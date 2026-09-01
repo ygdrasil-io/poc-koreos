@@ -351,6 +351,15 @@ public enum class WindowCreationMode { OpenedHere, OpenedInNewSession }
 
 `WindowSpecBuilder` est initialisé avec les valeurs exactes de `WindowSpec()` et sa conversion produit ce snapshot. Les anciens noms génériques `WindowSizeConstraints` sont remplacés par `LogicalSizeRange` pour éviter deux modèles concurrents.
 
+Le catalogue n'ajoute aucun type AppKit pour l'apparence, l'attention ou le
+déplacement : ils restent les valeurs et verbs communs `transparent`,
+`WindowAttention` et `InteractionAction.BeginWindowMove`. Pour AppKit livré,
+`WindowCapabilities.transparency` peut être supportée avec readback natif,
+alors que `blurBehind`, `icon`, `outerPosition`, `contentProtection` et les
+interactions armées ne deviennent pas implicitement supportés. Une application
+Kotlin qui possède sa propre vue native utilise l'escape hatch
+`Window.withDesktopHandle`; Kadre ne publie ni renderer ni widget.
+
 Pour `WindowSpec` et le snapshot résultant d’un `WindowUpdate`, chaque dimension de `minimumSize` est inférieure ou égale à la dimension correspondante de `maximumSize` lorsque les deux existent. La `contentSize` demandée par un `WindowSpec` appartient à cet intervalle. `LogicalSizeRange` applique la même relation et ses `increments`, lorsqu’ils existent, sont strictement positifs sans imposer que `minimum` soit un multiple. Un constructeur direct invalide lève `IllegalArgumentException`; une combinaison invalide produite par le DSL est retournée par `requestWindow` comme `InvalidRequest("sizeConstraints")`. `title` respecte `maxTextCodeUnitsPerValue`; une violation dépendant de la policy produit `Limit(RetainedPayload)` à l’opération, jamais une troncature. Un fullscreen exclusif revalide `displayId` dans la session et `mode` contre les modes/capabilities courants au moment du commit.
 
 ```kotlin

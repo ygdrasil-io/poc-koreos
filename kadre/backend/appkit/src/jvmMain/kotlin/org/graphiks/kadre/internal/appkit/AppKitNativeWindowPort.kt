@@ -1,5 +1,6 @@
 package org.graphiks.kadre.internal.appkit
 
+import org.graphiks.kadre.diagnostics.KadreResult
 import org.graphiks.kadre.internal.runtime.RuntimeDesktopNativeWindowHandle
 import org.graphiks.kadre.internal.runtime.SurfaceMetrics
 import org.graphiks.kadre.input.KeyLocation
@@ -21,6 +22,7 @@ import org.graphiks.kadre.surface.SurfaceVisibility
 import org.graphiks.kadre.window.WindowDecorations
 import org.graphiks.kadre.window.FullscreenMode
 import org.graphiks.kadre.window.WindowLevel
+import org.graphiks.kadre.window.WindowProperty
 import org.graphiks.kadre.window.WindowSystemButtons
 import org.graphiks.kadre.window.WindowSpec
 
@@ -125,6 +127,12 @@ internal interface AppKitNativeWindowOwner : AutoCloseable {
     override fun close()
 }
 
+/** Identifies the native mutation field whose setter or readback actually failed. */
+internal class AppKitWindowMutationFailure(
+    val failedFields: Set<WindowProperty>,
+    cause: Throwable,
+) : RuntimeException(cause)
+
 /** Peer-to-port token whose transition is the exact first native window setter boundary. */
 internal interface AppKitWindowMutationCommit {
     val started: Boolean
@@ -155,6 +163,11 @@ internal data class AppKitWindowLevelTarget(
     val level: PropertyChange<WindowLevel>,
 )
 
+/** Private, native-address-free appearance request forwarded from the runtime command. */
+internal data class AppKitWindowAppearanceTarget(
+    val transparency: PropertyChange<Boolean>,
+)
+
 /** Private, native-address-free fullscreen request forwarded from the runtime command. */
 internal data class AppKitWindowFullscreenTarget(val mode: FullscreenMode)
 
@@ -177,6 +190,9 @@ internal data class AppKitWindowMutationTarget(
         systemButtons = PropertyChange.Unchanged,
     ),
     val level: AppKitWindowLevelTarget = AppKitWindowLevelTarget(PropertyChange.Unchanged),
+    val appearance: AppKitWindowAppearanceTarget = AppKitWindowAppearanceTarget(
+        transparency = PropertyChange.Unchanged,
+    ),
 )
 
 /** Native values read together after AppKit has applied a geometry mutation or observation. */
@@ -193,6 +209,11 @@ internal data class AppKitWindowChromeSnapshot(
     val systemButtons: WindowSystemButtons,
 )
 
+/** Native appearance values read together with the rest of an effective window mutation. */
+internal data class AppKitWindowAppearanceSnapshot(
+    val transparency: Boolean,
+)
+
 /** Native values read together after AppKit has applied one window mutation. */
 internal data class AppKitWindowMutationSnapshot(
     val title: String,
@@ -202,6 +223,9 @@ internal data class AppKitWindowMutationSnapshot(
         systemButtons = WindowSystemButtons.All,
     ),
     val level: WindowLevel = WindowLevel.Normal,
+    val appearance: AppKitWindowAppearanceSnapshot = AppKitWindowAppearanceSnapshot(
+        transparency = false,
+    ),
 )
 
 /** Callback boundary for native-address-free geometry observations. */
@@ -281,6 +305,10 @@ internal sealed interface AppKitInput {
 /** Callback boundary that admits only immutable input values, never a borrowed native event. */
 internal class AppKitInputCallbacks(
     val input: (AppKitInput) -> Unit,
+    /** Runs only within a pressed-pointer native callback while its event is still borrowed. */
+    val pointerDown: (AppKitInput.PointerButtonChanged, () -> KadreResult<Unit>) -> Unit = { pointer, _ ->
+        input(pointer)
+    },
 )
 
 /** Owns native input callback admission and any tracking-area resource for one view. */

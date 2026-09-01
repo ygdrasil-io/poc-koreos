@@ -18,7 +18,10 @@ internal class AppKitWindowRuntimeDriverFactory(
         publicSurfaceCapabilities: Boolean = false,
         onLastWindowClosed: (() -> Unit)? = null,
         beforeCommitDelivery: (org.graphiks.kadre.window.WindowSpec) -> Unit = { },
+        beforeRuntimeSurfaceReadyDrain: () -> Unit = { },
         beforeFullscreenFollowUpEnqueue: (AppKitFullscreenCallback) -> Unit = { },
+        broker: AppKitProcessBroker? = null,
+        attentionOwner: AppKitProcessBroker.AppKitUserAttentionOwner? = null,
     ): AppKitWindowRuntimeDriver = AppKitWindowRuntimeDriver(
         resources = resources,
         nativePort = nativePortFactory(),
@@ -29,6 +32,9 @@ internal class AppKitWindowRuntimeDriverFactory(
         publicSurfaceCapabilities = publicSurfaceCapabilities,
         onLastWindowClosed = onLastWindowClosed,
         beforeCommitDelivery = beforeCommitDelivery,
+        beforeRuntimeSurfaceReadyDrain = beforeRuntimeSurfaceReadyDrain,
         beforeFullscreenFollowUpEnqueue = beforeFullscreenFollowUpEnqueue,
+        broker = broker,
+        attentionOwner = attentionOwner,
     )
 }

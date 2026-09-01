@@ -3,7 +3,10 @@ package org.graphiks.kadre.internal.appkit
 import org.graphiks.kadre.diagnostics.KadreFailure
 import org.graphiks.kadre.diagnostics.KadreResourceKind
 import org.graphiks.kadre.diagnostics.KadreResult
+import org.graphiks.kadre.diagnostics.KadreOperation
 import org.graphiks.kadre.internal.runtime.RuntimeDesktopNativeWindowHandle
+import org.graphiks.kadre.internal.runtime.RuntimeSynchronousInteraction
+import org.graphiks.kadre.interaction.InteractionAction
 import org.graphiks.kadre.internal.runtime.SurfaceMetrics
 import org.graphiks.kadre.internal.runtime.WindowPeerOwner
 import org.graphiks.kadre.surface.PropertyChange
@@ -13,7 +16,9 @@ import org.graphiks.kadre.surface.SurfaceTheme
 import org.graphiks.kadre.surface.SurfaceVisibility
 import org.graphiks.kadre.window.WindowSpec
 import org.graphiks.kadre.window.WindowLevel
+import org.graphiks.kadre.window.WindowProperty
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicReference
 
 @JvmInline
 internal value class AppKitWindowPeerId(internal val value: Long)
@@ -46,6 +51,7 @@ internal data class AppKitWindowMutation(
     val snapshot: AppKitWindowMutationSnapshot,
     val generation: Long,
     val failure: Throwable?,
+    val failureFields: Set<WindowProperty>,
 )
 
 internal data class AppKitFullscreenCompletion(
@@ -56,6 +62,7 @@ internal data class AppKitFullscreenCompletion(
 private data class NativeWindowMutationResult(
     val snapshot: AppKitWindowMutationSnapshot,
     val failure: Throwable?,
+    val failureFields: Set<WindowProperty>,
 )
 
 /** Native-address-free surface observation emitted by one AppKit window peer. */
@@ -134,7 +141,10 @@ internal class AppKitWindowPeer private constructor(
     override fun close() {
         if (!closed.compareAndSet(false, true)) return
         awaitHandleLeases()
-        callbackGate.revoke()
+        callbackGate.revokeAndRunAfterPointerCallbacks(::releaseNativeResources)
+    }
+
+    private fun releaseNativeResources() {
         port.onMainThread {
             var failure: Throwable? = null
             inputObserver?.let { observer ->
@@ -211,17 +221,23 @@ internal class AppKitWindowPeer private constructor(
                 callbackGate.duringManagedGeometryMutation {
                     try {
                         port.updateWindow(window, target, commit)?.let { snapshot ->
-                            NativeWindowMutationResult(snapshot, failure = null)
+                            NativeWindowMutationResult(snapshot, failure = null, failureFields = emptySet())
                         }
                     } catch (failure: Throwable) {
                         if (!commit.started) throw failure
+                        val attributedFailure = failure as? AppKitWindowMutationFailure
+                        val nativeFailure = attributedFailure?.cause ?: failure
                         val snapshot = try {
                             port.readWindow(window)
                         } catch (readbackFailure: Throwable) {
-                            if (readbackFailure !== failure) failure.addSuppressed(readbackFailure)
-                            throw failure
+                            if (readbackFailure !== nativeFailure) nativeFailure.addSuppressed(readbackFailure)
+                            throw nativeFailure
                         }
-                        NativeWindowMutationResult(snapshot, failure)
+                        NativeWindowMutationResult(
+                            snapshot = snapshot,
+                            failure = nativeFailure,
+                            failureFields = attributedFailure?.failedFields.orEmpty(),
+                        )
                     }
                 }
             }
@@ -346,6 +362,10 @@ internal class AppKitWindowPeer private constructor(
             port: AppKitNativeWindowPort,
             acceptStimulus: (AppKitWindowStimulus) -> Unit = {},
             acceptSurfaceStimulus: (AppKitSurfaceStimulus) -> Unit = {},
+            dispatchSynchronousInteraction: (
+                RuntimeSynchronousInteraction,
+                (InteractionAction) -> KadreResult<Unit>,
+            ) -> Boolean = { _, _ -> false },
             readInitialWindowSnapshot: Boolean = false,
             reportCallbackFailure: (Throwable) -> Unit = {},
         ): AppKitWindowPeer {
@@ -354,6 +374,7 @@ internal class AppKitWindowPeer private constructor(
                 acceptStimulus,
                 acceptSurfaceStimulus,
                 reportCallbackFailure,
+                dispatchSynchronousInteraction,
             )
             return port.onMainThread {
                 var window: AppKitNativeWindowOwner? = null
@@ -390,6 +411,11 @@ internal class AppKitWindowPeer private constructor(
                                 "AppKit initial window level readback diverged: " +
                                     "requested=${spec.level}, effective=${snapshot.level}"
                             }
+                            check(snapshot.appearance.transparency == spec.transparent) {
+                                "AppKit initial window transparency readback diverged: " +
+                                    "requested=${spec.transparent}, " +
+                                    "effective=${snapshot.appearance.transparency}"
+                            }
                         }
                     } else {
                         null
@@ -414,7 +440,10 @@ internal class AppKitWindowPeer private constructor(
                     inputObserver = port.observeInput(
                         window,
                         contentView,
-                        AppKitInputCallbacks(callbackGate::input),
+                        AppKitInputCallbacks(
+                            input = callbackGate::input,
+                            pointerDown = callbackGate::pointerDown,
+                        ),
                     )
                     inputObserver?.let { observer ->
                         callbackGate.inputObservationChanged(
@@ -481,8 +510,13 @@ private class AppKitWindowCallbackGate(
     private val acceptWindowStimulus: (AppKitWindowStimulus) -> Unit,
     private val acceptSurfaceStimulus: (AppKitSurfaceStimulus) -> Unit,
     private val reportFailure: (Throwable) -> Unit,
+    private val dispatchSynchronousInteraction: (
+        RuntimeSynchronousInteraction,
+        (InteractionAction) -> KadreResult<Unit>,
+    ) -> Boolean,
 ) {
-    private val lock = Any()
+    @Suppress("PLATFORM_CLASS_MAPPED_TO_KOTLIN")
+    private val lock = Object()
     private var accepting = true
     private var surfaceAccepting = false
     private var nativeCloseDelivered = false
@@ -495,6 +529,9 @@ private class AppKitWindowCallbackGate(
     private var managedGeometryMutationDepth = 0
     private var fullscreenWillObservedSinceToggle = false
     private val bufferedManagedGeometryCallbacks = ArrayDeque<AppKitWindowStimulus.GeometryChanged>()
+    private var activePointerCallbacks = 0
+    private val activePointerCallbackThreads = linkedMapOf<Thread, Int>()
+    private val deferredPointerCallbackCleanup = ArrayDeque<() -> Unit>()
 
     fun duringManagedGeometryMutation(
         block: () -> NativeWindowMutationResult?,
@@ -515,6 +552,7 @@ private class AppKitWindowCallbackGate(
                 snapshot = mutation.snapshot,
                 generation = checkNotNull(generation),
                 failure = mutation.failure,
+                failureFields = mutation.failureFields,
             )
         }
     }
@@ -602,6 +640,47 @@ private class AppKitWindowCallbackGate(
             }
         }
         stimulus?.let(::publishSurface)
+    }
+
+    /**
+     * Keeps the borrowed AppKit event callback synchronous: the runtime decides whether the
+     * native move is admitted, then it publishes the one ordinary immutable pointer input.
+     */
+    fun pointerDown(
+        input: AppKitInput.PointerButtonChanged,
+        invokeNativeMove: () -> KadreResult<Unit>,
+    ) {
+        val admitted = synchronized(lock) {
+            if (!surfaceAccepting) {
+                false
+            } else {
+                activePointerCallbacks += 1
+                val thread = Thread.currentThread()
+                activePointerCallbackThreads[thread] = (activePointerCallbackThreads[thread] ?: 0) + 1
+                true
+            }
+        }
+        if (!admitted) return
+        val borrowedMove = BorrowedPointerMove(invokeNativeMove)
+        try {
+            val dispatched = dispatchSynchronousInteraction(
+                RuntimeSynchronousInteraction.PointerPressed(input.button, input.position, input.pressure),
+            ) { action ->
+                if (action == InteractionAction.BeginWindowMove) {
+                    borrowedMove.invoke()
+                } else {
+                    KadreResult.Failure(KadreFailure.Unsupported(KadreOperation.Interaction))
+                }
+            }
+            // Before public surface commit, no runtime surface exists yet. Preserve the regular
+            // immutable path without retaining the native event; live surfaces always dispatch above.
+            if (!dispatched) input(input)
+        } finally {
+            // A handler may retain its callback context. The runtime's native lambda can therefore
+            // outlive this stack frame, but its AppKit event callback cannot.
+            borrowedMove.revoke()
+            completePointerCallback()
+        }
     }
 
     fun inputObservationChanged(keyboardInstalled: Boolean, pointerInstalled: Boolean) {
@@ -722,6 +801,67 @@ private class AppKitWindowCallbackGate(
         }
     }
 
+    /**
+     * Linearizes teardown with pressed-pointer callbacks. A different closer waits until the
+     * borrowed event callback is finished; a close requested by that callback is drained from its
+     * finally block, after the borrowed move closure was revoked.
+     */
+    fun revokeAndRunAfterPointerCallbacks(cleanup: () -> Unit) {
+        var interrupted = false
+        val runNow = synchronized(lock) {
+            accepting = false
+            surfaceAccepting = false
+            if (activePointerCallbacks == 0) {
+                true
+            } else if ((activePointerCallbackThreads[Thread.currentThread()] ?: 0) > 0) {
+                deferredPointerCallbackCleanup += cleanup
+                false
+            } else {
+                while (activePointerCallbacks > 0) {
+                    try {
+                        lock.wait()
+                    } catch (_: InterruptedException) {
+                        interrupted = true
+                    }
+                }
+                true
+            }
+        }
+        try {
+            if (runNow) cleanup()
+        } finally {
+            if (interrupted) Thread.currentThread().interrupt()
+        }
+    }
+
+    private fun completePointerCallback() {
+        val deferredCleanup = synchronized(lock) {
+            activePointerCallbacks -= 1
+            check(activePointerCallbacks >= 0) { "AppKit pointer callback depth underflow" }
+            val thread = Thread.currentThread()
+            val activeOnThread = checkNotNull(activePointerCallbackThreads[thread]) - 1
+            if (activeOnThread == 0) activePointerCallbackThreads.remove(thread)
+            else activePointerCallbackThreads[thread] = activeOnThread
+            if (activePointerCallbacks == 0) {
+                lock.notifyAll()
+                deferredPointerCallbackCleanup.toList().also { deferredPointerCallbackCleanup.clear() }
+            } else {
+                emptyList()
+            }
+        }
+        deferredCleanup.forEach { cleanup ->
+            try {
+                cleanup()
+            } catch (failure: Throwable) {
+                try {
+                    reportFailure(failure)
+                } catch (_: Throwable) {
+                    // Diagnostics must not escape the Objective-C pointer callback boundary.
+                }
+            }
+        }
+    }
+
     private fun publishWindow(stimulus: AppKitWindowStimulus) {
         publish(stimulus, acceptWindowStimulus)
     }
@@ -740,6 +880,17 @@ private class AppKitWindowCallbackGate(
                 // Both failures are contained at the Objective-C callback boundary.
             }
         }
+    }
+}
+
+private class BorrowedPointerMove(callback: () -> KadreResult<Unit>) {
+    private val callback = AtomicReference<(() -> KadreResult<Unit>)?>(callback)
+
+    fun invoke(): KadreResult<Unit> = callback.get()?.invoke()
+        ?: KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.Interaction))
+
+    fun revoke() {
+        callback.set(null)
     }
 }
 

@@ -45,6 +45,7 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertSame
+import kotlin.test.assertTrue
 
 class DesktopHostTest {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
@@ -69,6 +70,27 @@ class DesktopHostTest {
         assertSame(factory, request.applicationFactory)
         assertSame(KadrePolicies.Realtime, request.policy)
         assertEquals(DesktopIntegrationKind.AppKitMainLoop, request.integration)
+        assertFalse(request.allowUserAttention)
+    }
+
+    @Test
+    fun embeddedAttentionOptInIsTransportedToTheProviderRequest() {
+        val provider = RecordingProvider(DesktopBackendKind.AppKit, setOf(DesktopIntegrationKind.AppKitMainLoop))
+        val facade = DesktopHostFacade(DesktopOperatingSystem.MacOS) { listOf(provider) }
+
+        assertIs<KadreResult.Success<KadreSession>>(
+            facade.attach(
+                scope,
+                factory,
+                DesktopHostOptions.Embedded(
+                    integration = DesktopIntegration.AppKitMainLoop,
+                    allowUserAttention = true,
+                ),
+                KadrePolicies.Default,
+            ),
+        )
+
+        assertTrue(provider.embeddedRequests.single().allowUserAttention)
     }
 
     @Test
@@ -311,6 +333,7 @@ class DesktopHostTest {
         assertSame(factory, request.applicationFactory)
         assertSame(KadrePolicies.Recording, request.policy)
         assertFalse(request.stopWhenLastWindowClosed)
+        assertFalse(request.javaClass.declaredFields.any { it.name == "allowUserAttention" })
 
         provider.runResult = KadreResult.Failure(KadreFailure.AlreadyInUse(KadreResourceKind.Host))
         val exception = assertFailsWith<KadreException> {
@@ -345,6 +368,7 @@ class DesktopHostTest {
             platform = KadrePlatform.AppKit,
             failureReporter = RuntimeFailureReporter { throw AssertionError(it) },
             publicWindowCapabilities = true,
+            enabledWindowUpdateCapabilities = setOf(org.graphiks.kadre.window.WindowProperty.Title),
         )
         val window = assertIs<WindowRequestOutcome.OpenedHere>(
             manager.requestWindow(WindowSpec(title = "handle")).successValue().await(),

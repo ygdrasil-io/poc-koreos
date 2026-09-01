@@ -52,6 +52,8 @@ import org.graphiks.kadre.surface.LogicalSize
 import org.graphiks.kadre.surface.PhysicalSize
 import org.graphiks.kadre.surface.PhysicalPoint
 import org.graphiks.kadre.surface.PhysicalRect
+import org.graphiks.kadre.surface.BinaryImage
+import org.graphiks.kadre.surface.ImageFormat
 import org.graphiks.kadre.surface.SurfaceAttachmentState
 import org.graphiks.kadre.surface.SurfaceFocus
 import org.graphiks.kadre.surface.SurfaceOcclusion
@@ -70,6 +72,7 @@ import org.graphiks.kadre.window.WindowDecorations
 import org.graphiks.kadre.window.FullscreenKind
 import org.graphiks.kadre.window.FullscreenMode
 import org.graphiks.kadre.window.WindowEvent
+import org.graphiks.kadre.window.WindowId
 import org.graphiks.kadre.window.WindowLevel
 import org.graphiks.kadre.window.WindowOperationId
 import org.graphiks.kadre.window.WindowPhase
@@ -89,6 +92,7 @@ import kotlin.time.Duration.Companion.seconds
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
@@ -523,6 +527,44 @@ class RuntimeWindowManagerTest {
         assertEquals(command.operationId, properties.operationId)
         assertEquals(effective, observedStates.single())
         collector.cancelAndJoin()
+    }
+
+    @Test
+    fun enabledAppearanceUpdatesReachTheWindowCommandPort() = runTest {
+        val port = DeterministicWindowCommandPort()
+        val manager = manager(
+            port,
+            enabledWindowUpdateCapabilities = setOf(
+                WindowProperty.Transparency,
+                WindowProperty.ContentProtection,
+            ),
+        )
+        val window = commit(
+            manager.requestWindow(WindowSpec()).successValue(),
+            port.openCommands.single(),
+        )
+
+        val update = async(start = CoroutineStart.UNDISPATCHED) {
+            window.apply(
+                WindowUpdate(
+                    transparency = PropertyChange.Set(true),
+                    contentProtection = PropertyChange.Set(true),
+                ),
+            )
+        }
+        val command = port.updateCommands.single()
+
+        assertEquals(PropertyChange.Set(true), command.update.transparency)
+        assertEquals(PropertyChange.Set(true), command.update.contentProtection)
+        command.applied(
+            window.state.value.copy(
+                transparent = true,
+                contentProtection = true,
+            ),
+        )
+        val outcome = assertIs<WindowUpdateOutcome.Applied>(update.await().successValue())
+        assertTrue(outcome.state.transparent)
+        assertTrue(outcome.state.contentProtection)
     }
 
     @Test
@@ -3645,7 +3687,11 @@ class RuntimeWindowManagerTest {
     @Test
     fun nativeCloseRequestIsPublishedAndTheFirstApplicationDecisionWins() = runTest {
         val port = DeterministicWindowCommandPort()
-        val manager = manager(port, publicWindowCapabilities = true)
+        val manager = manager(
+            port,
+            publicWindowCapabilities = true,
+            enabledWindowUpdateCapabilities = setOf(WindowProperty.Title),
+        )
         val request = manager.requestWindow(WindowSpec(title = "native-close")).successValue()
         val command = port.openCommands.single()
         val window = commit(request, command)
@@ -3717,7 +3763,11 @@ class RuntimeWindowManagerTest {
     @Test
     fun aRejectedCloseRequestBecomesTooLateAfterAProgrammaticCloseWins() = runTest {
         val port = DeterministicWindowCommandPort()
-        val manager = manager(port, publicWindowCapabilities = true)
+        val manager = manager(
+            port,
+            publicWindowCapabilities = true,
+            enabledWindowUpdateCapabilities = setOf(WindowProperty.Title),
+        )
         val request = manager.requestWindow(WindowSpec(title = "reject-then-close")).successValue()
         val command = port.openCommands.single()
         val window = commit(request, command)
@@ -3750,6 +3800,7 @@ class RuntimeWindowManagerTest {
             maxWindows = 3,
             maxPending = 3,
             publicWindowCapabilities = true,
+            enabledWindowUpdateCapabilities = setOf(WindowProperty.Title),
             onLastWindowClosed = { stopProposals += 1 },
         )
 
@@ -3819,6 +3870,214 @@ class RuntimeWindowManagerTest {
         assertEquals(WindowCloseOutcome.Closed, window.close().successValue())
     }
 
+    @Test
+    fun configuredAttentionPortPublishesItsDomainAndReceivesTheRequestedAttention() = runTest {
+        val port = DeterministicWindowCommandPort()
+        val attentionPort = RecordingAttentionPort()
+        val acceptedAttention = setOf(
+            WindowAttention.None,
+            WindowAttention.Informational,
+            WindowAttention.Critical,
+        )
+        val manager = manager(
+            port,
+            attentionPort = attentionPort,
+            acceptedAttention = acceptedAttention,
+        )
+        val window = commit(manager.requestWindow(WindowSpec()).successValue(), port.openCommands.single())
+
+        assertEquals(
+            Capability.Supported(acceptedAttention, FeatureAvailability.Available),
+            window.capabilities.value.attention,
+        )
+        assertEquals(KadreResult.Success(Unit), window.requestAttention(WindowAttention.Critical))
+        assertEquals(listOf(window.id to WindowAttention.Critical), attentionPort.requests)
+    }
+
+    @Test
+    fun absentAttentionPortPublishesAndReturnsUnsupported() = runTest {
+        val port = DeterministicWindowCommandPort()
+        val manager = manager(port, attentionPort = null)
+        val window = commit(manager.requestWindow(WindowSpec()).successValue(), port.openCommands.single())
+
+        assertEquals(
+            Capability.Unsupported(KadreFailure.Unsupported(KadreOperation.RequestWindowAttention)),
+            window.capabilities.value.attention,
+        )
+        assertEquals(
+            KadreResult.Failure(KadreFailure.Unsupported(KadreOperation.RequestWindowAttention)),
+            window.requestAttention(WindowAttention.Informational),
+        )
+    }
+
+    @Test
+    fun closedWindowDoesNotTouchAttentionPort() = runTest {
+        val port = DeterministicWindowCommandPort()
+        val attentionPort = RecordingAttentionPort()
+        val manager = manager(
+            port,
+            attentionPort = attentionPort,
+            acceptedAttention = setOf(
+                WindowAttention.None,
+                WindowAttention.Informational,
+                WindowAttention.Critical,
+            ),
+        )
+        val request = manager.requestWindow(WindowSpec()).successValue()
+        val command = port.openCommands.single()
+        val window = commit(request, command)
+
+        command.nativeClosed()
+
+        assertEquals(
+            KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.Window)),
+            window.requestAttention(WindowAttention.Critical),
+        )
+        assertTrue(attentionPort.requests.isEmpty())
+        assertEquals(listOf(window.id), attentionPort.releasedWindowIds)
+    }
+
+    @Test
+    fun closeAtAttentionPortBoundaryReturnsClosedAndCompensatesLateNativeToken() = runTest {
+        val port = DeterministicWindowCommandPort()
+        val attentionPort = SuspendingNativeAttentionPort()
+        val manager = manager(
+            port,
+            attentionPort = attentionPort,
+            acceptedAttention = setOf(
+                WindowAttention.None,
+                WindowAttention.Informational,
+                WindowAttention.Critical,
+            ),
+        )
+        val request = manager.requestWindow(WindowSpec()).successValue()
+        val command = port.openCommands.single()
+        val window = commit(request, command)
+        val attention = async(start = CoroutineStart.UNDISPATCHED) {
+            window.requestAttention(WindowAttention.Critical)
+        }
+        attentionPort.requestEntered.await()
+
+        command.nativeClosed()
+        attentionPort.resumeRequest.complete(Unit)
+
+        assertEquals(
+            listOf(
+                KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.Window)),
+                false,
+            ),
+            listOf(
+                attention.await(),
+                attentionPort.hasNativeAttention(window.id),
+            ),
+        )
+    }
+
+    @Test
+    fun attentionPortRequiresTheFullStandardAttentionDomain() {
+        assertFailsWith<IllegalArgumentException> {
+            manager(
+                DeterministicWindowCommandPort(),
+                attentionPort = RecordingAttentionPort(),
+                acceptedAttention = setOf(WindowAttention.Critical),
+            )
+        }
+    }
+
+    @Test
+    fun transparencyAndContentProtectionCapabilitiesFollowTheirEnabledProperties() = runTest {
+        val unsupportedPort = DeterministicWindowCommandPort()
+        val unsupportedWindow = commit(
+            manager(unsupportedPort, publicWindowCapabilities = true)
+                .requestWindow(WindowSpec()).successValue(),
+            unsupportedPort.openCommands.single(),
+        )
+        assertIs<Capability.Unsupported>(unsupportedWindow.capabilities.value.transparency)
+        assertIs<Capability.Unsupported>(unsupportedWindow.capabilities.value.contentProtection)
+
+        val port = DeterministicWindowCommandPort()
+        val window = commit(
+            manager(
+                port,
+                publicWindowCapabilities = true,
+                enabledWindowUpdateCapabilities = setOf(
+                    WindowProperty.Transparency,
+                    WindowProperty.ContentProtection,
+                ),
+            ).requestWindow(WindowSpec()).successValue(),
+            port.openCommands.single(),
+        )
+
+        assertEquals(Capability.Supported(Unit, FeatureAvailability.Available), window.capabilities.value.transparency)
+        assertEquals(Capability.Supported(Unit, FeatureAvailability.Available), window.capabilities.value.contentProtection)
+        assertIs<Capability.Unsupported>(window.capabilities.value.blurBehind)
+        assertIs<Capability.Unsupported>(window.capabilities.value.icon)
+    }
+
+    @Test
+    fun unsupportedInitialBlurIsRejectedBeforeNativeOpen() = runTest {
+        assertUnsupportedInitialSpec(WindowSpec(blurBehind = true))
+    }
+
+    @Test
+    fun unsupportedInitialIconIsRejectedBeforeNativeOpen() = runTest {
+        assertUnsupportedInitialSpec(WindowSpec(icon = BinaryImage(byteArrayOf(), ImageFormat.Png)))
+    }
+
+    @Test
+    fun unsupportedInitialOuterPositionIsRejectedBeforeNativeOpen() = runTest {
+        assertUnsupportedInitialSpec(WindowSpec(outerPosition = PhysicalPoint(1, 2)))
+    }
+
+    @Test
+    fun structurallyUnsupportedInitialFieldsRejectEvenWhenCapabilityPublicationIsDisabled() = runTest {
+        listOf(
+            WindowSpec(blurBehind = true),
+            WindowSpec(icon = BinaryImage(byteArrayOf(), ImageFormat.Png)),
+            WindowSpec(outerPosition = PhysicalPoint(1, 2)),
+        ).forEach { spec ->
+            val port = DeterministicWindowCommandPort()
+            val manager = manager(
+                port,
+                enabledWindowUpdateCapabilities = setOf(
+                    WindowProperty.Blur,
+                    WindowProperty.Icon,
+                    WindowProperty.OuterPosition,
+                ),
+            )
+
+            val request = manager.requestWindow(spec).successValue()
+            request.cancel()
+
+            assertEquals(
+                WindowRequestOutcome.Rejected(KadreFailure.Unsupported(KadreOperation.RequestWindow)),
+                request.await(),
+            )
+            assertTrue(port.openCommands.isEmpty())
+        }
+    }
+
+    @Test
+    fun unsupportedInitialExclusiveFullscreenIsRejectedBeforeNativeOpen() = runTest {
+        assertUnsupportedInitialSpec(WindowSpec(fullscreen = exclusiveFullscreenFixture()))
+    }
+
+    @Test
+    fun everyOtherUnsupportedNonDefaultInitialFieldIsRejectedBeforeNativeOpen() = runTest {
+        listOf(
+            WindowSpec(title = "title"),
+            WindowSpec(contentSize = LogicalSize(640.0, 480.0)),
+            WindowSpec(minimumSize = LogicalSize(320.0, 240.0)),
+            WindowSpec(maximumSize = LogicalSize(1_024.0, 768.0)),
+            WindowSpec(resizable = false),
+            WindowSpec(decorations = WindowDecorations.Borderless),
+            WindowSpec(systemButtons = WindowSystemButtons.None),
+            WindowSpec(level = WindowLevel.Floating),
+            WindowSpec(transparent = true),
+            WindowSpec(contentProtection = true),
+        ).forEach { spec -> assertUnsupportedInitialSpec(spec) }
+    }
+
     private fun manager(
         port: DeterministicWindowCommandPort,
         maxWindows: Int = 4,
@@ -3828,6 +4087,8 @@ class RuntimeWindowManagerTest {
         enabledWindowUpdateCapabilities: Set<WindowProperty> = emptySet(),
         fullscreenAvailabilityFailure: KadreFailure.PlatformFailure? = null,
         publicSurfaceCapabilities: Boolean = false,
+        attentionPort: WindowAttentionPort? = null,
+        acceptedAttention: Set<WindowAttention> = emptySet(),
         onLastWindowClosed: () -> Unit = {},
     ): RuntimeWindowManager = RuntimeWindowManager(
         resources = KadrePolicies.Default.resources.copy(
@@ -3841,8 +4102,23 @@ class RuntimeWindowManagerTest {
         enabledWindowUpdateCapabilities = enabledWindowUpdateCapabilities,
         fullscreenAvailabilityFailure = fullscreenAvailabilityFailure,
         publicSurfaceCapabilities = publicSurfaceCapabilities,
+        attentionPort = attentionPort,
+        acceptedAttention = acceptedAttention,
         onLastWindowClosed = onLastWindowClosed,
     )
+
+    private suspend fun assertUnsupportedInitialSpec(spec: WindowSpec) {
+        val port = DeterministicWindowCommandPort()
+        val manager = manager(port, publicWindowCapabilities = true)
+
+        val request = manager.requestWindow(spec).successValue()
+
+        assertEquals(
+            WindowRequestOutcome.Rejected(KadreFailure.Unsupported(KadreOperation.RequestWindow)),
+            request.await(),
+        )
+        assertTrue(port.openCommands.isEmpty())
+    }
 
     private fun installWindowEventPolicy(
         manager: RuntimeWindowManager,
@@ -4036,6 +4312,47 @@ class RuntimeWindowManagerTest {
             onOpenedClose(command)
             return openedCloseOutcome
         }
+    }
+
+    private class RecordingAttentionPort : WindowAttentionPort {
+        val requests = mutableListOf<Pair<WindowId, WindowAttention>>()
+        val releasedWindowIds = mutableListOf<WindowId>()
+        var closeCount: Int = 0
+
+        override suspend fun request(windowId: WindowId, attention: WindowAttention): KadreResult<Unit> {
+            requests += windowId to attention
+            return KadreResult.Success(Unit)
+        }
+
+        override fun release(windowId: WindowId) {
+            releasedWindowIds += windowId
+        }
+
+        override fun close() {
+            closeCount += 1
+        }
+    }
+
+    private class SuspendingNativeAttentionPort : WindowAttentionPort {
+        val requestEntered = CompletableDeferred<Unit>()
+        val resumeRequest = CompletableDeferred<Unit>()
+        private val nativeAttention = mutableSetOf<WindowId>()
+
+        override suspend fun request(windowId: WindowId, attention: WindowAttention): KadreResult<Unit> {
+            requestEntered.complete(Unit)
+            resumeRequest.await()
+            synchronized(nativeAttention) { nativeAttention += windowId }
+            return KadreResult.Success(Unit)
+        }
+
+        override fun release(windowId: WindowId) {
+            synchronized(nativeAttention) { nativeAttention -= windowId }
+        }
+
+        override fun close() = Unit
+
+        fun hasNativeAttention(windowId: WindowId): Boolean =
+            synchronized(nativeAttention) { windowId in nativeAttention }
     }
 
     private sealed interface PortCloseEvent {

@@ -31,6 +31,8 @@ import org.graphiks.kadre.policy.InputDeliveryPolicy
 import org.graphiks.kadre.policy.KadrePolicies
 import org.graphiks.kadre.policy.WindowDeliveryPolicy
 import org.graphiks.kadre.surface.LogicalInsets
+import org.graphiks.kadre.surface.LogicalPoint
+import org.graphiks.kadre.surface.LogicalSize
 import org.graphiks.kadre.surface.PropertyChange
 import org.graphiks.kadre.surface.SurfaceCapabilities
 import org.graphiks.kadre.surface.SurfaceFocus
@@ -74,6 +76,11 @@ import org.graphiks.kadre.window.WindowState
 import org.graphiks.kadre.window.WindowSystemButtons
 import org.graphiks.kadre.window.WindowUpdate
 import org.graphiks.kadre.window.WindowUpdateOutcome
+import org.graphiks.kadre.input.PointerButton
+import org.graphiks.kadre.input.PhysicalKey
+import org.graphiks.kadre.input.TouchId
+import org.graphiks.kadre.interaction.InteractionAction
+import org.graphiks.kadre.interaction.InteractionKind
 import java.util.concurrent.atomic.AtomicLong
 import kotlin.time.Duration.Companion.nanoseconds
 
@@ -91,15 +98,26 @@ public class RuntimeWindowManager public constructor(
     private val failureReporter: RuntimeFailureReporter,
     private val publicWindowCapabilities: Boolean = false,
     private val enabledWindowUpdateCapabilities: Set<WindowProperty> = emptySet(),
+    private val attentionPort: WindowAttentionPort? = null,
+    private val acceptedAttention: Set<WindowAttention> = emptySet(),
     private val fullscreenAvailabilityFailure: KadreFailure.PlatformFailure? = null,
     private val publicSurfaceCapabilities: Boolean = false,
     private val enabledSurfaceCapabilities: SurfaceCapabilities = unsupportedSurfaceCapabilities(),
     private val onLastWindowClosed: (() -> Unit)? = null,
 ) : WindowManager, AutoCloseable, RuntimeFullscreenObservationSink {
+    init {
+        if (attentionPort != null) {
+            require(acceptedAttention == STANDARD_WINDOW_ATTENTION) {
+                "attentionPort requires the standard attention domain"
+            }
+        }
+    }
+
     private val lock = Any()
     private val pending = linkedMapOf<WindowRequestId, PendingWindow>()
     private val committed = linkedMapOf<WindowRequestId, CommittedWindow>()
     private val dispatchedWindowUpdates = linkedMapOf<WindowOperationId, RuntimeWindow>()
+    private val pendingAttentionReleases = mutableListOf<WindowId>()
     internal var beforeWindowUpdateRegistration: (RuntimeWindow, PendingWindowUpdate) -> Unit = { _, _ -> }
     private val surfaces = linkedMapOf<SurfaceId, RuntimeWindowSurface>()
     private var nextAdmissionOrder = 0L
@@ -226,6 +244,21 @@ public class RuntimeWindowManager public constructor(
     }
 
     /**
+     * Unstable backend SPI for one synchronous native interaction callback.
+     * The runtime assigns the public event stamp; a backend retains every native payload.
+     */
+    public fun dispatchSynchronousInteraction(
+        surfaceId: SurfaceId,
+        event: RuntimeSynchronousInteraction,
+        supported: Set<InteractionKind>,
+        invokeNative: (InteractionAction) -> KadreResult<Unit>,
+    ): Boolean {
+        val surface = synchronized(lock) { surfaces[surfaceId] } ?: return false
+        surface.dispatchSynchronousInteraction(event, supported, invokeNative)
+        return true
+    }
+
+    /**
      * Admits an uncorrelated native geometry observation for one live window.
      *
      * The runtime remains authoritative for revision assignment and event publication.
@@ -239,22 +272,22 @@ public class RuntimeWindowManager public constructor(
 
     override suspend fun requestWindow(spec: WindowSpec): KadreResult<WindowRequest> {
         currentCoroutineContext().ensureActive()
+        if (unsupportedInitialWindowProperty(spec) != null) {
+            return synchronized(lock) {
+                if (closed) {
+                    KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.Host))
+                } else {
+                    KadreResult.Success(rejectedWindowRequest())
+                }
+            }
+        }
         if (spec.fullscreen != FullscreenMode.Windowed) {
             return synchronized(lock) {
                 if (closed) return@synchronized KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.Host))
                 when (spec.fullscreen) {
                     FullscreenMode.Borderless -> KadreResult.Failure(KadreFailure.InvalidRequest("fullscreen"))
                     is FullscreenMode.Exclusive -> {
-                        val request = RuntimeWindowRequest(
-                            RuntimeProcessIds.nextWindowRequestId(),
-                            RuntimeProcessIds.nextWindowId(),
-                            this,
-                        )
-                        request.terminate(
-                            WindowRequestOutcome.Rejected(KadreFailure.Unsupported(KadreOperation.RequestWindow)),
-                        )
-                        request.markHandoffDelivered()
-                        KadreResult.Success(request)
+                        KadreResult.Success(rejectedWindowRequest())
                     }
                     FullscreenMode.Windowed -> error("windowed fullscreen was handled before admission")
                 }
@@ -322,7 +355,7 @@ public class RuntimeWindowManager public constructor(
     }
 
     override fun close() {
-        synchronized(lock) {
+        val portToClose = synchronized(lock) {
             if (closed) return
             closed = true
 
@@ -360,7 +393,10 @@ public class RuntimeWindowManager public constructor(
                 .sortedByDescending(CommittedWindow::admissionOrder)
                 .toList()
                 .forEach(::forceCloseLocked)
+            attentionPort
         }
+        drainAttentionReleases()
+        portToClose?.let(::safeCloseAttentionPort)
     }
 
     internal suspend fun cancelRequest(request: RuntimeWindowRequest): WindowCancellationOutcome = synchronized(lock) {
@@ -458,6 +494,7 @@ public class RuntimeWindowManager public constructor(
         synchronized(lock) {
             committed[window.requestId]?.let(::forceCloseLocked)
         }
+        drainAttentionReleases()
         drainLastWindowStopProposal()
     }
 
@@ -623,12 +660,44 @@ public class RuntimeWindowManager public constructor(
         safeReport(diagnostic)
     }
 
-    internal suspend fun requestAttention(window: RuntimeWindow): KadreResult<Unit> = synchronized(lock) {
-        if (window.currentState().phase != WindowPhase.Open) {
-            KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.Window))
-        } else {
-            KadreResult.Failure(KadreFailure.Unsupported(KadreOperation.RequestWindowAttention))
+    internal suspend fun requestAttention(
+        window: RuntimeWindow,
+        attention: WindowAttention,
+    ): KadreResult<Unit> {
+        val port = synchronized(lock) {
+            if (window.currentState().phase != WindowPhase.Open) {
+                return KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.Window))
+            }
+            val configuredPort = attentionPort
+                ?: return KadreResult.Failure(KadreFailure.Unsupported(KadreOperation.RequestWindowAttention))
+            if (attention !in acceptedAttention) {
+                return KadreResult.Failure(KadreFailure.Unsupported(KadreOperation.RequestWindowAttention))
+            }
+            configuredPort
         }
+        val result = try {
+            port.request(window.id, attention)
+        } catch (cancellation: CancellationException) {
+            throw cancellation
+        } catch (cause: Exception) {
+            safeReport(cause)
+            KadreResult.Failure(platformFailure("window-attention-exception"))
+        } catch (cause: LinkageError) {
+            safeReport(cause)
+            KadreResult.Failure(platformFailure("window-attention-exception"))
+        }
+        val closedResource = synchronized(lock) {
+            val stillOpen =
+                committed[window.requestId]?.window === window &&
+                    window.currentState().phase == WindowPhase.Open
+            if (!stillOpen) pendingAttentionReleases += window.id
+            if (stillOpen) null else if (closed) KadreResourceKind.Host else KadreResourceKind.Window
+        }
+        if (closedResource != null) {
+            drainAttentionReleases()
+            return KadreResult.Failure(KadreFailure.Closed(closedResource))
+        }
+        return result
     }
 
     internal suspend fun respondToCloseRequest(
@@ -677,6 +746,7 @@ public class RuntimeWindowManager public constructor(
                 WindowCloseDecision.Accept -> acceptCloseResponseLocked(record, closeRequest)
             }
         }
+        drainAttentionReleases()
         drainLastWindowStopProposal()
         return result
     }
@@ -754,6 +824,7 @@ public class RuntimeWindowManager public constructor(
                 }
             }
         }
+        drainAttentionReleases()
         drainLastWindowStopProposal()
         return result
     }
@@ -809,6 +880,7 @@ public class RuntimeWindowManager public constructor(
             }
             request.finishPreHandoffCancellation(WindowRequestOutcome.RequesterDetached)
         }
+        drainAttentionReleases()
         drainLastWindowStopProposal()
     }
 
@@ -916,6 +988,7 @@ public class RuntimeWindowManager public constructor(
                     record.window.finishClosing()
                     surfaces.remove(record.window.surface.id)
                     releaseWindowSlotsLocked(1)
+                    pendingAttentionReleases += record.window.id
                     publishMembershipLocked()
                     owner = record.owner
                     return@synchronized
@@ -934,6 +1007,7 @@ public class RuntimeWindowManager public constructor(
         } catch (cause: LinkageError) {
             recoverCallbackFailure(requestId, null, cause)
         } finally {
+            drainAttentionReleases()
             drainLastWindowStopProposal()
         }
     }
@@ -1022,6 +1096,7 @@ public class RuntimeWindowManager public constructor(
         record.window.finishClosing()
         surfaces.remove(record.window.surface.id)
         releaseWindowSlotsLocked(1)
+        pendingAttentionReleases += record.window.id
         publishMembershipLocked()
         safeCloseOwner(record.owner)
     }
@@ -1104,6 +1179,7 @@ public class RuntimeWindowManager public constructor(
             platform = platform,
             publicWindowCapabilities = publicWindowCapabilities,
             enabledWindowUpdateCapabilities = enabledWindowUpdateCapabilities,
+            acceptedAttention = if (attentionPort == null) null else acceptedAttention,
             fullscreenAvailabilityFailure = fullscreenAvailabilityFailure,
             eventCollectorGate = collectorAllocator.newGate(sessionMaxCollectorsPerFlow),
             deliveryPolicy = windowDeliveryPolicy,
@@ -1148,6 +1224,7 @@ public class RuntimeWindowManager public constructor(
         } catch (recoveryCause: LinkageError) {
             safeReport(recoveryCause)
         } finally {
+            drainAttentionReleases()
             drainLastWindowStopProposal()
         }
         callbackOwner?.let(::safeCloseOwner)
@@ -1188,6 +1265,35 @@ public class RuntimeWindowManager public constructor(
         }
     }
 
+    private fun drainAttentionReleases() {
+        val releases = synchronized(lock) {
+            val port = attentionPort ?: return@synchronized null
+            val windowIds = pendingAttentionReleases.toList()
+            pendingAttentionReleases.clear()
+            windowIds to port
+        } ?: return
+        val (windowIds, port) = releases
+        windowIds.forEach { windowId ->
+            try {
+                port.release(windowId)
+            } catch (cause: Exception) {
+                safeReport(cause)
+            } catch (cause: LinkageError) {
+                safeReport(cause)
+            }
+        }
+    }
+
+    private fun safeCloseAttentionPort(port: WindowAttentionPort) {
+        try {
+            port.close()
+        } catch (cause: Exception) {
+            safeReport(cause)
+        } catch (cause: LinkageError) {
+            safeReport(cause)
+        }
+    }
+
     private fun safeReport(cause: Throwable) {
         try {
             failureReporter.report(cause)
@@ -1200,6 +1306,40 @@ public class RuntimeWindowManager public constructor(
 
     private fun platformFailure(code: String): KadreFailure.PlatformFailure =
         KadreFailure.PlatformFailure(platform, "window-command-port", code)
+
+    private fun rejectedWindowRequest(): RuntimeWindowRequest = RuntimeWindowRequest(
+        RuntimeProcessIds.nextWindowRequestId(),
+        RuntimeProcessIds.nextWindowId(),
+        this,
+    ).also { request ->
+        request.terminate(WindowRequestOutcome.Rejected(KadreFailure.Unsupported(KadreOperation.RequestWindow)))
+        request.markHandoffDelivered()
+    }
+
+    private fun unsupportedInitialWindowProperty(spec: WindowSpec): WindowProperty? {
+        when {
+            spec.outerPosition != null -> return WindowProperty.OuterPosition
+            spec.blurBehind -> return WindowProperty.Blur
+            spec.icon != null -> return WindowProperty.Icon
+        }
+        if (!publicWindowCapabilities) return null
+        fun unsupported(property: WindowProperty): Boolean = property !in enabledWindowUpdateCapabilities
+        return when {
+            spec.title.isNotEmpty() && unsupported(WindowProperty.Title) -> WindowProperty.Title
+            spec.contentSize != DEFAULT_WINDOW_CONTENT_SIZE && unsupported(WindowProperty.ContentSize) -> WindowProperty.ContentSize
+            spec.minimumSize != null && unsupported(WindowProperty.MinimumSize) -> WindowProperty.MinimumSize
+            spec.maximumSize != null && unsupported(WindowProperty.MaximumSize) -> WindowProperty.MaximumSize
+            !spec.resizable && unsupported(WindowProperty.Resizable) -> WindowProperty.Resizable
+            spec.fullscreen is FullscreenMode.Exclusive -> WindowProperty.Fullscreen
+            spec.fullscreen is FullscreenMode.Borderless && unsupported(WindowProperty.Fullscreen) -> WindowProperty.Fullscreen
+            spec.decorations != WindowDecorations.System && unsupported(WindowProperty.Decorations) -> WindowProperty.Decorations
+            spec.systemButtons != WindowSystemButtons.All && unsupported(WindowProperty.SystemButtons) -> WindowProperty.SystemButtons
+            spec.level != WindowLevel.Normal && unsupported(WindowProperty.Level) -> WindowProperty.Level
+            spec.transparent && unsupported(WindowProperty.Transparency) -> WindowProperty.Transparency
+            spec.contentProtection && unsupported(WindowProperty.ContentProtection) -> WindowProperty.ContentProtection
+            else -> null
+        }
+    }
 
     private fun removePendingLocked(record: PendingWindow) {
         if (pending.remove(record.request.id) != null) releaseWindowSlotsLocked(1)
@@ -1292,6 +1432,22 @@ public class RuntimeWindowManager public constructor(
     }
 }
 
+/** Unstable backend-only callback payload for [RuntimeWindowManager.dispatchSynchronousInteraction]. */
+public sealed interface RuntimeSynchronousInteraction {
+    public data class PointerPressed(
+        public val button: PointerButton,
+        public val position: LogicalPoint,
+        public val pressure: Double?,
+    ) : RuntimeSynchronousInteraction
+
+    public data class KeyPressed(public val physicalKey: PhysicalKey) : RuntimeSynchronousInteraction
+
+    public data class TouchStarted(
+        public val touchId: TouchId,
+        public val position: LogicalPoint,
+    ) : RuntimeSynchronousInteraction
+}
+
 private fun fallbackSurfaceSnapshot(effectiveSpec: WindowSpec): SurfaceInitialSnapshot = SurfaceInitialSnapshot(
     metrics = SurfaceMetrics(
         logicalSize = effectiveSpec.contentSize,
@@ -1379,6 +1535,7 @@ internal class RuntimeWindow(
     private val platform: KadrePlatform,
     publicWindowCapabilities: Boolean,
     enabledWindowUpdateCapabilities: Set<WindowProperty>,
+    acceptedAttention: Set<WindowAttention>?,
     private val fullscreenAvailabilityFailure: KadreFailure.PlatformFailure?,
     eventCollectorGate: RuntimeEventCollectorGate,
     deliveryPolicy: WindowDeliveryPolicy,
@@ -1392,6 +1549,7 @@ internal class RuntimeWindow(
         windowCapabilities(
             publicWindowCapabilities,
             enabledWindowUpdateCapabilities,
+            acceptedAttention,
             fullscreenAvailabilityFailure,
         ),
     )
@@ -1426,7 +1584,7 @@ internal class RuntimeWindow(
         manager.applyWindow(this, update)
 
     override suspend fun requestAttention(attention: WindowAttention): KadreResult<Unit> =
-        manager.requestAttention(this)
+        manager.requestAttention(this, attention)
 
     override suspend fun close(): KadreResult<WindowCloseOutcome> = manager.closeWindow(this)
 
@@ -2517,6 +2675,7 @@ private fun initialWindowState(spec: WindowSpec): WindowState = WindowState(
 private fun windowCapabilities(
     publicWindowCapabilities: Boolean,
     enabledWindowUpdateCapabilities: Set<WindowProperty>,
+    acceptedAttention: Set<WindowAttention>?,
     fullscreenAvailabilityFailure: KadreFailure.PlatformFailure?,
 ): WindowCapabilities = WindowCapabilities(
     title = if (publicWindowCapabilities) {
@@ -2576,11 +2735,13 @@ private fun windowCapabilities(
     } else {
         unsupported(KadreOperation.UpdateWindow)
     },
-    transparency = unsupported(KadreOperation.UpdateWindow),
+    transparency = enabledWindowUpdateCapabilities.capability(WindowProperty.Transparency, Unit),
     blurBehind = unsupported(KadreOperation.UpdateWindow),
     icon = unsupported(KadreOperation.UpdateWindow),
-    attention = unsupported(KadreOperation.RequestWindowAttention),
-    contentProtection = unsupported(KadreOperation.UpdateWindow),
+    attention = acceptedAttention?.let {
+        Capability.Supported(it, FeatureAvailability.Available)
+    } ?: unsupported(KadreOperation.RequestWindowAttention),
+    contentProtection = enabledWindowUpdateCapabilities.capability(WindowProperty.ContentProtection, Unit),
     closeInterception = if (publicWindowCapabilities) {
         Capability.Supported(Unit, FeatureAvailability.Available)
     } else {
@@ -2626,6 +2787,14 @@ internal val DEFAULT_RUNTIME_WINDOW_UPDATE_PROPERTIES: Set<WindowProperty> = set
     WindowProperty.Resizable,
 )
 
+private val DEFAULT_WINDOW_CONTENT_SIZE: LogicalSize = LogicalSize(800.0, 600.0)
+
+private val STANDARD_WINDOW_ATTENTION: Set<WindowAttention> = setOf(
+    WindowAttention.None,
+    WindowAttention.Informational,
+    WindowAttention.Critical,
+)
+
 private fun candidateFor(
     update: WindowUpdate,
     current: WindowState,
@@ -2640,6 +2809,8 @@ private fun candidateFor(
         decorations = resolveDecorations(update.decorations, current.decorations),
         systemButtons = resolveSystemButtons(update.systemButtons, current.systemButtons),
         level = resolveLevel(update.level, current.level),
+        transparent = resolveResizable(update.transparency, current.transparent),
+        contentProtection = resolveResizable(update.contentProtection, current.contentProtection),
     )
 } catch (_: IllegalArgumentException) {
     null
@@ -2733,6 +2904,8 @@ private fun invalidRequiredClearField(
     WindowProperty.Decorations in supportedProperties && update.decorations is PropertyChange.Clear -> "decorations"
     WindowProperty.SystemButtons in supportedProperties && update.systemButtons is PropertyChange.Clear -> "systemButtons"
     WindowProperty.Level in supportedProperties && update.level is PropertyChange.Clear -> "level"
+    WindowProperty.Transparency in supportedProperties && update.transparency is PropertyChange.Clear -> "transparency"
+    WindowProperty.ContentProtection in supportedProperties && update.contentProtection is PropertyChange.Clear -> "contentProtection"
     else -> null
 }
 
@@ -2793,7 +2966,9 @@ private fun mutationChanged(current: WindowState, candidate: WindowState): Boole
         current.fullscreen != candidate.fullscreen ||
         current.decorations != candidate.decorations ||
         current.systemButtons != candidate.systemButtons ||
-        current.level != candidate.level
+        current.level != candidate.level ||
+        current.transparent != candidate.transparent ||
+        current.contentProtection != candidate.contentProtection
 
 private fun supportedMutationOnly(
     update: WindowUpdate,
@@ -2808,6 +2983,11 @@ private fun supportedMutationOnly(
     decorations = update.decorations.whenSupported(WindowProperty.Decorations, supportedProperties),
     systemButtons = update.systemButtons.whenSupported(WindowProperty.SystemButtons, supportedProperties),
     level = update.level.whenSupported(WindowProperty.Level, supportedProperties),
+    transparency = update.transparency.whenSupported(WindowProperty.Transparency, supportedProperties),
+    contentProtection = update.contentProtection.whenSupported(
+        WindowProperty.ContentProtection,
+        supportedProperties,
+    ),
     expectedRevision = update.expectedRevision,
 )
 

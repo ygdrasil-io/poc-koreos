@@ -19,6 +19,7 @@ import org.graphiks.kadre.application.SessionInstant
 import org.graphiks.kadre.application.SessionSequence
 import org.graphiks.kadre.diagnostics.Capability
 import org.graphiks.kadre.diagnostics.FeatureAvailability
+import org.graphiks.kadre.diagnostics.DelicateKadreApi
 import org.graphiks.kadre.diagnostics.KadreException
 import org.graphiks.kadre.diagnostics.KadreFailure
 import org.graphiks.kadre.diagnostics.KadreOperation
@@ -38,6 +39,7 @@ import org.graphiks.kadre.input.PointerButton
 import org.graphiks.kadre.input.PointerButtonState
 import org.graphiks.kadre.input.PointerKind
 import org.graphiks.kadre.input.ScrollDelta
+import org.graphiks.kadre.interaction.InteractionHandler
 import org.graphiks.kadre.policy.CollectorOverflowAction
 import org.graphiks.kadre.policy.ContinuousDelivery
 import org.graphiks.kadre.policy.IngressOverflowAction
@@ -78,6 +80,17 @@ import kotlin.time.Duration.Companion.nanoseconds
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class RuntimeWindowSurfaceTest {
+    @Test
+    @OptIn(DelicateKadreApi::class)
+    fun interactionHandlerRemainsUnsupportedWithoutBackendInteractionCapabilities() = runTest {
+        val surface = surface()
+
+        assertEquals(
+            KadreResult.Failure(KadreFailure.Unsupported(KadreOperation.InstallInteractionHandler)),
+            surface.installInteractionHandler(InteractionHandler { _, _ -> }),
+        )
+    }
+
     @Test
     fun keyAndPointerPublishReducedSnapshotsBeforeEventsAndKeepUnknownRepeatAndReleaseAtOneRevision() = runTest {
         val surface = surface()

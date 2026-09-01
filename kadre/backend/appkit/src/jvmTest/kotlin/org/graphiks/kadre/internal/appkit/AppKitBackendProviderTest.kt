@@ -90,6 +90,7 @@ import org.graphiks.kadre.window.FullscreenKind
 import org.graphiks.kadre.window.FullscreenMode
 import org.graphiks.kadre.window.LogicalSizeRange
 import org.graphiks.kadre.window.Window
+import org.graphiks.kadre.window.WindowAttention
 import org.graphiks.kadre.window.WindowCloseDecision
 import org.graphiks.kadre.window.WindowCloseOutcome
 import org.graphiks.kadre.window.WindowCloseResponseOutcome
@@ -129,6 +130,71 @@ import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
 class AppKitBackendProviderTest {
+    @Test
+    fun embeddedAttentionIsUnsupportedByDefaultWithoutTouchingTheNativeBroker() = kotlinx.coroutines.runBlocking {
+        val native = EmbeddedNativeApplication()
+        val provider = AppKitBackendProvider.forTesting(
+            native,
+            AppKitProcessBroker(),
+            AppKitWindowRuntimeDriverFactory { DeterministicAppKitNativeWindowPort("attention-default") },
+        ) { true }
+        val parentScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob())
+        val observedWindows = CompletableDeferred<WindowManager>()
+
+        try {
+            val session = provider.attach(publicWindowRequest(parentScope, observedWindows)).requireSession()
+            val window = assertIs<WindowRequestOutcome.OpenedHere>(
+                observedWindows.await().requestWindow(WindowSpec(title = "attention-default")).appKitSuccessValue().await(),
+            ).window
+
+            assertEquals(
+                KadreFailure.Unsupported(KadreOperation.RequestWindowAttention),
+                assertIs<KadreResult.Failure>(window.requestAttention(WindowAttention.Informational)).reason,
+            )
+            assertTrue(native.attentionRequests.isEmpty())
+            session.close()
+            session.awaitTermination()
+        } finally {
+            parentScope.cancel()
+        }
+        Unit
+    }
+
+    @Test
+    fun embeddedAttentionOptInRoutesTheStandardDomainThroughTheNativeBroker() = kotlinx.coroutines.runBlocking {
+        val native = EmbeddedNativeApplication()
+        val provider = AppKitBackendProvider.forTesting(
+            native,
+            AppKitProcessBroker(),
+            AppKitWindowRuntimeDriverFactory { DeterministicAppKitNativeWindowPort("attention-opt-in") },
+        ) { true }
+        val parentScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob())
+        val observedWindows = CompletableDeferred<WindowManager>()
+
+        try {
+            val session = provider.attach(publicWindowRequest(parentScope, observedWindows, allowUserAttention = true)).requireSession()
+            val window = assertIs<WindowRequestOutcome.OpenedHere>(
+                observedWindows.await().requestWindow(WindowSpec(title = "attention-opt-in")).appKitSuccessValue().await(),
+            ).window
+
+            assertEquals(
+                Capability.Supported(
+                    setOf(WindowAttention.None, WindowAttention.Informational, WindowAttention.Critical),
+                    FeatureAvailability.Available,
+                ),
+                window.capabilities.value.attention,
+            )
+            assertEquals(KadreResult.Success(Unit), window.requestAttention(WindowAttention.Critical))
+            assertEquals(listOf(WindowAttention.Critical), native.attentionRequests)
+            session.close()
+            session.awaitTermination()
+            assertEquals(listOf(1L), native.cancelledAttentionTokens)
+        } finally {
+            parentScope.cancel()
+        }
+        Unit
+    }
+
     @Test
     fun discoveryAndAvailabilityDoNotTouchTheNativeBridge() {
         val providers = ServiceLoader.load(DesktopBackendProvider::class.java).toList()
@@ -584,7 +650,7 @@ class AppKitBackendProviderTest {
         }
 
     @Test
-    fun publicAppKitWindowStateDoesNotClaimUnsupportedRequestedPropertiesWereApplied() =
+    fun publicAppKitWindowStateCommitsSupportedTransparencyAndLeavesUnsupportedPropertiesUnavailable() =
         kotlinx.coroutines.runBlocking {
             val port = DeterministicAppKitNativeWindowPort("public-effective-state")
             val provider = AppKitBackendProvider.forTesting(
@@ -608,8 +674,6 @@ class AppKitBackendProviderTest {
                             maximumSize = LogicalSize(640.0, 360.0),
                             level = WindowLevel.Floating,
                             transparent = true,
-                            blurBehind = true,
-                            contentProtection = true,
                         ),
                     ).appKitSuccessValue().await(),
                 ).window
@@ -622,7 +686,7 @@ class AppKitBackendProviderTest {
                 assertEquals(WindowDecorations.System, window.state.value.decorations)
                 assertEquals(WindowSystemButtons.All, window.state.value.systemButtons)
                 assertEquals(WindowLevel.Floating, window.state.value.level)
-                assertFalse(window.state.value.transparent)
+                assertTrue(window.state.value.transparent)
                 assertFalse(window.state.value.blurBehind)
                 assertFalse(window.state.value.contentProtection)
 
@@ -663,9 +727,12 @@ class AppKitBackendProviderTest {
                     ),
                     windowCapabilities.fullscreen,
                 )
+                assertEquals(
+                    Capability.Supported(Unit, FeatureAvailability.Available),
+                    windowCapabilities.transparency,
+                )
                 listOf<Capability<*>>(
                     windowCapabilities.outerPosition,
-                    windowCapabilities.transparency,
                     windowCapabilities.blurBehind,
                     windowCapabilities.icon,
                     windowCapabilities.attention,
@@ -685,10 +752,16 @@ class AppKitBackendProviderTest {
                     surfaceCapabilities.pointerCapture,
                     surfaceCapabilities.hitTesting,
                     surfaceCapabilities.inputDefaultBehavior,
-                    surfaceCapabilities.handlerInteractions,
                     surfaceCapabilities.armedInteractions,
                     surfaceCapabilities.platformAccess,
                 ).forEach { capability -> assertIs<Capability.Unsupported>(capability) }
+                assertEquals(
+                    Capability.Supported(
+                        setOf(org.graphiks.kadre.interaction.InteractionKind.BeginWindowMove),
+                        FeatureAvailability.Available,
+                    ),
+                    surfaceCapabilities.handlerInteractions,
+                )
                 val stateBeforeUnsupportedUpdate = window.surface.state.value
                 val unsupportedUpdate = assertIs<SurfaceUpdateOutcome.PartiallyApplied>(
                     window.surface.apply(
@@ -1327,7 +1400,7 @@ class AppKitBackendProviderTest {
         org.graphiks.kadre.diagnostics.KadrePlatformApi::class,
     )
     @Test
-    fun publicAppKitWindowActivatesTheNineProvenUpdateCapabilitiesOnMacOs() =
+    fun publicAppKitWindowActivatesTheTenProvenUpdateCapabilitiesOnMacOs() =
         runPublicAppKitGeometrySession {
             val window = openPublicGeometryWindow("public-geometry-capabilities")
             val range = LogicalSizeRange(null, null, null)
@@ -1384,13 +1457,22 @@ class AppKitBackendProviderTest {
                 ),
                 window.capabilities.value.fullscreen,
             )
+            assertEquals(
+                Capability.Supported(Unit, FeatureAvailability.Available),
+                window.capabilities.value.transparency,
+            )
+            assertEquals(
+                Capability.Supported(
+                    setOf(WindowAttention.None, WindowAttention.Informational, WindowAttention.Critical),
+                    FeatureAvailability.Available,
+                ),
+                window.capabilities.value.attention,
+            )
             assertNull(window.state.value.outerBounds)
             listOf<Capability<*>>(
                 window.capabilities.value.outerPosition,
-                window.capabilities.value.transparency,
                 window.capabilities.value.blurBehind,
                 window.capabilities.value.icon,
-                window.capabilities.value.attention,
                 window.capabilities.value.contentProtection,
             ).forEach { capability -> assertIs<Capability.Unsupported>(capability) }
         }
@@ -2729,6 +2811,89 @@ class AppKitBackendProviderTest {
     }
 
     @Test
+    fun phase5AdvancedWindowHarnessWritesAnHonestNoninteractiveRecordOnMacOs() {
+        if (!isMacOs()) return
+        val record = Files.createTempFile("kadre-phase5-advanced-window-harness", ".tsv")
+        val output = Files.createTempFile("kadre-phase5-advanced-window-harness", ".log")
+        try {
+            val process = ProcessBuilder(
+                Path.of(System.getProperty("java.home"), "bin", "java").toString(),
+                "-XstartOnFirstThread",
+                "--enable-native-access=ALL-UNNAMED",
+                "-cp",
+                System.getProperty("java.class.path"),
+                "org.graphiks.kadre.internal.appkit.manual.Phase5AdvancedWindowHarnessKt",
+                "--record=$record",
+                "--build-id=automated-advanced-window-harness-proof",
+            ).redirectErrorStream(true)
+                .redirectOutput(output.toFile())
+                .start()
+
+            process.outputStream.bufferedWriter().use { commands ->
+                commands.appendLine("transparent")
+                commands.appendLine("opaque")
+                commands.appendLine("attention informational")
+                commands.appendLine("attention critical")
+                commands.appendLine("attention none")
+                commands.appendLine("install-move-handler")
+                commands.appendLine("move")
+                (1..5).forEach { scenario ->
+                    commands.appendLine(
+                        "result M$scenario not-applicable automated proof does not satisfy manual M$scenario",
+                    )
+                }
+                commands.appendLine("close")
+                commands.appendLine("finish")
+            }
+            val completed = process.waitFor(30, TimeUnit.SECONDS)
+            if (!completed) process.destroyForcibly()
+            val processOutput = Files.readString(output)
+            assertTrue(completed, processOutput)
+            assertEquals(0, process.exitValue(), processOutput)
+
+            val report = Files.readString(record)
+            assertTrue(report.contains("RUN_METADATA\t"), report)
+            listOf(
+                "macOS=",
+                "architecture=",
+                "hardware=",
+                "displays=",
+                "buildId=automated-advanced-window-harness-proof",
+            ).forEach { field -> assertTrue(report.contains(field), "$field missing from:\n$report") }
+            assertTrue(report.contains("SNAPSHOT\tinitial\tWindowState("), report)
+            assertTrue(report.contains("CAPABILITIES\tWindowCapabilities("), report)
+            listOf("transparent", "opaque").forEach { command ->
+                assertTrue(report.contains("COMMAND\t$command\tSuccess(value="), report)
+                assertTrue(report.contains("SNAPSHOT\tcommand-$command\tWindowState("), report)
+            }
+            listOf("informational", "critical", "none").forEach { attention ->
+                assertTrue(report.contains("COMMAND\tattention-$attention\tSuccess(value=kotlin.Unit)"), report)
+            }
+            assertTrue(report.contains("COMMAND\tinstall-move-handler\tSuccess(value="), report)
+            assertTrue(report.contains("COMMAND\tmove\tawaiting-real-pointer-down"), report)
+            assertTrue(
+                report.contains("TERMINAL_STABILITY\tnoLateRevision=true\tnoLateEvent=true"),
+                report,
+            )
+            assertTrue(report.contains("TERMINAL\tWindowState(phase=Closed"), report)
+            assertTrue(report.contains("SESSION_OUTCOME\tStopped(reason=ApplicationRequested)"), report)
+            (1..5).forEach { scenario ->
+                assertTrue(
+                    report.contains(
+                        "SCENARIO\tM$scenario\tnot-applicable\t" +
+                            "automated proof does not satisfy manual M$scenario",
+                    ),
+                    report,
+                )
+            }
+            assertFalse(report.lineSequence().any { it.startsWith("SCENARIO\t") && "\tpass\t" in it }, report)
+        } finally {
+            Files.deleteIfExists(record)
+            Files.deleteIfExists(output)
+        }
+    }
+
+    @Test
     fun publishedKffiScrollPostingAcceptsDiscreteAndPreciseCoreGraphicsEventsOnMacOs() {
         if (!isMacOs()) return
 
@@ -2953,6 +3118,9 @@ private class EmbeddedNativeApplication : AppKitNativeApplication {
         private set
     var stopCount: Int = 0
         private set
+    val attentionRequests = mutableListOf<WindowAttention>()
+    val cancelledAttentionTokens = mutableListOf<Long>()
+    private var nextAttentionToken = 1L
 
     override fun isMainThread(): Boolean = true
 
@@ -2960,6 +3128,13 @@ private class EmbeddedNativeApplication : AppKitNativeApplication {
 
     override fun startLifecycleObservation(listener: (AppKitLifecycleSignal) -> Unit): AutoCloseable =
         observe(listener)
+
+    override fun requestUserAttention(attention: WindowAttention): Long =
+        nextAttentionToken++.also { attentionRequests += attention }
+
+    override fun cancelUserAttentionRequest(token: Long) {
+        cancelledAttentionTokens += token
+    }
 
     override fun run() {
         runCount += 1
@@ -3109,6 +3284,7 @@ private fun embeddedRequest(
 private fun publicWindowRequest(
     parentScope: kotlinx.coroutines.CoroutineScope,
     captureWindows: CompletableDeferred<WindowManager>,
+    allowUserAttention: Boolean = false,
 ): DesktopEmbeddedRequest = DesktopEmbeddedRequest(
     parentScope,
     KadreApplicationFactory {
@@ -3119,6 +3295,7 @@ private fun publicWindowRequest(
     },
     DesktopIntegrationKind.AppKitMainLoop,
     KadrePolicies.Default,
+    allowUserAttention,
 )
 
 @OptIn(

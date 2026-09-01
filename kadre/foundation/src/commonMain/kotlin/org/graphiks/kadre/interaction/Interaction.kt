@@ -5,13 +5,11 @@ import kotlinx.coroutines.flow.StateFlow
 import org.graphiks.kadre.application.EventStamp
 import org.graphiks.kadre.diagnostics.DelicateKadreApi
 import org.graphiks.kadre.diagnostics.KadreFailure
-import org.graphiks.kadre.diagnostics.KadreOperation
 import org.graphiks.kadre.diagnostics.KadreResult
 import org.graphiks.kadre.input.DropOfferId
 import org.graphiks.kadre.input.PhysicalKey
 import org.graphiks.kadre.input.PointerButton
 import org.graphiks.kadre.input.TouchId
-import org.graphiks.kadre.surface.HostSurface
 import org.graphiks.kadre.surface.LogicalPoint
 import org.graphiks.kadre.surface.PointerCaptureMode
 import org.graphiks.kadre.window.FullscreenMode
@@ -19,18 +17,6 @@ import org.graphiks.kadre.window.ResizeEdge
 import org.graphiks.kadre.window.WindowRequestId
 import org.graphiks.kadre.window.WindowSpec
 import kotlin.time.Duration
-
-@OptIn(DelicateKadreApi::class)
-public fun HostSurface.installInteractionHandler(
-    handler: InteractionHandler,
-): KadreResult<InteractionRegistration> =
-    KadreResult.Failure(KadreFailure.Unsupported(KadreOperation.InstallInteractionHandler))
-
-public suspend fun HostSurface.armInteraction(
-    action: InteractionAction,
-    options: InteractionArmOptions,
-): KadreResult<ArmedInteraction> =
-    KadreResult.Failure(KadreFailure.Unsupported(KadreOperation.ArmInteraction))
 
 public interface InteractionRegistration : AutoCloseable {
     public val outcomes: Flow<InteractionActionOutcome>

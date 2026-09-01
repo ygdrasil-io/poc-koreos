@@ -1,5 +1,9 @@
 package org.graphiks.kadre.internal.appkit
 
+import org.graphiks.kadre.diagnostics.KadreResult
+import org.graphiks.kadre.input.PointerButton
+import org.graphiks.kadre.input.PointerButtonState
+import org.graphiks.kadre.surface.LogicalPoint
 import org.graphiks.kadre.window.WindowSpec
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
@@ -272,6 +276,39 @@ class AppKitWindowPeerTest {
         assertTrue(closeCompletedBeforeConsumerReturned.get())
     }
 
+    @Test
+    fun callbackOriginatedCloseReportsDeferredCleanupFailureWithoutThrowing() {
+        val cleanupFailure = IllegalStateException("deferred callback cleanup")
+        val reported = mutableListOf<Throwable>()
+        val port = RecordingAppKitNativeWindowPort(
+            cleanupFailure = cleanupFailure,
+            installInput = true,
+        )
+        lateinit var peer: AppKitWindowPeer
+        peer = AppKitWindowPeer.prepare(
+            PEER_ID,
+            WindowSpec(),
+            port,
+            dispatchSynchronousInteraction = { _, _ ->
+                peer.close()
+                true
+            },
+            reportCallbackFailure = reported::add,
+        )
+
+        port.emitPointerDown(
+            AppKitInput.PointerButtonChanged(
+                PointerButton.Primary,
+                PointerButtonState.Pressed,
+                LogicalPoint(13.0, 17.0),
+                pressure = null,
+            ),
+        ) { KadreResult.Success(Unit) }
+
+        assertEquals(listOf<Throwable>(cleanupFailure), reported)
+        assertTrue(port.trace.containsAll(listOf("detach:view", "release:view", "close:window", "release:window")))
+    }
+
     private companion object {
         val PEER_ID: AppKitWindowPeerId = AppKitWindowPeerId(41L)
     }
@@ -281,9 +318,11 @@ private class RecordingAppKitNativeWindowPort(
     private val failAt: String? = null,
     private val cleanupFailure: Throwable? = null,
     private val detachDelegateFailure: Throwable? = null,
+    private val installInput: Boolean = false,
 ) : AppKitNativeWindowPort {
     val trace = mutableListOf<String>()
     lateinit var delegate: RecordingDelegateOwner
+    private var inputObserver: RecordingInputObserver? = null
 
     override fun isMainThread(): Boolean = true
 
@@ -339,6 +378,22 @@ private class RecordingAppKitNativeWindowPort(
         failIfRequested("present")
     }
 
+    override fun observeSurface(
+        window: AppKitNativeWindowOwner,
+        view: AppKitNativeViewOwner,
+        callbacks: AppKitSurfaceCallbacks,
+    ): AppKitNativeSurfaceObserverOwner? = if (installInput) RecordingSurfaceObserver() else null
+
+    override fun observeInput(
+        window: AppKitNativeWindowOwner,
+        view: AppKitNativeViewOwner,
+        callbacks: AppKitInputCallbacks,
+    ): AppKitNativeInputObserverOwner? = if (installInput) {
+        RecordingInputObserver(callbacks).also { inputObserver = it }
+    } else {
+        null
+    }
+
     override fun detachDelegate(window: AppKitNativeWindowOwner) {
         trace += "detach:delegate"
         detachDelegateFailure?.let { throw it }
@@ -364,6 +419,41 @@ private class RecordingAppKitNativeWindowPort(
     private fun failIfRequested(operation: String) {
         if (failAt == operation) error("native $operation failure")
     }
+
+    fun emitPointerDown(
+        input: AppKitInput.PointerButtonChanged,
+        nativeMove: () -> KadreResult<Unit>,
+    ) {
+        checkNotNull(inputObserver).emitPointerDown(input, nativeMove)
+    }
+}
+
+private class RecordingSurfaceObserver : AppKitNativeSurfaceObserverOwner {
+    override val initialSnapshot: AppKitSurfaceSnapshot = deterministicSurfaceSnapshot()
+
+    override fun requestRedraw(generation: Long) = Unit
+
+    override fun revokeCallbacks() = Unit
+
+    override fun close() = Unit
+}
+
+private class RecordingInputObserver(
+    private val callbacks: AppKitInputCallbacks,
+) : AppKitNativeInputObserverOwner {
+    override val keyboardInstalled: Boolean = true
+    override val pointerInstalled: Boolean = true
+
+    fun emitPointerDown(
+        input: AppKitInput.PointerButtonChanged,
+        nativeMove: () -> KadreResult<Unit>,
+    ) {
+        callbacks.pointerDown(input, nativeMove)
+    }
+
+    override fun revokeCallbacks() = Unit
+
+    override fun close() = Unit
 }
 
 private class RecordingWindowOwner(

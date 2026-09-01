@@ -17,6 +17,7 @@ public sealed interface DesktopHostOptions {
     public data class Embedded(
         public val integration: DesktopIntegration,
         public val backend: DesktopBackend = DesktopBackend.Auto,
+        public val allowUserAttention: Boolean = false,
     ) : DesktopHostOptions
 
     public data class Standalone(

@@ -5,6 +5,9 @@ import org.graphiks.kadre.diagnostics.KadreFailure
 import org.graphiks.kadre.diagnostics.KadreException
 import org.graphiks.kadre.diagnostics.KadrePlatform
 import org.graphiks.kadre.diagnostics.KadreResourceKind
+import org.graphiks.kadre.diagnostics.KadreOperation
+import org.graphiks.kadre.diagnostics.Capability
+import org.graphiks.kadre.diagnostics.FeatureAvailability
 import org.graphiks.kadre.internal.runtime.OpenedWindowCloseCommand
 import org.graphiks.kadre.internal.runtime.OpenedWindowCloseOutcome
 import org.graphiks.kadre.internal.runtime.CloseRequestRejectionOutcome
@@ -15,6 +18,7 @@ import org.graphiks.kadre.internal.runtime.RuntimeFailureReporter
 import org.graphiks.kadre.internal.runtime.RuntimeDesktopNativeWindowHandle
 import org.graphiks.kadre.internal.runtime.RuntimeDesktopWindowHandleAccess
 import org.graphiks.kadre.internal.runtime.RuntimeWindowManager
+import org.graphiks.kadre.internal.runtime.RuntimeSynchronousInteraction
 import org.graphiks.kadre.internal.runtime.SurfaceCommandPort
 import org.graphiks.kadre.internal.runtime.SurfaceInitialSnapshot
 import org.graphiks.kadre.internal.runtime.SurfaceRedrawCommand
@@ -23,6 +27,7 @@ import org.graphiks.kadre.internal.runtime.SurfaceStimulus
 import org.graphiks.kadre.internal.runtime.SurfaceUpdateCommand
 import org.graphiks.kadre.internal.runtime.SurfaceUpdateCommandOutcome
 import org.graphiks.kadre.internal.runtime.WindowCommandPort
+import org.graphiks.kadre.internal.runtime.WindowAttentionPort
 import org.graphiks.kadre.internal.runtime.WindowOpenCommand
 import org.graphiks.kadre.internal.runtime.WindowPeerOwner
 import org.graphiks.kadre.internal.runtime.WindowUpdateCancellationCommand
@@ -35,6 +40,7 @@ import org.graphiks.kadre.surface.PropertyChange
 import org.graphiks.kadre.window.FullscreenMode
 import org.graphiks.kadre.window.RejectedWindowField
 import org.graphiks.kadre.window.WindowDecorations
+import org.graphiks.kadre.window.WindowAttention
 import org.graphiks.kadre.window.WindowLevel
 import org.graphiks.kadre.window.WindowId
 import org.graphiks.kadre.window.WindowRequestId
@@ -43,6 +49,9 @@ import org.graphiks.kadre.window.WindowSpec
 import org.graphiks.kadre.window.WindowSystemButtons
 import org.graphiks.kadre.window.WindowProperty
 import org.graphiks.kadre.surface.SurfaceId
+import org.graphiks.kadre.surface.SurfaceCapabilities
+import org.graphiks.kadre.interaction.InteractionAction
+import org.graphiks.kadre.interaction.InteractionKind
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
@@ -61,7 +70,10 @@ internal class AppKitWindowRuntimeDriver internal constructor(
     publicSurfaceCapabilities: Boolean,
     onLastWindowClosed: (() -> Unit)?,
     beforeCommitDelivery: (WindowSpec) -> Unit,
+    beforeRuntimeSurfaceReadyDrain: () -> Unit,
     beforeFullscreenFollowUpEnqueue: (AppKitFullscreenCallback) -> Unit,
+    broker: AppKitProcessBroker?,
+    attentionOwner: AppKitProcessBroker.AppKitUserAttentionOwner?,
 ) : AutoCloseable {
     private val closed = AtomicBoolean(false)
     private val fullscreenObservationSink = DeferredRuntimeFullscreenObservationSink()
@@ -69,6 +81,7 @@ internal class AppKitWindowRuntimeDriver internal constructor(
         nativePort,
         failureReporter,
         beforeCommitDelivery,
+        beforeRuntimeSurfaceReadyDrain,
         enabledWindowUpdateCapabilities,
         surfaceStimulusSink = { stimulus -> manager.acceptSurfaceStimulus(stimulus) },
         geometryStimulusSink = geometry@{ windowId, snapshot ->
@@ -81,7 +94,15 @@ internal class AppKitWindowRuntimeDriver internal constructor(
         },
         fullscreenObservationSink = fullscreenObservationSink,
         beforeFullscreenFollowUpEnqueue = beforeFullscreenFollowUpEnqueue,
+        synchronousInteractionSink = { surfaceId, event, supported, invokeNative ->
+            manager.dispatchSynchronousInteraction(surfaceId, event, supported, invokeNative)
+        },
     )
+    private val attentionPort: AppKitWindowAttentionPort? = if (broker != null && attentionOwner != null) {
+        BrokeredAppKitWindowAttentionPort(commandPort, broker, attentionOwner)
+    } else {
+        null
+    }
 
     internal val manager: RuntimeWindowManager = RuntimeWindowManager(
         resources = resources,
@@ -91,8 +112,11 @@ internal class AppKitWindowRuntimeDriver internal constructor(
         failureReporter = failureReporter,
         publicWindowCapabilities = publicAppKitCapabilities,
         enabledWindowUpdateCapabilities = enabledWindowUpdateCapabilities,
+        attentionPort = attentionPort,
+        acceptedAttention = APPKIT_WINDOW_ATTENTION,
         fullscreenAvailabilityFailure = fullscreenAvailabilityFailure,
         publicSurfaceCapabilities = publicSurfaceCapabilities,
+        enabledSurfaceCapabilities = appKitSurfaceCapabilities(publicSurfaceCapabilities),
         onLastWindowClosed = onLastWindowClosed,
     ).also(fullscreenObservationSink::install)
 
@@ -107,16 +131,123 @@ internal class AppKitWindowRuntimeDriver internal constructor(
     }
 }
 
+internal interface AppKitWindowAttentionPort : WindowAttentionPort
+
+private val APPKIT_HANDLER_INTERACTIONS = setOf(InteractionKind.BeginWindowMove)
+
+private fun appKitSurfaceCapabilities(publicSurfaceCapabilities: Boolean): SurfaceCapabilities {
+    val unsupportedUpdate = Capability.Unsupported(KadreFailure.Unsupported(KadreOperation.UpdateSurface))
+    return SurfaceCapabilities(
+        cursor = unsupportedUpdate,
+        customCursor = unsupportedUpdate,
+        pointerCapture = unsupportedUpdate,
+        hitTesting = unsupportedUpdate,
+        inputDefaultBehavior = unsupportedUpdate,
+        handlerInteractions = if (publicSurfaceCapabilities) {
+            Capability.Supported(APPKIT_HANDLER_INTERACTIONS, FeatureAvailability.Available)
+        } else {
+            Capability.Unsupported(KadreFailure.Unsupported(KadreOperation.InstallInteractionHandler))
+        },
+        armedInteractions = Capability.Unsupported(KadreFailure.Unsupported(KadreOperation.ArmInteraction)),
+        platformAccess = unsupportedUpdate,
+    )
+}
+
+private class BrokeredAppKitWindowAttentionPort(
+    private val commandPort: AppKitWindowCommandPort,
+    private val broker: AppKitProcessBroker,
+    private val owner: AppKitProcessBroker.AppKitUserAttentionOwner,
+) : AppKitWindowAttentionPort {
+    private val closed = AtomicBoolean(false)
+
+    init {
+        owner.installFailureReporter { failure ->
+            commandPort.reportAttentionFailure(KadreException(failure))
+        }
+    }
+
+    override suspend fun request(windowId: WindowId, attention: WindowAttention) =
+        suspendCancellableCoroutine { continuation ->
+            val cancelled = AtomicBoolean(false)
+            continuation.invokeOnCancellation { cancelled.set(true) }
+            val submitted = commandPort.submitAttention {
+                val result = when {
+                    cancelled.get() -> null
+                    closed.get() -> org.graphiks.kadre.diagnostics.KadreResult.Failure(
+                        KadreFailure.Closed(KadreResourceKind.Host),
+                    )
+                    else -> try {
+                        commandPort.onMainThread {
+                            when {
+                                cancelled.get() -> null
+                                closed.get() -> org.graphiks.kadre.diagnostics.KadreResult.Failure(
+                                    KadreFailure.Closed(KadreResourceKind.Host),
+                                )
+                                else -> broker.requestUserAttention(owner, windowId, attention)
+                            }
+                        }
+                    } catch (cause: Exception) {
+                        commandPort.reportAttentionFailure(cause)
+                        org.graphiks.kadre.diagnostics.KadreResult.Failure(
+                            KadreFailure.PlatformFailure(KadrePlatform.AppKit, "user-attention", "main-thread-exception"),
+                        )
+                    } catch (cause: LinkageError) {
+                        commandPort.reportAttentionFailure(cause)
+                        org.graphiks.kadre.diagnostics.KadreResult.Failure(
+                            KadreFailure.PlatformFailure(KadrePlatform.AppKit, "user-attention", "main-thread-exception"),
+                        )
+                    }
+                }
+                if (result != null && continuation.isActive) continuation.resume(result) { _, _, _ -> }
+            }
+            if (!submitted && continuation.isActive) {
+                continuation.resume(
+                    org.graphiks.kadre.diagnostics.KadreResult.Failure(
+                        KadreFailure.Closed(KadreResourceKind.Host),
+                    ),
+                ) { _, _, _ -> }
+            }
+        }
+
+    override fun release(windowId: WindowId) {
+        commandPort.submitAttentionCleanup {
+            if (broker.hasUserAttention(owner, windowId)) {
+                val result = commandPort.onMainThread { broker.releaseUserAttention(owner, windowId) }
+                if (result is org.graphiks.kadre.diagnostics.KadreResult.Failure) {
+                    commandPort.reportAttentionFailure(KadreException(result.reason))
+                }
+            }
+        }
+    }
+
+    override fun close() {
+        if (!closed.compareAndSet(false, true)) return
+        commandPort.submitAttentionCleanup {
+            if (broker.hasUserAttention(owner)) {
+                commandPort.onMainThread { broker.releaseAllUserAttention(owner) }
+                    .forEach { failure -> commandPort.reportAttentionFailure(KadreException(failure)) }
+            }
+        }
+    }
+}
+
 private class AppKitWindowCommandPort(
     private val nativePort: AppKitNativeWindowPort,
     private val failureReporter: RuntimeFailureReporter,
     private val beforeCommitDelivery: (WindowSpec) -> Unit,
+    private val beforeRuntimeSurfaceReadyDrain: () -> Unit,
     private val enabledWindowUpdateCapabilities: Set<WindowProperty>,
     private val surfaceStimulusSink: (SurfaceStimulus) -> Boolean,
     private val geometryStimulusSink: (WindowId, AppKitWindowGeometrySnapshot) -> Boolean,
     private val windowState: (WindowId) -> WindowState?,
     private val fullscreenObservationSink: RuntimeFullscreenObservationSink,
     private val beforeFullscreenFollowUpEnqueue: (AppKitFullscreenCallback) -> Unit,
+    private val synchronousInteractionSink: (
+        SurfaceId,
+        RuntimeSynchronousInteraction,
+        Set<InteractionKind>,
+        (InteractionAction) -> org.graphiks.kadre.diagnostics.KadreResult<Unit>,
+    ) -> Boolean,
 ) : WindowCommandPort, SurfaceCommandPort {
     private val lock = Any()
     private val nextPeerId = AtomicLong(0L)
@@ -127,6 +258,14 @@ private class AppKitWindowCommandPort(
     private val mutationCommands = linkedMapOf<org.graphiks.kadre.window.WindowOperationId, PendingWindowMutationCommand>()
     private val commands = AppKitWindowCommandQueue(::reportFailure)
     private var closed = false
+
+    fun submitAttention(task: () -> Unit): Boolean = commands.submit(task)
+
+    fun submitAttentionCleanup(task: () -> Unit): Boolean = commands.submitFollowUp(task)
+
+    fun <T> onMainThread(block: () -> T): T = nativePort.onMainThread(block)
+
+    fun reportAttentionFailure(cause: Throwable) = reportFailure(cause)
 
     override fun requestOpen(command: WindowOpenCommand) {
         val entry = PeerEntry(command, AppKitWindowPeerId(nextPeerId.getAndIncrement()))
@@ -316,7 +455,10 @@ private class AppKitWindowCommandPort(
         }
 
         val effectiveSpec = appKitEffectiveSpec(entry.command.spec, enabledWindowUpdateCapabilities)
-        val initialLevelReadbackRequired = WindowProperty.Level in enabledWindowUpdateCapabilities
+        val initialWindowReadbackRequired = setOf(
+            WindowProperty.Level,
+            WindowProperty.Transparency,
+        ).any(enabledWindowUpdateCapabilities::contains)
         val peer = try {
             AppKitWindowPeer.prepare(
                 id = entry.peerId,
@@ -324,8 +466,11 @@ private class AppKitWindowCommandPort(
                 port = nativePort,
                 acceptStimulus = ::enqueueStimulus,
                 acceptSurfaceStimulus = ::enqueueSurfaceStimulus,
+                dispatchSynchronousInteraction = { event, invokeNative ->
+                    dispatchSynchronousInteraction(entry, event, invokeNative)
+                },
                 reportCallbackFailure = ::reportFailure,
-                readInitialWindowSnapshot = initialLevelReadbackRequired,
+                readInitialWindowSnapshot = initialWindowReadbackRequired,
             )
         } catch (cause: Exception) {
             rejectPreparation(entry, cause)
@@ -334,8 +479,20 @@ private class AppKitWindowCommandPort(
             rejectPreparation(entry, cause)
             return
         }
-        val openingSpec = if (initialLevelReadbackRequired) {
-            effectiveSpec.copy(level = checkNotNull(peer.initialWindowSnapshot).level)
+        val openingSpec = if (initialWindowReadbackRequired) {
+            val snapshot = checkNotNull(peer.initialWindowSnapshot)
+            effectiveSpec.copy(
+                level = if (WindowProperty.Level in enabledWindowUpdateCapabilities) {
+                    snapshot.level
+                } else {
+                    effectiveSpec.level
+                },
+                transparent = if (WindowProperty.Transparency in enabledWindowUpdateCapabilities) {
+                    snapshot.appearance.transparency
+                } else {
+                    effectiveSpec.transparent
+                },
+            )
         } else {
             effectiveSpec
         }
@@ -359,7 +516,11 @@ private class AppKitWindowCommandPort(
                     openingSpec,
                     peer.initialSurfaceSnapshot?.toRuntimeSnapshot(),
                 ) {
-                    commands.submitFollowUp { markRuntimeSurfaceReady(entry) }
+                    if (beginRuntimeSurfaceReadiness(entry)) {
+                        commands.submitFollowUp {
+                            nativePort.onMainThread { markRuntimeSurfaceReady(entry) }
+                        }
+                    }
                     commands.submitFollowUp { markRuntimeGeometryReady(entry) }
                     commands.submitFollowUp { markRuntimeWindowReady(entry) }
                 }
@@ -454,6 +615,9 @@ private class AppKitWindowCommandPort(
 
     private fun enqueueSurfaceStimulus(stimulus: AppKitSurfaceStimulus) {
         var deliverThroughSerializer = false
+        var deliverInputInline = false
+        var drainBufferedInputInline = false
+        var entryToDrain: PeerEntry? = null
         val accepted = synchronized(lock) {
             val entry = byPeer[stimulus.peerId]
             if (
@@ -463,10 +627,24 @@ private class AppKitWindowCommandPort(
                 !entry.surfaceCleanupReserved &&
                 !entry.closeAdmitted
             ) {
-                if (entry.runtimeSurfaceReady) {
-                    deliverThroughSerializer = true
-                } else {
-                    entry.bufferedSurfaceStimuli.addLast(stimulus)
+                when (entry.surfaceReadiness) {
+                    RuntimeSurfaceReadiness.Buffering -> entry.bufferedSurfaceStimuli.addLast(stimulus)
+                    RuntimeSurfaceReadiness.Draining -> {
+                        entry.bufferedSurfaceStimuli.addLast(stimulus)
+                        if (
+                            stimulus.affectsSurfaceInput() &&
+                            (entry.surfaceDrainOwner == null || entry.surfaceDrainOwner === Thread.currentThread())
+                        ) {
+                            drainBufferedInputInline = true
+                            entryToDrain = entry
+                        }
+                    }
+                    RuntimeSurfaceReadiness.Live -> if (stimulus.affectsSurfaceInput()) {
+                        deliverInputInline = true
+                    } else {
+                        deliverThroughSerializer = true
+                    }
+                    RuntimeSurfaceReadiness.Closed -> return@synchronized false
                 }
                 true
             } else {
@@ -476,28 +654,111 @@ private class AppKitWindowCommandPort(
         if (accepted && deliverThroughSerializer) {
             commands.submitFollowUp { acceptSurfaceStimulus(stimulus) }
         }
+        if (accepted && drainBufferedInputInline) {
+            drainBufferedSurfaceStimuli(entryToDrain)
+        }
+        if (accepted && deliverInputInline) {
+            // A pointer-down interaction enters the runtime synchronously. Deliver its preceding
+            // live input callback inline, rather than waiting on this queue, to preserve AppKit order.
+            acceptSurfaceStimulus(stimulus)
+        }
     }
 
     private fun markRuntimeSurfaceReady(entry: PeerEntry) {
-        val bufferedSurfaceStimuli = synchronized(lock) {
+        val completeDrain = synchronized(lock) {
             if (
                 entry.removed ||
                 entry.surfaceCleanupReserved ||
                 entry.closeAdmitted ||
                 closed
             ) {
+                entry.surfaceReadiness = RuntimeSurfaceReadiness.Closed
+                entry.surfaceDrainOwner = null
                 entry.bufferedSurfaceStimuli.clear()
-                emptyList()
+                false
             } else {
-                entry.runtimeSurfaceReady = true
-                entry.bufferedSurfaceStimuli.toList().also {
-                    entry.bufferedSurfaceStimuli.clear()
-                }
+                entry.surfaceReadiness == RuntimeSurfaceReadiness.Draining
             }
         }
-        // This callback itself runs on the command queue, so the FIFO drain is serialized with
-        // every later surface callback admitted through submitFollowUp().
-        bufferedSurfaceStimuli.forEach(::acceptSurfaceStimulus)
+        if (!completeDrain) return
+        beforeRuntimeSurfaceReadyDrain()
+        drainBufferedSurfaceStimuli(entry)
+    }
+
+    private fun beginRuntimeSurfaceReadiness(entry: PeerEntry): Boolean = synchronized(lock) {
+        when {
+            closed || entry.removed || entry.surfaceCleanupReserved || entry.closeAdmitted -> {
+                entry.surfaceReadiness = RuntimeSurfaceReadiness.Closed
+                entry.surfaceDrainOwner = null
+                entry.bufferedSurfaceStimuli.clear()
+                false
+            }
+            entry.surfaceReadiness == RuntimeSurfaceReadiness.Buffering -> {
+                entry.surfaceReadiness = RuntimeSurfaceReadiness.Draining
+                true
+            }
+            else -> false
+        }
+    }
+
+    /**
+     * Completes the pre-commit to live handoff without exposing a ready flag before its FIFO.
+     *
+     * AppKit invokes surface and input callbacks on its main thread. Readiness is marshalled to
+     * that same owner thread, so a synchronous pointer-down can take over an unowned drain
+     * reentrantly without waiting for the command queue. No runtime or application code runs
+     * while [lock] is held.
+     */
+    private fun drainBufferedSurfaceStimuli(entry: PeerEntry?): Boolean {
+        entry ?: return false
+        val owner = Thread.currentThread()
+        val claimed = synchronized(lock) {
+            when {
+                closed || entry.removed || entry.surfaceCleanupReserved || entry.closeAdmitted -> {
+                    entry.surfaceReadiness = RuntimeSurfaceReadiness.Closed
+                    entry.surfaceDrainOwner = null
+                    entry.bufferedSurfaceStimuli.clear()
+                    false
+                }
+                entry.surfaceReadiness == RuntimeSurfaceReadiness.Live -> true
+                entry.surfaceReadiness != RuntimeSurfaceReadiness.Draining -> false
+                entry.surfaceDrainOwner == null || entry.surfaceDrainOwner === owner -> {
+                    entry.surfaceDrainOwner = owner
+                    true
+                }
+                else -> false
+            }
+        }
+        if (!claimed) return false
+
+        while (true) {
+            var live = false
+            val stimulus = synchronized(lock) {
+                when {
+                    closed || entry.removed || entry.surfaceCleanupReserved || entry.closeAdmitted -> {
+                        entry.surfaceReadiness = RuntimeSurfaceReadiness.Closed
+                        entry.surfaceDrainOwner = null
+                        entry.bufferedSurfaceStimuli.clear()
+                        null
+                    }
+                    entry.surfaceReadiness == RuntimeSurfaceReadiness.Live -> {
+                        live = true
+                        null
+                    }
+                    entry.surfaceReadiness != RuntimeSurfaceReadiness.Draining ||
+                        entry.surfaceDrainOwner !== owner -> null
+                    entry.bufferedSurfaceStimuli.isEmpty() -> {
+                        entry.surfaceReadiness = RuntimeSurfaceReadiness.Live
+                        entry.surfaceDrainOwner = null
+                        live = true
+                        null
+                    }
+                    else -> entry.bufferedSurfaceStimuli.removeFirst()
+                }
+            }
+            if (stimulus == null) return live
+            acceptSurfaceStimulus(stimulus)
+        }
     }
 
     private fun markRuntimeGeometryReady(entry: PeerEntry) {
@@ -533,6 +794,49 @@ private class AppKitWindowCommandPort(
             }?.surfaceId
         } ?: return
         surfaceStimulusSink(stimulus.toRuntime(surfaceId))
+    }
+
+    private fun AppKitSurfaceStimulus.affectsSurfaceInput(): Boolean = when (this) {
+        is AppKitSurfaceStimulus.FocusChanged,
+        is AppKitSurfaceStimulus.InputObservationChanged,
+        is AppKitSurfaceStimulus.KeyChanged,
+        is AppKitSurfaceStimulus.PointerInput,
+        -> true
+
+        else -> false
+    }
+
+    private fun dispatchSynchronousInteraction(
+        entry: PeerEntry,
+        event: RuntimeSynchronousInteraction,
+        invokeNative: (InteractionAction) -> org.graphiks.kadre.diagnostics.KadreResult<Unit>,
+    ): Boolean {
+        val readiness = synchronized(lock) {
+            when {
+                closed || entry.removed || entry.surfaceCleanupReserved || entry.closeAdmitted ->
+                    RuntimeSurfaceReadiness.Closed
+                else -> entry.surfaceReadiness
+            }
+        }
+        val ready = when (readiness) {
+            RuntimeSurfaceReadiness.Buffering,
+            RuntimeSurfaceReadiness.Closed,
+            -> false
+            RuntimeSurfaceReadiness.Draining -> drainBufferedSurfaceStimuli(entry)
+            RuntimeSurfaceReadiness.Live -> true
+        }
+        if (!ready) return false
+        val surfaceId = synchronized(lock) {
+            byPeer[entry.peerId]?.takeIf {
+                it === entry &&
+                    !closed &&
+                    !it.removed &&
+                    !it.surfaceCleanupReserved &&
+                    !it.closeAdmitted &&
+                    it.surfaceReadiness == RuntimeSurfaceReadiness.Live
+            }?.surfaceId
+        } ?: return false
+        return synchronousInteractionSink(surfaceId, event, APPKIT_HANDLER_INTERACTIONS, invokeNative)
     }
 
     private fun acceptStimulus(stimulus: AppKitWindowStimulus) {
@@ -664,13 +968,22 @@ private class AppKitWindowCommandPort(
         val effective = mutation.snapshot.withMutationFrom(current)
         val failure = mutation.failure
         if (failure == null) {
-            pending.command.applied(effective)
+            val rejectedTransparency = pending.command.rejectedMutationFields(
+                mutation.snapshot,
+                platformFailure("window-update-rejected"),
+            ).filter { it.field == WindowProperty.Transparency }
+            if (rejectedTransparency.isEmpty()) {
+                pending.command.applied(effective)
+            } else {
+                pending.command.partiallyApplied(effective, rejectedTransparency)
+            }
             return
         }
         reportFailure(failure)
         val rejected = pending.command.rejectedMutationFields(
             mutation.snapshot,
             platformFailure("window-update-rejected"),
+            forcedFields = mutation.failureFields,
         )
         if (rejected.isEmpty()) {
             pending.command.applied(effective)
@@ -1159,6 +1472,8 @@ private class AppKitWindowCommandPort(
 
     private fun removeEntryLocked(entry: PeerEntry): List<PendingWindowMutationCommand> {
         entry.removed = true
+        entry.surfaceReadiness = RuntimeSurfaceReadiness.Closed
+        entry.surfaceDrainOwner = null
         entry.bufferedSurfaceStimuli.clear()
         entry.bufferedGeometryStimuli.clear()
         entry.bufferedFullscreenStimuli.clear()
@@ -1210,7 +1525,8 @@ private class AppKitWindowCommandPort(
         var peer: AppKitWindowPeer? = null
         var cancellationRequested: Boolean = false
         var commitIssued: Boolean = false
-        var runtimeSurfaceReady: Boolean = false
+        var surfaceReadiness: RuntimeSurfaceReadiness = RuntimeSurfaceReadiness.Buffering
+        var surfaceDrainOwner: Thread? = null
         val bufferedSurfaceStimuli = ArrayDeque<AppKitSurfaceStimulus>()
         var runtimeGeometryReady: Boolean = false
         var managedGeometryGeneration: Long = 0L
@@ -1247,6 +1563,13 @@ private class AppKitWindowCommandPort(
         Commit,
         Cancel,
         Cleanup,
+    }
+
+    private enum class RuntimeSurfaceReadiness {
+        Buffering,
+        Draining,
+        Live,
+        Closed,
     }
 
     private enum class CleanupCompletion {
@@ -1496,6 +1819,12 @@ private class AppKitWindowCommandPort(
 private fun fullscreenFailure(code: String): KadreFailure.PlatformFailure =
     KadreFailure.PlatformFailure(KadrePlatform.AppKit, "fullscreen", code)
 
+private val APPKIT_WINDOW_ATTENTION: Set<WindowAttention> = setOf(
+    WindowAttention.None,
+    WindowAttention.Informational,
+    WindowAttention.Critical,
+)
+
 private class DeferredRuntimeFullscreenObservationSink : RuntimeFullscreenObservationSink {
     private val delegate = AtomicReference<RuntimeFullscreenObservationSink?>()
 
@@ -1588,10 +1917,10 @@ private fun appKitEffectiveSpec(
     fullscreen = FullscreenMode.Windowed,
     level = requested.level.takeIf { WindowProperty.Level in enabledWindowUpdateCapabilities }
         ?: WindowLevel.Normal,
-    transparent = false,
+    transparent = requested.transparent,
     blurBehind = false,
     icon = null,
-    contentProtection = false,
+    contentProtection = requested.contentProtection,
 ).let { effective ->
     if (effective.decorations == WindowDecorations.Borderless) {
         effective.copy(systemButtons = WindowSystemButtons.None)
@@ -1613,11 +1942,15 @@ private fun WindowUpdateCommand.toMutationTarget(): AppKitWindowMutationTarget =
         systemButtons = update.systemButtons,
     ),
     level = AppKitWindowLevelTarget(update.level),
+    appearance = AppKitWindowAppearanceTarget(
+        transparency = update.transparency,
+    ),
 )
 
 private fun WindowUpdateCommand.rejectedMutationFields(
     snapshot: AppKitWindowMutationSnapshot,
     failure: KadreFailure,
+    forcedFields: Set<WindowProperty> = emptySet(),
 ): List<RejectedWindowField> = buildList {
     when (val change = update.title) {
         is PropertyChange.Set -> if (snapshot.title != change.value) {
@@ -1679,6 +2012,16 @@ private fun WindowUpdateCommand.rejectedMutationFields(
         PropertyChange.Clear -> add(RejectedWindowField(WindowProperty.Level, failure))
         PropertyChange.Unchanged -> Unit
     }
+    when (val change = update.transparency) {
+        is PropertyChange.Set -> if (
+            WindowProperty.Transparency in forcedFields ||
+            snapshot.appearance.transparency != change.value
+        ) {
+            add(RejectedWindowField(WindowProperty.Transparency, failure))
+        }
+        PropertyChange.Clear -> add(RejectedWindowField(WindowProperty.Transparency, failure))
+        PropertyChange.Unchanged -> Unit
+    }
 }
 
 private fun AppKitWindowMutationSnapshot.withMutationFrom(
@@ -1692,6 +2035,7 @@ private fun AppKitWindowMutationSnapshot.withMutationFrom(
     decorations = chrome.decorations,
     systemButtons = chrome.systemButtons,
     level = level,
+    transparent = appearance.transparency,
     revision = current.revision,
 )
 

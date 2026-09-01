@@ -1,5 +1,8 @@
 package org.graphiks.kadre.internal.appkit
 
+import org.graphiks.kadre.diagnostics.KadreFailure
+import org.graphiks.kadre.diagnostics.KadrePlatform
+import org.graphiks.kadre.diagnostics.KadreResult
 import org.graphiks.kadre.internal.runtime.RuntimeDesktopNativeWindowHandle
 import org.graphiks.kadre.internal.runtime.SurfaceMetrics
 import org.graphiks.kadre.input.KeyLocation
@@ -23,6 +26,7 @@ import org.graphiks.kadre.surface.SurfaceVisibility
 import org.graphiks.kadre.surface.toPhysical
 import org.graphiks.kadre.window.WindowDecorations
 import org.graphiks.kadre.window.WindowLevel
+import org.graphiks.kadre.window.WindowProperty
 import org.graphiks.kadre.window.WindowSpec
 import org.graphiks.kadre.window.WindowSystemButtons
 import org.graphiks.kffi.objc.CGWindowLevelForKey
@@ -31,7 +35,9 @@ import org.graphiks.kffi.objc.NSApplication
 import org.graphiks.kffi.objc.NSAppearance
 import org.graphiks.kffi.objc.NSBackingStoreType
 import org.graphiks.kffi.objc.NSButton
+import org.graphiks.kffi.objc.NSColor
 import org.graphiks.kffi.objc.NSEdgeInsets
+import org.graphiks.kffi.objc.NSEvent
 import org.graphiks.kffi.objc.NSEventModifierFlags
 import org.graphiks.kffi.objc.NSEventType
 import org.graphiks.kffi.objc.NSNotificationCenter
@@ -207,7 +213,7 @@ internal class KffiAppKitWindowPort(
                 inputAdmission.acceptsFirstResponder()
             }
             APPKIT_INPUT_EVENT_SELECTORS.forEach { selector ->
-                onNSEvent(selector, inputAdmission::observe)
+                onVoidObject(selector) { event -> inputAdmission.observe(NSEvent(event.ptr)) }
             }
         }
         return try {
@@ -405,6 +411,55 @@ private val APPKIT_INPUT_EVENT_SELECTORS = listOf(
     "mouseEntered:",
     "mouseExited:",
     "mouseCancelled:",
+)
+
+/** Copies only the immutable fields needed by Kadre while [NSEvent] is still callback-borrowed. */
+private fun NSEvent.toObservation(): NSEventObservation {
+    val eventType = type()
+    val location = locationInWindow()
+    val eventDetails = when (eventType) {
+        NSEventType.NSEventTypeKeyDown,
+        NSEventType.NSEventTypeKeyUp,
+        NSEventType.NSEventTypeFlagsChanged,
+        -> NSEventObservation.Details.Keyboard(
+            keyCode = keyCode().toInt() and 0xffff,
+            characters = charactersAsString(),
+            charactersIgnoringModifiers = charactersIgnoringModifiersAsString(),
+            isRepeat = isARepeat(),
+        )
+
+        NSEventType.NSEventTypeMouseMoved,
+        NSEventType.NSEventTypeLeftMouseDragged,
+        NSEventType.NSEventTypeRightMouseDragged,
+        NSEventType.NSEventTypeOtherMouseDragged,
+        NSEventType.NSEventTypeLeftMouseDown,
+        NSEventType.NSEventTypeLeftMouseUp,
+        NSEventType.NSEventTypeRightMouseDown,
+        NSEventType.NSEventTypeRightMouseUp,
+        NSEventType.NSEventTypeOtherMouseDown,
+        NSEventType.NSEventTypeOtherMouseUp,
+        -> NSEventObservation.Details.Pointer(
+            buttonNumber = buttonNumber(),
+            clickCount = clickCount(),
+            pressure = pressure(),
+            deltaX = deltaX(),
+            deltaY = deltaY(),
+        )
+
+        else -> NSEventObservation.Details.None
+    }
+    return NSEventObservation(
+        type = eventType,
+        modifierFlags = modifierFlags(),
+        position = NSEventObservation.Position(location.x, location.y),
+        details = eventDetails,
+    )
+}
+
+private fun nativeMoveFailure(): KadreFailure.PlatformFailure = KadreFailure.PlatformFailure(
+    KadrePlatform.AppKit,
+    "window-move",
+    "perform-window-drag-exception",
 )
 
 /** Maps the published, address-free KFFI event snapshot into Kadre's private AppKit stimulus. */
@@ -620,6 +675,7 @@ private fun configureKffiWindow(owner: AppKitNativeWindowOwner, spec: WindowSpec
     owner.kffiWindowOwner().applyInitialGeometry(spec)
     owner.kffiWindowOwner().applyInitialChrome(spec)
     owner.kffiWindowOwner().applyInitialLevel(spec)
+    owner.kffiWindowOwner().applyInitialAppearance(spec)
     owner.kffiWindow().apply {
         setReleasedWhenClosed(false)
         setTitle(spec.title)
@@ -657,6 +713,10 @@ private class KffiWindowOwner(
         window.setLevel(spec.level.toAppKitWindowLevel())
     }
 
+    fun applyInitialAppearance(spec: WindowSpec) {
+        applyAppearance(spec.transparent)
+    }
+
     fun restoreLevel(level: WindowLevel) {
         window.setLevel(level.toAppKitWindowLevel())
     }
@@ -684,6 +744,17 @@ private class KffiWindowOwner(
             is PropertyChange.Set -> window.setLevel(level.value.toAppKitWindowLevel())
             PropertyChange.Clear -> error("AppKit does not support clearing a window level")
             PropertyChange.Unchanged -> Unit
+        }
+        if (target.appearance.hasChange()) {
+            applyAppearanceMutation {
+                val current = readAppearance()
+                applyAppearance(
+                    transparency = target.appearance.transparency.resolveValue(current.transparency),
+                )
+            }
+            return readWindow(
+                appearance = applyAppearanceMutation { readAppearance() },
+            )
         }
         return readWindow()
     }
@@ -731,14 +802,39 @@ private class KffiWindowOwner(
     fun readGeometry(): AppKitWindowGeometrySnapshot =
         readGeometrySnapshot(window, requestedMinimumSize, requestedMaximumSize)
 
-    fun readWindow(): AppKitWindowMutationSnapshot = AppKitWindowMutationSnapshot(
+    fun readWindow(): AppKitWindowMutationSnapshot = readWindow(readAppearance())
+
+    private fun readWindow(
+        appearance: AppKitWindowAppearanceSnapshot,
+    ): AppKitWindowMutationSnapshot = AppKitWindowMutationSnapshot(
         title = window.titleAsString(),
         geometry = readGeometry(),
         chrome = readChrome(),
         level = readLevel(),
+        appearance = appearance,
     )
 
     private fun readLevel(): WindowLevel = appKitWindowLevel(window.level())
+
+    private fun applyAppearance(transparency: Boolean) {
+        window.setOpaque(!transparency)
+        window.setBackgroundColor(
+            if (transparency) NSColor.clearColor() else NSColor.windowBackgroundColor(),
+        )
+        check(window.isOpaque() == !transparency) {
+            "AppKit opacity readback diverged from requested transparency"
+        }
+    }
+
+    private fun readAppearance(): AppKitWindowAppearanceSnapshot = AppKitWindowAppearanceSnapshot(
+        transparency = !window.isOpaque(),
+    )
+
+    private inline fun <T> applyAppearanceMutation(block: () -> T): T = try {
+        block()
+    } catch (failure: Throwable) {
+        throw AppKitWindowMutationFailure(setOf(WindowProperty.Transparency), failure)
+    }
 
     private fun applyChrome(
         decorations: WindowDecorations,
@@ -864,6 +960,9 @@ private fun NSWindow.standardButtonHidden(button: NSWindowButton): Boolean {
 private fun AppKitWindowChromeTarget.hasChange(): Boolean =
     decorations !is PropertyChange.Unchanged || systemButtons !is PropertyChange.Unchanged
 
+private fun AppKitWindowAppearanceTarget.hasChange(): Boolean =
+    transparency !is PropertyChange.Unchanged
+
 private fun WindowLevel.toAppKitWindowLevel(): Long = CGWindowLevelForKey(
     when (this) {
         WindowLevel.Normal -> CGWindowLevelKey.kCGNormalWindowLevelKey
@@ -969,8 +1068,9 @@ private class KffiViewInputAdmission {
     fun install(
         callbacks: AppKitInputCallbacks,
         pointerEnabled: Boolean,
+        invokeNativeMove: (NSEvent) -> KadreResult<Unit>,
     ): AutoCloseable {
-        val observer = KffiViewInputObserver(callbacks, pointerEnabled)
+        val observer = KffiViewInputObserver(callbacks, pointerEnabled, invokeNativeMove)
         check(this.observer.compareAndSet(null, observer)) {
             "AppKit view input callbacks are already observed"
         }
@@ -979,9 +1079,14 @@ private class KffiViewInputAdmission {
 
     fun acceptsFirstResponder(): Boolean = observer.get() != null
 
-    fun observe(observation: NSEventObservation) {
+    fun observe(event: NSEvent) {
         val observer = observer.get() ?: return
-        observation.toAppKitInput()?.takeIf(observer::accepts)?.let(observer.callbacks.input)
+        val input = event.toObservation().toAppKitInput()?.takeIf(observer::accepts) ?: return
+        if (input is AppKitInput.PointerButtonChanged && input.buttonState == PointerButtonState.Pressed) {
+            observer.callbacks.pointerDown(input) { observer.invokeNativeMove(event) }
+        } else {
+            observer.callbacks.input(input)
+        }
     }
 
     fun revoke(observer: KffiViewInputObserver) {
@@ -992,6 +1097,7 @@ private class KffiViewInputAdmission {
 private class KffiViewInputObserver(
     val callbacks: AppKitInputCallbacks,
     private val pointerEnabled: Boolean,
+    val invokeNativeMove: (NSEvent) -> KadreResult<Unit>,
 ) {
     fun accepts(input: AppKitInput): Boolean = input is AppKitInput.KeyChanged || pointerEnabled
 }
@@ -1046,7 +1152,20 @@ private class KffiInputObserverOwner private constructor(
             viewOwner: KffiViewOwner,
             callbacks: AppKitInputCallbacks,
         ): KffiInputObserverOwner {
-            val observation = viewOwner.inputAdmission.install(callbacks, pointerEnabled = true)
+            val observation = viewOwner.inputAdmission.install(
+                callbacks = callbacks,
+                pointerEnabled = true,
+                invokeNativeMove = { event ->
+                    try {
+                        window.performWindowDragWithEvent(event.ptr)
+                        KadreResult.Success(Unit)
+                    } catch (_: Exception) {
+                        KadreResult.Failure(nativeMoveFailure())
+                    } catch (_: LinkageError) {
+                        KadreResult.Failure(nativeMoveFailure())
+                    }
+                },
+            )
             var pointerTracking: ObjCPointerTracking? = null
             return try {
                 check(window.makeFirstResponder(viewOwner.view.ptr)) {

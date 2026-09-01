@@ -8,6 +8,7 @@ import org.graphiks.kadre.surface.SurfaceId
 import org.graphiks.kadre.window.RejectedWindowField
 import org.graphiks.kadre.window.FullscreenMode
 import org.graphiks.kadre.window.WindowId
+import org.graphiks.kadre.window.WindowAttention
 import org.graphiks.kadre.window.WindowLevel
 import org.graphiks.kadre.window.WindowOperationId
 import org.graphiks.kadre.window.WindowRequestId
@@ -51,6 +52,15 @@ public interface WindowCommandPort {
     /** Resolves backend-side coalescing when the application tries to keep a native close open. */
     public fun closeRequestRejected(command: OpenedWindowCloseCommand): CloseRequestRejectionOutcome =
         CloseRequestRejectionOutcome.Rejected
+}
+
+/** Unstable backend SPI for process-scoped user-attention requests owned by a live window. */
+public interface WindowAttentionPort : AutoCloseable {
+    public suspend fun request(windowId: WindowId, attention: WindowAttention): KadreResult<Unit>
+
+    public fun release(windowId: WindowId)
+
+    override public fun close()
 }
 
 /**
