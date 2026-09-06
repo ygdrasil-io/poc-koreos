@@ -14,6 +14,9 @@ import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.atomic.AtomicReference
 
+private typealias AttentionReleaseDispatcher =
+    (() -> List<KadreFailure.PlatformFailure>) -> List<KadreFailure.PlatformFailure>
+
 internal interface AppKitLifecycleTarget {
     fun updateLifecycle(state: LifecycleState)
 
@@ -244,6 +247,7 @@ internal class AppKitProcessBroker {
     ) : AutoCloseable {
         private val closed = AtomicBoolean(false)
         private val failureReporter = AtomicReference<((KadreFailure.PlatformFailure) -> Unit)?>(null)
+        private val releaseDispatcher = AtomicReference<AttentionReleaseDispatcher?>(null)
 
         fun isOpen(): Boolean = !closed.get()
 
@@ -253,9 +257,18 @@ internal class AppKitProcessBroker {
             }
         }
 
+        fun installReleaseDispatcher(dispatcher: AttentionReleaseDispatcher) {
+            check(releaseDispatcher.compareAndSet(null, dispatcher)) {
+                "AppKit user-attention release dispatcher is already installed"
+            }
+        }
+
         override fun close() {
             if (!closed.compareAndSet(false, true)) return
-            broker.releaseUserAttentionOwner(this).forEach { failure ->
+            if (!broker.hasUserAttention(this)) return
+            val release = { broker.releaseUserAttentionOwner(this) }
+            val failures = releaseDispatcher.get()?.invoke(release) ?: release()
+            failures.forEach { failure ->
                 try {
                     failureReporter.get()?.invoke(failure)
                 } catch (_: Exception) {
