@@ -78,7 +78,7 @@ class GenerateContractEvidenceTest {
         assertEquals("1", json["schemaVersion"]!!.jsonPrimitive.content)
         assertEquals("0123456789abcdef0123456789abcdef01234567", json["commit"]!!.jsonPrimitive.content)
         assertEquals("jvm", json["target"]!!.jsonPrimitive.content)
-        assertEquals("junit", json["execution"]!!.jsonPrimitive.content)
+        assertEquals("junit", json["execution"]!!.jsonObject["kind"]!!.jsonPrimitive.content)
         assertEquals("appkit-jvm", json["adapter"]!!.jsonPrimitive.content)
         assertEquals(4, json["scenarios"]!!.jsonArray.size)
         assertEquals(2, json["sentinels"]!!.jsonArray.size)
