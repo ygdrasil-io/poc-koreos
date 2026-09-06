@@ -66,9 +66,12 @@ internal fun validateContractEvidence(
 
     gateContractIds.asSequence()
         .map(recordsById::getValue)
-        .filter { it.status == ContractStatus.Active && target in it.requiredTargets }
+        .filter { it.status == ContractStatus.Active }
         .sortedBy(ContractRecord::contractId)
         .forEach { contract ->
+            check(target in contract.requiredTargets) {
+                "${contract.contractId}[$target]: target is not required"
+            }
             val targetMappings = mappings.filter {
                 it.contractId == contract.contractId && it.target == target
             }

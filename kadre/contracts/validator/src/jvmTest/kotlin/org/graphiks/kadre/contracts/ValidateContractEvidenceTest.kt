@@ -112,6 +112,21 @@ class ValidateContractEvidenceTest {
     }
 
     @Test
+    fun activeGateRejectsAJobTargetNotRequiredByTheContract() {
+        val fixture = fixture(
+            registry = O1_REGISTRY,
+            mapping = O1_MAPPING,
+            target = "js",
+            expectedExecutions = ExpectedContractExecutions.JUnit,
+            gateContractIds = setOf("INT-002"),
+        )
+
+        val exception = assertFailsWith<IllegalStateException> { fixture.validate() }
+
+        assertEquals("INT-002[js]: target is not required", exception.message)
+    }
+
+    @Test
     fun scenariosMustExactlyMatchTheMappedContractAndIds() {
         val mutations = listOf(
             canonicalJvmEvidence().replace("\"contractId\": \"INT-002\"", "\"contractId\": \"BCK-001\"") to

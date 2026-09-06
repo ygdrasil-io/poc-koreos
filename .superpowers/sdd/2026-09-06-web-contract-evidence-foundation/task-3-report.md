@@ -53,6 +53,13 @@ La vérification `:kadre:contracts:validator:check` reste bloquée après les te
 - RED observé : compilation impossible sur `validateContractEvidenceCli`, volontairement demandé par le nouveau test de frontière.
 - GREEN : ajout du wrapper CLI et délégation du `main`; 13 tests passaient.
 
+### Cycle 3 — correctif de review sur le target du gate
+
+- Finding critique vérifié : le filtre combiné `status == Active && target in requiredTargets` supprimait silencieusement un contrat actif lorsque le job fournissait le mauvais target, et renvoyait un index vide.
+- RED observé avec `activeGateRejectsAJobTargetNotRequiredByTheContract` : le validateur terminait sans exception avec `ContractEvidenceIndex(junit={}, browser={})` pour `INT-002[js]`, alors que le contrat ne requiert que `jvm`.
+- GREEN : le filtre conserve désormais tous les contrats `active`, puis rejette explicitement `${contractId}[${target}]: target is not required` avant toute sélection de mapping, recherche d’artifact ou validation d’exécution.
+- La règle distincte des contrats `planned` reste inchangée : ils sont toujours ignorés sans exiger d’artifact.
+
 Les tests exercent des objets réels et des fichiers temporaires, sans mock. Les valeurs attendues du JSON et des TSV sont des fixtures littérales indépendantes du lecteur.
 
 ## Couverture de l’oracle
@@ -61,6 +68,7 @@ Les tests exercent des objets réels et des fichiers temporaires, sans mock. Les
 - schéma incorrect, ancienne forme scalaire de `execution` et champ inconnu ;
 - commit d’artifact invalide, commit différent du SHA attendu et SHA attendu invalide ;
 - target différent de celui du job ;
+- target d’invocation du gate absent des `requiredTargets` d’un contrat actif ;
 - `contractId` de scénario incorrect, scénario absent/inconnu, sentinelle absente/inconnue ;
 - `tests == 0`, skipped, failures et errors non nuls ;
 - artifact JVM absent ;
@@ -75,13 +83,13 @@ Les tests exercent des objets réels et des fichiers temporaires, sans mock. Les
 ## Vérifications
 
 - `rtk ./gradlew :kadre:contracts:validator:jvmTest --tests org.graphiks.kadre.contracts.ValidateContractEvidenceTest --console=plain`
-  - succès ; 13 tests, 0 skipped, 0 failure, 0 error.
+  - succès après correctif ; 14 tests, 0 skipped, 0 failure, 0 error.
 - `rtk ./gradlew :kadre:contracts:validator:jvmTest --tests org.graphiks.kadre.contracts.ContractEvidenceTest --console=plain`
   - succès ; 12 tests.
 - `rtk ./gradlew :kadre:contracts:validator:jvmTest --tests org.graphiks.kadre.contracts.GenerateContractEvidenceTest --console=plain`
   - succès ; 6 tests.
-- `rtk ./gradlew :kadre:contracts:validator:jvmTest --console=plain`
-  - succès ; 49 tests au total, 0 skipped, 0 failure, 0 error.
+- `rtk ./gradlew :kadre:contracts:validator:jvmTest --rerun-tasks --console=plain`
+  - succès après correctif ; 50 tests au total, 0 skipped, 0 failure, 0 error, 14 tâches exécutées.
 - `rtk ./gradlew :kadre:contracts:validator:check --console=plain`
   - les tests du validateur passent ; échec ensuite dans `generateRuntimeINP001ContractEvidence` avec le message de la CLI de génération exigeant huit arguments.
 - `rtk git diff --check`
@@ -101,6 +109,8 @@ Les tests exercent des objets réels et des fichiers temporaires, sans mock. Les
 ## Préoccupation restante
 
 La commande `check` ne pourra être entièrement verte avant la tâche 4 : `kadre/contracts/validator/build.gradle.kts` fournit encore sept arguments aux tâches `GenerateContractEvidence` et conserve le commit par défaut `local`. Ce fichier est volontairement hors du périmètre de la tâche 3 et le ledger assigne précisément ces deux migrations à la tâche suivante.
+
+Finding mineur différé lors de la ronde de review : le lecteur vérifie l’égalité exacte des ensembles et rejette les doublons, mais n’impose pas encore l’ordre canonique des tableaux JSON `scenarios` et `sentinels`. Aucun changement n’est apporté à cet ordre dans ce correctif ciblé.
 
 ## Commit prévu
 
