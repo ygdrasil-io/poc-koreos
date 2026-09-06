@@ -103,8 +103,9 @@ Les invariants à rendre exécutables sont :
 - Kadre ne crée ni canvas, ni div, ni popup. Sans provider,
   `requestWindow` rend explicitement `Unsupported`.
 - Un provider est synchrone, uniquement disponible sur l'overload factory,
-  et un nouveau browsing context produit une nouvelle `KadreSession`, jamais
-  une fenêtre dans la session originelle.
+  et fournit un élément déjà créé dans un browsing context distinct. Kadre y
+  crée une nouvelle `KadreSession`, jamais une fenêtre dans la session
+  originelle ni un browsing context natif.
 - Tout `pagehide`, y compris `persisted == true`, ferme l'admission et termine
   la session sans attente. `pageshow` ne ressuscite jamais cette session ; un
   host de retour doit s'attacher à nouveau. Le traitement libère seulement les
@@ -117,18 +118,18 @@ Les invariants à rendre exécutables sont :
   l'élément conservé n'est promise.
 
 Les interactions soumises à la transient user activation (fullscreen,
-pointer lock, drop et popup) ne sont pas implémentées dans cette tranche, mais
+pointer lock et drop) ne sont pas implémentées dans cette tranche, mais
 leur admission sera toujours vérifiée via `InteractionContext`, jamais par un
 token conservé.
 
 ## Registre et scénarios
 
-Le registre ajoute les trois contrats suivants au statut `planned`, avec les
+Le registre ajoute les quatre contrats suivants au statut `planned`, avec les
 familles fermées de `TEST-STRATEGY.md` :
 
 ```tsv
-BCK-001	planned	DESIGN.md#15.3	DOM host attach and lifecycle	surface/window confusion, lifecycle loss, cross-session leak or false capability	O3	web-attach-connected,web-attach-detached-rejected,web-attach-manual-detached,web-manual-initial-shadow-reinsert,web-detach-reparent-batch,web-shadow-root-detach-reparent,web-shadow-root-late-reinsert,web-detach-cross-document-terminal,web-manual-detach-and-stop,web-visibility-focus,web-focus-transfer-between-hosts,web-attach-detach-admission-race,web-detach-terminal,web-multi-session-isolation,web-no-implicit-window,web-window-provider-new-session,web-window-provider-same-context,web-window-provider-no-context,web-window-provider-invalid-element,web-window-provider-invalid-scope,web-window-provider-callback-failure,web-pagehide-admission-close,web-pagehide-navigation,web-pagehide-no-resurrection	js,wasmJs	WindowManagerCapabilities.requestWindow	web-surface-never-window,web-no-implicit-dom,web-cross-session-isolation,web-detach-no-resurrection,web-shadow-root-observation,web-provider-no-same-document-window,web-active-gate-requires-js-and-wasm	-
-INT-002	planned	INTEROP-EXPORTS.md#6	JS and Wasm host facade structural exports	foreign API drift or leaked coroutine types	O1	web-typescript-consumer-js,web-typescript-consumer-wasm	js,wasmJs	-	web-host-no-coroutine-leak,web-host-identical-dts	-
+BCK-001	planned	DESIGN.md#15.3	DOM host attach and lifecycle	surface/window confusion, lifecycle loss, cross-session leak or false capability	O3	web-attach-connected,web-attach-detached-rejected,web-attach-manual-detached,web-manual-initial-shadow-reinsert,web-detach-reparent-batch,web-shadow-root-detach-reparent,web-shadow-root-late-reinsert,web-detach-cross-document-terminal,web-manual-detach-and-stop,web-visibility-focus,web-focus-transfer-between-hosts,web-attach-detach-admission-race,web-detach-terminal,web-multi-session-isolation,web-attach-same-element-busy,web-no-implicit-window,web-window-provider-new-session,web-window-provider-same-context,web-window-provider-no-context,web-window-provider-invalid-element,web-window-provider-invalid-scope,web-window-provider-owned-element,web-window-provider-callback-failure,web-pagehide-admission-close,web-pagehide-navigation,web-pagehide-no-resurrection	js,wasmJs	WindowManagerCapabilities.requestWindow	web-surface-never-window,web-no-implicit-dom,web-cross-session-isolation,web-host-single-owner,web-detach-no-resurrection,web-shadow-root-observation,web-provider-no-same-document-window,web-provider-owned-element-rejected,web-active-gate-requires-js-and-wasm	-
+INT-002	planned	INTEROP-EXPORTS.md#6	JS and Wasm host facade structural exports	foreign API drift or leaked coroutine types	O1	web-typescript-consumer	js,wasmJs	-	web-host-no-coroutine-leak,web-host-common-consumer	-
 INT-003	planned	INTEROP-EXPORTS.md#6	JS and Wasm host facade runtime	incorrect host outcome, notification ordering or ownership	O3	web-host-attach-failure,web-host-state-subscription,web-host-observer-exception,web-host-stop-close-outcome,web-host-provider	js,wasmJs	-	web-host-microtask-order,web-host-callback-isolation,web-host-outcome-rejection	-
 INT-004	planned	INTEROP-EXPORTS.md#7	Web element escape hatch	invalid retained element access or lease/teardown race	O3	web-element-lease,web-element-lease-concurrent-close	js,wasmJs	SurfaceCapabilities.platformAccess	web-element-lease-boundary,web-element-lease-close-order	-
 ```
@@ -163,12 +164,14 @@ Ses identifiants de scénario stables sont :
 | `web-attach-detach-admission-race` | détache à chacune des frontières d'admission | aucun `create`/`run` après motif terminal ; session admise termine `HostDetached` |
 | `web-detach-terminal` | retire et laisse l'élément déconnecté après le batch | session terminée, aucune resurrection |
 | `web-multi-session-isolation` | attache deux éléments différents | identities, lifecycle et fermeture indépendants |
+| `web-attach-same-element-busy` | attache une seconde fois le même élément avant la terminaison de la première session | `Failure(Busy(Host))`, aucun listener/capability supplémentaire et première session inchangée |
 | `web-no-implicit-window` | demande une fenêtre sans provider | `Success(WindowRequest)` déjà terminal en `Rejected(Unsupported(RequestWindow))`, aucun DOM créé |
-| `web-window-provider-new-session` | provider synchrone retourne un host dans un nouveau browsing context | `OpenedInNewSession`, même factory, `AdditionalHostRequested` et `originatingRequestId` corrélés |
+| `web-window-provider-new-session` | provider synchrone retourne un host déjà créé dans un browsing context distinct | `OpenedInNewSession`, même factory, `AdditionalHostRequested` et `originatingRequestId` corrélés ; Kadre n'a créé ni popup, ni iframe |
 | `web-window-provider-same-context` | provider retourne un élément du browsing context origine | `Rejected(InvalidRequest("element.ownerDocument"))`, aucune session synthétique |
 | `web-window-provider-no-context` | provider retourne un élément dont `ownerDocument.defaultView == null` | `Rejected(InvalidRequest("element.ownerDocument"))`, aucune session synthétique |
 | `web-window-provider-invalid-element` | provider retourne un élément invalide ou déconnecté sous `StopWhenDetached` | `Rejected(InvalidRequest("element"))`, aucune session synthétique |
 | `web-window-provider-invalid-scope` | provider retourne une scope sans `Job` ou déjà inactive | `Rejected(InvalidRequest("parentScope"))` ou `Rejected(ParentScopeCancelled)`, aucune session synthétique |
+| `web-window-provider-owned-element` | provider retourne un élément déjà attaché à une session vivante | `Rejected(Busy(Host))`, aucune session synthétique et owner existant inchangé |
 | `web-window-provider-callback-failure` | provider lève ou retourne une failure hors domaine | `Rejected(PlatformFailure(Web, "WebWindowProvider", "callback-exception"|"invalid-failure"))` terminale |
 | `web-pagehide-admission-close` | émet `pagehide` déterministe puis appelle `requestWindow` | `Stopped(HostDetached)` et `Failure(Closed(Host))`, sans requête ni provider ; bridges synchrones libérés sans attendre la terminaison |
 | `web-pagehide-navigation` | Playwright navigue réellement après instrumentation externe de la page | `Stopped(HostDetached)` observé avant destruction et `requestWindow` refusé par `Failure(Closed(Host))`; aucun `awaitTermination` exigé |
@@ -180,15 +183,26 @@ Avant l'activation, le validateur devient target-aware :
 
 - `EvidenceMapping` porte le target Kotlin ; `validateMappings` vérifie le
   produit `contract × requiredTargets × scenarios/sentinels`, plutôt qu'une
-  allowlist de préfixes JVM ;
-- chaque job target écrit le chemin canonique
-  `contract-evidence/<contractId>.json`. L'archive du job est étiquetée par
-  target (`js` ou `wasmJs`) et l'aggregate indexe donc `(target, contractId)` :
-  deux jobs ne s'écrasent pas et une preuve d'un autre target est refusée ;
+  allowlist de préfixes JVM. Un scénario reste target-neutre : le même ID est
+  prouvé une fois par target. Une propriété réellement croisée est exprimée
+  comme le même consumer partagé, exécuté dans les deux jobs, jamais comme un
+  scénario suffixé qui devrait être prouvé sur le mauvais target ;
+- chaque job target écrit la preuve JVM canonique à
+  `contract-evidence/<contractId>.json`. Une preuve browser est écrite à
+  `contract-evidence/browser/<engine>/<contractId>.json`; l'archive du job est
+  étiquetée par target (`js` ou `wasmJs`) et l'aggregate indexe donc
+  `(target, contractId, engine, bundleSha256)` : deux moteurs ne s'écrasent pas
+  et une preuve d'un autre target est refusée ;
 - `ContractEvidence` reçoit le target réel, le vérifie contre la ligne TSV,
   ne code plus `jvm`, et accepte `O1` lorsqu'un consumer compile produit le
   JUnit canonique exigé par la stratégie. Il conserve commit, schema, target,
-  adapter, environnement, compteurs et listes de scénario/sentinelle ;
+  adapter, environnement, compteurs et listes de scénario/sentinelle. Le
+  validateur reçoit le SHA attendu et exige son égalité exacte ;
+- une preuve browser ajoute l'identité du bundle public (nom et SHA-256) et
+  du moteur (famille et version). L'agrégateur indexe `(target, contractId,
+  engine, bundleSha256)` : Chromium de PR et chaque moteur nightly restent
+  donc distinguables et aucun artifact stale ne peut satisfaire un autre
+  commit ou bundle ;
 - les tests du validateur prouvent qu'un contrat `planned` est admis, tandis
   qu'un contrat `active` sans mapping, sentinelle, preuve JSON, commit/schema
   valide ou target requis échoue.
@@ -199,7 +213,7 @@ sentinelles et preuves valides. `INT-002` devient actif avec les deux consumers
 TypeScript ; `INT-003` suit le même gate O3 pour les comportements runtime de
 la façade.
 
-`INT-002` compile le même source TypeScript contre les deux `.d.ts` et exige
+`INT-002` compile le même source TypeScript inchangé contre les deux `.d.ts` et exige
 les unions exhaustives, `bigint`, le wrapper opaque de factory et l'absence de
 `Flow`, `CoroutineScope`, `Continuation`, `Throwable`, `Any` ou adresse native
 dans les signatures. `INT-003` observe dans une vraie page :
@@ -264,14 +278,20 @@ elle ne devient jamais un succès silencieux ou un pseudo-`NotApplicable`.
 3. Ajouter les variantes JS/Wasm de l'umbrella `kadre` et l'agrégation de leurs
    composants, avec publication et consumer Kotlin de chaque target.
 4. Créer `platform:web` uniquement avec un attach DOM réel, `MutationObserver`,
-   lifecycle, `withWebElement`, driver Playwright et les preuves `BCK-001` et
-   `INT-004`. Cette tranche est un adapter d'incubation prouvé, mais pas encore
-   un adapter Web supporté.
+   lifecycle, `withWebElement`, driver Playwright et les preuves d'attach de
+   `BCK-001` ainsi que `INT-004`. Le provider n'adopte à ce jalon qu'un host
+   déjà créé dans un context distinct ; l'ouverture de popup/iframe reste hors
+   scope. Cette tranche est un adapter d'incubation prouvé, mais pas encore un
+   adapter Web supporté.
 5. Livrer métriques/redraw, les cinq managers initiaux, le registre de
    capabilities et la façade `@kadre/host` avec `INT-002` et `INT-003`. C'est
    le premier jalon qui peut annoncer un adapter Web supporté.
 6. Ajouter, chacun dans une tranche verticale, input et IME, touch/gestures,
-   drag-and-drop, puis les operations nécessitant une interaction utilisateur.
+   drag-and-drop, puis les operations Web nécessitant une interaction
+   utilisateur. Dans l'adapter Web, popup et iframe restent host-owned : même
+   si `InteractionAction.OpenWindow` est conservée par l'API commune pour
+   d'autres adapters, elle y reste `Unsupported` et ne permet jamais à Kadre
+   de choisir ou créer un browsing context.
 
 Le travail AppKit de migration de `SurfaceInput.openTextInput` vers une méthode
 membre est une dépendance explicite de l'IME Web, pas de la fondation Web ni
