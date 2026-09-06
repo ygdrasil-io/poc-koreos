@@ -114,6 +114,68 @@ class ContractRegistryTest {
     }
 
     @Test
+    fun activeContractOutsideExplicitGateIsNotInferredFromItsPrefix() {
+        val fixture = createTempDirectory("kadre-explicit-contract-gate-")
+        val registry = fixture.resolve("contracts.tsv").also {
+            it.writeText(
+                "$HEADER\n" +
+                    "APK-099\tactive\tDESIGN.md#explicit-gate\tnon-gated contract\trisk\tO2\tscenario\tjvm\t-\tsentinel\t-",
+            )
+        }
+        val mapping = fixture.resolve("evidence.tsv").also { it.writeText(EMPTY_MAPPING) }
+
+        assertEquals(emptyList(), validateContractRegistry(registry, listOf(mapping), emptySet()))
+    }
+
+    @Test
+    fun activeMappingOutsideExplicitGateIsRejectedRegardlessOfContractPrefix() {
+        val fixture = createTempDirectory("kadre-explicit-contract-gate-")
+        val registry = fixture.resolve("contracts.tsv").also {
+            it.writeText(
+                "$HEADER\n" +
+                    "SES-099\tactive\tDESIGN.md#explicit-gate\tnon-prefixed contract\trisk\tO2\tscenario\tjvm\t-\tsentinel\t-",
+            )
+        }
+        val mapping = fixture.resolve("evidence.tsv").also {
+            it.writeText(
+                "$MAPPING_HEADER\n" +
+                    "SES-099\tjvm\tscenario\tscenario\torg.graphiks.kadre.SessionTest\tscenario[jvm]\n" +
+                    "SES-099\tjvm\tsentinel\tsentinel\torg.graphiks.kadre.SessionTest\tsentinel[jvm]",
+            )
+        }
+
+        val errors = validateContractRegistry(registry, listOf(mapping), emptySet())
+
+        assertEquals(listOf("SES-099: active mapping is outside configured evidence gates"), errors)
+    }
+
+    @Test
+    fun plannedContractInExplicitGateDoesNotRequireMapping() {
+        val fixture = createTempDirectory("kadre-planned-contract-gate-")
+        val registry = fixture.resolve("contracts.tsv").also { it.writeText(PLANNED_GATE_REGISTRY) }
+        val mapping = fixture.resolve("evidence.tsv").also { it.writeText(EMPTY_MAPPING) }
+
+        assertEquals(
+            emptyList(),
+            validateContractRegistry(registry, listOf(mapping), setOf("SES-098")),
+        )
+    }
+
+    @Test
+    fun activatingAPlannedGateImmediatelyRequiresCompleteMapping() {
+        val fixture = createTempDirectory("kadre-active-contract-gate-")
+        val registry = fixture.resolve("contracts.tsv").also {
+            it.writeText(PLANNED_GATE_REGISTRY.replace("SES-098\tplanned", "SES-098\tactive"))
+        }
+        val mapping = fixture.resolve("evidence.tsv").also { it.writeText(EMPTY_MAPPING) }
+
+        val errors = validateContractRegistry(registry, listOf(mapping), setOf("SES-098"))
+
+        assertTrue(errors.any { it == "SES-098[jvm]: missing scenario: scenario" })
+        assertTrue(errors.any { it == "SES-098[jvm]: missing sentinel: sentinel" })
+    }
+
+    @Test
     fun activeWindowContractsRequireCompleteMappingsAndConfiguredEvidenceGates() {
         val fixture = createTempDirectory("kadre-window-contracts-")
         val registry = fixture.resolve("contracts.tsv").also { it.writeText(WINDOW_REGISTRY) }
@@ -145,40 +207,46 @@ class ContractRegistryTest {
     }
 
     @Test
-    fun activeWindowContractMissingFromMappingsAndGatesIsRejected() {
+    fun activeContractWithoutMappingCanRemainOutsideExplicitGate() {
         val fixture = createTempDirectory("kadre-window-contracts-")
         val registry = fixture.resolve("contracts.tsv").also { it.writeText(WINDOW_REGISTRY) }
         val mapping = fixture.resolve("evidence.tsv").also { it.writeText(WIN_ONLY_MAPPING) }
 
-        val errors = validateContractRegistry(
-            registry,
-            listOf(mapping),
-            setOf("WIN-001"),
+        assertEquals(
+            emptyList(),
+            validateContractRegistry(
+                registry,
+                listOf(mapping),
+                setOf("WIN-001"),
+            ),
         )
-
-        assertTrue(errors.any { "APK-006: active contract has no configured evidence gate" in it })
     }
 
     private companion object {
         const val HEADER =
             "contractId\tstatus\tsource\tsubject\trisk\toracle\tscenarios\trequiredTargets\tconditionalCapabilities\tsentinels\tretirementRef"
+        const val MAPPING_HEADER = "contractId\ttarget\tkind\tevidenceId\ttestClass\ttestName"
+        const val EMPTY_MAPPING = MAPPING_HEADER
+        const val PLANNED_GATE_REGISTRY =
+            "$HEADER\n" +
+                "SES-098\tplanned\tDESIGN.md#explicit-gate\tplanned gate\trisk\tO2\tscenario\tjvm\t-\tsentinel\t-"
         const val WINDOW_REGISTRY =
             "$HEADER\n" +
                 "WIN-001\tactive\tAPPKIT-PHASE-5-WINDOW-GEOMETRY-DESIGN.md#Preuves\truntime geometry\tmissed delivery\tO2\truntime-window-geometry-validation\tjvm\t-\truntime-window-geometry-policy-bypass\t-\n" +
                 "APK-006\tactive\tAPPKIT-PHASE-5-WINDOW-GEOMETRY-DESIGN.md#Preuves\tAppKit geometry\tmissed activation\tO3\tappkit-window-geometry-public-activation\tjvm\tWindowCapabilities.contentSize\tappkit-window-geometry-policy-bypass\t-"
         const val WINDOW_MAPPING =
-            "contractId\ttarget\tkind\tevidenceId\ttestClass\ttestName\n" +
+            "$MAPPING_HEADER\n" +
                 "WIN-001\tjvm\tscenario\truntime-window-geometry-validation\torg.graphiks.kadre.internal.runtime.RuntimeWindowManagerTest\twindowUpdateValidatesCombinedSizeConstraintsBeforeDispatch[jvm]\n" +
                 "WIN-001\tjvm\tsentinel\truntime-window-geometry-policy-bypass\torg.graphiks.kadre.internal.runtime.RuntimeWindowManagerTest\twindowGeometryEventsFollowConfiguredDeliveryPolicy[jvm]\n" +
                 "APK-006\tjvm\tscenario\tappkit-window-geometry-public-activation\torg.graphiks.kadre.internal.appkit.AppKitBackendProviderTest\tpublicAppKitWindowGeometryActivatesOnlyTheFourProvenCapabilitiesOnMacOs[jvm]\n" +
                 "APK-006\tjvm\tsentinel\tappkit-window-geometry-policy-bypass\torg.graphiks.kadre.internal.appkit.AppKitBackendProviderTest\tpublicAppKitWindowGeometryEventsFollowSessionPolicyOnMacOs[jvm]"
         const val INCOMPLETE_WINDOW_MAPPING =
-            "contractId\ttarget\tkind\tevidenceId\ttestClass\ttestName\n" +
+            "$MAPPING_HEADER\n" +
                 "WIN-001\tjvm\tscenario\truntime-window-geometry-validation\torg.graphiks.kadre.internal.runtime.RuntimeWindowManagerTest\twindowUpdateValidatesCombinedSizeConstraintsBeforeDispatch[jvm]\n" +
                 "APK-006\tjvm\tscenario\tappkit-window-geometry-public-activation\torg.graphiks.kadre.internal.appkit.AppKitBackendProviderTest\tpublicAppKitWindowGeometryActivatesOnlyTheFourProvenCapabilitiesOnMacOs[jvm]\n" +
                 "APK-006\tjvm\tsentinel\tappkit-window-geometry-policy-bypass\torg.graphiks.kadre.internal.appkit.AppKitBackendProviderTest\tpublicAppKitWindowGeometryEventsFollowSessionPolicyOnMacOs[jvm]"
         const val WIN_ONLY_MAPPING =
-            "contractId\ttarget\tkind\tevidenceId\ttestClass\ttestName\n" +
+            "$MAPPING_HEADER\n" +
                 "WIN-001\tjvm\tscenario\truntime-window-geometry-validation\torg.graphiks.kadre.internal.runtime.RuntimeWindowManagerTest\twindowUpdateValidatesCombinedSizeConstraintsBeforeDispatch[jvm]\n" +
                 "WIN-001\tjvm\tsentinel\truntime-window-geometry-policy-bypass\torg.graphiks.kadre.internal.runtime.RuntimeWindowManagerTest\twindowGeometryEventsFollowConfiguredDeliveryPolicy[jvm]"
     }
