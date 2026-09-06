@@ -177,6 +177,7 @@ class AppKitWindowRuntimeDriverTest {
 
             val close = closeExecutor.submit(driver::close)
             awaitAttentionPortClosed(driver)
+            close.get(500, TimeUnit.MILLISECONDS)
             releaseOwnerThread.countDown()
 
             assertEquals(
@@ -320,11 +321,17 @@ class AppKitWindowRuntimeDriverTest {
 
             driver.closeWithinTimeout()
 
+            withTimeout(2.seconds) {
+                while (native.cancelled.isEmpty()) yield()
+            }
             assertEquals(listOf(1L), native.cancelled)
             assertEquals(listOf(true), native.cancellationsOnOwnerThread)
             assertEquals(
                 KadreFailure.PlatformFailure(KadrePlatform.AppKit, "user-attention", "cancel-exception"),
-                assertIs<KadreException>(reported.single()).failure,
+                assertIs<KadreException>(withTimeout(2.seconds) {
+                    while (reported.isEmpty()) yield()
+                    reported.single()
+                }).failure,
             )
 
             owner.close()
