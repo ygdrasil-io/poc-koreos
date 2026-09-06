@@ -1,6 +1,13 @@
 package org.graphiks.kadre.internal.appkit
 
 import org.graphiks.kadre.diagnostics.KadreResult
+import org.graphiks.kadre.diagnostics.Capability
+import org.graphiks.kadre.diagnostics.KadreFailure
+import org.graphiks.kadre.diagnostics.KadreResourceKind
+import org.graphiks.kadre.internal.runtime.TextInputDocumentCommand
+import org.graphiks.kadre.input.TextDocumentRevision
+import org.graphiks.kadre.input.TextInputConfig
+import org.graphiks.kadre.input.TextRange
 import org.graphiks.kadre.internal.runtime.RuntimeDesktopNativeWindowHandle
 import org.graphiks.kadre.input.KeyLocation
 import org.graphiks.kadre.input.KeyState
@@ -74,6 +81,59 @@ class KffiAppKitWindowPortMacOsTest {
     }
 
     @Test
+    fun textInputAvailabilityGuardsTheInputContextAndScreenRectCapabilities() {
+        assertFalse(AppKitTextInputAvailability("10.5.8").isAvailable)
+        assertTrue(AppKitTextInputAvailability("10.6.0").isAvailable)
+        assertFalse(AppKitTextInputAvailability("10.6.8").supportsRectToScreen)
+        assertTrue(AppKitTextInputAvailability("10.7.0").supportsRectToScreen)
+    }
+
+    @Test
+    fun textInputShadowUpdatesMarkedTextBeforeTheQueuedRuntimeReconciliation() {
+        val shadow = AppKitTextInputShadow(
+            TextInputConfig(
+                surroundingText = "abcd",
+                selection = TextRange(1, 2),
+                documentRevision = TextDocumentRevision(0),
+            ),
+        )
+
+        assertTrue(shadow.setMarkedText(TextRange(1, 2), "XYZ", TextRange(1, 2)))
+        assertEquals("aXYZcd", shadow.text)
+        assertEquals(TextRange(2, 3), shadow.selection)
+        assertEquals(TextRange(1, 4), shadow.markedRange)
+
+        assertEquals(
+            AppKitTextInputDocumentUpdate.Applied,
+            shadow.applyDocument("aXYZcd", TextRange(3, 3), TextDocumentRevision(1)),
+        )
+        assertEquals(TextRange(1, 4), shadow.markedRange)
+        assertEquals(
+            AppKitTextInputDocumentUpdate.CompositionActive,
+            shadow.applyDocument("unrelated", TextRange(0, 0), TextDocumentRevision(2)),
+        )
+        assertEquals("aXYZcd", shadow.text)
+        assertEquals(TextDocumentRevision(1), shadow.documentRevision)
+        assertTrue(shadow.clearMarkedText())
+        assertEquals(null, shadow.markedRange)
+
+        assertTrue(shadow.replaceText(TextRange(1, 4), "Q"))
+        assertEquals("aQcd", shadow.text)
+        assertEquals(TextRange(2, 2), shadow.selection)
+
+        val endComposition = AppKitTextInputShadow(
+            TextInputConfig(
+                surroundingText = "a",
+                selection = TextRange(1, 1),
+                documentRevision = TextDocumentRevision(0),
+            ),
+        )
+        assertTrue(endComposition.setMarkedText(TextRange(1, 1), "XYZ", TextRange(2, 3)))
+        assertEquals(TextRange(1, 4), endComposition.markedRange)
+        assertEquals(TextRange(3, 4), endComposition.selection)
+    }
+
+    @Test
     fun createWindowAddsFullscreenPrimaryWithoutReplacingExistingCollectionBehavior() {
         val owner = CountingWindowOwner()
         val calls = mutableListOf<String>()
@@ -101,6 +161,72 @@ class KffiAppKitWindowPortMacOsTest {
 
         assertEquals(129L, nativeWindow.behavior.rawValue)
         assertEquals(listOf("create", "configure", "read", "write:129"), calls)
+    }
+
+    @Test
+    fun nativeContentViewOwnsARevocableTextInputReceiverOnMacOs() {
+        if (!isMacOsHost()) return
+
+        val port = KffiAppKitWindowPort()
+        var window: AppKitNativeWindowOwner? = null
+        var view: AppKitNativeViewOwner? = null
+        try {
+            port.onMainThread {
+                window = port.createWindow(WindowSpec(contentSize = LogicalSize(240.0, 135.0)))
+                view = port.createContentView(WindowSpec(contentSize = LogicalSize(240.0, 135.0)))
+                port.attachContentView(checkNotNull(window), checkNotNull(view))
+                port.present(checkNotNull(window))
+
+                val textInput = port.textInputPort(checkNotNull(view))
+                assertIs<Capability.Supported<Unit>>(textInput.capability)
+                val owner = assertIs<KadreResult.Success<org.graphiks.kadre.internal.runtime.TextInputOwner>>(
+                    textInput.open(
+                        AppKitNativeTextInputOpenCommand(
+                            config = TextInputConfig(
+                                surroundingText = "Kadre",
+                                selection = TextRange(5, 5),
+                                documentRevision = TextDocumentRevision(0),
+                            ),
+                            onObservation = { false },
+                        ),
+                    ),
+                ).value
+
+                assertEquals(
+                    KadreResult.Success(Unit),
+                    textInput.updateDocument(
+                        TextInputDocumentCommand(
+                            owner,
+                            "Kadre IME",
+                            TextRange(9, 9),
+                            TextDocumentRevision(1),
+                        ),
+                    ),
+                )
+
+                owner.close()
+                assertEquals(
+                    KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.TextInputSession)),
+                    textInput.updateDocument(
+                        TextInputDocumentCommand(
+                            owner,
+                            "late",
+                            TextRange(4, 4),
+                            TextDocumentRevision(2),
+                        ),
+                    ),
+                )
+            }
+        } finally {
+            port.onMainThread {
+                window?.let { nativeWindow ->
+                    port.detachContentView(nativeWindow)
+                    view?.close()
+                    port.closeWindow(nativeWindow)
+                    nativeWindow.close()
+                }
+            }
+        }
     }
 
     @Test

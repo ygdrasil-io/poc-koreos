@@ -2981,7 +2981,7 @@ class AppKitBackendProviderTest {
             assertTrue(report.contains("\ttouch=Unsupported\tgestures=Unsupported\tdragAndDrop=Unsupported"), report)
             assertTrue(
                 report.contains(
-                    "\ttextInput=Unsupported(operation=TextInput)" +
+                    "\ttextInput=Supported" +
                         "\trawInput=Unsupported(operation=RawInputAccess)",
                 ),
                 report,

@@ -50,6 +50,7 @@ cd "$REPO_ROOT"
 run_phase tests \
     "$GRADLEW" \
     :kadre:backend:appkit:appKitNativeTests \
+    --refresh-dependencies \
     --rerun-tasks \
     --no-daemon \
     --stacktrace \
@@ -60,6 +61,7 @@ run_phase evidence \
     :kadre:contracts:validator:generateRuntimeContractEvidence \
     :kadre:contracts:validator:generateAppKitContractEvidence \
     "-PkadreContractCommit=$COMMIT" \
+    --refresh-dependencies \
     --rerun-tasks \
     --no-daemon \
     --stacktrace \

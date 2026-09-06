@@ -1,10 +1,21 @@
 package org.graphiks.kadre.internal.appkit
 
+import org.graphiks.kadre.diagnostics.Capability
+import org.graphiks.kadre.diagnostics.FeatureAvailability
 import org.graphiks.kadre.diagnostics.KadreFailure
+import org.graphiks.kadre.diagnostics.KadreOperation
 import org.graphiks.kadre.diagnostics.KadrePlatform
 import org.graphiks.kadre.diagnostics.KadreResult
+import org.graphiks.kadre.diagnostics.KadreResourceKind
 import org.graphiks.kadre.internal.runtime.RuntimeDesktopNativeWindowHandle
 import org.graphiks.kadre.internal.runtime.SurfaceMetrics
+import org.graphiks.kadre.internal.runtime.TextInputCursorCommand
+import org.graphiks.kadre.internal.runtime.TextInputDocumentCommand
+import org.graphiks.kadre.internal.runtime.TextInputObservation
+import org.graphiks.kadre.internal.runtime.TextInputOwner
+import org.graphiks.kadre.input.TextDocumentRevision
+import org.graphiks.kadre.input.TextInputAction
+import org.graphiks.kadre.input.TextRange
 import org.graphiks.kadre.input.KeyLocation
 import org.graphiks.kadre.input.KeyState
 import org.graphiks.kadre.input.KeyboardModifiers
@@ -17,6 +28,7 @@ import org.graphiks.kadre.input.PointerButtonState
 import org.graphiks.kadre.surface.LogicalInsets
 import org.graphiks.kadre.surface.LogicalDelta
 import org.graphiks.kadre.surface.LogicalPoint
+import org.graphiks.kadre.surface.LogicalRect
 import org.graphiks.kadre.surface.LogicalSize
 import org.graphiks.kadre.surface.PropertyChange
 import org.graphiks.kadre.surface.SurfaceFocus
@@ -42,9 +54,11 @@ import org.graphiks.kffi.objc.NSEventModifierFlags
 import org.graphiks.kffi.objc.NSEventType
 import org.graphiks.kffi.objc.NSNotificationCenter
 import org.graphiks.kffi.objc.NSPoint
+import org.graphiks.kffi.objc.NSRange
 import org.graphiks.kffi.objc.NSRect
 import org.graphiks.kffi.objc.NSSize
 import org.graphiks.kffi.objc.NSThread
+import org.graphiks.kffi.objc.NSTextInputContext
 import org.graphiks.kffi.objc.NSView
 import org.graphiks.kffi.objc.NSWindow
 import org.graphiks.kffi.objc.NSWindowButton
@@ -53,10 +67,14 @@ import org.graphiks.kffi.objc.NSWindowOcclusionState
 import org.graphiks.kffi.objc.NSWindowStyleMask
 import org.graphiks.kffi.objc.ObjCRuntime
 import org.graphiks.kffi.objc.effectiveAppearance
+import org.graphiks.kffi.objc.convertBaseToScreen
 import org.graphiks.kffi.objc.safeAreaInsets
 import org.graphiks.kffi.objc.managed.ObjCManagedClass
 import org.graphiks.kffi.objc.managed.ObjCManagedInstance
+import org.graphiks.kffi.objc.managed.ObjCManagedTextInputValues
 import org.graphiks.kffi.objc.managed.ObjCMethodSignatures
+import org.graphiks.kffi.objc.managed.ObjCObjectRangeResult
+import org.graphiks.kffi.objc.managed.ObjCRectRangeResult
 import org.graphiks.kffi.objc.managed.ObjCNotificationObservation
 import org.graphiks.kffi.objc.managed.ObjCPointerTracking
 import org.graphiks.kffi.objc.managed.NSEventObservation
@@ -103,6 +121,19 @@ private fun String.numericVersionOrNull(): AppKitNumericVersion? {
 
 private val APPKIT_FULLSCREEN_MINIMUM_VERSION = AppKitNumericVersion(10L, 7L, 0L)
 
+/** Runtime guard for the AppKit text-input client and its input-context owner. */
+internal class AppKitTextInputAvailability(
+    systemVersion: String = System.getProperty("os.version", ""),
+) {
+    private val version = systemVersion.numericVersionOrNull()
+
+    val isAvailable: Boolean = version?.let { it >= APPKIT_TEXT_INPUT_MINIMUM_VERSION } ?: false
+    val supportsRectToScreen: Boolean = version?.let { it >= APPKIT_RECT_TO_SCREEN_MINIMUM_VERSION } ?: false
+}
+
+private val APPKIT_TEXT_INPUT_MINIMUM_VERSION = AppKitNumericVersion(10L, 6L, 0L)
+private val APPKIT_RECT_TO_SCREEN_MINIMUM_VERSION = AppKitNumericVersion(10L, 7L, 0L)
+
 /** Public-KFFI-backed AppKit port. Native addresses remain private to this implementation. */
 internal class KffiAppKitWindowPort(
     private val createUnconfiguredWindow: (WindowSpec) -> AppKitNativeWindowOwner =
@@ -110,6 +141,7 @@ internal class KffiAppKitWindowPort(
     private val configureWindow: (AppKitNativeWindowOwner, WindowSpec) -> Unit =
         ::configureKffiWindow,
     private val fullscreenAvailability: AppKitFullscreenAvailability = AppKitFullscreenAvailability(),
+    private val textInputAvailability: AppKitTextInputAvailability = AppKitTextInputAvailability(),
     private val collectionBehaviorWindow: (AppKitNativeWindowOwner) -> NSWindow =
         AppKitNativeWindowOwner::kffiWindow,
 ) : AppKitNativeWindowPort {
@@ -205,6 +237,7 @@ internal class KffiAppKitWindowPort(
         requireMainThread()
         val appearanceAdmission = KffiViewAppearanceAdmission()
         val inputAdmission = KffiViewInputAdmission()
+        val textInputAdmission = KffiViewTextInputAdmission(textInputAvailability)
         val instance = contentViewClass.createInstance {
             onVoid(VIEW_DID_CHANGE_EFFECTIVE_APPEARANCE) {
                 appearanceAdmission.viewDidChangeEffectiveAppearance()
@@ -215,11 +248,44 @@ internal class KffiAppKitWindowPort(
             APPKIT_INPUT_EVENT_SELECTORS.forEach { selector ->
                 onVoidObject(selector) { event -> inputAdmission.observe(NSEvent(event.ptr)) }
             }
+            onVoidObjectRange(INSERT_TEXT_REPLACEMENT_RANGE) { value, replacementRange ->
+                textInputAdmission.insertText(value, replacementRange)
+            }
+            onVoidSelector(DO_COMMAND_BY_SELECTOR) { selector -> textInputAdmission.doCommand(selector) }
+            onVoidObjectRangeRange(SET_MARKED_TEXT_SELECTED_RANGE_REPLACEMENT_RANGE) {
+                    value,
+                    selectedRange,
+                    replacementRange,
+                ->
+                textInputAdmission.setMarkedText(value, selectedRange, replacementRange)
+            }
+            onVoid(UNMARK_TEXT) { textInputAdmission.unmarkText() }
+            onRange(SELECTED_RANGE, fallback = APPKIT_EMPTY_RANGE) { textInputAdmission.selectedRange() }
+            onRange(MARKED_RANGE, fallback = APPKIT_NOT_FOUND_RANGE) { textInputAdmission.markedRange() }
+            onBoolean(HAS_MARKED_TEXT, fallback = false) { textInputAdmission.hasMarkedText() }
+            onObjectRangeOutRange(
+                ATTRIBUTED_SUBSTRING_FOR_PROPOSED_RANGE_ACTUAL_RANGE,
+                fallback = ObjCObjectRangeResult(null, APPKIT_EMPTY_RANGE),
+            ) { range ->
+                textInputAdmission.attributedSubstring(range)
+            }
+            onObject(VALID_ATTRIBUTES_FOR_MARKED_TEXT, fallback = null) {
+                textInputAdmission.validAttributes()
+            }
+            onRectRangeOutRange(
+                FIRST_RECT_FOR_CHARACTER_RANGE_ACTUAL_RANGE,
+                fallback = ObjCRectRangeResult(APPKIT_EMPTY_RECT, APPKIT_EMPTY_RANGE),
+            ) { range ->
+                textInputAdmission.firstRect(range)
+            }
+            onULongPoint(CHARACTER_INDEX_FOR_POINT, fallback = 0L) { point ->
+                textInputAdmission.characterIndex(point)
+            }
         }
         return try {
             val view = NSView(instance.receiver.ptr)
             view.setFrame(contentRect(spec))
-            KffiViewOwner(view, instance, appearanceAdmission, inputAdmission)
+            KffiViewOwner(view, instance, appearanceAdmission, inputAdmission, textInputAdmission)
         } catch (failure: Throwable) {
             try {
                 instance.close()
@@ -228,6 +294,11 @@ internal class KffiAppKitWindowPort(
             }
             throw failure
         }
+    }
+
+    override fun textInputPort(view: AppKitNativeViewOwner): AppKitNativeTextInputPort {
+        requireMainThread()
+        return view.kffiViewOwner().textInputPort
     }
 
     override fun createDelegate(
@@ -384,9 +455,24 @@ internal class KffiAppKitWindowPort(
         val contentViewClass: ObjCManagedClass by lazy {
             ObjCManagedClass.registerOnce(
                 superclassName = "NSView",
+                protocols = setOf("NSTextInputClient"),
                 methods = mapOf(
                     VIEW_DID_CHANGE_EFFECTIVE_APPEARANCE to ObjCMethodSignatures.Void,
                     ACCEPTS_FIRST_RESPONDER to ObjCMethodSignatures.Boolean,
+                    INSERT_TEXT_REPLACEMENT_RANGE to ObjCMethodSignatures.VoidObjectRange,
+                    DO_COMMAND_BY_SELECTOR to ObjCMethodSignatures.VoidSelector,
+                    SET_MARKED_TEXT_SELECTED_RANGE_REPLACEMENT_RANGE to
+                        ObjCMethodSignatures.VoidObjectRangeRange,
+                    UNMARK_TEXT to ObjCMethodSignatures.Void,
+                    SELECTED_RANGE to ObjCMethodSignatures.Range,
+                    MARKED_RANGE to ObjCMethodSignatures.Range,
+                    HAS_MARKED_TEXT to ObjCMethodSignatures.Boolean,
+                    ATTRIBUTED_SUBSTRING_FOR_PROPOSED_RANGE_ACTUAL_RANGE to
+                        ObjCMethodSignatures.ObjectRangeOutRange,
+                    VALID_ATTRIBUTES_FOR_MARKED_TEXT to ObjCMethodSignatures.Object,
+                    FIRST_RECT_FOR_CHARACTER_RANGE_ACTUAL_RANGE to
+                        ObjCMethodSignatures.RectRangeOutRange,
+                    CHARACTER_INDEX_FOR_POINT to ObjCMethodSignatures.ULongPoint,
                 ) + APPKIT_INPUT_EVENT_SELECTORS.associateWith { ObjCMethodSignatures.VoidObject },
             )
         }
@@ -412,6 +498,23 @@ private val APPKIT_INPUT_EVENT_SELECTORS = listOf(
     "mouseExited:",
     "mouseCancelled:",
 )
+
+private const val INSERT_TEXT_REPLACEMENT_RANGE = "insertText:replacementRange:"
+private const val DO_COMMAND_BY_SELECTOR = "doCommandBySelector:"
+private const val SET_MARKED_TEXT_SELECTED_RANGE_REPLACEMENT_RANGE = "setMarkedText:selectedRange:replacementRange:"
+private const val UNMARK_TEXT = "unmarkText"
+private const val SELECTED_RANGE = "selectedRange"
+private const val MARKED_RANGE = "markedRange"
+private const val HAS_MARKED_TEXT = "hasMarkedText"
+private const val ATTRIBUTED_SUBSTRING_FOR_PROPOSED_RANGE_ACTUAL_RANGE =
+    "attributedSubstringForProposedRange:actualRange:"
+private const val VALID_ATTRIBUTES_FOR_MARKED_TEXT = "validAttributesForMarkedText"
+private const val FIRST_RECT_FOR_CHARACTER_RANGE_ACTUAL_RANGE = "firstRectForCharacterRange:actualRange:"
+private const val CHARACTER_INDEX_FOR_POINT = "characterIndexForPoint:"
+private const val APPKIT_NS_NOT_FOUND = Long.MAX_VALUE
+private val APPKIT_EMPTY_RANGE = NSRange(0L, 0L)
+private val APPKIT_NOT_FOUND_RANGE = NSRange(APPKIT_NS_NOT_FOUND, 0L)
+private val APPKIT_EMPTY_RECT = NSRect(NSPoint(0.0, 0.0), NSSize(0.0, 0.0))
 
 /** Copies only the immutable fields needed by Kadre while [NSEvent] is still callback-borrowed. */
 private fun NSEvent.toObservation(): NSEventObservation {
@@ -1023,11 +1126,39 @@ private class KffiViewOwner(
     private val instance: ObjCManagedInstance,
     val appearanceAdmission: KffiViewAppearanceAdmission,
     val inputAdmission: KffiViewInputAdmission,
+    private val textInputAdmission: KffiViewTextInputAdmission,
 ) : AppKitNativeViewOwner {
     private val closed = AtomicBoolean(false)
 
+    val textInputPort: AppKitNativeTextInputPort
+        get() = textInputAdmission
+
+    init {
+        textInputAdmission.attach(view)
+    }
+
+    fun handleTextInputEvent(event: NSEvent) {
+        textInputAdmission.handleEvent(event)
+    }
+
     override fun close() {
-        if (closed.compareAndSet(false, true)) instance.close()
+        if (!closed.compareAndSet(false, true)) return
+        var failure: Throwable? = null
+        try {
+            textInputAdmission.close()
+        } catch (closeFailure: Throwable) {
+            failure = closeFailure
+        }
+        try {
+            instance.close()
+        } catch (closeFailure: Throwable) {
+            if (failure != null && failure !== closeFailure) {
+                failure.addSuppressed(closeFailure)
+            } else {
+                failure = closeFailure
+            }
+        }
+        failure?.let { throw it }
     }
 }
 
@@ -1069,8 +1200,9 @@ private class KffiViewInputAdmission {
         callbacks: AppKitInputCallbacks,
         pointerEnabled: Boolean,
         invokeNativeMove: (NSEvent) -> KadreResult<Unit>,
+        deliverToTextInput: (NSEvent) -> Unit,
     ): AutoCloseable {
-        val observer = KffiViewInputObserver(callbacks, pointerEnabled, invokeNativeMove)
+        val observer = KffiViewInputObserver(callbacks, pointerEnabled, invokeNativeMove, deliverToTextInput)
         check(this.observer.compareAndSet(null, observer)) {
             "AppKit view input callbacks are already observed"
         }
@@ -1081,6 +1213,7 @@ private class KffiViewInputAdmission {
 
     fun observe(event: NSEvent) {
         val observer = observer.get() ?: return
+        observer.deliverToTextInput(event)
         val input = event.toObservation().toAppKitInput()?.takeIf(observer::accepts) ?: return
         if (input is AppKitInput.PointerButtonChanged && input.buttonState == PointerButtonState.Pressed) {
             observer.callbacks.pointerDown(input) { observer.invokeNativeMove(event) }
@@ -1098,6 +1231,7 @@ private class KffiViewInputObserver(
     val callbacks: AppKitInputCallbacks,
     private val pointerEnabled: Boolean,
     val invokeNativeMove: (NSEvent) -> KadreResult<Unit>,
+    val deliverToTextInput: (NSEvent) -> Unit,
 ) {
     fun accepts(input: AppKitInput): Boolean = input is AppKitInput.KeyChanged || pointerEnabled
 }
@@ -1112,6 +1246,409 @@ private class KffiViewInputObservation(
         if (closed.compareAndSet(false, true)) admission.revoke(observer)
     }
 }
+
+/**
+ * Per-view, revocable `NSTextInputClient` implementation.
+ *
+ * AppKit calls this class on its native run loop. It copies every callback into Kotlin values and
+ * delegates delivery to the queued [TextInputOpenCommand.onObservation] supplied by the driver;
+ * no borrowed Objective-C value crosses the callback boundary.
+ */
+private class KffiViewTextInputAdmission(
+    private val availability: AppKitTextInputAvailability,
+) : AppKitNativeTextInputPort {
+    override val capability: Capability<Unit> = if (availability.isAvailable) {
+        Capability.Supported(Unit, FeatureAvailability.Available)
+    } else {
+        Capability.Unsupported(KadreFailure.Unsupported(KadreOperation.TextInput))
+    }
+
+    private val view = AtomicReference<NSView?>()
+    private val active = AtomicReference<KffiTextInputSession?>()
+    private val closed = AtomicBoolean(false)
+
+    fun attach(view: NSView) {
+        check(this.view.compareAndSet(null, view)) { "AppKit text-input view is already attached" }
+    }
+
+    override fun open(command: AppKitNativeTextInputOpenCommand): KadreResult<TextInputOwner> {
+        if (!availability.isAvailable) {
+            return KadreResult.Failure(KadreFailure.Unsupported(KadreOperation.TextInput))
+        }
+        if (closed.get()) return textInputClosedFailure()
+        val nativeView = view.get() ?: return textInputClosedFailure()
+        val contextPointer = nativeView.inputContext()
+        if (contextPointer == MemorySegment.NULL) return textInputFailure("missing-input-context")
+        val session = KffiTextInputSession(
+            admission = this,
+            context = NSTextInputContext(contextPointer),
+            command = command,
+        )
+        if (!active.compareAndSet(null, session)) {
+            session.closeValues()
+            return KadreResult.Failure(KadreFailure.AlreadyInUse(KadreResourceKind.TextInputSession))
+        }
+        return try {
+            session.context.activate()
+            KadreResult.Success(session)
+        } catch (failure: Exception) {
+            active.compareAndSet(session, null)
+            session.closeValues()
+            KadreResult.Failure(textInputPlatformFailure("activate-failed"))
+        } catch (failure: LinkageError) {
+            active.compareAndSet(session, null)
+            session.closeValues()
+            KadreResult.Failure(textInputPlatformFailure("activate-unavailable"))
+        }
+    }
+
+    override fun updateCursor(command: TextInputCursorCommand): KadreResult<Unit> {
+        val session = command.owner as? KffiTextInputSession
+            ?: return KadreResult.Failure(KadreFailure.InvalidRequest("textInputOwner"))
+        if (active.get() !== session) return textInputClosedFailure()
+        if (!session.acceptsCursor(command)) {
+            return KadreResult.Failure(KadreFailure.StaleRevision(session.documentRevision().value, command.documentRevision.value))
+        }
+        return try {
+            session.context.invalidateCharacterCoordinates()
+            if (session.applyCursor(command)) KadreResult.Success(Unit) else textInputClosedFailure()
+        } catch (failure: Exception) {
+            KadreResult.Failure(textInputPlatformFailure("invalidate-character-coordinates-failed"))
+        } catch (failure: LinkageError) {
+            KadreResult.Failure(textInputPlatformFailure("invalidate-character-coordinates-unavailable"))
+        }
+    }
+
+    override fun updateDocument(command: TextInputDocumentCommand): KadreResult<Unit> {
+        val session = command.owner as? KffiTextInputSession
+            ?: return KadreResult.Failure(KadreFailure.InvalidRequest("textInputOwner"))
+        if (active.get() !== session) return textInputClosedFailure()
+        return when (session.applyDocument(command)) {
+            AppKitTextInputDocumentUpdate.Applied -> KadreResult.Success(Unit)
+            AppKitTextInputDocumentUpdate.Stale -> KadreResult.Failure(
+                KadreFailure.StaleRevision(session.documentRevision().value, command.documentRevision.value),
+            )
+
+            AppKitTextInputDocumentUpdate.CompositionActive ->
+                KadreResult.Failure(KadreFailure.InvalidRequest("text"))
+
+            AppKitTextInputDocumentUpdate.Closed -> textInputClosedFailure()
+        }
+    }
+
+    fun handleEvent(event: NSEvent) {
+        if (event.type() != NSEventType.NSEventTypeKeyDown) return
+        val session = active.get() ?: return
+        try {
+            session.context.handleEvent(event.ptr)
+        } catch (_: Exception) {
+            // A native input source may refuse an event. The regular keyboard route remains live.
+        } catch (_: LinkageError) {
+            // Availability is represented by the text-input port rather than leaking linkage errors.
+        }
+    }
+
+    fun insertText(value: org.graphiks.kffi.objc.NSObject, replacementRange: NSRange) {
+        val session = active.get() ?: return
+        val text = value.asTextInputString() ?: return
+        val range = session.resolveRange(replacementRange) ?: return
+        if (!session.replaceText(range, text)) return
+        session.publish(TextInputObservation.Replace(range, text, session.documentRevision()))
+    }
+
+    fun doCommand(selector: String) {
+        val session = active.get() ?: return
+        val action = when (selector) {
+            "insertNewline:",
+            "insertLineBreak:",
+            -> session.action()
+
+            "insertTab:" -> TextInputAction.Next
+            else -> return
+        }
+        session.publish(TextInputObservation.Action(action, session.documentRevision()))
+    }
+
+    fun setMarkedText(value: org.graphiks.kffi.objc.NSObject, selectedRange: NSRange, replacementRange: NSRange) {
+        val session = active.get() ?: return
+        val text = value.asTextInputString() ?: return
+        val selected = selectedRange.toTextRangeOrNull(text) ?: return
+        val range = session.resolveRange(replacementRange) ?: return
+        if (!session.setMarkedText(range, text, selected)) return
+        val revision = session.documentRevision()
+        session.publish(TextInputObservation.CompositionChanged(range, text, selected, revision))
+    }
+
+    fun unmarkText() {
+        val session = active.get() ?: return
+        if (!session.clearComposition()) return
+        session.publish(TextInputObservation.CompositionChanged(null, "", null, session.documentRevision()))
+    }
+
+    fun selectedRange(): NSRange = active.get()?.selectionRange()?.toNSRange() ?: APPKIT_EMPTY_RANGE
+
+    fun markedRange(): NSRange = active.get()?.compositionRange()?.toNSRange() ?: APPKIT_NOT_FOUND_RANGE
+
+    fun hasMarkedText(): Boolean = active.get()?.compositionRange() != null
+
+    fun attributedSubstring(proposedRange: NSRange): ObjCObjectRangeResult {
+        val session = active.get() ?: return ObjCObjectRangeResult(null, APPKIT_EMPTY_RANGE)
+        val range = session.resolveRange(proposedRange) ?: return ObjCObjectRangeResult(null, APPKIT_EMPTY_RANGE)
+        return ObjCObjectRangeResult(
+            session.values.attributedString(session.documentText().substring(range.startUtf16, range.endExclusiveUtf16)),
+            range.toNSRange(),
+        )
+    }
+
+    fun validAttributes(): org.graphiks.kffi.objc.NSObject? = active.get()?.values?.markedTextAttributes()
+
+    fun firstRect(proposedRange: NSRange): ObjCRectRangeResult {
+        val session = active.get() ?: return ObjCRectRangeResult(APPKIT_EMPTY_RECT, APPKIT_EMPTY_RANGE)
+        val range = session.resolveRange(proposedRange)
+            ?: return ObjCRectRangeResult(APPKIT_EMPTY_RECT, APPKIT_EMPTY_RANGE)
+        val rect = session.cursorRect() ?: return ObjCRectRangeResult(APPKIT_EMPTY_RECT, range.toNSRange())
+        val nativeView = view.get() ?: return ObjCRectRangeResult(APPKIT_EMPTY_RECT, range.toNSRange())
+        val window = nativeView.window()
+        if (window == MemorySegment.NULL) return ObjCRectRangeResult(APPKIT_EMPTY_RECT, range.toNSRange())
+        val viewRect = NSRect(NSPoint(rect.origin.x, rect.origin.y), NSSize(rect.size.width, rect.size.height))
+        val windowRect = nativeView.convertRect_toView(viewRect, MemorySegment.NULL)
+        val screenRect = NSWindow(window).let { nativeWindow ->
+            if (availability.supportsRectToScreen) {
+                nativeWindow.convertRectToScreen(windowRect)
+            } else {
+                NSRect(nativeWindow.convertBaseToScreen(windowRect.origin), windowRect.size)
+            }
+        }
+        return ObjCRectRangeResult(screenRect, range.toNSRange())
+    }
+
+    fun characterIndex(@Suppress("UNUSED_PARAMETER") point: NSPoint): Long =
+        active.get()?.selectionRange()?.startUtf16?.toLong() ?: 0L
+
+    fun close() {
+        if (!closed.compareAndSet(false, true)) return
+        active.getAndSet(null)?.closeNativeSession()
+        view.set(null)
+    }
+
+    private fun close(session: KffiTextInputSession) {
+        if (active.compareAndSet(session, null)) session.closeNativeSession()
+    }
+
+    private class KffiTextInputSession(
+        private val admission: KffiViewTextInputAdmission,
+        val context: NSTextInputContext,
+        private val command: AppKitNativeTextInputOpenCommand,
+    ) : TextInputOwner {
+        private val lock = Any()
+        val values = ObjCManagedTextInputValues()
+        private val shadow = AppKitTextInputShadow(command.config)
+        private var nativeClosed = false
+
+        override fun close() {
+            admission.close(this)
+        }
+
+        fun acceptsCursor(command: TextInputCursorCommand): Boolean = synchronized(lock) {
+            !nativeClosed && shadow.acceptsCursor(command.documentRevision)
+        }
+
+        fun applyCursor(command: TextInputCursorCommand): Boolean = synchronized(lock) {
+            !nativeClosed && shadow.applyCursor(command.rect, command.documentRevision)
+        }
+
+        fun applyDocument(command: TextInputDocumentCommand): AppKitTextInputDocumentUpdate = synchronized(lock) {
+            if (nativeClosed) AppKitTextInputDocumentUpdate.Closed
+            else shadow.applyDocument(command.text, command.selection, command.documentRevision)
+        }
+
+        fun documentRevision(): TextDocumentRevision = synchronized(lock) { shadow.documentRevision }
+
+        fun documentText(): String = synchronized(lock) { shadow.text }
+
+        fun selectionRange(): TextRange = synchronized(lock) { shadow.selection }
+
+        fun compositionRange(): TextRange? = synchronized(lock) { shadow.markedRange }
+
+        fun cursorRect(): LogicalRect? = synchronized(lock) { shadow.cursorRect }
+
+        fun action(): TextInputAction = command.config.action
+
+        fun resolveRange(range: NSRange): TextRange? = synchronized(lock) {
+            shadow.resolveRange(range)
+        }
+
+        fun replaceText(range: TextRange, replacement: String): Boolean = synchronized(lock) {
+            !nativeClosed && shadow.replaceText(range, replacement)
+        }
+
+        fun setMarkedText(
+            replacementRange: TextRange,
+            markedText: String,
+            selectedRange: TextRange,
+        ): Boolean = synchronized(lock) {
+            !nativeClosed && shadow.setMarkedText(replacementRange, markedText, selectedRange)
+        }
+
+        fun clearComposition(): Boolean = synchronized(lock) {
+            !nativeClosed && shadow.clearMarkedText()
+        }
+
+        fun publish(observation: TextInputObservation) {
+            if (synchronized(lock) { nativeClosed }) return
+            command.onObservation(observation)
+        }
+
+        fun closeNativeSession() {
+            val shouldClose = synchronized(lock) {
+                if (nativeClosed) false
+                else {
+                    nativeClosed = true
+                    shadow.clearMarkedText()
+                    true
+                }
+            }
+            if (!shouldClose) return
+            var failure: Throwable? = null
+            try {
+                context.discardMarkedText()
+            } catch (closeFailure: Throwable) {
+                failure = closeFailure
+            }
+            try {
+                context.deactivate()
+            } catch (closeFailure: Throwable) {
+                if (failure != null && failure !== closeFailure) {
+                    failure.addSuppressed(closeFailure)
+                } else {
+                    failure = closeFailure
+                }
+            } finally {
+                values.close()
+            }
+            failure?.let { throw it }
+        }
+
+        fun closeValues() {
+            synchronized(lock) { nativeClosed = true }
+            values.close()
+        }
+    }
+}
+
+/**
+ * Immediate Kotlin shadow of the text storage AppKit queries from `NSTextInputClient`.
+ *
+ * The portable runtime remains authoritative for revisions. This shadow exists so a synchronous
+ * AppKit callback always observes the previous insert/marked-text change before the queued
+ * observation is reconciled by the runtime.
+ */
+internal class AppKitTextInputShadow(config: org.graphiks.kadre.input.TextInputConfig) {
+    var text: String = config.surroundingText
+        private set
+    var selection: TextRange = config.selection
+        private set
+    var documentRevision: TextDocumentRevision = config.documentRevision
+        private set
+    var cursorRect: LogicalRect? = null
+        private set
+    var markedRange: TextRange? = null
+        private set
+
+    fun acceptsCursor(revision: TextDocumentRevision): Boolean = revision == documentRevision
+
+    fun applyCursor(rect: LogicalRect, revision: TextDocumentRevision): Boolean {
+        if (!acceptsCursor(revision)) return false
+        cursorRect = rect
+        return true
+    }
+
+    fun applyDocument(
+        text: String,
+        selection: TextRange,
+        revision: TextDocumentRevision,
+    ): AppKitTextInputDocumentUpdate {
+        if (revision.value < documentRevision.value) return AppKitTextInputDocumentUpdate.Stale
+        if (markedRange != null && text != this.text) return AppKitTextInputDocumentUpdate.CompositionActive
+        this.text = text
+        this.selection = selection
+        documentRevision = revision
+        return AppKitTextInputDocumentUpdate.Applied
+    }
+
+    fun resolveRange(range: NSRange): TextRange? =
+        range.toTextRangeOrNull(text) ?: selection.takeIf { range.location == APPKIT_NS_NOT_FOUND }
+
+    fun replaceText(range: TextRange, replacement: String): Boolean {
+        if (!range.isWithin(text)) return false
+        text = text.replace(range, replacement)
+        val insertion = range.startUtf16 + replacement.length
+        selection = TextRange(insertion, insertion)
+        markedRange = null
+        return true
+    }
+
+    fun setMarkedText(
+        replacementRange: TextRange,
+        markedText: String,
+        selectedRange: TextRange,
+    ): Boolean {
+        if (!replacementRange.isWithin(text) || !selectedRange.isWithin(markedText)) return false
+        text = text.replace(replacementRange, markedText)
+        val markedStart = replacementRange.startUtf16
+        markedRange = TextRange(markedStart, markedStart + markedText.length)
+        selection = TextRange(
+            markedStart + selectedRange.startUtf16,
+            markedStart + selectedRange.endExclusiveUtf16,
+        )
+        return true
+    }
+
+    fun clearMarkedText(): Boolean {
+        if (markedRange == null) return false
+        markedRange = null
+        return true
+    }
+}
+
+/** Result of reconciling a runtime snapshot with the synchronous AppKit text shadow. */
+internal enum class AppKitTextInputDocumentUpdate {
+    Applied,
+    Stale,
+    CompositionActive,
+    Closed,
+}
+
+private fun org.graphiks.kffi.objc.NSObject.asTextInputString(): String? = try {
+    org.graphiks.kffi.objc.NSAttributedString(ptr).stringAsString()
+} catch (_: Exception) {
+    null
+} catch (_: LinkageError) {
+    null
+}
+
+private fun NSRange.toTextRangeOrNull(text: String): TextRange? {
+    if (location == APPKIT_NS_NOT_FOUND || location < 0L || length < 0L) return null
+    val end = location + length
+    if (end < location || end > text.length.toLong()) return null
+    return TextRange(location.toInt(), end.toInt())
+}
+
+private fun TextRange.toNSRange(): NSRange = NSRange(startUtf16.toLong(), (endExclusiveUtf16 - startUtf16).toLong())
+
+private fun TextRange.isWithin(text: String): Boolean = endExclusiveUtf16 <= text.length
+
+private fun String.replace(range: TextRange, replacement: String): String =
+    substring(0, range.startUtf16) + replacement + substring(range.endExclusiveUtf16)
+
+private fun textInputFailure(code: String): KadreResult.Failure =
+    KadreResult.Failure(textInputPlatformFailure(code))
+
+private fun textInputClosedFailure(): KadreResult.Failure =
+    KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.TextInputSession))
+
+private fun textInputPlatformFailure(code: String): KadreFailure.PlatformFailure =
+    KadreFailure.PlatformFailure(KadrePlatform.AppKit, "text-input", code)
 
 private class KffiInputObserverOwner private constructor(
     private val observation: AutoCloseable,
@@ -1165,6 +1702,7 @@ private class KffiInputObserverOwner private constructor(
                         KadreResult.Failure(nativeMoveFailure())
                     }
                 },
+                deliverToTextInput = viewOwner::handleTextInputEvent,
             )
             var pointerTracking: ObjCPointerTracking? = null
             return try {
