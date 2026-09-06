@@ -425,10 +425,10 @@ private class AppKitWindowCommandPort(
 
     fun beginClose(): CloseDrainMode {
         synchronized(lock) { closed = true }
-        if (!nativePort.isMainThread()) return CloseDrainMode.Blocking
-        return if (commands.beginMainThreadDrain()) {
+        return if (nativePort.isMainThread() && commands.beginMainThreadDrain()) {
             CloseDrainMode.Inline
         } else {
+            commands.beginAsynchronousDrain()
             CloseDrainMode.Asynchronous
         }
     }
@@ -441,7 +441,6 @@ private class AppKitWindowCommandPort(
         when (mode) {
             CloseDrainMode.Inline -> commands.drainInline()
             CloseDrainMode.Asynchronous -> commands.finishAsynchronousDrain()
-            CloseDrainMode.Blocking -> commands.closeAndDrain()
         }
     }
 
@@ -1808,7 +1807,6 @@ private class AppKitWindowCommandPort(
     enum class CloseDrainMode {
         Inline,
         Asynchronous,
-        Blocking,
     }
 
     private companion object {
@@ -2055,7 +2053,6 @@ internal class AppKitWindowCommandQueue(
     @Suppress("PLATFORM_CLASS_MAPPED_TO_KOTLIN")
     private val lock = Object()
     private val tasks = ArrayDeque<() -> Unit>()
-    private val terminated = CountDownLatch(1)
     private var accepting = true
     private var draining = false
     private var inlineDrain = false
@@ -2086,6 +2083,13 @@ internal class AppKitWindowCommandQueue(
         }
     }
 
+    fun beginAsynchronousDrain() {
+        synchronized(lock) {
+            accepting = false
+            lock.notifyAll()
+        }
+    }
+
     fun finishAsynchronousDrain() {
         synchronized(lock) {
             check(!inlineDrain) { "inline drain cannot be sealed asynchronously" }
@@ -2108,25 +2112,6 @@ internal class AppKitWindowCommandQueue(
             }
             runTask(task)
         }
-    }
-
-    fun closeAndDrain() {
-        synchronized(lock) {
-            accepting = false
-            draining = true
-            lock.notifyAll()
-        }
-        if (Thread.currentThread() === worker) return
-        var interrupted = false
-        while (true) {
-            try {
-                terminated.await()
-                break
-            } catch (_: InterruptedException) {
-                interrupted = true
-            }
-        }
-        if (interrupted) Thread.currentThread().interrupt()
     }
 
     private fun enqueue(task: () -> Unit, requireAccepting: Boolean): Boolean = synchronized(lock) {
@@ -2160,7 +2145,6 @@ internal class AppKitWindowCommandQueue(
                 stopped = true
                 lock.notifyAll()
             }
-            terminated.countDown()
         }
     }
 
