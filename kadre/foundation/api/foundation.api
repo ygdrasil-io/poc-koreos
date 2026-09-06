@@ -3623,6 +3623,7 @@ public final class org/graphiks/kadre/input/ScrollDelta$Logical : org/graphiks/k
 public abstract interface class org/graphiks/kadre/input/SurfaceInput {
 	public abstract fun getEvents ()Lkotlinx/coroutines/flow/Flow;
 	public abstract fun getState ()Lkotlinx/coroutines/flow/StateFlow;
+	public abstract fun openTextInput (Lorg/graphiks/kadre/input/TextInputConfig;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 }
 
 public final class org/graphiks/kadre/input/SurfaceInputState {
@@ -3671,7 +3672,6 @@ public final class org/graphiks/kadre/input/TextDocumentRevision {
 }
 
 public final class org/graphiks/kadre/input/TextDropRawKt {
-	public static final fun openTextInput (Lorg/graphiks/kadre/input/SurfaceInput;Lorg/graphiks/kadre/input/TextInputConfig;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public static final fun requestRawInput (Lorg/graphiks/kadre/input/SurfaceInput;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 }
 
@@ -3734,16 +3734,18 @@ public final class org/graphiks/kadre/input/TextInputEvent$Action : org/graphiks
 }
 
 public final class org/graphiks/kadre/input/TextInputEvent$CompositionChanged : org/graphiks/kadre/input/TextInputEvent {
-	public synthetic fun <init> (Lorg/graphiks/kadre/input/TextRange;Ljava/lang/String;JLorg/graphiks/kadre/application/EventStamp;Lkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public synthetic fun <init> (Lorg/graphiks/kadre/input/TextRange;Ljava/lang/String;Lorg/graphiks/kadre/input/TextRange;JLorg/graphiks/kadre/application/EventStamp;Lkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public final fun component1 ()Lorg/graphiks/kadre/input/TextRange;
 	public final fun component2 ()Ljava/lang/String;
-	public final fun component3-peOptMw ()J
-	public final fun component4 ()Lorg/graphiks/kadre/application/EventStamp;
-	public final fun copy-Mj11R6A (Lorg/graphiks/kadre/input/TextRange;Ljava/lang/String;JLorg/graphiks/kadre/application/EventStamp;)Lorg/graphiks/kadre/input/TextInputEvent$CompositionChanged;
-	public static synthetic fun copy-Mj11R6A$default (Lorg/graphiks/kadre/input/TextInputEvent$CompositionChanged;Lorg/graphiks/kadre/input/TextRange;Ljava/lang/String;JLorg/graphiks/kadre/application/EventStamp;ILjava/lang/Object;)Lorg/graphiks/kadre/input/TextInputEvent$CompositionChanged;
+	public final fun component3 ()Lorg/graphiks/kadre/input/TextRange;
+	public final fun component4-peOptMw ()J
+	public final fun component5 ()Lorg/graphiks/kadre/application/EventStamp;
+	public final fun copy-oIbw_zE (Lorg/graphiks/kadre/input/TextRange;Ljava/lang/String;Lorg/graphiks/kadre/input/TextRange;JLorg/graphiks/kadre/application/EventStamp;)Lorg/graphiks/kadre/input/TextInputEvent$CompositionChanged;
+	public static synthetic fun copy-oIbw_zE$default (Lorg/graphiks/kadre/input/TextInputEvent$CompositionChanged;Lorg/graphiks/kadre/input/TextRange;Ljava/lang/String;Lorg/graphiks/kadre/input/TextRange;JLorg/graphiks/kadre/application/EventStamp;ILjava/lang/Object;)Lorg/graphiks/kadre/input/TextInputEvent$CompositionChanged;
 	public fun equals (Ljava/lang/Object;)Z
 	public fun getBaseRevision-peOptMw ()J
 	public final fun getRange ()Lorg/graphiks/kadre/input/TextRange;
+	public final fun getSelection ()Lorg/graphiks/kadre/input/TextRange;
 	public fun getStamp ()Lorg/graphiks/kadre/application/EventStamp;
 	public final fun getText ()Ljava/lang/String;
 	public fun hashCode ()I

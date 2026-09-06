@@ -35,7 +35,7 @@
 Les overloads, extensions et combinators top-level sont limités à :
 
 - `WindowManager.requestWindow(configure)` ;
-- `SurfaceInput.openTextInput(config)` et `SurfaceInput.requestRawInput()` ;
+- `SurfaceInput.requestRawInput()` ;
 - `HostSurface.installInteractionHandler(handler)` et `HostSurface.armInteraction(action, options)` ;
 - les combinators de `KadreResult` listés en section 12 de `DESIGN.md` ;
 - `LogicalPoint.toPhysical`, `LogicalSize.toPhysical`, `PhysicalPoint.toLogical` et `PhysicalSize.toLogical` ;
@@ -574,7 +574,7 @@ public data class InputCapabilities(
 
 `PenState` n’est non-null que pour `PointerKind.Pen` ou `Eraser`. Les tilts sont dans `[-90, 90]`, le twist dans `[0, 2π)` et la pression tangentielle dans `[-1, 1]`; `PointerState.pressure` et `TouchState.pressure` sont dans `[0, 1]`. Chaque champ inconnu est `null` et aucune valeur native invalide n’est clampée silencieusement. Les noms optionnels de `InputDeviceDescriptor` respectent le budget de métadonnée, ne constituent jamais une identité persistante et deviennent `null` plutôt que tronqués.
 
-`SurfaceInput`, `SurfaceInputState`, `InputEvent` et `InputStateResetReason` conservent les signatures exhaustives de `DESIGN.md`, avec `pointers` et `touches` triés par leur ID stable dans la session. Un snapshot neutre possède sets/listes vides et conserve seulement les capabilities terminales.
+`SurfaceInput`, `SurfaceInputState`, `InputEvent` et `InputStateResetReason` conservent les signatures exhaustives de `DESIGN.md`, avec `pointers` et `touches` triés par leur ID stable dans la session. `SurfaceInput.openTextInput(config)` est un membre suspendu de l’interface, non une extension top-level, afin que chaque backend puisse en fournir l’implémentation effective. Un snapshot neutre possède sets/listes vides et conserve seulement les capabilities terminales.
 
 ### 6.2 Événements input — variantes fermées
 
@@ -711,12 +711,12 @@ public sealed interface TextInputEvent {
     public val baseRevision: TextDocumentRevision
     public data class Replace(public val range: TextRange, public val text: String, override val baseRevision: TextDocumentRevision, override val stamp: EventStamp) : TextInputEvent
     public data class SelectionChanged(public val selection: TextRange, override val baseRevision: TextDocumentRevision, override val stamp: EventStamp) : TextInputEvent
-    public data class CompositionChanged(public val range: TextRange?, public val text: String, override val baseRevision: TextDocumentRevision, override val stamp: EventStamp) : TextInputEvent
+    public data class CompositionChanged(public val range: TextRange?, public val text: String, public val selection: TextRange?, override val baseRevision: TextDocumentRevision, override val stamp: EventStamp) : TextInputEvent
     public data class Action(public val action: TextInputAction, override val baseRevision: TextDocumentRevision, override val stamp: EventStamp) : TextInputEvent
 }
 ```
 
-`TextRange` exige `0 <= startUtf16 <= endExclusiveUtf16`. `TextInputConfig.selection` doit être contenue dans `0..surroundingText.length`; les constructeurs rejettent une violation structurelle. Les limites de texte dépendant de `KadrePolicy` sont revalidées par `openTextInput`/`updateSurroundingText` et produisent la failure de budget de leur ligne d’opération, jamais une troncature. Chaque range d’un `TextInputState` ou `TextInputEvent` est garanti contenu dans le document identifié par sa révision de base ; un backend incapable de satisfaire cette garantie réinitialise l’input au lieu de publier un range invalide.
+`TextRange` exige `0 <= startUtf16 <= endExclusiveUtf16`. `TextInputConfig.selection` doit être contenue dans `0..surroundingText.length`; les constructeurs rejettent une violation structurelle. Les limites de texte dépendant de `KadrePolicy` sont revalidées par `openTextInput`/`updateSurroundingText` et produisent la failure de budget de leur ligne d’opération, jamais une troncature. Chaque range d’un `TextInputState` ou `TextInputEvent` est garanti contenu dans le document identifié par sa révision de base, sauf `CompositionChanged.selection`, qui est contenue dans son `text` de préédition. Lorsqu’un snapshot portant une révision supérieure est accepté pendant une composition, `TextInputState.composingRange` est rebased (recalculé) dans ce nouveau document ; un snapshot qui ne représente pas cette substitution est refusé par `InvalidRequest("text")`. Si une observation native intercale cette application suspendue, la session ferme avec `Closed(TextInputSession)` plutôt que de conserver deux états divergents. Un backend incapable de satisfaire ces garanties réinitialise l’input au lieu de publier un range invalide.
 
 ### 6.5 Drag-and-drop
 

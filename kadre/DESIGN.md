@@ -1048,6 +1048,7 @@ Un même gamepad physique peut être projeté dans plusieurs sessions avec des `
 public interface SurfaceInput {
     public val events: Flow<InputEvent>
     public val state: StateFlow<SurfaceInputState>
+    public suspend fun openTextInput(config: TextInputConfig): KadreResult<TextInputSession>
 }
 
 public data class SurfaceInputState(
@@ -1256,10 +1257,6 @@ Le routing ne masque jamais le lifecycle physique. Une projection attachée reç
 ### 10.3 IME
 
 ```kotlin
-public suspend fun SurfaceInput.openTextInput(
-    config: TextInputConfig,
-): KadreResult<TextInputSession>
-
 public interface TextInputSession : AutoCloseable {
     public val events: Flow<TextInputEvent>
     public val state: StateFlow<TextInputState>
@@ -1279,7 +1276,7 @@ public interface TextInputSession : AutoCloseable {
 
 Une surface possède au maximum une session IME active. Une seconde ouverture retourne `KadreFailure.AlreadyInUse`; aucun remplacement silencieux. `TextRange` utilise des offsets UTF-16 dans la `String` Kotlin. Le cursor rect est exprimé dans l’espace logique de la surface et converti par le backend.
 
-`TextDocumentRevision` est une révision monotone choisie par l’application et enregistrée avec chaque surrounding text. `TextInputState` contient la dernière révision acceptée. Tout `TextInputEvent` qui propose un edit, une sélection ou une composition porte la révision de base sur laquelle le host l’a calculé. L’application n’applique un edit que si cette révision correspond encore à son document ; sinon elle republie son snapshot courant. `updateCursor` exige exactement la révision courante et retourne `KadreFailure.StaleRevision` pour toute autre, mais accepte un nouveau rect pour refléter un layout ou scroll sans mutation du document. `updateSurroundingText` accepte une révision supérieure ; une révision inférieure retourne aussi `StaleRevision`, la même révision avec un payload identique est idempotente et avec un texte ou une sélection différente retourne `InvalidRequest`. Une nouvelle révision n’annule pas implicitement une composition : sa poursuite ou sa terminaison reste annoncée par l’état et les événements IME.
+`TextDocumentRevision` est une révision monotone choisie par l’application et enregistrée avec chaque surrounding text. `TextInputState` contient la dernière révision acceptée. Tout `TextInputEvent` qui propose un edit, une sélection ou une composition porte la révision de base sur laquelle le host l’a calculé. L’application n’applique un edit que si cette révision correspond encore à son document ; sinon elle republie son snapshot courant. Pour `CompositionChanged`, `range` est toujours dans le document de `baseRevision`, tandis que `selection` est dans `text`, donc dans le texte composé proposé ; elle est non nulle exactement quand `range` l’est. Une sélection interne de préédition n’est jamais encodée artificiellement comme `SelectionChanged`, car elle peut dépasser le document de base. Lorsque l’application accepte une composition dans un nouveau snapshot, celui-ci doit être la substitution de `text` dans `range`; le runtime rebase alors `TextInputState.composingRange` sur ce snapshot et refuse autrement `InvalidRequest("text")`. Si une nouvelle observation native est admise pendant l’application suspendue de ce snapshot, Kadre ferme explicitement la session et retourne `Closed(TextInputSession)` : il ne prétend jamais que le port natif et le runtime sont encore réconciliés. `updateCursor` exige exactement la révision courante et retourne `KadreFailure.StaleRevision` pour toute autre, mais accepte un nouveau rect pour refléter un layout ou scroll sans mutation du document. `updateSurroundingText` accepte une révision supérieure ; une révision inférieure retourne aussi `StaleRevision`, la même révision avec un payload identique est idempotente et avec un texte ou une sélection différente retourne `InvalidRequest`. Une nouvelle révision n’annule pas implicitement une composition : sa poursuite ou sa terminaison reste annoncée par l’état et les événements IME.
 
 Fermer la surface, sa fenêtre propriétaire ou la session ferme la session IME enfant. La perte temporaire de focus publie un état suspendu, sans détruire automatiquement la composition ; le backend peut terminer la composition uniquement lorsque le host natif l’impose et l’annonce par un événement terminal.
 

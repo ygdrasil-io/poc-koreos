@@ -9,9 +9,6 @@ import org.graphiks.kadre.diagnostics.KadreOperation
 import org.graphiks.kadre.diagnostics.KadreResult
 import org.graphiks.kadre.surface.LogicalRect
 
-public suspend fun SurfaceInput.openTextInput(config: TextInputConfig): KadreResult<TextInputSession> =
-    KadreResult.Failure(KadreFailure.Unsupported(KadreOperation.TextInput))
-
 public enum class TextInputPurpose { Text, Name, Email, Url, Telephone, Number, Decimal, Password }
 public enum class TextInputAction { Default, Done, Go, Next, Search, Send }
 public enum class TextCapitalization { None, Sentences, Words, Characters }
@@ -85,6 +82,8 @@ public sealed interface TextInputEvent {
     public data class CompositionChanged(
         public val range: TextRange?,
         public val text: String,
+        /** Selection within [text], or null when the composition has ended. */
+        public val selection: TextRange?,
         override val baseRevision: TextDocumentRevision,
         override val stamp: EventStamp,
     ) : TextInputEvent

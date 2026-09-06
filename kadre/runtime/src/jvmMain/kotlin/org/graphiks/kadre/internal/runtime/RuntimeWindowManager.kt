@@ -103,6 +103,7 @@ public class RuntimeWindowManager public constructor(
     private val fullscreenAvailabilityFailure: KadreFailure.PlatformFailure? = null,
     private val publicSurfaceCapabilities: Boolean = false,
     private val enabledSurfaceCapabilities: SurfaceCapabilities = unsupportedSurfaceCapabilities(),
+    private val textInputPortFactory: TextInputPortFactory = TextInputPortFactory { UnsupportedTextInputPort },
     private val onLastWindowClosed: (() -> Unit)? = null,
 ) : WindowManager, AutoCloseable, RuntimeFullscreenObservationSink {
     init {
@@ -1159,6 +1160,7 @@ public class RuntimeWindowManager public constructor(
             id = record.surfaceId,
             initialSnapshot = initialSurfaceSnapshot ?: fallbackSurfaceSnapshot(effectiveSpec),
             commandPort = surfaceCommandPort,
+            textInputPort = textInputPortFactory.create(record.surfaceId),
             commandsEnabled = publicSurfaceCapabilities,
             enabledCapabilities = enabledSurfaceCapabilities,
             eventStampSource = ::nextEventStamp,
