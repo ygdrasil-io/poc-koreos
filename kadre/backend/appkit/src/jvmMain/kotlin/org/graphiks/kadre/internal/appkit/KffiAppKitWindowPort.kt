@@ -45,6 +45,7 @@ import org.graphiks.kffi.objc.CGWindowLevelForKey
 import org.graphiks.kffi.objc.CGWindowLevelKey
 import org.graphiks.kffi.objc.NSApplication
 import org.graphiks.kffi.objc.NSAppearance
+import org.graphiks.kffi.objc.NSArray_arrayWithObjects_count
 import org.graphiks.kffi.objc.NSBackingStoreType
 import org.graphiks.kffi.objc.NSButton
 import org.graphiks.kffi.objc.NSColor
@@ -72,6 +73,8 @@ import org.graphiks.kffi.objc.effectiveAppearance
 import org.graphiks.kffi.objc.convertBaseToScreen
 import org.graphiks.kffi.objc.safeAreaInsets
 import org.graphiks.kffi.objc.asNSDraggingInfo
+import org.graphiks.kffi.objc.registerForDraggedTypes
+import org.graphiks.kffi.objc.unregisterDraggedTypes
 import org.graphiks.kffi.objc.managed.ObjCManagedClass
 import org.graphiks.kffi.objc.managed.ObjCManagedInstance
 import org.graphiks.kffi.objc.managed.ObjCManagedTextInputValues
@@ -300,6 +303,7 @@ internal class KffiAppKitWindowPort(
         return try {
             val view = NSView(instance.receiver.ptr)
             view.setFrame(contentRect(spec))
+            view.registerKadreDropTypes()
             KffiViewOwner(view, instance, appearanceAdmission, inputAdmission, dropAdmission, textInputAdmission)
         } catch (failure: Throwable) {
             try {
@@ -1185,6 +1189,15 @@ private class KffiViewOwner(
             failure = closeFailure
         }
         try {
+            view.unregisterDraggedTypes()
+        } catch (closeFailure: Throwable) {
+            if (failure != null && failure !== closeFailure) {
+                failure.addSuppressed(closeFailure)
+            } else {
+                failure = closeFailure
+            }
+        }
+        try {
             instance.close()
         } catch (closeFailure: Throwable) {
             if (failure != null && failure !== closeFailure) {
@@ -1196,6 +1209,38 @@ private class KffiViewOwner(
         failure?.let { throw it }
     }
 }
+
+/** Registers the complete fixed set that this AppKit adapter can snapshot without native escape. */
+private fun NSView.registerKadreDropTypes() {
+    ObjCRuntime.autoreleasePool {
+        Arena.ofConfined().use { arena ->
+            val pointers = arena.allocate(ValueLayout.ADDRESS, APPKIT_REGISTERED_DROP_TYPES.size.toLong())
+            APPKIT_REGISTERED_DROP_TYPES.forEachIndexed { index, type ->
+                pointers.set(
+                    ValueLayout.ADDRESS,
+                    index * ValueLayout.ADDRESS.byteSize(),
+                    ObjCRuntime.newNSString(arena, type),
+                )
+            }
+            val array = NSArray_arrayWithObjects_count(pointers, APPKIT_REGISTERED_DROP_TYPES.size.toLong())
+            check(array != MemorySegment.NULL) { "AppKit could not create the registered drop type array" }
+            registerForDraggedTypes(array)
+        }
+    }
+}
+
+private val APPKIT_REGISTERED_DROP_TYPES = listOf(
+    "public.file-url",
+    "public.url",
+    "public.utf8-plain-text",
+    "public.text",
+    "public.data",
+    "public.html",
+    "public.rtf",
+    "public.png",
+    "public.jpeg",
+    "public.tiff",
+)
 
 private class KffiViewAppearanceAdmission {
     private val callback = AtomicReference<(() -> Unit)?>(null)
