@@ -152,7 +152,7 @@ Ses identifiants de scénario stables sont :
 | `web-attach-connected` | attache un élément connecté | session vivante, primary surface présente, aucune Window |
 | `web-attach-detached-rejected` | attache `StopWhenDetached` sur élément déconnecté | `InvalidRequest("element")`, aucune session |
 | `web-attach-manual-detached` | attache `Manual` sur élément déconnecté | lifecycle `Attached + Background + Inactive` |
-| `web-manual-initial-shadow-reinsert` | attache `Manual` hors DOM, puis insère l'élément dans un `ShadowRoot` | watcher initial détecte la reconnexion, lifecycle restauré ; detach terminal ultérieur détecté par l'observer réinstallé |
+| `web-manual-initial-shadow-reinsert` | attache `Manual` hors DOM, puis insère l'élément dans un `ShadowRoot` | watcher initial détecte la reconnexion, lifecycle restauré ; detach ordinaire ultérieur conserve la session en `Background + Inactive` et réarme le watcher |
 | `web-detach-reparent-batch` | retire puis réinsère avant le batch `MutationObserver` | même session encore vivante |
 | `web-shadow-root-detach-reparent` | retire/réinsère l'élément depuis un `ShadowRoot`, puis le change de root dans le même document | même session vivante et observer réinstallé ; detach terminal ensuite détecté |
 | `web-shadow-root-late-reinsert` | sous `Manual`, livre le batch de retrait puis réinsère plus tard dans un autre `ShadowRoot` du même document | watcher de connexion détecte la reconnexion, lifecycle restauré et observer réinstallé |
