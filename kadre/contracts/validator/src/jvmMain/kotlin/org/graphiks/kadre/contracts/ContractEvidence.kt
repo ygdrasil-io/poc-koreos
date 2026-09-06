@@ -145,10 +145,18 @@ internal object ContractEvidence {
         path: Path,
         contract: ContractRecord,
         mappings: List<EvidenceMapping>,
+        junit: JUnitSummary,
         expectedCommit: String,
         expectedTarget: String,
         expectedBrowserEngine: String?,
     ): ValidatedContractEvidence {
+        check(contract.oracle in setOf(ContractOracle.O1, ContractOracle.O2, ContractOracle.O3)) {
+            if (contract.oracle == ContractOracle.O4) {
+                "${contract.contractId} uses O4 and requires differential evidence"
+            } else {
+                "${contract.contractId} must use oracle O1, O2 or O3"
+            }
+        }
         val document = runCatching {
             jsonFormat.parseToJsonElement(Files.readString(path)).asObject("evidence")
         }.getOrElse { cause ->
@@ -189,13 +197,19 @@ internal object ContractEvidence {
                 check(environment.requiredString(field).isNotBlank()) { "$field must not be blank" }
             }
         }
-        check(document.requiredLong("durationMillis") >= 0) { "durationMillis must not be negative" }
+        val durationMillis = document.requiredLong("durationMillis")
+        check(durationMillis >= 0) { "durationMillis must not be negative" }
+        check(durationMillis == junit.durationMillis) {
+            "durationMillis=$durationMillis does not match JUnit durationMillis=${junit.durationMillis}"
+        }
         document.requiredObject("capabilities").also { capabilities ->
             capabilities.requireFields("initial", "transitions")
             capabilities.requiredArray("initial")
             capabilities.requiredArray("transitions")
         }
 
+        val declaredScenarioIds = mutableListOf<String>()
+        val declaredSentinelIds = mutableListOf<String>()
         val declaredMappings = buildList {
             document.requiredArray("scenarios").forEachIndexed { index, element ->
                 val scenario = element.asObject("scenarios[$index]")
@@ -210,12 +224,14 @@ internal object ContractEvidence {
                 check(scenario.requiredString("oracle") == contract.oracle.name) {
                     "scenario ${scenario.requiredString("scenarioId")} has wrong oracle"
                 }
+                val scenarioId = scenario.requiredString("scenarioId")
+                declaredScenarioIds += scenarioId
                 add(
                     EvidenceMapping(
                         contractId = declaredContractId,
                         target = target,
                         kind = EvidenceKind.Scenario,
-                        evidenceId = scenario.requiredString("scenarioId"),
+                        evidenceId = scenarioId,
                         testClass = "artifact",
                         testName = "artifact",
                     ),
@@ -231,29 +247,57 @@ internal object ContractEvidence {
                 check(sentinel.requiredString("result") == "Killed") {
                     "sentinel ${sentinel.requiredString("sentinelId")} was not killed"
                 }
+                val sentinelId = sentinel.requiredString("sentinelId")
+                declaredSentinelIds += sentinelId
                 add(
                     EvidenceMapping(
                         contractId = declaredContractId,
                         target = target,
                         kind = EvidenceKind.Sentinel,
-                        evidenceId = sentinel.requiredString("sentinelId"),
+                        evidenceId = sentinelId,
                         testClass = "artifact",
                         testName = "artifact",
                     ),
                 )
             }
         }
+        check(declaredScenarioIds == declaredScenarioIds.sorted()) {
+            "scenarios must be sorted by scenarioId"
+        }
+        check(declaredSentinelIds == declaredSentinelIds.sorted()) {
+            "sentinels must be sorted by sentinelId"
+        }
         val configuredErrors = validateTargetMappings(contract, target, mappings)
         check(configuredErrors.isEmpty()) { configuredErrors.joinToString(separator = "\n") }
         val declaredErrors = validateTargetMappings(contract, target, declaredMappings)
         check(declaredErrors.isEmpty()) { declaredErrors.joinToString(separator = "\n") }
 
+        check(junit.tests > 0) { "JUnit evidence contains no tests" }
+        mappings.forEach { mapping ->
+            val identity = mapping.testClass to mapping.testName
+            val testCase = junit.cases[identity]
+                ?: error("mapped testcase is missing: ${mapping.testClass}#${mapping.testName}")
+            check(testCase.status == JUnitStatus.Passed) {
+                "mapped testcase did not pass: ${mapping.testClass}#${mapping.testName} (${testCase.status})"
+            }
+        }
+        check(junit.skipped == 0) { "skipped=${junit.skipped}" }
+        check(junit.failures == 0) { "failures=${junit.failures}" }
+        check(junit.errors == 0) { "errors=${junit.errors}" }
+
         document.requiredObject("tests").also { tests ->
             tests.requireFields("tests", "skipped", "failures", "errors")
-            check(tests.requiredInt("tests") > 0) { "JUnit evidence contains no tests" }
-            listOf("skipped", "failures", "errors").forEach { field ->
-                val count = tests.requiredInt(field)
-                check(count == 0) { "$field=$count" }
+            val expectedCounts = mapOf(
+                "tests" to junit.tests,
+                "skipped" to junit.skipped,
+                "failures" to junit.failures,
+                "errors" to junit.errors,
+            )
+            expectedCounts.forEach { (field, junitCount) ->
+                val declaredCount = tests.requiredInt(field)
+                check(declaredCount == junitCount) {
+                    "$field=$declaredCount does not match JUnit $field=$junitCount"
+                }
             }
         }
 

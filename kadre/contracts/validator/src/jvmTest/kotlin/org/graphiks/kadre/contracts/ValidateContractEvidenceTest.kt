@@ -12,9 +12,134 @@ import kotlin.test.assertNotNull
 
 class ValidateContractEvidenceTest {
     @Test
+    fun activeJvmContractRejectsSelfDeclaredJsonWithoutAssociatedJunit() {
+        val fixture = jvmFixture()
+        fixture.writeJvmEvidence(canonicalJvmEvidence(), withJunit = false)
+
+        val exception = assertFailsWith<IllegalStateException> { fixture.validate() }
+
+        assertContains(exception.message.orEmpty(), "JUnit report directory does not exist")
+    }
+
+    @Test
+    fun activeBrowserContractRejectsSelfDeclaredJsonWithoutEngineJunit() {
+        val fixture = browserFixture(target = "js", engines = setOf("chromium"))
+        fixture.writeBrowserEvidence(
+            "job-a",
+            "chromium",
+            canonicalBrowserEvidence("js", "chromium", CHROMIUM_BUNDLE),
+            withJunit = false,
+        )
+
+        val exception = assertFailsWith<IllegalStateException> { fixture.validate() }
+
+        assertContains(exception.message.orEmpty(), "JUnit report directory does not exist")
+    }
+
+    @Test
+    fun mappedJunitCasesMustExistAndPassForTheValidatedExecution() {
+        val missing = jvmFixture()
+        missing.writeJvmEvidence(canonicalJvmEvidence())
+        missing.writeJvmReport(VALID_JVM_REPORT.replace("consumerCompiles[jvm]", "wrongConsumer[jvm]"))
+        val missingCase = assertFailsWith<IllegalStateException> { missing.validate() }
+        assertContains(
+            missingCase.message.orEmpty(),
+            "mapped testcase is missing: example.WebTypeScriptConsumerCompileTest#consumerCompiles[jvm]",
+        )
+
+        val failed = jvmFixture()
+        failed.writeJvmEvidence(canonicalJvmEvidence())
+        failed.writeJvmReport(
+            VALID_JVM_REPORT
+                .replace("failures=\"0\"", "failures=\"1\"")
+                .replace("/>\n", "><failure/></testcase>\n"),
+        )
+        val failedCase = assertFailsWith<IllegalStateException> { failed.validate() }
+        assertContains(
+            failedCase.message.orEmpty(),
+            "mapped testcase did not pass: example.WebTypeScriptConsumerCompileTest#consumerCompiles[jvm] (Failed)",
+        )
+    }
+
+    @Test
+    fun jsonSummaryAndDurationMustEqualAssociatedJunit() {
+        val mutations = listOf(
+            canonicalJvmEvidence().replace("\"durationMillis\": 10", "\"durationMillis\": 11") to
+                "durationMillis=11 does not match JUnit durationMillis=10",
+            canonicalJvmEvidence().replace("\"tests\": 1", "\"tests\": 2") to
+                "tests=2 does not match JUnit tests=1",
+        )
+
+        mutations.forEach { (json, expected) ->
+            val fixture = jvmFixture()
+            fixture.writeJvmEvidence(json)
+            fixture.writeJvmReport(VALID_JVM_REPORT)
+
+            val exception = assertFailsWith<IllegalStateException> { fixture.validate() }
+
+            assertContains(exception.message.orEmpty(), expected)
+        }
+    }
+
+    @Test
+    fun artifactReaderRejectsO4UntilDifferentialEvidenceExists() {
+        val fixture = fixture(
+            registry = O1_REGISTRY.replace("\tO1\t", "\tO4\t"),
+            mapping = O1_MAPPING,
+            target = "jvm",
+            expectedExecutions = ExpectedContractExecutions.JUnit,
+            gateContractIds = setOf("INT-002"),
+        )
+        fixture.writeJvmEvidence(canonicalJvmEvidence().replace("\"oracle\": \"O1\"", "\"oracle\": \"O4\""))
+        fixture.writeJvmReport(VALID_JVM_REPORT)
+
+        val exception = assertFailsWith<IllegalStateException> { fixture.validate() }
+
+        assertContains(exception.message.orEmpty(), "INT-002 uses O4 and requires differential evidence")
+    }
+
+    @Test
+    fun scenarioAndSentinelArraysMustUseCanonicalIdOrder() {
+        val reversedScenarios = jvmFixture()
+        reversedScenarios.writeJvmEvidence(
+            canonicalJvmEvidence().replace(
+                "${scenarioJson("web-host-common-consumer", "O1")},\n    ${scenarioJson("web-typescript-consumer", "O1")}",
+                "${scenarioJson("web-typescript-consumer", "O1")},\n    ${scenarioJson("web-host-common-consumer", "O1")}",
+            ),
+        )
+        reversedScenarios.writeJvmReport(VALID_JVM_REPORT)
+        val scenarios = assertFailsWith<IllegalStateException> { reversedScenarios.validate() }
+        assertContains(scenarios.message.orEmpty(), "scenarios must be sorted by scenarioId")
+
+        val sentinelRegistry = O1_REGISTRY.replace(
+            "web-consumer-surface-mismatch\t-",
+            "web-consumer-surface-mismatch,web-consumer-zombie\t-",
+        )
+        val sentinelMapping = "$O1_MAPPING\n" +
+            "INT-002\tjvm\tsentinel\tweb-consumer-zombie\texample.WebTypeScriptConsumerCompileTest\tconsumerCompiles[jvm]"
+        val reversedSentinels = fixture(
+            registry = sentinelRegistry,
+            mapping = sentinelMapping,
+            target = "jvm",
+            expectedExecutions = ExpectedContractExecutions.JUnit,
+            gateContractIds = setOf("INT-002"),
+        )
+        reversedSentinels.writeJvmEvidence(
+            canonicalJvmEvidence().replace(
+                "[${sentinelJson("web-consumer-surface-mismatch")}]",
+                "[${sentinelJson("web-consumer-zombie")}, ${sentinelJson("web-consumer-surface-mismatch")}]",
+            ),
+        )
+        reversedSentinels.writeJvmReport(VALID_JVM_REPORT)
+        val sentinels = assertFailsWith<IllegalStateException> { reversedSentinels.validate() }
+        assertContains(sentinels.message.orEmpty(), "sentinels must be sorted by sentinelId")
+    }
+
+    @Test
     fun canonicalJvmEvidenceIsValidatedAndIndexedByTargetAndContract() {
         val fixture = jvmFixture()
         fixture.writeJvmEvidence(canonicalJvmEvidence())
+        fixture.writeJvmReport(VALID_JVM_REPORT)
 
         val index = fixture.validate()
 
@@ -24,7 +149,7 @@ class ValidateContractEvidenceTest {
     }
 
     @Test
-    fun cliAcceptsJunitOrBrowserEnginesAndRequiresItsSevenArguments() {
+    fun cliAcceptsJunitOrBrowserEnginesAndRequiresItsEightArguments() {
         val fixture = jvmFixture()
         fixture.writeJvmEvidence(canonicalJvmEvidence())
 
@@ -37,6 +162,7 @@ class ValidateContractEvidenceTest {
                 "junit",
                 "INT-002",
                 fixture.artifactDirectories.single().toString(),
+                "test-results/jvmTest",
             ),
         )
 
@@ -54,6 +180,7 @@ class ValidateContractEvidenceTest {
                 "chromium,firefox",
                 "BCK-001",
                 browser.artifactDirectories.single().toString(),
+                "test-results/browser/{engine}",
             ),
         )
         assertNotNull(browserIndex.browser["js"]?.get("BCK-001")?.get("chromium")?.get(CHROMIUM_BUNDLE))
@@ -136,7 +263,7 @@ class ValidateContractEvidenceTest {
                 scenarioJson("wrong-consumer", "O1"),
             ) to "missing scenario: web-typescript-consumer",
             canonicalJvmEvidence().replace(
-                "${scenarioJson("web-typescript-consumer", "O1")},\n    ${scenarioJson("web-host-common-consumer", "O1")}",
+                "${scenarioJson("web-host-common-consumer", "O1")},\n    ${scenarioJson("web-typescript-consumer", "O1")}",
                 scenarioJson("web-typescript-consumer", "O1"),
             ) to "missing scenario: web-host-common-consumer",
         )
@@ -169,10 +296,10 @@ class ValidateContractEvidenceTest {
     @Test
     fun junitCountersMustContainTestsWithoutSkippedFailuresOrErrors() {
         val mutations = listOf(
-            "\"tests\": 1" to "\"tests\": 0" to "JUnit evidence contains no tests",
-            "\"skipped\": 0" to "\"skipped\": 1" to "skipped=1",
-            "\"failures\": 0" to "\"failures\": 1" to "failures=1",
-            "\"errors\": 0" to "\"errors\": 1" to "errors=1",
+            "\"tests\": 1" to "\"tests\": 0" to "tests=0 does not match JUnit tests=1",
+            "\"skipped\": 0" to "\"skipped\": 1" to "skipped=1 does not match JUnit skipped=0",
+            "\"failures\": 0" to "\"failures\": 1" to "failures=1 does not match JUnit failures=0",
+            "\"errors\": 0" to "\"errors\": 1" to "errors=1 does not match JUnit errors=0",
         )
 
         mutations.forEach { (replacement, expected) ->
@@ -362,20 +489,40 @@ class ValidateContractEvidenceTest {
         val gateContractIds: Set<String>,
         val artifactDirectories: MutableList<Path> = mutableListOf(),
     ) {
-        fun writeJvmEvidence(json: String) {
+        fun writeJvmEvidence(json: String, withJunit: Boolean = true) {
             val job = root.resolve("job-${artifactDirectories.size}").also(artifactDirectories::add)
             job.resolve("contract-evidence/INT-002.json").also {
                 it.parent.createDirectories()
                 it.writeText(json)
             }
+            if (withJunit) {
+                job.resolve("test-results/jvmTest/TEST-contract.xml").also {
+                    it.parent.createDirectories()
+                    it.writeText(VALID_JVM_REPORT)
+                }
+            }
         }
 
-        fun writeBrowserEvidence(jobName: String, engine: String, json: String) {
+        fun writeBrowserEvidence(jobName: String, engine: String, json: String, withJunit: Boolean = true) {
             val job = root.resolve(jobName)
             if (job !in artifactDirectories) artifactDirectories.add(job)
             job.resolve("contract-evidence/browser/$engine/BCK-001.json").also {
                 it.parent.createDirectories()
                 it.writeText(json)
+            }
+            if (withJunit) {
+                job.resolve("test-results/browser/$engine/TEST-contract.xml").also {
+                    it.parent.createDirectories()
+                    it.writeText(validBrowserReport(target))
+                }
+            }
+        }
+
+        fun writeJvmReport(report: String) {
+            val job = artifactDirectories.single()
+            job.resolve("test-results/jvmTest/TEST-contract.xml").also {
+                it.parent.createDirectories()
+                it.writeText(report)
             }
         }
 
@@ -387,6 +534,10 @@ class ValidateContractEvidenceTest {
             expectedExecutions = expectedExecutions,
             gateContractIds = gateContractIds,
             artifactDirectories = artifactDirectories.ifEmpty { listOf(root.resolve("absent-job")) },
+            junitReportRelativeDirectories = when (expectedExecutions) {
+                ExpectedContractExecutions.JUnit -> listOf("test-results/jvmTest")
+                is ExpectedContractExecutions.Browser -> listOf("test-results/browser/{engine}")
+            },
         )
     }
 
@@ -395,6 +546,12 @@ class ValidateContractEvidenceTest {
         const val OTHER_COMMIT = "fedcba9876543210fedcba9876543210fedcba98"
         const val CHROMIUM_BUNDLE = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
         const val FIREFOX_BUNDLE = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        val VALID_JVM_REPORT =
+            """
+            <testsuite name="WebTypeScriptConsumerCompileTest" tests="1" skipped="0" failures="0" errors="0" time="0.010">
+              <testcase name="consumerCompiles[jvm]" classname="example.WebTypeScriptConsumerCompileTest" time="0.010"/>
+            </testsuite>
+            """.trimIndent()
         const val REGISTRY_HEADER =
             "contractId\tstatus\tsource\tsubject\trisk\toracle\tscenarios\trequiredTargets\tconditionalCapabilities\tsentinels\tretirementRef"
         const val MAPPING_HEADER = "contractId\ttarget\tkind\tevidenceId\ttestClass\ttestName"
@@ -429,8 +586,8 @@ class ValidateContractEvidenceTest {
               "durationMillis": 10,
               "capabilities": { "initial": [], "transitions": [] },
               "scenarios": [
-                ${scenarioJson("web-typescript-consumer", "O1")},
-                ${scenarioJson("web-host-common-consumer", "O1")}
+                ${scenarioJson("web-host-common-consumer", "O1")},
+                ${scenarioJson("web-typescript-consumer", "O1")}
               ],
               "sentinels": [${sentinelJson("web-consumer-surface-mismatch")}],
               "tests": { "tests": 1, "skipped": 0, "failures": 0, "errors": 0 }
@@ -454,6 +611,14 @@ class ValidateContractEvidenceTest {
               "sentinels": [${sentinelJson("web-detached-host-retained", "BCK-001")}],
               "tests": { "tests": 3, "skipped": 0, "failures": 0, "errors": 0 }
             }
+        """.trimIndent()
+
+        fun validBrowserReport(target: String): String = """
+            <testsuite name="WebContractTest" tests="3" skipped="0" failures="0" errors="0" time="0.020">
+              <testcase name="attach[$target]" classname="example.WebContractTest" time="0.007"/>
+              <testcase name="document[$target]" classname="example.WebContractTest" time="0.007"/>
+              <testcase name="detached[$target]" classname="example.WebContractTest" time="0.006"/>
+            </testsuite>
         """.trimIndent()
 
         fun scenarioJson(id: String, oracle: String, contractId: String = "INT-002"): String =

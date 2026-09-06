@@ -133,6 +133,7 @@ class ContractRegistryTest {
                 expectedExecutions = ExpectedContractExecutions.Browser(setOf("chromium")),
                 gateContractIds = WEB_CONTRACT_IDS,
                 artifactDirectories = listOf(createTempDirectory("kadre-absent-$target-browser-evidence-").resolve("missing")),
+                junitReportRelativeDirectories = listOf("test-results/browser/{engine}"),
             )
 
             assertEquals(ContractEvidenceIndex(emptyMap(), emptyMap()), index)
@@ -159,6 +160,7 @@ class ContractRegistryTest {
                     expectedExecutions = ExpectedContractExecutions.Browser(setOf("chromium")),
                     gateContractIds = setOf("BCK-001"),
                     artifactDirectories = listOf(fixture.resolve(target)),
+                    junitReportRelativeDirectories = listOf("test-results/browser/{engine}"),
                 )
             }
 
@@ -197,6 +199,7 @@ class ContractRegistryTest {
                     expectedExecutions = ExpectedContractExecutions.Browser(setOf("chromium")),
                     gateContractIds = setOf("INT-002"),
                     artifactDirectories = listOf(fixture.resolve(target)),
+                    junitReportRelativeDirectories = listOf("test-results/browser/{engine}"),
                 )
             }
 

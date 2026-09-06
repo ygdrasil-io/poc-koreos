@@ -120,6 +120,10 @@ val validateAppKitContractEvidence by tasks.registering(JavaExec::class) {
         "junit",
         appKitContractIds.joinToString(separator = ","),
         rootProject.file("kadre/backend/appkit/build").absolutePath,
+        listOf(
+            "test-results/jvmTest",
+            "test-results/appKitStandaloneLoopTest",
+        ).joinToString(separator = System.getProperty("path.separator")),
     )
     inputs.file(appKitContractRegistry)
     inputs.file(appKitContractMapping)
@@ -128,6 +132,10 @@ val validateAppKitContractEvidence by tasks.registering(JavaExec::class) {
     inputs.property("contractTarget", contractEvidenceTarget)
     inputs.property("contractExecutions", "junit")
     inputs.property("contractGateIds", appKitContractIds)
+    inputs.property(
+        "junitReportRelativeDirectories",
+        listOf("test-results/jvmTest", "test-results/appKitStandaloneLoopTest"),
+    )
 }
 
 val generateAppKitContractEvidence by tasks.registering {
@@ -184,6 +192,7 @@ val validateRuntimeContractEvidence by tasks.registering(JavaExec::class) {
         "junit",
         runtimeContractIds.joinToString(separator = ","),
         rootProject.file("kadre/runtime/build").absolutePath,
+        "test-results/jvmTest",
     )
     inputs.file(runtimeContractRegistry)
     inputs.file(runtimeContractMapping)
@@ -192,6 +201,7 @@ val validateRuntimeContractEvidence by tasks.registering(JavaExec::class) {
     inputs.property("contractTarget", contractEvidenceTarget)
     inputs.property("contractExecutions", "junit")
     inputs.property("contractGateIds", runtimeContractIds)
+    inputs.property("junitReportRelativeDirectories", listOf("test-results/jvmTest"))
 }
 
 val generateRuntimeContractEvidence by tasks.registering {
@@ -235,6 +245,7 @@ val browserContractEvidenceTasks = listOf("js", "wasmJs").map { target ->
             browserContractEngines.get(),
             webContractIds.joinToString(separator = ","),
             artifactDirectory.absolutePath,
+            "test-results/browser/{engine}",
         )
         inputs.file(browserContractRegistry)
         inputs.files(browserContractMappings)
@@ -243,6 +254,7 @@ val browserContractEvidenceTasks = listOf("js", "wasmJs").map { target ->
         inputs.property("contractTarget", target)
         inputs.property("contractExecutions", browserContractEngines)
         inputs.property("contractGateIds", webContractIds)
+        inputs.property("junitReportRelativeDirectories", listOf("test-results/browser/{engine}"))
     }
 }
 

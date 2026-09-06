@@ -29,6 +29,7 @@ internal fun validateContractEvidence(
     expectedExecutions: ExpectedContractExecutions,
     gateContractIds: Set<String>,
     artifactDirectories: List<Path>,
+    junitReportRelativeDirectories: List<String>,
 ): ContractEvidenceIndex {
     require(Files.isRegularFile(registryPath)) { "contract registry does not exist: $registryPath" }
     require(ContractEvidence.isGitSha(expectedCommit)) { "expected commit must be a Git SHA" }
@@ -36,6 +37,22 @@ internal fun validateContractEvidence(
     require(mappingPaths.isNotEmpty()) { "contract evidence mappings must not be empty" }
     require(gateContractIds.isNotEmpty()) { "contract evidence gate IDs must not be empty" }
     require(artifactDirectories.isNotEmpty()) { "artifact directories must not be empty" }
+    require(junitReportRelativeDirectories.isNotEmpty()) { "JUnit report relative directories must not be empty" }
+    junitReportRelativeDirectories.forEach { template ->
+        require(template.isNotBlank()) { "JUnit report relative directories must not be blank" }
+        val samplePath = Path.of(template.replace(EnginePlaceholder, "engine"))
+        require(!samplePath.isAbsolute && !samplePath.normalize().startsWith("..")) {
+            "JUnit report directory must be relative to its artifact directory: $template"
+        }
+    }
+    when (expectedExecutions) {
+        ExpectedContractExecutions.JUnit -> require(junitReportRelativeDirectories.none { EnginePlaceholder in it }) {
+            "JUnit execution report directories must not contain $EnginePlaceholder"
+        }
+        is ExpectedContractExecutions.Browser -> require(junitReportRelativeDirectories.all { EnginePlaceholder in it }) {
+            "browser report directories must contain $EnginePlaceholder"
+        }
+    }
 
     val records = ContractRegistry.parse(registryPath.readText())
     val registryErrors = ContractRegistry.validate(records)
@@ -80,16 +97,22 @@ internal fun validateContractEvidence(
 
             when (expectedExecutions) {
                 ExpectedContractExecutions.JUnit -> {
-                    val path = requireSingleArtifact(
+                    val artifact = requireSingleArtifact(
                         artifactDirectories = distinctArtifactDirectories,
                         relativePath = Path.of("contract-evidence", "${contract.contractId}.json"),
                         missingMessage = "missing evidence artifact for ${contract.contractId}[$target]",
                         duplicateMessage = "duplicate evidence artifacts for ${contract.contractId}[$target]",
                     )
+                    val junit = readAssociatedJunit(
+                        artifact = artifact,
+                        relativeDirectories = junitReportRelativeDirectories,
+                        engine = null,
+                    )
                     val evidence = ContractEvidence.readAndValidate(
-                        path = path,
+                        path = artifact.path,
                         contract = contract,
                         mappings = targetMappings,
+                        junit = junit,
                         expectedCommit = expectedCommit,
                         expectedTarget = target,
                         expectedBrowserEngine = null,
@@ -98,7 +121,7 @@ internal fun validateContractEvidence(
                 }
 
                 is ExpectedContractExecutions.Browser -> expectedExecutions.engines.sorted().forEach { engine ->
-                    val path = requireSingleArtifact(
+                    val artifact = requireSingleArtifact(
                         artifactDirectories = distinctArtifactDirectories,
                         relativePath = Path.of(
                             "contract-evidence",
@@ -109,10 +132,16 @@ internal fun validateContractEvidence(
                         missingMessage = "missing evidence artifact for ${contract.contractId}[$target]/$engine",
                         duplicateMessage = "duplicate evidence artifacts for ${contract.contractId}[$target]/$engine",
                     )
+                    val junit = readAssociatedJunit(
+                        artifact = artifact,
+                        relativeDirectories = junitReportRelativeDirectories,
+                        engine = engine,
+                    )
                     val evidence = ContractEvidence.readAndValidate(
-                        path = path,
+                        path = artifact.path,
                         contract = contract,
                         mappings = targetMappings,
+                        junit = junit,
                         expectedCommit = expectedCommit,
                         expectedTarget = target,
                         expectedBrowserEngine = engine,
@@ -136,19 +165,41 @@ private data class BrowserIndexKey(
     val bundleSha256: String,
 )
 
+private data class LocatedArtifact(
+    val directory: Path,
+    val path: Path,
+)
+
+private const val EnginePlaceholder = "{engine}"
+
 private fun requireSingleArtifact(
     artifactDirectories: List<Path>,
     relativePath: Path,
     missingMessage: String,
     duplicateMessage: String,
-): Path {
+): LocatedArtifact {
     val candidates = artifactDirectories.asSequence()
-        .map { it.resolve(relativePath) }
-        .filter(Files::isRegularFile)
+        .map { directory -> LocatedArtifact(directory, directory.resolve(relativePath)) }
+        .filter { Files.isRegularFile(it.path) }
         .toList()
     check(candidates.isNotEmpty()) { missingMessage }
     check(candidates.size == 1) { duplicateMessage }
     return candidates.single()
+}
+
+private fun readAssociatedJunit(
+    artifact: LocatedArtifact,
+    relativeDirectories: List<String>,
+    engine: String?,
+): JUnitSummary = runCatching {
+    JUnitEvidence.read(
+        relativeDirectories.map { template ->
+            val relativeDirectory = if (engine == null) template else template.replace(EnginePlaceholder, engine)
+            artifact.directory.resolve(relativeDirectory)
+        },
+    )
+}.getOrElse { cause ->
+    throw IllegalStateException(cause.message, cause)
 }
 
 private fun Map<BrowserIndexKey, ValidatedContractEvidence>.toNestedIndex():
@@ -169,8 +220,8 @@ private fun parseExpectedExecutions(value: String): ExpectedContractExecutions =
     }
 
 internal fun validateContractEvidenceCli(args: Array<String>): ContractEvidenceIndex {
-    require(args.size == 7) {
-        "expected registry, mappings, expected commit, target, executions, gate IDs and artifact directories arguments"
+    require(args.size == 8) {
+        "expected registry, mappings, expected commit, target, executions, gate IDs, artifact directories and JUnit report directories arguments"
     }
     return validateContractEvidence(
         registryPath = Path.of(args[0]),
@@ -180,6 +231,7 @@ internal fun validateContractEvidenceCli(args: Array<String>): ContractEvidenceI
         expectedExecutions = parseExpectedExecutions(args[4]),
         gateContractIds = args[5].split(',').filter(String::isNotBlank).toSet(),
         artifactDirectories = args[6].split(File.pathSeparator).filter(String::isNotBlank).map(Path::of),
+        junitReportRelativeDirectories = args[7].split(File.pathSeparator).filter(String::isNotBlank),
     )
 }
 
