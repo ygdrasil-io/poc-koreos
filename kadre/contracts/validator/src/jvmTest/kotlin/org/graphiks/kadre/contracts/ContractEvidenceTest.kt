@@ -121,7 +121,7 @@ class ContractEvidenceTest {
             )
         }
 
-        assertContains(exception.message.orEmpty(), "APK-001: missing sentinel: appkit-loop-not-woken")
+        assertContains(exception.message.orEmpty(), "APK-001[jvm]: missing sentinel: appkit-loop-not-woken")
     }
 
     @Test
@@ -196,12 +196,12 @@ class ContractEvidenceTest {
 
     private fun completeMappings(): List<EvidenceMapping> = ContractEvidenceMapping.parse(
         "$MAPPING_HEADER\n" +
-            "APK-001\tscenario\tappkit-provider-discovery\texample.AppKitTest\tdiscovery[jvm]\n" +
-            "APK-001\tscenario\tappkit-standalone-stop\texample.AppKitTest\trealStop[jvm]\n" +
-            "APK-001\tscenario\tappkit-standalone-failure\texample.AppKitTest\tnativeFailure[jvm]\n" +
-            "APK-001\tscenario\tappkit-standalone-reuse\texample.AppKitTest\trealStop[jvm]\n" +
-            "APK-001\tsentinel\tappkit-off-main-accepted\texample.AppKitTest\toffMain[jvm]\n" +
-            "APK-001\tsentinel\tappkit-loop-not-woken\texample.AppKitTest\trealStop[jvm]",
+            "APK-001\tjvm\tscenario\tappkit-provider-discovery\texample.AppKitTest\tdiscovery[jvm]\n" +
+            "APK-001\tjvm\tscenario\tappkit-standalone-stop\texample.AppKitTest\trealStop[jvm]\n" +
+            "APK-001\tjvm\tscenario\tappkit-standalone-failure\texample.AppKitTest\tnativeFailure[jvm]\n" +
+            "APK-001\tjvm\tscenario\tappkit-standalone-reuse\texample.AppKitTest\trealStop[jvm]\n" +
+            "APK-001\tjvm\tsentinel\tappkit-off-main-accepted\texample.AppKitTest\toffMain[jvm]\n" +
+            "APK-001\tjvm\tsentinel\tappkit-loop-not-woken\texample.AppKitTest\trealStop[jvm]",
     )
 
     private fun activeAppKitContract(): ContractRecord = ContractRecord(
@@ -261,7 +261,7 @@ class ContractEvidenceTest {
     }
 
     private companion object {
-        const val MAPPING_HEADER = "contractId\tkind\tevidenceId\ttestClass\ttestName"
+        const val MAPPING_HEADER = "contractId\ttarget\tkind\tevidenceId\ttestClass\ttestName"
         val VALID_REPORT =
             """
             <?xml version="1.0" encoding="UTF-8"?>
