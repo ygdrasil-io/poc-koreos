@@ -11,6 +11,7 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import java.util.concurrent.locks.ReentrantLock
+import java.util.concurrent.atomic.AtomicReference
 import org.graphiks.kadre.application.EventDeliverySpan
 import org.graphiks.kadre.application.EventStamp
 import org.graphiks.kadre.diagnostics.Capability
@@ -40,8 +41,12 @@ import org.graphiks.kadre.input.PointerState
 import org.graphiks.kadre.input.ScrollDelta
 import org.graphiks.kadre.input.SurfaceInput
 import org.graphiks.kadre.input.SurfaceInputState
+import org.graphiks.kadre.input.TextDocumentRevision
 import org.graphiks.kadre.input.TextInputConfig
+import org.graphiks.kadre.input.TextInputEvent
 import org.graphiks.kadre.input.TextInputSession
+import org.graphiks.kadre.input.TextInputState
+import org.graphiks.kadre.input.TextRange
 import org.graphiks.kadre.input.TouchPhase
 import org.graphiks.kadre.input.TouchState
 import org.graphiks.kadre.interaction.InteractionAction
@@ -65,6 +70,7 @@ import org.graphiks.kadre.surface.HitTestingMode
 import org.graphiks.kadre.surface.HostSurface
 import org.graphiks.kadre.surface.InputDefaultBehavior
 import org.graphiks.kadre.surface.LogicalDelta
+import org.graphiks.kadre.surface.LogicalRect
 import org.graphiks.kadre.surface.PointerCaptureMode
 import org.graphiks.kadre.surface.PropertyChange
 import org.graphiks.kadre.surface.RejectedSurfaceField
@@ -86,6 +92,7 @@ internal class RuntimeWindowSurface(
     override val id: SurfaceId,
     initialSnapshot: SurfaceInitialSnapshot,
     private val commandPort: SurfaceCommandPort,
+    private val textInputPort: TextInputPort = UnsupportedTextInputPort,
     private val commandsEnabled: Boolean,
     enabledCapabilities: SurfaceCapabilities,
     private val eventStampSource: () -> EventStamp,
@@ -127,6 +134,8 @@ internal class RuntimeWindowSurface(
         deliveryPolicy = inputDeliveryPolicy,
         eventStampSource = eventStampSource,
         eventCollectorGate = collectorAllocator.newGate(maxCollectorsPerFlow),
+        textInputPort = textInputPort,
+        textInputEventCollectorGate = collectorAllocator.newGate(maxCollectorsPerFlow),
         failureReporter = ::safeReport,
         sessionFailureHandler = sessionFailureHandler,
     )
@@ -306,12 +315,14 @@ internal class RuntimeWindowSurface(
 
         var admission: PublicationAdmission? = null
         var resetInputForFocusLoss = false
+        var textInputFocus: SurfaceFocus? = null
         val accepted = synchronized(lock) {
             if (currentState.attachment == SurfaceAttachmentState.Detached) return@synchronized false
             val publication = when (stimulus) {
                 is SurfaceStimulus.MetricsChanged -> metricsPublicationLocked(stimulus.metrics)
                 is SurfaceStimulus.FocusChanged -> focusPublicationLocked(stimulus.focus).also { publication ->
                     resetInputForFocusLoss = publication != null && stimulus.focus == SurfaceFocus.Unfocused
+                    if (publication != null) textInputFocus = stimulus.focus
                 }
                 is SurfaceStimulus.VisibilityChanged -> visibilityPublicationLocked(
                     stimulus.visibility,
@@ -334,6 +345,11 @@ internal class RuntimeWindowSurface(
             true
         }
         if (resetInputForFocusLoss) surfaceInput.focusLost()
+        when (textInputFocus) {
+            SurfaceFocus.Focused -> surfaceInput.resumeTextInput()
+            SurfaceFocus.Unfocused -> surfaceInput.suspendTextInput()
+            null -> Unit
+        }
         admission?.let(::finishPublicationAdmission)
         return accepted
     }
@@ -1214,11 +1230,13 @@ private class RuntimeSurfaceInput(
     private val deliveryPolicy: InputDeliveryPolicy,
     private val eventStampSource: () -> EventStamp,
     private val eventCollectorGate: RuntimeEventCollectorGate,
+    private val textInputPort: TextInputPort,
+    private val textInputEventCollectorGate: RuntimeEventCollectorGate,
     private val failureReporter: (Throwable) -> Unit,
     private val sessionFailureHandler: (KadreFailure) -> Unit,
 ) : SurfaceInput {
     private val lock = Any()
-    private var currentState = unsupportedInputState()
+    private var currentState = unsupportedInputState(textInputPort.capability)
     private var nextPointerIdentity = 0L
     private var mousePointerId: PointerId? = null
     private val publications = BoundedInputScheduler(
@@ -1229,6 +1247,8 @@ private class RuntimeSurfaceInput(
     private var publicationDrainActive = false
     private var terminal: FlowTerminal? = null
     private var terminalNotificationPending = false
+    private var textInputSession: RuntimeTextInputSession? = null
+    private var textInputOpening = false
     private val mutableState = MutableStateFlow(currentState)
     private val subscribers = linkedMapOf<InputEventSubscriber, RuntimeEventCollectorLease>()
 
@@ -1250,8 +1270,75 @@ private class RuntimeSurfaceInput(
         }
     }
 
-    override suspend fun openTextInput(config: TextInputConfig): KadreResult<TextInputSession> =
-        KadreResult.Failure(KadreFailure.Unsupported(KadreOperation.TextInput))
+    override suspend fun openTextInput(config: TextInputConfig): KadreResult<TextInputSession> {
+        val admitted = synchronized(lock) {
+            when {
+                terminal != null -> TextInputOpenAdmission.Closed
+                textInputSession != null || textInputOpening -> TextInputOpenAdmission.AlreadyInUse
+                currentState.capabilities.textInput is Capability.Unsupported -> TextInputOpenAdmission.Unsupported(
+                    (currentState.capabilities.textInput as Capability.Unsupported).failure,
+                )
+
+                else -> {
+                    textInputOpening = true
+                    TextInputOpenAdmission.Admitted
+                }
+            }
+        }
+        when (admitted) {
+            TextInputOpenAdmission.Closed -> return KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.InputSource))
+            TextInputOpenAdmission.AlreadyInUse -> {
+                return KadreResult.Failure(KadreFailure.AlreadyInUse(KadreResourceKind.TextInputSession))
+            }
+
+            is TextInputOpenAdmission.Unsupported -> return KadreResult.Failure(admitted.failure)
+            TextInputOpenAdmission.Admitted -> Unit
+        }
+
+        val sessionReference = AtomicReference<RuntimeTextInputSession?>()
+        val owner = when (
+            val opened = textInputPort.open(
+                TextInputOpenCommand(
+                    surfaceId = surfaceId,
+                    config = config,
+                    onObservation = { observation -> sessionReference.get()?.acceptObservation(observation) ?: false },
+                ),
+            )
+        ) {
+            is KadreResult.Failure -> {
+                synchronized(lock) { textInputOpening = false }
+                return opened
+            }
+
+            is KadreResult.Success -> opened.value
+        }
+        val session = RuntimeTextInputSession(
+            owner = owner,
+            initialConfig = config,
+            port = textInputPort,
+            eventStampSource = eventStampSource,
+            eventCollectorGate = textInputEventCollectorGate,
+            failureReporter = failureReporter,
+            onClosed = ::clearTextInputSession,
+        )
+        sessionReference.set(session)
+        val result = synchronized(lock) {
+            textInputOpening = false
+            when {
+                terminal != null -> KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.InputSource))
+                textInputSession != null -> KadreResult.Failure(
+                    KadreFailure.AlreadyInUse(KadreResourceKind.TextInputSession),
+                )
+
+                else -> {
+                    textInputSession = session
+                    KadreResult.Success(session)
+                }
+            }
+        }
+        if (result is KadreResult.Failure) session.close()
+        return result
+    }
 
     fun accept(stimulus: SurfaceStimulus): Boolean {
         var admission: InputPublicationAdmission? = null
@@ -1363,14 +1450,41 @@ private class RuntimeSurfaceInput(
         return accepted
     }
 
+    fun suspendTextInput() {
+        val session = synchronized(lock) { textInputSession }
+        session?.suspend()
+    }
+
+    fun resumeTextInput() {
+        val session = synchronized(lock) { textInputSession }
+        session?.resume()
+    }
+
     fun close(failure: KadreFailure?) {
+        var activeTextInput: RuntimeTextInputSession? = null
         val admission = synchronized(lock) {
             if (terminal != null) return
             terminal = failure?.let(FlowTerminal::Failed) ?: FlowTerminal.Closed
             terminalNotificationPending = true
+            activeTextInput = textInputSession
+            textInputSession = null
             InputPublicationAdmission(ensurePublicationDrainLocked())
         }
+        activeTextInput?.close()
         finishPublicationAdmission(admission)
+    }
+
+    private fun clearTextInputSession(session: RuntimeTextInputSession) {
+        synchronized(lock) {
+            if (textInputSession === session) textInputSession = null
+        }
+    }
+
+    private sealed interface TextInputOpenAdmission {
+        data object Admitted : TextInputOpenAdmission
+        data object AlreadyInUse : TextInputOpenAdmission
+        data object Closed : TextInputOpenAdmission
+        data class Unsupported(val failure: KadreFailure.Unsupported) : TextInputOpenAdmission
     }
 
     private fun reduceLocked(
@@ -1625,6 +1739,8 @@ private class RuntimeSurfaceInput(
         failSession: Boolean,
     ): InputPublicationAdmission {
         if (terminal != null) return InputPublicationAdmission(shouldDrain = false)
+        val activeTextInput = textInputSession
+        textInputSession = null
         val neutral = currentState.copy(
             keyboard = KeyboardState(emptySet()),
             pointers = emptyList(),
@@ -1640,10 +1756,12 @@ private class RuntimeSurfaceInput(
             shouldDrain = ensurePublicationDrainLocked(),
             reportOverflow = true,
             failSession = if (failSession) failure else null,
+            textInputToClose = activeTextInput,
         )
     }
 
     private fun finishPublicationAdmission(admission: InputPublicationAdmission) {
+        admission.textInputToClose?.close()
         if (admission.reportOverflow) safeReport(KadreException(KadreFailure.SourceOverflow(KadreResourceKind.InputSource)))
         if (admission.shouldDrain) drainPublications()
         admission.failSession?.let(::safeFailSession)
@@ -1767,6 +1885,259 @@ private class RuntimeSurfaceInput(
     }
 }
 
+private class RuntimeTextInputSession(
+    private val owner: TextInputOwner,
+    initialConfig: TextInputConfig,
+    private val port: TextInputPort,
+    private val eventStampSource: () -> EventStamp,
+    private val eventCollectorGate: RuntimeEventCollectorGate,
+    private val failureReporter: (Throwable) -> Unit,
+    private val onClosed: (RuntimeTextInputSession) -> Unit,
+) : TextInputSession {
+    private val lock = Any()
+    private val updateMutex = Mutex()
+    private var documentText = initialConfig.surroundingText
+    private var selection = initialConfig.selection
+    private var acceptedDocumentRevision = initialConfig.documentRevision
+    private var currentState: TextInputState = TextInputState.Active(acceptedDocumentRevision, null)
+    private var closed = false
+    private val mutableState = MutableStateFlow(currentState)
+    private val subscribers = linkedMapOf<TextInputEventSubscriber, RuntimeEventCollectorLease>()
+
+    override val state: StateFlow<TextInputState> = mutableState.asStateFlow()
+    override val events: Flow<TextInputEvent> = flow {
+        val subscriber = TextInputEventSubscriber()
+        when (val registration = registerSubscriber(subscriber)) {
+            TextInputCollectorRegistration.Closed -> return@flow
+            is TextInputCollectorRegistration.Failed -> throw KadreException(registration.failure)
+            TextInputCollectorRegistration.Registered -> Unit
+        }
+        try {
+            while (true) {
+                val event = subscriber.next() ?: break
+                emit(event)
+            }
+        } finally {
+            unregisterSubscriber(subscriber)
+        }
+    }
+
+    override suspend fun updateCursor(
+        rect: LogicalRect,
+        documentRevision: TextDocumentRevision,
+    ): KadreResult<Unit> = updateMutex.withLock {
+        val command = synchronized(lock) {
+            when {
+                closed -> return@withLock KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.TextInputSession))
+                documentRevision != acceptedDocumentRevision -> {
+                    return@withLock KadreResult.Failure(
+                        KadreFailure.StaleRevision(acceptedDocumentRevision.value, documentRevision.value),
+                    )
+                }
+
+                else -> TextInputCursorCommand(owner, rect, documentRevision)
+            }
+        }
+        when (val result = port.updateCursor(command)) {
+            is KadreResult.Failure -> result
+            is KadreResult.Success -> synchronized(lock) {
+                if (closed) {
+                    KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.TextInputSession))
+                } else {
+                    KadreResult.Success(Unit)
+                }
+            }
+        }
+    }
+
+    override suspend fun updateSurroundingText(
+        text: String,
+        selection: TextRange,
+        documentRevision: TextDocumentRevision,
+    ): KadreResult<Unit> = updateMutex.withLock {
+        val command = synchronized(lock) {
+            when {
+                closed -> return@withLock KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.TextInputSession))
+                selection.endExclusiveUtf16 > text.length -> {
+                    return@withLock KadreResult.Failure(KadreFailure.InvalidRequest("selection"))
+                }
+
+                documentRevision.value < acceptedDocumentRevision.value -> {
+                    return@withLock KadreResult.Failure(
+                        KadreFailure.StaleRevision(acceptedDocumentRevision.value, documentRevision.value),
+                    )
+                }
+
+                documentRevision == acceptedDocumentRevision && text == documentText && selection == this.selection -> {
+                    return@withLock KadreResult.Success(Unit)
+                }
+
+                documentRevision == acceptedDocumentRevision && text != documentText -> {
+                    return@withLock KadreResult.Failure(KadreFailure.InvalidRequest("text"))
+                }
+
+                documentRevision == acceptedDocumentRevision -> {
+                    return@withLock KadreResult.Failure(KadreFailure.InvalidRequest("selection"))
+                }
+
+                else -> TextInputDocumentCommand(owner, text, selection, documentRevision)
+            }
+        }
+        when (val result = port.updateDocument(command)) {
+            is KadreResult.Failure -> result
+            is KadreResult.Success -> synchronized(lock) {
+                if (closed) {
+                    KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.TextInputSession))
+                } else {
+                    documentText = text
+                    this.selection = selection
+                    acceptedDocumentRevision = documentRevision
+                    publishStateLocked(
+                        composingRange = currentState.composingRangeOrNull,
+                        documentRevision = documentRevision,
+                    )
+                    KadreResult.Success(Unit)
+                }
+            }
+        }
+    }
+
+    fun acceptObservation(observation: TextInputObservation): Boolean {
+        val event = synchronized(lock) {
+            if (closed || observation.baseRevision != acceptedDocumentRevision) return@synchronized null
+            val stamp = eventStampSource()
+            when (observation) {
+                is TextInputObservation.Replace -> {
+                    if (!observation.range.isWithin(documentText)) return@synchronized null
+                    TextInputEvent.Replace(observation.range, observation.text, observation.baseRevision, stamp)
+                }
+
+                is TextInputObservation.SelectionChanged -> {
+                    if (!observation.selection.isWithin(documentText)) return@synchronized null
+                    TextInputEvent.SelectionChanged(observation.selection, observation.baseRevision, stamp)
+                }
+
+                is TextInputObservation.CompositionChanged -> {
+                    if (observation.range != null && !observation.range.isWithin(documentText)) return@synchronized null
+                    publishStateLocked(composingRange = observation.range)
+                    TextInputEvent.CompositionChanged(
+                        observation.range,
+                        observation.text,
+                        observation.baseRevision,
+                        stamp,
+                    )
+                }
+
+                is TextInputObservation.Action -> TextInputEvent.Action(observation.action, observation.baseRevision, stamp)
+            }
+        } ?: return false
+        publish(event)
+        return true
+    }
+
+    fun suspend() = synchronized(lock) {
+        if (currentState is TextInputState.Active) publishStateLocked(currentState.composingRangeOrNull, suspended = true)
+    }
+
+    fun resume() = synchronized(lock) {
+        if (currentState is TextInputState.Suspended) publishStateLocked(currentState.composingRangeOrNull, suspended = false)
+    }
+
+    override fun close() {
+        val subscribersToClose = synchronized(lock) {
+            if (closed) return
+            closed = true
+            currentState = TextInputState.Closed
+            mutableState.value = currentState
+            subscribers.toList().also { subscribers.clear() }
+        }
+        safeCloseOwner()
+        subscribersToClose.forEach { (subscriber, lease) ->
+            lease.close()
+            subscriber.terminate()
+        }
+        onClosed(this)
+    }
+
+    private fun publishStateLocked(
+        composingRange: TextRange?,
+        documentRevision: TextDocumentRevision = acceptedDocumentRevision,
+        suspended: Boolean = currentState is TextInputState.Suspended,
+    ) {
+        currentState = if (suspended) {
+            TextInputState.Suspended(documentRevision, composingRange)
+        } else {
+            TextInputState.Active(documentRevision, composingRange)
+        }
+        mutableState.value = currentState
+    }
+
+    private fun publish(event: TextInputEvent) {
+        val subscribersToNotify = synchronized(lock) { subscribers.keys.toList() }
+        subscribersToNotify.forEach { it.offer(event) }
+    }
+
+    private fun registerSubscriber(subscriber: TextInputEventSubscriber): TextInputCollectorRegistration = synchronized(lock) {
+        if (closed) return@synchronized TextInputCollectorRegistration.Closed
+        when (val admission = eventCollectorGate.tryAcquire()) {
+            is KadreResult.Failure -> TextInputCollectorRegistration.Failed(admission.reason)
+            is KadreResult.Success -> {
+                check(subscribers.put(subscriber, admission.value) == null)
+                TextInputCollectorRegistration.Registered
+            }
+        }
+    }
+
+    private fun unregisterSubscriber(subscriber: TextInputEventSubscriber) {
+        val lease = synchronized(lock) { subscribers.remove(subscriber) }
+        lease?.close()
+        subscriber.dispose()
+    }
+
+    private fun safeCloseOwner() {
+        try {
+            owner.close()
+        } catch (cause: Exception) {
+            failureReporter(cause)
+        } catch (cause: LinkageError) {
+            failureReporter(cause)
+        }
+    }
+}
+
+private sealed interface TextInputCollectorRegistration {
+    data object Registered : TextInputCollectorRegistration
+    data object Closed : TextInputCollectorRegistration
+    data class Failed(val failure: KadreFailure) : TextInputCollectorRegistration
+}
+
+private class TextInputEventSubscriber {
+    private val channel = Channel<TextInputEvent>(Channel.UNLIMITED)
+
+    fun offer(event: TextInputEvent) {
+        channel.trySend(event)
+    }
+
+    suspend fun next(): TextInputEvent? = channel.receiveCatching().getOrNull()
+
+    fun terminate() {
+        channel.close()
+    }
+
+    fun dispose() {
+        channel.cancel()
+    }
+}
+
+private fun TextRange.isWithin(text: String): Boolean = endExclusiveUtf16 <= text.length
+
+private val TextInputState.composingRangeOrNull: TextRange?
+    get() = when (this) {
+        is TextInputState.Active -> composingRange
+        is TextInputState.Suspended -> composingRange
+        TextInputState.Closed -> null
+    }
+
 private data class InputPublication(
     val event: InputEvent,
     val scrollBoundary: Long? = null,
@@ -1784,6 +2155,7 @@ private data class InputPublicationAdmission(
     val shouldDrain: Boolean,
     val reportOverflow: Boolean = false,
     val failSession: KadreFailure? = null,
+    val textInputToClose: RuntimeTextInputSession? = null,
 )
 
 private enum class InputEventLane { Discrete, PointerMotion, Scroll }
@@ -2034,22 +2406,26 @@ private fun ScrollDelta.plusSameUnit(other: ScrollDelta): ScrollDelta? = when (t
 private fun replacePointer(existing: List<PointerState>, pointer: PointerState): List<PointerState> =
     existing.filterNot { it.id == pointer.id } + pointer
 
-private fun unsupportedInputState(): SurfaceInputState = SurfaceInputState(
+private fun unsupportedInputState(
+    textInput: Capability<Unit> = unsupported(KadreOperation.TextInput),
+): SurfaceInputState = SurfaceInputState(
     keyboard = KeyboardState(emptySet()),
     pointers = emptyList(),
     touches = emptyList(),
     modifiers = KeyboardModifiers(emptySet()),
-    capabilities = unsupportedInputCapabilities(),
+    capabilities = unsupportedInputCapabilities(textInput),
     revision = InputStateRevision(0L),
 )
 
-private fun unsupportedInputCapabilities(): InputCapabilities = InputCapabilities(
+private fun unsupportedInputCapabilities(
+    textInput: Capability<Unit> = unsupported(KadreOperation.TextInput),
+): InputCapabilities = InputCapabilities(
     keyboard = FeatureAvailability.Unsupported,
     pointer = FeatureAvailability.Unsupported,
     touch = FeatureAvailability.Unsupported,
     gestures = FeatureAvailability.Unsupported,
     dragAndDrop = FeatureAvailability.Unsupported,
-    textInput = unsupported(KadreOperation.TextInput),
+    textInput = textInput,
     rawInput = unsupported(KadreOperation.RawInputAccess),
 )
 

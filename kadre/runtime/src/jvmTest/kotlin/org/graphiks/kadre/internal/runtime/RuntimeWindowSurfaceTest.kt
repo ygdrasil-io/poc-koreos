@@ -39,6 +39,11 @@ import org.graphiks.kadre.input.PointerButton
 import org.graphiks.kadre.input.PointerButtonState
 import org.graphiks.kadre.input.PointerKind
 import org.graphiks.kadre.input.ScrollDelta
+import org.graphiks.kadre.input.TextDocumentRevision
+import org.graphiks.kadre.input.TextInputConfig
+import org.graphiks.kadre.input.TextInputEvent
+import org.graphiks.kadre.input.TextInputState
+import org.graphiks.kadre.input.TextRange
 import org.graphiks.kadre.interaction.InteractionHandler
 import org.graphiks.kadre.policy.CollectorOverflowAction
 import org.graphiks.kadre.policy.ContinuousDelivery
@@ -54,6 +59,7 @@ import org.graphiks.kadre.surface.InputDefaultBehavior
 import org.graphiks.kadre.surface.LogicalInsets
 import org.graphiks.kadre.surface.LogicalDelta
 import org.graphiks.kadre.surface.LogicalPoint
+import org.graphiks.kadre.surface.LogicalRect
 import org.graphiks.kadre.surface.LogicalSize
 import org.graphiks.kadre.surface.PhysicalSize
 import org.graphiks.kadre.surface.PointerCaptureMode
@@ -80,6 +86,148 @@ import kotlin.time.Duration.Companion.nanoseconds
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class RuntimeWindowSurfaceTest {
+    @Test
+    fun textInputAllowsOneSessionAndSerializesDocumentRevisions() = runTest {
+        val port = RecordingTextInputPort()
+        val surface = surface(textInputPort = port)
+
+        val session = assertIs<KadreResult.Success<org.graphiks.kadre.input.TextInputSession>>(
+            surface.input.openTextInput(TextInputConfig(surroundingText = "a", selection = TextRange(1, 1))),
+        ).value
+
+        assertEquals(TextInputState.Active(TextDocumentRevision(0), null), session.state.value)
+        assertEquals(1, port.opened.size)
+        assertEquals(
+            KadreResult.Failure(KadreFailure.AlreadyInUse(KadreResourceKind.TextInputSession)),
+            surface.input.openTextInput(TextInputConfig()),
+        )
+        assertEquals(
+            KadreResult.Failure(KadreFailure.StaleRevision(expected = 0, received = 1)),
+            session.updateCursor(LogicalRect(LogicalPoint(0.0, 0.0), LogicalSize(1.0, 1.0)), TextDocumentRevision(1)),
+        )
+        assertEquals(
+            KadreResult.Success(Unit),
+            session.updateCursor(LogicalRect(LogicalPoint(1.0, 2.0), LogicalSize(3.0, 4.0)), TextDocumentRevision(0)),
+        )
+        assertEquals(1, port.cursorCommands.size)
+        assertEquals(
+            KadreResult.Success(Unit),
+            session.updateSurroundingText("ab", TextRange(2, 2), TextDocumentRevision(1)),
+        )
+        assertEquals(TextInputState.Active(TextDocumentRevision(1), null), session.state.value)
+        assertEquals(
+            KadreResult.Success(Unit),
+            session.updateSurroundingText("ab", TextRange(2, 2), TextDocumentRevision(1)),
+        )
+        assertEquals(1, port.documentCommands.size)
+        assertEquals(
+            KadreResult.Failure(KadreFailure.InvalidRequest("text")),
+            session.updateSurroundingText("different", TextRange(2, 2), TextDocumentRevision(1)),
+        )
+        assertEquals(
+            KadreResult.Failure(KadreFailure.StaleRevision(expected = 1, received = 0)),
+            session.updateSurroundingText("a", TextRange(1, 1), TextDocumentRevision(0)),
+        )
+        assertEquals(
+            KadreResult.Failure(KadreFailure.InvalidRequest("selection")),
+            session.updateSurroundingText("a", TextRange(0, 2), TextDocumentRevision(2)),
+        )
+
+        session.close()
+
+        assertTrue(port.owner.closed)
+        assertIs<KadreResult.Success<org.graphiks.kadre.input.TextInputSession>>(
+            surface.input.openTextInput(TextInputConfig()),
+        )
+    }
+
+    @Test
+    fun textInputValidatesNativeRangesSuspendsOnFocusLossAndClosesWithTheSurface() = runTest {
+        val port = RecordingTextInputPort()
+        val surface = surface(textInputPort = port)
+        val session = assertIs<KadreResult.Success<org.graphiks.kadre.input.TextInputSession>>(
+            surface.input.openTextInput(TextInputConfig(surroundingText = "ab", selection = TextRange(2, 2))),
+        ).value
+        val events = async(UnconfinedTestDispatcher(testScheduler), start = CoroutineStart.UNDISPATCHED) {
+            session.events.toList()
+        }
+
+        assertTrue(
+            port.emit(
+                TextInputObservation.Replace(
+                    range = TextRange(1, 2),
+                    text = "x",
+                    baseRevision = TextDocumentRevision(0),
+                ),
+            ),
+        )
+        assertTrue(
+            port.emit(
+                TextInputObservation.CompositionChanged(
+                    range = TextRange(0, 1),
+                    text = "a",
+                    baseRevision = TextDocumentRevision(0),
+                ),
+            ),
+        )
+        assertEquals(TextInputState.Active(TextDocumentRevision(0), TextRange(0, 1)), session.state.value)
+        assertTrue(
+            port.emit(
+                TextInputObservation.CompositionChanged(
+                    range = null,
+                    text = "",
+                    baseRevision = TextDocumentRevision(0),
+                ),
+            ),
+        )
+        assertFalse(
+            port.emit(
+                TextInputObservation.SelectionChanged(
+                    selection = TextRange(0, 3),
+                    baseRevision = TextDocumentRevision(0),
+                ),
+            ),
+        )
+        assertTrue(surface.accept(SurfaceStimulus.FocusChanged(surface.id, SurfaceFocus.Focused)))
+        assertTrue(surface.accept(SurfaceStimulus.FocusChanged(surface.id, SurfaceFocus.Unfocused)))
+        assertEquals(TextInputState.Suspended(TextDocumentRevision(0), null), session.state.value)
+
+        assertTrue(surface.detach())
+
+        val delivered = events.await()
+        val replacement = assertIs<TextInputEvent.Replace>(delivered.first())
+        assertEquals(TextRange(1, 2), replacement.range)
+        assertEquals("x", replacement.text)
+        assertEquals(
+            listOf<TextInputEvent>(
+                replacement,
+                TextInputEvent.CompositionChanged(
+                    range = TextRange(0, 1),
+                    text = "a",
+                    baseRevision = TextDocumentRevision(0),
+                    stamp = delivered[1].stamp,
+                ),
+                TextInputEvent.CompositionChanged(
+                    range = null,
+                    text = "",
+                    baseRevision = TextDocumentRevision(0),
+                    stamp = delivered[2].stamp,
+                ),
+            ),
+            delivered,
+        )
+        assertEquals(TextInputState.Closed, session.state.value)
+        assertTrue(port.owner.closed)
+        assertFalse(
+            port.emit(
+                TextInputObservation.Action(
+                    action = org.graphiks.kadre.input.TextInputAction.Done,
+                    baseRevision = TextDocumentRevision(0),
+                ),
+            ),
+        )
+    }
+
     @Test
     @OptIn(DelicateKadreApi::class)
     fun interactionHandlerRemainsUnsupportedWithoutBackendInteractionCapabilities() = runTest {
@@ -1608,6 +1756,7 @@ class RuntimeWindowSurfaceTest {
         id: SurfaceId = SurfaceId(37),
         metrics: SurfaceMetrics = DEFAULT_METRICS,
         port: SurfaceCommandPort = RecordingSurfaceCommandPort(),
+        textInputPort: TextInputPort = UnsupportedTextInputPort,
         commandsEnabled: Boolean = false,
         capabilities: SurfaceCapabilities = phaseThreeCapabilities(),
         reported: MutableList<Throwable> = mutableListOf(),
@@ -1629,6 +1778,7 @@ class RuntimeWindowSurfaceTest {
             theme = SurfaceTheme.Unknown,
         ),
         commandPort = port,
+        textInputPort = textInputPort,
         commandsEnabled = commandsEnabled,
         enabledCapabilities = capabilities,
         eventStampSource = StampSource()::next,
@@ -1667,6 +1817,41 @@ class RuntimeWindowSurfaceTest {
         override suspend fun apply(command: SurfaceUpdateCommand): KadreResult<SurfaceUpdateCommandOutcome> {
             updateCommands += command
             return onApply(command)
+        }
+    }
+
+    private class RecordingTextInputPort : TextInputPort {
+        override val capability: Capability<Unit> = Capability.Supported(Unit, FeatureAvailability.Available)
+        val opened = mutableListOf<TextInputOpenCommand>()
+        val cursorCommands = mutableListOf<TextInputCursorCommand>()
+        val documentCommands = mutableListOf<TextInputDocumentCommand>()
+        private val owners = mutableListOf<RecordingTextInputOwner>()
+        val owner: RecordingTextInputOwner
+            get() = owners.last()
+
+        override fun open(command: TextInputOpenCommand): KadreResult<TextInputOwner> {
+            opened += command
+            return KadreResult.Success(RecordingTextInputOwner().also(owners::add))
+        }
+
+        override suspend fun updateCursor(command: TextInputCursorCommand): KadreResult<Unit> {
+            cursorCommands += command
+            return KadreResult.Success(Unit)
+        }
+
+        override suspend fun updateDocument(command: TextInputDocumentCommand): KadreResult<Unit> {
+            documentCommands += command
+            return KadreResult.Success(Unit)
+        }
+
+        fun emit(observation: TextInputObservation): Boolean = opened.single().onObservation(observation)
+    }
+
+    private class RecordingTextInputOwner : TextInputOwner {
+        var closed = false
+
+        override fun close() {
+            closed = true
         }
     }
 
