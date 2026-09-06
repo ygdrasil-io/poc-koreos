@@ -26,6 +26,12 @@ import org.graphiks.kadre.internal.runtime.SurfaceRedrawGeneration
 import org.graphiks.kadre.internal.runtime.SurfaceStimulus
 import org.graphiks.kadre.internal.runtime.SurfaceUpdateCommand
 import org.graphiks.kadre.internal.runtime.SurfaceUpdateCommandOutcome
+import org.graphiks.kadre.internal.runtime.TextInputCursorCommand
+import org.graphiks.kadre.internal.runtime.TextInputDocumentCommand
+import org.graphiks.kadre.internal.runtime.TextInputOpenCommand
+import org.graphiks.kadre.internal.runtime.TextInputOwner
+import org.graphiks.kadre.internal.runtime.TextInputPort
+import org.graphiks.kadre.internal.runtime.TextInputPortFactory
 import org.graphiks.kadre.internal.runtime.WindowCommandPort
 import org.graphiks.kadre.internal.runtime.WindowAttentionPort
 import org.graphiks.kadre.internal.runtime.WindowOpenCommand
@@ -117,6 +123,7 @@ internal class AppKitWindowRuntimeDriver internal constructor(
         fullscreenAvailabilityFailure = fullscreenAvailabilityFailure,
         publicSurfaceCapabilities = publicSurfaceCapabilities,
         enabledSurfaceCapabilities = appKitSurfaceCapabilities(publicSurfaceCapabilities),
+        textInputPortFactory = TextInputPortFactory(commandPort::textInputPort),
         onLastWindowClosed = onLastWindowClosed,
     ).also(fullscreenObservationSink::install)
 
@@ -414,6 +421,18 @@ private class AppKitWindowCommandPort(
         } else {
             closedSurfaceFailure()
         }
+    }
+
+    fun textInputPort(surfaceId: SurfaceId): TextInputPort {
+        val peerPort = synchronized(lock) {
+            bySurface[surfaceId]?.takeIf {
+                !closed &&
+                    !it.removed &&
+                    !it.surfaceCleanupReserved &&
+                    !it.closeAdmitted
+            }?.peer?.textInputPort()
+        } ?: return AppKitUnavailableTextInputPort
+        return AppKitQueuedTextInputPort(peerPort, commands::submitFollowUp)
     }
 
     override suspend fun apply(
@@ -1812,6 +1831,40 @@ private class AppKitWindowCommandPort(
     private companion object {
         val CANCELLATION_COMPLETION: KadreFailure = KadreFailure.TemporarilyUnavailable(retryable = false)
     }
+}
+
+/** Queues immutable text observations before they can re-enter the portable runtime. */
+private class AppKitQueuedTextInputPort(
+    private val delegate: TextInputPort,
+    private val submitObservation: (() -> Unit) -> Boolean,
+) : TextInputPort {
+    override val capability = delegate.capability
+
+    override fun open(command: TextInputOpenCommand): org.graphiks.kadre.diagnostics.KadreResult<TextInputOwner> =
+        delegate.open(
+            command.copy(
+                onObservation = { observation ->
+                    submitObservation { command.onObservation(observation) }
+                },
+            ),
+        )
+
+    override suspend fun updateCursor(command: TextInputCursorCommand) = delegate.updateCursor(command)
+
+    override suspend fun updateDocument(command: TextInputDocumentCommand) = delegate.updateDocument(command)
+}
+
+private object AppKitUnavailableTextInputPort : TextInputPort {
+    override val capability: Capability<Unit> = Capability.Unsupported(KadreFailure.Unsupported(KadreOperation.TextInput))
+
+    override fun open(command: TextInputOpenCommand): org.graphiks.kadre.diagnostics.KadreResult<TextInputOwner> =
+        org.graphiks.kadre.diagnostics.KadreResult.Failure(KadreFailure.Unsupported(KadreOperation.TextInput))
+
+    override suspend fun updateCursor(command: TextInputCursorCommand) =
+        org.graphiks.kadre.diagnostics.KadreResult.Failure(KadreFailure.Unsupported(KadreOperation.TextInput))
+
+    override suspend fun updateDocument(command: TextInputDocumentCommand) =
+        org.graphiks.kadre.diagnostics.KadreResult.Failure(KadreFailure.Unsupported(KadreOperation.TextInput))
 }
 
 private fun fullscreenFailure(code: String): KadreFailure.PlatformFailure =

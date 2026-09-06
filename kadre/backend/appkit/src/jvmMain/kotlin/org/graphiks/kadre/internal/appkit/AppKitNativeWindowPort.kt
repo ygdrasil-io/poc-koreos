@@ -1,8 +1,15 @@
 package org.graphiks.kadre.internal.appkit
 
+import org.graphiks.kadre.diagnostics.Capability
+import org.graphiks.kadre.diagnostics.KadreFailure
+import org.graphiks.kadre.diagnostics.KadreOperation
 import org.graphiks.kadre.diagnostics.KadreResult
 import org.graphiks.kadre.internal.runtime.RuntimeDesktopNativeWindowHandle
 import org.graphiks.kadre.internal.runtime.SurfaceMetrics
+import org.graphiks.kadre.internal.runtime.TextInputCursorCommand
+import org.graphiks.kadre.internal.runtime.TextInputDocumentCommand
+import org.graphiks.kadre.internal.runtime.TextInputObservation
+import org.graphiks.kadre.internal.runtime.TextInputOwner
 import org.graphiks.kadre.input.KeyLocation
 import org.graphiks.kadre.input.KeyState
 import org.graphiks.kadre.input.KeyboardModifiers
@@ -11,6 +18,7 @@ import org.graphiks.kadre.input.PhysicalKey
 import org.graphiks.kadre.input.PointerButton
 import org.graphiks.kadre.input.PointerButtonState
 import org.graphiks.kadre.input.PointerKind
+import org.graphiks.kadre.input.TextInputConfig
 import org.graphiks.kadre.surface.LogicalDelta
 import org.graphiks.kadre.surface.LogicalPoint
 import org.graphiks.kadre.surface.LogicalSize
@@ -42,6 +50,12 @@ internal interface AppKitNativeWindowPort {
     fun createWindow(spec: WindowSpec): AppKitNativeWindowOwner
 
     fun createContentView(spec: WindowSpec): AppKitNativeViewOwner
+
+    /**
+     * Returns the text-input port owned by [view]. The default keeps backends that have not
+     * installed a revocable `NSTextInputClient` receiver explicitly unsupported.
+     */
+    fun textInputPort(view: AppKitNativeViewOwner): AppKitNativeTextInputPort = AppKitUnsupportedTextInputPort
 
     fun createDelegate(
         peerId: AppKitWindowPeerId,
@@ -142,6 +156,42 @@ internal interface AppKitWindowMutationCommit {
 
 internal interface AppKitNativeViewOwner : AutoCloseable {
     override fun close()
+}
+
+/**
+ * Synchronous, AppKit-main-thread side of a text-input receiver.
+ *
+ * [TextInputPort] deliberately remains suspending at the portable runtime boundary. AppKit owns
+ * a synchronous native run-loop instead, so [AppKitPeerTextInputPort] is the sole adapter that
+ * marshals this contract onto the main thread without blocking it in a nested coroutine.
+ */
+internal interface AppKitNativeTextInputPort {
+    val capability: Capability<Unit>
+
+    fun open(command: AppKitNativeTextInputOpenCommand): KadreResult<TextInputOwner>
+
+    fun updateCursor(command: TextInputCursorCommand): KadreResult<Unit>
+
+    fun updateDocument(command: TextInputDocumentCommand): KadreResult<Unit>
+}
+
+/** Immutable pointer-free values copied from the runtime into the synchronous AppKit receiver. */
+internal data class AppKitNativeTextInputOpenCommand(
+    val config: TextInputConfig,
+    val onObservation: (TextInputObservation) -> Boolean,
+)
+
+private object AppKitUnsupportedTextInputPort : AppKitNativeTextInputPort {
+    override val capability: Capability<Unit> = Capability.Unsupported(KadreFailure.Unsupported(KadreOperation.TextInput))
+
+    override fun open(command: AppKitNativeTextInputOpenCommand): KadreResult<TextInputOwner> =
+        KadreResult.Failure(KadreFailure.Unsupported(KadreOperation.TextInput))
+
+    override fun updateCursor(command: TextInputCursorCommand): KadreResult<Unit> =
+        KadreResult.Failure(KadreFailure.Unsupported(KadreOperation.TextInput))
+
+    override fun updateDocument(command: TextInputDocumentCommand): KadreResult<Unit> =
+        KadreResult.Failure(KadreFailure.Unsupported(KadreOperation.TextInput))
 }
 
 /** Private, native-address-free geometry request forwarded from the runtime command. */

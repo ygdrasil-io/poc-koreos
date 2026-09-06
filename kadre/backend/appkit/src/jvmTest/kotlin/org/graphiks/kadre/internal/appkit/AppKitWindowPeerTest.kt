@@ -31,6 +31,31 @@ class AppKitWindowPeerTest {
                 "attach:view",
                 "attach:delegate",
                 "present",
+                "create:text-input-port",
+                "main:end",
+            ),
+            port.trace,
+        )
+    }
+
+    @Test
+    fun preparationCapturesTheTextInputPortBeforeItReturnsFromTheMainThread() {
+        val port = RecordingAppKitNativeWindowPort()
+
+        val peer = AppKitWindowPeer.prepare(PEER_ID, WindowSpec(), port) { }
+
+        peer.textInputPort()
+
+        assertEquals(
+            listOf(
+                "main:start",
+                "create:window",
+                "create:view",
+                "create:delegate",
+                "attach:view",
+                "attach:delegate",
+                "present",
+                "create:text-input-port",
                 "main:end",
             ),
             port.trace,
@@ -346,6 +371,11 @@ private class RecordingAppKitNativeWindowPort(
         trace += "create:view"
         failIfRequested("create:view")
         return RecordingViewOwner(trace, cleanupFailure)
+    }
+
+    override fun textInputPort(view: AppKitNativeViewOwner): AppKitNativeTextInputPort {
+        trace += "create:text-input-port"
+        return super.textInputPort(view)
     }
 
     override fun createDelegate(

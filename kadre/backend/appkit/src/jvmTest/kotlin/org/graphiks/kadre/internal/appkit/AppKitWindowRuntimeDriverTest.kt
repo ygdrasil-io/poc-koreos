@@ -31,8 +31,14 @@ import org.graphiks.kadre.diagnostics.KadreResult
 import org.graphiks.kadre.internal.runtime.RuntimeDesktopNativeWindowHandle
 import org.graphiks.kadre.internal.runtime.RuntimeDesktopWindowHandleAccess
 import org.graphiks.kadre.internal.runtime.RuntimeFailureReporter
-import org.graphiks.kadre.internal.runtime.WindowOpenCommand
 import org.graphiks.kadre.internal.runtime.SurfaceMetrics
+import org.graphiks.kadre.internal.runtime.TextInputCursorCommand
+import org.graphiks.kadre.internal.runtime.TextInputDocumentCommand
+import org.graphiks.kadre.internal.runtime.TextInputObservation
+import org.graphiks.kadre.internal.runtime.TextInputOpenCommand
+import org.graphiks.kadre.internal.runtime.TextInputOwner
+import org.graphiks.kadre.internal.runtime.TextInputPort
+import org.graphiks.kadre.internal.runtime.WindowOpenCommand
 import org.graphiks.kadre.internal.runtime.desktop.DesktopStandaloneRequest
 import org.graphiks.kadre.input.KeyLocation
 import org.graphiks.kadre.input.KeyState
@@ -43,6 +49,10 @@ import org.graphiks.kadre.input.InputEvent
 import org.graphiks.kadre.input.InputStateResetReason
 import org.graphiks.kadre.input.PointerButton
 import org.graphiks.kadre.input.PointerButtonState
+import org.graphiks.kadre.input.TextDocumentRevision
+import org.graphiks.kadre.input.TextInputConfig
+import org.graphiks.kadre.input.TextInputEvent
+import org.graphiks.kadre.input.TextRange
 import org.graphiks.kadre.interaction.InteractionAction
 import org.graphiks.kadre.interaction.InteractionActionOutcome
 import org.graphiks.kadre.interaction.InteractionHandler
@@ -4697,6 +4707,68 @@ class AppKitWindowRuntimeDriverTest {
             port.close()
         }
     }
+
+    @Test
+    fun textInputIsPeerLocalQueuedAndRevokedBeforeTheNativeViewCloses() = runBlocking {
+        val nativeTextInput = RecordingAppKitTextInputPort()
+        val port = DeterministicAppKitNativeWindowPort(
+            name = "text-input",
+            configuredTextInputPort = nativeTextInput,
+        )
+        val driver = AppKitWindowRuntimeDriverFactory { port }.create(KadrePolicies.Default.resources)
+
+        try {
+            val window = openedWindow(driver, WindowSpec(title = "text-input"))
+            assertIs<Capability.Supported<Unit>>(window.surface.input.state.value.capabilities.textInput)
+
+            val session = assertIs<KadreResult.Success<org.graphiks.kadre.input.TextInputSession>>(
+                window.surface.input.openTextInput(
+                    TextInputConfig(
+                        surroundingText = "ab",
+                        selection = TextRange(2, 2),
+                        documentRevision = TextDocumentRevision(0),
+                    ),
+                ),
+            ).value
+            val delivered = async { withTimeout(2.seconds) { session.events.first() } }
+            yield()
+
+            assertTrue(
+                nativeTextInput.emit(
+                    TextInputObservation.Replace(
+                        range = TextRange(1, 2),
+                        text = "x",
+                        baseRevision = TextDocumentRevision(0),
+                    ),
+                ),
+            )
+            val event = assertIs<TextInputEvent.Replace>(delivered.await())
+            assertEquals(TextRange(1, 2), event.range)
+            assertEquals("x", event.text)
+            assertEquals(TextDocumentRevision(0), event.baseRevision)
+
+            assertEquals(
+                KadreResult.Success(Unit),
+                session.updateSurroundingText("axb", TextRange(2, 2), TextDocumentRevision(1)),
+            )
+            assertEquals(1, nativeTextInput.documentCommands.size)
+
+            session.close()
+            assertTrue(nativeTextInput.ownerClosed.get())
+            assertFalse(
+                nativeTextInput.emit(
+                    TextInputObservation.Replace(
+                        range = TextRange(0, 0),
+                        text = "late",
+                        baseRevision = TextDocumentRevision(1),
+                    ),
+                ),
+            )
+        } finally {
+            driver.close()
+        }
+    }
+
 }
 
 internal class DeterministicAppKitNativeWindowPort(
@@ -4733,6 +4805,7 @@ internal class DeterministicAppKitNativeWindowPort(
     private val appearanceSetterFailure: Throwable? = null,
     private val appearanceFailureAfterTransparencySet: Throwable? = null,
     appearanceReadbackFailure: Throwable? = null,
+    private val configuredTextInputPort: AppKitNativeTextInputPort? = null,
 ) : AppKitNativeWindowPort {
     @Volatile
     private var effectiveLevelOverride: WindowLevel? = effectiveLevel
@@ -4803,6 +4876,9 @@ internal class DeterministicAppKitNativeWindowPort(
     }
 
     override fun createContentView(spec: WindowSpec): AppKitNativeViewOwner = RecordingNativeViewOwner()
+
+    override fun textInputPort(view: AppKitNativeViewOwner): AppKitNativeTextInputPort =
+        configuredTextInputPort ?: super.textInputPort(view)
 
     override fun createDelegate(
         peerId: AppKitWindowPeerId,
@@ -5401,6 +5477,34 @@ private fun chromeUpdateProperties(): Set<WindowProperty> =
 
 private fun appearanceUpdateProperties(): Set<WindowProperty> =
     setOf(WindowProperty.Transparency)
+
+private class RecordingAppKitTextInputPort : AppKitNativeTextInputPort {
+    override val capability: Capability<Unit> = Capability.Supported(Unit, FeatureAvailability.Available)
+    private var callback: ((TextInputObservation) -> Boolean)? = null
+    val documentCommands = mutableListOf<TextInputDocumentCommand>()
+    val ownerClosed = AtomicBoolean(false)
+    private val owner = object : TextInputOwner {
+        override fun close() {
+            callback = null
+            ownerClosed.set(true)
+        }
+    }
+
+    override fun open(command: AppKitNativeTextInputOpenCommand): KadreResult<TextInputOwner> {
+        check(callback == null) { "text input opened more than once" }
+        callback = command.onObservation
+        return KadreResult.Success(owner)
+    }
+
+    override fun updateCursor(command: TextInputCursorCommand): KadreResult<Unit> = KadreResult.Success(Unit)
+
+    override fun updateDocument(command: TextInputDocumentCommand): KadreResult<Unit> {
+        documentCommands += command
+        return KadreResult.Success(Unit)
+    }
+
+    fun emit(observation: TextInputObservation): Boolean = callback?.invoke(observation) ?: false
+}
 
 internal class OwnerThreadAppKitNativeWindowPort(
     name: String,

@@ -6,6 +6,11 @@ import org.graphiks.kadre.diagnostics.KadreResult
 import org.graphiks.kadre.diagnostics.KadreOperation
 import org.graphiks.kadre.internal.runtime.RuntimeDesktopNativeWindowHandle
 import org.graphiks.kadre.internal.runtime.RuntimeSynchronousInteraction
+import org.graphiks.kadre.internal.runtime.TextInputCursorCommand
+import org.graphiks.kadre.internal.runtime.TextInputDocumentCommand
+import org.graphiks.kadre.internal.runtime.TextInputOpenCommand
+import org.graphiks.kadre.internal.runtime.TextInputOwner
+import org.graphiks.kadre.internal.runtime.TextInputPort
 import org.graphiks.kadre.interaction.InteractionAction
 import org.graphiks.kadre.internal.runtime.SurfaceMetrics
 import org.graphiks.kadre.internal.runtime.WindowPeerOwner
@@ -126,6 +131,7 @@ internal class AppKitWindowPeer private constructor(
     private val geometryObserver: AppKitNativeGeometryObserverOwner?,
     private val surfaceObserver: AppKitNativeSurfaceObserverOwner?,
     private val inputObserver: AppKitNativeInputObserverOwner?,
+    nativeTextInputPort: AppKitNativeTextInputPort,
     private val callbackGate: AppKitWindowCallbackGate,
     internal val initialWindowSnapshot: AppKitWindowMutationSnapshot?,
 ) : WindowPeerOwner {
@@ -135,6 +141,11 @@ internal class AppKitWindowPeer private constructor(
     @Suppress("PLATFORM_CLASS_MAPPED_TO_KOTLIN")
     private val lifetimeLock = Object()
     private val closed = AtomicBoolean(false)
+    private val textInputPort = AppKitPeerTextInputPort(
+        nativePort = nativeTextInputPort,
+        appKitPort = port,
+        isPeerOpen = { !closed.get() },
+    )
     private var activeHandleLeases = 0
     private var nativeCloseCommitted = false
 
@@ -193,6 +204,9 @@ internal class AppKitWindowPeer private constructor(
             if (!closed.get()) surfaceObserver?.requestRedraw(generation)
         }
     }
+
+    /** Returns the per-peer text-input port without exposing the native view owner. */
+    internal fun textInputPort(): TextInputPort = textInputPort
 
     /** Convenience path for direct peer tests and setup that cannot be cancelled. */
     internal fun updateGeometry(target: AppKitWindowGeometryTarget): AppKitWindowGeometrySnapshot? =
@@ -383,6 +397,7 @@ internal class AppKitWindowPeer private constructor(
                 var geometryObserver: AppKitNativeGeometryObserverOwner? = null
                 var surfaceObserver: AppKitNativeSurfaceObserverOwner? = null
                 var inputObserver: AppKitNativeInputObserverOwner? = null
+                var textInputPort: AppKitNativeTextInputPort? = null
                 var contentAttached = false
                 var delegateMayBeAttached = false
                 try {
@@ -421,6 +436,7 @@ internal class AppKitWindowPeer private constructor(
                         null
                     }
                     port.present(window)
+                    textInputPort = port.textInputPort(contentView)
                     geometryObserver = port.observeGeometry(
                         window,
                         AppKitWindowGeometryCallbacks(callbackGate::geometryChanged),
@@ -460,6 +476,7 @@ internal class AppKitWindowPeer private constructor(
                         geometryObserver,
                         surfaceObserver,
                         inputObserver,
+                        checkNotNull(textInputPort),
                         callbackGate,
                         initialWindowSnapshot,
                     )
@@ -504,6 +521,69 @@ internal class AppKitWindowPeer private constructor(
         }
     }
 }
+
+/** Routes one peer-local text-input owner through the AppKit main-thread boundary. */
+private class AppKitPeerTextInputPort(
+    private val nativePort: AppKitNativeTextInputPort,
+    private val appKitPort: AppKitNativeWindowPort,
+    private val isPeerOpen: () -> Boolean,
+) : TextInputPort {
+    override val capability = nativePort.capability
+
+    override fun open(command: TextInputOpenCommand): KadreResult<TextInputOwner> {
+        if (!isPeerOpen()) return closedTextInputFailure()
+        return appKitPort.onMainThread {
+            if (!isPeerOpen()) {
+                closedTextInputFailure()
+            } else {
+                when (
+                    val opened = nativePort.open(
+                        AppKitNativeTextInputOpenCommand(command.config, command.onObservation),
+                    )
+                ) {
+                    is KadreResult.Failure -> opened
+                    is KadreResult.Success -> KadreResult.Success(
+                        AppKitPeerTextInputOwner(opened.value, appKitPort),
+                    )
+                }
+            }
+        }
+    }
+
+    override suspend fun updateCursor(command: TextInputCursorCommand): KadreResult<Unit> {
+        val owner = command.owner as? AppKitPeerTextInputOwner
+            ?: return KadreResult.Failure(KadreFailure.InvalidRequest("textInputOwner"))
+        if (!isPeerOpen()) return closedTextInputFailure()
+        return appKitPort.onMainThread {
+            if (!isPeerOpen()) closedTextInputFailure()
+            else nativePort.updateCursor(command.copy(owner = owner.nativeOwner))
+        }
+    }
+
+    override suspend fun updateDocument(command: TextInputDocumentCommand): KadreResult<Unit> {
+        val owner = command.owner as? AppKitPeerTextInputOwner
+            ?: return KadreResult.Failure(KadreFailure.InvalidRequest("textInputOwner"))
+        if (!isPeerOpen()) return closedTextInputFailure()
+        return appKitPort.onMainThread {
+            if (!isPeerOpen()) closedTextInputFailure()
+            else nativePort.updateDocument(command.copy(owner = owner.nativeOwner))
+        }
+    }
+}
+
+private class AppKitPeerTextInputOwner(
+    val nativeOwner: TextInputOwner,
+    private val appKitPort: AppKitNativeWindowPort,
+) : TextInputOwner {
+    private val closed = AtomicBoolean(false)
+
+    override fun close() {
+        if (closed.compareAndSet(false, true)) appKitPort.onMainThread(nativeOwner::close)
+    }
+}
+
+private fun closedTextInputFailure(): KadreResult.Failure =
+    KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.TextInputSession))
 
 private class AppKitWindowCallbackGate(
     private val peerId: AppKitWindowPeerId,
