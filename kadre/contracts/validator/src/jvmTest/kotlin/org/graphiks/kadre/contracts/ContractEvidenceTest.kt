@@ -48,6 +48,25 @@ class ContractEvidenceTest {
     }
 
     @Test
+    fun activeO4ContractRequiresDifferentialEvidence() {
+        val exception = assertFailsWith<IllegalStateException> {
+            ContractEvidence.create(
+                contract = activeRuntimeContract().copy(oracle = ContractOracle.O4),
+                mappings = completeRuntimeMappings(),
+                junit = JUnitEvidence.read(writeReport(VALID_REPORT)),
+                commit = "0123456789abcdef0123456789abcdef01234567",
+                target = "jvm",
+                adapter = "runtime-jvm",
+                os = "Mac OS X",
+                runtime = "OpenJDK Runtime Environment",
+                toolchain = "25",
+            )
+        }
+
+        assertContains(exception.message.orEmpty(), "INP-001 uses O4 and requires differential evidence")
+    }
+
+    @Test
     fun evidenceIsBuiltFromPassingJUnitCases() {
         val junit = JUnitEvidence.read(writeReport(VALID_REPORT))
 

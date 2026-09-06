@@ -38,3 +38,10 @@ All three commands completed successfully.
 ## Concerns
 
 - The existing Gradle `JavaExec` callers still use the pre-existing seven-argument shape and default `local` commit. The brief assigns their repository-wide update to task 4, so this task intentionally leaves `build.gradle.kts` untouched.
+
+## Review fix
+
+- Restored the evidence-oracle gate after review: O1, O2 and O3 remain eligible for JUnit-backed evidence, while O4 is rejected with an actionable message that differential evidence is required.
+- RED: `activeO4ContractRequiresDifferentialEvidence` initially failed because O4 emitted evidence.
+- GREEN: the targeted evidence tests, generator tests and the complete validator JVM suite now pass.
+- Deferred by controller decision: no direct CLI seven-argument test was added in this fix round.

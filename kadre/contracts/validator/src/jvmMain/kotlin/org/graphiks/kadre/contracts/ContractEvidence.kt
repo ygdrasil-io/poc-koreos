@@ -28,6 +28,13 @@ internal object ContractEvidence {
         toolchain: String,
     ): JsonObject {
         check(contract.status == ContractStatus.Active) { "${contract.contractId} is not active" }
+        check(contract.oracle in setOf(ContractOracle.O1, ContractOracle.O2, ContractOracle.O3)) {
+            if (contract.oracle == ContractOracle.O4) {
+                "${contract.contractId} uses O4 and requires differential evidence"
+            } else {
+                "${contract.contractId} must use oracle O1, O2 or O3"
+            }
+        }
         check(target in contract.requiredTargets) { "${contract.contractId}[$target]: target is not required" }
         check(commit.matches(GitSha)) { "commit must be a Git SHA" }
         require(adapter.isNotBlank()) { "adapter must not be blank" }
