@@ -48,6 +48,8 @@ import org.graphiks.kffi.objc.NSAppearance
 import org.graphiks.kffi.objc.NSBackingStoreType
 import org.graphiks.kffi.objc.NSButton
 import org.graphiks.kffi.objc.NSColor
+import org.graphiks.kffi.objc.NSDragOperation
+import org.graphiks.kffi.objc.NSDraggingInfo
 import org.graphiks.kffi.objc.NSEdgeInsets
 import org.graphiks.kffi.objc.NSEvent
 import org.graphiks.kffi.objc.NSEventModifierFlags
@@ -69,6 +71,7 @@ import org.graphiks.kffi.objc.ObjCRuntime
 import org.graphiks.kffi.objc.effectiveAppearance
 import org.graphiks.kffi.objc.convertBaseToScreen
 import org.graphiks.kffi.objc.safeAreaInsets
+import org.graphiks.kffi.objc.asNSDraggingInfo
 import org.graphiks.kffi.objc.managed.ObjCManagedClass
 import org.graphiks.kffi.objc.managed.ObjCManagedInstance
 import org.graphiks.kffi.objc.managed.ObjCManagedTextInputValues
@@ -237,6 +240,7 @@ internal class KffiAppKitWindowPort(
         requireMainThread()
         val appearanceAdmission = KffiViewAppearanceAdmission()
         val inputAdmission = KffiViewInputAdmission()
+        val dropAdmission = KffiViewDropAdmission()
         val textInputAdmission = KffiViewTextInputAdmission(textInputAvailability)
         val instance = contentViewClass.createInstance {
             onVoid(VIEW_DID_CHANGE_EFFECTIVE_APPEARANCE) {
@@ -248,6 +252,17 @@ internal class KffiAppKitWindowPort(
             APPKIT_INPUT_EVENT_SELECTORS.forEach { selector ->
                 onVoidObject(selector) { event -> inputAdmission.observe(NSEvent(event.ptr)) }
             }
+            onULongObject(DRAGGING_ENTERED, fallback = NSDragOperation.NSDragOperationNone.rawValue) { info ->
+                dropAdmission.draggingEntered(info.ptr.asNSDraggingInfo())
+            }
+            onULongObject(DRAGGING_UPDATED, fallback = NSDragOperation.NSDragOperationNone.rawValue) { info ->
+                dropAdmission.draggingUpdated(info.ptr.asNSDraggingInfo())
+            }
+            onVoidObject(DRAGGING_EXITED) { dropAdmission.draggingExited() }
+            onBooleanObject(PERFORM_DRAG_OPERATION, fallback = false) { info ->
+                dropAdmission.performDragOperation(info.ptr.asNSDraggingInfo())
+            }
+            onVoidObject(CONCLUDE_DRAG_OPERATION) { dropAdmission.concludeDragOperation() }
             onVoidObjectRange(INSERT_TEXT_REPLACEMENT_RANGE) { value, replacementRange ->
                 textInputAdmission.insertText(value, replacementRange)
             }
@@ -285,7 +300,7 @@ internal class KffiAppKitWindowPort(
         return try {
             val view = NSView(instance.receiver.ptr)
             view.setFrame(contentRect(spec))
-            KffiViewOwner(view, instance, appearanceAdmission, inputAdmission, textInputAdmission)
+            KffiViewOwner(view, instance, appearanceAdmission, inputAdmission, dropAdmission, textInputAdmission)
         } catch (failure: Throwable) {
             try {
                 instance.close()
@@ -384,6 +399,15 @@ internal class KffiAppKitWindowPort(
         )
     }
 
+    override fun observeDrop(
+        window: AppKitNativeWindowOwner,
+        view: AppKitNativeViewOwner,
+        callbacks: AppKitDropCallbacks,
+    ): AppKitNativeDropObserverOwner {
+        requireMainThread()
+        return KffiDropObserverOwner.create(view.kffiViewOwner(), callbacks)
+    }
+
     override fun detachDelegate(window: AppKitNativeWindowOwner) {
         requireMainThread()
         window.kffiWindow().setDelegate(MemorySegment.NULL)
@@ -425,6 +449,11 @@ internal class KffiAppKitWindowPort(
         const val WINDOW_DID_FAIL_EXIT_FULLSCREEN = "windowDidFailToExitFullScreen:"
         const val VIEW_DID_CHANGE_EFFECTIVE_APPEARANCE = "viewDidChangeEffectiveAppearance"
         const val ACCEPTS_FIRST_RESPONDER = "acceptsFirstResponder"
+        const val DRAGGING_ENTERED = "draggingEntered:"
+        const val DRAGGING_UPDATED = "draggingUpdated:"
+        const val DRAGGING_EXITED = "draggingExited:"
+        const val PERFORM_DRAG_OPERATION = "performDragOperation:"
+        const val CONCLUDE_DRAG_OPERATION = "concludeDragOperation:"
 
         val basicWindowDelegateClass: ObjCManagedClass by lazy {
             ObjCManagedClass.registerOnce(
@@ -455,7 +484,7 @@ internal class KffiAppKitWindowPort(
         val contentViewClass: ObjCManagedClass by lazy {
             ObjCManagedClass.registerOnce(
                 superclassName = "NSView",
-                protocols = setOf("NSTextInputClient"),
+                protocols = setOf("NSTextInputClient", "NSDraggingDestination"),
                 methods = mapOf(
                     VIEW_DID_CHANGE_EFFECTIVE_APPEARANCE to ObjCMethodSignatures.Void,
                     ACCEPTS_FIRST_RESPONDER to ObjCMethodSignatures.Boolean,
@@ -473,6 +502,11 @@ internal class KffiAppKitWindowPort(
                     FIRST_RECT_FOR_CHARACTER_RANGE_ACTUAL_RANGE to
                         ObjCMethodSignatures.RectRangeOutRange,
                     CHARACTER_INDEX_FOR_POINT to ObjCMethodSignatures.ULongPoint,
+                    DRAGGING_ENTERED to ObjCMethodSignatures.ULongObject,
+                    DRAGGING_UPDATED to ObjCMethodSignatures.ULongObject,
+                    DRAGGING_EXITED to ObjCMethodSignatures.VoidObject,
+                    PERFORM_DRAG_OPERATION to ObjCMethodSignatures.BooleanObject,
+                    CONCLUDE_DRAG_OPERATION to ObjCMethodSignatures.VoidObject,
                 ) + APPKIT_INPUT_EVENT_SELECTORS.associateWith { ObjCMethodSignatures.VoidObject },
             )
         }
@@ -1126,6 +1160,7 @@ private class KffiViewOwner(
     private val instance: ObjCManagedInstance,
     val appearanceAdmission: KffiViewAppearanceAdmission,
     val inputAdmission: KffiViewInputAdmission,
+    val dropAdmission: KffiViewDropAdmission,
     private val textInputAdmission: KffiViewTextInputAdmission,
 ) : AppKitNativeViewOwner {
     private val closed = AtomicBoolean(false)
@@ -1246,6 +1281,92 @@ private class KffiViewInputObservation(
         if (closed.compareAndSet(false, true)) admission.revoke(observer)
     }
 }
+
+/**
+ * Synchronous `NSDraggingDestination` admission for one content view.
+ *
+ * `draggingEntered:` is the only callback that snapshots the borrowed native pasteboard. The
+ * returned AppKit operation is therefore determined before the native callback returns; later
+ * callbacks only consult the peer's already-admitted offer.
+ */
+private class KffiViewDropAdmission {
+    private val observer = AtomicReference<KffiViewDropObserver?>(null)
+
+    fun install(callbacks: AppKitDropCallbacks): AutoCloseable {
+        val observer = KffiViewDropObserver(callbacks)
+        check(this.observer.compareAndSet(null, observer)) {
+            "AppKit view drop callbacks are already observed"
+        }
+        return KffiViewDropObservation(this, observer)
+    }
+
+    fun draggingEntered(info: NSDraggingInfo): Long {
+        val observer = observer.get() ?: return NSDragOperation.NSDragOperationNone.rawValue
+        val position = info.draggingLocation().toLogicalPointOrNull()
+            ?: return NSDragOperation.NSDragOperationNone.rawValue
+        val source = info.toKffiDropTransferSourceOrNull()
+            ?: return NSDragOperation.NSDragOperationNone.rawValue
+        return try {
+            if (observer.callbacks.entered(source, position)) {
+                NSDragOperation.NSDragOperationCopy.rawValue
+            } else {
+                NSDragOperation.NSDragOperationNone.rawValue
+            }
+        } catch (failure: Throwable) {
+            try {
+                source.close()
+            } catch (closeFailure: Throwable) {
+                if (closeFailure !== failure) failure.addSuppressed(closeFailure)
+            }
+            throw failure
+        }
+    }
+
+    fun draggingUpdated(info: NSDraggingInfo): Long {
+        val observer = observer.get() ?: return NSDragOperation.NSDragOperationNone.rawValue
+        val position = info.draggingLocation().toLogicalPointOrNull()
+            ?: return NSDragOperation.NSDragOperationNone.rawValue
+        return if (observer.callbacks.moved(position)) {
+            NSDragOperation.NSDragOperationCopy.rawValue
+        } else {
+            NSDragOperation.NSDragOperationNone.rawValue
+        }
+    }
+
+    fun draggingExited() {
+        observer.get()?.callbacks?.exited?.invoke()
+    }
+
+    fun performDragOperation(info: NSDraggingInfo): Boolean {
+        val observer = observer.get() ?: return false
+        val position = info.draggingLocation().toLogicalPointOrNull() ?: return false
+        return observer.callbacks.performed(position)
+    }
+
+    fun concludeDragOperation() = Unit
+
+    fun revoke(observer: KffiViewDropObserver) {
+        this.observer.compareAndSet(observer, null)
+    }
+}
+
+private class KffiViewDropObserver(
+    val callbacks: AppKitDropCallbacks,
+)
+
+private class KffiViewDropObservation(
+    private val admission: KffiViewDropAdmission,
+    private val observer: KffiViewDropObserver,
+) : AutoCloseable {
+    private val closed = AtomicBoolean(false)
+
+    override fun close() {
+        if (closed.compareAndSet(false, true)) admission.revoke(observer)
+    }
+}
+
+private fun NSPoint.toLogicalPointOrNull(): LogicalPoint? =
+    if (x.isFinite() && y.isFinite()) LogicalPoint(x, y) else null
 
 /**
  * Per-view, revocable `NSTextInputClient` implementation.
@@ -1725,6 +1846,28 @@ private class KffiInputObserverOwner private constructor(
                 throw failure
             }
         }
+    }
+}
+
+/** Owns just the revocable callback admission; `NSView` remains the native destination owner. */
+private class KffiDropObserverOwner private constructor(
+    private val observation: AutoCloseable,
+) : AppKitNativeDropObserverOwner {
+    private val closed = AtomicBoolean(false)
+
+    override fun revokeCallbacks() {
+        observation.close()
+    }
+
+    override fun close() {
+        if (closed.compareAndSet(false, true)) revokeCallbacks()
+    }
+
+    companion object {
+        fun create(
+            viewOwner: KffiViewOwner,
+            callbacks: AppKitDropCallbacks,
+        ): KffiDropObserverOwner = KffiDropObserverOwner(viewOwner.dropAdmission.install(callbacks))
     }
 }
 

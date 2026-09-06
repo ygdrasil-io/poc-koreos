@@ -32,6 +32,8 @@ import org.graphiks.kadre.internal.runtime.RuntimeDesktopNativeWindowHandle
 import org.graphiks.kadre.internal.runtime.RuntimeDesktopWindowHandleAccess
 import org.graphiks.kadre.internal.runtime.RuntimeFailureReporter
 import org.graphiks.kadre.internal.runtime.SurfaceMetrics
+import org.graphiks.kadre.internal.runtime.DropItemSource
+import org.graphiks.kadre.internal.runtime.DropTransferSource
 import org.graphiks.kadre.internal.runtime.TextInputCursorCommand
 import org.graphiks.kadre.internal.runtime.TextInputDocumentCommand
 import org.graphiks.kadre.internal.runtime.TextInputObservation
@@ -45,6 +47,11 @@ import org.graphiks.kadre.input.KeyState
 import org.graphiks.kadre.input.KeyboardModifiers
 import org.graphiks.kadre.input.LogicalKey
 import org.graphiks.kadre.input.PhysicalKey
+import org.graphiks.kadre.input.DropItemDescriptor
+import org.graphiks.kadre.input.DropItemKind
+import org.graphiks.kadre.input.DropItemReadMode
+import org.graphiks.kadre.input.DropOffer
+import org.graphiks.kadre.input.DropTransfer
 import org.graphiks.kadre.input.InputEvent
 import org.graphiks.kadre.input.InputStateResetReason
 import org.graphiks.kadre.input.PointerButton
@@ -55,6 +62,7 @@ import org.graphiks.kadre.input.TextInputEvent
 import org.graphiks.kadre.input.TextRange
 import org.graphiks.kadre.interaction.InteractionAction
 import org.graphiks.kadre.interaction.InteractionActionOutcome
+import org.graphiks.kadre.interaction.InteractionEvent
 import org.graphiks.kadre.interaction.InteractionHandler
 import org.graphiks.kadre.interaction.InteractionKind
 import org.graphiks.kadre.policy.KadrePolicies
@@ -3547,7 +3555,7 @@ class AppKitWindowRuntimeDriverTest {
                     .await(),
             ).window
             assertEquals(
-                setOf(InteractionKind.BeginWindowMove),
+                setOf(InteractionKind.BeginWindowMove, InteractionKind.AcceptDrop),
                 assertIs<Capability.Supported<Set<InteractionKind>>>(
                     window.surface.capabilities.value.handlerInteractions,
                 ).constraints,
@@ -3606,6 +3614,46 @@ class AppKitWindowRuntimeDriverTest {
             assertEquals(1, port.nativeMoveCalls("pointer-down-system-move"))
             assertTrue(port.nativeMoveRanOnOwnerThread("pointer-down-system-move"))
             inputs.cancelAndJoin()
+        } finally {
+            driver.close()
+        }
+    }
+
+    @Test
+    fun nativeDropAcceptsSynchronouslyThenHandsItsTransferToTheClaimingCoroutine() = runBlocking {
+        val port = DeterministicAppKitNativeWindowPort(
+            name = "native-drop-transfer",
+            dropObservationInstalled = true,
+        )
+        val driver = AppKitWindowRuntimeDriverFactory { port }.create(
+            resources = KadrePolicies.Default.resources,
+            publicAppKitCapabilities = true,
+            publicSurfaceCapabilities = true,
+            enabledWindowUpdateCapabilities = publicAppKitUpdateProperties(),
+        )
+        lateinit var offer: DropOffer
+        val source = RecordingNativeDropTransferSource()
+
+        try {
+            val window = assertIs<WindowRequestOutcome.OpenedHere>(
+                driver.manager.requestWindow(WindowSpec(title = "native-drop-transfer"))
+                    .appKitSuccessValue()
+                    .await(),
+            ).window
+            window.surface.installInteractionHandler(InteractionHandler { context, event ->
+                offer = assertIs<InteractionEvent.DropEntered>(event).offer
+                assertIs<KadreResult.Success<*>>(context.request(InteractionAction.AcceptDrop(offer.id)))
+            }).appKitSuccessValue()
+
+            assertTrue(port.emitDropEntered("native-drop-transfer", source, LogicalPoint(13.0, 17.0)))
+            assertTrue(port.emitDropMoved("native-drop-transfer", LogicalPoint(14.0, 18.0)))
+            assertTrue(port.emitDropPerformed("native-drop-transfer", LogicalPoint(15.0, 19.0)))
+
+            val transfer = assertIs<KadreResult.Success<DropTransfer>>(
+                withTimeout(2.seconds) { offer.claimTransfer() },
+            ).value
+            transfer.close()
+            assertTrue(source.closed.get())
         } finally {
             driver.close()
         }
@@ -4818,6 +4866,7 @@ internal class DeterministicAppKitNativeWindowPort(
     private val afterSurfaceActivationBeforeCommit: (DeterministicAppKitNativeWindowPort) -> Unit = { },
     private val inputObservationInstalled: Boolean = false,
     private val inputObservationInstalledFor: Set<String> = emptySet(),
+    private val dropObservationInstalled: Boolean = false,
     private val afterInputObservationBeforeCommit: (DeterministicAppKitNativeWindowPort) -> Unit = { },
     private val effectiveGeometry: AppKitWindowGeometrySnapshot? = null,
     private val emitGeometryDuringUpdate: Boolean = false,
@@ -4849,6 +4898,7 @@ internal class DeterministicAppKitNativeWindowPort(
     private val windows = linkedMapOf<String, RecordingNativeWindowOwner>()
     private val surfaceObservers = linkedMapOf<String, RecordingNativeSurfaceObserver>()
     private val inputObservers = linkedMapOf<String, RecordingNativeInputObserver>()
+    private val dropObservers = linkedMapOf<String, RecordingNativeDropObserver>()
     private val geometryObservers = linkedMapOf<String, RecordingNativeGeometryObserver>()
     val createdWindowTitles = CopyOnWriteArrayList<String>()
     val closedWindowTitles = CopyOnWriteArrayList<String>()
@@ -5116,6 +5166,19 @@ internal class DeterministicAppKitNativeWindowPort(
         null
     }
 
+    override fun observeDrop(
+        window: AppKitNativeWindowOwner,
+        view: AppKitNativeViewOwner,
+        callbacks: AppKitDropCallbacks,
+    ): AppKitNativeDropObserverOwner? = if (dropObservationInstalled) {
+        RecordingNativeDropObserver(callbacks).also { observer ->
+            val identity = window.recordingWindow().identity
+            check(dropObservers.put(identity, observer) == null) { "$name duplicate test drop observer" }
+        }
+    } else {
+        null
+    }
+
     override fun detachDelegate(window: AppKitNativeWindowOwner) {
         window.recordingWindow().delegateAttached = false
     }
@@ -5209,6 +5272,15 @@ internal class DeterministicAppKitNativeWindowPort(
     fun emitInput(title: String, input: AppKitInput) {
         checkNotNull(inputObservers[title]).emit(input)
     }
+
+    fun emitDropEntered(title: String, source: DropTransferSource, position: LogicalPoint): Boolean =
+        checkNotNull(dropObservers[title]).emitEntered(source, position)
+
+    fun emitDropMoved(title: String, position: LogicalPoint): Boolean =
+        checkNotNull(dropObservers[title]).emitMoved(position)
+
+    fun emitDropPerformed(title: String, position: LogicalPoint): Boolean =
+        checkNotNull(dropObservers[title]).emitPerformed(position)
 
     fun emitPointerDown(
         title: String,
@@ -5398,6 +5470,25 @@ internal class DeterministicAppKitNativeWindowPort(
         override fun close() = Unit
     }
 
+    private class RecordingNativeDropObserver(
+        private val callbacks: AppKitDropCallbacks,
+    ) : AppKitNativeDropObserverOwner {
+        private val accepting = AtomicBoolean(true)
+
+        fun emitEntered(source: DropTransferSource, position: LogicalPoint): Boolean =
+            accepting.get() && callbacks.entered(source, position)
+
+        fun emitMoved(position: LogicalPoint): Boolean = accepting.get() && callbacks.moved(position)
+
+        fun emitPerformed(position: LogicalPoint): Boolean = accepting.get() && callbacks.performed(position)
+
+        override fun revokeCallbacks() {
+            accepting.set(false)
+        }
+
+        override fun close() = Unit
+    }
+
     private fun AppKitNativeWindowOwner.recordingWindow(): RecordingNativeWindowOwner =
         this as? RecordingNativeWindowOwner ?: error("foreign test window owner")
 
@@ -5406,6 +5497,34 @@ internal class DeterministicAppKitNativeWindowPort(
 
     private fun AppKitNativeDelegateOwner.recordingDelegate(): RecordingNativeDelegateOwner =
         this as? RecordingNativeDelegateOwner ?: error("foreign test delegate owner")
+}
+
+private class RecordingNativeDropTransferSource : DropTransferSource {
+    override val items: List<DropItemSource> = listOf(RecordingNativeDropItemSource)
+    val closed = AtomicBoolean(false)
+
+    override fun close() {
+        closed.set(true)
+    }
+}
+
+private data object RecordingNativeDropItemSource : DropItemSource {
+    override val descriptor: DropItemDescriptor = DropItemDescriptor(
+        displayName = null,
+        sizeBytes = 1L,
+        mimeTypes = listOf("application/octet-stream"),
+        kind = DropItemKind.Binary,
+    )
+    override val readMode: DropItemReadMode = DropItemReadMode.Replayable
+
+    override suspend fun collectBytes(
+        maxChunkBytes: Int,
+        collector: suspend (ByteArray) -> Unit,
+    ): KadreResult<Unit> {
+        require(maxChunkBytes > 0)
+        collector(byteArrayOf(1))
+        return KadreResult.Success(Unit)
+    }
 }
 
 private fun AppKitWindowGeometrySnapshot.updateFor(
