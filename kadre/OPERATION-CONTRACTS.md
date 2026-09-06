@@ -101,6 +101,8 @@ Les fields d’attach suivent le registre de section 1.1. `runKadreApplication` 
 | `Window.respondToCloseRequest` | `KeptOpen`, `Closing`, `TooLate` ou `AlreadyResolved` | `Invalid("requestId")`, `Closed(Window)`, `Temporary`, `Platform` | la première décision admise gagne ; après commit, le snapshot et l’outcome portant l’operation ID font autorité. |
 | `WebWindowProvider.open` (callback host) | `Success(WebWindowHost)` ou failure transformée en `WindowRequestOutcome.Rejected` | exactement le set de `WindowRequestOutcome.Rejected` | synchrone, pendant l’activation native ; aucun owner n’est transféré avant validation du host retourné. Une exception devient `PlatformFailure(Web, "WebWindowProvider", "callback-exception")`; une failure hors set devient le même domain avec code `"invalid-failure"`. |
 
+Pour un `WebWindowHost` retourné avec succès, `element.ownerDocument.defaultView` doit être non nul et différent du browsing context de la requête. Un document sans browsing context ou le context d’origine produit `Rejected(InvalidRequest("element.ownerDocument"))`; un élément invalide ou déconnecté sous `StopWhenDetached` produit `Rejected(InvalidRequest("element"))`. L’absence de `Job` et une scope inactive produisent respectivement `Rejected(InvalidRequest("parentScope"))` et `Rejected(ParentScopeCancelled)`. Ces failures sont des outcomes de la `WindowRequest` admise, jamais des failures de son appel extérieur.
+
 Un champ fonctionnel valide mais non supporté de `Window.apply`, tel que
 `FullscreenMode.Exclusive`, est représenté par
 `Success(PartiallyApplied(..., RejectedWindowField(...)))` ; il ne réutilise

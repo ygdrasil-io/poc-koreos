@@ -33,8 +33,9 @@ Trois séquences ont été considérées :
 La première pull request Web ne créera donc pas un adapter factice. Elle
 ajoutera uniquement les contrats `planned` et la convention de preuves. Le
 harness navigateur n'entre dans le build qu'avec un artifact JS/Wasm qui peut
-réellement l'exercer. La première tranche fonctionnelle activera les contrats
-dans le même commit que l'attach DOM réellement testé et son driver.
+réellement l'exercer. La première tranche fonctionnelle activera `BCK-001`
+dans le même commit que l'attach DOM réellement testé et son driver ; les
+façades host possèdent leurs propres gates `INT-002` et `INT-003`.
 
 ## Contrat cible, inchangé
 
@@ -71,18 +72,23 @@ Les invariants à rendre exécutables sont :
 
 - `StopWhenDetached` rejette un élément initialement déconnecté ; `Manual`
   l'accepte et publie `Attached + Background + Inactive`.
-- Le test de détachement a lieu après le batch du `MutationObserver`. Un
+- Le test de détachement a lieu après le batch du `MutationObserver`, observé
+  sur le `Document` ou le `ShadowRoot` contenant l'élément. Après chaque batch,
+  le host recalcule son root et réinstalle l'observer lorsqu'il a changé. Un
   reparentage achevé avant cette livraison conserve la session uniquement si
   `ownerDocument` reste le document initial ; un transfert vers un autre
   document termine la session, même si l'élément est déjà reconnecté. Un
   élément encore déconnecté la termine et sa réinsertion requiert une nouvelle
   session.
-- `visibilitychange` pilote `Foreground` ou `Background` depuis le document ;
-  `focus` et `blur` du browsing context pilotent `Active` ou `Inactive`. Un
-  document background publie toujours `Inactive`, et un document foreground
-  ne devient `Active` que lorsqu'il possède le focus. `Manual` conserve la
-  session lors d'un detach/reinsert et ne devient terminal que par
-  `requestStop` ou un motif externe.
+- `visibilitychange` pilote `Foreground` seulement si le document est visible
+  **et** l'élément reste connecté. `focus`/`blur` du browsing context et
+  `focusin`/`focusout` de l'élément ou de son subtree pilotent `Active` : une
+  surface n'est active que si elle est foreground et possède l'input. Un
+  document background, une surface déconnectée ou un autre host ayant le focus
+  publient `Inactive`. `Manual` conserve la session lors d'un detach/reinsert,
+  mais son lifecycle reste `Background + Inactive` tant que l'élément n'est
+  pas reconnecté ; il ne devient terminal que par `requestStop` ou un motif
+  externe.
 - L'admission sérialise attach et détachement : un detach admis avant la
   création échoue sans session ; après admission, la session termine
   `Stopped(HostDetached)`, la factory tardive est ignorée et `run` ne démarre
@@ -110,18 +116,22 @@ token conservé.
 
 ## Registre et scénarios
 
-Le registre ajoute les deux contrats suivants au statut `planned` :
+Le registre ajoute les trois contrats suivants au statut `planned`, avec les
+familles fermées de `TEST-STRATEGY.md` :
 
 ```tsv
-WEB-001	planned	DESIGN.md#15.3	DOM host attach and lifecycle	surface/window confusion, lifecycle loss, cross-session leak or false capability	O3	web-attach-connected,web-attach-detached-rejected,web-attach-manual-detached,web-detach-reparent-batch,web-detach-cross-document-terminal,web-manual-detach-and-stop,web-visibility-focus,web-attach-detach-admission-race,web-detach-terminal,web-multi-session-isolation,web-no-implicit-window,web-window-provider-new-session,web-window-provider-invalid-host,web-window-provider-callback-failure,web-pagehide-admission-close,web-pagehide-navigation,web-pagehide-no-resurrection,web-element-lease,web-element-lease-concurrent-close	js,wasmJs	SurfaceCapabilities.platformAccess,WindowManagerCapabilities.requestWindow	web-surface-never-window,web-no-implicit-dom,web-cross-session-isolation,web-detach-no-resurrection,web-provider-no-same-document-window,web-active-gate-requires-js-and-wasm	-
-WEB-002	planned	INTEROP-EXPORTS.md#6	JS and Wasm host facade	foreign API drift, leaked coroutine types or divergent declarations	O1	web-typescript-consumer-js,web-typescript-consumer-wasm,web-host-failure-mapping,web-host-state-subscription	js,wasmJs	-	web-host-no-coroutine-leak,web-host-identical-dts	-
+BCK-001	planned	DESIGN.md#15.3	DOM host attach and lifecycle	surface/window confusion, lifecycle loss, cross-session leak or false capability	O3	web-attach-connected,web-attach-detached-rejected,web-attach-manual-detached,web-detach-reparent-batch,web-shadow-root-detach-reparent,web-detach-cross-document-terminal,web-manual-detach-and-stop,web-visibility-focus,web-focus-transfer-between-hosts,web-attach-detach-admission-race,web-detach-terminal,web-multi-session-isolation,web-no-implicit-window,web-window-provider-new-session,web-window-provider-same-context,web-window-provider-no-context,web-window-provider-invalid-element,web-window-provider-invalid-scope,web-window-provider-callback-failure,web-pagehide-admission-close,web-pagehide-navigation,web-pagehide-no-resurrection,web-element-lease,web-element-lease-concurrent-close	js,wasmJs	SurfaceCapabilities.platformAccess,WindowManagerCapabilities.requestWindow	web-surface-never-window,web-no-implicit-dom,web-cross-session-isolation,web-detach-no-resurrection,web-shadow-root-observation,web-provider-no-same-document-window,web-active-gate-requires-js-and-wasm	-
+INT-002	planned	INTEROP-EXPORTS.md#6	JS and Wasm host facade structural exports	foreign API drift or leaked coroutine types	O1	web-typescript-consumer-js,web-typescript-consumer-wasm	js,wasmJs	-	web-host-no-coroutine-leak,web-host-identical-dts	-
+INT-003	planned	INTEROP-EXPORTS.md#6	JS and Wasm host facade runtime	incorrect host outcome, notification ordering or ownership	O3	web-host-attach-failure,web-host-state-subscription,web-host-observer-exception,web-host-stop-close-outcome,web-host-provider	js,wasmJs	-	web-host-microtask-order,web-host-callback-isolation,web-host-outcome-rejection	-
 ```
 
-`WEB-001` porte l'adapter Kotlin ; `WEB-002` porte `@kadre/host`, son
-`KadreWeb.attach`, les `KadreHostError`, un `MainScope` par handle, les
-notifications d'état sérialisées en microtask et le même consumer TypeScript
-pour JS et Wasm. L'activation de `WEB-001` seule ne qualifie jamais
-`platform:web` comme adapter supporté ou publiable.
+`BCK-001` porte l'adapter Kotlin. `INT-002` prouve structurellement
+`@kadre/host` et le même consumer TypeScript pour JS et Wasm. `INT-003` prouve
+à la frontière browser `KadreWeb.attach`, les `KadreHostError`, un `MainScope`
+par handle, la notification d'état initiale puis en microtask, l'exception
+d'observer isolée, `requestStop`/`close`, `awaitTermination` et le provider
+TypeScript. L'activation de `BCK-001` seule ne qualifie jamais `platform:web`
+comme adapter supporté ou publiable.
 
 Ses identifiants de scénario stables sont :
 
@@ -131,37 +141,63 @@ Ses identifiants de scénario stables sont :
 | `web-attach-detached-rejected` | attache `StopWhenDetached` sur élément déconnecté | `InvalidRequest("element")`, aucune session |
 | `web-attach-manual-detached` | attache `Manual` sur élément déconnecté | lifecycle `Attached + Background + Inactive` |
 | `web-detach-reparent-batch` | retire puis réinsère avant le batch `MutationObserver` | même session encore vivante |
+| `web-shadow-root-detach-reparent` | retire/réinsère l'élément depuis un `ShadowRoot`, puis le change de root dans le même document | même session vivante et observer réinstallé ; detach terminal ensuite détecté |
 | `web-detach-cross-document-terminal` | transfère l'élément vers un autre `ownerDocument` avant le batch | `Stopped(HostDetached)`, aucune session dans le nouveau document |
 | `web-manual-detach-and-stop` | détache/réinsère un host `Manual`, puis demande l'arrêt | aucune terminaison au detach ; terminaison seulement par l'arrêt explicite |
-| `web-visibility-focus` | Playwright bascule entre deux pages/tabs réels et le focus du browsing context | snapshots ordonnés `Foreground/Background` et `Active/Inactive` valides |
+| `web-visibility-focus` | Playwright bascule entre deux pages/tabs réels et le focus du browsing context | `Foreground` seulement connecté+visible ; snapshots `Foreground/Background` et `Active/Inactive` valides |
+| `web-focus-transfer-between-hosts` | transfère l'input entre deux hosts de la même page | un seul host actif ; l'autre publie `Inactive` |
 | `web-attach-detach-admission-race` | détache à chacune des frontières d'admission | aucun `create`/`run` après motif terminal ; session admise termine `HostDetached` |
 | `web-detach-terminal` | retire et laisse l'élément déconnecté après le batch | session terminée, aucune resurrection |
 | `web-multi-session-isolation` | attache deux éléments différents | identities, lifecycle et fermeture indépendants |
-| `web-no-implicit-window` | demande une fenêtre sans provider | `Unsupported`, aucun DOM créé |
+| `web-no-implicit-window` | demande une fenêtre sans provider | `Success(WindowRequest)` déjà terminal en `Rejected(Unsupported(RequestWindow))`, aucun DOM créé |
 | `web-window-provider-new-session` | provider synchrone retourne un host dans un nouveau browsing context | `OpenedInNewSession`, même factory, `AdditionalHostRequested` et `originatingRequestId` corrélés |
-| `web-window-provider-invalid-host` | provider retourne même document, élément invalide/déconnecté, ou scope absente/inactive | `Rejected` avec la failure fermée exacte, aucune session synthétique |
+| `web-window-provider-same-context` | provider retourne un élément du browsing context origine | `Rejected(InvalidRequest("element.ownerDocument"))`, aucune session synthétique |
+| `web-window-provider-no-context` | provider retourne un élément dont `ownerDocument.defaultView == null` | `Rejected(InvalidRequest("element.ownerDocument"))`, aucune session synthétique |
+| `web-window-provider-invalid-element` | provider retourne un élément invalide ou déconnecté sous `StopWhenDetached` | `Rejected(InvalidRequest("element"))`, aucune session synthétique |
+| `web-window-provider-invalid-scope` | provider retourne une scope sans `Job` ou déjà inactive | `Rejected(InvalidRequest("parentScope"))` ou `Rejected(ParentScopeCancelled)`, aucune session synthétique |
 | `web-window-provider-callback-failure` | provider lève ou retourne une failure hors domaine | `Rejected(PlatformFailure(Web, "WebWindowProvider", "callback-exception"|"invalid-failure"))` terminale |
-| `web-pagehide-admission-close` | émet `pagehide` déterministe avant une nouvelle opération | admission fermée et bridges synchrones libérés, sans attendre la terminaison |
-| `web-pagehide-navigation` | Playwright navigue réellement après instrumentation externe de la page | fermeture synchrone observée avant destruction ; aucun `awaitTermination` exigé |
+| `web-pagehide-admission-close` | émet `pagehide` déterministe avant une nouvelle opération | `Stopped(HostDetached)`, admission fermée et bridges synchrones libérés, sans attendre la terminaison |
+| `web-pagehide-navigation` | Playwright navigue réellement après instrumentation externe de la page | `Stopped(HostDetached)` observé avant destruction et opération ultérieure refusée par host fermé ; aucun `awaitTermination` exigé |
 | `web-pagehide-no-resurrection` | injecte le chemin `pagehide` persisted puis `pageshow`, en complément de la navigation réelle | ancienne session reste terminale ; un nouvel attach est requis |
 | `web-element-lease` | exécute `withWebElement` pendant puis après fermeture | callback admis puis `Closed(Surface)` |
 | `web-element-lease-concurrent-close` | detach/close pendant une lease active | commit attend le callback ; aucune nouvelle lease ensuite |
 
-Avant l'activation, le validateur de registre est généralisé : il déduit le
-gate de `requiredTargets`, au lieu d'une allowlist de préfixes JVM, et ses
-tests prouvent qu'un contrat `planned` est admis mais qu'un contrat `active`
-sans mapping ni preuve pour chacun de ses targets échoue. Le format de preuve
-devient lui aussi target-neutral : il ne code ni `jvm` ni un JUnit JVM. Chaque
-target Kotlin produit un fichier distinct,
-`contract-evidence/js/WEB-001.json` et
-`contract-evidence/wasmJs/WEB-001.json`; le moteur, sa version et les
-capabilities observées restent dans l'environnement de la preuve, pas dans le
-champ `target`.
+Avant l'activation, le validateur devient target-aware :
 
-`WEB-001` ne devient `active` que dans la pull request qui fournit tous ses
+- `EvidenceMapping` porte le target Kotlin ; `validateMappings` vérifie le
+  produit `contract × requiredTargets × scenarios/sentinels`, plutôt qu'une
+  allowlist de préfixes JVM ;
+- chaque job target écrit le chemin canonique
+  `contract-evidence/<contractId>.json`. L'archive du job est étiquetée par
+  target (`js` ou `wasmJs`) et l'aggregate indexe donc `(target, contractId)` :
+  deux jobs ne s'écrasent pas et une preuve d'un autre target est refusée ;
+- `ContractEvidence` reçoit le target réel, le vérifie contre la ligne TSV,
+  ne code plus `jvm`, et accepte `O1` lorsqu'un consumer compile produit le
+  JUnit canonique exigé par la stratégie. Il conserve commit, schema, target,
+  adapter, environnement, compteurs et listes de scénario/sentinelle ;
+- les tests du validateur prouvent qu'un contrat `planned` est admis, tandis
+  qu'un contrat `active` sans mapping, sentinelle, preuve JSON, commit/schema
+  valide ou target requis échoue.
+
+`BCK-001` ne devient `active` que dans la pull request qui fournit tous ses
 scénarios dans un vrai navigateur pour JS **et** Wasm, leurs mappings,
-sentinelles et deux preuves valides. `WEB-002` suit le même principe avec les
-deux compilations TypeScript et les tests runtime de façade.
+sentinelles et preuves valides. `INT-002` devient actif avec les deux consumers
+TypeScript ; `INT-003` suit le même gate O3 pour les comportements runtime de
+la façade.
+
+`INT-002` compile le même source TypeScript contre les deux `.d.ts` et exige
+les unions exhaustives, `bigint`, le wrapper opaque de factory et l'absence de
+`Flow`, `CoroutineScope`, `Continuation`, `Throwable`, `Any` ou adresse native
+dans les signatures. `INT-003` observe dans une vraie page :
+
+- un échec d'attach levé comme `KadreHostError` portant la `KadreFailure`
+  exacte ;
+- l'état initial synchronement, les mises à jour ensuite dans la microtask
+  queue, et une exception d'observer qui le désinscrit sans terminer Kadre ;
+- `requestStop` puis `close`, et l'unique `SessionOutcome` renvoyé par
+  `awaitTermination`, sans rejection Promise pour une failure fonctionnelle ;
+- le provider TypeScript synchrone, son DTO copié, ses failures fermées et le
+  `KadreHostError` de callback exact.
 
 ## Harness navigateur
 
@@ -199,9 +235,9 @@ elle ne devient jamais un succès silencieux ou un pseudo-`NotApplicable`.
 
 ## Dépendances et ordre d'implémentation
 
-1. Ajouter `WEB-001` et `WEB-002` planifiés, les scénarios, les sentinelles et
-   le protocole de preuve Web, sans modifier le runtime, créer de module vide,
-   ou installer de runner navigateur.
+1. Ajouter `BCK-001`, `INT-002` et `INT-003` planifiés, les scénarios, les
+   sentinelles et le protocole de preuve Web, sans modifier le runtime, créer
+   de module vide, ou installer de runner navigateur.
 2. Porter les variantes JS/Wasm de `foundation`, remplacer dans `runtime` les
    locks, atomiques, horloge, identité, collections et affinité de thread JVM
    par des abstractions multiplateformes, puis prouver le noyau commun sur les
@@ -209,12 +245,12 @@ elle ne devient jamais un succès silencieux ou un pseudo-`NotApplicable`.
 3. Ajouter les variantes JS/Wasm de l'umbrella `kadre` et l'agrégation de leurs
    composants, avec publication et consumer Kotlin de chaque target.
 4. Créer `platform:web` uniquement avec un attach DOM réel, `MutationObserver`,
-   lifecycle, `withWebElement`, driver Playwright et les preuves `WEB-001`.
+   lifecycle, `withWebElement`, driver Playwright et les preuves `BCK-001`.
    Cette tranche est un adapter d'incubation prouvé, mais pas encore un adapter
    Web supporté.
 5. Livrer métriques/redraw, les cinq managers initiaux, le registre de
-   capabilities et la façade `@kadre/host` avec `WEB-002`. C'est le premier
-   jalon qui peut annoncer un adapter Web supporté.
+   capabilities et la façade `@kadre/host` avec `INT-002` et `INT-003`. C'est
+   le premier jalon qui peut annoncer un adapter Web supporté.
 6. Ajouter, chacun dans une tranche verticale, input et IME, touch/gestures,
    drag-and-drop, puis les operations nécessitant une interaction utilisateur.
 
@@ -224,16 +260,17 @@ de l'attach/lifecycle DOM.
 
 ## Tests et critères d'acceptation
 
-- Le validateur accepte `WEB-001` et `WEB-002` en `planned` sans exiger de
-  preuve target-specific ; il refuse leur passage à `active` sans preuve et
-  sentinelle pour JS **et** Wasm.
+- Le validateur accepte `BCK-001`, `INT-002` et `INT-003` en `planned` sans
+  exiger de preuve target-specific ; il refuse leur passage à `active` sans
+  preuve et sentinelle pour JS **et** Wasm.
 - Le protocole de driver associe sans ambiguïté un scénario, un target Kotlin,
   un moteur browser, un bundle et un `contractId`.
 - Aucun fichier de l'ancien `kadre-old` n'est importé ni dépendance de
   production ; il peut seulement servir à retrouver des stimuli à couvrir.
 - Aucun type DOM, Playwright ou Node n'apparaît dans `foundation` ni dans
   l'API commune.
-- La première pull request fonctionnelle ne peut pas activer `WEB-001` si
+- La première pull request fonctionnelle ne peut pas activer `BCK-001` si
   `scripts/test-web-browsers.sh` ne vérifie pas tous les scénarios ci-dessus
   sur les deux targets ; elle ne peut pas annoncer `platform:web` supporté
-  avant l'activation de `WEB-002` et les garanties initiales de capabilities.
+  avant l'activation de `INT-002`, `INT-003` et les garanties initiales de
+  capabilities.
