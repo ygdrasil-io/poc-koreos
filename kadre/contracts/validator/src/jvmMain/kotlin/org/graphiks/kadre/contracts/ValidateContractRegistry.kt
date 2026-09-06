@@ -53,8 +53,18 @@ internal fun validateContractRegistry(
         .filter { it.status == ContractStatus.Retired }
         .forEach { errors += "${it.contractId}: configured evidence gate references a retired contract" }
 
+    records.asSequence()
+        .filter { it.status != ContractStatus.Retired }
+        .filter(ContractRecord::requiresBrowserEvidenceGate)
+        .filter { it.contractId !in requiredEvidenceGateIds }
+        .sortedBy(ContractRecord::contractId)
+        .forEach { errors += "${it.contractId}: browser contract is outside configured evidence gates" }
+
     return errors
 }
+
+private fun ContractRecord.requiresBrowserEvidenceGate(): Boolean =
+    requiredTargets.any { it == "js" || it == "wasmJs" }
 
 public fun main(args: Array<String>) {
     require(args.size == 1 || args.size == 3) {

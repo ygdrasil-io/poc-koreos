@@ -20,13 +20,16 @@ val jvmMain = kotlin.targets.getByName("jvm").compilations.getByName("main")
 val contractEvidenceGateIds = listOf(
     "APK-001", "APK-002", "APK-003", "APK-004", "APK-005", "APK-006",
     "APK-007", "APK-008", "APK-009", "APK-010", "APK-011", "APK-012",
-    "INP-001", "WIN-001", "WIN-002", "WIN-003", "WIN-004", "WIN-005", "WIN-006", "INT-001",
+    "INP-001", "WIN-001", "WIN-002", "WIN-003", "WIN-004", "WIN-005", "WIN-006",
+    "BCK-001", "INT-001", "INT-002", "INT-003", "INT-004",
 )
+val webContractIds = listOf("BCK-001", "INT-002", "INT-003", "INT-004")
 val appKitContractIds = contractEvidenceGateIds.filter { it.startsWith("APK-") }
 val runtimeContractIds = contractEvidenceGateIds.filter { contractId ->
-    contractId.startsWith("INP-") || contractId.startsWith("WIN-") || contractId.startsWith("INT-")
+    contractId !in webContractIds &&
+        (contractId.startsWith("INP-") || contractId.startsWith("WIN-") || contractId.startsWith("INT-"))
 }
-check((appKitContractIds + runtimeContractIds).toSet() == contractEvidenceGateIds.toSet()) {
+check((appKitContractIds + runtimeContractIds + webContractIds).toSet() == contractEvidenceGateIds.toSet()) {
     "every configured contract evidence gate must have an explicit producer"
 }
 val contractEvidenceTarget = "jvm"
@@ -198,7 +201,53 @@ val generateRuntimeContractEvidence by tasks.registering {
     outputs.dir(runtimeContractEvidenceDirectory)
 }
 
+val browserContractRegistry = rootProject.file("kadre/contracts/registry/contracts.tsv")
+val browserContractMappings = listOf(
+    rootProject.file("kadre/runtime/contracts/evidence.tsv"),
+    rootProject.file("kadre/backend/appkit/contracts/evidence.tsv"),
+)
+val browserContractEngines = providers.gradleProperty("kadreBrowserEngines")
+    .orElse("chromium")
+    .map { configuredEngines ->
+        configuredEngines.split(',')
+            .map(String::trim)
+            .also { engines ->
+                require(engines.isNotEmpty() && engines.none(String::isBlank)) {
+                    "kadreBrowserEngines must contain one or more comma-separated browser engines"
+                }
+            }
+            .distinct()
+            .joinToString(",")
+    }
+val browserContractEvidenceTasks = listOf("js", "wasmJs").map { target ->
+    tasks.register<JavaExec>("validate${target.replaceFirstChar(Char::uppercase)}BrowserContractEvidence") {
+        group = "verification"
+        description = "Validates every active $target browser contract evidence artifact."
+        dependsOn("jvmMainClasses")
+        classpath(jvmMain.output.allOutputs, jvmMain.runtimeDependencyFiles)
+        mainClass.set("org.graphiks.kadre.contracts.ValidateContractEvidenceKt")
+        val artifactDirectory = rootProject.file("kadre/contracts/driver/web/build/contract-evidence/$target")
+        args(
+            browserContractRegistry.absolutePath,
+            browserContractMappings.joinToString(separator = ",") { it.absolutePath },
+            contractEvidenceCommit.get(),
+            target,
+            browserContractEngines.get(),
+            webContractIds.joinToString(separator = ","),
+            artifactDirectory.absolutePath,
+        )
+        inputs.file(browserContractRegistry)
+        inputs.files(browserContractMappings)
+        inputs.files(fileTree(artifactDirectory))
+        inputs.property("contractCommit", contractEvidenceCommit)
+        inputs.property("contractTarget", target)
+        inputs.property("contractExecutions", browserContractEngines)
+        inputs.property("contractGateIds", webContractIds)
+    }
+}
+
 tasks.named("check") {
     dependsOn(validateContractRegistry)
     dependsOn(generateRuntimeContractEvidence)
+    dependsOn(browserContractEvidenceTasks)
 }

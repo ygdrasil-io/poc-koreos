@@ -2,6 +2,7 @@ package org.graphiks.kadre.contracts
 
 import java.nio.file.Path
 import kotlin.io.path.createTempDirectory
+import kotlin.io.path.readText
 import kotlin.io.path.writeText
 import kotlin.test.Test
 import kotlin.test.assertContains
@@ -10,6 +11,199 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 
 class ContractRegistryTest {
+    @Test
+    fun realRegistryDeclaresTheExactPlannedWebContracts() {
+        val recordsById = ContractRegistry.parse(repositoryFile("kadre/contracts/registry/contracts.tsv").readText())
+            .associateBy(ContractRecord::contractId)
+
+        assertEquals(
+            mapOf(
+                "BCK-001" to ContractRecord(
+                    contractId = "BCK-001",
+                    status = ContractStatus.Planned,
+                    source = "DESIGN.md#15.3",
+                    subject = "DOM host attach and lifecycle",
+                    risk = "surface/window confusion, lifecycle loss, cross-session leak or false capability",
+                    oracle = ContractOracle.O3,
+                    scenarios = listOf(
+                        "web-attach-connected",
+                        "web-attach-detached-rejected",
+                        "web-attach-manual-detached",
+                        "web-manual-initial-shadow-reinsert",
+                        "web-detach-reparent-batch",
+                        "web-shadow-root-detach-reparent",
+                        "web-shadow-root-late-reinsert",
+                        "web-detach-cross-document-terminal",
+                        "web-manual-detach-and-stop",
+                        "web-visibility-focus",
+                        "web-focus-transfer-between-hosts",
+                        "web-attach-detach-admission-race",
+                        "web-detach-terminal",
+                        "web-multi-session-isolation",
+                        "web-attach-same-element-busy",
+                        "web-no-implicit-window",
+                        "web-window-provider-new-session",
+                        "web-window-provider-same-context",
+                        "web-window-provider-no-context",
+                        "web-window-provider-invalid-element",
+                        "web-window-provider-invalid-scope",
+                        "web-window-provider-owned-element",
+                        "web-window-provider-callback-failure",
+                        "web-pagehide-admission-close",
+                        "web-pagehide-navigation",
+                        "web-pagehide-no-resurrection",
+                    ),
+                    requiredTargets = listOf("js", "wasmJs"),
+                    conditionalCapabilities = listOf("WindowManagerCapabilities.requestWindow"),
+                    sentinels = listOf(
+                        "web-surface-never-window",
+                        "web-no-implicit-dom",
+                        "web-cross-session-isolation",
+                        "web-host-single-owner",
+                        "web-detach-no-resurrection",
+                        "web-shadow-root-observation",
+                        "web-provider-no-same-document-window",
+                        "web-provider-owned-element-rejected",
+                        "web-active-gate-requires-js-and-wasm",
+                    ),
+                    retirementRef = null,
+                ),
+                "INT-002" to plannedWebContract(
+                    contractId = "INT-002",
+                    source = "INTEROP-EXPORTS.md#6",
+                    subject = "JS and Wasm host facade structural exports",
+                    risk = "foreign API drift or leaked coroutine types",
+                    oracle = ContractOracle.O1,
+                    scenarios = listOf("web-typescript-consumer"),
+                    sentinels = listOf("web-host-no-coroutine-leak", "web-host-common-consumer"),
+                ),
+                "INT-003" to plannedWebContract(
+                    contractId = "INT-003",
+                    source = "INTEROP-EXPORTS.md#6",
+                    subject = "JS and Wasm host facade runtime",
+                    risk = "incorrect host outcome, notification ordering or ownership",
+                    oracle = ContractOracle.O3,
+                    scenarios = listOf(
+                        "web-host-attach-failure",
+                        "web-host-state-subscription",
+                        "web-host-observer-exception",
+                        "web-host-stop-close-outcome",
+                        "web-host-provider",
+                    ),
+                    sentinels = listOf(
+                        "web-host-microtask-order",
+                        "web-host-callback-isolation",
+                        "web-host-outcome-rejection",
+                    ),
+                ),
+                "INT-004" to plannedWebContract(
+                    contractId = "INT-004",
+                    source = "INTEROP-EXPORTS.md#7",
+                    subject = "Web element escape hatch",
+                    risk = "invalid retained element access or lease/teardown race",
+                    oracle = ContractOracle.O3,
+                    scenarios = listOf("web-element-lease", "web-element-lease-concurrent-close"),
+                    conditionalCapabilities = listOf("SurfaceCapabilities.platformAccess"),
+                    sentinels = listOf("web-element-lease-boundary", "web-element-lease-close-order"),
+                ),
+            ),
+            recordsById.filterKeys { it in WEB_CONTRACT_IDS },
+        )
+    }
+
+    @Test
+    fun realRegistryRequiresEveryWebContractInTheExplicitGate() {
+        val errors = validateContractRegistry(
+            registryPath = repositoryFile("kadre/contracts/registry/contracts.tsv"),
+            mappingPaths = repositoryMappingFiles(),
+            requiredEvidenceGateIds = WEB_CONTRACT_IDS - "INT-004",
+        )
+
+        assertContains(errors, "INT-004: browser contract is outside configured evidence gates")
+    }
+
+    @Test
+    fun plannedWebGatesAcceptMissingMappingsAndArtifactDirectoriesForBothTargets() {
+        listOf("js", "wasmJs").forEach { target ->
+            val index = validateContractEvidence(
+                registryPath = repositoryFile("kadre/contracts/registry/contracts.tsv"),
+                mappingPaths = repositoryMappingFiles(),
+                expectedCommit = COMMIT,
+                target = target,
+                expectedExecutions = ExpectedContractExecutions.Browser(setOf("chromium")),
+                gateContractIds = WEB_CONTRACT_IDS,
+                artifactDirectories = listOf(createTempDirectory("kadre-absent-$target-browser-evidence-").resolve("missing")),
+            )
+
+            assertEquals(ContractEvidenceIndex(emptyMap(), emptyMap()), index)
+        }
+    }
+
+    @Test
+    fun activatingAWebGateRequiresMappingsForBothTargets() {
+        val fixture = createTempDirectory("kadre-active-web-gate-")
+        val registry = fixture.resolve("contracts.tsv").also {
+            it.writeText(
+                repositoryFile("kadre/contracts/registry/contracts.tsv").readText()
+                    .replace("BCK-001\tplanned", "BCK-001\tactive"),
+            )
+        }
+
+        listOf("js", "wasmJs").forEach { target ->
+            val exception = assertFailsWith<IllegalStateException> {
+                validateContractEvidence(
+                    registryPath = registry,
+                    mappingPaths = repositoryMappingFiles(),
+                    expectedCommit = COMMIT,
+                    target = target,
+                    expectedExecutions = ExpectedContractExecutions.Browser(setOf("chromium")),
+                    gateContractIds = setOf("BCK-001"),
+                    artifactDirectories = listOf(fixture.resolve(target)),
+                )
+            }
+
+            assertContains(exception.message.orEmpty(), "BCK-001[$target]: missing scenario: web-attach-connected")
+        }
+    }
+
+    @Test
+    fun activeWebGateWithCompleteMappingsRequiresBrowserArtifactForBothTargets() {
+        val fixture = createTempDirectory("kadre-active-web-artifact-")
+        val registry = fixture.resolve("contracts.tsv").also {
+            it.writeText(
+                repositoryFile("kadre/contracts/registry/contracts.tsv").readText()
+                    .replace("INT-002\tplanned", "INT-002\tactive"),
+            )
+        }
+        val mapping = fixture.resolve("evidence.tsv").also {
+            it.writeText(
+                "$MAPPING_HEADER\n" +
+                    "INT-002\tjs\tscenario\tweb-typescript-consumer\texample.WebConsumerTest\tconsumer[js]\n" +
+                    "INT-002\tjs\tsentinel\tweb-host-no-coroutine-leak\texample.WebConsumerTest\tnoCoroutines[js]\n" +
+                    "INT-002\tjs\tsentinel\tweb-host-common-consumer\texample.WebConsumerTest\tcommonConsumer[js]\n" +
+                    "INT-002\twasmJs\tscenario\tweb-typescript-consumer\texample.WebConsumerTest\tconsumer[wasmJs]\n" +
+                    "INT-002\twasmJs\tsentinel\tweb-host-no-coroutine-leak\texample.WebConsumerTest\tnoCoroutines[wasmJs]\n" +
+                    "INT-002\twasmJs\tsentinel\tweb-host-common-consumer\texample.WebConsumerTest\tcommonConsumer[wasmJs]",
+            )
+        }
+
+        listOf("js", "wasmJs").forEach { target ->
+            val exception = assertFailsWith<IllegalStateException> {
+                validateContractEvidence(
+                    registryPath = registry,
+                    mappingPaths = listOf(mapping),
+                    expectedCommit = COMMIT,
+                    target = target,
+                    expectedExecutions = ExpectedContractExecutions.Browser(setOf("chromium")),
+                    gateContractIds = setOf("INT-002"),
+                    artifactDirectories = listOf(fixture.resolve(target)),
+                )
+            }
+
+            assertContains(exception.message.orEmpty(), "missing evidence artifact for INT-002[$target]/chromium")
+        }
+    }
+
     @Test
     fun parsesAnActiveContractWithEvidenceLists() {
         val text =
@@ -222,7 +416,47 @@ class ContractRegistryTest {
         )
     }
 
+    private fun repositoryMappingFiles(): List<Path> = listOf(
+        repositoryFile("kadre/runtime/contracts/evidence.tsv"),
+        repositoryFile("kadre/backend/appkit/contracts/evidence.tsv"),
+    )
+
+    private fun repositoryFile(relativePath: String): Path {
+        var candidate = Path.of("").toAbsolutePath()
+        while (candidate.parent != null) {
+            val resolved = candidate.resolve(relativePath)
+            if (resolved.toFile().exists()) return resolved
+            candidate = candidate.parent
+        }
+        error("repository file not found: $relativePath")
+    }
+
+    private fun plannedWebContract(
+        contractId: String,
+        source: String,
+        subject: String,
+        risk: String,
+        oracle: ContractOracle,
+        scenarios: List<String>,
+        conditionalCapabilities: List<String> = emptyList(),
+        sentinels: List<String>,
+    ): ContractRecord = ContractRecord(
+        contractId = contractId,
+        status = ContractStatus.Planned,
+        source = source,
+        subject = subject,
+        risk = risk,
+        oracle = oracle,
+        scenarios = scenarios,
+        requiredTargets = listOf("js", "wasmJs"),
+        conditionalCapabilities = conditionalCapabilities,
+        sentinels = sentinels,
+        retirementRef = null,
+    )
+
     private companion object {
+        const val COMMIT = "0123456789abcdef0123456789abcdef01234567"
+        val WEB_CONTRACT_IDS = setOf("BCK-001", "INT-002", "INT-003", "INT-004")
         const val HEADER =
             "contractId\tstatus\tsource\tsubject\trisk\toracle\tscenarios\trequiredTargets\tconditionalCapabilities\tsentinels\tretirementRef"
         const val MAPPING_HEADER = "contractId\ttarget\tkind\tevidenceId\ttestClass\ttestName"

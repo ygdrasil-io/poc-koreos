@@ -346,6 +346,16 @@ Chaque target produit un `contract-evidence/<contractId>.json` par contrat actif
 
 `result` est un domaine fermé `Passed | Failed` ; il n’existe ni `Skipped`, ni `Ignored`, ni `NotApplicable`. Le validateur aggregate recalcule les scénarios actifs requis depuis le registre, la promesse documentée et l’environnement déclaré. Il ne fait pas confiance à un simple compteur fourni par le test runner. Une preuve inconnue, dupliquée avec deux résultats, absente ou associée à une mauvaise target fait échouer le gate.
 
+### 10.1 Protocole des preuves browser Web
+
+La fixture consommatrice publique est compilée et exécutée séparément pour JS et Wasm. Les deux targets utilisent le même consumer TypeScript et le même scenario target-neutre `web-typescript-consumer` ; aucun ID suffixé par target ne peut remplacer cette preuve commune. Chaque job produit son propre rapport JUnit et ses JSON canoniques, étiquetés par target, commit Git et moteur dans l'artifact CI. Le validateur reçoit le SHA Git attendu et exige son égalité exacte avec chaque JSON.
+
+Une preuve browser est réservée au chemin `kadre/contracts/driver/web/build/contract-evidence/<target>/contract-evidence/browser/<engine>/<contractId>.json`. Son descripteur d'exécution identifie le moteur et sa version, ainsi que le nom et le SHA-256 du bundle public réellement chargé. Les artifacts JS et Wasm restent séparés ; ni leur nom CI, ni leur répertoire, ni l'index agrégé ne permet à l'un d'écraser l'autre.
+
+Le gate de PR exige Chromium pour JS et Wasm. Le profil nightly passe explicitement `-PkadreBrowserEngines=chromium,firefox,webkit` aux mêmes validateurs et exige les trois moteurs pour chaque target. Toute combinaison target/moteur déclarée supportée doit produire une exécution réelle : `skipped`, `ignored` et `NotApplicable` sont interdits et ne peuvent pas être remplacés par une preuve d'un autre target ou moteur.
+
+Les contrats Web restent `planned` tant que ces producteurs n'existent pas : `check` exécute les validateurs JS et Wasm Chromium, mais admet les répertoires absents sans fabriquer mapping, JSON ou résultat de test. Le passage d'un contrat à `active` rend immédiatement obligatoires son mapping et chaque artifact attendu. Le driver Playwright sera ajouté avec le premier attach DOM réel, pas dans cette tranche de fondation.
+
 ## 11. Nightly et release
 
 ### 11.1 Nightly obligatoire
