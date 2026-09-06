@@ -6,6 +6,9 @@ import org.graphiks.kadre.diagnostics.KadreFailure
 import org.graphiks.kadre.diagnostics.KadreOperation
 import org.graphiks.kadre.diagnostics.KadreResult
 import org.graphiks.kadre.input.DeviceId
+import org.graphiks.kadre.input.DropItemDescriptor
+import org.graphiks.kadre.input.DropItemReadMode
+import org.graphiks.kadre.input.DropOfferId
 import org.graphiks.kadre.input.KeyLocation
 import org.graphiks.kadre.input.KeyState
 import org.graphiks.kadre.input.KeyboardModifiers
@@ -36,6 +39,31 @@ import org.graphiks.kadre.surface.SurfaceOcclusion
 import org.graphiks.kadre.surface.SurfaceTheme
 import org.graphiks.kadre.surface.SurfaceVisibility
 import org.graphiks.kadre.surface.toPhysical
+
+/**
+ * Backend-owned source retained by one runtime-owned drop offer.
+ *
+ * The source is Kotlin-only: implementations must not allow a borrowed native pasteboard object
+ * or filesystem path to escape through this interface. The runtime closes it on every terminal
+ * path that has not handed the resulting transfer to the application.
+ */
+public interface DropTransferSource : AutoCloseable {
+    public val items: List<DropItemSource>
+
+    public override fun close()
+}
+
+/** One deferred byte source behind a portable dropped item. */
+public interface DropItemSource {
+    public val descriptor: DropItemDescriptor
+    public val readMode: DropItemReadMode
+
+    /** Delivers source-owned chunks no larger than [maxChunkBytes]. */
+    public suspend fun collectBytes(
+        maxChunkBytes: Int,
+        collector: suspend (ByteArray) -> Unit,
+    ): KadreResult<Unit>
+}
 
 /**
  * Unstable backend SPI used by the portable surface state machine.
@@ -304,6 +332,29 @@ public sealed interface SurfaceStimulus {
             require(coalescingBoundary >= 0L) { "coalescingBoundary must be non-negative" }
         }
     }
+
+    /** One movement for the runtime-owned offer that the backend was synchronously allowed to retain. */
+    public data class DropMoved(
+        override val surfaceId: SurfaceId,
+        public val offerId: DropOfferId,
+        public val position: LogicalPoint,
+        public val deviceId: DeviceId? = null,
+    ) : SurfaceStimulus
+
+    /** Native drag exit for a runtime-owned offer. */
+    public data class DropExited(
+        override val surfaceId: SurfaceId,
+        public val offerId: DropOfferId,
+        public val deviceId: DeviceId? = null,
+    ) : SurfaceStimulus
+
+    /** Native drop completion after its synchronous acceptance. */
+    public data class DropPerformed(
+        override val surfaceId: SurfaceId,
+        public val offerId: DropOfferId,
+        public val position: LogicalPoint,
+        public val deviceId: DeviceId? = null,
+    ) : SurfaceStimulus
 
     /** Closes all ingress while preserving the last effective snapshot. */
     public data class Detached(override val surfaceId: SurfaceId) : SurfaceStimulus

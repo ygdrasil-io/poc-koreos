@@ -24,6 +24,8 @@ import org.graphiks.kadre.diagnostics.KadreOperation
 import org.graphiks.kadre.diagnostics.KadrePlatform
 import org.graphiks.kadre.diagnostics.KadreResourceKind
 import org.graphiks.kadre.diagnostics.KadreResult
+import org.graphiks.kadre.input.DropOfferId
+import org.graphiks.kadre.input.DropOfferTerminationReason
 import org.graphiks.kadre.input.InputCapabilities
 import org.graphiks.kadre.input.InputEvent
 import org.graphiks.kadre.input.InputStateResetReason
@@ -62,6 +64,7 @@ import org.graphiks.kadre.policy.ContinuousOverflowAction
 import org.graphiks.kadre.policy.IngressOverflowAction
 import org.graphiks.kadre.policy.InputDeliveryPolicy
 import org.graphiks.kadre.policy.KadrePolicies
+import org.graphiks.kadre.policy.ResourceBudgetPolicy
 import org.graphiks.kadre.policy.SlowCollectorCancellationException
 import org.graphiks.kadre.policy.WindowDeliveryPolicy
 import org.graphiks.kadre.surface.CursorIcon
@@ -70,6 +73,7 @@ import org.graphiks.kadre.surface.HitTestingMode
 import org.graphiks.kadre.surface.HostSurface
 import org.graphiks.kadre.surface.InputDefaultBehavior
 import org.graphiks.kadre.surface.LogicalDelta
+import org.graphiks.kadre.surface.LogicalPoint
 import org.graphiks.kadre.surface.LogicalRect
 import org.graphiks.kadre.surface.PointerCaptureMode
 import org.graphiks.kadre.surface.PropertyChange
@@ -100,6 +104,11 @@ internal class RuntimeWindowSurface(
     private val failureReporter: RuntimeFailureReporter = RuntimeFailureReporter { },
     private val deliveryPolicy: WindowDeliveryPolicy = KadrePolicies.Default.window,
     private val inputDeliveryPolicy: InputDeliveryPolicy = KadrePolicies.Default.input,
+    private val resources: ResourceBudgetPolicy = KadrePolicies.Default.resources,
+    private val dropTransferBudget: RuntimeDropTransferBudget = RuntimeDropTransferBudget(
+        resources.maxConcurrentDropTransfers,
+    ),
+    private val dropTransferScope: kotlinx.coroutines.CoroutineScope? = null,
     private val maxCollectorsPerFlow: Int = KadrePolicies.Default.resources.maxEventCollectorsPerFlow,
     private val collectorAllocator: RuntimeEventCollectorAllocator = RuntimeEventCollectorAllocator(
         KadrePolicies.Default.resources.maxEventCollectorsPerSession,
@@ -135,6 +144,10 @@ internal class RuntimeWindowSurface(
         eventStampSource = eventStampSource,
         eventCollectorGate = collectorAllocator.newGate(maxCollectorsPerFlow),
         textInputPort = textInputPort,
+        dragAndDropAvailable = enabledCapabilities.supportsDropInteraction(),
+        resources = resources,
+        dropTransferBudget = dropTransferBudget,
+        dropTransferScope = dropTransferScope,
         textInputEventCollectorGate = collectorAllocator.newGate(maxCollectorsPerFlow),
         failureReporter = ::safeReport,
         sessionFailureHandler = sessionFailureHandler,
@@ -338,6 +351,9 @@ internal class RuntimeWindowSurface(
                 is SurfaceStimulus.PointerButtonChanged,
                 is SurfaceStimulus.PointerLeft,
                 is SurfaceStimulus.Scroll,
+                is SurfaceStimulus.DropMoved,
+                is SurfaceStimulus.DropExited,
+                is SurfaceStimulus.DropPerformed,
                 -> error("input stimuli are handled before surface publication")
                 is SurfaceStimulus.Detached -> error("handled before lock")
             } ?: return@synchronized false
@@ -366,8 +382,60 @@ internal class RuntimeWindowSurface(
         )
     }
 
+    /**
+     * Creates one runtime-owned offer before invoking the synchronous native handler.
+     *
+     * The backend receives the opaque ID only after an `AcceptDrop` action commits, which keeps
+     * later move/exit/drop stimuli tied to a runtime-issued offer.
+     */
+    internal fun dispatchSynchronousDrop(
+        source: DropTransferSource,
+        position: LogicalPoint,
+        invokeNative: (DropOfferId) -> KadreResult<Unit>,
+    ): DropOfferId? {
+        val stamp = eventStampSource()
+        val offer = surfaceInput.presentDrop(source, position, stamp) ?: return null
+        var accepted = false
+        val supported = (liveCapabilities.handlerInteractions as? Capability.Supported<Set<InteractionKind>>)
+            ?.constraints
+            .orEmpty()
+        dispatchSynchronousInteraction(
+            eventFactory = {
+                DeferredInteraction(InteractionEvent.DropEntered(offer, position, stamp), null)
+            },
+            stamp = stamp,
+            supported = supported,
+            invokeNative = { action ->
+                when {
+                    action !is InteractionAction.AcceptDrop ->
+                        KadreResult.Failure(KadreFailure.Unsupported(KadreOperation.Interaction))
+
+                    action.offerId != offer.id -> KadreResult.Failure(KadreFailure.InvalidRequest("offerId"))
+
+                    else -> when (val acceptedResult = surfaceInput.acceptDrop(offer.id)) {
+                        is KadreResult.Failure -> acceptedResult
+                        is KadreResult.Success -> when (val result = invokeNative(offer.id)) {
+                            is KadreResult.Failure -> {
+                                surfaceInput.rejectDrop(offer.id)
+                                result
+                            }
+
+                            is KadreResult.Success -> {
+                                accepted = true
+                                result
+                            }
+                        }
+                    }
+                }
+            },
+        )
+        if (!accepted) surfaceInput.rejectDrop(offer.id)
+        return offer.id.takeIf { accepted }
+    }
+
     private fun dispatchSynchronousInteraction(
         eventFactory: (EventStamp) -> DeferredInteraction,
+        stamp: EventStamp = eventStampSource(),
         supported: Set<InteractionKind>,
         invokeNative: (InteractionAction) -> KadreResult<Unit>,
     ) {
@@ -386,7 +454,7 @@ internal class RuntimeWindowSurface(
         } finally {
             interactionDispatchLock.unlock()
         }
-        val admitted = eventFactory(eventStampSource())
+        val admitted = eventFactory(stamp)
         val stamped = admitted.event
         if (dispatchHandler) {
             try {
@@ -1203,6 +1271,7 @@ private fun InteractionEvent.withStamp(stamp: EventStamp): InteractionEvent = wh
     is InteractionEvent.PointerPressed -> copy(stamp = stamp)
     is InteractionEvent.KeyPressed -> copy(stamp = stamp)
     is InteractionEvent.TouchStarted -> copy(stamp = stamp)
+    is InteractionEvent.DropEntered -> copy(stamp = stamp)
 }
 
 private fun SurfaceCapabilities.normalisedInteractionCapabilities(): SurfaceCapabilities {
@@ -1231,14 +1300,24 @@ private class RuntimeSurfaceInput(
     private val eventStampSource: () -> EventStamp,
     private val eventCollectorGate: RuntimeEventCollectorGate,
     private val textInputPort: TextInputPort,
+    private val dragAndDropAvailable: Boolean,
+    private val resources: ResourceBudgetPolicy,
+    private val dropTransferBudget: RuntimeDropTransferBudget,
+    private val dropTransferScope: kotlinx.coroutines.CoroutineScope?,
     private val textInputEventCollectorGate: RuntimeEventCollectorGate,
     private val failureReporter: (Throwable) -> Unit,
     private val sessionFailureHandler: (KadreFailure) -> Unit,
 ) : SurfaceInput {
     private val lock = Any()
-    private var currentState = unsupportedInputState(textInputPort.capability)
+    private var currentState = unsupportedInputState(
+        textInput = textInputPort.capability,
+        dragAndDrop = if (dragAndDropAvailable) FeatureAvailability.Available else FeatureAvailability.Unsupported,
+    )
     private var nextPointerIdentity = 0L
+    private var nextDropOfferIdentity = 0L
     private var mousePointerId: PointerId? = null
+    private var activeDrop: RuntimeDropOffer? = null
+    private val activeDropTransfers = linkedSetOf<RuntimeDropTransfer>()
     private val publications = BoundedInputScheduler(
         discreteCapacity = deliveryPolicy.discreteEvents.ingressCapacity,
         pointerDelivery = deliveryPolicy.pointerMotion,
@@ -1340,6 +1419,109 @@ private class RuntimeSurfaceInput(
         return result
     }
 
+    fun presentDrop(
+        source: DropTransferSource,
+        position: LogicalPoint,
+        stamp: EventStamp,
+    ): RuntimeDropOffer? {
+        val itemSources = when (val validation = snapshotDropItems(source, resources)) {
+            is DropItemSnapshot.Valid -> validation.items
+            is DropItemSnapshot.Invalid -> {
+                val admission = synchronized(lock) {
+                    if (terminal != null) null else terminaliseLocked(validation.failure, failSession = false)
+                }
+                try {
+                    source.close()
+                } finally {
+                    admission?.let(::finishPublicationAdmission)
+                }
+                return null
+            }
+        }
+        var admission: InputPublicationAdmission? = null
+        val offer = synchronized(lock) {
+            if (terminal != null || currentState.capabilities.dragAndDrop != FeatureAvailability.Available) {
+                return@synchronized null
+            }
+            check(nextDropOfferIdentity < Long.MAX_VALUE) { "drop offer identity space exhausted" }
+            activeDrop?.terminate(DropOfferTerminationReason.LeftSurface)
+            val next = RuntimeDropOffer(
+                id = DropOfferId(nextDropOfferIdentity++),
+                source = source,
+                itemSources = itemSources,
+                resources = resources,
+                transferBudget = dropTransferBudget,
+            )
+            activeDrop = next
+            admission = enqueuePublicationLocked(
+                InputPublication(
+                    InputEvent.DropEntered(
+                        offer = next,
+                        position = position,
+                        stamp = stamp,
+                        deviceId = null,
+                        stateRevision = currentState.revision,
+                    ),
+                ),
+            )
+            next
+        }
+        admission?.let(::finishPublicationAdmission)
+        if (offer == null) source.close()
+        return offer
+    }
+
+    private fun snapshotDropItems(
+        source: DropTransferSource,
+        resources: ResourceBudgetPolicy,
+    ): DropItemSnapshot {
+        val sources = source.items.toList()
+        if (sources.size > resources.maxCollectionElementsPerValue) {
+            return DropItemSnapshot.Invalid(retainedPayloadLimit(resources.maxCollectionElementsPerValue))
+        }
+        val snapshots = ArrayList<RuntimeDropItemSource>(sources.size)
+        for (item in sources) {
+            val descriptor = item.descriptor
+            if (descriptor.mimeTypes.size > resources.maxCollectionElementsPerValue) {
+                return DropItemSnapshot.Invalid(retainedPayloadLimit(resources.maxCollectionElementsPerValue))
+            }
+            if (descriptor.mimeTypes.any { it.length > resources.maxMetadataCodeUnitsPerValue }) {
+                return DropItemSnapshot.Invalid(retainedPayloadLimit(resources.maxMetadataCodeUnitsPerValue))
+            }
+            snapshots += RuntimeDropItemSource(
+                source = item,
+                descriptor = descriptor.copy(
+                    displayName = descriptor.displayName?.takeIf {
+                        it.length <= resources.maxMetadataCodeUnitsPerValue
+                    },
+                    mimeTypes = descriptor.mimeTypes.toList(),
+                ),
+                readMode = item.readMode,
+            )
+        }
+        return DropItemSnapshot.Valid(snapshots)
+    }
+
+    private fun retainedPayloadLimit(limit: Int): KadreFailure.ResourceLimitExceeded =
+        KadreFailure.ResourceLimitExceeded(KadreResourceKind.RetainedPayload, limit.toLong())
+
+    private sealed interface DropItemSnapshot {
+        data class Valid(val items: List<RuntimeDropItemSource>) : DropItemSnapshot
+        data class Invalid(val failure: KadreFailure.ResourceLimitExceeded) : DropItemSnapshot
+    }
+
+    fun acceptDrop(offerId: DropOfferId): KadreResult<Unit> = synchronized(lock) {
+        activeDrop?.takeIf { it.id == offerId }?.accept()
+            ?: KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.DropTransfer))
+    }
+
+    fun rejectDrop(offerId: DropOfferId): Boolean {
+        val offer = synchronized(lock) {
+            activeDrop?.takeIf { it.id == offerId }?.also { activeDrop = null }
+        } ?: return false
+        return offer.terminate(DropOfferTerminationReason.Rejected)
+    }
+
     fun accept(stimulus: SurfaceStimulus): Boolean {
         var admission: InputPublicationAdmission? = null
         val accepted = synchronized(lock) {
@@ -1383,6 +1565,10 @@ private class RuntimeSurfaceInput(
         )
 
         is InteractionEvent.TouchStarted -> acceptInteractionTouch(event)
+
+        // A drop entry is published when its runtime-owned offer is created, before this
+        // interaction callback is dispatched. It must not be reinjected as ordinary input.
+        is InteractionEvent.DropEntered -> false
     }
 
     private fun acceptInteractionTouch(event: InteractionEvent.TouchStarted): Boolean {
@@ -1462,15 +1648,23 @@ private class RuntimeSurfaceInput(
 
     fun close(failure: KadreFailure?) {
         var activeTextInput: RuntimeTextInputSession? = null
+        var dropToClose: RuntimeDropOffer? = null
+        var transfersToClose: List<RuntimeDropTransfer> = emptyList()
         val admission = synchronized(lock) {
             if (terminal != null) return
             terminal = failure?.let(FlowTerminal::Failed) ?: FlowTerminal.Closed
             terminalNotificationPending = true
             activeTextInput = textInputSession
             textInputSession = null
+            dropToClose = activeDrop
+            activeDrop = null
+            transfersToClose = activeDropTransfers.toList()
+            activeDropTransfers.clear()
             InputPublicationAdmission(ensurePublicationDrainLocked())
         }
         activeTextInput?.close()
+        dropToClose?.terminate(DropOfferTerminationReason.OwnerClosed)
+        transfersToClose.forEach(RuntimeDropTransfer::close)
         finishPublicationAdmission(admission)
     }
 
@@ -1618,6 +1812,51 @@ private class RuntimeSurfaceInput(
             scrollBoundary = stimulus.coalescingBoundary,
         )
 
+        is SurfaceStimulus.DropMoved -> {
+            val offer = activeDrop?.takeIf { it.id == stimulus.offerId } ?: return null
+            InputPublication(
+                InputEvent.DropMoved(
+                    offerId = offer.id,
+                    position = stimulus.position,
+                    stamp = stamp,
+                    deviceId = stimulus.deviceId,
+                    stateRevision = currentState.revision,
+                ),
+            )
+        }
+
+        is SurfaceStimulus.DropExited -> {
+            val offer = activeDrop?.takeIf { it.id == stimulus.offerId } ?: return null
+            activeDrop = null
+            offer.terminate(DropOfferTerminationReason.LeftSurface)
+            InputPublication(
+                InputEvent.DropExited(
+                    offerId = offer.id,
+                    stamp = stamp,
+                    deviceId = stimulus.deviceId,
+                    stateRevision = currentState.revision,
+                ),
+            )
+        }
+
+        is SurfaceStimulus.DropPerformed -> {
+            val offer = activeDrop?.takeIf { it.id == stimulus.offerId } ?: return null
+            val transfer = offer.perform(dropTransferScope) { closed ->
+                synchronized(lock) { activeDropTransfers.remove(closed) }
+            } ?: return null
+            activeDrop = null
+            activeDropTransfers += transfer
+            InputPublication(
+                InputEvent.Dropped(
+                    offer = offer,
+                    position = stimulus.position,
+                    stamp = stamp,
+                    deviceId = stimulus.deviceId,
+                    stateRevision = currentState.revision,
+                ),
+            )
+        }
+
         is SurfaceStimulus.MetricsChanged,
         is SurfaceStimulus.FocusChanged,
         is SurfaceStimulus.VisibilityChanged,
@@ -1741,6 +1980,10 @@ private class RuntimeSurfaceInput(
         if (terminal != null) return InputPublicationAdmission(shouldDrain = false)
         val activeTextInput = textInputSession
         textInputSession = null
+        val dropOfferToClose = activeDrop
+        activeDrop = null
+        val dropTransfersToClose = activeDropTransfers.toList()
+        activeDropTransfers.clear()
         val neutral = currentState.copy(
             keyboard = KeyboardState(emptySet()),
             pointers = emptyList(),
@@ -1755,14 +1998,23 @@ private class RuntimeSurfaceInput(
         return InputPublicationAdmission(
             shouldDrain = ensurePublicationDrainLocked(),
             reportOverflow = true,
+            terminalFailure = failure,
             failSession = if (failSession) failure else null,
             textInputToClose = activeTextInput,
+            dropOfferToClose = dropOfferToClose,
+            dropTransfersToClose = dropTransfersToClose,
         )
     }
 
     private fun finishPublicationAdmission(admission: InputPublicationAdmission) {
         admission.textInputToClose?.close()
-        if (admission.reportOverflow) safeReport(KadreException(KadreFailure.SourceOverflow(KadreResourceKind.InputSource)))
+        admission.dropOfferToClose?.terminate(DropOfferTerminationReason.OwnerClosed)
+        admission.dropTransfersToClose.forEach(RuntimeDropTransfer::close)
+        if (admission.reportOverflow) {
+            safeReport(
+                KadreException(admission.terminalFailure ?: KadreFailure.SourceOverflow(KadreResourceKind.InputSource)),
+            )
+        }
         if (admission.shouldDrain) drainPublications()
         admission.failSession?.let(::safeFailSession)
     }
@@ -2220,8 +2472,11 @@ private sealed interface InputStateAfterDelivery {
 private data class InputPublicationAdmission(
     val shouldDrain: Boolean,
     val reportOverflow: Boolean = false,
+    val terminalFailure: KadreFailure? = null,
     val failSession: KadreFailure? = null,
     val textInputToClose: RuntimeTextInputSession? = null,
+    val dropOfferToClose: RuntimeDropOffer? = null,
+    val dropTransfersToClose: List<RuntimeDropTransfer> = emptyList(),
 )
 
 private enum class InputEventLane { Discrete, PointerMotion, Scroll }
@@ -2449,6 +2704,10 @@ private fun InputEvent.copyInputEvent(): InputEvent = when (this) {
     is InputEvent.PointerMoved -> copy(stamp = stamp.copy())
     is InputEvent.PointerButtonChanged -> copy(stamp = stamp.copy())
     is InputEvent.Scrolled -> copy(stamp = stamp.copy())
+    is InputEvent.DropEntered -> copy(stamp = stamp.copy())
+    is InputEvent.DropMoved -> copy(stamp = stamp.copy())
+    is InputEvent.DropExited -> copy(stamp = stamp.copy())
+    is InputEvent.Dropped -> copy(stamp = stamp.copy())
     is InputEvent.StateReset -> copy(stamp = stamp.copy())
     else -> error("inactive input event entered the essential input runtime")
 }
@@ -2474,23 +2733,25 @@ private fun replacePointer(existing: List<PointerState>, pointer: PointerState):
 
 private fun unsupportedInputState(
     textInput: Capability<Unit> = unsupported(KadreOperation.TextInput),
+    dragAndDrop: FeatureAvailability = FeatureAvailability.Unsupported,
 ): SurfaceInputState = SurfaceInputState(
     keyboard = KeyboardState(emptySet()),
     pointers = emptyList(),
     touches = emptyList(),
     modifiers = KeyboardModifiers(emptySet()),
-    capabilities = unsupportedInputCapabilities(textInput),
+    capabilities = unsupportedInputCapabilities(textInput, dragAndDrop),
     revision = InputStateRevision(0L),
 )
 
 private fun unsupportedInputCapabilities(
     textInput: Capability<Unit> = unsupported(KadreOperation.TextInput),
+    dragAndDrop: FeatureAvailability = FeatureAvailability.Unsupported,
 ): InputCapabilities = InputCapabilities(
     keyboard = FeatureAvailability.Unsupported,
     pointer = FeatureAvailability.Unsupported,
     touch = FeatureAvailability.Unsupported,
     gestures = FeatureAvailability.Unsupported,
-    dragAndDrop = FeatureAvailability.Unsupported,
+    dragAndDrop = dragAndDrop,
     textInput = textInput,
     rawInput = unsupported(KadreOperation.RawInputAccess),
 )
@@ -2576,6 +2837,9 @@ private fun SurfaceStimulus.isInputStimulus(): Boolean = when (this) {
     is SurfaceStimulus.PointerButtonChanged,
     is SurfaceStimulus.PointerLeft,
     is SurfaceStimulus.Scroll,
+    is SurfaceStimulus.DropMoved,
+    is SurfaceStimulus.DropExited,
+    is SurfaceStimulus.DropPerformed,
     -> true
 
     is SurfaceStimulus.MetricsChanged,
@@ -2586,6 +2850,12 @@ private fun SurfaceStimulus.isInputStimulus(): Boolean = when (this) {
     is SurfaceStimulus.Detached,
     -> false
 }
+
+private fun SurfaceCapabilities.supportsDropInteraction(): Boolean =
+    (handlerInteractions as? Capability.Supported<Set<InteractionKind>>)
+        ?.constraints
+        ?.contains(InteractionKind.AcceptDrop)
+        ?: false
 
 private fun successfulUpdateOutcome(
     state: SurfaceState,
