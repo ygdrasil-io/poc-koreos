@@ -262,6 +262,56 @@ class RuntimeWindowSurfaceTest {
     }
 
     @Test
+    fun textInputClosesWhenAnObservationRacesWithAnAcceptedDocumentSnapshot() = runTest {
+        val port = RecordingTextInputPort()
+        val documentUpdateStarted = CompletableDeferred<Unit>()
+        val allowDocumentUpdateToReturn = CompletableDeferred<Unit>()
+        port.beforeDocumentSuccess = {
+            documentUpdateStarted.complete(Unit)
+            allowDocumentUpdateToReturn.await()
+        }
+        val surface = surface(textInputPort = port)
+        val session = assertIs<KadreResult.Success<org.graphiks.kadre.input.TextInputSession>>(
+            surface.input.openTextInput(
+                TextInputConfig(surroundingText = "abcd", selection = TextRange(4, 4)),
+            ),
+        ).value
+        assertTrue(
+            port.emit(
+                TextInputObservation.CompositionChanged(
+                    range = TextRange(2, 4),
+                    text = "x",
+                    selection = TextRange(1, 1),
+                    baseRevision = TextDocumentRevision(0),
+                ),
+            ),
+        )
+
+        val update = async(start = CoroutineStart.UNDISPATCHED) {
+            session.updateSurroundingText("abx", TextRange(3, 3), TextDocumentRevision(1))
+        }
+        documentUpdateStarted.await()
+        assertTrue(
+            port.emit(
+                TextInputObservation.CompositionChanged(
+                    range = TextRange(0, 1),
+                    text = "z",
+                    selection = TextRange(1, 1),
+                    baseRevision = TextDocumentRevision(0),
+                ),
+            ),
+        )
+        allowDocumentUpdateToReturn.complete(Unit)
+
+        assertEquals(
+            KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.TextInputSession)),
+            update.await(),
+        )
+        assertEquals(TextInputState.Closed, session.state.value)
+        assertTrue(port.owner.closed)
+    }
+
+    @Test
     @OptIn(DelicateKadreApi::class)
     fun interactionHandlerRemainsUnsupportedWithoutBackendInteractionCapabilities() = runTest {
         val surface = surface()
@@ -1858,6 +1908,7 @@ class RuntimeWindowSurfaceTest {
         val opened = mutableListOf<TextInputOpenCommand>()
         val cursorCommands = mutableListOf<TextInputCursorCommand>()
         val documentCommands = mutableListOf<TextInputDocumentCommand>()
+        var beforeDocumentSuccess: suspend (TextInputDocumentCommand) -> Unit = { }
         private val owners = mutableListOf<RecordingTextInputOwner>()
         val owner: RecordingTextInputOwner
             get() = owners.last()
@@ -1874,6 +1925,7 @@ class RuntimeWindowSurfaceTest {
 
         override suspend fun updateDocument(command: TextInputDocumentCommand): KadreResult<Unit> {
             documentCommands += command
+            beforeDocumentSuccess(command)
             return KadreResult.Success(Unit)
         }
 

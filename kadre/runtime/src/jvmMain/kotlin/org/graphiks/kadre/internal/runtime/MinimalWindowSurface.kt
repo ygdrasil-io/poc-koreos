@@ -1900,6 +1900,7 @@ private class RuntimeTextInputSession(
     private var selection = initialConfig.selection
     private var acceptedDocumentRevision = initialConfig.documentRevision
     private var activeComposition: RuntimeTextInputComposition? = null
+    private var observationEpoch = 0L
     private var currentState: TextInputState = TextInputState.Active(acceptedDocumentRevision, null)
     private var closed = false
     private val mutableState = MutableStateFlow(currentState)
@@ -1956,7 +1957,7 @@ private class RuntimeTextInputSession(
         selection: TextRange,
         documentRevision: TextDocumentRevision,
     ): KadreResult<Unit> = updateMutex.withLock {
-        val command = synchronized(lock) {
+        val admission = synchronized(lock) {
             when {
                 closed -> return@withLock KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.TextInputSession))
                 selection.endExclusiveUtf16 > text.length -> {
@@ -1986,30 +1987,48 @@ private class RuntimeTextInputSession(
                     if (composition != null && composition.rebasedRange(documentText, text) == null) {
                         return@withLock KadreResult.Failure(KadreFailure.InvalidRequest("text"))
                     }
-                    TextInputDocumentCommand(owner, text, selection, documentRevision)
+                    TextInputDocumentAdmission(
+                        command = TextInputDocumentCommand(owner, text, selection, documentRevision),
+                        observationEpoch = observationEpoch,
+                    )
                 }
             }
         }
-        when (val result = port.updateDocument(command)) {
+        when (val result = port.updateDocument(admission.command)) {
             is KadreResult.Failure -> result
-            is KadreResult.Success -> synchronized(lock) {
-                if (closed) {
-                    KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.TextInputSession))
-                } else {
-                    val composition = activeComposition
-                    val rebasedComposition = composition?.rebasedRange(documentText, text)
-                    if (composition != null && rebasedComposition == null) {
-                        return@synchronized KadreResult.Failure(KadreFailure.InvalidRequest("text"))
+            is KadreResult.Success -> {
+                val commit = synchronized(lock) {
+                    when {
+                        closed -> TextInputDocumentCommit.Closed
+                        observationEpoch != admission.observationEpoch -> TextInputDocumentCommit.NonReconcilable
+                        else -> {
+                            val composition = activeComposition
+                            val rebasedComposition = composition?.rebasedRange(documentText, text)
+                            if (composition != null && rebasedComposition == null) {
+                                TextInputDocumentCommit.NonReconcilable
+                            } else {
+                                documentText = text
+                                this.selection = selection
+                                acceptedDocumentRevision = documentRevision
+                                activeComposition = composition?.copy(range = checkNotNull(rebasedComposition))
+                                publishStateLocked(
+                                    composingRange = rebasedComposition,
+                                    documentRevision = documentRevision,
+                                )
+                                TextInputDocumentCommit.Committed
+                            }
+                        }
                     }
-                    documentText = text
-                    this.selection = selection
-                    acceptedDocumentRevision = documentRevision
-                    activeComposition = composition?.copy(range = checkNotNull(rebasedComposition))
-                    publishStateLocked(
-                        composingRange = rebasedComposition,
-                        documentRevision = documentRevision,
-                    )
-                    KadreResult.Success(Unit)
+                }
+                when (commit) {
+                    TextInputDocumentCommit.Committed -> KadreResult.Success(Unit)
+                    TextInputDocumentCommit.Closed ->
+                        KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.TextInputSession))
+
+                    TextInputDocumentCommit.NonReconcilable -> {
+                        close()
+                        KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.TextInputSession))
+                    }
                 }
             }
         }
@@ -2052,7 +2071,7 @@ private class RuntimeTextInputSession(
                 }
 
                 is TextInputObservation.Action -> TextInputEvent.Action(observation.action, observation.baseRevision, stamp)
-            }
+            }.also { observationEpoch = observationEpoch.next() }
         } ?: return false
         publish(event)
         return true
@@ -2164,6 +2183,18 @@ private data class RuntimeTextInputComposition(
         if (rebasedDocument != snapshot) return null
         return TextRange(range.startUtf16, range.startUtf16 + text.length)
     }
+}
+
+private data class TextInputDocumentAdmission(
+    val command: TextInputDocumentCommand,
+    val observationEpoch: Long,
+)
+
+private enum class TextInputDocumentCommit { Committed, Closed, NonReconcilable }
+
+private fun Long.next(): Long {
+    check(this < Long.MAX_VALUE) { "text input observation epoch space exhausted" }
+    return this + 1L
 }
 
 private val TextInputState.composingRangeOrNull: TextRange?
