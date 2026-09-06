@@ -82,6 +82,8 @@ public sealed interface TextInputEvent {
     public data class CompositionChanged(
         public val range: TextRange?,
         public val text: String,
+        /** Selection within [text], or null when the composition has ended. */
+        public val selection: TextRange?,
         override val baseRevision: TextDocumentRevision,
         override val stamp: EventStamp,
     ) : TextInputEvent

@@ -711,12 +711,12 @@ public sealed interface TextInputEvent {
     public val baseRevision: TextDocumentRevision
     public data class Replace(public val range: TextRange, public val text: String, override val baseRevision: TextDocumentRevision, override val stamp: EventStamp) : TextInputEvent
     public data class SelectionChanged(public val selection: TextRange, override val baseRevision: TextDocumentRevision, override val stamp: EventStamp) : TextInputEvent
-    public data class CompositionChanged(public val range: TextRange?, public val text: String, override val baseRevision: TextDocumentRevision, override val stamp: EventStamp) : TextInputEvent
+    public data class CompositionChanged(public val range: TextRange?, public val text: String, public val selection: TextRange?, override val baseRevision: TextDocumentRevision, override val stamp: EventStamp) : TextInputEvent
     public data class Action(public val action: TextInputAction, override val baseRevision: TextDocumentRevision, override val stamp: EventStamp) : TextInputEvent
 }
 ```
 
-`TextRange` exige `0 <= startUtf16 <= endExclusiveUtf16`. `TextInputConfig.selection` doit être contenue dans `0..surroundingText.length`; les constructeurs rejettent une violation structurelle. Les limites de texte dépendant de `KadrePolicy` sont revalidées par `openTextInput`/`updateSurroundingText` et produisent la failure de budget de leur ligne d’opération, jamais une troncature. Chaque range d’un `TextInputState` ou `TextInputEvent` est garanti contenu dans le document identifié par sa révision de base ; un backend incapable de satisfaire cette garantie réinitialise l’input au lieu de publier un range invalide.
+`TextRange` exige `0 <= startUtf16 <= endExclusiveUtf16`. `TextInputConfig.selection` doit être contenue dans `0..surroundingText.length`; les constructeurs rejettent une violation structurelle. Les limites de texte dépendant de `KadrePolicy` sont revalidées par `openTextInput`/`updateSurroundingText` et produisent la failure de budget de leur ligne d’opération, jamais une troncature. Chaque range d’un `TextInputState` ou `TextInputEvent` est garanti contenu dans le document identifié par sa révision de base, sauf `CompositionChanged.selection`, qui est contenue dans son `text` de préédition. Lorsqu’un snapshot portant une révision supérieure est accepté pendant une composition, `TextInputState.composingRange` est rebased (recalculé) dans ce nouveau document ; un snapshot qui ne représente pas cette substitution est refusé par `InvalidRequest("text")`. Un backend incapable de satisfaire ces garanties réinitialise l’input au lieu de publier un range invalide.
 
 ### 6.5 Drag-and-drop
 

@@ -164,18 +164,20 @@ class RuntimeWindowSurfaceTest {
         assertTrue(
             port.emit(
                 TextInputObservation.CompositionChanged(
-                    range = TextRange(0, 1),
-                    text = "a",
+                    range = TextRange(1, 2),
+                    text = "xyz",
+                    selection = TextRange(1, 2),
                     baseRevision = TextDocumentRevision(0),
                 ),
             ),
         )
-        assertEquals(TextInputState.Active(TextDocumentRevision(0), TextRange(0, 1)), session.state.value)
+        assertEquals(TextInputState.Active(TextDocumentRevision(0), TextRange(1, 2)), session.state.value)
         assertTrue(
             port.emit(
                 TextInputObservation.CompositionChanged(
                     range = null,
                     text = "",
+                    selection = null,
                     baseRevision = TextDocumentRevision(0),
                 ),
             ),
@@ -202,14 +204,16 @@ class RuntimeWindowSurfaceTest {
             listOf<TextInputEvent>(
                 replacement,
                 TextInputEvent.CompositionChanged(
-                    range = TextRange(0, 1),
-                    text = "a",
+                    range = TextRange(1, 2),
+                    text = "xyz",
+                    selection = TextRange(1, 2),
                     baseRevision = TextDocumentRevision(0),
                     stamp = delivered[1].stamp,
                 ),
                 TextInputEvent.CompositionChanged(
                     range = null,
                     text = "",
+                    selection = null,
                     baseRevision = TextDocumentRevision(0),
                     stamp = delivered[2].stamp,
                 ),
@@ -226,6 +230,35 @@ class RuntimeWindowSurfaceTest {
                 ),
             ),
         )
+    }
+
+    @Test
+    fun textInputRebasesTheComposingRangeWhenItsSnapshotIsAccepted() = runTest {
+        val port = RecordingTextInputPort()
+        val surface = surface(textInputPort = port)
+        val session = assertIs<KadreResult.Success<org.graphiks.kadre.input.TextInputSession>>(
+            surface.input.openTextInput(
+                TextInputConfig(surroundingText = "abcd", selection = TextRange(4, 4)),
+            ),
+        ).value
+
+        assertTrue(
+            port.emit(
+                TextInputObservation.CompositionChanged(
+                    range = TextRange(2, 4),
+                    text = "x",
+                    selection = TextRange(1, 1),
+                    baseRevision = TextDocumentRevision(0),
+                ),
+            ),
+        )
+        assertEquals(TextInputState.Active(TextDocumentRevision(0), TextRange(2, 4)), session.state.value)
+
+        assertEquals(
+            KadreResult.Success(Unit),
+            session.updateSurroundingText("abx", TextRange(3, 3), TextDocumentRevision(1)),
+        )
+        assertEquals(TextInputState.Active(TextDocumentRevision(1), TextRange(2, 3)), session.state.value)
     }
 
     @Test

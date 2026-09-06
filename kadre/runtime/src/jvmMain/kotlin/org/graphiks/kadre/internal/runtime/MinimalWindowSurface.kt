@@ -1899,6 +1899,7 @@ private class RuntimeTextInputSession(
     private var documentText = initialConfig.surroundingText
     private var selection = initialConfig.selection
     private var acceptedDocumentRevision = initialConfig.documentRevision
+    private var activeComposition: RuntimeTextInputComposition? = null
     private var currentState: TextInputState = TextInputState.Active(acceptedDocumentRevision, null)
     private var closed = false
     private val mutableState = MutableStateFlow(currentState)
@@ -1980,7 +1981,13 @@ private class RuntimeTextInputSession(
                     return@withLock KadreResult.Failure(KadreFailure.InvalidRequest("selection"))
                 }
 
-                else -> TextInputDocumentCommand(owner, text, selection, documentRevision)
+                else -> {
+                    val composition = activeComposition
+                    if (composition != null && composition.rebasedRange(documentText, text) == null) {
+                        return@withLock KadreResult.Failure(KadreFailure.InvalidRequest("text"))
+                    }
+                    TextInputDocumentCommand(owner, text, selection, documentRevision)
+                }
             }
         }
         when (val result = port.updateDocument(command)) {
@@ -1989,11 +1996,17 @@ private class RuntimeTextInputSession(
                 if (closed) {
                     KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.TextInputSession))
                 } else {
+                    val composition = activeComposition
+                    val rebasedComposition = composition?.rebasedRange(documentText, text)
+                    if (composition != null && rebasedComposition == null) {
+                        return@synchronized KadreResult.Failure(KadreFailure.InvalidRequest("text"))
+                    }
                     documentText = text
                     this.selection = selection
                     acceptedDocumentRevision = documentRevision
+                    activeComposition = composition?.copy(range = checkNotNull(rebasedComposition))
                     publishStateLocked(
-                        composingRange = currentState.composingRangeOrNull,
+                        composingRange = rebasedComposition,
                         documentRevision = documentRevision,
                     )
                     KadreResult.Success(Unit)
@@ -2009,6 +2022,8 @@ private class RuntimeTextInputSession(
             when (observation) {
                 is TextInputObservation.Replace -> {
                     if (!observation.range.isWithin(documentText)) return@synchronized null
+                    activeComposition = null
+                    publishStateLocked(composingRange = null)
                     TextInputEvent.Replace(observation.range, observation.text, observation.baseRevision, stamp)
                 }
 
@@ -2019,10 +2034,18 @@ private class RuntimeTextInputSession(
 
                 is TextInputObservation.CompositionChanged -> {
                     if (observation.range != null && !observation.range.isWithin(documentText)) return@synchronized null
+                    if (observation.selection != null && !observation.selection.isWithin(observation.text)) {
+                        return@synchronized null
+                    }
+                    if ((observation.range == null) != (observation.selection == null)) return@synchronized null
+                    activeComposition = observation.range?.let { range ->
+                        RuntimeTextInputComposition(range, observation.text)
+                    }
                     publishStateLocked(composingRange = observation.range)
                     TextInputEvent.CompositionChanged(
                         observation.range,
                         observation.text,
+                        observation.selection,
                         observation.baseRevision,
                         stamp,
                     )
@@ -2130,6 +2153,18 @@ private class TextInputEventSubscriber {
 }
 
 private fun TextRange.isWithin(text: String): Boolean = endExclusiveUtf16 <= text.length
+
+private data class RuntimeTextInputComposition(
+    val range: TextRange,
+    val text: String,
+) {
+    fun rebasedRange(document: String, snapshot: String): TextRange? {
+        if (!range.isWithin(document)) return null
+        val rebasedDocument = document.substring(0, range.startUtf16) + text + document.substring(range.endExclusiveUtf16)
+        if (rebasedDocument != snapshot) return null
+        return TextRange(range.startUtf16, range.startUtf16 + text.length)
+    }
+}
 
 private val TextInputState.composingRangeOrNull: TextRange?
     get() = when (this) {
