@@ -240,6 +240,7 @@ class ContractEvidenceTest {
     private fun completeRuntimeMappings(): List<EvidenceMapping> = listOf(
         EvidenceMapping(
             contractId = "INP-001",
+            target = "jvm",
             kind = EvidenceKind.Scenario,
             evidenceId = "runtime-input-key-pointer",
             testClass = "example.AppKitTest",
@@ -247,6 +248,7 @@ class ContractEvidenceTest {
         ),
         EvidenceMapping(
             contractId = "INP-001",
+            target = "jvm",
             kind = EvidenceKind.Sentinel,
             evidenceId = "runtime-input-policy-bypass",
             testClass = "example.AppKitTest",

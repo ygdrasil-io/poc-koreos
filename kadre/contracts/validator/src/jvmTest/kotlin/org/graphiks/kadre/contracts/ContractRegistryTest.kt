@@ -52,6 +52,16 @@ class ContractRegistryTest {
     }
 
     @Test
+    fun plannedContractWithDeclaredWebTargetsPassesStructuralValidationWithoutMappings() {
+        val records = ContractRegistry.parse(
+            "$HEADER\n" +
+                "BCK-001\tplanned\tDESIGN.md#15.3\tweb attachment\tmissing browser evidence\tO2\tweb-attach-connected\tjs,wasmJs\t-\tweb-lease-bounded\t-",
+        )
+
+        assertEquals(emptyList(), ContractRegistry.validate(records))
+    }
+
+    @Test
     fun blankListCellsAreNotAcceptedAsEvidence() {
         val records = ContractRegistry.parse(
             "$HEADER\n" +
@@ -115,7 +125,7 @@ class ContractRegistryTest {
             listOf(incompleteMapping),
             setOf("WIN-001", "APK-006"),
         )
-        assertTrue(incompleteErrors.any { "WIN-001: missing sentinel: runtime-window-geometry-policy-bypass" in it })
+        assertTrue(incompleteErrors.any { "WIN-001[jvm]: missing sentinel: runtime-window-geometry-policy-bypass" in it })
 
         val outsideGateErrors = validateContractRegistry(
             registry,
@@ -157,19 +167,19 @@ class ContractRegistryTest {
                 "WIN-001\tactive\tAPPKIT-PHASE-5-WINDOW-GEOMETRY-DESIGN.md#Preuves\truntime geometry\tmissed delivery\tO2\truntime-window-geometry-validation\tjvm\t-\truntime-window-geometry-policy-bypass\t-\n" +
                 "APK-006\tactive\tAPPKIT-PHASE-5-WINDOW-GEOMETRY-DESIGN.md#Preuves\tAppKit geometry\tmissed activation\tO3\tappkit-window-geometry-public-activation\tjvm\tWindowCapabilities.contentSize\tappkit-window-geometry-policy-bypass\t-"
         const val WINDOW_MAPPING =
-            "contractId\tkind\tevidenceId\ttestClass\ttestName\n" +
-                "WIN-001\tscenario\truntime-window-geometry-validation\torg.graphiks.kadre.internal.runtime.RuntimeWindowManagerTest\twindowUpdateValidatesCombinedSizeConstraintsBeforeDispatch[jvm]\n" +
-                "WIN-001\tsentinel\truntime-window-geometry-policy-bypass\torg.graphiks.kadre.internal.runtime.RuntimeWindowManagerTest\twindowGeometryEventsFollowConfiguredDeliveryPolicy[jvm]\n" +
-                "APK-006\tscenario\tappkit-window-geometry-public-activation\torg.graphiks.kadre.internal.appkit.AppKitBackendProviderTest\tpublicAppKitWindowGeometryActivatesOnlyTheFourProvenCapabilitiesOnMacOs[jvm]\n" +
-                "APK-006\tsentinel\tappkit-window-geometry-policy-bypass\torg.graphiks.kadre.internal.appkit.AppKitBackendProviderTest\tpublicAppKitWindowGeometryEventsFollowSessionPolicyOnMacOs[jvm]"
+            "contractId\ttarget\tkind\tevidenceId\ttestClass\ttestName\n" +
+                "WIN-001\tjvm\tscenario\truntime-window-geometry-validation\torg.graphiks.kadre.internal.runtime.RuntimeWindowManagerTest\twindowUpdateValidatesCombinedSizeConstraintsBeforeDispatch[jvm]\n" +
+                "WIN-001\tjvm\tsentinel\truntime-window-geometry-policy-bypass\torg.graphiks.kadre.internal.runtime.RuntimeWindowManagerTest\twindowGeometryEventsFollowConfiguredDeliveryPolicy[jvm]\n" +
+                "APK-006\tjvm\tscenario\tappkit-window-geometry-public-activation\torg.graphiks.kadre.internal.appkit.AppKitBackendProviderTest\tpublicAppKitWindowGeometryActivatesOnlyTheFourProvenCapabilitiesOnMacOs[jvm]\n" +
+                "APK-006\tjvm\tsentinel\tappkit-window-geometry-policy-bypass\torg.graphiks.kadre.internal.appkit.AppKitBackendProviderTest\tpublicAppKitWindowGeometryEventsFollowSessionPolicyOnMacOs[jvm]"
         const val INCOMPLETE_WINDOW_MAPPING =
-            "contractId\tkind\tevidenceId\ttestClass\ttestName\n" +
-                "WIN-001\tscenario\truntime-window-geometry-validation\torg.graphiks.kadre.internal.runtime.RuntimeWindowManagerTest\twindowUpdateValidatesCombinedSizeConstraintsBeforeDispatch[jvm]\n" +
-                "APK-006\tscenario\tappkit-window-geometry-public-activation\torg.graphiks.kadre.internal.appkit.AppKitBackendProviderTest\tpublicAppKitWindowGeometryActivatesOnlyTheFourProvenCapabilitiesOnMacOs[jvm]\n" +
-                "APK-006\tsentinel\tappkit-window-geometry-policy-bypass\torg.graphiks.kadre.internal.appkit.AppKitBackendProviderTest\tpublicAppKitWindowGeometryEventsFollowSessionPolicyOnMacOs[jvm]"
+            "contractId\ttarget\tkind\tevidenceId\ttestClass\ttestName\n" +
+                "WIN-001\tjvm\tscenario\truntime-window-geometry-validation\torg.graphiks.kadre.internal.runtime.RuntimeWindowManagerTest\twindowUpdateValidatesCombinedSizeConstraintsBeforeDispatch[jvm]\n" +
+                "APK-006\tjvm\tscenario\tappkit-window-geometry-public-activation\torg.graphiks.kadre.internal.appkit.AppKitBackendProviderTest\tpublicAppKitWindowGeometryActivatesOnlyTheFourProvenCapabilitiesOnMacOs[jvm]\n" +
+                "APK-006\tjvm\tsentinel\tappkit-window-geometry-policy-bypass\torg.graphiks.kadre.internal.appkit.AppKitBackendProviderTest\tpublicAppKitWindowGeometryEventsFollowSessionPolicyOnMacOs[jvm]"
         const val WIN_ONLY_MAPPING =
-            "contractId\tkind\tevidenceId\ttestClass\ttestName\n" +
-                "WIN-001\tscenario\truntime-window-geometry-validation\torg.graphiks.kadre.internal.runtime.RuntimeWindowManagerTest\twindowUpdateValidatesCombinedSizeConstraintsBeforeDispatch[jvm]\n" +
-                "WIN-001\tsentinel\truntime-window-geometry-policy-bypass\torg.graphiks.kadre.internal.runtime.RuntimeWindowManagerTest\twindowGeometryEventsFollowConfiguredDeliveryPolicy[jvm]"
+            "contractId\ttarget\tkind\tevidenceId\ttestClass\ttestName\n" +
+                "WIN-001\tjvm\tscenario\truntime-window-geometry-validation\torg.graphiks.kadre.internal.runtime.RuntimeWindowManagerTest\twindowUpdateValidatesCombinedSizeConstraintsBeforeDispatch[jvm]\n" +
+                "WIN-001\tjvm\tsentinel\truntime-window-geometry-policy-bypass\torg.graphiks.kadre.internal.runtime.RuntimeWindowManagerTest\twindowGeometryEventsFollowConfiguredDeliveryPolicy[jvm]"
     }
 }
