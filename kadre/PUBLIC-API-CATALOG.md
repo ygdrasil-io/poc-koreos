@@ -35,7 +35,7 @@
 Les overloads, extensions et combinators top-level sont limités à :
 
 - `WindowManager.requestWindow(configure)` ;
-- `SurfaceInput.openTextInput(config)` et `SurfaceInput.requestRawInput()` ;
+- `SurfaceInput.requestRawInput()` ;
 - `HostSurface.installInteractionHandler(handler)` et `HostSurface.armInteraction(action, options)` ;
 - les combinators de `KadreResult` listés en section 12 de `DESIGN.md` ;
 - `LogicalPoint.toPhysical`, `LogicalSize.toPhysical`, `PhysicalPoint.toLogical` et `PhysicalSize.toLogical` ;
@@ -574,7 +574,7 @@ public data class InputCapabilities(
 
 `PenState` n’est non-null que pour `PointerKind.Pen` ou `Eraser`. Les tilts sont dans `[-90, 90]`, le twist dans `[0, 2π)` et la pression tangentielle dans `[-1, 1]`; `PointerState.pressure` et `TouchState.pressure` sont dans `[0, 1]`. Chaque champ inconnu est `null` et aucune valeur native invalide n’est clampée silencieusement. Les noms optionnels de `InputDeviceDescriptor` respectent le budget de métadonnée, ne constituent jamais une identité persistante et deviennent `null` plutôt que tronqués.
 
-`SurfaceInput`, `SurfaceInputState`, `InputEvent` et `InputStateResetReason` conservent les signatures exhaustives de `DESIGN.md`, avec `pointers` et `touches` triés par leur ID stable dans la session. Un snapshot neutre possède sets/listes vides et conserve seulement les capabilities terminales.
+`SurfaceInput`, `SurfaceInputState`, `InputEvent` et `InputStateResetReason` conservent les signatures exhaustives de `DESIGN.md`, avec `pointers` et `touches` triés par leur ID stable dans la session. `SurfaceInput.openTextInput(config)` est un membre suspendu de l’interface, non une extension top-level, afin que chaque backend puisse en fournir l’implémentation effective. Un snapshot neutre possède sets/listes vides et conserve seulement les capabilities terminales.
 
 ### 6.2 Événements input — variantes fermées
 

@@ -1048,6 +1048,7 @@ Un même gamepad physique peut être projeté dans plusieurs sessions avec des `
 public interface SurfaceInput {
     public val events: Flow<InputEvent>
     public val state: StateFlow<SurfaceInputState>
+    public suspend fun openTextInput(config: TextInputConfig): KadreResult<TextInputSession>
 }
 
 public data class SurfaceInputState(
@@ -1256,10 +1257,6 @@ Le routing ne masque jamais le lifecycle physique. Une projection attachée reç
 ### 10.3 IME
 
 ```kotlin
-public suspend fun SurfaceInput.openTextInput(
-    config: TextInputConfig,
-): KadreResult<TextInputSession>
-
 public interface TextInputSession : AutoCloseable {
     public val events: Flow<TextInputEvent>
     public val state: StateFlow<TextInputState>

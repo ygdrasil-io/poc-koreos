@@ -9,9 +9,6 @@ import org.graphiks.kadre.diagnostics.KadreOperation
 import org.graphiks.kadre.diagnostics.KadreResult
 import org.graphiks.kadre.surface.LogicalRect
 
-public suspend fun SurfaceInput.openTextInput(config: TextInputConfig): KadreResult<TextInputSession> =
-    KadreResult.Failure(KadreFailure.Unsupported(KadreOperation.TextInput))
-
 public enum class TextInputPurpose { Text, Name, Email, Url, Telephone, Number, Decimal, Password }
 public enum class TextInputAction { Default, Done, Go, Next, Search, Send }
 public enum class TextCapitalization { None, Sentences, Words, Characters }

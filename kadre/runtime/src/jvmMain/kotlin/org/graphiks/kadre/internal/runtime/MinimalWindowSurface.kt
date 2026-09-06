@@ -40,6 +40,8 @@ import org.graphiks.kadre.input.PointerState
 import org.graphiks.kadre.input.ScrollDelta
 import org.graphiks.kadre.input.SurfaceInput
 import org.graphiks.kadre.input.SurfaceInputState
+import org.graphiks.kadre.input.TextInputConfig
+import org.graphiks.kadre.input.TextInputSession
 import org.graphiks.kadre.input.TouchPhase
 import org.graphiks.kadre.input.TouchState
 import org.graphiks.kadre.interaction.InteractionAction
@@ -1247,6 +1249,9 @@ private class RuntimeSurfaceInput(
             unregisterSubscriber(subscriber)
         }
     }
+
+    override suspend fun openTextInput(config: TextInputConfig): KadreResult<TextInputSession> =
+        KadreResult.Failure(KadreFailure.Unsupported(KadreOperation.TextInput))
 
     fun accept(stimulus: SurfaceStimulus): Boolean {
         var admission: InputPublicationAdmission? = null
