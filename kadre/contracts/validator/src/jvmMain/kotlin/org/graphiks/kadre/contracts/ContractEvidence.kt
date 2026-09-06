@@ -21,30 +21,30 @@ internal object ContractEvidence {
         mappings: List<EvidenceMapping>,
         junit: JUnitSummary,
         commit: String,
+        target: String,
         adapter: String,
         os: String,
         runtime: String,
         toolchain: String,
     ): JsonObject {
         check(contract.status == ContractStatus.Active) { "${contract.contractId} is not active" }
-        check(contract.oracle == ContractOracle.O2 || contract.oracle == ContractOracle.O3) {
-            "${contract.contractId} must use oracle O2 or O3"
-        }
-        check("jvm" in contract.requiredTargets) { "${contract.contractId} does not require target jvm" }
-        check(commit.isNotBlank()) { "commit must not be blank" }
+        check(target in contract.requiredTargets) { "${contract.contractId}[$target]: target is not required" }
+        check(commit.matches(GitSha)) { "commit must be a Git SHA" }
         require(adapter.isNotBlank()) { "adapter must not be blank" }
         check(os.isNotBlank()) { "os must not be blank" }
         check(runtime.isNotBlank()) { "runtime must not be blank" }
         check(toolchain.isNotBlank()) { "toolchain must not be blank" }
 
-        val mappingErrors = validateMappings(contract, mappings)
+        val relevantMappings = mappings.filter {
+            it.contractId == contract.contractId && it.target == target
+        }
+        val mappingErrors = validateTargetMappings(contract, target, relevantMappings)
         check(mappingErrors.isEmpty()) { mappingErrors.joinToString(separator = "\n") }
         check(junit.tests > 0) { "JUnit evidence contains no tests" }
         check(junit.skipped == 0) { "skipped=${junit.skipped}" }
         check(junit.failures == 0) { "failures=${junit.failures}" }
         check(junit.errors == 0) { "errors=${junit.errors}" }
 
-        val relevantMappings = mappings.filter { it.contractId == contract.contractId }
         relevantMappings.forEach { mapping ->
             val identity = mapping.testClass to mapping.testName
             val testCase = junit.cases[identity]
@@ -57,7 +57,8 @@ internal object ContractEvidence {
         return buildJsonObject {
             put("schemaVersion", 1)
             put("commit", commit)
-            put("target", "jvm")
+            put("target", target)
+            put("execution", "junit")
             put("adapter", adapter)
             put("environment", buildJsonObject {
                 put("os", os)
@@ -102,6 +103,8 @@ internal object ContractEvidence {
             })
         }
     }
+
+    private val GitSha = Regex("[0-9a-fA-F]{40}|[0-9a-fA-F]{64}")
 
     fun writeAtomically(path: Path, evidence: JsonObject) {
         val parent = requireNotNull(path.toAbsolutePath().parent) { "evidence output requires a parent directory" }

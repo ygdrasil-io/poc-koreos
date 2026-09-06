@@ -25,8 +25,9 @@ class GenerateContractEvidenceTest {
                 fixture.mapping.toString(),
                 fixture.reports.toString(),
                 fixture.output.toString(),
-                "0123456789abcdef",
+                "0123456789abcdef0123456789abcdef01234567",
                 "INP-001",
+                "jvm",
                 "runtime-jvm",
             ),
         )
@@ -47,8 +48,9 @@ class GenerateContractEvidenceTest {
                     fixture.mapping.toString(),
                     fixture.reports.toString(),
                     fixture.output.toString(),
-                    "0123456789abcdef",
+                    "0123456789abcdef0123456789abcdef01234567",
                     "APK-001",
+                    "jvm",
                     " ",
                 ),
             )
@@ -66,15 +68,17 @@ class GenerateContractEvidenceTest {
             mappingPath = fixture.mapping,
             junitDirectory = fixture.reports,
             outputPath = fixture.output,
-            commit = "0123456789abcdef",
+            commit = "0123456789abcdef0123456789abcdef01234567",
             contractId = "APK-001",
+            target = "jvm",
             adapter = "appkit-jvm",
         )
 
         val json = Json.parseToJsonElement(fixture.output.readText()).jsonObject
         assertEquals("1", json["schemaVersion"]!!.jsonPrimitive.content)
-        assertEquals("0123456789abcdef", json["commit"]!!.jsonPrimitive.content)
+        assertEquals("0123456789abcdef0123456789abcdef01234567", json["commit"]!!.jsonPrimitive.content)
         assertEquals("jvm", json["target"]!!.jsonPrimitive.content)
+        assertEquals("junit", json["execution"]!!.jsonPrimitive.content)
         assertEquals("appkit-jvm", json["adapter"]!!.jsonPrimitive.content)
         assertEquals(4, json["scenarios"]!!.jsonArray.size)
         assertEquals(2, json["sentinels"]!!.jsonArray.size)
@@ -101,8 +105,9 @@ class GenerateContractEvidenceTest {
                 mappingPath = fixture.mapping,
                 junitDirectory = fixture.reports,
                 outputPath = fixture.output,
-                commit = "fedcba9876543210",
+                commit = "fedcba9876543210fedcba9876543210fedcba98",
                 contractId = "APK-001",
+                target = "jvm",
                 adapter = "appkit-jvm",
             )
         }
@@ -137,14 +142,40 @@ class GenerateContractEvidenceTest {
             mappingPath = fixture.mapping,
             junitDirectory = fixture.reports,
             outputPath = fixture.output,
-            commit = "0123456789abcdef",
+            commit = "0123456789abcdef0123456789abcdef01234567",
             contractId = "APK-001",
+            target = "jvm",
             adapter = "appkit-jvm",
         )
 
         val json = Json.parseToJsonElement(fixture.output.readText()).jsonObject
         assertEquals(4, json["scenarios"]!!.jsonArray.size)
         assertEquals(2, json["sentinels"]!!.jsonArray.size)
+    }
+
+    @Test
+    fun generationRequiresMappingsForOnlyTheSelectedTarget() {
+        val fixture = createFixture(VALID_REPORT)
+        fixture.registry.writeText(REGISTRY.replace("\tjvm\t-", "\tjvm,js\t-"))
+        fixture.mapping.writeText(
+            MAPPING + "\n" +
+                "APK-001\tjs\tscenario\tappkit-provider-discovery\texample.JsTest\tdiscovery[js]",
+        )
+
+        generateContractEvidence(
+            registryPath = fixture.registry,
+            mappingPath = fixture.mapping,
+            junitDirectory = fixture.reports,
+            outputPath = fixture.output,
+            commit = "0123456789abcdef0123456789abcdef01234567",
+            contractId = "APK-001",
+            target = "jvm",
+            adapter = "appkit-jvm",
+        )
+
+        val json = Json.parseToJsonElement(fixture.output.readText()).jsonObject
+        assertEquals("jvm", json["target"]!!.jsonPrimitive.content)
+        assertEquals(4, json["scenarios"]!!.jsonArray.size)
     }
 
     private fun createFixture(report: String): Fixture {

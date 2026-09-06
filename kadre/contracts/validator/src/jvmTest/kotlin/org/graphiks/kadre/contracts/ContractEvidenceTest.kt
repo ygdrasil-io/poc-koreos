@@ -18,7 +18,8 @@ class ContractEvidenceTest {
             contract = activeRuntimeContract(),
             mappings = completeRuntimeMappings(),
             junit = JUnitEvidence.read(writeReport(VALID_REPORT)),
-            commit = "0123456789abcdef",
+            commit = "0123456789abcdef0123456789abcdef01234567",
+            target = "jvm",
             adapter = "runtime-jvm",
             os = "Mac OS X",
             runtime = "OpenJDK Runtime Environment",
@@ -30,21 +31,20 @@ class ContractEvidenceTest {
     }
 
     @Test
-    fun oracleOutsideO2AndO3CannotProduceEvidence() {
-        val exception = assertFailsWith<IllegalStateException> {
-            ContractEvidence.create(
-                contract = activeRuntimeContract().copy(oracle = ContractOracle.O1),
-                mappings = completeRuntimeMappings(),
-                junit = JUnitEvidence.read(writeReport(VALID_REPORT)),
-                commit = "0123456789abcdef",
-                adapter = "runtime-jvm",
-                os = "Mac OS X",
-                runtime = "OpenJDK Runtime Environment",
-                toolchain = "25",
-            )
-        }
+    fun activeO1ContractCanProduceEvidenceFromPassingJUnitConsumer() {
+        val json = ContractEvidence.create(
+            contract = activeRuntimeContract().copy(oracle = ContractOracle.O1),
+            mappings = completeRuntimeMappings(),
+            junit = JUnitEvidence.read(writeReport(VALID_REPORT)),
+            commit = "0123456789abcdef0123456789abcdef01234567",
+            target = "jvm",
+            adapter = "runtime-jvm",
+            os = "Mac OS X",
+            runtime = "OpenJDK Runtime Environment",
+            toolchain = "25",
+        )
 
-        assertContains(exception.message.orEmpty(), "INP-001 must use oracle O2 or O3")
+        assertEquals("O1", json["scenarios"]!!.jsonArray.single().jsonObject["oracle"]!!.jsonPrimitive.content)
     }
 
     @Test
@@ -55,7 +55,8 @@ class ContractEvidenceTest {
             contract = activeAppKitContract(),
             mappings = completeMappings(),
             junit = junit,
-            commit = "0123456789abcdef",
+            commit = "0123456789abcdef0123456789abcdef01234567",
+            target = "jvm",
             adapter = "appkit-jvm",
             os = "Mac OS X",
             runtime = "OpenJDK Runtime Environment",
@@ -63,8 +64,10 @@ class ContractEvidenceTest {
         )
 
         assertEquals("1", json["schemaVersion"]!!.jsonPrimitive.content)
-        assertEquals("0123456789abcdef", json["commit"]!!.jsonPrimitive.content)
+        assertEquals("0123456789abcdef0123456789abcdef01234567", json["commit"]!!.jsonPrimitive.content)
         assertEquals("jvm", json["target"]!!.jsonPrimitive.content)
+        assertEquals("junit", json["execution"]!!.jsonPrimitive.content)
+        assertEquals(null, json["browser"])
         assertEquals("appkit-jvm", json["adapter"]!!.jsonPrimitive.content)
         assertEquals("155", json["durationMillis"]!!.jsonPrimitive.content)
         assertEquals("4", json["tests"]!!.jsonObject["tests"]!!.jsonPrimitive.content)
@@ -113,7 +116,8 @@ class ContractEvidenceTest {
                 contract = activeAppKitContract(),
                 mappings = completeMappings().dropLast(1),
                 junit = JUnitEvidence.read(writeReport(VALID_REPORT)),
-                commit = "0123456789abcdef",
+                commit = "0123456789abcdef0123456789abcdef01234567",
+                target = "jvm",
                 adapter = "appkit-jvm",
                 os = "Mac OS X",
                 runtime = "OpenJDK Runtime Environment",
@@ -156,6 +160,76 @@ class ContractEvidenceTest {
     }
 
     @Test
+    fun targetMustBeRequiredByTheContract() {
+        val exception = assertFailsWith<IllegalStateException> {
+            ContractEvidence.create(
+                contract = activeAppKitContract(),
+                mappings = completeMappings(),
+                junit = JUnitEvidence.read(writeReport(VALID_REPORT)),
+                commit = "0123456789abcdef0123456789abcdef01234567",
+                target = "js",
+                adapter = "appkit-jvm",
+                os = "Mac OS X",
+                runtime = "OpenJDK Runtime Environment",
+                toolchain = "25",
+            )
+        }
+
+        assertContains(exception.message.orEmpty(), "APK-001[js]: target is not required")
+    }
+
+    @Test
+    fun jsEvidenceUsesOnlyJsMappingsAndWritesJsTarget() {
+        val contract = activeRuntimeContract().copy(requiredTargets = listOf("jvm", "js"))
+        val mappings = completeRuntimeMappings() + listOf(
+            EvidenceMapping("INP-001", "js", EvidenceKind.Scenario, "runtime-input-key-pointer", "example.JsTest", "input[js]"),
+            EvidenceMapping("INP-001", "js", EvidenceKind.Sentinel, "runtime-input-policy-bypass", "example.JsTest", "policy[js]"),
+        )
+        val jsReport = """
+            <?xml version="1.0" encoding="UTF-8"?>
+            <testsuite name="JsConsumerTest" tests="2" skipped="0" failures="0" errors="0" time="0.020">
+              <testcase name="input[js]" classname="example.JsTest" time="0.010"/>
+              <testcase name="policy[js]" classname="example.JsTest" time="0.010"/>
+            </testsuite>
+        """.trimIndent()
+
+        val json = ContractEvidence.create(
+            contract = contract,
+            mappings = mappings,
+            junit = JUnitEvidence.read(writeReport(jsReport)),
+            commit = "0123456789abcdef0123456789abcdef01234567",
+            target = "js",
+            adapter = "runtime-js",
+            os = "Mac OS X",
+            runtime = "OpenJDK Runtime Environment",
+            toolchain = "25",
+        )
+
+        assertEquals("js", json["target"]!!.jsonPrimitive.content)
+        assertEquals("junit", json["execution"]!!.jsonPrimitive.content)
+    }
+
+    @Test
+    fun invalidGitCommitIsRejected() {
+        listOf("", "not-a-git-sha", "0123456789abcdeg").forEach { commit ->
+            val exception = assertFailsWith<IllegalStateException> {
+                ContractEvidence.create(
+                    contract = activeAppKitContract(),
+                    mappings = completeMappings(),
+                    junit = JUnitEvidence.read(writeReport(VALID_REPORT)),
+                    commit = commit,
+                    target = "jvm",
+                    adapter = "appkit-jvm",
+                    os = "Mac OS X",
+                    runtime = "OpenJDK Runtime Environment",
+                    toolchain = "25",
+                )
+            }
+            assertContains(exception.message.orEmpty(), "commit must be a Git SHA")
+        }
+    }
+
+    @Test
     fun inconsistentSuiteCountersAreRejected() {
         val exception = assertFailsWith<IllegalStateException> {
             JUnitEvidence.read(writeReport(VALID_REPORT.replace("tests=\"4\"", "tests=\"5\"")))
@@ -187,7 +261,8 @@ class ContractEvidenceTest {
         contract = activeAppKitContract(),
         mappings = completeMappings(),
         junit = junit,
-        commit = "0123456789abcdef",
+        commit = "0123456789abcdef0123456789abcdef01234567",
+        target = "jvm",
         adapter = "appkit-jvm",
         os = "Mac OS X",
         runtime = "OpenJDK Runtime Environment",

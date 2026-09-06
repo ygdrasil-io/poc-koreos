@@ -12,6 +12,7 @@ internal fun generateContractEvidence(
     outputPath: Path,
     commit: String,
     contractId: String,
+    target: String,
     adapter: String,
 ) = generateContractEvidence(
     registryPath = registryPath,
@@ -20,6 +21,7 @@ internal fun generateContractEvidence(
     outputPath = outputPath,
     commit = commit,
     contractId = contractId,
+    target = target,
     adapter = adapter,
 )
 
@@ -30,6 +32,7 @@ internal fun generateContractEvidence(
     outputPath: Path,
     commit: String,
     contractId: String,
+    target: String,
     adapter: String,
 ) {
     require(Files.isRegularFile(registryPath)) { "contract registry does not exist: $registryPath" }
@@ -56,6 +59,7 @@ internal fun generateContractEvidence(
         mappings = mappings.filter { it.contractId == contractId },
         junit = junit,
         commit = commit,
+        target = target,
         adapter = adapter,
         os = System.getProperty("os.name").orEmpty(),
         runtime = listOf(
@@ -68,8 +72,8 @@ internal fun generateContractEvidence(
 }
 
 public fun main(args: Array<String>) {
-    require(args.size == 7) {
-        "expected registry, mapping, JUnit directories, output, commit, contractId and adapter arguments"
+    require(args.size == 8) {
+        "expected registry, mapping, JUnit directories, output, commit, contractId, target and adapter arguments"
     }
     generateContractEvidence(
         registryPath = Path.of(args[0]),
@@ -78,6 +82,7 @@ public fun main(args: Array<String>) {
         outputPath = Path.of(args[3]),
         commit = args[4],
         contractId = args[5],
-        adapter = args[6],
+        target = args[6],
+        adapter = args[7],
     )
 }
