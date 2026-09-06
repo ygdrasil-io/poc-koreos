@@ -1911,16 +1911,17 @@ public fun HTMLElement.attachKadre(
 - Attachement à un `HTMLElement` ou `HTMLCanvasElement` existant.
 - L’élément attaché devient `primarySurface`; il n’est jamais exposé comme `Window` et `WindowManager.state.value.primary` reste `null`.
 - `StopWhenDetached` exige un élément initialement connecté ; sinon `attachKadre` retourne `InvalidRequest`. `Manual` accepte un élément déconnecté avec lifecycle `Attached + Background + Inactive`.
-- `StopWhenDetached` vérifie `isConnected` à la livraison du batch `MutationObserver` : un reparenting terminé avant cette livraison ne ferme pas la session ; un élément encore détaché la termine et sa réinsertion exige une nouvelle session.
-- `Manual` ignore le détachement DOM et exige un `requestStop` explicite.
+- `StopWhenDetached` vérifie `isConnected` et le `ownerDocument` initial à la livraison du batch `MutationObserver` : un reparenting terminé avant cette livraison ne ferme la session que dans le même document ; un transfert vers un autre document la termine, même si l’élément est reconnecté. Un élément encore détaché la termine et sa réinsertion exige une nouvelle session.
+- `Manual` ignore le détachement DOM, y compris un detach/reinsert, et exige un `requestStop` explicite.
+- `visibilitychange` du document pilote `Foreground`/`Background`; `focus` et `blur` du browsing context pilotent `Active`/`Inactive`. Un document background publie toujours `Inactive`, et un document foreground ne devient `Active` que s’il possède le focus.
 - Aucun détournement du titre comme ID DOM.
 - Sessions multiples possibles sur une même page.
 - Kadre ne crée jamais de `<canvas>`, `<div>` ou popup et ne choisit aucun emplacement dans le DOM. Sans `WebWindowProvider`, `requestWindow` retourne `Unsupported`. Un provider peut demander un nouveau browsing context ; celui-ci devient un nouveau host et produit `OpenedInNewSession`, jamais `OpenedHere`.
 - Les opérations exigeant la transient user activation passent par `InteractionContext`. Les requêtes suspendues ordinaires retournent `InteractionRequired` lorsqu’elles arrivent trop tard.
-- Même contrat public en JS et Wasm.
+- Même contrat public en JS et Wasm, avec les types SDK exacts de chaque target : les déclarations utilisant `HTMLElement` sont distinctes en `jsMain` et `wasmJsMain`; seul leur noyau interne, sans type DOM public, est partagé.
 - L’overload direct place `application` en dernier paramètre et n’accepte aucun `windowProvider` : il est mono-session et autorise `element.attachKadre(scope) { … }`. Une intégration qui peut ouvrir un autre browsing context utilise obligatoirement l’overload factory.
 - Aucun faux `runApp` bloquant.
-- `pagehide` et la destruction du browsing context ferment immédiatement l’admission et libèrent best-effort les bridges synchrones, mais le navigateur ne garantit pas l’achèvement d’un teardown suspendu. `awaitTermination` n’est garanti que tant que le runtime JS reste vivant ; aucune persistence ou requête réseau n’est déclenchée implicitement pendant unload.
+- Tout `pagehide`, y compris lorsqu’il est `persisted`, et la destruction du browsing context ferment immédiatement l’admission et terminent la session sans attente ; un `pageshow` ne la ressuscite jamais. Le host doit s’attacher à nouveau. Kadre libère best-effort les bridges synchrones, mais le navigateur ne garantit pas l’achèvement d’un teardown suspendu. `awaitTermination` n’est garanti que tant que le runtime JS reste vivant ; aucune persistence ou requête réseau n’est déclenchée implicitement pendant unload.
 
 ### 15.4 Desktop
 
