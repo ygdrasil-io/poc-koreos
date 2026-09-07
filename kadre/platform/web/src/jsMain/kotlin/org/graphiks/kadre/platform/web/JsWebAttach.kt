@@ -4,14 +4,12 @@ import kotlinx.coroutines.CoroutineScope
 import org.graphiks.kadre.application.KadreApplication
 import org.graphiks.kadre.application.KadreApplicationFactory
 import org.graphiks.kadre.application.KadreSession
-import org.graphiks.kadre.diagnostics.KadreFailure
 import org.graphiks.kadre.diagnostics.KadreResult
 import org.graphiks.kadre.policy.KadrePolicies
 import org.graphiks.kadre.policy.KadrePolicy
 import org.graphiks.kadre.window.WindowRequestId
 import org.graphiks.kadre.window.WindowSpec
 import org.w3c.dom.HTMLElement
-import kotlin.math.max
 
 public data class WebWindowHost(
     public val element: HTMLElement,
@@ -30,8 +28,12 @@ public fun HTMLElement.attachKadre(
     attachmentPolicy: WebAttachmentPolicy = WebAttachmentPolicy.StopWhenDetached,
     windowProvider: WebWindowProvider? = null,
 ): KadreResult<KadreSession> {
-    if (!isConnected) return KadreResult.Failure(KadreFailure.InvalidRequest("element"))
-    return WebHostSession(JsWebHostPort(this)).attach(parentScope, applicationFactory, policy)
+    return WebHostSession(JsWebDomPort(this)).attach(
+        parentScope,
+        applicationFactory,
+        policy,
+        attachmentPolicy,
+    )
 }
 
 public fun HTMLElement.attachKadre(
@@ -45,25 +47,3 @@ public fun HTMLElement.attachKadre(
     policy = policy,
     attachmentPolicy = attachmentPolicy,
 )
-
-private class JsWebHostPort(element: HTMLElement) : WebHostPort {
-    private var element: HTMLElement? = element
-
-    override val initialSnapshot: WebSurfaceSnapshot = element.snapshot()
-
-    override fun release() {
-        element = null
-    }
-}
-
-private fun HTMLElement.snapshot(): WebSurfaceSnapshot {
-    val logicalWidth = max(clientWidth.toDouble(), 1.0)
-    val logicalHeight = max(clientHeight.toDouble(), 1.0)
-    return WebSurfaceSnapshot(
-        logicalWidth = logicalWidth,
-        logicalHeight = logicalHeight,
-        physicalWidth = logicalWidth.toInt(),
-        physicalHeight = logicalHeight.toInt(),
-        scaleFactor = 1.0,
-    )
-}
