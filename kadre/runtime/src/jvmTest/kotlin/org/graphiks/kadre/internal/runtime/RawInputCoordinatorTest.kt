@@ -36,6 +36,8 @@ import org.graphiks.kadre.surface.SurfaceId
 import org.graphiks.kadre.surface.LogicalInsets
 import org.graphiks.kadre.surface.LogicalSize
 import org.graphiks.kadre.surface.PhysicalSize
+import org.graphiks.kadre.surface.SurfaceAppearance
+import org.graphiks.kadre.surface.SurfaceContrast
 import org.graphiks.kadre.surface.SurfaceFocus
 import org.graphiks.kadre.surface.SurfaceOcclusion
 import org.graphiks.kadre.surface.SurfaceTheme
@@ -310,7 +312,7 @@ class RawInputCoordinatorTest {
                 focus = SurfaceFocus.Unfocused,
                 visibility = SurfaceVisibility.Visible,
                 occlusion = SurfaceOcclusion.Unknown,
-                theme = SurfaceTheme.Unknown,
+                appearance = SurfaceAppearance(SurfaceTheme.Unknown, SurfaceContrast.Unknown),
             ),
             commandPort = UnsupportedSurfaceCommandPort,
             rawInputCoordinator = coordinator,

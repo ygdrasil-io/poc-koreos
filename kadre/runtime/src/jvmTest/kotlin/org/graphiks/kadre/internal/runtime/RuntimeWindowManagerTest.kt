@@ -56,6 +56,8 @@ import org.graphiks.kadre.surface.PhysicalRect
 import org.graphiks.kadre.surface.BinaryImage
 import org.graphiks.kadre.surface.ImageFormat
 import org.graphiks.kadre.surface.SurfaceAttachmentState
+import org.graphiks.kadre.surface.SurfaceAppearance
+import org.graphiks.kadre.surface.SurfaceContrast
 import org.graphiks.kadre.surface.SurfaceFocus
 import org.graphiks.kadre.surface.SurfaceOcclusion
 import org.graphiks.kadre.surface.SurfaceRevision
@@ -2980,7 +2982,7 @@ class RuntimeWindowManagerTest {
                 focus = SurfaceFocus.Focused,
                 visibility = SurfaceVisibility.Hidden,
                 occlusion = SurfaceOcclusion.Occluded,
-                theme = SurfaceTheme.Dark,
+                appearance = SurfaceAppearance(SurfaceTheme.Dark, SurfaceContrast.Normal),
             ),
         )
         val window = assertIs<WindowRequestOutcome.OpenedHere>(request.await()).window
@@ -2992,7 +2994,7 @@ class RuntimeWindowManagerTest {
         assertEquals(SurfaceFocus.Focused, window.surface.state.value.focus)
         assertEquals(SurfaceVisibility.Hidden, window.surface.state.value.visibility)
         assertEquals(SurfaceOcclusion.Occluded, window.surface.state.value.occlusion)
-        assertEquals(SurfaceTheme.Dark, window.surface.state.value.theme)
+        assertEquals(SurfaceTheme.Dark, window.surface.state.value.appearance.theme)
         assertEquals(SurfaceRevision(0), window.surface.state.value.revision)
 
         assertTrue(

@@ -26,7 +26,7 @@ import org.graphiks.kadre.surface.LogicalSize
 import org.graphiks.kadre.surface.PropertyChange
 import org.graphiks.kadre.surface.SurfaceFocus
 import org.graphiks.kadre.surface.SurfaceOcclusion
-import org.graphiks.kadre.surface.SurfaceTheme
+import org.graphiks.kadre.surface.SurfaceAppearance
 import org.graphiks.kadre.surface.SurfaceVisibility
 import org.graphiks.kadre.window.WindowDecorations
 import org.graphiks.kadre.window.FullscreenMode
@@ -304,7 +304,7 @@ internal data class AppKitSurfaceSnapshot(
     val focus: SurfaceFocus,
     val visibility: SurfaceVisibility,
     val occlusion: SurfaceOcclusion,
-    val theme: SurfaceTheme,
+    val appearance: SurfaceAppearance,
 )
 
 /** Callback boundary used only with already-frozen, native-address-free values. */
@@ -312,7 +312,7 @@ internal class AppKitSurfaceCallbacks(
     val metricsChanged: (SurfaceMetrics) -> Unit,
     val focusChanged: (SurfaceFocus) -> Unit,
     val visibilityChanged: (SurfaceVisibility, SurfaceOcclusion) -> Unit,
-    val themeChanged: (SurfaceTheme) -> Unit,
+    val appearanceChanged: (SurfaceAppearance) -> Unit,
     val redrawConsumed: (Long) -> Unit,
 )
 

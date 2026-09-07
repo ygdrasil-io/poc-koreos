@@ -58,7 +58,7 @@ Décisions :
 | `MonitorHandle`, `VideoMode` | replace | `DisplayManagerState` atomique, `DisplayInventory` complet ou terminalement indisponible, `DisplayState` terminal avant retrait et nouvel ID après réapparition |
 | `Fullscreen` | replace | modes et contraintes dans `WindowSpec`/`WindowUpdate` et `WindowCapabilities` |
 | `Theme`, `WindowLevel`, `WindowButtons` | keep/move | valeurs de `WindowState`, `WindowSpec` ou `WindowUpdate` avec capability typée |
-| `ActiveEventLoop.systemTheme` | replace | theme observable de `SurfaceState`; aucune préférence globale fictive pour une session headless |
+| `ActiveEventLoop.systemTheme` | replace | `SurfaceState.appearance.theme` observable, corrélé à `SurfaceState.appearance.contrast`; aucune préférence globale fictive pour une session headless |
 | `CursorIcon`, `CursorGrabMode`, `CursorImage`, `CustomCursor` | replace | `CursorStyle` et `CursorImage` copiée/owned par la surface ; aucun handle custom cursor public |
 | `Icon` | replace | valeur immuable avec copie défensive dans `WindowSpec`/`WindowUpdate` |
 | `UserAttentionType`, `ResizeDirection` | keep/move | `Window.requestAttention` et actions dédiées ; token d’interaction lorsque le host l’exige |

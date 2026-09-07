@@ -36,6 +36,8 @@ import org.graphiks.kadre.surface.LogicalPoint
 import org.graphiks.kadre.surface.LogicalSize
 import org.graphiks.kadre.surface.PropertyChange
 import org.graphiks.kadre.surface.SurfaceCapabilities
+import org.graphiks.kadre.surface.SurfaceAppearance
+import org.graphiks.kadre.surface.SurfaceContrast
 import org.graphiks.kadre.surface.SurfaceFocus
 import org.graphiks.kadre.surface.SurfaceId
 import org.graphiks.kadre.surface.SurfaceOcclusion
@@ -1546,7 +1548,7 @@ private fun fallbackSurfaceSnapshot(effectiveSpec: WindowSpec): SurfaceInitialSn
     focus = SurfaceFocus.Unfocused,
     visibility = SurfaceVisibility.Visible,
     occlusion = SurfaceOcclusion.Unknown,
-    theme = SurfaceTheme.Unknown,
+    appearance = SurfaceAppearance(SurfaceTheme.Unknown, SurfaceContrast.Unknown),
 )
 
 internal class RuntimeWindowRequest(

@@ -61,7 +61,7 @@ public fun main(args: Array<String>) {
                 recorder.metadata(
                     options = options,
                     initialScaleFactor = surface.state.value.scaleFactor,
-                    initialAppearance = surface.state.value.theme.toString(),
+                    initialAppearance = surface.state.value.appearance.toString(),
                 )
                 recorder.line("SNAPSHOT\tinitial\t${surface.state.value}")
                 recorder.line("CAPABILITIES\t${surface.capabilities.value}")

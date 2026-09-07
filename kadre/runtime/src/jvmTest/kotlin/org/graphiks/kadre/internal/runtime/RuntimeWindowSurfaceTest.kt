@@ -8,6 +8,7 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.filterIsInstance
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.take
@@ -80,7 +81,9 @@ import org.graphiks.kadre.surface.PhysicalSize
 import org.graphiks.kadre.surface.PointerCaptureMode
 import org.graphiks.kadre.surface.PropertyChange
 import org.graphiks.kadre.surface.SurfaceAttachmentState
+import org.graphiks.kadre.surface.SurfaceAppearance
 import org.graphiks.kadre.surface.SurfaceCapabilities
+import org.graphiks.kadre.surface.SurfaceContrast
 import org.graphiks.kadre.surface.SurfaceEvent
 import org.graphiks.kadre.surface.SurfaceFocus
 import org.graphiks.kadre.surface.SurfaceId
@@ -1225,7 +1228,7 @@ class RuntimeWindowSurfaceTest {
                 ),
             ),
         )
-        assertFalse(surface.accept(SurfaceStimulus.ThemeChanged(surface.id, SurfaceTheme.Unknown)))
+        assertFalse(surface.accept(SurfaceStimulus.AppearanceChanged(surface.id, appearance(SurfaceTheme.Unknown))))
         surface.detach()
         collection.await()
 
@@ -1251,19 +1254,42 @@ class RuntimeWindowSurfaceTest {
                 ),
             ),
         )
-        assertTrue(surface.accept(SurfaceStimulus.ThemeChanged(surface.id, SurfaceTheme.Dark)))
+        assertTrue(surface.accept(SurfaceStimulus.AppearanceChanged(surface.id, appearance(SurfaceTheme.Dark))))
         surface.detach()
         collection.await()
 
         assertEquals(SurfaceFocus.Focused, surface.state.value.focus)
         assertEquals(SurfaceVisibility.Hidden, surface.state.value.visibility)
         assertEquals(SurfaceOcclusion.Occluded, surface.state.value.occlusion)
-        assertEquals(SurfaceTheme.Dark, surface.state.value.theme)
+        assertEquals(SurfaceTheme.Dark, surface.state.value.appearance.theme)
         assertEquals(SurfaceRevision(4), surface.state.value.revision)
         assertIs<SurfaceEvent.FocusChanged>(events[0])
         assertIs<SurfaceEvent.VisibilityChanged>(events[1])
-        assertIs<SurfaceEvent.ThemeChanged>(events[2])
+        assertIs<SurfaceEvent.AppearanceChanged>(events[2])
         assertEquals(listOf(1L, 2L, 3L), events.map { it.stateRevision.value })
+    }
+
+    @Test
+    fun contrastOnlyChangePublishesOneAtomicAppearanceSnapshot() = runTest {
+        val surface = surface()
+        val event = async(UnconfinedTestDispatcher(testScheduler), start = CoroutineStart.UNDISPATCHED) {
+            surface.events.filterIsInstance<SurfaceEvent.AppearanceChanged>().first()
+        }
+
+        assertTrue(
+            surface.accept(
+                SurfaceStimulus.AppearanceChanged(
+                    surface.id,
+                    appearance(SurfaceTheme.Unknown, SurfaceContrast.High),
+                ),
+            ),
+        )
+
+        val observed = event.await()
+        assertEquals(SurfaceTheme.Unknown, observed.state.appearance.theme)
+        assertEquals(SurfaceContrast.High, observed.state.appearance.contrast)
+        assertEquals(observed.state, surface.state.value)
+        surface.detach()
     }
 
     @Test
@@ -1273,7 +1299,7 @@ class RuntimeWindowSurfaceTest {
             surface.events
                 .onEach { event ->
                     if (event is SurfaceEvent.FocusChanged) {
-                        surface.accept(SurfaceStimulus.ThemeChanged(surface.id, SurfaceTheme.Dark))
+                        surface.accept(SurfaceStimulus.AppearanceChanged(surface.id, appearance(SurfaceTheme.Dark)))
                     }
                 }
                 .take(2)
@@ -1283,11 +1309,11 @@ class RuntimeWindowSurfaceTest {
         surface.accept(SurfaceStimulus.FocusChanged(surface.id, SurfaceFocus.Focused))
 
         assertEquals(
-            listOf(SurfaceEvent.FocusChanged::class, SurfaceEvent.ThemeChanged::class),
+            listOf(SurfaceEvent.FocusChanged::class, SurfaceEvent.AppearanceChanged::class),
             events.await().map { it::class },
         )
         assertEquals(SurfaceRevision(2), surface.state.value.revision)
-        assertEquals(SurfaceTheme.Dark, surface.state.value.theme)
+        assertEquals(SurfaceTheme.Dark, surface.state.value.appearance.theme)
     }
 
     @Test
@@ -1301,7 +1327,7 @@ class RuntimeWindowSurfaceTest {
                         injected = true
                         surface.accept(SurfaceStimulus.MetricsChanged(surface.id, metrics(650.0, 370.0)))
                         surface.accept(SurfaceStimulus.MetricsChanged(surface.id, metrics(660.0, 380.0)))
-                        surface.accept(SurfaceStimulus.ThemeChanged(surface.id, SurfaceTheme.Dark))
+                        surface.accept(SurfaceStimulus.AppearanceChanged(surface.id, appearance(SurfaceTheme.Dark)))
                         surface.accept(SurfaceStimulus.MetricsChanged(surface.id, metrics(670.0, 390.0)))
                         surface.accept(SurfaceStimulus.MetricsChanged(surface.id, metrics(680.0, 400.0)))
                     }
@@ -1317,7 +1343,7 @@ class RuntimeWindowSurfaceTest {
             listOf(
                 SurfaceEvent.FocusChanged::class,
                 SurfaceEvent.MetricsChanged::class,
-                SurfaceEvent.ThemeChanged::class,
+                SurfaceEvent.AppearanceChanged::class,
                 SurfaceEvent.MetricsChanged::class,
             ),
             delivered.map { it::class },
@@ -1353,7 +1379,7 @@ class RuntimeWindowSurfaceTest {
         entered.await()
         surface.accept(SurfaceStimulus.MetricsChanged(surface.id, metrics(650.0, 370.0)))
         surface.accept(SurfaceStimulus.MetricsChanged(surface.id, metrics(660.0, 380.0)))
-        surface.accept(SurfaceStimulus.ThemeChanged(surface.id, SurfaceTheme.Dark))
+        surface.accept(SurfaceStimulus.AppearanceChanged(surface.id, appearance(SurfaceTheme.Dark)))
         surface.accept(SurfaceStimulus.MetricsChanged(surface.id, metrics(670.0, 390.0)))
         surface.accept(SurfaceStimulus.MetricsChanged(surface.id, metrics(680.0, 400.0)))
         surface.detach()
@@ -1364,7 +1390,7 @@ class RuntimeWindowSurfaceTest {
             listOf(
                 SurfaceEvent.FocusChanged::class,
                 SurfaceEvent.MetricsChanged::class,
-                SurfaceEvent.ThemeChanged::class,
+                SurfaceEvent.AppearanceChanged::class,
                 SurfaceEvent.MetricsChanged::class,
             ),
             delivered.map { it::class },
@@ -1567,7 +1593,7 @@ class RuntimeWindowSurfaceTest {
                     .onEach { event ->
                         if (!injected && event is SurfaceEvent.FocusChanged) {
                             injected = true
-                            target.accept(SurfaceStimulus.ThemeChanged(target.id, SurfaceTheme.Dark))
+                            target.accept(SurfaceStimulus.AppearanceChanged(target.id, appearance(SurfaceTheme.Dark)))
                             target.accept(
                                 SurfaceStimulus.VisibilityChanged(
                                     target.id,
@@ -1628,7 +1654,7 @@ class RuntimeWindowSurfaceTest {
 
         surface.accept(SurfaceStimulus.FocusChanged(surface.id, SurfaceFocus.Focused))
         entered.await()
-        surface.accept(SurfaceStimulus.ThemeChanged(surface.id, SurfaceTheme.Dark))
+        surface.accept(SurfaceStimulus.AppearanceChanged(surface.id, appearance(SurfaceTheme.Dark)))
         surface.accept(
             SurfaceStimulus.VisibilityChanged(
                 surface.id,
@@ -1659,7 +1685,7 @@ class RuntimeWindowSurfaceTest {
                     .onEach { event ->
                         if (!injected && event is SurfaceEvent.FocusChanged) {
                             injected = true
-                            surface.accept(SurfaceStimulus.ThemeChanged(surface.id, SurfaceTheme.Dark))
+                            surface.accept(SurfaceStimulus.AppearanceChanged(surface.id, appearance(SurfaceTheme.Dark)))
                             surface.accept(
                                 SurfaceStimulus.VisibilityChanged(
                                     surface.id,
@@ -1711,7 +1737,7 @@ class RuntimeWindowSurfaceTest {
                     .onEach { event ->
                         if (!injected && event is SurfaceEvent.FocusChanged) {
                             injected = true
-                            surface.accept(SurfaceStimulus.ThemeChanged(surface.id, SurfaceTheme.Dark))
+                            surface.accept(SurfaceStimulus.AppearanceChanged(surface.id, appearance(SurfaceTheme.Dark)))
                             surface.accept(
                                 SurfaceStimulus.VisibilityChanged(
                                     surface.id,
@@ -2187,7 +2213,7 @@ class RuntimeWindowSurfaceTest {
             KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.Surface)),
             surface.apply(SurfaceUpdate(cursor = PropertyChange.Set(CursorStyle.Hidden))),
         )
-        assertFalse(surface.accept(SurfaceStimulus.ThemeChanged(surface.id, SurfaceTheme.Dark)))
+        assertFalse(surface.accept(SurfaceStimulus.AppearanceChanged(surface.id, appearance(SurfaceTheme.Dark))))
         assertFalse(
             surface.accept(
                 SurfaceStimulus.RedrawConsumed(surface.id, port.redrawCommands.single().generation),
@@ -2239,7 +2265,7 @@ class RuntimeWindowSurfaceTest {
             focus = SurfaceFocus.Unfocused,
             visibility = SurfaceVisibility.Visible,
             occlusion = SurfaceOcclusion.Unknown,
-            theme = SurfaceTheme.Unknown,
+            appearance = appearance(SurfaceTheme.Unknown),
         ),
         commandPort = port,
         textInputPort = textInputPort,
@@ -2488,6 +2514,11 @@ class RuntimeWindowSurfaceTest {
         scaleFactor = 1.0,
         safeAreaInsets = LogicalInsets(0.0, 0.0, 0.0, 0.0),
     )
+
+    private fun appearance(
+        theme: SurfaceTheme,
+        contrast: SurfaceContrast = SurfaceContrast.Normal,
+    ): SurfaceAppearance = SurfaceAppearance(theme, contrast)
 
     private fun <T> KadreResult<T>.successValue(): T = when (this) {
         is KadreResult.Success -> value

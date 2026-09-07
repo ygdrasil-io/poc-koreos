@@ -1961,7 +1961,7 @@ private fun AppKitSurfaceStimulus.toRuntime(surfaceId: SurfaceId): SurfaceStimul
     is AppKitSurfaceStimulus.MetricsChanged -> SurfaceStimulus.MetricsChanged(surfaceId, metrics)
     is AppKitSurfaceStimulus.FocusChanged -> SurfaceStimulus.FocusChanged(surfaceId, focus)
     is AppKitSurfaceStimulus.VisibilityChanged -> SurfaceStimulus.VisibilityChanged(surfaceId, visibility, occlusion)
-    is AppKitSurfaceStimulus.ThemeChanged -> SurfaceStimulus.ThemeChanged(surfaceId, theme)
+    is AppKitSurfaceStimulus.AppearanceChanged -> SurfaceStimulus.AppearanceChanged(surfaceId, appearance)
     is AppKitSurfaceStimulus.RedrawConsumed -> SurfaceStimulus.RedrawConsumed(
         surfaceId,
         SurfaceRedrawGeneration.fromNative(generation),
@@ -2019,7 +2019,7 @@ private fun AppKitSurfaceSnapshot.toRuntimeSnapshot(): SurfaceInitialSnapshot = 
     focus = focus,
     visibility = visibility,
     occlusion = occlusion,
-    theme = theme,
+    appearance = appearance,
 )
 
 private fun appKitEffectiveSpec(

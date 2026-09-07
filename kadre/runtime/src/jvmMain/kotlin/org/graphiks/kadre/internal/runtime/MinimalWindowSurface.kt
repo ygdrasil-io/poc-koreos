@@ -81,6 +81,7 @@ import org.graphiks.kadre.surface.PropertyChange
 import org.graphiks.kadre.surface.RejectedSurfaceField
 import org.graphiks.kadre.surface.SurfaceAttachmentState
 import org.graphiks.kadre.surface.SurfaceCapabilities
+import org.graphiks.kadre.surface.SurfaceAppearance
 import org.graphiks.kadre.surface.SurfaceEvent
 import org.graphiks.kadre.surface.SurfaceFocus
 import org.graphiks.kadre.surface.SurfaceId
@@ -88,7 +89,6 @@ import org.graphiks.kadre.surface.SurfaceOcclusion
 import org.graphiks.kadre.surface.SurfaceProperty
 import org.graphiks.kadre.surface.SurfaceRevision
 import org.graphiks.kadre.surface.SurfaceState
-import org.graphiks.kadre.surface.SurfaceTheme
 import org.graphiks.kadre.surface.SurfaceUpdate
 import org.graphiks.kadre.surface.SurfaceUpdateOutcome
 import org.graphiks.kadre.surface.SurfaceVisibility
@@ -351,7 +351,7 @@ internal class RuntimeWindowSurface(
                     stimulus.occlusion,
                 )
 
-                is SurfaceStimulus.ThemeChanged -> themePublicationLocked(stimulus.theme)
+                is SurfaceStimulus.AppearanceChanged -> appearancePublicationLocked(stimulus.appearance)
                 is SurfaceStimulus.RedrawConsumed -> redrawPublicationLocked(stimulus.generation)
                 is SurfaceStimulus.KeyChanged,
                 is SurfaceStimulus.InputObservationChanged,
@@ -725,12 +725,12 @@ internal class RuntimeWindowSurface(
         )
     }
 
-    private fun themePublicationLocked(theme: SurfaceTheme): SurfacePublication? {
-        if (currentState.theme == theme) return null
-        currentState = currentState.copy(theme = theme, revision = currentState.revision.next())
+    private fun appearancePublicationLocked(appearance: SurfaceAppearance): SurfacePublication? {
+        if (currentState.appearance == appearance) return null
+        currentState = currentState.copy(appearance = appearance, revision = currentState.revision.next())
         return SurfacePublication(
             state = currentState,
-            event = SurfaceEvent.ThemeChanged(currentState, eventStampSource()),
+            event = SurfaceEvent.AppearanceChanged(currentState, eventStampSource()),
         )
     }
 
@@ -1247,7 +1247,7 @@ private fun SurfaceEvent.lane(): SurfaceEventLane = when (this) {
     is SurfaceEvent.RedrawRequested -> SurfaceEventLane.Redraw
     is SurfaceEvent.FocusChanged,
     is SurfaceEvent.VisibilityChanged,
-    is SurfaceEvent.ThemeChanged,
+    is SurfaceEvent.AppearanceChanged,
     -> SurfaceEventLane.Discrete
 }
 
@@ -1262,7 +1262,7 @@ private fun SurfaceEvent.withStamp(value: EventStamp): SurfaceEvent = when (this
     is SurfaceEvent.MetricsChanged -> copy(stamp = value)
     is SurfaceEvent.FocusChanged -> copy(stamp = value)
     is SurfaceEvent.VisibilityChanged -> copy(stamp = value)
-    is SurfaceEvent.ThemeChanged -> copy(stamp = value)
+    is SurfaceEvent.AppearanceChanged -> copy(stamp = value)
     is SurfaceEvent.RedrawRequested -> copy(stamp = value)
 }
 
@@ -1895,7 +1895,7 @@ private class RuntimeSurfaceInput(
         is SurfaceStimulus.MetricsChanged,
         is SurfaceStimulus.FocusChanged,
         is SurfaceStimulus.VisibilityChanged,
-        is SurfaceStimulus.ThemeChanged,
+        is SurfaceStimulus.AppearanceChanged,
         is SurfaceStimulus.RedrawConsumed,
         is SurfaceStimulus.InputObservationChanged,
         is SurfaceStimulus.Detached,
@@ -2818,7 +2818,7 @@ private fun initialState(snapshot: SurfaceInitialSnapshot): SurfaceState = Surfa
     visibility = snapshot.visibility,
     occlusion = snapshot.occlusion,
     focus = snapshot.focus,
-    theme = snapshot.theme,
+    appearance = snapshot.appearance,
     cursor = CursorStyle.System(CursorIcon.Default),
     pointerCapture = PointerCaptureMode.None,
     hitTesting = HitTestingMode.Enabled,
@@ -2882,7 +2882,7 @@ private fun SurfaceStimulus.isInputStimulus(): Boolean = when (this) {
     is SurfaceStimulus.MetricsChanged,
     is SurfaceStimulus.FocusChanged,
     is SurfaceStimulus.VisibilityChanged,
-    is SurfaceStimulus.ThemeChanged,
+    is SurfaceStimulus.AppearanceChanged,
     is SurfaceStimulus.RedrawConsumed,
     is SurfaceStimulus.Detached,
     -> false

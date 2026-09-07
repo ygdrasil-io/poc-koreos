@@ -72,6 +72,8 @@ import org.graphiks.kadre.surface.LogicalSize
 import org.graphiks.kadre.surface.PropertyChange
 import org.graphiks.kadre.surface.SurfaceFocus
 import org.graphiks.kadre.surface.SurfaceOcclusion
+import org.graphiks.kadre.surface.SurfaceAppearance
+import org.graphiks.kadre.surface.SurfaceContrast
 import org.graphiks.kadre.surface.SurfaceTheme
 import org.graphiks.kadre.surface.SurfaceVisibility
 import org.graphiks.kadre.surface.toPhysical
@@ -5817,7 +5819,7 @@ internal fun deterministicSurfaceSnapshot(
     focus = SurfaceFocus.Focused,
     visibility = SurfaceVisibility.Visible,
     occlusion = SurfaceOcclusion.Unknown,
-    theme = SurfaceTheme.Light,
+    appearance = SurfaceAppearance(SurfaceTheme.Light, SurfaceContrast.Normal),
 )
 
 internal fun <T> KadreResult<T>.appKitSuccessValue(): T = when (this) {

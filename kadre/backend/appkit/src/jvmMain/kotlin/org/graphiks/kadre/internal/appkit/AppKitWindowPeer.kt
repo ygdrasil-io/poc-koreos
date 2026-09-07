@@ -20,7 +20,7 @@ import org.graphiks.kadre.surface.PropertyChange
 import org.graphiks.kadre.surface.LogicalPoint
 import org.graphiks.kadre.surface.SurfaceFocus
 import org.graphiks.kadre.surface.SurfaceOcclusion
-import org.graphiks.kadre.surface.SurfaceTheme
+import org.graphiks.kadre.surface.SurfaceAppearance
 import org.graphiks.kadre.surface.SurfaceVisibility
 import org.graphiks.kadre.window.WindowSpec
 import org.graphiks.kadre.window.WindowLevel
@@ -93,9 +93,9 @@ internal sealed interface AppKitSurfaceStimulus {
         val occlusion: SurfaceOcclusion,
     ) : AppKitSurfaceStimulus
 
-    data class ThemeChanged(
+    data class AppearanceChanged(
         override val peerId: AppKitWindowPeerId,
-        val theme: SurfaceTheme,
+        val appearance: SurfaceAppearance,
     ) : AppKitSurfaceStimulus
 
     data class RedrawConsumed(
@@ -482,7 +482,7 @@ internal class AppKitWindowPeer private constructor(
                             metricsChanged = callbackGate::metricsChanged,
                             focusChanged = callbackGate::focusChanged,
                             visibilityChanged = callbackGate::visibilityChanged,
-                            themeChanged = callbackGate::themeChanged,
+                            appearanceChanged = callbackGate::appearanceChanged,
                             redrawConsumed = callbackGate::redrawConsumed,
                         ),
                     )
@@ -653,7 +653,7 @@ private class AppKitWindowCallbackGate(
     private var lastMetrics: SurfaceMetrics? = null
     private var lastFocus: SurfaceFocus? = null
     private var lastVisibility: Pair<SurfaceVisibility, SurfaceOcclusion>? = null
-    private var lastTheme: SurfaceTheme? = null
+    private var lastAppearance: SurfaceAppearance? = null
     private var lastRedrawGeneration = -1L
     private var geometryGeneration = 0L
     private var managedGeometryMutationDepth = 0
@@ -694,7 +694,7 @@ private class AppKitWindowCallbackGate(
             lastMetrics = snapshot.metrics
             lastFocus = snapshot.focus
             lastVisibility = snapshot.visibility to snapshot.occlusion
-            lastTheme = snapshot.theme
+            lastAppearance = snapshot.appearance
             surfaceAccepting = true
         }
     }
@@ -736,13 +736,13 @@ private class AppKitWindowCallbackGate(
         stimulus?.let(::publishSurface)
     }
 
-    fun themeChanged(theme: SurfaceTheme) {
+    fun appearanceChanged(appearance: SurfaceAppearance) {
         val stimulus = synchronized(lock) {
-            if (!surfaceAccepting || theme == lastTheme) {
+            if (!surfaceAccepting || appearance == lastAppearance) {
                 null
             } else {
-                lastTheme = theme
-                AppKitSurfaceStimulus.ThemeChanged(peerId, theme)
+                lastAppearance = appearance
+                AppKitSurfaceStimulus.AppearanceChanged(peerId, appearance)
             }
         }
         stimulus?.let(::publishSurface)

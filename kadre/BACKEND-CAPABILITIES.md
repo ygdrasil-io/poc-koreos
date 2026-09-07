@@ -107,6 +107,16 @@ il ne fabrique aucun signal. `WARN` devient `Moderate` et `CRITICAL` devient
 sessions vivantes : fermer une session ne ferme pas la source process-wide,
 alors que la terminaison du host la ferme avant tout nouveau relayage.
 
+L’AppKit adapter lit l’`appearance` d’une surface comme un seul snapshot : le
+thème vient de l’`effectiveAppearance` de la `NSView` et le contraste de
+`NSWorkspace.accessibilityDisplayShouldIncreaseContrast`. Le callback local de
+changement d’appearance de la view et la notification workspace des options
+d’accessibilité reconstruisent ce même snapshot ; un changement de contraste
+seul publie donc `SurfaceEvent.AppearanceChanged`. La notification est observée
+sur le `notificationCenter` de ce `NSWorkspace`, puis relayée sur le main thread
+avant toute lecture AppKit. Si une composante ne peut pas être lue, elle vaut
+`Unknown` et aucune valeur n’est devinée.
+
 L’absence de `Window` sur Android View ou sur le host Web initial ne ferme pas sa surface et ne fabrique aucune `WindowCapabilities`. `WindowManagerState.windows` reste vide ; Android publie `requestWindow = Unsupported(RequestWindow)`, tandis que Web suit son provider. `N(CaptureOpen)` pour `CaptureTarget.Source` n’interdit pas `HostChoice`; `sourceEnumeration`, `hostPicker` et les capabilities de target décrivent séparément ces chemins.
 
 Les gestures sont des observations host-native ou des recognizers installés explicitement par l’adapter. Kadre ne promet aucun recognizer logiciel universel. Un adapter peut supporter pointer/touch tout en publiant gestures `Unsupported`.

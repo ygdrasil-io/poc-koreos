@@ -241,7 +241,7 @@ Les méthodes `Virtual*Controller`, `VirtualKadreClock.advanceBy` et constructeu
 | `VirtualKadreClock` | `advanceBy`, `runCurrent` | `now` et la file virtuelle drainée font autorité ; aucune suspension |
 | `FakeKadreHost` | `detach` | premier appel publie le detach terminal ; appels suivants idempotents |
 | `VirtualLifecycleController` | `setCapabilities`, `setVisibility`, `setActivation`, `memoryPressure` | snapshot lifecycle/capability mis à jour avant événement ou diagnostic ; signal memory-pressure admis sous `hostSignals` |
-| `VirtualSurfaceController` | `setMetrics`, `setFocus`, `setVisibility`, `setTheme`, `setCapabilities`, `requestRedraw`, `detach` | snapshot/révision généré puis événement correspondant |
+| `VirtualSurfaceController` | `setMetrics`, `setFocus`, `setVisibility`, `setAppearance`, `setCapabilities`, `requestRedraw`, `detach` | snapshot/révision généré puis événement correspondant |
 | `VirtualWindowController` | `openHere`, `openInNewSession`, `reject`, `cancel`, `externalApply`, `setCapabilities`, `requestClose`, `forceClose` | state de la request ou fenêtre ciblée ; aucune identité n’est forgée par le caller |
 | `VirtualDisplayController` | `setCapabilities`, `requirePermission`, `denyPermission`, `fail`, `connect`, `update`, `disconnect` | `DisplayManagerState` composé et IDs générés |
 | `VirtualInputController` | `setCapabilities`, `connectDevice`, `disconnectDevice`, `key`, `pointerEnter`, `pointerMove`, `pointerButton`, `pointerLeave`, `scroll`, `touchStart`, `touchMove`, `touchEnd`, `gesture`, `reset`, `offerDrop`, `moveDrop`, `leaveDrop`, `performDrop`, `rawDelta` | snapshot input mis à jour avant l’événement ; factories d’ID indiquées par le catalogue |

@@ -31,6 +31,8 @@ import org.graphiks.kadre.surface.LogicalPoint
 import org.graphiks.kadre.surface.LogicalRect
 import org.graphiks.kadre.surface.LogicalSize
 import org.graphiks.kadre.surface.PropertyChange
+import org.graphiks.kadre.surface.SurfaceAppearance
+import org.graphiks.kadre.surface.SurfaceContrast
 import org.graphiks.kadre.surface.SurfaceFocus
 import org.graphiks.kadre.surface.SurfaceOcclusion
 import org.graphiks.kadre.surface.SurfaceTheme
@@ -68,7 +70,10 @@ import org.graphiks.kffi.objc.NSWindowButton
 import org.graphiks.kffi.objc.NSWindowCollectionBehavior
 import org.graphiks.kffi.objc.NSWindowOcclusionState
 import org.graphiks.kffi.objc.NSWindowStyleMask
+import org.graphiks.kffi.objc.NSWorkspace
+import org.graphiks.kffi.objc.NSWorkspaceAccessibilityDisplayOptionsDidChangeNotification
 import org.graphiks.kffi.objc.ObjCRuntime
+import org.graphiks.kffi.objc.accessibilityDisplayShouldIncreaseContrast
 import org.graphiks.kffi.objc.effectiveAppearance
 import org.graphiks.kffi.objc.convertBaseToScreen
 import org.graphiks.kffi.objc.safeAreaInsets
@@ -2022,14 +2027,14 @@ private class KffiSurfaceObserverOwner private constructor(
         callbacks.visibilityChanged(visibility, occlusion)
     }
 
-    private fun emitTheme() {
+    private fun emitAppearance() {
         requireMainThread()
-        if (accepting.get()) callbacks.themeChanged(readTheme(view))
+        if (accepting.get()) callbacks.appearanceChanged(readAppearance(view))
     }
 
     private fun observeAppearance(admission: KffiViewAppearanceAdmission) {
         check(appearanceObservation == null) { "AppKit view appearance is already observed" }
-        appearanceObservation = admission.observe(::emitTheme)
+        appearanceObservation = admission.observe(::emitAppearance)
     }
 
     companion object {
@@ -2095,6 +2100,14 @@ private class KffiSurfaceObserverOwner private constructor(
                     window.ptr,
                     installedOwner::emitVisibility,
                 )
+                val workspace = NSWorkspace(NSWorkspace.sharedWorkspace())
+                val workspaceCenter = NSNotificationCenter(workspace.notificationCenter())
+                observations += workspaceCenter.observe(
+                    name = NSWorkspaceAccessibilityDisplayOptionsDidChangeNotification,
+                    objectFilter = workspace.ptr,
+                ) {
+                    KffiAppKitMainThread.call(installedOwner::emitAppearance)
+                }
                 installedOwner.initialSnapshot = readSnapshot(view, window)
                 return installedOwner
             } catch (failure: Throwable) {
@@ -2127,7 +2140,7 @@ private fun readSnapshot(view: NSView, window: NSWindow): AppKitSurfaceSnapshot 
         focus = readFocus(window),
         visibility = visibility,
         occlusion = occlusion,
-        theme = readTheme(view),
+        appearance = readAppearance(view),
     )
 }
 
@@ -2174,6 +2187,24 @@ private fun readTheme(view: NSView): SurfaceTheme {
         name.isNotBlank() -> SurfaceTheme.Light
         else -> SurfaceTheme.Unknown
     }
+}
+
+private fun readAppearance(view: NSView): SurfaceAppearance = SurfaceAppearance(
+    theme = readTheme(view),
+    contrast = readContrast(),
+)
+
+private fun readContrast(): SurfaceContrast = try {
+    val workspace = NSWorkspace(NSWorkspace.sharedWorkspace())
+    if (workspace.accessibilityDisplayShouldIncreaseContrast()) {
+        SurfaceContrast.High
+    } else {
+        SurfaceContrast.Normal
+    }
+} catch (_: Exception) {
+    SurfaceContrast.Unknown
+} catch (_: LinkageError) {
+    SurfaceContrast.Unknown
 }
 
 internal class KffiDelegateOwner(

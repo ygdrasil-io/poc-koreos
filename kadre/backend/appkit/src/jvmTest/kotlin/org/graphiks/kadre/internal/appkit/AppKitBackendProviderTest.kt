@@ -84,6 +84,8 @@ import org.graphiks.kadre.surface.InputDefaultBehavior
 import org.graphiks.kadre.surface.LogicalSize
 import org.graphiks.kadre.surface.PropertyChange
 import org.graphiks.kadre.surface.SurfaceAttachmentState
+import org.graphiks.kadre.surface.SurfaceAppearance
+import org.graphiks.kadre.surface.SurfaceContrast
 import org.graphiks.kadre.surface.SurfaceEvent
 import org.graphiks.kadre.surface.SurfaceFocus
 import org.graphiks.kadre.surface.SurfaceOcclusion
@@ -582,7 +584,7 @@ class AppKitBackendProviderTest {
                 focus = SurfaceFocus.Focused,
                 visibility = org.graphiks.kadre.surface.SurfaceVisibility.Hidden,
                 occlusion = SurfaceOcclusion.Occluded,
-                theme = SurfaceTheme.Dark,
+                appearance = SurfaceAppearance(SurfaceTheme.Dark, SurfaceContrast.Normal),
             )
             val port = DeterministicAppKitNativeWindowPort(
                 name = "public-surface-ordering",
@@ -614,7 +616,7 @@ class AppKitBackendProviderTest {
                 assertEquals(initial.focus, initialState.focus)
                 assertEquals(initial.visibility, initialState.visibility)
                 assertEquals(initial.occlusion, initialState.occlusion)
-                assertEquals(initial.theme, initialState.theme)
+                assertEquals(initial.appearance, initialState.appearance)
 
                 val events = Channel<SurfaceEvent>(Channel.UNLIMITED)
                 val collector = launch(start = CoroutineStart.UNDISPATCHED) {
