@@ -50,6 +50,27 @@ test('moving into a same-document ShadowRoot reinstalls observation on that root
   await expect(page.locator('body')).toHaveAttribute('data-kadre-shadow-session', 'terminated');
 });
 
+test('removing the host from inside its connected ShadowRoot terminates the session', async ({ page }) => {
+  await loadScenario(page, 'shadow-inner-detach');
+
+  await page.locator('[data-kadre-host="shadow-inner"]').evaluate((host) => {
+    const shadowHost = document.createElement('section');
+    shadowHost.setAttribute('data-kadre-shadow-container', 'inner');
+    document.body.appendChild(shadowHost);
+    const shadowRoot = shadowHost.attachShadow({ mode: 'open' });
+    shadowRoot.appendChild(host);
+  });
+  await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => resolve())));
+  await expect(page.locator('body')).toHaveAttribute('data-kadre-shadow-inner-session', 'running');
+
+  await page.locator('[data-kadre-shadow-container="inner"]').evaluate((shadowHost) => {
+    shadowHost.shadowRoot.querySelector('[data-kadre-host="shadow-inner"]').remove();
+  });
+
+  await expect(page.locator('body')).toHaveAttribute('data-kadre-shadow-inner-session', 'terminated');
+  await expect(page.locator('body')).toHaveAttribute('data-kadre-shadow-inner-outcome', 'host-detached');
+});
+
 test('attaching preserves the provided element own-property identity surface', async ({ page }) => {
   await loadScenario(page, 'identity-no-expando');
   const host = page.locator('[data-kadre-host="identity"]');
@@ -96,6 +117,35 @@ test('Manual accepts an initial detach and reconnects through the origin context
   await expect(page.locator('body')).toHaveAttribute(
     'data-kadre-manual-lifecycle',
     'attached-foreground-active',
+  );
+});
+
+test('Manual reconnects an initially disconnected host inside an already connected ShadowRoot', async ({ page }) => {
+  await loadScenario(page, 'manual-shadow-reconnect');
+  const body = page.locator('body');
+
+  await expect(body).toHaveAttribute(
+    'data-kadre-manual-shadow-lifecycle',
+    'attached-background-inactive',
+  );
+  await page.evaluate(() => {
+    const shadowHost = document.createElement('section');
+    shadowHost.setAttribute('data-kadre-shadow-container', 'manual-reconnect');
+    document.body.appendChild(shadowHost);
+    shadowHost.attachShadow({ mode: 'open' });
+  });
+  await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => resolve())));
+  await expect(body).toHaveAttribute(
+    'data-kadre-manual-shadow-lifecycle',
+    'attached-background-inactive',
+  );
+
+  await page.evaluate(() => document.dispatchEvent(new Event('kadre-connect-manual-shadow')));
+  await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => resolve())));
+
+  await expect(body).toHaveAttribute(
+    'data-kadre-manual-shadow-lifecycle',
+    'attached-foreground-inactive',
   );
 });
 

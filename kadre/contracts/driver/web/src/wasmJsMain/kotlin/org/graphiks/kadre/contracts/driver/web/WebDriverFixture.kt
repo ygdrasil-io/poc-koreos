@@ -30,8 +30,10 @@ public fun main() {
         "durable-detach" -> attachScenario("durable")
         "detach-reinsert" -> attachScenario("reinsert")
         "shadow-root" -> attachScenario("shadow")
+        "shadow-inner-detach" -> attachScenario("shadow-inner")
         "inter-document" -> attachScenario("transfer")
         "manual-reconnect" -> manualReconnectScenario()
+        "manual-shadow-reconnect" -> manualShadowReconnectScenario()
         "manual-detach-reconnect" -> manualDetachReconnectScenario()
         "independent" -> independentScenario()
         "duplicate" -> duplicateScenario()
@@ -63,6 +65,18 @@ private fun manualReconnectScenario() {
     )
     document.addEventListener("kadre-connect-manual", {
         if (!host.isConnected) document.body!!.appendChild(host)
+    })
+}
+
+private fun manualShadowReconnectScenario() {
+    val host = createHost("manual-shadow", connected = false)
+    document.body!!.setAttribute(
+        "data-kadre-attach",
+        describeAttach(attachAndObserve(host, "manual-shadow", WebAttachmentPolicy.Manual)),
+    )
+    document.addEventListener("kadre-connect-manual-shadow", {
+        val shadowHost = document.querySelector("[data-kadre-shadow-container='manual-reconnect']")
+        if (!host.isConnected) shadowHost?.shadowRoot?.appendChild(host)
     })
 }
 
