@@ -79,6 +79,7 @@ import org.graphiks.kadre.window.WindowUpdateOutcome
 import org.graphiks.kadre.input.PointerButton
 import org.graphiks.kadre.input.PhysicalKey
 import org.graphiks.kadre.input.TouchId
+import org.graphiks.kadre.input.DropOfferId
 import org.graphiks.kadre.interaction.InteractionAction
 import org.graphiks.kadre.interaction.InteractionKind
 import java.util.concurrent.atomic.AtomicLong
@@ -134,6 +135,8 @@ public class RuntimeWindowManager public constructor(
     private var windowDeliveryPolicy: WindowDeliveryPolicy = KadrePolicies.Default.window
     private var surfaceDeliveryPolicy: WindowDeliveryPolicy = KadrePolicies.Default.window
     private var surfaceInputDeliveryPolicy: InputDeliveryPolicy = KadrePolicies.Default.input
+    private val dropTransferBudget = RuntimeDropTransferBudget(resources.maxConcurrentDropTransfers)
+    private var dropTransferScope: CoroutineScope? = null
     private val isolatedEventCollectorAllocator = lazy {
         RuntimeEventCollectorAllocator(resources.maxEventCollectorsPerSession)
     }
@@ -219,6 +222,7 @@ public class RuntimeWindowManager public constructor(
         sessionFailureHandler: (KadreFailure) -> Unit,
         collectorAllocator: RuntimeEventCollectorAllocator,
         maxCollectorsPerFlow: Int,
+        dropTransferScope: CoroutineScope? = null,
     ) {
         synchronized(lock) {
             check(sessionEventStampSource == null) { "window event stamp source was already installed" }
@@ -230,6 +234,7 @@ public class RuntimeWindowManager public constructor(
             surfaceSessionFailureHandler = sessionFailureHandler
             sessionEventCollectorAllocator = collectorAllocator
             sessionMaxCollectorsPerFlow = maxCollectorsPerFlow
+            this.dropTransferScope = dropTransferScope
         }
     }
 
@@ -257,6 +262,27 @@ public class RuntimeWindowManager public constructor(
         val surface = synchronized(lock) { surfaces[surfaceId] } ?: return false
         surface.dispatchSynchronousInteraction(event, supported, invokeNative)
         return true
+    }
+
+    /**
+     * Unstable backend SPI for the synchronous admission of one retained native drop payload.
+     *
+     * The source is owned by the runtime after this call, including when the surface has already
+     * been detached. A non-null result is the opaque offer ID retained by the backend for later
+     * move, exit and perform observations.
+     */
+    public fun dispatchSynchronousDrop(
+        surfaceId: SurfaceId,
+        source: DropTransferSource,
+        position: LogicalPoint,
+        invokeNative: (DropOfferId) -> KadreResult<Unit>,
+    ): DropOfferId? {
+        val surface = synchronized(lock) { surfaces[surfaceId] }
+        if (surface == null) {
+            source.close()
+            return null
+        }
+        return surface.dispatchSynchronousDrop(source, position, invokeNative)
     }
 
     /**
@@ -1168,6 +1194,9 @@ public class RuntimeWindowManager public constructor(
             failureReporter = failureReporter,
             deliveryPolicy = surfaceDeliveryPolicy,
             inputDeliveryPolicy = surfaceInputDeliveryPolicy,
+            resources = resources,
+            dropTransferBudget = dropTransferBudget,
+            dropTransferScope = dropTransferScope,
             maxCollectorsPerFlow = sessionMaxCollectorsPerFlow,
             collectorAllocator = collectorAllocator,
             sessionFailureHandler = surfaceSessionFailureHandler,

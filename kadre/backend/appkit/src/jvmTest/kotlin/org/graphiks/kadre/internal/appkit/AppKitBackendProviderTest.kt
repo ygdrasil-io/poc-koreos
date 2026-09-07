@@ -757,7 +757,10 @@ class AppKitBackendProviderTest {
                 ).forEach { capability -> assertIs<Capability.Unsupported>(capability) }
                 assertEquals(
                     Capability.Supported(
-                        setOf(org.graphiks.kadre.interaction.InteractionKind.BeginWindowMove),
+                        setOf(
+                            org.graphiks.kadre.interaction.InteractionKind.BeginWindowMove,
+                            org.graphiks.kadre.interaction.InteractionKind.AcceptDrop,
+                        ),
                         FeatureAvailability.Available,
                     ),
                     surfaceCapabilities.handlerInteractions,
@@ -795,7 +798,7 @@ class AppKitBackendProviderTest {
                 assertEquals(FeatureAvailability.Unsupported, inputCapabilities.pointer)
                 assertEquals(FeatureAvailability.Unsupported, inputCapabilities.touch)
                 assertEquals(FeatureAvailability.Unsupported, inputCapabilities.gestures)
-                assertEquals(FeatureAvailability.Unsupported, inputCapabilities.dragAndDrop)
+                assertEquals(FeatureAvailability.Available, inputCapabilities.dragAndDrop)
                 assertIs<Capability.Unsupported>(inputCapabilities.textInput)
                 assertIs<Capability.Unsupported>(inputCapabilities.rawInput)
                 Unit
@@ -2978,7 +2981,7 @@ class AppKitBackendProviderTest {
             val report = Files.readString(record)
             assertTrue(report.contains("RUN_METADATA\t"), report)
             assertTrue(report.contains("INPUT_CAPABILITIES\tkeyboard=Available\tpointer=Available"), report)
-            assertTrue(report.contains("\ttouch=Unsupported\tgestures=Unsupported\tdragAndDrop=Unsupported"), report)
+            assertTrue(report.contains("\ttouch=Unsupported\tgestures=Unsupported\tdragAndDrop=Available"), report)
             assertTrue(
                 report.contains(
                     "\ttextInput=Supported" +

@@ -97,6 +97,7 @@ internal class SessionRuntime(
                 ::eventDeliveryFailed,
                 eventCollectorAllocator,
                 policy.resources.maxEventCollectorsPerFlow,
+                rootScope,
             )
         }
     private val runtimeDisplays = UnsupportedDisplayManager(

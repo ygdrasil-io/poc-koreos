@@ -138,6 +138,7 @@ internal class RuntimeInteractionHandler(
                 consumed = true
                 InteractionRequestId(nextRequest++)
             }
+            val dropOfferId = (action as? InteractionAction.AcceptDrop)?.offerId
             val nativeResult = try {
                 invokeNative(action)
             } catch (cause: Exception) {
@@ -148,8 +149,19 @@ internal class RuntimeInteractionHandler(
                 KadreResult.Failure(KadreFailure.ApplicationFailure)
             }
             outcome = when (nativeResult) {
-                is KadreResult.Success -> InteractionActionOutcome.Committed(requestId, null, stamp)
-                is KadreResult.Failure -> InteractionActionOutcome.Rejected(requestId, nativeResult.reason, stamp)
+                is KadreResult.Success -> InteractionActionOutcome.Committed(
+                    requestId,
+                    null,
+                    stamp,
+                    dropOfferId,
+                )
+
+                is KadreResult.Failure -> InteractionActionOutcome.Rejected(
+                    requestId,
+                    nativeResult.reason,
+                    stamp,
+                    dropOfferId,
+                )
             }
             return KadreResult.Success(requestId)
         }

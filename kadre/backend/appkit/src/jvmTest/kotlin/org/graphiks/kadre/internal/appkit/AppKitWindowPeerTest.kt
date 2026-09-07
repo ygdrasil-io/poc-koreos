@@ -1,6 +1,7 @@
 package org.graphiks.kadre.internal.appkit
 
 import org.graphiks.kadre.diagnostics.KadreResult
+import org.graphiks.kadre.internal.runtime.DropTransferSource
 import org.graphiks.kadre.input.PointerButton
 import org.graphiks.kadre.input.PointerButtonState
 import org.graphiks.kadre.surface.LogicalPoint
@@ -334,6 +335,24 @@ class AppKitWindowPeerTest {
         assertTrue(port.trace.containsAll(listOf("detach:view", "release:view", "close:window", "release:window")))
     }
 
+    @Test
+    fun rejectedDropClosesItsRetainedSourceBeforeTheNativeCallbackReturns() {
+        val port = RecordingAppKitNativeWindowPort(installInput = true, installDrop = true)
+        val source = RecordingDropTransferSource()
+        AppKitWindowPeer.prepare(
+            PEER_ID,
+            WindowSpec(),
+            port,
+            dispatchSynchronousDrop = { rejected, _ ->
+                rejected.close()
+                null
+            },
+        )
+
+        assertFalse(port.emitDropEntered(source, LogicalPoint(13.0, 17.0)))
+        assertTrue(source.closed.get())
+    }
+
     private companion object {
         val PEER_ID: AppKitWindowPeerId = AppKitWindowPeerId(41L)
     }
@@ -344,10 +363,12 @@ private class RecordingAppKitNativeWindowPort(
     private val cleanupFailure: Throwable? = null,
     private val detachDelegateFailure: Throwable? = null,
     private val installInput: Boolean = false,
+    private val installDrop: Boolean = false,
 ) : AppKitNativeWindowPort {
     val trace = mutableListOf<String>()
     lateinit var delegate: RecordingDelegateOwner
     private var inputObserver: RecordingInputObserver? = null
+    private var dropObserver: RecordingDropObserver? = null
 
     override fun isMainThread(): Boolean = true
 
@@ -424,6 +445,16 @@ private class RecordingAppKitNativeWindowPort(
         null
     }
 
+    override fun observeDrop(
+        window: AppKitNativeWindowOwner,
+        view: AppKitNativeViewOwner,
+        callbacks: AppKitDropCallbacks,
+    ): AppKitNativeDropObserverOwner? = if (installDrop) {
+        RecordingDropObserver(callbacks).also { dropObserver = it }
+    } else {
+        null
+    }
+
     override fun detachDelegate(window: AppKitNativeWindowOwner) {
         trace += "detach:delegate"
         detachDelegateFailure?.let { throw it }
@@ -456,6 +487,10 @@ private class RecordingAppKitNativeWindowPort(
     ) {
         checkNotNull(inputObserver).emitPointerDown(input, nativeMove)
     }
+
+    fun emitDropEntered(source: DropTransferSource, position: LogicalPoint): Boolean =
+        checkNotNull(dropObserver).emitEntered(source, position)
+
 }
 
 private class RecordingSurfaceObserver : AppKitNativeSurfaceObserverOwner {
@@ -484,6 +519,25 @@ private class RecordingInputObserver(
     override fun revokeCallbacks() = Unit
 
     override fun close() = Unit
+}
+
+private class RecordingDropObserver(
+    private val callbacks: AppKitDropCallbacks,
+) : AppKitNativeDropObserverOwner {
+    fun emitEntered(source: DropTransferSource, position: LogicalPoint): Boolean = callbacks.entered(source, position)
+
+    override fun revokeCallbacks() = Unit
+
+    override fun close() = Unit
+}
+
+private class RecordingDropTransferSource : DropTransferSource {
+    override val items = emptyList<org.graphiks.kadre.internal.runtime.DropItemSource>()
+    val closed = AtomicBoolean(false)
+
+    override fun close() {
+        closed.set(true)
+    }
 }
 
 private class RecordingWindowOwner(
