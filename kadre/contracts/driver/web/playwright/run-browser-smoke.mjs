@@ -10,6 +10,8 @@ const PROCESS_TREE_TERMINATION_TIMEOUT_MILLISECONDS = 5_000;
 const CHILD_CLOSE_TIMEOUT_MILLISECONDS = 5_000;
 const WINDOWS_TASKKILL_TIMEOUT_MILLISECONDS = 3_000;
 const WINDOWS_TASKKILL_REAP_TIMEOUT_MILLISECONDS = 1_000;
+const SERVER_GRACEFUL_DRAIN_TIMEOUT_MILLISECONDS = 1_000;
+const SERVER_FORCED_DRAIN_TIMEOUT_MILLISECONDS = 1_000;
 const signalExitCodes = { SIGINT: 2, SIGTERM: 15 };
 
 class SmokeInterruptedError extends Error {
@@ -45,6 +47,7 @@ const server = await serveDistribution(distributionRoot, entryScript);
 let passed = false;
 let interruptedSignal;
 let interruptedCleanupError;
+let serverCloseError;
 
 try {
   const command = process.platform === 'win32' ? 'node_modules/.bin/playwright.cmd' : 'node_modules/.bin/playwright';
@@ -75,17 +78,24 @@ try {
   }
 } finally {
   if (passed) await rm(playwrightOutput, { force: true, recursive: true });
-  await new Promise((resolveClose, rejectClose) => {
-    server.instance.close((error) => error ? rejectClose(error) : resolveClose());
-  });
+  try {
+    await closeServer(server);
+  } catch (error) {
+    serverCloseError = error;
+  }
 }
 
 if (interruptedSignal) {
   if (interruptedCleanupError) {
     console.error(`Playwright cleanup after ${interruptedSignal} failed: ${interruptedCleanupError.message}`);
   }
-  exitForSignal(interruptedSignal, !interruptedCleanupError);
+  if (serverCloseError) {
+    console.error(`Browser smoke server close after ${interruptedSignal} failed: ${serverCloseError.message}`);
+  }
+  exitForSignal(interruptedSignal, !interruptedCleanupError && !serverCloseError);
 }
+
+if (serverCloseError) throw serverCloseError;
 
 function parseTimeout(value) {
   if (value === undefined) return 90_000;
@@ -139,10 +149,12 @@ function runWithWatchdog(command, argumentsList, options, timeout) {
 
     const cleanUp = async () => {
       const failures = [];
+      const cleanupChildren = new Set();
       if (child?.pid) {
+        cleanupChildren.add(child);
         try {
           await withDeadline(
-            terminateProcessTree(child.pid),
+            terminateProcessTree(child.pid, cleanupChildren),
             PROCESS_TREE_TERMINATION_TIMEOUT_MILLISECONDS,
             `process-tree termination for ${child.pid}`,
           );
@@ -159,7 +171,10 @@ function runWithWatchdog(command, argumentsList, options, timeout) {
       } catch (error) {
         failures.push(error);
       }
-      if (failures.length > 0) throw new AggregateError(failures, 'browser smoke cleanup did not complete');
+      if (failures.length > 0) {
+        for (const cleanupChild of cleanupChildren) releaseChildHandle(cleanupChild);
+        throw new AggregateError(failures, 'browser smoke cleanup did not complete');
+      }
     };
 
     try {
@@ -194,10 +209,10 @@ function runWithWatchdog(command, argumentsList, options, timeout) {
   });
 }
 
-async function terminateProcessTree(pid) {
+async function terminateProcessTree(pid, cleanupChildren) {
   if (!pid) return;
   if (process.platform === 'win32') {
-    await terminateWindowsProcessTree(pid);
+    await terminateWindowsProcessTree(pid, cleanupChildren);
     return;
   }
   const failures = [];
@@ -228,13 +243,14 @@ async function terminateProcessTree(pid) {
   if (failures.length > 0) throw new AggregateError(failures, `could not fully terminate process group ${pid}`);
 }
 
-async function terminateWindowsProcessTree(pid) {
+async function terminateWindowsProcessTree(pid, cleanupChildren) {
   let helper;
   try {
     helper = spawn('taskkill', ['/pid', String(pid), '/T', '/F'], { stdio: 'ignore', windowsHide: true });
   } catch (error) {
     throw new Error(`could not start taskkill for ${pid}: ${error.message}`, { cause: error });
   }
+  cleanupChildren?.add(helper);
   const helperClosed = new Promise((resolveClose, rejectClose) => {
     helper.once('error', rejectClose);
     helper.once('close', (status) => resolveClose(status));
@@ -257,6 +273,7 @@ async function terminateWindowsProcessTree(pid) {
     } catch {
       // The helper was explicitly killed; its bounded reaping failure is already represented by the original taskkill failure.
     }
+    releaseChildHandle(helper);
     throw error;
   }
 }
@@ -322,6 +339,15 @@ function delay(milliseconds) {
   return new Promise((resolveDelay) => setTimeout(resolveDelay, milliseconds));
 }
 
+function releaseChildHandle(child) {
+  if (!child) return;
+  try {
+    child.unref();
+  } catch {
+    // A process that already closed has no live handle to release.
+  }
+}
+
 function exitForSignal(signal, safeToResignal) {
   if (safeToResignal && process.listenerCount(signal) === 0) {
     try {
@@ -331,7 +357,7 @@ function exitForSignal(signal, safeToResignal) {
       // Fall through to the conventional numeric exit status below.
     }
   }
-  process.exitCode = 128 + signalExitCodes[signal];
+  process.exit(128 + signalExitCodes[signal]);
 }
 
 
@@ -354,6 +380,7 @@ async function findFiles(directory, matches) {
 }
 
 async function serveDistribution(realRoot, entryScript) {
+  const sockets = new Set();
   const instance = createServer(async (request, response) => {
     try {
       const requestedPath = request.url === '/index.html'
@@ -379,12 +406,83 @@ async function serveDistribution(realRoot, entryScript) {
       response.writeHead(404).end();
     }
   });
+  instance.on('connection', (socket) => {
+    sockets.add(socket);
+    socket.once('close', () => sockets.delete(socket));
+  });
   await new Promise((resolveListen, rejectListen) => {
     instance.once('error', rejectListen);
     instance.listen(0, '127.0.0.1', () => resolveListen());
   });
   const address = instance.address();
-  return { instance, url: `http://127.0.0.1:${address.port}` };
+  return { instance, sockets, url: `http://127.0.0.1:${address.port}` };
+}
+
+function closeServer(server) {
+  if (!server.closePromise) {
+    server.closePromise = new Promise((resolveClose, rejectClose) => {
+      try {
+        server.instance.close((error) => error ? rejectClose(error) : resolveClose());
+      } catch (error) {
+        rejectClose(error);
+      }
+    });
+  }
+  return drainServer(server);
+}
+
+async function drainServer(server) {
+  try {
+    await withDeadline(
+      server.closePromise,
+      SERVER_GRACEFUL_DRAIN_TIMEOUT_MILLISECONDS,
+      'browser smoke server graceful drain',
+    );
+    return;
+  } catch (gracefulError) {
+    destroyServerConnections(server);
+    try {
+      await withDeadline(
+        server.closePromise,
+        SERVER_FORCED_DRAIN_TIMEOUT_MILLISECONDS,
+        'browser smoke server forced drain',
+      );
+      return;
+    } catch (forcedError) {
+      releaseServerHandle(server);
+      throw new AggregateError(
+        [gracefulError, forcedError],
+        'browser smoke server did not close within bounded drains',
+      );
+    }
+  }
+}
+
+function destroyServerConnections(server) {
+  server.instance.closeAllConnections?.();
+  for (const socket of server.sockets) {
+    try {
+      socket.destroy();
+    } catch {
+      // A socket can race with its own close event; the forced drain remains bounded.
+    }
+  }
+}
+
+function releaseServerHandle(server) {
+  destroyServerConnections(server);
+  try {
+    server.instance.unref();
+  } catch {
+    // The server may already have closed while its callback was being observed.
+  }
+  for (const socket of server.sockets) {
+    try {
+      socket.unref();
+    } catch {
+      // Destroyed sockets do not retain a handle.
+    }
+  }
 }
 
 function isWithin(root, path) {
