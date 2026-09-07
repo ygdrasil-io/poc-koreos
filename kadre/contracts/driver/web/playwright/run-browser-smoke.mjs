@@ -91,7 +91,7 @@ async function runBrowserSmoke(argumentsList) {
 
     if (businessSucceeded && serverFinalized && coordinator.canRemoveDiagnostics()) {
       try {
-        await removeSuccessfulDiagnostics(playwrightOutput, preservedPlaywrightOutput);
+        await removeSuccessfulDiagnostics(playwrightOutput, preservedPlaywrightOutput, coordinator);
       } catch (error) {
         coordinator.recordFinalizationFailure(error);
       }
@@ -192,7 +192,7 @@ function assertZeroJunitOutcomes(element, location) {
   }
 }
 
-async function removeSuccessfulDiagnostics(output, preservedOutput) {
+async function removeSuccessfulDiagnostics(output, preservedOutput, coordinator) {
   const suffix = `${process.pid}-${Date.now()}`;
   const stagingOutput = join(dirname(preservedOutput), `.playwright-preservation-${suffix}`);
   const retiredOutput = join(dirname(preservedOutput), `.playwright-retired-${suffix}`);
@@ -222,6 +222,7 @@ async function removeSuccessfulDiagnostics(output, preservedOutput) {
       `publishing preserved diagnostics at ${preservedOutput}`,
     );
     installedPreservation = true;
+    if (coordinator.signal()) return;
 
     try {
       await boundedDiagnosticOperation(
@@ -231,6 +232,7 @@ async function removeSuccessfulDiagnostics(output, preservedOutput) {
     } catch (error) {
       throw new Error(`Could not remove successful diagnostics; complete diagnostics preserved at ${preservedOutput}: ${error.message}`, { cause: error });
     }
+    if (coordinator.signal()) return;
 
     try {
       await boundedDiagnosticOperation(
@@ -241,8 +243,29 @@ async function removeSuccessfulDiagnostics(output, preservedOutput) {
     } catch (error) {
       throw new Error(`Could not retire successful diagnostic preservation; complete diagnostics preserved at ${preservedOutput}: ${error.message}`, { cause: error });
     }
+    if (coordinator.signal()) {
+      await restorePreservedDiagnostics(disposableOutput, preservedOutput);
+      installedPreservation = true;
+      return;
+    }
 
-    await removeDiagnosticsBestEffort(disposableOutput);
+    try {
+      await boundedDiagnosticOperation(
+        rm(disposableOutput, { force: true, recursive: true }),
+        `removing diagnostic quarantine at ${disposableOutput}`,
+      );
+    } catch (error) {
+      try {
+        await restorePreservedDiagnostics(disposableOutput, preservedOutput);
+        installedPreservation = true;
+      } catch (restoreError) {
+        throw new AggregateError(
+          [error, restoreError],
+          `Could not remove diagnostic quarantine or restore complete diagnostics at ${preservedOutput}`,
+        );
+      }
+      throw new Error(`Could not remove diagnostic quarantine; complete diagnostics restored at ${preservedOutput}: ${error.message}`, { cause: error });
+    }
     if (retiredExistingOutput) await removeDiagnosticsBestEffort(retiredOutput);
   } finally {
     await removeDiagnosticsBestEffort(stagingOutput);
@@ -250,6 +273,13 @@ async function removeSuccessfulDiagnostics(output, preservedOutput) {
       await removeDiagnosticsBestEffort(disposableOutput);
     }
   }
+}
+
+async function restorePreservedDiagnostics(disposableOutput, preservedOutput) {
+  await boundedDiagnosticOperation(
+    rename(disposableOutput, preservedOutput),
+    `restoring complete diagnostics at ${preservedOutput}`,
+  );
 }
 
 function boundedDiagnosticOperation(operation, description) {

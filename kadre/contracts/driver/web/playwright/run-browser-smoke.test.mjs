@@ -6,10 +6,11 @@ import {
   mkdtemp,
   mkdir,
   readFile,
+  readdir,
   rm,
   writeFile,
 } from 'node:fs/promises';
-import { constants as fsConstants } from 'node:fs';
+import { constants as fsConstants, watch } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -137,6 +138,61 @@ test('a diagnostic-removal failure preserves diagnostics and still tears down th
   await waitForFile(fixture.connectionClosed, 1_000);
 });
 
+test('a quarantine deletion failure restores complete diagnostics to the visible preservation path', {
+  skip: process.platform === 'win32' && 'Windows chmod does not provide a deterministic remove failure',
+  timeout: 20_000,
+}, async (context) => {
+  const fixture = await createFixture('quarantine-remove-failure');
+  const execution = runSmoke(fixture);
+  context.after(async () => {
+    await writeFile(fixture.preservationRelease, 'release').catch(() => undefined);
+    await stopProcess(execution.child);
+    await chmod(fixture.preservedDiagnostics, 0o700).catch(() => undefined);
+    await fixture.dispose();
+  });
+
+  await waitForFileWhileRunning(fixture.preservationPublished, execution, 10_000);
+  await chmod(fixture.preservedDiagnostics, 0o500);
+  await writeFile(fixture.preservationRelease, 'release');
+
+  const result = await execution.completion;
+
+  assert.notEqual(normalizedExitStatus(result), 0, 'a quarantine deletion failure must fail the smoke');
+  assert.match(result.stderr, /EACCES|EPERM/, 'the runner must surface the quarantine deletion failure');
+  assert.equal(await readFile(fixture.preservedDiagnosticMarker, 'utf8'), 'diagnostic evidence');
+  assert.equal((await readdir(fixture.preservedDiagnosticBulkDirectory)).length, 2_500);
+  assert.equal(
+    (await readdir(fixture.diagnosticsParent)).some((entry) => entry.startsWith('.playwright-delete-')),
+    false,
+    'the only diagnostic copy must not remain at a hidden random path',
+  );
+});
+
+for (const signal of ['SIGINT', 'SIGTERM']) {
+  test(`${signal} during asynchronous diagnostic preservation retains complete visible diagnostics`, {
+    skip: process.platform === 'win32' && 'Windows does not deliver POSIX signals to a child as catchable console signals',
+    timeout: 20_000,
+  }, async (context) => {
+    const fixture = await createFixture('signal-during-preservation');
+    await mkdir(fixture.diagnosticsParent, { recursive: true });
+    const preservationStarted = watchForEntry(fixture.diagnosticsParent, '.playwright-preservation-');
+    const execution = runSmoke(fixture);
+    context.after(async () => {
+      preservationStarted.close();
+      await stopProcess(execution.child);
+      await fixture.dispose();
+    });
+
+    await waitForEntryWhileRunning(preservationStarted.completion, execution, 10_000);
+    execution.child.kill(signal);
+    const result = await execution.completion;
+
+    assert.equal(normalizedExitStatus(result), signalExitCodes[signal], result.stderr);
+    assert.equal(await readFile(fixture.preservedDiagnosticMarker, 'utf8'), 'diagnostic evidence');
+    assert.equal((await readdir(fixture.preservedDiagnosticBulkDirectory)).length, 2_500);
+  });
+}
+
 for (const [name, report, expectedError] of [
   ['malformed', '<testsuites tests="1"><testsuite><testcase></testsuites>', /not parseable/],
   ['empty', '<testsuites tests="0" failures="0" errors="0" skipped="0"></testsuites>', /at least one testsuite/],
@@ -172,6 +228,9 @@ async function createFixture(scenario, junit = validJunit) {
   const descendantPid = join(root, 'descendant.pid');
   const descendantReady = join(root, 'descendant-ready');
   const descendantTerminated = join(root, 'descendant-terminated');
+  const preservationPause = join(root, 'preservation-pause.cjs');
+  const preservationPublished = join(root, 'preservation-published');
+  const preservationRelease = join(root, 'preservation-release');
   const diagnostics = join(evidence, 'diagnostics', 'playwright');
   const diagnosticsParent = dirname(diagnostics);
   const diagnosticTraceDirectory = join(diagnostics, 'trace');
@@ -179,6 +238,7 @@ async function createFixture(scenario, junit = validJunit) {
   const preservedDiagnostics = join(evidence, 'diagnostics', 'playwright-preserved');
   const preservedDiagnosticTraceDirectory = join(preservedDiagnostics, 'trace');
   const preservedDiagnosticMarker = join(preservedDiagnosticTraceDirectory, 'trace.txt');
+  const preservedDiagnosticBulkDirectory = join(preservedDiagnostics, 'bulk');
 
   await mkdir(distribution, { recursive: true });
   await mkdir(binDirectory, { recursive: true });
@@ -186,6 +246,7 @@ async function createFixture(scenario, junit = validJunit) {
   await writeFile(heldClient, heldClientSource, { mode: 0o755 });
   await writeFile(descendant, descendantSource, { mode: 0o755 });
   await writeFile(fakePlaywright, fakePlaywrightSource, { mode: 0o755 });
+  await writeFile(preservationPause, preservationPauseSource, { mode: 0o755 });
 
   if (process.platform === 'win32') {
     await writeFile(
@@ -213,8 +274,11 @@ async function createFixture(scenario, junit = validJunit) {
     distribution,
     evidence,
     preservedDiagnosticMarker,
+    preservedDiagnosticBulkDirectory,
     preservedDiagnosticTraceDirectory,
     preservedDiagnostics,
+    preservationPublished,
+    preservationRelease,
     root,
     async dispose() {
       try {
@@ -231,6 +295,7 @@ async function createFixture(scenario, junit = validJunit) {
       }
       await chmod(diagnosticsParent, 0o700).catch(() => undefined);
       await chmod(diagnosticTraceDirectory, 0o700).catch(() => undefined);
+      await chmod(preservedDiagnostics, 0o700).catch(() => undefined);
       await chmod(preservedDiagnosticTraceDirectory, 0o700).catch(() => undefined);
       await rm(root, { force: true, recursive: true });
     },
@@ -246,7 +311,15 @@ async function createFixture(scenario, junit = validJunit) {
       KADRE_RUNNER_TEST_HELD_CLIENT: heldClient,
       KADRE_RUNNER_TEST_HELD_CLIENT_PID: heldClientPid,
       KADRE_RUNNER_TEST_JUNIT: junit,
+      KADRE_RUNNER_TEST_PAUSE_AFTER_RENAME: scenario === 'quarantine-remove-failure'
+        ? preservedDiagnostics
+        : '',
+      KADRE_RUNNER_TEST_PRESERVATION_PUBLISHED: preservationPublished,
+      KADRE_RUNNER_TEST_PRESERVATION_RELEASE: preservationRelease,
       KADRE_RUNNER_TEST_SCENARIO: scenario,
+      ...(scenario === 'quarantine-remove-failure' ? {
+        NODE_OPTIONS: [process.env.NODE_OPTIONS, `--require=${preservationPause}`].filter(Boolean).join(' '),
+      } : {}),
     },
   };
 }
@@ -302,6 +375,35 @@ function waitForFileWhileRunning(path, execution, timeout) {
       throw new Error(`runner exited before creating ${path}: ${result.stderr}`);
     }),
   ]);
+}
+
+function watchForEntry(directory, prefix) {
+  let resolveEntry;
+  let rejectEntry;
+  const completion = new Promise((resolveCompletion, rejectCompletion) => {
+    resolveEntry = resolveCompletion;
+    rejectEntry = rejectCompletion;
+  });
+  const watcher = watch(directory, { persistent: false }, (_event, filename) => {
+    if (filename && String(filename).startsWith(prefix)) {
+      watcher.close();
+      resolveEntry(join(directory, String(filename)));
+    }
+  });
+  watcher.once('error', rejectEntry);
+  return { close: () => watcher.close(), completion };
+}
+
+function waitForEntryWhileRunning(entry, execution, timeout) {
+  return withTimeout(Promise.race([
+    entry,
+    execution.completion.then((result) => {
+      throw new Error(`runner exited before creating the watched diagnostic entry: ${result.stderr}`);
+    }),
+  ]), timeout, async () => {
+    await stopProcess(execution.child);
+    throw new Error('timed out waiting for the watched diagnostic entry');
+  });
 }
 
 function withTimeout(promise, timeout, onTimeout) {
@@ -393,6 +495,13 @@ function writeResults() {
   const traceDirectory = join(process.env.KADRE_PLAYWRIGHT_OUTPUT_DIR, 'trace');
   mkdirSync(traceDirectory, { recursive: true });
   writeFileSync(join(traceDirectory, 'trace.txt'), 'diagnostic evidence');
+  if (scenario === 'quarantine-remove-failure' || scenario === 'signal-during-preservation') {
+    const bulkDirectory = join(process.env.KADRE_PLAYWRIGHT_OUTPUT_DIR, 'bulk');
+    mkdirSync(bulkDirectory, { recursive: true });
+    for (let index = 0; index < 2_500; index += 1) {
+      writeFileSync(join(bulkDirectory, String(index).padStart(4, '0')), 'diagnostic evidence');
+    }
+  }
   if (scenario === 'remove-failure') chmodSync(traceDirectory, 0o500);
 }
 `;
@@ -420,4 +529,25 @@ process.on('SIGTERM', () => {
   process.exit(0);
 });
 setInterval(() => undefined, 1_000);
+`;
+
+const preservationPauseSource = String.raw`
+const { existsSync, writeFileSync } = require('node:fs');
+const fileSystem = require('node:fs/promises');
+const { resolve } = require('node:path');
+
+const rename = fileSystem.rename.bind(fileSystem);
+fileSystem.rename = async (source, destination) => {
+  const result = await rename(source, destination);
+  if (process.env.KADRE_RUNNER_TEST_PAUSE_AFTER_RENAME
+      && resolve(destination) === resolve(process.env.KADRE_RUNNER_TEST_PAUSE_AFTER_RENAME)) {
+    writeFileSync(process.env.KADRE_RUNNER_TEST_PRESERVATION_PUBLISHED, 'published');
+    const deadline = Date.now() + 10_000;
+    while (!existsSync(process.env.KADRE_RUNNER_TEST_PRESERVATION_RELEASE)) {
+      if (Date.now() >= deadline) throw new Error('timed out waiting to release diagnostic preservation');
+      await new Promise((resolveDelay) => setTimeout(resolveDelay, 10));
+    }
+  }
+  return result;
+};
 `;
