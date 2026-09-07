@@ -178,6 +178,27 @@ public class RuntimeHostController private constructor(
         targets.forEach(SessionRuntime::hostDetached)
     }
 
+    /**
+     * Immediately publishes host detachment for a runtime that may be destroyed without a
+     * cooperative shutdown opportunity, such as browser pagehide.
+     */
+    internal fun detachImmediately() {
+        val detachedState = LifecycleState(
+            AttachmentState.Detached,
+            VisibilityState.Background,
+            ActivationState.Inactive,
+        )
+        val targets = lock.withLock {
+            if (!detached) {
+                detached = true
+                lifecycleState = detachedState
+            }
+            sessions.toList()
+        }
+        targets.forEach { it.updateLifecycle(detachedState) }
+        targets.forEach(SessionRuntime::hostDetachedImmediately)
+    }
+
     public fun fail(failure: KadreFailure.PlatformFailure) {
         val targets = lock.withLock { sessions.toList() }
         targets.forEach { it.hostFailed(failure) }

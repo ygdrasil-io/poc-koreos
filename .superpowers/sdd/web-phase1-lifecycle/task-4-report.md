@@ -1,48 +1,44 @@
-# Task 4 — DOM-independent Web ownership and lifecycle core
+# Task 4 — review fix round 1
 
-## Scope delivered
+## Corrections
 
-- Added a DOM-free stable-identity registry with idempotent reservation release and the existing
-  `KadreFailure.AlreadyInUse(KadreResourceKind.Host)` representation of the contractual
-  `Busy(Host)` outcome.
-- Added immutable browser lifecycle snapshots and a reducer for `StopWhenDetached`, `Manual`,
-  deterministic visibility/focus reduction, inter-document transfer, and terminal `pagehide`.
-- Routed reductions into `RuntimeHostController.updateLifecycle` and `detach`, preserving the
-  runtime's `HostDetached` termination path.  Session teardown now releases the target port and
-  registry reservation exactly once.
-- Added DOM-free common tests for reservation/release, policy admission, detach, transfer,
-  manual disconnection, focus/visibility, `pagehide`, idempotence, and runtime termination.
+- Ajout du seam runtime interne `detachImmediately` pour `pagehide` :
+  `Stopped(HostDetached)` est publié sans attendre `shutdownTimeout`; le detach ordinaire reste
+  coopératif.
+- Séparation du cleanup de port et de la réservation. Le port est relâché durant la fermeture de
+  surface, alors que la réservation est relâchée dans `RuntimeSessionObserver` après
+  `SessionState.Terminated`.
+- Cleanup de port best effort sur les échecs d'admission et de teardown; une exception de cleanup
+  ne fuit plus hors de `attach` et ne bloque pas la libération de réservation.
+- Le rapport précédemment suivi est supprimé de Git; ce rapport de remplacement reste ignoré.
+- Tests renforcés pour une observation inter-document directe et pour `pagehide` sur application
+  non coopérative.
 
-## TDD evidence
+## RED
 
-RED command (before production files existed):
+Avant l'implémentation, le test JS Web échouait comme attendu :
+
+- `pagehideTerminatesAStubbornApplicationWithoutAwaitingShutdownTimeout` observait `Stopping`
+  au lieu de `Terminated(Stopped(HostDetached))`;
+- `cleanupFailureDuringLifecycleInstallationDoesNotEscapeOrLeakReservation` laissait remonter
+  `IllegalStateException("cleanup")`.
+
+Le test runtime JVM échouait à la compilation, car `RuntimeHostController.detachImmediately`
+n'existait pas.
+
+## GREEN / vérification
 
 ```text
-./gradlew :kadre:platform:web:jsBrowserTest --tests org.graphiks.kadre.platform.web.WebLifecycleReducerTest --tests org.graphiks.kadre.platform.web.WebHostSessionTest
-```
-
-It failed in `:kadre:platform:web:compileTestKotlinJs` with the expected unresolved references
-to `WebHostRegistry`, `WebHostReservation`, `WebLifecycleSnapshot`, `WebLifecycleReducer`, and
-the new `WebHostSession` seam.
-
-## Verification
-
-```text
-./gradlew :kadre:platform:web:jsBrowserTest --tests org.graphiks.kadre.platform.web.WebLifecycleReducerTest --tests org.graphiks.kadre.platform.web.WebHostSessionTest
-./gradlew :kadre:platform:web:wasmJsBrowserTest --tests org.graphiks.kadre.platform.web.WebLifecycleReducerTest --tests org.graphiks.kadre.platform.web.WebHostSessionTest
-./gradlew :kadre:platform:web:jsBrowserTest :kadre:platform:web:wasmJsBrowserTest
+./gradlew :kadre:runtime:jvmTest --tests org.graphiks.kadre.internal.runtime.RuntimeHostControllerTest.immediateHostDetachPublishesTerminationWithoutAwaitingANonCooperativeApplication
+./gradlew :kadre:platform:web:jsBrowserTest --tests org.graphiks.kadre.platform.web.WebHostSessionTest --tests org.graphiks.kadre.platform.web.WebLifecycleReducerTest
+./gradlew :kadre:platform:web:wasmJsBrowserTest --tests org.graphiks.kadre.platform.web.WebHostSessionTest --tests org.graphiks.kadre.platform.web.WebLifecycleReducerTest
+./gradlew :kadre:runtime:jvmTest :kadre:platform:web:jsBrowserTest :kadre:platform:web:wasmJsBrowserTest
 git diff --check
 ```
 
-All commands completed successfully.  The generated `kotlin-js-store/` directory was removed
-before committing; no `kadre/contracts/driver/web/node_modules/` directory was created by this
-task.
+Toutes les commandes ont réussi. Les artefacts `kotlin-js-store/` générés par Gradle sont retirés
+avant le commit.
 
-## Commit
+## Concern
 
-`feat(web): add lifecycle ownership core` (this commit).
-
-## Concerns
-
-None.  Target-specific JS/Wasm ports intentionally retain DOM observation, stable element
-identity override, observer installation, and Manual rAF reconnection for Task 5.
+Aucun.

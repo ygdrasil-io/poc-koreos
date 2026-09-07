@@ -18,10 +18,16 @@ class WebLifecycleReducerTest {
     }
 
     @Test
-    fun stopWhenDetachedTerminatesForADurableDetachOrDocumentTransfer() {
+    fun stopWhenDetachedTerminatesForADurableDetach() {
         val reducer = WebLifecycleReducer(WebAttachmentPolicy.StopWhenDetached)
 
         assertEquals(WebLifecycleReduction.Terminate, reducer.reduce(snapshot(connected = false)))
+    }
+
+    @Test
+    fun stopWhenDetachedTerminatesForADirectInterDocumentObservation() {
+        val reducer = WebLifecycleReducer(WebAttachmentPolicy.StopWhenDetached)
+
         assertEquals(WebLifecycleReduction.Terminate, reducer.reduce(snapshot(inOriginDocument = false)))
     }
 

@@ -1,8 +1,10 @@
 package org.graphiks.kadre.platform.web
 
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withContext
 import org.graphiks.kadre.application.ActivationState
 import org.graphiks.kadre.application.AttachmentState
 import org.graphiks.kadre.application.KadreApplication
@@ -10,9 +12,11 @@ import org.graphiks.kadre.application.KadreApplicationFactory
 import org.graphiks.kadre.application.KadreScope
 import org.graphiks.kadre.application.KadreSession
 import org.graphiks.kadre.application.SessionOutcome
+import org.graphiks.kadre.application.SessionState
 import org.graphiks.kadre.application.SessionStopReason
 import org.graphiks.kadre.application.VisibilityState
 import org.graphiks.kadre.diagnostics.KadreFailure
+import org.graphiks.kadre.diagnostics.KadrePlatform
 import org.graphiks.kadre.diagnostics.KadreResourceKind
 import org.graphiks.kadre.diagnostics.KadreResult
 import org.graphiks.kadre.policy.KadrePolicies
@@ -21,6 +25,7 @@ import org.graphiks.kadre.surface.PhysicalSize
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
+import kotlin.time.Duration.Companion.seconds
 
 class WebHostSessionTest {
     @Test
@@ -104,6 +109,66 @@ class WebHostSessionTest {
     }
 
     @Test
+    fun pagehideTerminatesAStubbornApplicationWithoutAwaitingShutdownTimeout() = runTest {
+        val blocker = CompletableDeferred<Unit>()
+        val timeout = 1.seconds
+        val port = RecordingPort(Any(), snapshot())
+        val policy = KadrePolicies.Default.copy(
+            execution = KadrePolicies.Default.execution.copy(shutdownTimeout = timeout),
+        )
+        val session = successful(
+            WebHostSession(port, WebHostRegistry()).attach(
+                this,
+                KadreApplicationFactory {
+                    KadreApplication {
+                        withContext(NonCancellable) { blocker.await() }
+                    }
+                },
+                policy,
+            ),
+        )
+        testScheduler.runCurrent()
+        val expected = SessionOutcome.Stopped(SessionStopReason.HostDetached)
+
+        port.deliver(snapshot(pageHidden = true))
+
+        try {
+            assertEquals(SessionState.Terminated(expected), session.state.value)
+            assertEquals(expected, session.awaitTermination())
+        } finally {
+            blocker.complete(Unit)
+            testScheduler.runCurrent()
+        }
+    }
+
+    @Test
+    fun cleanupFailureDuringLifecycleInstallationDoesNotEscapeOrLeakReservation() = runTest {
+        val registry = WebHostRegistry()
+        val identity = Any()
+        val failingPort = RecordingPort(
+            stableIdentity = identity,
+            initialLifecycleSnapshot = snapshot(),
+            lifecycleInstallationFailure = IllegalStateException("install"),
+            cleanupFailure = IllegalStateException("cleanup"),
+        )
+
+        assertEquals(
+            KadreResult.Failure(
+                KadreFailure.PlatformFailure(KadrePlatform.Web, "web-host", "lifecycle-install-failed"),
+            ),
+            WebHostSession(failingPort, registry).attach(this, factory(), KadrePolicies.Default),
+        )
+        assertEquals(1, failingPort.releases)
+
+        successful(WebHostSession(RecordingPort(identity, snapshot()), registry).attach(
+            this,
+            factory(),
+            KadrePolicies.Default,
+        )).requestStop()
+        testScheduler.runCurrent()
+    }
+
+    @Test
     fun manualDisconnectedSessionPublishesAttachedBackgroundInactiveLifecycle() = runTest {
         val scopeReady = CompletableDeferred<KadreScope>()
         val port = RecordingPort(Any(), snapshot(connected = false))
@@ -156,6 +221,8 @@ class WebHostSessionTest {
     private class RecordingPort(
         override val stableIdentity: Any,
         override val initialLifecycleSnapshot: WebLifecycleSnapshot,
+        private val lifecycleInstallationFailure: Throwable? = null,
+        private val cleanupFailure: Throwable? = null,
     ) : WebHostPort {
         override val initialSnapshot: WebSurfaceSnapshot = WebSurfaceSnapshot(
             logicalWidth = 1.0,
@@ -174,10 +241,12 @@ class WebHostSessionTest {
         override fun installLifecycleObserver(observer: (WebLifecycleSnapshot) -> Unit) {
             listenerInstallations += 1
             lifecycleObserver = observer
+            lifecycleInstallationFailure?.let { throw it }
         }
 
         override fun release() {
             releases += 1
+            cleanupFailure?.let { throw it }
         }
 
         fun deliver(snapshot: WebLifecycleSnapshot) {

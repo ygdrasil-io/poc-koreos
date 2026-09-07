@@ -213,6 +213,21 @@ internal class SessionRuntime(
         requestTermination(SessionOutcome.Stopped(SessionStopReason.HostDetached))
     }
 
+    fun hostDetachedImmediately() {
+        val final = lock.withLock {
+            if (finished) return
+            selectedOutcome = selectOutcome(
+                selectedOutcome,
+                SessionOutcome.Stopped(SessionStopReason.HostDetached),
+            )
+            mutableState.value = SessionState.Stopping
+            startupJob?.cancel()
+            applicationJob?.cancel()
+            checkNotNull(selectedOutcome)
+        }
+        finish(final)
+    }
+
     fun hostFailed(failure: KadreFailure.PlatformFailure) {
         requestTermination(SessionOutcome.Failed(failure))
     }

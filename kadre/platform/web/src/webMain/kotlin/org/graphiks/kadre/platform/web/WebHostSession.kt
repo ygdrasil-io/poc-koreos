@@ -27,6 +27,7 @@ import org.graphiks.kadre.input.TextInputConfig
 import org.graphiks.kadre.input.TextInputSession
 import org.graphiks.kadre.internal.runtime.RuntimeHostController
 import org.graphiks.kadre.internal.runtime.RuntimePrimarySurface
+import org.graphiks.kadre.internal.runtime.RuntimeSessionObserver
 import org.graphiks.kadre.policy.KadrePolicy
 import org.graphiks.kadre.surface.CursorIcon
 import org.graphiks.kadre.surface.CursorStyle
@@ -115,19 +116,21 @@ internal class WebHostSession(
             port.installLifecycleObserver { snapshot ->
                 when (val reduction = reducer.reduce(snapshot)) {
                     is WebLifecycleReduction.Update -> controller.updateLifecycle(reduction.state)
-                    WebLifecycleReduction.Terminate -> controller.detach()
+                    WebLifecycleReduction.Terminate -> {
+                        if (snapshot.pageHidden) controller.detachImmediately() else controller.detach()
+                    }
                 }
             }
         }
         if (installed.isFailure) {
-            ownership.release()
+            ownership.releaseAfterAttachFailure()
             return KadreResult.Failure(
                 KadreFailure.PlatformFailure(KadrePlatform.Web, "web-host", "lifecycle-install-failed"),
             )
         }
 
         val attached = controller.attach(parentScope, applicationFactory, policy)
-        if (attached is KadreResult.Failure) ownership.release()
+        if (attached is KadreResult.Failure) ownership.releaseAfterAttachFailure()
         return attached
     }
 
@@ -137,6 +140,7 @@ internal class WebHostSession(
     ): RuntimeHostController = RuntimeHostController.withPrimarySurface(
         platform = KadrePlatform.Web,
         initialLifecycleState = initialLifecycle,
+        sessionObserver = RuntimeSessionObserver { _, _ -> ownership.releaseReservation() },
         primarySurfaceFactory = { id ->
             val surface = WebHostSurface(id, port, ownership)
             RuntimePrimarySurface(surface, surface::detach)
@@ -148,16 +152,24 @@ private class WebHostOwnership(
     private val port: WebHostPort,
     private val reservation: WebHostReservation,
 ) {
-    private var released: Boolean = false
+    private var portReleased: Boolean = false
+    private var reservationReleased: Boolean = false
 
-    fun release() {
-        if (released) return
-        released = true
-        try {
-            port.release()
-        } finally {
-            reservation.release()
-        }
+    fun releaseAfterAttachFailure() {
+        releasePort()
+        releaseReservation()
+    }
+
+    fun releasePort() {
+        if (portReleased) return
+        portReleased = true
+        runCatching { port.release() }
+    }
+
+    fun releaseReservation() {
+        if (reservationReleased) return
+        reservationReleased = true
+        reservation.release()
     }
 }
 
@@ -214,7 +226,7 @@ private class WebHostSurface(
                 revision = SurfaceRevision(current.revision.value + 1L),
             )
         } finally {
-            ownership.release()
+            ownership.releasePort()
         }
     }
 }
