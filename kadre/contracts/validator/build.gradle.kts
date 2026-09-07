@@ -236,7 +236,8 @@ val browserContractEvidenceTasks = listOf("js", "wasmJs").map { target ->
     tasks.register<JavaExec>("validate${target.replaceFirstChar(Char::uppercase)}BrowserContractEvidence") {
         group = "verification"
         description = "Validates every active $target browser contract evidence artifact."
-        dependsOn("jvmMainClasses", ":kadre:contracts:driver:web:${target}BrowserSmoke")
+        dependsOn("jvmMainClasses")
+        mustRunAfter(":kadre:contracts:driver:web:${target}BrowserSmoke")
         classpath(jvmMain.output.allOutputs, jvmMain.runtimeDependencyFiles)
         mainClass.set("org.graphiks.kadre.contracts.ValidateContractEvidenceKt")
         val artifactDirectory = rootProject.file("kadre/contracts/driver/web/build/contract-evidence/$target")

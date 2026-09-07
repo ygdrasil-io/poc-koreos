@@ -40,7 +40,7 @@ jobs:
         run: npx --prefix kadre/contracts/driver/web playwright install --with-deps chromium
 
       - name: Run Web browser contract smoke gate
-        run: timeout --foreground --kill-after=30s 8m ./gradlew :kadre:contracts:driver:web:jsBrowserSmoke :kadre:contracts:driver:web:wasmJsBrowserSmoke :kadre:contracts:validator:check --console=plain
+        run: ./gradlew :kadre:contracts:driver:web:jsBrowserSmoke :kadre:contracts:driver:web:wasmJsBrowserSmoke :kadre:contracts:validator:check --console=plain
 
       - name: Upload Web diagnostics and evidence
         if: failure()

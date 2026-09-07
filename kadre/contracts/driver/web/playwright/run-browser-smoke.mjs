@@ -1,5 +1,5 @@
 import { createServer } from 'node:http';
-import { readFile, readdir, rm, stat } from 'node:fs/promises';
+import { readFile, readdir, realpath, rm, stat } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { basename, extname, join, relative, resolve, sep } from 'node:path';
 import { spawn } from 'node:child_process';
@@ -11,6 +11,7 @@ const argumentsByName = new Map(process.argv.slice(2).map((argument) => {
 const target = argumentsByName.get('--target');
 const distribution = argumentsByName.get('--distribution');
 const evidence = argumentsByName.get('--evidence');
+const timeoutMilliseconds = parseTimeout(argumentsByName.get('--timeout-ms'));
 
 if (!['js', 'wasmJs'].includes(target) || !distribution || !evidence) {
   throw new Error('expected --target=js|wasmJs, --distribution=<directory>, and --evidence=<directory>');
@@ -22,13 +23,14 @@ if (!existsSync(distribution)) {
 const junitDirectory = join(evidence, 'test-results', 'browser', 'chromium');
 const junitOutput = join(junitDirectory, 'TEST-web-phase0.xml');
 const playwrightOutput = join(evidence, 'diagnostics', 'playwright');
-const entryScript = await findEntryScript(distribution);
-const server = await serveDistribution(distribution, entryScript);
+const distributionRoot = await realpath(distribution);
+const entryScript = await findEntryScript(distributionRoot);
+const server = await serveDistribution(distributionRoot, entryScript);
 let passed = false;
 
 try {
   const command = process.platform === 'win32' ? 'node_modules/.bin/playwright.cmd' : 'node_modules/.bin/playwright';
-  const result = await run(command, ['test', '--config', 'playwright/playwright.config.mjs'], {
+  const result = await runWithWatchdog(command, ['test', '--config', 'playwright/playwright.config.mjs'], {
     cwd: process.cwd(),
     env: {
       ...process.env,
@@ -37,7 +39,7 @@ try {
       KADRE_PLAYWRIGHT_OUTPUT_DIR: playwrightOutput,
     },
     stdio: 'inherit',
-  });
+  }, timeoutMilliseconds);
   if (result.status !== 0) {
     throw new Error(`Playwright ${target} smoke failed with exit status ${result.status}`);
   }
@@ -53,12 +55,77 @@ try {
   });
 }
 
-function run(command, argumentsList, options) {
+function parseTimeout(value) {
+  if (value === undefined) return 90_000;
+  if (!/^\d+$/.test(value) || Number(value) === 0) {
+    throw new Error('--timeout-ms must be a positive integer');
+  }
+  return Number(value);
+}
+
+function runWithWatchdog(command, argumentsList, options, timeout) {
   return new Promise((resolveRun, rejectRun) => {
-    const child = spawn(command, argumentsList, options);
-    child.once('error', rejectRun);
-    child.once('close', (status) => resolveRun({ status }));
+    const child = spawn(command, argumentsList, {
+      ...options,
+      detached: process.platform !== 'win32',
+    });
+    let settled = false;
+    let timedOut = false;
+    let termination = Promise.resolve();
+    const timer = setTimeout(() => {
+      timedOut = true;
+      termination = terminateProcessTree(child.pid);
+    }, timeout);
+
+    const settle = async (callback) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      await callback();
+    };
+
+    child.once('error', (error) => {
+      void settle(async () => {
+        await terminateProcessTree(child.pid);
+        rejectRun(error);
+      });
+    });
+    child.once('close', (status) => {
+      void settle(async () => {
+        if (timedOut) {
+          await termination;
+          rejectRun(new Error(`Playwright exceeded configured timeout of ${timeout}ms; terminated its process tree`));
+          return;
+        }
+        if (status !== 0) await terminateProcessTree(child.pid);
+        resolveRun({ status });
+      });
+    });
   });
+}
+
+async function terminateProcessTree(pid) {
+  if (!pid) return;
+  if (process.platform === 'win32') {
+    await new Promise((resolveTermination) => {
+      const killer = spawn('taskkill', ['/pid', String(pid), '/T', '/F'], { stdio: 'ignore', windowsHide: true });
+      killer.once('error', resolveTermination);
+      killer.once('close', resolveTermination);
+    });
+    return;
+  }
+  try {
+    process.kill(-pid, 'SIGTERM');
+  } catch (error) {
+    if (error.code === 'ESRCH') return;
+    throw error;
+  }
+  await new Promise((resolveGrace) => setTimeout(resolveGrace, 1_000));
+  try {
+    process.kill(-pid, 'SIGKILL');
+  } catch (error) {
+    if (error.code !== 'ESRCH') throw error;
+  }
 }
 
 async function findEntryScript(directory) {
@@ -79,23 +146,28 @@ async function findFiles(directory, matches) {
   return files.flat().sort();
 }
 
-async function serveDistribution(directory, entryScript) {
+async function serveDistribution(realRoot, entryScript) {
   const instance = createServer(async (request, response) => {
     try {
-      const path = request.url === '/index.html'
+      const requestedPath = request.url === '/index.html'
         ? null
-        : resolve(directory, `.${new URL(request.url, 'http://127.0.0.1').pathname}`);
-      if (path === null) {
+        : resolve(realRoot, `.${new URL(request.url, 'http://127.0.0.1').pathname}`);
+      if (requestedPath === null) {
         response.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
         response.end(`<!doctype html><html><body><script src="/${entryScript}"></script></body></html>`);
         return;
       }
-      if (!path.startsWith(`${resolve(directory)}${sep}`) || !(await stat(path)).isFile()) {
+      if (!isWithin(realRoot, requestedPath)) {
         response.writeHead(404).end();
         return;
       }
-      response.writeHead(200, { 'content-type': contentType(path) });
-      response.end(await readFile(path));
+      const realFile = await realpath(requestedPath);
+      if (!isWithin(realRoot, realFile) || !(await stat(realFile)).isFile()) {
+        response.writeHead(404).end();
+        return;
+      }
+      response.writeHead(200, { 'content-type': contentType(realFile) });
+      response.end(await readFile(realFile));
     } catch {
       response.writeHead(404).end();
     }
@@ -106,6 +178,10 @@ async function serveDistribution(directory, entryScript) {
   });
   const address = instance.address();
   return { instance, url: `http://127.0.0.1:${address.port}` };
+}
+
+function isWithin(root, path) {
+  return path.startsWith(`${root}${sep}`);
 }
 
 function contentType(path) {
