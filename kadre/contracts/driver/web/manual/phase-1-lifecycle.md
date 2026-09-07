@@ -31,10 +31,53 @@ The page must hold an active `parentScope`, attach an application that remains
 alive until stopped, and log `pagehide.persisted` and `pageshow.persisted`.
 Do not add instrumentation to Kadre for this charter.
 
+### Clean-checkout setup
+
+`installPlaywright` only performs the locked `npm ci --ignore-scripts`; it does
+not install a browser. Provision the exact Chromium revision pinned by that
+local package, then build both public driver bundles:
+
+```shell
+rtk ./gradlew :kadre:contracts:driver:web:installPlaywright
+(cd kadre/contracts/driver/web && npx --no-install playwright install chromium)
+rtk ./gradlew :kadre:contracts:driver:web:jsBrowserDistribution :kadre:contracts:driver:web:wasmJsBrowserDistribution
+```
+
+Create a disposable static host outside the checkout. It loads the existing
+public JS and Wasm driver bundles; no fixture, dependency or source is added to
+the repository:
+
+```shell
+kadre_manual_dir="$(mktemp -d)"
+mkdir "$kadre_manual_dir/js" "$kadre_manual_dir/wasm"
+cp kadre/contracts/driver/web/build/dist/js/productionExecutable/kadre-web-phase0.js "$kadre_manual_dir/js/"
+cp -R kadre/contracts/driver/web/build/dist/wasmJs/productionExecutable/. "$kadre_manual_dir/wasm/"
+cat > "$kadre_manual_dir/js/index.html" <<'EOF'
+<!doctype html><meta charset="utf-8"><script src="./kadre-web-phase0.js"></script>
+EOF
+cat > "$kadre_manual_dir/wasm/index.html" <<'EOF'
+<!doctype html><meta charset="utf-8"><script src="./kadre-web-phase0-wasm.js"></script>
+EOF
+(cd "$kadre_manual_dir" && python3 -m http.server 8080)
+```
+
+Keep the static server running in that terminal and open one target at a time,
+for example:
+
+```text
+http://127.0.0.1:8080/js/index.html?scenario=manual-reconnect
+http://127.0.0.1:8080/wasm/index.html?scenario=manual-reconnect
+```
+
+Replace `manual-reconnect` with the public fixture scenario needed by a
+procedure, such as `pagehide`, `focus`, `shadow-root`, `inter-document` or
+`duplicate`. The query is read by the public driver bundle, so the same
+temporary host page can be reused for all observations.
+
 | Target | Browser setup | Automated prerequisite |
 | --- | --- | --- |
-| Kotlin/JS IR | Chromium installed by the pinned Playwright package | `rtk ./gradlew :kadre:contracts:driver:web:jsBrowserSmoke --rerun-tasks` |
-| Kotlin/Wasm-JS | Chromium installed by the pinned Playwright package | `rtk ./gradlew :kadre:contracts:driver:web:wasmJsBrowserSmoke --rerun-tasks` |
+| Kotlin/JS IR | Chromium provisioned by the local pinned Playwright package | `rtk ./gradlew :kadre:contracts:driver:web:jsBrowserSmoke --rerun-tasks` |
+| Kotlin/Wasm-JS | Chromium provisioned by the local pinned Playwright package | `rtk ./gradlew :kadre:contracts:driver:web:wasmJsBrowserSmoke --rerun-tasks` |
 
 Run both target commands before the manual pass. Their Playwright lifecycle
 smokes cover deterministic attach, ownership, lifecycle and teardown paths.
@@ -95,8 +138,11 @@ created nor owns the container or either ShadowRoot.
 
 The session remains alive through both disconnections. It becomes foreground
 when connected to a visible origin document and active only when focused. No
-`Stopped(HostDetached)` outcome is produced unless the host explicitly stops
-the session or the element is transferred to another document.
+terminal outcome is produced by a Manual disconnection alone. An explicit
+`KadreSession.requestStop()` produces `Stopped(HostRequested)`; an application
+call to `KadreScope.requestStop()` produces `Stopped(ApplicationRequested)`.
+For a Manual session, an inter-document transfer or `pagehide` produces
+`Stopped(HostDetached)`.
 
 ### 5. Cross-document adoption through a host-created iframe
 
@@ -114,8 +160,8 @@ experiment; this does not mean Kadre opens an iframe, popup or a new window.
    while the first session is alive.
 2. Confirm the second request is rejected as `AlreadyInUse(Host)` and inspect
    that the element's child count and own-property names did not change.
-3. Stop or detach the first session and await its terminal state; only then
-   attach the same element again.
+3. Call `KadreSession.requestStop()` on the first session, await
+   `Stopped(HostRequested)`, and only then attach the same element again.
 
 The duplicate does not take ownership, install a second observer, or mutate a
 host DOM property/expando. Reservation cleanup occurs only after the first

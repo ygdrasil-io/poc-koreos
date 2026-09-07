@@ -14,15 +14,30 @@ rtk ./gradlew :kadre:contracts:driver:web:jsBrowserSmoke :kadre:contracts:driver
 
 The target-specific Playwright suites are
 [web-lifecycle.spec.mjs](playwright/web-lifecycle.spec.mjs). They exercise the
-public `HTMLElement.attachKadre` API and produce the browser evidence consumed
-by the contract gates. The tests cover deterministic lifecycle behaviour:
-ownership, detach/reinsert, cross-document transfer, Shadow DOM observation,
-`Manual` reconnection, focus and visibility reduction, `pagehide`, and the
-absence of Kadre-created DOM or a primary window.
+public `HTMLElement.attachKadre` API and emit target-specific JUnit and
+diagnostic artifacts for the lifecycle scenarios that will later belong to a
+contract proof. The tests cover deterministic lifecycle behaviour: ownership,
+detach/reinsert, cross-document transfer, Shadow DOM observation, `Manual`
+reconnection, focus and visibility reduction, `pagehide`, and the absence of
+Kadre-created DOM or a primary window.
 
-The phase-1 tests use a pinned Playwright/Chromium installation. A local
-browser installation is prepared by the Gradle tasks; no system browser version
-is an input to the automated smoke.
+`BCK-001` remains `planned` in Phase 1. No active contract gate consumes these
+artifacts and this driver does not activate that capability.
+
+## Pinned Chromium provisioning
+
+The Gradle task `installPlaywright` runs only the locked `npm ci
+--ignore-scripts`; it does **not** provision a browser executable. From a clean
+checkout, provision the Chromium revision pinned by that local Playwright
+installation separately:
+
+```shell
+rtk ./gradlew :kadre:contracts:driver:web:installPlaywright
+(cd kadre/contracts/driver/web && npx --no-install playwright install chromium)
+```
+
+The browser smoke tasks then use that local pinned Chromium revision. A system
+browser version is not an input to the automated smoke.
 
 ## Manual browser charter
 
