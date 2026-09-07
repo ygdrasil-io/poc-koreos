@@ -24,6 +24,7 @@ import org.graphiks.kadre.surface.LogicalSize
 import org.graphiks.kadre.surface.PhysicalSize
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.time.Duration.Companion.seconds
 
@@ -160,6 +161,52 @@ class WebHostSessionTest {
     }
 
     @Test
+    fun ordinaryStopRevokesThePortButRetainsTheReservationUntilTermination() = runTest {
+        val blocker = CompletableDeferred<Unit>()
+        val registry = WebHostRegistry()
+        val identity = Any()
+        val port = RecordingPort(identity, snapshot())
+        val session = successful(
+            WebHostSession(port, registry).attach(
+                this,
+                KadreApplicationFactory {
+                    KadreApplication {
+                        withContext(NonCancellable) { blocker.await() }
+                    }
+                },
+                KadrePolicies.Default,
+            ),
+        )
+        testScheduler.runCurrent()
+
+        session.requestStop()
+
+        try {
+            assertEquals(SessionState.Stopping, session.state.value)
+            assertEquals(1, port.releases)
+            assertFalse(port.deliver(snapshot(connected = false)))
+            assertEquals(
+                KadreResult.Failure(KadreFailure.AlreadyInUse(KadreResourceKind.Host)),
+                WebHostSession(RecordingPort(identity, snapshot()), registry).attach(
+                    this,
+                    factory(),
+                    KadrePolicies.Default,
+                ),
+            )
+        } finally {
+            blocker.complete(Unit)
+            testScheduler.runCurrent()
+        }
+        assertIs<SessionState.Terminated>(session.state.value)
+
+        val replacement = RecordingPort(identity, snapshot())
+        successful(
+            WebHostSession(replacement, registry).attach(this, factory(), KadrePolicies.Default),
+        ).requestStop()
+        testScheduler.runCurrent()
+    }
+
+    @Test
     fun cleanupFailureDuringLifecycleInstallationDoesNotEscapeOrLeakReservation() = runTest {
         val registry = WebHostRegistry()
         val identity = Any()
@@ -264,12 +311,15 @@ class WebHostSessionTest {
 
         override fun release() {
             releases += 1
+            lifecycleObserver = null
             cleanupFailure?.let { throw it }
         }
 
-        fun deliver(snapshot: WebLifecycleSnapshot) {
-            checkNotNull(lifecycleObserver).invoke(snapshot)
-        }
+        fun deliver(snapshot: WebLifecycleSnapshot): Boolean =
+            lifecycleObserver?.let {
+                it(snapshot)
+                true
+            } ?: false
     }
 
     private class EqualityCollidingIdentity {

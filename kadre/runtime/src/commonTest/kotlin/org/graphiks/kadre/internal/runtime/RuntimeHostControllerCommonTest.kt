@@ -1,11 +1,23 @@
 package org.graphiks.kadre.internal.runtime
 
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.InternalCoroutinesApi
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withContext
 import org.graphiks.kadre.application.KadreApplication
 import org.graphiks.kadre.application.KadreApplicationFactory
 import org.graphiks.kadre.application.KadreScope
+import org.graphiks.kadre.application.KadreSession
+import org.graphiks.kadre.application.SessionOutcome
+import org.graphiks.kadre.application.SessionState
+import org.graphiks.kadre.application.SessionStopReason
 import org.graphiks.kadre.diagnostics.KadrePlatform
 import org.graphiks.kadre.diagnostics.KadreResult
 import org.graphiks.kadre.policy.KadrePolicies
@@ -85,6 +97,155 @@ class RuntimeHostControllerCommonTest {
         second.requestStop()
         testScheduler.runCurrent()
     }
+
+    @OptIn(InternalCoroutinesApi::class)
+    @Test
+    fun ordinaryTerminationRevokesOnceBeforeApplicationCancellation() = runTest {
+        val events = mutableListOf<String>()
+        val blocker = CompletableDeferred<Unit>()
+        val controller = controllerWithRevocation(
+            onRevocation = { events += "revoked" },
+            onStop = { events += "host-stopping" },
+        )
+        val session = attach(controller) {
+            coroutineContext[Job]!!.invokeOnCompletion(
+                onCancelling = true,
+                invokeImmediately = true,
+            ) { cause ->
+                if (cause != null) events += "application-cancelled"
+            }
+            withContext(NonCancellable) { blocker.await() }
+        }
+        testScheduler.runCurrent()
+
+        session.requestStop()
+        session.requestStop()
+        controller.detach()
+
+        try {
+            assertEquals(SessionState.Stopping, session.state.value)
+            assertEquals(listOf("revoked", "application-cancelled", "host-stopping"), events)
+        } finally {
+            blocker.complete(Unit)
+            testScheduler.runCurrent()
+        }
+    }
+
+    @OptIn(InternalCoroutinesApi::class)
+    @Test
+    fun parentCancellationRevokesBeforeApplicationCancellation() = runTest {
+        val events = mutableListOf<String>()
+        val blocker = CompletableDeferred<Unit>()
+        val parentJob = SupervisorJob()
+        val parentScope = CoroutineScope(parentJob + StandardTestDispatcher(testScheduler))
+        val controller = controllerWithRevocation(onRevocation = { events += "revoked" })
+        val session = attach(controller, parentScope) {
+            coroutineContext[Job]!!.invokeOnCompletion(
+                onCancelling = true,
+                invokeImmediately = true,
+            ) { cause ->
+                if (cause != null) events += "application-cancelled"
+            }
+            withContext(NonCancellable) { blocker.await() }
+        }
+        testScheduler.runCurrent()
+
+        parentScope.cancel()
+
+        try {
+            assertEquals(listOf("revoked", "application-cancelled"), events)
+        } finally {
+            blocker.complete(Unit)
+            testScheduler.runCurrent()
+        }
+        assertEquals(
+            SessionOutcome.Stopped(SessionStopReason.ParentCancelled),
+            session.awaitTermination(),
+        )
+    }
+
+    @OptIn(InternalCoroutinesApi::class)
+    @Test
+    fun immediateHostDetachRevokesOnceBeforeApplicationCancellation() = runTest {
+        val events = mutableListOf<String>()
+        val blocker = CompletableDeferred<Unit>()
+        val controller = controllerWithRevocation(onRevocation = { events += "revoked" })
+        val session = attach(controller) {
+            coroutineContext[Job]!!.invokeOnCompletion(
+                onCancelling = true,
+                invokeImmediately = true,
+            ) { cause ->
+                if (cause != null) events += "application-cancelled"
+            }
+            withContext(NonCancellable) { blocker.await() }
+        }
+        testScheduler.runCurrent()
+
+        controller.detachImmediately()
+        controller.detachImmediately()
+
+        try {
+            assertEquals(listOf("revoked", "application-cancelled"), events)
+            assertEquals(
+                SessionState.Terminated(SessionOutcome.Stopped(SessionStopReason.HostDetached)),
+                session.state.value,
+            )
+        } finally {
+            blocker.complete(Unit)
+            testScheduler.runCurrent()
+        }
+    }
+
+    @Test
+    fun revocationFailureIsDiagnosticOnly() = runTest {
+        val failure = IllegalStateException("revoke")
+        val reported = mutableListOf<Throwable>()
+        val controller = controllerWithRevocation(
+            onRevocation = { throw failure },
+            failureReporter = RuntimeFailureReporter(reported::add),
+        )
+        val session = attach(controller) { awaitCancellation() }
+        testScheduler.runCurrent()
+
+        session.requestStop()
+        testScheduler.runCurrent()
+
+        assertEquals(
+            SessionOutcome.Stopped(SessionStopReason.HostRequested),
+            session.awaitTermination(),
+        )
+        assertEquals(listOf<Throwable>(failure), reported)
+    }
+
+    private fun controllerWithRevocation(
+        onRevocation: () -> Unit,
+        onStop: () -> Unit = {},
+        failureReporter: RuntimeFailureReporter = RuntimeFailureReporter { },
+    ): RuntimeHostController = RuntimeHostController.withPrimarySurface(
+        platform = KadrePlatform.Web,
+        failureReporter = failureReporter,
+        sessionRevocationHandler = RuntimeSessionRevocationHandler { onRevocation() },
+        sessionStopHandler = RuntimeSessionStopHandler {
+            onStop()
+            null
+        },
+        primarySurfaceFactory = { id ->
+            val surface = RuntimeHostSurface(id, initialSurfaceState())
+            RuntimePrimarySurface(surface, surface::close)
+        },
+    )
+
+    private suspend fun kotlinx.coroutines.test.TestScope.attach(
+        controller: RuntimeHostController,
+        parentScope: CoroutineScope = this,
+        application: suspend KadreScope.() -> Unit,
+    ): KadreSession = assertIs<KadreResult.Success<KadreSession>>(
+        controller.attach(
+            parentScope,
+            KadreApplicationFactory { KadreApplication(application) },
+            KadrePolicies.Default,
+        ),
+    ).value
 
     private fun initialSurfaceState(): SurfaceState = SurfaceState(
         attachment = SurfaceAttachmentState.Attached,

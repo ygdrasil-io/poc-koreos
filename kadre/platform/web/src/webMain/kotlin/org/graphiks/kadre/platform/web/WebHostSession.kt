@@ -27,6 +27,7 @@ import org.graphiks.kadre.input.TextInputConfig
 import org.graphiks.kadre.input.TextInputSession
 import org.graphiks.kadre.internal.runtime.RuntimeHostController
 import org.graphiks.kadre.internal.runtime.RuntimePrimarySurface
+import org.graphiks.kadre.internal.runtime.RuntimeSessionRevocationHandler
 import org.graphiks.kadre.internal.runtime.RuntimeSessionObserver
 import org.graphiks.kadre.policy.KadrePolicy
 import org.graphiks.kadre.surface.CursorIcon
@@ -140,6 +141,7 @@ internal class WebHostSession(
     ): RuntimeHostController = RuntimeHostController.withPrimarySurface(
         platform = KadrePlatform.Web,
         initialLifecycleState = initialLifecycle,
+        sessionRevocationHandler = RuntimeSessionRevocationHandler { ownership.releasePort() },
         sessionObserver = RuntimeSessionObserver { _, _ -> ownership.releaseReservation() },
         primarySurfaceFactory = { id ->
             val surface = WebHostSurface(id, port, ownership)
