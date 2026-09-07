@@ -1,11 +1,16 @@
+@file:OptIn(org.jetbrains.kotlin.gradle.ExperimentalWasmDsl::class)
+
 plugins {
     id("org.jetbrains.kotlin.multiplatform")
     id("maven-publish")
 }
 
 kotlin {
+    applyDefaultHierarchyTemplate()
     jvmToolchain(25)
     jvm()
+    js { browser() }
+    wasmJs { browser() }
     explicitApi()
     compilerOptions {
         freeCompilerArgs.add("-Xconsistent-data-class-copy-visibility")

@@ -106,7 +106,7 @@ public class RuntimeWindowManager public constructor(
     private val enabledSurfaceCapabilities: SurfaceCapabilities = unsupportedSurfaceCapabilities(),
     private val textInputPortFactory: TextInputPortFactory = TextInputPortFactory { UnsupportedTextInputPort },
     private val onLastWindowClosed: (() -> Unit)? = null,
-) : WindowManager, AutoCloseable, RuntimeFullscreenObservationSink {
+) : WindowManager, AutoCloseable, RuntimeFullscreenObservationSink, RuntimeSessionWindowManager {
     init {
         if (attentionPort != null) {
             require(acceptedAttention == STANDARD_WINDOW_ATTENTION) {
@@ -215,14 +215,14 @@ public class RuntimeWindowManager public constructor(
         pending[requestId]?.request ?: committed[requestId]?.request
     }
 
-    internal fun installSessionConfiguration(
+    override fun installSessionConfiguration(
         deliveryPolicy: WindowDeliveryPolicy,
         inputDeliveryPolicy: InputDeliveryPolicy,
         source: () -> EventStamp,
         sessionFailureHandler: (KadreFailure) -> Unit,
-        collectorAllocator: RuntimeEventCollectorAllocator,
+        collectorAllocator: Any,
         maxCollectorsPerFlow: Int,
-        dropTransferScope: CoroutineScope? = null,
+        dropTransferScope: CoroutineScope?,
     ) {
         synchronized(lock) {
             check(sessionEventStampSource == null) { "window event stamp source was already installed" }
@@ -232,11 +232,29 @@ public class RuntimeWindowManager public constructor(
             surfaceDeliveryPolicy = deliveryPolicy
             surfaceInputDeliveryPolicy = inputDeliveryPolicy
             surfaceSessionFailureHandler = sessionFailureHandler
-            sessionEventCollectorAllocator = collectorAllocator
+            sessionEventCollectorAllocator = collectorAllocator as? RuntimeEventCollectorAllocator
+                ?: error("runtime session collector allocator has an invalid type")
             sessionMaxCollectorsPerFlow = maxCollectorsPerFlow
             this.dropTransferScope = dropTransferScope
         }
     }
+
+    internal fun installSessionConfiguration(
+        deliveryPolicy: WindowDeliveryPolicy,
+        inputDeliveryPolicy: InputDeliveryPolicy,
+        source: () -> EventStamp,
+        sessionFailureHandler: (KadreFailure) -> Unit,
+        collectorAllocator: RuntimeEventCollectorAllocator,
+        maxCollectorsPerFlow: Int,
+    ) = installSessionConfiguration(
+        deliveryPolicy,
+        inputDeliveryPolicy,
+        source,
+        sessionFailureHandler,
+        collectorAllocator,
+        maxCollectorsPerFlow,
+        null,
+    )
 
     /**
      * Unstable backend SPI accepting one immutable observation or acknowledgement.

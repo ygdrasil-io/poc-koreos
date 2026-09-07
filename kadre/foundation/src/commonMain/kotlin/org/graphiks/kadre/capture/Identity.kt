@@ -1,6 +1,7 @@
 package org.graphiks.kadre.capture
 
 import kotlin.time.Duration
+import kotlin.jvm.JvmInline
 
 public class CaptureSourceId internal constructor(private val value: Long) {
     init { require(value >= 0) }

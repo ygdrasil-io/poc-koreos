@@ -40,7 +40,6 @@ import org.graphiks.kadre.input.DeviceManager
 import org.graphiks.kadre.policy.KadrePolicy
 import org.graphiks.kadre.surface.HostSurface
 import org.graphiks.kadre.window.WindowManager
-import java.util.concurrent.atomic.AtomicLong
 import kotlin.coroutines.AbstractCoroutineContextElement
 import kotlin.coroutines.CoroutineContext
 import kotlin.coroutines.cancellation.CancellationException
@@ -59,14 +58,15 @@ internal class SessionRuntime(
     private val onTerminated: (SessionRuntime, SessionOutcome) -> Unit,
     componentsFactory: RuntimeSessionComponentsFactory,
 ) : KadreSession {
-    private val lock = Any()
+    private val lock = RuntimeLock()
     private val parentJob = checkNotNull(parentScope.coroutineContext[Job])
     private val rootJob = SupervisorJob(parentJob)
     private val baseContext = parentScope.coroutineContext.minusKey(Job)
     private val rootScope = CoroutineScope(baseContext + rootJob)
     private val mutableState = MutableStateFlow<SessionState>(SessionState.Starting)
     private val terminal = CompletableDeferred<SessionOutcome>()
-    private val nextSequence = AtomicLong(0L)
+    private val sequenceLock = RuntimeLock()
+    private var nextSequence = 0L
     private val marker = SessionMarker(id)
     private val eventCollectorAllocator = RuntimeEventCollectorAllocator(
         policy.resources.maxEventCollectorsPerSession,
@@ -83,14 +83,9 @@ internal class SessionRuntime(
         policy.resources.maxEventCollectorsPerFlow,
     )
     private val runtimeComponents = try {
-        componentsFactory.create(id, rootScope)
-    } catch (cause: Throwable) {
-        rootJob.cancel()
-        throw cause
-    }
-    private val runtimeWindows = runtimeComponents.windows
-        .also { manager ->
-            (manager as? RuntimeWindowManager)?.installSessionConfiguration(
+        val components = componentsFactory.create(id, rootScope)
+        try {
+            components.installSessionConfiguration(
                 policy.window,
                 policy.input,
                 ::nextStamp,
@@ -99,7 +94,16 @@ internal class SessionRuntime(
                 policy.resources.maxEventCollectorsPerFlow,
                 rootScope,
             )
+        } catch (cause: Throwable) {
+            runCatching { components.close() }
+            throw cause
         }
+        components
+    } catch (cause: Throwable) {
+        rootJob.cancel()
+        throw cause
+    }
+    private val runtimeWindows = runtimeComponents.windows
     private val runtimeDisplays = UnsupportedDisplayManager(
         eventCollectorAllocator,
         policy.resources.maxEventCollectorsPerFlow,
@@ -109,7 +113,7 @@ internal class SessionRuntime(
         policy.resources.maxEventCollectorsPerFlow,
     )
     private val runtimeCapture = UnsupportedCaptureManager()
-    private val mutablePrimarySurface = MutableStateFlow<HostSurface?>(null)
+    private val mutablePrimarySurface = MutableStateFlow(runtimeComponents.primarySurface)
 
     private var startupJob: Job? = null
     private var applicationJob: Deferred<Unit>? = null
@@ -127,7 +131,7 @@ internal class SessionRuntime(
         ) { cause ->
             if (cause != null) parentCancelled()
         }
-        val mayStart = synchronized(lock) {
+        val mayStart = lock.withLock {
             if (finished) {
                 false
             } else {
@@ -157,7 +161,7 @@ internal class SessionRuntime(
             scope = ApplicationScope(baseContext + runner + marker)
             runner.invokeOnCompletion(::applicationCompleted)
 
-            val shouldStart = synchronized(lock) {
+            val shouldStart = lock.withLock {
                 if (finished || selectedOutcome != null || mutableState.value != SessionState.Starting) {
                     false
                 } else {
@@ -168,7 +172,7 @@ internal class SessionRuntime(
             }
             if (shouldStart) runner.start() else runner.cancel()
         }
-        synchronized(lock) {
+        lock.withLock {
             if (finished || selectedOutcome != null) {
                 startup.cancel()
             } else {
@@ -224,7 +228,7 @@ internal class SessionRuntime(
 
     private fun parentCancelled() {
         val outcome = SessionOutcome.Stopped(SessionStopReason.ParentCancelled)
-        synchronized(lock) {
+        lock.withLock {
             if (finished) return
             selectedOutcome = selectOutcome(selectedOutcome, outcome)
             mutableState.value = SessionState.Stopping
@@ -238,7 +242,7 @@ internal class SessionRuntime(
         when {
             cause == null -> requestTermination(SessionOutcome.Completed)
             cause is CancellationException -> {
-                val alreadySelected = synchronized(lock) { selectedOutcome }
+                val alreadySelected = lock.withLock { selectedOutcome }
                 if (alreadySelected == null) {
                     val reason = if (parentJob.isActive) {
                         SessionStopReason.ApplicationCancelled
@@ -254,7 +258,7 @@ internal class SessionRuntime(
 
     private fun handleApplicationThrowable(cause: Throwable) {
         if (cause is CancellationException) {
-            val selected = synchronized(lock) { selectedOutcome }
+            val selected = lock.withLock { selectedOutcome }
             if (selected == null) {
                 requestTermination(SessionOutcome.Stopped(SessionStopReason.ApplicationCancelled))
             }
@@ -265,7 +269,7 @@ internal class SessionRuntime(
     }
 
     private fun requestTermination(proposed: SessionOutcome) {
-        synchronized(lock) {
+        lock.withLock {
             if (finished) return
             selectedOutcome = selectOutcome(selectedOutcome, proposed)
             mutableState.value = SessionState.Stopping
@@ -278,27 +282,27 @@ internal class SessionRuntime(
         // Run host shutdown before publishing a terminal outcome: a native stop failure must
         // still be able to promote an otherwise successful stop to Failed(PlatformFailure).
         val stopFailure = onStopping(this)
-        val finishImmediately: Boolean
-        synchronized(lock) {
-            if (finished) return
+        val termination = lock.withLock {
+            if (finished) return@withLock null
             if (stopFailure != null) {
                 selectedOutcome = selectOutcome(selectedOutcome, SessionOutcome.Failed(stopFailure))
             }
-            finishImmediately = applicationJob == null
+            checkNotNull(selectedOutcome) to (applicationJob == null)
         }
+        if (termination == null) return
 
-        if (finishImmediately) {
-            finish(checkNotNull(synchronized(lock) { selectedOutcome }))
+        if (termination.second) {
+            finish(termination.first)
             return
         }
 
         rootScope.launch {
-            val application = synchronized(lock) { applicationJob }
+            val application = lock.withLock { applicationJob }
             val completed = application == null || withTimeoutOrNull(policy.execution.shutdownTimeout) {
                 application.join()
                 true
             } == true
-            val selected = checkNotNull(synchronized(lock) { selectedOutcome })
+            val selected = checkNotNull(lock.withLock { selectedOutcome })
             val final = if (!completed && selected !is SessionOutcome.Failed) {
                 SessionOutcome.Failed(KadreFailure.ShutdownTimedOut(policy.execution.shutdownTimeout))
             } else {
@@ -309,7 +313,7 @@ internal class SessionRuntime(
     }
 
     private fun finish(outcome: SessionOutcome) {
-        val final = synchronized(lock) {
+        val final = lock.withLock {
             if (finished) return
             finished = true
             selectedOutcome = selectOutcome(selectedOutcome, outcome)
@@ -325,7 +329,7 @@ internal class SessionRuntime(
     }
 
     fun disposeUnstarted() {
-        val shouldDispose = synchronized(lock) {
+        val shouldDispose = lock.withLock {
             if (finished) {
                 false
             } else {
@@ -348,10 +352,13 @@ internal class SessionRuntime(
             ?.let(failureReporter)
     }
 
-    private fun isFinished(): Boolean = synchronized(lock) { finished }
+    private fun isFinished(): Boolean = lock.withLock { finished }
 
     private fun nextStamp(): EventStamp {
-        val sequence = nextSequence.getAndIncrement()
+        val sequence = sequenceLock.withLock {
+            check(nextSequence < Long.MAX_VALUE) { "session sequence overflow" }
+            nextSequence++
+        }
         check(sequence >= 0L) { "session sequence overflow" }
         return EventStamp(
             SessionSequence(sequence),

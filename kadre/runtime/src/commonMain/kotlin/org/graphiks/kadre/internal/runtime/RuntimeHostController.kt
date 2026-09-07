@@ -21,6 +21,8 @@ import org.graphiks.kadre.diagnostics.KadreResourceKind
 import org.graphiks.kadre.diagnostics.KadreResult
 import org.graphiks.kadre.policy.KadrePolicies
 import org.graphiks.kadre.policy.KadrePolicy
+import org.graphiks.kadre.surface.HostSurface
+import org.graphiks.kadre.surface.SurfaceId
 
 public fun interface RuntimeFailureReporter {
     public fun report(cause: Throwable)
@@ -63,7 +65,7 @@ public class RuntimeHostController private constructor(
         UnsupportedRuntimeSessionComponentsFactory,
     )
 
-    private val lock = Any()
+    private val lock = RuntimeLock()
     private val sessions = linkedSetOf<SessionRuntime>()
     private var lifecycleState = initialLifecycleState
     private var lifecycleCapabilities = initialLifecycleCapabilities
@@ -78,7 +80,7 @@ public class RuntimeHostController private constructor(
             ?: return KadreResult.Failure(KadreFailure.InvalidRequest("parentScope"))
         if (!parentJob.isActive) return KadreResult.Failure(KadreFailure.ParentScopeCancelled)
 
-        val initialLifecycle = synchronized(lock) {
+        val initialLifecycle = lock.withLock {
             if (detached) return KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.Host))
             if (!parentJob.isActive) return KadreResult.Failure(KadreFailure.ParentScopeCancelled)
             lifecycleState to lifecycleCapabilities
@@ -98,15 +100,12 @@ public class RuntimeHostController private constructor(
                 onTerminated = ::sessionTerminated,
                 componentsFactory = componentsFactory,
             )
-        } catch (cause: Exception) {
-            reportFailure(cause)
-            return KadreResult.Failure(runtimeSessionComponentsFailure())
-        } catch (cause: LinkageError) {
+        } catch (cause: Throwable) {
             reportFailure(cause)
             return KadreResult.Failure(runtimeSessionComponentsFailure())
         }
 
-        val installFailure = synchronized(lock) {
+        val installFailure = lock.withLock {
             when {
                 detached -> KadreFailure.Closed(KadreResourceKind.Host)
                 !parentJob.isActive -> KadreFailure.ParentScopeCancelled
@@ -128,7 +127,7 @@ public class RuntimeHostController private constructor(
     }
 
     public fun updateLifecycle(state: LifecycleState): LifecycleState {
-        val targets = synchronized(lock) {
+        val targets = lock.withLock {
             require(!detached) { "host is detached" }
             if (lifecycleState == state) return lifecycleState
             lifecycleState = state
@@ -143,7 +142,7 @@ public class RuntimeHostController private constructor(
     }
 
     public fun updateLifecycleCapabilities(capabilities: LifecycleCapabilities) {
-        val targets = synchronized(lock) {
+        val targets = lock.withLock {
             require(!detached) { "host is detached" }
             if (lifecycleCapabilities == capabilities) return
             lifecycleCapabilities = capabilities
@@ -153,7 +152,7 @@ public class RuntimeHostController private constructor(
     }
 
     public fun emitMemoryPressure(level: MemoryPressureLevel) {
-        val targets = synchronized(lock) {
+        val targets = lock.withLock {
             require(!detached) { "host is detached" }
             require(lifecycleCapabilities.memoryPressure == FeatureAvailability.Available) {
                 "memory pressure is unavailable"
@@ -169,7 +168,7 @@ public class RuntimeHostController private constructor(
             VisibilityState.Background,
             ActivationState.Inactive,
         )
-        val targets = synchronized(lock) {
+        val targets = lock.withLock {
             if (detached) return
             detached = true
             lifecycleState = detachedState
@@ -180,7 +179,7 @@ public class RuntimeHostController private constructor(
     }
 
     public fun fail(failure: KadreFailure.PlatformFailure) {
-        val targets = synchronized(lock) { sessions.toList() }
+        val targets = lock.withLock { sessions.toList() }
         targets.forEach { it.hostFailed(failure) }
     }
 
@@ -193,16 +192,13 @@ public class RuntimeHostController private constructor(
             // Functional stop failures must be returned explicitly; thrown adapter bugs remain
             // diagnostic-only so arbitrary host code cannot escape through session teardown.
             sessionStopHandler.stop(session.id)
-        } catch (cause: Exception) {
-            reportFailure(cause)
-            null
-        } catch (cause: LinkageError) {
+        } catch (cause: Throwable) {
             reportFailure(cause)
             null
         }
 
     private fun sessionTerminated(session: SessionRuntime, outcome: SessionOutcome) {
-        synchronized(lock) { sessions.remove(session) }
+        lock.withLock { sessions.remove(session) }
         runCatching { sessionObserver.terminated(session.id, outcome) }
             .exceptionOrNull()
             ?.let(::reportFailure)
@@ -266,6 +262,33 @@ public class RuntimeHostController private constructor(
             sessionObserver,
             MonotonicRuntimeClockFactory,
             componentsFactory,
+        )
+
+        /**
+         * Creates a host whose sessions receive one host-provided primary surface without a
+         * runtime-managed window.
+         */
+        public fun withPrimarySurface(
+            platform: KadrePlatform,
+            initialLifecycleState: LifecycleState = DEFAULT_LIFECYCLE_STATE,
+            initialLifecycleCapabilities: LifecycleCapabilities = DEFAULT_LIFECYCLE_CAPABILITIES,
+            failureReporter: RuntimeFailureReporter = RuntimeFailureReporter { },
+            sessionStopHandler: RuntimeSessionStopHandler = RuntimeSessionStopHandler { null },
+            sessionObserver: RuntimeSessionObserver = RuntimeSessionObserver { _, _ -> },
+            primarySurfaceFactory: (SurfaceId) -> RuntimePrimarySurface,
+        ): RuntimeHostController = withComponents(
+            platform = platform,
+            componentsFactory = RuntimeSessionComponentsFactory { sessionId, _ ->
+                RuntimeSessionComponents(
+                    windows = UnsupportedWindowManager(RuntimeProcessIds::nextWindowRequestId),
+                    primarySurface = primarySurfaceFactory(RuntimeProcessIds.nextSurfaceId()),
+                )
+            },
+            initialLifecycleState = initialLifecycleState,
+            initialLifecycleCapabilities = initialLifecycleCapabilities,
+            failureReporter = failureReporter,
+            sessionStopHandler = sessionStopHandler,
+            sessionObserver = sessionObserver,
         )
 
     }
