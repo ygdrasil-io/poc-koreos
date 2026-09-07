@@ -4,6 +4,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.test.runTest
 import org.graphiks.kadre.diagnostics.Capability
+import org.graphiks.kadre.diagnostics.DelicateKadreApi
 import org.graphiks.kadre.diagnostics.FeatureAvailability
 import org.graphiks.kadre.diagnostics.KadreFailure
 import org.graphiks.kadre.diagnostics.KadreOperation
@@ -12,6 +13,7 @@ import org.graphiks.kadre.surface.LogicalRect
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
+@OptIn(DelicateKadreApi::class)
 class SurfaceInputTextInputTest {
     @Test
     fun surfaceInputMemberDelegatesTextInputOpeningToItsRuntime() = runTest {
@@ -22,9 +24,28 @@ class SurfaceInputTextInputTest {
 
             override suspend fun openTextInput(config: TextInputConfig): KadreResult<TextInputSession> =
                 KadreResult.Success(session)
+
+            override suspend fun requestRawInput(): KadreResult<RawInputAccess> =
+                KadreResult.Failure(KadreFailure.Unsupported(KadreOperation.RawInputAccess))
         }
 
         assertEquals(KadreResult.Success(session), input.openTextInput(TextInputConfig()))
+    }
+
+    @Test
+    fun surfaceInputMemberDelegatesRawInputRequestToItsRuntime() = runTest {
+        val access = TestRawInputAccess()
+        val input = object : SurfaceInput {
+            override val events = emptyFlow<InputEvent>()
+            override val state = MutableStateFlow(testInputState())
+
+            override suspend fun openTextInput(config: TextInputConfig): KadreResult<TextInputSession> =
+                KadreResult.Failure(KadreFailure.Unsupported(KadreOperation.TextInput))
+
+            override suspend fun requestRawInput(): KadreResult<RawInputAccess> = KadreResult.Success(access)
+        }
+
+        assertEquals(KadreResult.Success(access), input.requestRawInput())
     }
 }
 
@@ -44,6 +65,14 @@ private class TestTextInputSession : TextInputSession {
         selection: TextRange,
         documentRevision: TextDocumentRevision,
     ): KadreResult<Unit> = KadreResult.Success(Unit)
+}
+
+@OptIn(DelicateKadreApi::class)
+private class TestRawInputAccess : RawInputAccess {
+    override val state = MutableStateFlow<RawInputState>(RawInputState.Active)
+    override val events = emptyFlow<RawInputEvent>()
+
+    override fun close() = Unit
 }
 
 private fun testInputState(): SurfaceInputState = SurfaceInputState(

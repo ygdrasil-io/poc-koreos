@@ -28,4 +28,8 @@ public final class Consumer {
     public static KadreFailure closedHost() {
         return new KadreFailure.Closed(KadreResourceKind.Host);
     }
+
+    public static KadreResourceKind rawInputResource() {
+        return KadreResourceKind.RawInputAccess;
+    }
 }

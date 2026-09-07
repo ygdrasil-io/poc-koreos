@@ -446,6 +446,7 @@ public data class ResourceBudgetPolicy(
     public val maxPendingInteractionRequests: Int,
     public val maxConcurrentCaptureSessions: Int,
     public val maxConcurrentGamepadEffects: Int,
+    public val maxConcurrentRawInputAccesses: Int,
     public val maxConcurrentDropTransfers: Int,
     public val maxDropChunkBytes: Int,
     public val dropTransferClaimTimeout: Duration,
@@ -537,6 +538,17 @@ public enum class ContinuousOverflowAction {
     FailSession,
 }
 
+public data class RawInputDeliveryPolicy(
+    public val capacity: Int,
+    public val onOverflow: RawInputOverflowAction,
+)
+
+public enum class RawInputOverflowAction {
+    DropOldestAndReport,
+    DropLatestAndReport,
+    CloseAccess,
+}
+
 public class SlowCollectorCancellationException internal constructor(
     message: String,
 ) : CancellationException(message)
@@ -548,6 +560,7 @@ public data class InputDeliveryPolicy(
     public val scroll: ContinuousDelivery,
     public val gestureChanges: ContinuousDelivery,
     public val gamepadChanges: ContinuousDelivery,
+    public val rawInput: RawInputDeliveryPolicy,
 )
 
 public data class WindowDeliveryPolicy(
@@ -584,7 +597,7 @@ Mapping normatif exhaustif des flux publics :
 | `TextInputSession.events` | `input.discreteEvents` | `TextInputSession` |
 | `CaptureSession.events` | `capture.events` | `CaptureSession` |
 | `CaptureSession.collectFrames` | `capture.frames` | `CaptureSession` |
-| `RawInputAccess.events` | `input.pointerMotion` | `RawInputAccess` |
+| `RawInputAccess.events` | `input.rawInput` | `RawInputAccess` |
 | `KadreDiagnostics.events`, `CaptureSession.diagnostics` | `diagnostics` | uniquement le flux de diagnostics concerné |
 
 Cette table est fermée : ajouter un `Flow` public exige d’ajouter son mapping dans la même modification. Les `StateFlow` n’y figurent pas, car leur conflation et leur absence de terminaison suivent la section 7.1. Pour les diagnostics, `DiagnosticPolicy` gouverne la capacité et le drop explicite des détails ; les compteurs correspondants restent exacts jusqu’à leur saturation explicitement signalée. Tous les collectors d’événements, diagnostics inclus, consomment les budgets `maxEventCollectorsPerFlow` et `maxEventCollectorsPerSession`.
@@ -603,11 +616,11 @@ Profils (résumé ; `POLICY-PROFILES.md` est l’autorité champ par champ) :
 
 La capacité de transitions du tableau est utilisée pour l’ingress et pour chaque collector des lanes lifecycle, `window.discreteEvents`, device, `input.discreteEvents` et capture events.
 
-| Profil | Collectors flow/session | Fenêtres | Requêtes fenêtre | Interactions | Captures | Effets gamepad | Drop transfers / chunk / claim |
-|---|---:|---:|---:|---:|---:|---:|---:|
-| `Default` | 16 / 128 | 16 | 16 | 16 | 4 | 16 | 4 / 256 KiB / 30 s |
-| `Realtime` | 8 / 64 | 8 | 8 | 8 | 2 | 8 | 2 / 64 KiB / 5 s |
-| `Recording` | 16 / 128 | 32 | 16 | 16 | 4 | 32 | 8 / 1 MiB / 60 s |
+| Profil | Collectors flow/session | Fenêtres | Requêtes fenêtre | Interactions | Captures | Effets gamepad | Accès raw | Drop transfers / chunk / claim |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| `Default` | 16 / 128 | 16 | 16 | 16 | 4 | 16 | 16 | 4 / 256 KiB / 30 s |
+| `Realtime` | 8 / 64 | 8 | 8 | 8 | 2 | 8 | 8 | 2 / 64 KiB / 5 s |
+| `Recording` | 16 / 128 | 32 | 16 | 16 | 4 | 32 | 64 | 8 / 1 MiB / 60 s |
 
 | Profil | Payload retenu/session | Texte/value | Métadonnée/value | Collection/value | Image/resource |
 |---|---:|---:|---:|---:|---:|
@@ -648,7 +661,7 @@ Les profils fixent aussi des limites finies de collectors d’événements et de
 
 Tous les calculs de coût utilisent une arithmétique vérifiée : une addition ou multiplication qui dépasserait le type numérique est traitée comme un dépassement de budget avant allocation, jamais comme un wraparound. `maxImageBytesPerResource` couvre la somme des représentations encodées et décodées simultanément retenues par Kadre pour une icône ou un curseur ; ces mêmes octets comptent aussi une seule fois dans le total de payload retenu de la session. Dimensions, strides et nombre de pixels sont validés avec la même arithmétique avant décodage afin qu’une petite entrée compressée ne contourne pas le budget. Les pools de capture restent comptés par `maxBufferedBytesPerSession`, pas une seconde fois comme payload générique.
 
-`maxWindowsPerSession` couvre les fenêtres vivantes, pas seulement les requêtes pendantes. `Default` et `Realtime` routent les gamepads vers la session active ; `Recording` les route vers toutes les sessions foreground. Les trois profils utilisent un ownership exclusif des effets. Seule une policy custom peut demander `SharedWhenSupported`, puis uniquement si le backend garantit cette capability. Atteindre un budget retourne `KadreFailure.ResourceLimitExceeded`; Kadre n’alloue jamais d’abord pour diagnostiquer ensuite.
+`maxWindowsPerSession` couvre les fenêtres vivantes, pas seulement les requêtes pendantes. `Default` et `Realtime` routent les gamepads vers la session active ; `Recording` les route vers toutes les sessions foreground. Les trois profils utilisent un ownership exclusif des effets. Seule une policy custom peut demander `SharedWhenSupported`, puis uniquement si le backend garantit cette capability. `maxConcurrentRawInputAccesses` compte les accès raw vivants de cette session avant toute demande de permission ou admission de source native. Atteindre un budget retourne `KadreFailure.ResourceLimitExceeded`; Kadre n’alloue jamais d’abord pour diagnostiquer ensuite.
 
 `ExecutionPriority` influence uniquement les workers internes et leur cadence de réveil. Les dispatchers UI/main propriétaires restent imposés par le host et ne sont jamais remplaçables par une policy applicative. `shutdownTimeout` suit le contrat schedulable et la priorité des failures de la section 5 ; son dépassement produit toujours un diagnostic fatal et devient `ShutdownTimedOut` seulement en l’absence de failure primaire antérieure.
 
@@ -1689,6 +1702,7 @@ public enum class KadreResourceKind {
     WindowRequest,
     Display,
     InputSource,
+    RawInputAccess,
     InputDevice,
     Gamepad,
     EventCollector,

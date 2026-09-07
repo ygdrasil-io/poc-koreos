@@ -4,6 +4,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
 import org.graphiks.kadre.application.EventStamp
 import org.graphiks.kadre.diagnostics.Capability
+import org.graphiks.kadre.diagnostics.DelicateKadreApi
 import org.graphiks.kadre.diagnostics.FeatureAvailability
 import org.graphiks.kadre.diagnostics.KadreResult
 import org.graphiks.kadre.surface.LogicalDelta
@@ -14,6 +15,9 @@ public interface SurfaceInput {
     public val events: Flow<InputEvent>
     public val state: StateFlow<SurfaceInputState>
     public suspend fun openTextInput(config: TextInputConfig): KadreResult<TextInputSession>
+
+    @DelicateKadreApi
+    public suspend fun requestRawInput(): KadreResult<RawInputAccess>
 }
 
 public data class SurfaceInputState(

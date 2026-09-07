@@ -1684,6 +1684,7 @@ public final class org/graphiks/kadre/diagnostics/KadreResourceKind : java/lang/
 	public static final field InputDevice Lorg/graphiks/kadre/diagnostics/KadreResourceKind;
 	public static final field InputSource Lorg/graphiks/kadre/diagnostics/KadreResourceKind;
 	public static final field Interaction Lorg/graphiks/kadre/diagnostics/KadreResourceKind;
+	public static final field RawInputAccess Lorg/graphiks/kadre/diagnostics/KadreResourceKind;
 	public static final field RetainedPayload Lorg/graphiks/kadre/diagnostics/KadreResourceKind;
 	public static final field Surface Lorg/graphiks/kadre/diagnostics/KadreResourceKind;
 	public static final field TextInputSession Lorg/graphiks/kadre/diagnostics/KadreResourceKind;
@@ -3624,6 +3625,7 @@ public abstract interface class org/graphiks/kadre/input/SurfaceInput {
 	public abstract fun getEvents ()Lkotlinx/coroutines/flow/Flow;
 	public abstract fun getState ()Lkotlinx/coroutines/flow/StateFlow;
 	public abstract fun openTextInput (Lorg/graphiks/kadre/input/TextInputConfig;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public abstract fun requestRawInput (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 }
 
 public final class org/graphiks/kadre/input/SurfaceInputState {
@@ -3669,10 +3671,6 @@ public final class org/graphiks/kadre/input/TextDocumentRevision {
 	public fun toString ()Ljava/lang/String;
 	public static fun toString-impl (J)Ljava/lang/String;
 	public final synthetic fun unbox-impl ()J
-}
-
-public final class org/graphiks/kadre/input/TextDropRawKt {
-	public static final fun requestRawInput (Lorg/graphiks/kadre/input/SurfaceInput;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 }
 
 public final class org/graphiks/kadre/input/TextInputAction : java/lang/Enum {
@@ -4441,20 +4439,22 @@ public final class org/graphiks/kadre/policy/IngressOverflowAction : java/lang/E
 }
 
 public final class org/graphiks/kadre/policy/InputDeliveryPolicy {
-	public fun <init> (Lorg/graphiks/kadre/policy/EventDeliveryPolicy;Lorg/graphiks/kadre/policy/ContinuousDelivery;Lorg/graphiks/kadre/policy/ContinuousDelivery;Lorg/graphiks/kadre/policy/ContinuousDelivery;Lorg/graphiks/kadre/policy/ContinuousDelivery;Lorg/graphiks/kadre/policy/ContinuousDelivery;)V
+	public fun <init> (Lorg/graphiks/kadre/policy/EventDeliveryPolicy;Lorg/graphiks/kadre/policy/ContinuousDelivery;Lorg/graphiks/kadre/policy/ContinuousDelivery;Lorg/graphiks/kadre/policy/ContinuousDelivery;Lorg/graphiks/kadre/policy/ContinuousDelivery;Lorg/graphiks/kadre/policy/ContinuousDelivery;Lorg/graphiks/kadre/policy/RawInputDeliveryPolicy;)V
 	public final fun component1 ()Lorg/graphiks/kadre/policy/EventDeliveryPolicy;
 	public final fun component2 ()Lorg/graphiks/kadre/policy/ContinuousDelivery;
 	public final fun component3 ()Lorg/graphiks/kadre/policy/ContinuousDelivery;
 	public final fun component4 ()Lorg/graphiks/kadre/policy/ContinuousDelivery;
 	public final fun component5 ()Lorg/graphiks/kadre/policy/ContinuousDelivery;
 	public final fun component6 ()Lorg/graphiks/kadre/policy/ContinuousDelivery;
-	public final fun copy (Lorg/graphiks/kadre/policy/EventDeliveryPolicy;Lorg/graphiks/kadre/policy/ContinuousDelivery;Lorg/graphiks/kadre/policy/ContinuousDelivery;Lorg/graphiks/kadre/policy/ContinuousDelivery;Lorg/graphiks/kadre/policy/ContinuousDelivery;Lorg/graphiks/kadre/policy/ContinuousDelivery;)Lorg/graphiks/kadre/policy/InputDeliveryPolicy;
-	public static synthetic fun copy$default (Lorg/graphiks/kadre/policy/InputDeliveryPolicy;Lorg/graphiks/kadre/policy/EventDeliveryPolicy;Lorg/graphiks/kadre/policy/ContinuousDelivery;Lorg/graphiks/kadre/policy/ContinuousDelivery;Lorg/graphiks/kadre/policy/ContinuousDelivery;Lorg/graphiks/kadre/policy/ContinuousDelivery;Lorg/graphiks/kadre/policy/ContinuousDelivery;ILjava/lang/Object;)Lorg/graphiks/kadre/policy/InputDeliveryPolicy;
+	public final fun component7 ()Lorg/graphiks/kadre/policy/RawInputDeliveryPolicy;
+	public final fun copy (Lorg/graphiks/kadre/policy/EventDeliveryPolicy;Lorg/graphiks/kadre/policy/ContinuousDelivery;Lorg/graphiks/kadre/policy/ContinuousDelivery;Lorg/graphiks/kadre/policy/ContinuousDelivery;Lorg/graphiks/kadre/policy/ContinuousDelivery;Lorg/graphiks/kadre/policy/ContinuousDelivery;Lorg/graphiks/kadre/policy/RawInputDeliveryPolicy;)Lorg/graphiks/kadre/policy/InputDeliveryPolicy;
+	public static synthetic fun copy$default (Lorg/graphiks/kadre/policy/InputDeliveryPolicy;Lorg/graphiks/kadre/policy/EventDeliveryPolicy;Lorg/graphiks/kadre/policy/ContinuousDelivery;Lorg/graphiks/kadre/policy/ContinuousDelivery;Lorg/graphiks/kadre/policy/ContinuousDelivery;Lorg/graphiks/kadre/policy/ContinuousDelivery;Lorg/graphiks/kadre/policy/ContinuousDelivery;Lorg/graphiks/kadre/policy/RawInputDeliveryPolicy;ILjava/lang/Object;)Lorg/graphiks/kadre/policy/InputDeliveryPolicy;
 	public fun equals (Ljava/lang/Object;)Z
 	public final fun getDiscreteEvents ()Lorg/graphiks/kadre/policy/EventDeliveryPolicy;
 	public final fun getGamepadChanges ()Lorg/graphiks/kadre/policy/ContinuousDelivery;
 	public final fun getGestureChanges ()Lorg/graphiks/kadre/policy/ContinuousDelivery;
 	public final fun getPointerMotion ()Lorg/graphiks/kadre/policy/ContinuousDelivery;
+	public final fun getRawInput ()Lorg/graphiks/kadre/policy/RawInputDeliveryPolicy;
 	public final fun getScroll ()Lorg/graphiks/kadre/policy/ContinuousDelivery;
 	public final fun getTouchMotion ()Lorg/graphiks/kadre/policy/ContinuousDelivery;
 	public fun hashCode ()I
@@ -4497,15 +4497,38 @@ public final class org/graphiks/kadre/policy/KadrePolicy {
 	public fun toString ()Ljava/lang/String;
 }
 
-public final class org/graphiks/kadre/policy/ResourceBudgetPolicy {
-	public synthetic fun <init> (IIIIIIIIIJJIIIJLkotlin/jvm/internal/DefaultConstructorMarker;)V
+public final class org/graphiks/kadre/policy/RawInputDeliveryPolicy {
+	public fun <init> (ILorg/graphiks/kadre/policy/RawInputOverflowAction;)V
 	public final fun component1 ()I
-	public final fun component10-UwyO8pc ()J
-	public final fun component11 ()J
-	public final fun component12 ()I
+	public final fun component2 ()Lorg/graphiks/kadre/policy/RawInputOverflowAction;
+	public final fun copy (ILorg/graphiks/kadre/policy/RawInputOverflowAction;)Lorg/graphiks/kadre/policy/RawInputDeliveryPolicy;
+	public static synthetic fun copy$default (Lorg/graphiks/kadre/policy/RawInputDeliveryPolicy;ILorg/graphiks/kadre/policy/RawInputOverflowAction;ILjava/lang/Object;)Lorg/graphiks/kadre/policy/RawInputDeliveryPolicy;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getCapacity ()I
+	public final fun getOnOverflow ()Lorg/graphiks/kadre/policy/RawInputOverflowAction;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class org/graphiks/kadre/policy/RawInputOverflowAction : java/lang/Enum {
+	public static final field CloseAccess Lorg/graphiks/kadre/policy/RawInputOverflowAction;
+	public static final field DropLatestAndReport Lorg/graphiks/kadre/policy/RawInputOverflowAction;
+	public static final field DropOldestAndReport Lorg/graphiks/kadre/policy/RawInputOverflowAction;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public static fun valueOf (Ljava/lang/String;)Lorg/graphiks/kadre/policy/RawInputOverflowAction;
+	public static fun values ()[Lorg/graphiks/kadre/policy/RawInputOverflowAction;
+}
+
+public final class org/graphiks/kadre/policy/ResourceBudgetPolicy {
+	public synthetic fun <init> (IIIIIIIIIIJJIIIJLkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun component1 ()I
+	public final fun component10 ()I
+	public final fun component11-UwyO8pc ()J
+	public final fun component12 ()J
 	public final fun component13 ()I
 	public final fun component14 ()I
-	public final fun component15 ()J
+	public final fun component15 ()I
+	public final fun component16 ()J
 	public final fun component2 ()I
 	public final fun component3 ()I
 	public final fun component4 ()I
@@ -4514,14 +4537,15 @@ public final class org/graphiks/kadre/policy/ResourceBudgetPolicy {
 	public final fun component7 ()I
 	public final fun component8 ()I
 	public final fun component9 ()I
-	public final fun copy-8r91_B0 (IIIIIIIIIJJIIIJ)Lorg/graphiks/kadre/policy/ResourceBudgetPolicy;
-	public static synthetic fun copy-8r91_B0$default (Lorg/graphiks/kadre/policy/ResourceBudgetPolicy;IIIIIIIIIJJIIIJILjava/lang/Object;)Lorg/graphiks/kadre/policy/ResourceBudgetPolicy;
+	public final fun copy-Q2DFlHg (IIIIIIIIIIJJIIIJ)Lorg/graphiks/kadre/policy/ResourceBudgetPolicy;
+	public static synthetic fun copy-Q2DFlHg$default (Lorg/graphiks/kadre/policy/ResourceBudgetPolicy;IIIIIIIIIIJJIIIJILjava/lang/Object;)Lorg/graphiks/kadre/policy/ResourceBudgetPolicy;
 	public fun equals (Ljava/lang/Object;)Z
 	public final fun getDropTransferClaimTimeout-UwyO8pc ()J
 	public final fun getMaxCollectionElementsPerValue ()I
 	public final fun getMaxConcurrentCaptureSessions ()I
 	public final fun getMaxConcurrentDropTransfers ()I
 	public final fun getMaxConcurrentGamepadEffects ()I
+	public final fun getMaxConcurrentRawInputAccesses ()I
 	public final fun getMaxDropChunkBytes ()I
 	public final fun getMaxEventCollectorsPerFlow ()I
 	public final fun getMaxEventCollectorsPerSession ()I

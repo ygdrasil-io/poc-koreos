@@ -11,7 +11,7 @@
 - `Default` est le minimum structurel obligatoire de tout adapter officiel déclaré supporté. `Realtime`, `Recording` et une copie custom peuvent échouer à `attach` avec `UnsupportedPolicy` sans dégradation silencieuse.
 - Les trois propriétés exposent des values profondément immuables. Un appel à `copy` crée une nouvelle policy ; aucun singleton mutable ni registry globale n’existe.
 
-Dans chaque profil, `KadrePolicy.resources` vaut exactement le `ResourceBudgetPolicy` formé par les quinze champs des sections 6 et 7 ; aucun second budget ni default de constructeur n’est appliqué.
+Dans chaque profil, `KadrePolicy.resources` vaut exactement le `ResourceBudgetPolicy` formé par les seize champs des sections 6 et 7 ; aucun second budget ni default de constructeur n’est appliqué.
 
 Si plusieurs composants d’une policy sont structurellement impossibles, `attach` retourne l’unique `UnsupportedPolicy` correspondant au premier composant dans l’ordre fermé de `KadrePolicyComponent` : `Execution`, `LifecycleEvents`, `HostSignals`, `WindowEvents`, `DeviceEvents`, `InputEvents`, `DevicePolicy`, `CaptureEvents`, `CaptureFrames`, `Diagnostics`, `Resources`. L’adapter ne dépend donc pas de l’ordre de ses probes pour choisir la failure.
 
@@ -68,6 +68,7 @@ Le `FailSession` d’un collector `Recording` signifie qu’un consumer ayant de
 | `input.scroll` | `Coalesced` | `Coalesced` | `Buffered(8192, FailSession)` |
 | `input.gestureChanges` | `Coalesced` | `Coalesced` | `Buffered(8192, FailSession)` |
 | `input.gamepadChanges` | `Latest` | `Latest` | `Buffered(8192, FailSession)` |
+| `input.rawInput` | `RawInputDeliveryPolicy(256, DropOldestAndReport)` | `RawInputDeliveryPolicy(64, DropOldestAndReport)` | `RawInputDeliveryPolicy(8192, CloseAccess)` |
 | `capture.frames` | `FrameDelivery.Latest` | `FrameDelivery.Latest` | `FrameDelivery.Buffered(3, CloseSource)` |
 | `capture.maxBufferedBytesPerSession` | 134 217 728 (128 MiB) | 67 108 864 (64 MiB) | 536 870 912 (512 MiB) |
 
@@ -94,6 +95,7 @@ Pour `Realtime`, « coalesced à chaque tour du host » décrit la cadence d’i
 | `maxPendingInteractionRequests` | 16 | 8 | 16 |
 | `maxConcurrentCaptureSessions` | 4 | 2 | 4 |
 | `maxConcurrentGamepadEffects` | 16 | 8 | 32 |
+| `maxConcurrentRawInputAccesses` | 16 | 8 | 64 |
 | `maxConcurrentDropTransfers` | 4 | 2 | 8 |
 | `maxDropChunkBytes` | 262 144 | 65 536 | 1 048 576 |
 | `dropTransferClaimTimeout` | 30 s | 5 s | 60 s |
@@ -120,7 +122,7 @@ Les constructeurs de policy appliquent exactement ces invariants et lèvent `Ill
 4. `maxDropChunkBytes <= maxRetainedPayloadBytesPerSession` ;
 5. `maxImageBytesPerResource <= maxRetainedPayloadBytesPerSession` ;
 6. `capture.maxBufferedBytesPerSession > 0` ;
-7. toute `Buffered.capacity > 0` ;
+7. toute `Buffered.capacity > 0` et toute `RawInputDeliveryPolicy.capacity > 0` ;
 8. `dropTransferClaimTimeout` et `shutdownTimeout` sont finies et strictement positives ;
 9. aucun produit ou cumul nécessaire au calcul d’un budget ne peut overflow `Long` ;
 10. `DiagnosticPolicy.eventBufferCapacity > 0`.

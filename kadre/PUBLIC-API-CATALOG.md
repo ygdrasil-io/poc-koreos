@@ -24,7 +24,7 @@
 | `org.graphiks.kadre.interaction` | `InteractionHandler`, `InteractionContext`, `InteractionRegistration`, `ArmedInteraction`, `ArmedInteractionState`, `InteractionAction`, `InteractionActionOutcome`, `InteractionArmOptions`, `InteractionTrigger`, `InteractionTriggerKind`, `ArmedInteractionConstraints`, `InteractionEvent`, `InteractionKind`, `InteractionToken`, `InteractionRequestId` |
 | `org.graphiks.kadre.input` | `DeviceManager`, `DeviceManagerState`, `DeviceManagerRevision`, `DeviceInventory`, `DeviceLifecycleEvent`, `InputDevice`, `InputDeviceDescriptor`, `InputDeviceKind`, `DeviceId`, `DeviceConnectionState`, `SurfaceInput`, `SurfaceInputState`, `InputStateRevision`, `InputCapabilities`, `InputEvent`, `InputStateResetReason`, `KeyboardState`, `KeyboardModifiers`, `ModifierKey`, `KeyState`, `PhysicalKey`, `LogicalKey`, `NamedKey`, `KeyLocation`, `PointerState`, `PointerId`, `PointerKind`, `PointerButton`, `PointerButtonState`, `PenState`, `TouchState`, `TouchId`, `TouchPhase`, `GestureKind`, `ScrollDelta`, `Gamepad`, `GamepadId`, `GamepadRevision`, `GamepadSnapshot`, `GamepadDescriptor`, `GamepadMapping`, `GamepadRoutingState`, `GamepadCapabilities`, `GamepadEffectConstraints`, `GamepadState`, `GamepadButton`, `GamepadAxis`, `GamepadButtonValue`, `GamepadAxisValue`, `GamepadEvent`, `GamepadEffect`, `GamepadEffectKind`, `GamepadEffectSession`, `GamepadEffectState`, `GamepadEffectOutcome`, `GamepadEffectStopReason`, `TextInputConfig`, `TextInputSession`, `TextInputState`, `TextInputEvent`, `TextInputPurpose`, `TextInputAction`, `TextCapitalization`, `TextRange`, `TextDocumentRevision`, `DropOffer`, `DropOfferId`, `DropOfferState`, `DropOfferTerminationReason`, `DropItemDescriptor`, `DropItemKind`, `DropTransfer`, `DroppedItem`, `DropItemReadMode`, `RawInputAccess`, `RawInputState`, `RawInputEvent`, `RawInputUnit`, `KadrePermission`, `PermissionState` |
 | `org.graphiks.kadre.capture` | `CaptureManager`, `CaptureManagerState`, `CaptureManagerRevision`, `CapturePermissionScope`, `CapturePermissionState`, `CaptureCapabilities`, `CaptureTargetConstraints`, `CaptureSources`, `CaptureSource`, `CaptureSourceId`, `CaptureSourceKind`, `CaptureRequest`, `CaptureTarget`, `CaptureSession`, `CaptureSessionState`, `CaptureConfiguration`, `CaptureConfigurationRevision`, `CaptureCadence`, `CaptureOutcome`, `CaptureStopReason`, `CaptureEvent`, `CaptureDiagnostic`, `CaptureFrame`, `CaptureSourceInstant`, `CaptureDiscontinuity`, `CaptureRegion`, `CaptureCursorMode`, `CaptureOrientation`, `PixelFormat`, `PixelPlaneLayout`, `CopiedPixelPlane`, `ColorEncoding`, `ColorPrimaries`, `TransferFunction`, `MatrixCoefficients`, `ColorRange`, `HdrMetadata`, `MasteringDisplayMetadata`, `Chromaticity`, `AlphaMode` |
-| `org.graphiks.kadre.policy` | `KadrePolicy`, `KadrePolicies`, `ExecutionPolicy`, `ExecutionPriority`, `EventDeliveryPolicy`, `ResourceBudgetPolicy`, `DevicePolicy`, `GamepadRouting`, `DeviceEffectOwnership`, `DiagnosticPolicy`, `DiagnosticDataExposure`, `DiagnosticOverflowAction`, `ContinuousDelivery`, `FrameDelivery`, `IngressOverflowAction`, `CollectorOverflowAction`, `ContinuousOverflowAction`, `SlowCollectorCancellationException`, `InputDeliveryPolicy`, `WindowDeliveryPolicy`, `CaptureDeliveryPolicy` |
+| `org.graphiks.kadre.policy` | `KadrePolicy`, `KadrePolicies`, `ExecutionPolicy`, `ExecutionPriority`, `EventDeliveryPolicy`, `ResourceBudgetPolicy`, `DevicePolicy`, `GamepadRouting`, `DeviceEffectOwnership`, `DiagnosticPolicy`, `DiagnosticDataExposure`, `DiagnosticOverflowAction`, `ContinuousDelivery`, `FrameDelivery`, `IngressOverflowAction`, `CollectorOverflowAction`, `ContinuousOverflowAction`, `RawInputDeliveryPolicy`, `RawInputOverflowAction`, `SlowCollectorCancellationException`, `InputDeliveryPolicy`, `WindowDeliveryPolicy`, `CaptureDeliveryPolicy` |
 | `org.graphiks.kadre.diagnostics` | `KadreResult`, `KadreException`, `KadreFailure`, `KadreOperation`, `KadrePolicyComponent`, `KadreResourceKind`, `KadrePlatform`, `InteractionFailureReason`, `Capability`, `FeatureAvailability`, `KadreDiagnostics`, `KadreDiagnostic`, `DiagnosticSeverity`, `KadreSubsystem`, `DiagnosticCounters`, `DiagnosticCounter`, `ExperimentalKadreApi`, `KadrePlatformApi`, `DelicateKadreApi` |
 | `org.graphiks.kadre.platform.android` | quatre overloads `attachKadre`; callback `withAndroidView` |
 | `org.graphiks.kadre.platform.uikit` | `KadreIos`; callback `withUIKitView` |
@@ -35,7 +35,6 @@
 Les overloads, extensions et combinators top-level sont limités à :
 
 - `WindowManager.requestWindow(configure)` ;
-- `SurfaceInput.requestRawInput()` ;
 - `HostSurface.installInteractionHandler(handler)` et `HostSurface.armInteraction(action, options)` ;
 - les combinators de `KadreResult` listés en section 12 de `DESIGN.md` ;
 - `LogicalPoint.toPhysical`, `LogicalSize.toPhysical`, `PhysicalPoint.toLogical` et `PhysicalSize.toLogical` ;
@@ -739,8 +738,10 @@ Les interfaces, états, outcomes et règles de lecture restent exactement ceux d
 ### 6.6 Raw input
 
 ```kotlin
-@DelicateKadreApi
-public suspend fun SurfaceInput.requestRawInput(): KadreResult<RawInputAccess>
+public interface SurfaceInput {
+    @DelicateKadreApi
+    public suspend fun requestRawInput(): KadreResult<RawInputAccess>
+}
 
 @DelicateKadreApi
 public interface RawInputAccess : AutoCloseable {
@@ -764,7 +765,7 @@ public data class RawInputEvent(
 )
 ```
 
-Une surface n’accepte qu’un `RawInputAccess`. `RawInputAccess.events` est mappé sur `input.pointerMotion` dans la table fermée de delivery de `DESIGN.md`. Fermer l’accès neutralise ses deltas sans altérer `SurfaceInput.events`.
+Une surface accepte zéro ou plusieurs `RawInputAccess` indépendants. `RawInputAccess.events` est mappé sur `input.rawInput`, avec une capacité et une action d’overflow propres à chaque accès. Fermer un accès neutralise uniquement ses deltas sans altérer `SurfaceInput.events` ni les autres accès.
 
 ### 6.7 Permissions
 

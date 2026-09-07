@@ -40,6 +40,7 @@ import org.graphiks.kadre.input.PointerKind
 import org.graphiks.kadre.input.PointerButtonState
 import org.graphiks.kadre.input.PointerId
 import org.graphiks.kadre.input.PointerState
+import org.graphiks.kadre.input.RawInputAccess
 import org.graphiks.kadre.input.ScrollDelta
 import org.graphiks.kadre.input.SurfaceInput
 import org.graphiks.kadre.input.SurfaceInputState
@@ -1418,6 +1419,10 @@ private class RuntimeSurfaceInput(
         if (result is KadreResult.Failure) session.close()
         return result
     }
+
+    @OptIn(DelicateKadreApi::class)
+    override suspend fun requestRawInput(): KadreResult<RawInputAccess> =
+        KadreResult.Failure(KadreFailure.Unsupported(KadreOperation.RawInputAccess))
 
     fun presentDrop(
         source: DropTransferSource,

@@ -86,6 +86,13 @@ Un `HTMLElement`, une `View` ou une vue UIKit matche toujours la ligne `HostSurf
 | `InputCapabilities` | replace | snapshot composé `SurfaceInputState.capabilities` et capabilities fermées |
 | `defaultLogicalKey`, `defaultText`, `location` | internalize | helpers de mapping backend ; l’API publie directement touche physique, logique et location observées |
 
+`SurfaceInput.requestRawInput()` n’est plus une extension qui retourne un
+fallback global : c’est un membre `@DelicateKadreApi` du runtime propriétaire
+de la surface. L’appel source reste identique, mais l’ABI est volontairement
+cassée pendant l’incubation. `InputDeliveryPolicy.rawInput` et
+`ResourceBudgetPolicy.maxConcurrentRawInputAccesses` sont obligatoires dans
+toute policy custom ; leur absence ne reçoit aucun default implicite.
+
 La perte de focus, la déconnexion ou la révocation remplace les releases synthétiques par un `SurfaceInputState` neutre suivi de `InputEvent.StateReset`. Un overflow publie directement le snapshot composé terminal et termine le flow avec une failure hors de la lane saturée, sans promettre un dernier événement impossible à admettre. Les APIs nécessitant un serial ou une user activation utilisent `InteractionContext`, pas un événement `Flow` livré trop tard.
 
 Le flux input unifié conserve son ordre grâce à un scheduler borné : une lane FIFO discrète et des lanes continues ne coalescent jamais à travers une barrière discrète. La cancellation d’un simple waiter n’acquiert aucun ownership sur une requête, une interaction ou un effet.
