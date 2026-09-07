@@ -4008,18 +4008,22 @@ public final class org/graphiks/kadre/interaction/InteractionAction$UnlockPointe
 }
 
 public abstract interface class org/graphiks/kadre/interaction/InteractionActionOutcome {
+	public abstract fun getDropOfferId ()Lorg/graphiks/kadre/input/DropOfferId;
 	public abstract fun getRequestId ()Lorg/graphiks/kadre/interaction/InteractionRequestId;
 	public abstract fun getStamp ()Lorg/graphiks/kadre/application/EventStamp;
 }
 
 public final class org/graphiks/kadre/interaction/InteractionActionOutcome$Committed : org/graphiks/kadre/interaction/InteractionActionOutcome {
-	public fun <init> (Lorg/graphiks/kadre/interaction/InteractionRequestId;Lorg/graphiks/kadre/window/WindowRequestId;Lorg/graphiks/kadre/application/EventStamp;)V
+	public fun <init> (Lorg/graphiks/kadre/interaction/InteractionRequestId;Lorg/graphiks/kadre/window/WindowRequestId;Lorg/graphiks/kadre/application/EventStamp;Lorg/graphiks/kadre/input/DropOfferId;)V
+	public synthetic fun <init> (Lorg/graphiks/kadre/interaction/InteractionRequestId;Lorg/graphiks/kadre/window/WindowRequestId;Lorg/graphiks/kadre/application/EventStamp;Lorg/graphiks/kadre/input/DropOfferId;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public final fun component1 ()Lorg/graphiks/kadre/interaction/InteractionRequestId;
 	public final fun component2 ()Lorg/graphiks/kadre/window/WindowRequestId;
 	public final fun component3 ()Lorg/graphiks/kadre/application/EventStamp;
-	public final fun copy (Lorg/graphiks/kadre/interaction/InteractionRequestId;Lorg/graphiks/kadre/window/WindowRequestId;Lorg/graphiks/kadre/application/EventStamp;)Lorg/graphiks/kadre/interaction/InteractionActionOutcome$Committed;
-	public static synthetic fun copy$default (Lorg/graphiks/kadre/interaction/InteractionActionOutcome$Committed;Lorg/graphiks/kadre/interaction/InteractionRequestId;Lorg/graphiks/kadre/window/WindowRequestId;Lorg/graphiks/kadre/application/EventStamp;ILjava/lang/Object;)Lorg/graphiks/kadre/interaction/InteractionActionOutcome$Committed;
+	public final fun component4 ()Lorg/graphiks/kadre/input/DropOfferId;
+	public final fun copy (Lorg/graphiks/kadre/interaction/InteractionRequestId;Lorg/graphiks/kadre/window/WindowRequestId;Lorg/graphiks/kadre/application/EventStamp;Lorg/graphiks/kadre/input/DropOfferId;)Lorg/graphiks/kadre/interaction/InteractionActionOutcome$Committed;
+	public static synthetic fun copy$default (Lorg/graphiks/kadre/interaction/InteractionActionOutcome$Committed;Lorg/graphiks/kadre/interaction/InteractionRequestId;Lorg/graphiks/kadre/window/WindowRequestId;Lorg/graphiks/kadre/application/EventStamp;Lorg/graphiks/kadre/input/DropOfferId;ILjava/lang/Object;)Lorg/graphiks/kadre/interaction/InteractionActionOutcome$Committed;
 	public fun equals (Ljava/lang/Object;)Z
+	public fun getDropOfferId ()Lorg/graphiks/kadre/input/DropOfferId;
 	public fun getRequestId ()Lorg/graphiks/kadre/interaction/InteractionRequestId;
 	public fun getStamp ()Lorg/graphiks/kadre/application/EventStamp;
 	public final fun getWindowRequestId ()Lorg/graphiks/kadre/window/WindowRequestId;
@@ -4028,12 +4032,15 @@ public final class org/graphiks/kadre/interaction/InteractionActionOutcome$Commi
 }
 
 public final class org/graphiks/kadre/interaction/InteractionActionOutcome$Expired : org/graphiks/kadre/interaction/InteractionActionOutcome {
-	public fun <init> (Lorg/graphiks/kadre/interaction/InteractionRequestId;Lorg/graphiks/kadre/application/EventStamp;)V
+	public fun <init> (Lorg/graphiks/kadre/interaction/InteractionRequestId;Lorg/graphiks/kadre/application/EventStamp;Lorg/graphiks/kadre/input/DropOfferId;)V
+	public synthetic fun <init> (Lorg/graphiks/kadre/interaction/InteractionRequestId;Lorg/graphiks/kadre/application/EventStamp;Lorg/graphiks/kadre/input/DropOfferId;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public final fun component1 ()Lorg/graphiks/kadre/interaction/InteractionRequestId;
 	public final fun component2 ()Lorg/graphiks/kadre/application/EventStamp;
-	public final fun copy (Lorg/graphiks/kadre/interaction/InteractionRequestId;Lorg/graphiks/kadre/application/EventStamp;)Lorg/graphiks/kadre/interaction/InteractionActionOutcome$Expired;
-	public static synthetic fun copy$default (Lorg/graphiks/kadre/interaction/InteractionActionOutcome$Expired;Lorg/graphiks/kadre/interaction/InteractionRequestId;Lorg/graphiks/kadre/application/EventStamp;ILjava/lang/Object;)Lorg/graphiks/kadre/interaction/InteractionActionOutcome$Expired;
+	public final fun component3 ()Lorg/graphiks/kadre/input/DropOfferId;
+	public final fun copy (Lorg/graphiks/kadre/interaction/InteractionRequestId;Lorg/graphiks/kadre/application/EventStamp;Lorg/graphiks/kadre/input/DropOfferId;)Lorg/graphiks/kadre/interaction/InteractionActionOutcome$Expired;
+	public static synthetic fun copy$default (Lorg/graphiks/kadre/interaction/InteractionActionOutcome$Expired;Lorg/graphiks/kadre/interaction/InteractionRequestId;Lorg/graphiks/kadre/application/EventStamp;Lorg/graphiks/kadre/input/DropOfferId;ILjava/lang/Object;)Lorg/graphiks/kadre/interaction/InteractionActionOutcome$Expired;
 	public fun equals (Ljava/lang/Object;)Z
+	public fun getDropOfferId ()Lorg/graphiks/kadre/input/DropOfferId;
 	public fun getRequestId ()Lorg/graphiks/kadre/interaction/InteractionRequestId;
 	public fun getStamp ()Lorg/graphiks/kadre/application/EventStamp;
 	public fun hashCode ()I
@@ -4041,12 +4048,15 @@ public final class org/graphiks/kadre/interaction/InteractionActionOutcome$Expir
 }
 
 public final class org/graphiks/kadre/interaction/InteractionActionOutcome$OwnerClosed : org/graphiks/kadre/interaction/InteractionActionOutcome {
-	public fun <init> (Lorg/graphiks/kadre/interaction/InteractionRequestId;Lorg/graphiks/kadre/application/EventStamp;)V
+	public fun <init> (Lorg/graphiks/kadre/interaction/InteractionRequestId;Lorg/graphiks/kadre/application/EventStamp;Lorg/graphiks/kadre/input/DropOfferId;)V
+	public synthetic fun <init> (Lorg/graphiks/kadre/interaction/InteractionRequestId;Lorg/graphiks/kadre/application/EventStamp;Lorg/graphiks/kadre/input/DropOfferId;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public final fun component1 ()Lorg/graphiks/kadre/interaction/InteractionRequestId;
 	public final fun component2 ()Lorg/graphiks/kadre/application/EventStamp;
-	public final fun copy (Lorg/graphiks/kadre/interaction/InteractionRequestId;Lorg/graphiks/kadre/application/EventStamp;)Lorg/graphiks/kadre/interaction/InteractionActionOutcome$OwnerClosed;
-	public static synthetic fun copy$default (Lorg/graphiks/kadre/interaction/InteractionActionOutcome$OwnerClosed;Lorg/graphiks/kadre/interaction/InteractionRequestId;Lorg/graphiks/kadre/application/EventStamp;ILjava/lang/Object;)Lorg/graphiks/kadre/interaction/InteractionActionOutcome$OwnerClosed;
+	public final fun component3 ()Lorg/graphiks/kadre/input/DropOfferId;
+	public final fun copy (Lorg/graphiks/kadre/interaction/InteractionRequestId;Lorg/graphiks/kadre/application/EventStamp;Lorg/graphiks/kadre/input/DropOfferId;)Lorg/graphiks/kadre/interaction/InteractionActionOutcome$OwnerClosed;
+	public static synthetic fun copy$default (Lorg/graphiks/kadre/interaction/InteractionActionOutcome$OwnerClosed;Lorg/graphiks/kadre/interaction/InteractionRequestId;Lorg/graphiks/kadre/application/EventStamp;Lorg/graphiks/kadre/input/DropOfferId;ILjava/lang/Object;)Lorg/graphiks/kadre/interaction/InteractionActionOutcome$OwnerClosed;
 	public fun equals (Ljava/lang/Object;)Z
+	public fun getDropOfferId ()Lorg/graphiks/kadre/input/DropOfferId;
 	public fun getRequestId ()Lorg/graphiks/kadre/interaction/InteractionRequestId;
 	public fun getStamp ()Lorg/graphiks/kadre/application/EventStamp;
 	public fun hashCode ()I
@@ -4054,13 +4064,16 @@ public final class org/graphiks/kadre/interaction/InteractionActionOutcome$Owner
 }
 
 public final class org/graphiks/kadre/interaction/InteractionActionOutcome$Rejected : org/graphiks/kadre/interaction/InteractionActionOutcome {
-	public fun <init> (Lorg/graphiks/kadre/interaction/InteractionRequestId;Lorg/graphiks/kadre/diagnostics/KadreFailure;Lorg/graphiks/kadre/application/EventStamp;)V
+	public fun <init> (Lorg/graphiks/kadre/interaction/InteractionRequestId;Lorg/graphiks/kadre/diagnostics/KadreFailure;Lorg/graphiks/kadre/application/EventStamp;Lorg/graphiks/kadre/input/DropOfferId;)V
+	public synthetic fun <init> (Lorg/graphiks/kadre/interaction/InteractionRequestId;Lorg/graphiks/kadre/diagnostics/KadreFailure;Lorg/graphiks/kadre/application/EventStamp;Lorg/graphiks/kadre/input/DropOfferId;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public final fun component1 ()Lorg/graphiks/kadre/interaction/InteractionRequestId;
 	public final fun component2 ()Lorg/graphiks/kadre/diagnostics/KadreFailure;
 	public final fun component3 ()Lorg/graphiks/kadre/application/EventStamp;
-	public final fun copy (Lorg/graphiks/kadre/interaction/InteractionRequestId;Lorg/graphiks/kadre/diagnostics/KadreFailure;Lorg/graphiks/kadre/application/EventStamp;)Lorg/graphiks/kadre/interaction/InteractionActionOutcome$Rejected;
-	public static synthetic fun copy$default (Lorg/graphiks/kadre/interaction/InteractionActionOutcome$Rejected;Lorg/graphiks/kadre/interaction/InteractionRequestId;Lorg/graphiks/kadre/diagnostics/KadreFailure;Lorg/graphiks/kadre/application/EventStamp;ILjava/lang/Object;)Lorg/graphiks/kadre/interaction/InteractionActionOutcome$Rejected;
+	public final fun component4 ()Lorg/graphiks/kadre/input/DropOfferId;
+	public final fun copy (Lorg/graphiks/kadre/interaction/InteractionRequestId;Lorg/graphiks/kadre/diagnostics/KadreFailure;Lorg/graphiks/kadre/application/EventStamp;Lorg/graphiks/kadre/input/DropOfferId;)Lorg/graphiks/kadre/interaction/InteractionActionOutcome$Rejected;
+	public static synthetic fun copy$default (Lorg/graphiks/kadre/interaction/InteractionActionOutcome$Rejected;Lorg/graphiks/kadre/interaction/InteractionRequestId;Lorg/graphiks/kadre/diagnostics/KadreFailure;Lorg/graphiks/kadre/application/EventStamp;Lorg/graphiks/kadre/input/DropOfferId;ILjava/lang/Object;)Lorg/graphiks/kadre/interaction/InteractionActionOutcome$Rejected;
 	public fun equals (Ljava/lang/Object;)Z
+	public fun getDropOfferId ()Lorg/graphiks/kadre/input/DropOfferId;
 	public final fun getFailure ()Lorg/graphiks/kadre/diagnostics/KadreFailure;
 	public fun getRequestId ()Lorg/graphiks/kadre/interaction/InteractionRequestId;
 	public fun getStamp ()Lorg/graphiks/kadre/application/EventStamp;
@@ -4089,6 +4102,21 @@ public abstract interface class org/graphiks/kadre/interaction/InteractionContex
 
 public abstract interface class org/graphiks/kadre/interaction/InteractionEvent {
 	public abstract fun getStamp ()Lorg/graphiks/kadre/application/EventStamp;
+}
+
+public final class org/graphiks/kadre/interaction/InteractionEvent$DropEntered : org/graphiks/kadre/interaction/InteractionEvent {
+	public fun <init> (Lorg/graphiks/kadre/input/DropOffer;Lorg/graphiks/kadre/surface/LogicalPoint;Lorg/graphiks/kadre/application/EventStamp;)V
+	public final fun component1 ()Lorg/graphiks/kadre/input/DropOffer;
+	public final fun component2 ()Lorg/graphiks/kadre/surface/LogicalPoint;
+	public final fun component3 ()Lorg/graphiks/kadre/application/EventStamp;
+	public final fun copy (Lorg/graphiks/kadre/input/DropOffer;Lorg/graphiks/kadre/surface/LogicalPoint;Lorg/graphiks/kadre/application/EventStamp;)Lorg/graphiks/kadre/interaction/InteractionEvent$DropEntered;
+	public static synthetic fun copy$default (Lorg/graphiks/kadre/interaction/InteractionEvent$DropEntered;Lorg/graphiks/kadre/input/DropOffer;Lorg/graphiks/kadre/surface/LogicalPoint;Lorg/graphiks/kadre/application/EventStamp;ILjava/lang/Object;)Lorg/graphiks/kadre/interaction/InteractionEvent$DropEntered;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getOffer ()Lorg/graphiks/kadre/input/DropOffer;
+	public final fun getPosition ()Lorg/graphiks/kadre/surface/LogicalPoint;
+	public fun getStamp ()Lorg/graphiks/kadre/application/EventStamp;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
 }
 
 public final class org/graphiks/kadre/interaction/InteractionEvent$KeyPressed : org/graphiks/kadre/interaction/InteractionEvent {
