@@ -162,6 +162,45 @@ class AppKitWindowRuntimeDriverTest {
     }
 
     @Test
+    fun ownerCloseDispatchesRetainedAttentionToTheAppKitOwnerThread() = runBlocking {
+        val port = OwnerThreadAppKitNativeWindowPort("attention-owner-close-dispatch")
+        val native = DriverAttentionNative(port::isMainThread)
+        val broker = AppKitProcessBroker()
+        val owner = broker.newUserAttentionOwner(native)
+        val driver = AppKitWindowRuntimeDriverFactory { port }.create(
+            resources = KadrePolicies.Default.resources,
+            publicAppKitCapabilities = true,
+            enabledWindowUpdateCapabilities = publicAppKitUpdateProperties(),
+            broker = broker,
+            attentionOwner = owner,
+        )
+        val closeExecutor = newDaemonSingleThreadExecutor("attention-owner-close-dispatch")
+
+        try {
+            val window = withTimeout(2.seconds) {
+                openedWindow(driver, WindowSpec(title = "attention-owner-close-dispatch"))
+            }
+            assertEquals(
+                KadreResult.Success(Unit),
+                withTimeout(2.seconds) { window.requestAttention(WindowAttention.Critical) },
+            )
+
+            closeExecutor.submit(owner::close).get(2, TimeUnit.SECONDS)
+
+            withTimeout(2.seconds) {
+                while (native.cancelled.isEmpty()) yield()
+            }
+            assertEquals(listOf(1L), native.cancelled)
+            assertEquals(listOf(true), native.cancellationsOnOwnerThread)
+        } finally {
+            driver.closeWithinTimeout()
+            owner.close()
+            closeExecutor.shutdownNow()
+            port.close()
+        }
+    }
+
+    @Test
     fun driverCloseBeforeQueuedAttentionOwnerExecutionReturnsClosedWithoutNativeRequest() = runBlocking {
         val ownerThreadEntered = CountDownLatch(1)
         val releaseOwnerThread = CountDownLatch(1)
