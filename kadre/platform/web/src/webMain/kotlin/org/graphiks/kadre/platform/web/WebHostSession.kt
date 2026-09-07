@@ -1,6 +1,7 @@
 package org.graphiks.kadre.platform.web
 
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -8,6 +9,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.emptyFlow
 import org.graphiks.kadre.application.KadreApplicationFactory
 import org.graphiks.kadre.application.KadreSession
+import org.graphiks.kadre.application.LifecycleState
 import org.graphiks.kadre.diagnostics.Capability
 import org.graphiks.kadre.diagnostics.FeatureAvailability
 import org.graphiks.kadre.diagnostics.KadreFailure
@@ -59,28 +61,110 @@ internal data class WebSurfaceSnapshot(
 internal interface WebHostPort {
     val initialSnapshot: WebSurfaceSnapshot
 
+    /**
+     * Stable target-owned identity used for admission.  Target ports override this with their
+     * element identity; the default preserves the existing inert ports until they do so.
+     */
+    val stableIdentity: Any get() = this
+
+    /** Initial browser facts copied by the target before common admission starts. */
+    val initialLifecycleSnapshot: WebLifecycleSnapshot
+        get() = WebLifecycleSnapshot(
+            connected = true,
+            inOriginDocument = true,
+            documentVisible = true,
+            browsingContextFocused = true,
+            subtreeFocused = true,
+        )
+
+    /**
+     * Installs target-owned observation after ownership has been reserved.
+     * [release] removes this observer together with every other target resource.
+     */
+    fun installLifecycleObserver(observer: (WebLifecycleSnapshot) -> Unit) = Unit
+
     fun release()
 }
 
 internal class WebHostSession(
     private val port: WebHostPort,
+    private val registry: WebHostRegistry = WebHostRegistry.shared,
 ) {
     fun attach(
         parentScope: CoroutineScope,
         applicationFactory: KadreApplicationFactory,
         policy: KadrePolicy,
-    ): KadreResult<KadreSession> = RuntimeHostController.withPrimarySurface(
+        attachmentPolicy: WebAttachmentPolicy = WebAttachmentPolicy.StopWhenDetached,
+    ): KadreResult<KadreSession> {
+        val reducer = WebLifecycleReducer(attachmentPolicy)
+        val initialLifecycle = when (val reduction = reducer.reduce(port.initialLifecycleSnapshot)) {
+            is WebLifecycleReduction.Update -> reduction.state
+            WebLifecycleReduction.Terminate -> return KadreResult.Failure(KadreFailure.InvalidRequest("element"))
+        }
+        val parentJob = parentScope.coroutineContext[Job]
+            ?: return KadreResult.Failure(KadreFailure.InvalidRequest("parentScope"))
+        if (!parentJob.isActive) return KadreResult.Failure(KadreFailure.ParentScopeCancelled)
+
+        val reservation = when (val result = registry.reserve(port.stableIdentity)) {
+            is KadreResult.Success -> result.value
+            is KadreResult.Failure -> return result
+        }
+        val ownership = WebHostOwnership(port, reservation)
+        val controller = createController(initialLifecycle, ownership)
+        val installed = runCatching {
+            port.installLifecycleObserver { snapshot ->
+                when (val reduction = reducer.reduce(snapshot)) {
+                    is WebLifecycleReduction.Update -> controller.updateLifecycle(reduction.state)
+                    WebLifecycleReduction.Terminate -> controller.detach()
+                }
+            }
+        }
+        if (installed.isFailure) {
+            ownership.release()
+            return KadreResult.Failure(
+                KadreFailure.PlatformFailure(KadrePlatform.Web, "web-host", "lifecycle-install-failed"),
+            )
+        }
+
+        val attached = controller.attach(parentScope, applicationFactory, policy)
+        if (attached is KadreResult.Failure) ownership.release()
+        return attached
+    }
+
+    private fun createController(
+        initialLifecycle: LifecycleState,
+        ownership: WebHostOwnership,
+    ): RuntimeHostController = RuntimeHostController.withPrimarySurface(
         platform = KadrePlatform.Web,
+        initialLifecycleState = initialLifecycle,
         primarySurfaceFactory = { id ->
-            val surface = WebHostSurface(id, port)
+            val surface = WebHostSurface(id, port, ownership)
             RuntimePrimarySurface(surface, surface::detach)
         },
-    ).attach(parentScope, applicationFactory, policy)
+    )
+}
+
+private class WebHostOwnership(
+    private val port: WebHostPort,
+    private val reservation: WebHostReservation,
+) {
+    private var released: Boolean = false
+
+    fun release() {
+        if (released) return
+        released = true
+        try {
+            port.release()
+        } finally {
+            reservation.release()
+        }
+    }
 }
 
 private class WebHostSurface(
     override val id: SurfaceId,
     private val port: WebHostPort,
+    private val ownership: WebHostOwnership,
 ) : HostSurface {
     private var detached: Boolean = false
     private val mutableState = MutableStateFlow(
@@ -130,7 +214,7 @@ private class WebHostSurface(
                 revision = SurfaceRevision(current.revision.value + 1L),
             )
         } finally {
-            port.release()
+            ownership.release()
         }
     }
 }
