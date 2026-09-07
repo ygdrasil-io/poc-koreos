@@ -17,6 +17,23 @@ import test from 'node:test';
 
 const runner = resolve(dirname(fileURLToPath(import.meta.url)), 'run-browser-smoke.mjs');
 const signalExitCodes = { SIGINT: 130, SIGTERM: 143 };
+const validJunit = '<?xml version="1.0"?><testsuites tests="1" failures="0" errors="0" skipped="0"><testsuite name="web" tests="1" failures="0" errors="0" skipped="0"><testcase name="attaches" classname="web-phase0"/></testsuite></testsuites>';
+
+test('launch construction uses a shell for the Windows Playwright cmd shim only', async () => {
+  const { createPlaywrightLaunch } = await import('./browser-smoke-launch.mjs');
+  const baseOptions = { cwd: '/work', stdio: 'inherit' };
+
+  assert.deepEqual(createPlaywrightLaunch('win32', baseOptions), {
+    argumentsList: ['test', '--config', 'playwright/playwright.config.mjs'],
+    command: 'node_modules/.bin/playwright.cmd',
+    options: { ...baseOptions, detached: false, shell: true },
+  });
+  assert.deepEqual(createPlaywrightLaunch('linux', baseOptions), {
+    argumentsList: ['test', '--config', 'playwright/playwright.config.mjs'],
+    command: 'node_modules/.bin/playwright',
+    options: { ...baseOptions, detached: true },
+  });
+});
 
 for (const signal of ['SIGINT', 'SIGTERM']) {
   test(`${signal} overrides a watchdog after process-tree cleanup has started`, {
@@ -36,11 +53,49 @@ for (const signal of ['SIGINT', 'SIGTERM']) {
   });
 }
 
+for (const [firstSignal, secondSignal] of [['SIGINT', 'SIGTERM'], ['SIGTERM', 'SIGINT']]) {
+  test(`${secondSignal} overrides an earlier ${firstSignal} while cleanup is running`, {
+    skip: process.platform === 'win32' && 'Windows does not deliver POSIX signals to a child as catchable console signals',
+    timeout: 10_000,
+  }, async (context) => {
+    const fixture = await createFixture('watchdog');
+    context.after(() => fixture.dispose());
+
+    const execution = runSmoke(fixture, ['--timeout-ms=500']);
+    await waitForFileWhileRunning(fixture.childReady, execution, 4_000);
+    await waitForFileWhileRunning(fixture.cleanupStarted, execution, 4_000);
+    execution.child.kill(firstSignal);
+    await new Promise((resolveDelay) => setTimeout(resolveDelay, 50));
+    execution.child.kill(secondSignal);
+
+    const result = await execution.completion;
+    assert.equal(normalizedExitStatus(result), signalExitCodes[secondSignal], result.stderr);
+  });
+}
+
+test('a successful Playwright child reaps a descendant left in its process group', {
+  skip: process.platform === 'win32' && 'Windows has no POSIX process-group probe',
+  timeout: 10_000,
+}, async (context) => {
+  const fixture = await createFixture('success-with-descendant');
+  context.after(() => fixture.dispose());
+
+  const execution = runSmoke(fixture);
+  await waitForFileWhileRunning(fixture.descendantReady, execution, 4_000);
+  const result = await execution.completion;
+
+  assert.equal(normalizedExitStatus(result), 0, result.stderr);
+  await waitForFile(fixture.descendantTerminated, 1_000);
+  assert.equal(processExists(await readPid(fixture.descendantPid)), false, 'successful runner left a process-group descendant alive');
+});
+
 test('a partial HTTP request is held through graceful drain and closed by forced teardown', {
   timeout: 10_000,
 }, async (context) => {
   const fixture = await createFixture('held-connection');
   context.after(() => fixture.dispose());
+  await mkdir(fixture.preservedDiagnosticTraceDirectory, { recursive: true });
+  await writeFile(fixture.preservedDiagnosticMarker, 'stale diagnostic evidence');
 
   const startedAt = Date.now();
   const execution = runSmoke(fixture);
@@ -53,6 +108,7 @@ test('a partial HTTP request is held through graceful drain and closed by forced
   assert.ok(elapsed < 4_000, `server teardown exceeded its bounded drains (${elapsed}ms)`);
   await waitForFile(fixture.connectionClosed, 1_000);
   await assert.rejects(access(fixture.diagnostics, fsConstants.F_OK), { code: 'ENOENT' });
+  await assert.rejects(access(fixture.preservedDiagnostics, fsConstants.F_OK), { code: 'ENOENT' });
 });
 
 test('a diagnostic-removal failure preserves diagnostics and still tears down the server', {
@@ -75,31 +131,60 @@ test('a diagnostic-removal failure preserves diagnostics and still tears down th
 
   assert.notEqual(normalizedExitStatus(result), 0, 'a finalization failure must fail the smoke');
   assert.match(result.stderr, /EACCES|EPERM/, 'the runner must surface the diagnostic removal failure');
+  assert.match(result.stderr, /playwright-preserved/, 'the runner must report the preserved diagnostic path');
   assert.ok(Date.now() - startedAt >= 750, 'diagnostic removal ran before bounded server teardown');
-  assert.equal(await readFile(fixture.diagnosticMarker, 'utf8'), 'diagnostic evidence');
+  assert.equal(await readFile(fixture.preservedDiagnosticMarker, 'utf8'), 'diagnostic evidence');
   await waitForFile(fixture.connectionClosed, 1_000);
 });
 
-async function createFixture(scenario) {
+for (const [name, report, expectedError] of [
+  ['malformed', '<testsuites tests="1"><testsuite><testcase></testsuites>', /not parseable/],
+  ['empty', '<testsuites tests="0" failures="0" errors="0" skipped="0"></testsuites>', /at least one testsuite/],
+  ['aborted', '<testsuites tests="1" failures="0" errors="0" skipped="0"><testsuite tests="1" failures="0" errors="0" skipped="0"><testcase name="case" status="aborted"/></testsuite></testsuites>', /has aborted status/],
+  ['unknown', '<testsuites tests="1" failures="0" errors="0" skipped="0"><testsuite tests="1" failures="0" errors="0" skipped="0"><testcase name="case" status="unknown"/></testsuite></testsuites>', /has unknown status/],
+  ['count-mismatched', '<testsuites tests="2" failures="0" errors="0" skipped="0"><testsuite tests="2" failures="0" errors="0" skipped="0"><testcase name="only-case"/></testsuite></testsuites>', /declares 2 tests but contains 1 testcase/],
+]) {
+  test(`rejects ${name} JUnit and retains diagnostics`, { timeout: 10_000 }, async (context) => {
+    const fixture = await createFixture('report', report);
+    context.after(() => fixture.dispose());
+
+    const result = await runSmoke(fixture).completion;
+
+    assert.notEqual(normalizedExitStatus(result), 0, `${name} JUnit report was accepted`);
+    assert.match(result.stderr, expectedError, result.stderr);
+    assert.equal(await readFile(fixture.diagnosticMarker, 'utf8'), 'diagnostic evidence');
+  });
+}
+
+async function createFixture(scenario, junit = validJunit) {
   const root = await mkdtemp(join(tmpdir(), 'kadre-browser-runner-'));
   const distribution = join(root, 'distribution');
   const evidence = join(root, 'evidence');
   const binDirectory = join(root, 'node_modules', '.bin');
   const fakePlaywright = join(root, 'fake-playwright.cjs');
   const heldClient = join(root, 'held-client.cjs');
+  const descendant = join(root, 'descendant.cjs');
   const childReady = join(root, 'child-ready');
   const cleanupStarted = join(root, 'cleanup-started');
   const connectionOpened = join(root, 'connection-opened');
   const connectionClosed = join(root, 'connection-closed');
   const heldClientPid = join(root, 'held-client.pid');
+  const descendantPid = join(root, 'descendant.pid');
+  const descendantReady = join(root, 'descendant-ready');
+  const descendantTerminated = join(root, 'descendant-terminated');
   const diagnostics = join(evidence, 'diagnostics', 'playwright');
   const diagnosticsParent = dirname(diagnostics);
-  const diagnosticMarker = join(diagnostics, 'trace.txt');
+  const diagnosticTraceDirectory = join(diagnostics, 'trace');
+  const diagnosticMarker = join(diagnosticTraceDirectory, 'trace.txt');
+  const preservedDiagnostics = join(evidence, 'diagnostics', 'playwright-preserved');
+  const preservedDiagnosticTraceDirectory = join(preservedDiagnostics, 'trace');
+  const preservedDiagnosticMarker = join(preservedDiagnosticTraceDirectory, 'trace.txt');
 
   await mkdir(distribution, { recursive: true });
   await mkdir(binDirectory, { recursive: true });
   await writeFile(join(distribution, 'fixture.js'), 'globalThis.kadreFixture = true;\n');
   await writeFile(heldClient, heldClientSource, { mode: 0o755 });
+  await writeFile(descendant, descendantSource, { mode: 0o755 });
   await writeFile(fakePlaywright, fakePlaywrightSource, { mode: 0o755 });
 
   if (process.platform === 'win32') {
@@ -118,11 +203,18 @@ async function createFixture(scenario) {
     cleanupStarted,
     connectionClosed,
     connectionOpened,
+    descendantPid,
+    descendantReady,
+    descendantTerminated,
     diagnosticMarker,
+    diagnosticTraceDirectory,
     diagnostics,
     diagnosticsParent,
     distribution,
     evidence,
+    preservedDiagnosticMarker,
+    preservedDiagnosticTraceDirectory,
+    preservedDiagnostics,
     root,
     async dispose() {
       try {
@@ -131,7 +223,15 @@ async function createFixture(scenario) {
       } catch (error) {
         if (error.code !== 'ENOENT' && error.code !== 'ESRCH') throw error;
       }
+      try {
+        const pid = await readPid(descendantPid);
+        if (pid > 0) process.kill(pid, 'SIGKILL');
+      } catch (error) {
+        if (error.code !== 'ENOENT' && error.code !== 'ESRCH') throw error;
+      }
       await chmod(diagnosticsParent, 0o700).catch(() => undefined);
+      await chmod(diagnosticTraceDirectory, 0o700).catch(() => undefined);
+      await chmod(preservedDiagnosticTraceDirectory, 0o700).catch(() => undefined);
       await rm(root, { force: true, recursive: true });
     },
     environment: {
@@ -139,8 +239,13 @@ async function createFixture(scenario) {
       KADRE_RUNNER_TEST_CHILD_READY: childReady,
       KADRE_RUNNER_TEST_CONNECTION_CLOSED: connectionClosed,
       KADRE_RUNNER_TEST_CONNECTION_OPENED: connectionOpened,
+      KADRE_RUNNER_TEST_DESCENDANT: descendant,
+      KADRE_RUNNER_TEST_DESCENDANT_PID: descendantPid,
+      KADRE_RUNNER_TEST_DESCENDANT_READY: descendantReady,
+      KADRE_RUNNER_TEST_DESCENDANT_TERMINATED: descendantTerminated,
       KADRE_RUNNER_TEST_HELD_CLIENT: heldClient,
       KADRE_RUNNER_TEST_HELD_CLIENT_PID: heldClientPid,
+      KADRE_RUNNER_TEST_JUNIT: junit,
       KADRE_RUNNER_TEST_SCENARIO: scenario,
     },
   };
@@ -217,6 +322,22 @@ async function stopProcess(child) {
   await new Promise((resolveClose) => child.once('close', resolveClose));
 }
 
+async function readPid(path) {
+  const pid = Number(await readFile(path, 'utf8'));
+  assert.ok(Number.isInteger(pid) && pid > 0, `invalid pid in ${path}`);
+  return pid;
+}
+
+function processExists(pid) {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    if (error.code === 'ESRCH') return false;
+    throw error;
+  }
+}
+
 const fakePlaywrightSource = String.raw`
 const { chmodSync, existsSync, mkdirSync, writeFileSync } = require('node:fs');
 const { dirname, join } = require('node:path');
@@ -230,7 +351,7 @@ if (scenario === 'watchdog') {
   });
   writeFileSync(process.env.KADRE_RUNNER_TEST_CHILD_READY, 'child ready');
   setInterval(() => undefined, 1_000);
-} else {
+} else if (scenario === 'held-connection' || scenario === 'remove-failure') {
   const helper = spawn(process.execPath, [process.env.KADRE_RUNNER_TEST_HELD_CLIENT], {
     detached: true,
     env: process.env,
@@ -239,25 +360,40 @@ if (scenario === 'watchdog') {
   writeFileSync(process.env.KADRE_RUNNER_TEST_HELD_CLIENT_PID, String(helper.pid));
   helper.unref();
   waitForConnection().then(() => {
-    mkdirSync(dirname(process.env.KADRE_JUNIT_OUTPUT), { recursive: true });
-    writeFileSync(
-      process.env.KADRE_JUNIT_OUTPUT,
-      '<testsuites tests="1" failures="0" errors="0" skipped="0"></testsuites>',
-    );
-    mkdirSync(process.env.KADRE_PLAYWRIGHT_OUTPUT_DIR, { recursive: true });
-    writeFileSync(join(process.env.KADRE_PLAYWRIGHT_OUTPUT_DIR, 'trace.txt'), 'diagnostic evidence');
-    if (scenario === 'remove-failure') {
-      chmodSync(dirname(process.env.KADRE_PLAYWRIGHT_OUTPUT_DIR), 0o500);
-    }
+    writeResults();
   });
+} else if (scenario === 'success-with-descendant') {
+  const descendant = spawn(process.execPath, [process.env.KADRE_RUNNER_TEST_DESCENDANT], {
+    detached: false,
+    env: process.env,
+    stdio: 'ignore',
+  });
+  writeFileSync(process.env.KADRE_RUNNER_TEST_DESCENDANT_PID, String(descendant.pid));
+  descendant.unref();
+  waitForFile(process.env.KADRE_RUNNER_TEST_DESCENDANT_READY, 'descendant did not start').then(writeResults);
+} else {
+  writeResults();
 }
 
 async function waitForConnection() {
+  await waitForFile(process.env.KADRE_RUNNER_TEST_CONNECTION_OPENED, 'held client did not connect');
+}
+
+async function waitForFile(path, message) {
   const deadline = Date.now() + 3_000;
-  while (!existsSync(process.env.KADRE_RUNNER_TEST_CONNECTION_OPENED)) {
-    if (Date.now() >= deadline) throw new Error('held client did not connect');
+  while (!existsSync(path)) {
+    if (Date.now() >= deadline) throw new Error(message);
     await new Promise((resolveDelay) => setTimeout(resolveDelay, 20));
   }
+}
+
+function writeResults() {
+  mkdirSync(dirname(process.env.KADRE_JUNIT_OUTPUT), { recursive: true });
+  writeFileSync(process.env.KADRE_JUNIT_OUTPUT, process.env.KADRE_RUNNER_TEST_JUNIT);
+  const traceDirectory = join(process.env.KADRE_PLAYWRIGHT_OUTPUT_DIR, 'trace');
+  mkdirSync(traceDirectory, { recursive: true });
+  writeFileSync(join(traceDirectory, 'trace.txt'), 'diagnostic evidence');
+  if (scenario === 'remove-failure') chmodSync(traceDirectory, 0o500);
 }
 `;
 
@@ -273,4 +409,15 @@ const socket = connect({ host: url.hostname, port: Number(url.port) }, () => {
 socket.on('close', () => {
   writeFileSync(process.env.KADRE_RUNNER_TEST_CONNECTION_CLOSED, 'connection closed');
 });
+`;
+
+const descendantSource = String.raw`
+const { writeFileSync } = require('node:fs');
+
+writeFileSync(process.env.KADRE_RUNNER_TEST_DESCENDANT_READY, 'descendant ready');
+process.on('SIGTERM', () => {
+  writeFileSync(process.env.KADRE_RUNNER_TEST_DESCENDANT_TERMINATED, 'descendant terminated');
+  process.exit(0);
+});
+setInterval(() => undefined, 1_000);
 `;

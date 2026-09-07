@@ -1,8 +1,10 @@
 import { createServer } from 'node:http';
-import { readFile, readdir, realpath, rm, stat } from 'node:fs/promises';
+import { cp, readFile, readdir, realpath, rename, rm, stat } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
-import { basename, extname, join, relative, resolve, sep } from 'node:path';
+import { basename, dirname, extname, join, relative, resolve, sep } from 'node:path';
 import { spawn } from 'node:child_process';
+import { XMLParser, XMLValidator } from 'fast-xml-parser';
+import { createPlaywrightLaunch } from './browser-smoke-launch.mjs';
 
 const POSIX_TERM_GRACE_MILLISECONDS = 1_000;
 const POSIX_KILL_GRACE_MILLISECONDS = 1_000;
@@ -12,6 +14,7 @@ const WINDOWS_TASKKILL_TIMEOUT_MILLISECONDS = 3_000;
 const WINDOWS_TASKKILL_REAP_TIMEOUT_MILLISECONDS = 1_000;
 const SERVER_GRACEFUL_DRAIN_TIMEOUT_MILLISECONDS = 1_000;
 const SERVER_FORCED_DRAIN_TIMEOUT_MILLISECONDS = 1_000;
+const DIAGNOSTIC_OPERATION_TIMEOUT_MILLISECONDS = 5_000;
 const signalExitCodes = { SIGINT: 2, SIGTERM: 15 };
 
 async function runBrowserSmoke(argumentsList) {
@@ -34,6 +37,7 @@ async function runBrowserSmoke(argumentsList) {
   const junitDirectory = join(evidence, 'test-results', 'browser', 'chromium');
   const junitOutput = join(junitDirectory, 'TEST-web-phase0.xml');
   const playwrightOutput = join(evidence, 'diagnostics', 'playwright');
+  const preservedPlaywrightOutput = join(evidence, 'diagnostics', 'playwright-preserved');
   const distributionRoot = await realpath(distribution);
   const entryScript = await findEntryScript(distributionRoot);
   const server = await serveDistribution(distributionRoot, entryScript);
@@ -43,8 +47,7 @@ async function runBrowserSmoke(argumentsList) {
 
   coordinator.installSignalHandlers();
   try {
-    const command = process.platform === 'win32' ? 'node_modules/.bin/playwright.cmd' : 'node_modules/.bin/playwright';
-    const result = await runWithWatchdog(command, ['test', '--config', 'playwright/playwright.config.mjs'], {
+    const launch = createPlaywrightLaunch(process.platform, {
       cwd: process.cwd(),
       env: {
         ...process.env,
@@ -53,28 +56,30 @@ async function runBrowserSmoke(argumentsList) {
         KADRE_PLAYWRIGHT_OUTPUT_DIR: playwrightOutput,
       },
       stdio: 'inherit',
-    }, timeoutMilliseconds, coordinator);
+    });
+    const result = await runWithWatchdog(
+      launch.command,
+      launch.argumentsList,
+      launch.options,
+      timeoutMilliseconds,
+      coordinator,
+    );
 
     if (!coordinator.hasTerminalReason()) {
       if (result.status !== 0) {
         coordinator.recordTerminal({ type: 'exit-failure', status: result.status, target });
       } else {
         const junit = await readFile(junitOutput, 'utf8');
-        if (/<(?:failure|error|skipped)\b|(?:failures|errors|skipped)="[1-9]\d*"/.test(junit)) {
-          throw new Error(`Playwright ${target} smoke reported a failure, error, or skip in ${junitOutput}`);
-        }
+        validateJunitReport(junit, junitOutput);
         if (!coordinator.hasTerminalReason()) businessSucceeded = true;
       }
     }
   } catch (error) {
     coordinator.recordTerminal({ type: 'business-error', error });
   } finally {
-    const childFinalization = coordinator.hasTerminalReason()
-      ? coordinator.cleanUpChild()
-      : Promise.resolve();
     const [serverResult] = await Promise.allSettled([
       closeServer(server),
-      childFinalization,
+      coordinator.cleanUpChild(),
     ]);
     if (serverResult.status === 'fulfilled') {
       serverFinalized = true;
@@ -86,7 +91,7 @@ async function runBrowserSmoke(argumentsList) {
 
     if (businessSucceeded && serverFinalized && coordinator.canRemoveDiagnostics()) {
       try {
-        await rm(playwrightOutput, { force: true, recursive: true });
+        await removeSuccessfulDiagnostics(playwrightOutput, preservedPlaywrightOutput);
       } catch (error) {
         coordinator.recordFinalizationFailure(error);
       }
@@ -116,10 +121,156 @@ function parseTimeout(value) {
   return Number(value);
 }
 
+function validateJunitReport(xml, path) {
+  const syntax = XMLValidator.validate(xml);
+  if (syntax !== true) {
+    throw new Error(`JUnit XML report ${path} is not parseable: ${syntax.err.msg}`);
+  }
+
+  const document = new XMLParser({
+    attributeNamePrefix: '@_',
+    ignoreAttributes: false,
+    isArray: (_name, elementPath) => elementPath === 'testsuites.testsuite'
+      || elementPath === 'testsuites.testsuite.testcase',
+  }).parse(xml);
+  const root = document.testsuites;
+  if (!root || typeof root !== 'object') {
+    throw new Error(`JUnit XML report ${path} must contain a testsuites root`);
+  }
+  const suites = root.testsuite ?? [];
+  if (suites.length === 0) {
+    throw new Error(`JUnit XML report ${path} must contain at least one testsuite`);
+  }
+
+  const cases = suites.flatMap((suite, index) => {
+    const suiteCases = suite?.testcase ?? [];
+    const declaredTests = junitCount(suite, 'tests', `${path} testsuite ${index + 1}`);
+    if (declaredTests !== suiteCases.length) {
+      throw new Error(`JUnit XML report ${path} testsuite ${index + 1} declares ${declaredTests} tests but contains ${suiteCases.length} testcases`);
+    }
+    assertZeroJunitOutcomes(suite, `${path} testsuite ${index + 1}`);
+    return suiteCases;
+  });
+
+  const declaredTests = junitCount(root, 'tests', path);
+  if (declaredTests <= 0 || cases.length === 0) {
+    throw new Error(`JUnit XML report ${path} must contain a positive test count and at least one testcase`);
+  }
+  if (declaredTests !== cases.length) {
+    throw new Error(`JUnit XML report ${path} declares ${declaredTests} tests but contains ${cases.length} testcases`);
+  }
+  assertZeroJunitOutcomes(root, path);
+
+  for (const [index, testCase] of cases.entries()) {
+    if (testCase?.failure !== undefined || testCase?.error !== undefined || testCase?.skipped !== undefined) {
+      throw new Error(`JUnit XML report ${path} testcase ${index + 1} is not successful`);
+    }
+    const status = testCase?.['@_status'];
+    if (typeof status === 'string' && ['aborted', 'unknown'].includes(status.toLowerCase())) {
+      throw new Error(`JUnit XML report ${path} testcase ${index + 1} has ${status} status`);
+    }
+  }
+}
+
+function junitCount(element, name, location) {
+  const value = element?.[`@_${name}`];
+  if (typeof value !== 'string' || !/^\d+$/.test(value)) {
+    throw new Error(`JUnit XML report ${location} has an invalid ${name} count`);
+  }
+  return Number(value);
+}
+
+function assertZeroJunitOutcomes(element, location) {
+  for (const name of ['failures', 'errors', 'skipped']) {
+    if (junitCount(element, name, location) !== 0) {
+      throw new Error(`JUnit XML report ${location} reports nonzero ${name}`);
+    }
+  }
+  const status = element?.['@_status'];
+  if (typeof status === 'string' && ['aborted', 'unknown'].includes(status.toLowerCase())) {
+    throw new Error(`JUnit XML report ${location} has ${status} status`);
+  }
+}
+
+async function removeSuccessfulDiagnostics(output, preservedOutput) {
+  const suffix = `${process.pid}-${Date.now()}`;
+  const stagingOutput = join(dirname(preservedOutput), `.playwright-preservation-${suffix}`);
+  const retiredOutput = join(dirname(preservedOutput), `.playwright-retired-${suffix}`);
+  const disposableOutput = join(dirname(preservedOutput), `.playwright-delete-${suffix}`);
+  let retiredExistingOutput = false;
+  let installedPreservation = false;
+
+  try {
+    if (existsSync(preservedOutput)) {
+      await boundedDiagnosticOperation(
+        rename(preservedOutput, retiredOutput),
+        `retiring stale diagnostics at ${preservedOutput}`,
+      );
+      retiredExistingOutput = true;
+    }
+    if (!existsSync(output)) {
+      if (retiredExistingOutput) await removeDiagnosticsBestEffort(retiredOutput);
+      return;
+    }
+
+    await boundedDiagnosticOperation(
+      cp(output, stagingOutput, { errorOnExist: true, force: false, recursive: true }),
+      `copying diagnostics from ${output}`,
+    );
+    await boundedDiagnosticOperation(
+      rename(stagingOutput, preservedOutput),
+      `publishing preserved diagnostics at ${preservedOutput}`,
+    );
+    installedPreservation = true;
+
+    try {
+      await boundedDiagnosticOperation(
+        rm(output, { force: true, recursive: true }),
+        `removing diagnostics at ${output}`,
+      );
+    } catch (error) {
+      throw new Error(`Could not remove successful diagnostics; complete diagnostics preserved at ${preservedOutput}: ${error.message}`, { cause: error });
+    }
+
+    try {
+      await boundedDiagnosticOperation(
+        rename(preservedOutput, disposableOutput),
+        `retiring preserved diagnostics at ${preservedOutput}`,
+      );
+      installedPreservation = false;
+    } catch (error) {
+      throw new Error(`Could not retire successful diagnostic preservation; complete diagnostics preserved at ${preservedOutput}: ${error.message}`, { cause: error });
+    }
+
+    await removeDiagnosticsBestEffort(disposableOutput);
+    if (retiredExistingOutput) await removeDiagnosticsBestEffort(retiredOutput);
+  } finally {
+    await removeDiagnosticsBestEffort(stagingOutput);
+    if (!installedPreservation && existsSync(disposableOutput)) {
+      await removeDiagnosticsBestEffort(disposableOutput);
+    }
+  }
+}
+
+function boundedDiagnosticOperation(operation, description) {
+  return withDeadline(operation, DIAGNOSTIC_OPERATION_TIMEOUT_MILLISECONDS, description);
+}
+
+async function removeDiagnosticsBestEffort(path) {
+  try {
+    await boundedDiagnosticOperation(
+      rm(path, { force: true, recursive: true }),
+      `best-effort diagnostic cleanup at ${path}`,
+    );
+  } catch {
+    // Hidden retirement paths never masquerade as the normal diagnostics for a clean smoke.
+  }
+}
+
 function reduceTerminalState(state, event) {
   if (event.type === 'terminal') {
-    if (state.reason?.type === 'signal') return state;
-    if (event.reason.type !== 'signal' && state.reason !== null) return state;
+    if (event.reason.type === 'signal') return { ...state, reason: event.reason };
+    if (state.reason !== null) return state;
     return { ...state, reason: event.reason };
   }
   if (event.type === 'child-cleanup-failure') {
@@ -267,7 +418,6 @@ async function runWithWatchdog(command, argumentsList, options, timeout, coordin
   try {
     child = spawn(command, argumentsList, {
       ...options,
-      detached: process.platform !== 'win32',
     });
   } catch (error) {
     coordinator.recordTerminal({ type: 'spawn-error', error });
@@ -301,9 +451,11 @@ async function runWithWatchdog(command, argumentsList, options, timeout, coordin
 async function terminateProcessTree(pid, cleanupChildren) {
   if (!pid) return;
   if (process.platform === 'win32') {
+    if (!processExists(pid)) return;
     await terminateWindowsProcessTree(pid, cleanupChildren);
     return;
   }
+  if (!processGroupExists(pid)) return;
   const failures = [];
   try {
     process.kill(-pid, 'SIGTERM');
@@ -330,6 +482,28 @@ async function terminateProcessTree(pid, cleanupChildren) {
     failures.push(error);
   }
   if (failures.length > 0) throw new AggregateError(failures, `could not fully terminate process group ${pid}`);
+}
+
+function processExists(pid) {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    if (error.code === 'ESRCH') return false;
+    if (error.code === 'EPERM') return true;
+    throw error;
+  }
+}
+
+function processGroupExists(pid) {
+  try {
+    process.kill(-pid, 0);
+    return true;
+  } catch (error) {
+    if (error.code === 'ESRCH') return false;
+    if (error.code === 'EPERM') return true;
+    throw error;
+  }
 }
 
 async function terminateWindowsProcessTree(pid, cleanupChildren) {
