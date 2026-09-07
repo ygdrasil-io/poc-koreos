@@ -3007,6 +3007,57 @@ class AppKitBackendProviderTest {
     }
 
     @Test
+    fun phase7DropHarnessWritesAnHonestNoninteractiveRecordOnMacOs() {
+        if (!isMacOs()) return
+        val record = Files.createTempFile("kadre-phase7-drop-harness", ".tsv")
+        val output = Files.createTempFile("kadre-phase7-drop-harness", ".log")
+        try {
+            val process = ProcessBuilder(
+                Path.of(System.getProperty("java.home"), "bin", "java").toString(),
+                "-XstartOnFirstThread",
+                "--enable-native-access=ALL-UNNAMED",
+                "-cp",
+                System.getProperty("java.class.path"),
+                "org.graphiks.kadre.internal.appkit.manual.Phase7DropHarnessKt",
+                "--record=$record",
+                "--build-id=automated-drop-harness-proof",
+            ).redirectErrorStream(true)
+                .redirectOutput(output.toFile())
+                .start()
+
+            process.outputStream.bufferedWriter().use { commands ->
+                commands.appendLine("snapshot")
+                commands.appendLine("result M5 pass premature terminal claim")
+                commands.appendLine("result M1 not-applicable automated run cannot produce a native drag")
+                commands.appendLine("finish")
+            }
+            val completed = process.waitFor(30, TimeUnit.SECONDS)
+            if (!completed) process.destroyForcibly()
+            val processOutput = Files.readString(output)
+            assertTrue(completed, processOutput)
+            assertEquals(0, process.exitValue(), processOutput)
+
+            val report = Files.readString(record)
+            assertTrue(report.contains("RUN_METADATA\t"), report)
+            assertTrue(report.contains("buildId=automated-drop-harness-proof"), report)
+            assertTrue(report.contains("INPUT_CAPABILITY\tdragAndDrop=Available"), report)
+            assertTrue(report.contains("HANDLER\tinstalled"), report)
+            assertTrue(report.contains("COMMAND\tsnapshot\t"), report)
+            assertTrue(
+                report.contains("SCENARIO\tM1\tnot-applicable\tautomated run cannot produce a native drag"),
+                report,
+            )
+            assertTrue(report.contains("COMMAND\tresult-rejected\tM5 requires terminal observation before recording"), report)
+            assertTrue(report.contains("TERMINAL_STABILITY\tnoLateRevision=true\tnoLateEvent=true"), report)
+            assertTrue(report.contains("SESSION_OUTCOME\tStopped(reason=ApplicationRequested)"), report)
+            assertFalse(report.lineSequence().any { it.startsWith("SCENARIO\t") && "\tpass\t" in it }, report)
+        } finally {
+            Files.deleteIfExists(record)
+            Files.deleteIfExists(output)
+        }
+    }
+
+    @Test
     fun realKffiPendingStopIsConsumedOnMacOs() {
         if (!isMacOs()) return
         val native = KffiAppKitNativeApplication()
