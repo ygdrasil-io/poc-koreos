@@ -4,95 +4,128 @@ import kotlin.test.Test
 import kotlin.test.assertContains
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
-import kotlin.test.assertTrue
 
 class ContractEvidenceMappingTest {
     @Test
-    fun mappingCoversEveryDeclaredScenarioAndSentinelExactlyOnce() {
-        val mappings = ContractEvidenceMapping.parse(COMPLETE_MAPPING)
+    fun mappingCoversEveryDeclaredScenarioAndSentinelExactlyOnceForEveryRequiredTarget() {
+        val mappings = ContractEvidenceMapping.parse(COMPLETE_WEB_MAPPING)
 
-        assertEquals(emptyList(), validateMappings(activeAppKitContract(), mappings))
+        assertEquals(emptyList(), validateMappings(activeWebContract(), mappings))
     }
 
     @Test
-    fun missingUnknownAndForeignEvidenceAreRejected() {
+    fun missingEvidenceOnOneTargetIsRejectedWithContractAndTarget() {
         val mappings = ContractEvidenceMapping.parse(
             "$HEADER\n" +
-                "APK-001\tscenario\tappkit-provider-discovery\texample.AppKitTest\tdiscovery[jvm]\n" +
-                "APK-001\tscenario\tunknown-scenario\texample.AppKitTest\tunknown[jvm]\n" +
-                "OTHER-001\tsentinel\tforeign-sentinel\texample.OtherTest\tforeign[jvm]",
+                "BCK-001\tjs\tscenario\tweb-attach-connected\texample.WebTest\tattach[js]\n" +
+                "BCK-001\twasmJs\tscenario\tweb-attach-connected\texample.WebTest\tattach[wasmJs]\n" +
+                "BCK-001\twasmJs\tsentinel\tweb-lease-bounded\texample.WebTest\tlease[wasmJs]",
         )
 
-        val errors = validateMappings(activeAppKitContract(), mappings)
+        val errors = validateMappings(activeWebContract(), mappings)
 
-        assertTrue(errors.any { "missing scenario: appkit-standalone-stop" in it })
-        assertTrue(errors.any { "unknown scenario: unknown-scenario" in it })
-        assertTrue(errors.any { "missing sentinel: appkit-loop-not-woken" in it })
-        assertTrue(errors.any { "unknown contractId: OTHER-001" in it })
+        assertContains(errors.joinToString(), "BCK-001[js]: missing sentinel: web-lease-bounded")
     }
 
     @Test
-    fun duplicateEvidenceIdIsRejectedEvenWhenItTargetsAnotherTest() {
-        val duplicate = COMPLETE_MAPPING +
-            "\nAPK-001\tscenario\tappkit-provider-discovery\texample.OtherTest\totherDiscovery[jvm]"
+    fun mappingTargetNotDeclaredByContractIsRejected() {
+        val errors = validateMappings(
+            activeWebContract(),
+            ContractEvidenceMapping.parse(
+                "$HEADER\n" +
+                    "BCK-001\tjvm\tscenario\tweb-attach-connected\texample.WebTest\tattach[jvm]",
+            ),
+        )
 
-        val errors = validateMappings(activeAppKitContract(), ContractEvidenceMapping.parse(duplicate))
+        assertContains(errors.joinToString(), "BCK-001[jvm]: target is not required")
+    }
 
-        assertTrue(errors.any { "duplicate scenario: appkit-provider-discovery" in it })
+    @Test
+    fun duplicateEvidenceIdIsRejectedPerTargetKindAndEvidenceId() {
+        val duplicate = COMPLETE_WEB_MAPPING +
+            "\nBCK-001\tjs\tscenario\tweb-attach-connected\texample.OtherTest\totherAttach[js]"
+
+        val errors = validateMappings(activeWebContract(), ContractEvidenceMapping.parse(duplicate))
+
+        assertContains(errors.joinToString(), "BCK-001[js]: duplicate scenario: web-attach-connected")
+    }
+
+    @Test
+    fun unknownContractIdErrorRemainsCompatible() {
+        val errors = validateMappings(
+            activeWebContract(),
+            ContractEvidenceMapping.parse(
+                "$HEADER\n" +
+                    "OTHER-001\tjs\tsentinel\tforeign-sentinel\texample.OtherTest\tforeign[js]",
+            ),
+        )
+
+        assertContains(errors.joinToString(), "BCK-001: unknown contractId: OTHER-001")
+    }
+
+    @Test
+    fun targetValidationChecksOnlyTheRequestedTargetSubset() {
+        val mappings = ContractEvidenceMapping.parse(COMPLETE_WEB_MAPPING)
+
+        assertEquals(emptyList(), validateTargetMappings(activeWebContract(), "js", mappings))
+    }
+
+    @Test
+    fun plannedContractDoesNotRequireMappings() {
+        assertEquals(emptyList(), validateMappings(plannedWebContract(), emptyList()))
     }
 
     @Test
     fun malformedKindAndColumnsAreRejectedWhileParsing() {
         val unknownKind = assertFailsWith<IllegalArgumentException> {
             ContractEvidenceMapping.parse(
-                "$HEADER\nAPK-001\tproof\tappkit-provider-discovery\texample.AppKitTest\tdiscovery[jvm]",
+                "$HEADER\nBCK-001\tjs\tproof\tweb-attach-connected\texample.WebTest\tattach[js]",
             )
         }
         assertContains(unknownKind.message.orEmpty(), "unknown evidence kind: proof")
 
         val missingColumn = assertFailsWith<IllegalArgumentException> {
             ContractEvidenceMapping.parse(
-                "$HEADER\nAPK-001\tscenario\tappkit-provider-discovery\texample.AppKitTest",
+                "$HEADER\nBCK-001\tjs\tscenario\tweb-attach-connected\texample.WebTest",
             )
         }
-        assertContains(missingColumn.message.orEmpty(), "expected 5 columns")
+        assertContains(missingColumn.message.orEmpty(), "expected 6 columns")
 
         val blankColumn = assertFailsWith<IllegalArgumentException> {
             ContractEvidenceMapping.parse(
-                "$HEADER\nAPK-001\tscenario\t\texample.AppKitTest\tdiscovery[jvm]",
+                "$HEADER\nBCK-001\t\tscenario\tweb-attach-connected\texample.WebTest\tattach[js]",
             )
         }
         assertContains(blankColumn.message.orEmpty(), "columns must not be blank")
     }
 
-    private fun activeAppKitContract(): ContractRecord = ContractRecord(
-        contractId = "APK-001",
-        status = ContractStatus.Active,
-        source = "APPKIT-JVM-FIRST-IMPLEMENTATION.md#6.1",
-        subject = "standalone AppKit host",
-        risk = "wrong thread ownership or hanging native loop",
-        oracle = ContractOracle.O3,
+    private fun activeWebContract(): ContractRecord = webContract(ContractStatus.Active)
+
+    private fun plannedWebContract(): ContractRecord = webContract(ContractStatus.Planned)
+
+    private fun webContract(status: ContractStatus): ContractRecord = ContractRecord(
+        contractId = "BCK-001",
+        status = status,
+        source = "DESIGN.md#15.3",
+        subject = "web attachment",
+        risk = "missing browser evidence",
+        oracle = ContractOracle.O2,
         scenarios = listOf(
-            "appkit-provider-discovery",
-            "appkit-standalone-stop",
-            "appkit-standalone-failure",
-            "appkit-standalone-reuse",
+            "web-attach-connected",
         ),
-        requiredTargets = listOf("jvm"),
+        requiredTargets = listOf("js", "wasmJs"),
         conditionalCapabilities = emptyList(),
-        sentinels = listOf("appkit-off-main-accepted", "appkit-loop-not-woken"),
+        sentinels = listOf("web-lease-bounded"),
         retirementRef = null,
     )
 
     private companion object {
-        const val HEADER = "contractId\tkind\tevidenceId\ttestClass\ttestName"
-        const val COMPLETE_MAPPING =
+        const val HEADER = "contractId\ttarget\tkind\tevidenceId\ttestClass\ttestName"
+        const val COMPLETE_WEB_MAPPING =
             "$HEADER\n" +
-                "APK-001\tscenario\tappkit-provider-discovery\texample.AppKitTest\tdiscovery[jvm]\n" +
-                "APK-001\tscenario\tappkit-standalone-stop\texample.AppKitTest\trealStop[jvm]\n" +
-                "APK-001\tscenario\tappkit-standalone-failure\texample.AppKitTest\tnativeFailure[jvm]\n" +
-                "APK-001\tscenario\tappkit-standalone-reuse\texample.AppKitTest\trealStop[jvm]\n" +
-                "APK-001\tsentinel\tappkit-off-main-accepted\texample.AppKitTest\toffMain[jvm]\n" +
-                "APK-001\tsentinel\tappkit-loop-not-woken\texample.AppKitTest\trealStop[jvm]"
+                "BCK-001\tjs\tscenario\tweb-attach-connected\texample.WebTest\tattach[js]\n" +
+                "BCK-001\tjs\tsentinel\tweb-lease-bounded\texample.WebTest\tlease[js]\n" +
+                "BCK-001\twasmJs\tscenario\tweb-attach-connected\texample.WebTest\tattach[wasmJs]\n" +
+                "BCK-001\twasmJs\tsentinel\tweb-lease-bounded\texample.WebTest\tlease[wasmJs]"
     }
 }

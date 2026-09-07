@@ -25,8 +25,9 @@ class GenerateContractEvidenceTest {
                 fixture.mapping.toString(),
                 fixture.reports.toString(),
                 fixture.output.toString(),
-                "0123456789abcdef",
+                "0123456789abcdef0123456789abcdef01234567",
                 "INP-001",
+                "jvm",
                 "runtime-jvm",
             ),
         )
@@ -47,8 +48,9 @@ class GenerateContractEvidenceTest {
                     fixture.mapping.toString(),
                     fixture.reports.toString(),
                     fixture.output.toString(),
-                    "0123456789abcdef",
+                    "0123456789abcdef0123456789abcdef01234567",
                     "APK-001",
+                    "jvm",
                     " ",
                 ),
             )
@@ -66,15 +68,17 @@ class GenerateContractEvidenceTest {
             mappingPath = fixture.mapping,
             junitDirectory = fixture.reports,
             outputPath = fixture.output,
-            commit = "0123456789abcdef",
+            commit = "0123456789abcdef0123456789abcdef01234567",
             contractId = "APK-001",
+            target = "jvm",
             adapter = "appkit-jvm",
         )
 
         val json = Json.parseToJsonElement(fixture.output.readText()).jsonObject
         assertEquals("1", json["schemaVersion"]!!.jsonPrimitive.content)
-        assertEquals("0123456789abcdef", json["commit"]!!.jsonPrimitive.content)
+        assertEquals("0123456789abcdef0123456789abcdef01234567", json["commit"]!!.jsonPrimitive.content)
         assertEquals("jvm", json["target"]!!.jsonPrimitive.content)
+        assertEquals("junit", json["execution"]!!.jsonObject["kind"]!!.jsonPrimitive.content)
         assertEquals("appkit-jvm", json["adapter"]!!.jsonPrimitive.content)
         assertEquals(4, json["scenarios"]!!.jsonArray.size)
         assertEquals(2, json["sentinels"]!!.jsonArray.size)
@@ -101,8 +105,9 @@ class GenerateContractEvidenceTest {
                 mappingPath = fixture.mapping,
                 junitDirectory = fixture.reports,
                 outputPath = fixture.output,
-                commit = "fedcba9876543210",
+                commit = "fedcba9876543210fedcba9876543210fedcba98",
                 contractId = "APK-001",
+                target = "jvm",
                 adapter = "appkit-jvm",
             )
         }
@@ -119,8 +124,8 @@ class GenerateContractEvidenceTest {
         )
         fixture.mapping.writeText(
             "$MAPPING\n" +
-                "APK-002\tscenario\tembedded\texample.AppKitTest\tembedded[jvm]\n" +
-                "APK-002\tsentinel\tembedded-refusal\texample.AppKitTest\tembeddedRefusal[jvm]",
+                "APK-002\tjvm\tscenario\tembedded\texample.AppKitTest\tembedded[jvm]\n" +
+                "APK-002\tjvm\tsentinel\tembedded-refusal\texample.AppKitTest\tembeddedRefusal[jvm]",
         )
         fixture.reports.resolve("TEST-embedded.xml").writeText(
             """
@@ -137,14 +142,40 @@ class GenerateContractEvidenceTest {
             mappingPath = fixture.mapping,
             junitDirectory = fixture.reports,
             outputPath = fixture.output,
-            commit = "0123456789abcdef",
+            commit = "0123456789abcdef0123456789abcdef01234567",
             contractId = "APK-001",
+            target = "jvm",
             adapter = "appkit-jvm",
         )
 
         val json = Json.parseToJsonElement(fixture.output.readText()).jsonObject
         assertEquals(4, json["scenarios"]!!.jsonArray.size)
         assertEquals(2, json["sentinels"]!!.jsonArray.size)
+    }
+
+    @Test
+    fun generationRequiresMappingsForOnlyTheSelectedTarget() {
+        val fixture = createFixture(VALID_REPORT)
+        fixture.registry.writeText(REGISTRY.replace("\tjvm\t-", "\tjvm,js\t-"))
+        fixture.mapping.writeText(
+            MAPPING + "\n" +
+                "APK-001\tjs\tscenario\tappkit-provider-discovery\texample.JsTest\tdiscovery[js]",
+        )
+
+        generateContractEvidence(
+            registryPath = fixture.registry,
+            mappingPath = fixture.mapping,
+            junitDirectory = fixture.reports,
+            outputPath = fixture.output,
+            commit = "0123456789abcdef0123456789abcdef01234567",
+            contractId = "APK-001",
+            target = "jvm",
+            adapter = "appkit-jvm",
+        )
+
+        val json = Json.parseToJsonElement(fixture.output.readText()).jsonObject
+        assertEquals("jvm", json["target"]!!.jsonPrimitive.content)
+        assertEquals(4, json["scenarios"]!!.jsonArray.size)
     }
 
     private fun createFixture(report: String): Fixture {
@@ -175,20 +206,20 @@ class GenerateContractEvidenceTest {
             "contractId\tstatus\tsource\tsubject\trisk\toracle\tscenarios\trequiredTargets\tconditionalCapabilities\tsentinels\tretirementRef\n" +
                 "INP-001\tactive\tTEST-STRATEGY.md#3\truntime input reducer\tmissing runtime evidence\tO2\truntime-input-key-pointer\tjvm\t-\truntime-input-policy-bypass\t-"
         const val RUNTIME_MAPPING =
-            "contractId\tkind\tevidenceId\ttestClass\ttestName\n" +
-                "INP-001\tscenario\truntime-input-key-pointer\texample.AppKitTest\tdiscovery[jvm]\n" +
-                "INP-001\tsentinel\truntime-input-policy-bypass\texample.AppKitTest\toffMain[jvm]"
+            "contractId\ttarget\tkind\tevidenceId\ttestClass\ttestName\n" +
+                "INP-001\tjvm\tscenario\truntime-input-key-pointer\texample.AppKitTest\tdiscovery[jvm]\n" +
+                "INP-001\tjvm\tsentinel\truntime-input-policy-bypass\texample.AppKitTest\toffMain[jvm]"
         const val REGISTRY =
             "contractId\tstatus\tsource\tsubject\trisk\toracle\tscenarios\trequiredTargets\tconditionalCapabilities\tsentinels\tretirementRef\n" +
                 "APK-001\tactive\tAPPKIT-JVM-FIRST-IMPLEMENTATION.md#6.1\tstandalone AppKit host\thanging native loop\tO3\tappkit-provider-discovery,appkit-standalone-stop,appkit-standalone-failure,appkit-standalone-reuse\tjvm\t-\tappkit-off-main-accepted,appkit-loop-not-woken\t-"
         const val MAPPING =
-            "contractId\tkind\tevidenceId\ttestClass\ttestName\n" +
-                "APK-001\tscenario\tappkit-provider-discovery\texample.AppKitTest\tdiscovery[jvm]\n" +
-                "APK-001\tscenario\tappkit-standalone-stop\texample.AppKitTest\trealStop[jvm]\n" +
-                "APK-001\tscenario\tappkit-standalone-failure\texample.AppKitTest\tnativeFailure[jvm]\n" +
-                "APK-001\tscenario\tappkit-standalone-reuse\texample.AppKitTest\trealStop[jvm]\n" +
-                "APK-001\tsentinel\tappkit-off-main-accepted\texample.AppKitTest\toffMain[jvm]\n" +
-                "APK-001\tsentinel\tappkit-loop-not-woken\texample.AppKitTest\trealStop[jvm]"
+            "contractId\ttarget\tkind\tevidenceId\ttestClass\ttestName\n" +
+                "APK-001\tjvm\tscenario\tappkit-provider-discovery\texample.AppKitTest\tdiscovery[jvm]\n" +
+                "APK-001\tjvm\tscenario\tappkit-standalone-stop\texample.AppKitTest\trealStop[jvm]\n" +
+                "APK-001\tjvm\tscenario\tappkit-standalone-failure\texample.AppKitTest\tnativeFailure[jvm]\n" +
+                "APK-001\tjvm\tscenario\tappkit-standalone-reuse\texample.AppKitTest\trealStop[jvm]\n" +
+                "APK-001\tjvm\tsentinel\tappkit-off-main-accepted\texample.AppKitTest\toffMain[jvm]\n" +
+                "APK-001\tjvm\tsentinel\tappkit-loop-not-woken\texample.AppKitTest\trealStop[jvm]"
         val VALID_REPORT =
             """
             <?xml version="1.0" encoding="UTF-8"?>

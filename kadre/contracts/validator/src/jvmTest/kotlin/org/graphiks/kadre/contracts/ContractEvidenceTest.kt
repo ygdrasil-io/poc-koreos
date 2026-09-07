@@ -18,7 +18,8 @@ class ContractEvidenceTest {
             contract = activeRuntimeContract(),
             mappings = completeRuntimeMappings(),
             junit = JUnitEvidence.read(writeReport(VALID_REPORT)),
-            commit = "0123456789abcdef",
+            commit = "0123456789abcdef0123456789abcdef01234567",
+            target = "jvm",
             adapter = "runtime-jvm",
             os = "Mac OS X",
             runtime = "OpenJDK Runtime Environment",
@@ -30,13 +31,31 @@ class ContractEvidenceTest {
     }
 
     @Test
-    fun oracleOutsideO2AndO3CannotProduceEvidence() {
+    fun activeO1ContractCanProduceEvidenceFromPassingJUnitConsumer() {
+        val json = ContractEvidence.create(
+            contract = activeRuntimeContract().copy(oracle = ContractOracle.O1),
+            mappings = completeRuntimeMappings(),
+            junit = JUnitEvidence.read(writeReport(VALID_REPORT)),
+            commit = "0123456789abcdef0123456789abcdef01234567",
+            target = "jvm",
+            adapter = "runtime-jvm",
+            os = "Mac OS X",
+            runtime = "OpenJDK Runtime Environment",
+            toolchain = "25",
+        )
+
+        assertEquals("O1", json["scenarios"]!!.jsonArray.single().jsonObject["oracle"]!!.jsonPrimitive.content)
+    }
+
+    @Test
+    fun activeO4ContractRequiresDifferentialEvidence() {
         val exception = assertFailsWith<IllegalStateException> {
             ContractEvidence.create(
-                contract = activeRuntimeContract().copy(oracle = ContractOracle.O1),
+                contract = activeRuntimeContract().copy(oracle = ContractOracle.O4),
                 mappings = completeRuntimeMappings(),
                 junit = JUnitEvidence.read(writeReport(VALID_REPORT)),
-                commit = "0123456789abcdef",
+                commit = "0123456789abcdef0123456789abcdef01234567",
+                target = "jvm",
                 adapter = "runtime-jvm",
                 os = "Mac OS X",
                 runtime = "OpenJDK Runtime Environment",
@@ -44,7 +63,7 @@ class ContractEvidenceTest {
             )
         }
 
-        assertContains(exception.message.orEmpty(), "INP-001 must use oracle O2 or O3")
+        assertContains(exception.message.orEmpty(), "INP-001 uses O4 and requires differential evidence")
     }
 
     @Test
@@ -55,7 +74,8 @@ class ContractEvidenceTest {
             contract = activeAppKitContract(),
             mappings = completeMappings(),
             junit = junit,
-            commit = "0123456789abcdef",
+            commit = "0123456789abcdef0123456789abcdef01234567",
+            target = "jvm",
             adapter = "appkit-jvm",
             os = "Mac OS X",
             runtime = "OpenJDK Runtime Environment",
@@ -63,8 +83,10 @@ class ContractEvidenceTest {
         )
 
         assertEquals("1", json["schemaVersion"]!!.jsonPrimitive.content)
-        assertEquals("0123456789abcdef", json["commit"]!!.jsonPrimitive.content)
+        assertEquals("0123456789abcdef0123456789abcdef01234567", json["commit"]!!.jsonPrimitive.content)
         assertEquals("jvm", json["target"]!!.jsonPrimitive.content)
+        assertEquals("junit", json["execution"]!!.jsonObject["kind"]!!.jsonPrimitive.content)
+        assertEquals(null, json["browser"])
         assertEquals("appkit-jvm", json["adapter"]!!.jsonPrimitive.content)
         assertEquals("155", json["durationMillis"]!!.jsonPrimitive.content)
         assertEquals("4", json["tests"]!!.jsonObject["tests"]!!.jsonPrimitive.content)
@@ -113,7 +135,8 @@ class ContractEvidenceTest {
                 contract = activeAppKitContract(),
                 mappings = completeMappings().dropLast(1),
                 junit = JUnitEvidence.read(writeReport(VALID_REPORT)),
-                commit = "0123456789abcdef",
+                commit = "0123456789abcdef0123456789abcdef01234567",
+                target = "jvm",
                 adapter = "appkit-jvm",
                 os = "Mac OS X",
                 runtime = "OpenJDK Runtime Environment",
@@ -121,7 +144,7 @@ class ContractEvidenceTest {
             )
         }
 
-        assertContains(exception.message.orEmpty(), "APK-001: missing sentinel: appkit-loop-not-woken")
+        assertContains(exception.message.orEmpty(), "APK-001[jvm]: missing sentinel: appkit-loop-not-woken")
     }
 
     @Test
@@ -152,6 +175,76 @@ class ContractEvidenceTest {
                 createEvidence(JUnitEvidence.read(writeReport(report)))
             }
             assertContains(exception.message.orEmpty(), expected)
+        }
+    }
+
+    @Test
+    fun targetMustBeRequiredByTheContract() {
+        val exception = assertFailsWith<IllegalStateException> {
+            ContractEvidence.create(
+                contract = activeAppKitContract(),
+                mappings = completeMappings(),
+                junit = JUnitEvidence.read(writeReport(VALID_REPORT)),
+                commit = "0123456789abcdef0123456789abcdef01234567",
+                target = "js",
+                adapter = "appkit-jvm",
+                os = "Mac OS X",
+                runtime = "OpenJDK Runtime Environment",
+                toolchain = "25",
+            )
+        }
+
+        assertContains(exception.message.orEmpty(), "APK-001[js]: target is not required")
+    }
+
+    @Test
+    fun jsEvidenceUsesOnlyJsMappingsAndWritesJsTarget() {
+        val contract = activeRuntimeContract().copy(requiredTargets = listOf("jvm", "js"))
+        val mappings = completeRuntimeMappings() + listOf(
+            EvidenceMapping("INP-001", "js", EvidenceKind.Scenario, "runtime-input-key-pointer", "example.JsTest", "input[js]"),
+            EvidenceMapping("INP-001", "js", EvidenceKind.Sentinel, "runtime-input-policy-bypass", "example.JsTest", "policy[js]"),
+        )
+        val jsReport = """
+            <?xml version="1.0" encoding="UTF-8"?>
+            <testsuite name="JsConsumerTest" tests="2" skipped="0" failures="0" errors="0" time="0.020">
+              <testcase name="input[js]" classname="example.JsTest" time="0.010"/>
+              <testcase name="policy[js]" classname="example.JsTest" time="0.010"/>
+            </testsuite>
+        """.trimIndent()
+
+        val json = ContractEvidence.create(
+            contract = contract,
+            mappings = mappings,
+            junit = JUnitEvidence.read(writeReport(jsReport)),
+            commit = "0123456789abcdef0123456789abcdef01234567",
+            target = "js",
+            adapter = "runtime-js",
+            os = "Mac OS X",
+            runtime = "OpenJDK Runtime Environment",
+            toolchain = "25",
+        )
+
+        assertEquals("js", json["target"]!!.jsonPrimitive.content)
+        assertEquals("junit", json["execution"]!!.jsonObject["kind"]!!.jsonPrimitive.content)
+    }
+
+    @Test
+    fun invalidGitCommitIsRejected() {
+        listOf("", "not-a-git-sha", "0123456789abcdeg").forEach { commit ->
+            val exception = assertFailsWith<IllegalStateException> {
+                ContractEvidence.create(
+                    contract = activeAppKitContract(),
+                    mappings = completeMappings(),
+                    junit = JUnitEvidence.read(writeReport(VALID_REPORT)),
+                    commit = commit,
+                    target = "jvm",
+                    adapter = "appkit-jvm",
+                    os = "Mac OS X",
+                    runtime = "OpenJDK Runtime Environment",
+                    toolchain = "25",
+                )
+            }
+            assertContains(exception.message.orEmpty(), "commit must be a Git SHA")
         }
     }
 
@@ -187,7 +280,8 @@ class ContractEvidenceTest {
         contract = activeAppKitContract(),
         mappings = completeMappings(),
         junit = junit,
-        commit = "0123456789abcdef",
+        commit = "0123456789abcdef0123456789abcdef01234567",
+        target = "jvm",
         adapter = "appkit-jvm",
         os = "Mac OS X",
         runtime = "OpenJDK Runtime Environment",
@@ -196,12 +290,12 @@ class ContractEvidenceTest {
 
     private fun completeMappings(): List<EvidenceMapping> = ContractEvidenceMapping.parse(
         "$MAPPING_HEADER\n" +
-            "APK-001\tscenario\tappkit-provider-discovery\texample.AppKitTest\tdiscovery[jvm]\n" +
-            "APK-001\tscenario\tappkit-standalone-stop\texample.AppKitTest\trealStop[jvm]\n" +
-            "APK-001\tscenario\tappkit-standalone-failure\texample.AppKitTest\tnativeFailure[jvm]\n" +
-            "APK-001\tscenario\tappkit-standalone-reuse\texample.AppKitTest\trealStop[jvm]\n" +
-            "APK-001\tsentinel\tappkit-off-main-accepted\texample.AppKitTest\toffMain[jvm]\n" +
-            "APK-001\tsentinel\tappkit-loop-not-woken\texample.AppKitTest\trealStop[jvm]",
+            "APK-001\tjvm\tscenario\tappkit-provider-discovery\texample.AppKitTest\tdiscovery[jvm]\n" +
+            "APK-001\tjvm\tscenario\tappkit-standalone-stop\texample.AppKitTest\trealStop[jvm]\n" +
+            "APK-001\tjvm\tscenario\tappkit-standalone-failure\texample.AppKitTest\tnativeFailure[jvm]\n" +
+            "APK-001\tjvm\tscenario\tappkit-standalone-reuse\texample.AppKitTest\trealStop[jvm]\n" +
+            "APK-001\tjvm\tsentinel\tappkit-off-main-accepted\texample.AppKitTest\toffMain[jvm]\n" +
+            "APK-001\tjvm\tsentinel\tappkit-loop-not-woken\texample.AppKitTest\trealStop[jvm]",
     )
 
     private fun activeAppKitContract(): ContractRecord = ContractRecord(
@@ -240,6 +334,7 @@ class ContractEvidenceTest {
     private fun completeRuntimeMappings(): List<EvidenceMapping> = listOf(
         EvidenceMapping(
             contractId = "INP-001",
+            target = "jvm",
             kind = EvidenceKind.Scenario,
             evidenceId = "runtime-input-key-pointer",
             testClass = "example.AppKitTest",
@@ -247,6 +342,7 @@ class ContractEvidenceTest {
         ),
         EvidenceMapping(
             contractId = "INP-001",
+            target = "jvm",
             kind = EvidenceKind.Sentinel,
             evidenceId = "runtime-input-policy-bypass",
             testClass = "example.AppKitTest",
@@ -259,7 +355,7 @@ class ContractEvidenceTest {
     }
 
     private companion object {
-        const val MAPPING_HEADER = "contractId\tkind\tevidenceId\ttestClass\ttestName"
+        const val MAPPING_HEADER = "contractId\ttarget\tkind\tevidenceId\ttestClass\ttestName"
         val VALID_REPORT =
             """
             <?xml version="1.0" encoding="UTF-8"?>

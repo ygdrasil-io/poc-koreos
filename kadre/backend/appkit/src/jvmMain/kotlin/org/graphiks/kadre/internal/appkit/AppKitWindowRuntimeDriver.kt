@@ -171,6 +171,9 @@ private class BrokeredAppKitWindowAttentionPort(
         owner.installFailureReporter { failure ->
             commandPort.reportAttentionFailure(KadreException(failure))
         }
+        owner.installReleaseDispatcher { release ->
+            commandPort.onMainThread(release)
+        }
     }
 
     override suspend fun request(windowId: WindowId, attention: WindowAttention) =

@@ -333,7 +333,7 @@ L’aggregate utilise `always()` uniquement pour inspecter tous les résultats, 
 
 ## 10. Preuve d’exécution produite
 
-Chaque target produit un `contract-evidence/<contractId>.json` par contrat actif, à structure canonique et listes triées. Chaque fichier n’est pas comparé octet par octet à une baseline, car sa durée varie ; son schéma versionné et sa sémantique sont validés. Il contient au minimum :
+Chaque target produit un `contract-evidence/<contractId>.json` par contrat actif, à structure canonique et listes triées. Chaque fichier n’est pas comparé octet par octet à une baseline, car sa durée varie ; son schéma versionné et sa sémantique sont validés. Le validateur impose l’ordre lexical des `scenarioId` et `sentinelId` plutôt que de traiter ces tableaux comme des ensembles non ordonnés. Le fichier contient au minimum :
 
 - `schemaVersion` ;
 - commit, target, OS/runtime/toolchain et adapter ;
@@ -344,7 +344,17 @@ Chaque target produit un `contract-evidence/<contractId>.json` par contrat actif
 - liste des sentinelles tuées ;
 - compteur de tests/skips/failures/errors cohérent avec JUnit.
 
-`result` est un domaine fermé `Passed | Failed` ; il n’existe ni `Skipped`, ni `Ignored`, ni `NotApplicable`. Le validateur aggregate recalcule les scénarios actifs requis depuis le registre, la promesse documentée et l’environnement déclaré. Il ne fait pas confiance à un simple compteur fourni par le test runner. Une preuve inconnue, dupliquée avec deux résultats, absente ou associée à une mauvaise target fait échouer le gate.
+`result` est un domaine fermé `Passed | Failed` ; il n’existe ni `Skipped`, ni `Ignored`, ni `NotApplicable`. Pour chaque contrat actif, le validateur aggregate charge aussi les rapports JUnit associés à la même racine d’artifact : le JSON seul n’est jamais une preuve. Chaque couple `testClass/testName` du mapping de la target doit exister dans JUnit et être passé. Les compteurs et `durationMillis` du JSON doivent être exactement égaux au résumé recalculé depuis le XML. Une preuve inconnue, dupliquée avec deux résultats, absente, associée à une mauvaise target ou décorrélée de JUnit fait échouer le gate. O4 reste refusé tant qu’un format d’exécution différentielle réel n’est pas défini.
+
+### 10.1 Protocole des preuves browser Web
+
+La fixture consommatrice publique est compilée et exécutée séparément pour JS et Wasm. Les deux targets utilisent le même consumer TypeScript et le même scenario target-neutre `web-typescript-consumer` ; aucun ID suffixé par target ne peut remplacer cette preuve commune. Chaque job produit son propre rapport JUnit et ses JSON canoniques, étiquetés par target, commit Git et moteur dans l'artifact CI. Le validateur reçoit le SHA Git attendu et exige son égalité exacte avec chaque JSON.
+
+Une preuve browser est réservée au chemin `kadre/contracts/driver/web/build/contract-evidence/<target>/contract-evidence/browser/<engine>/<contractId>.json`. Le rapport corrélé est réservé sous la même racine target-scopée, à `kadre/contracts/driver/web/build/contract-evidence/<target>/test-results/browser/<engine>/TEST-*.xml`. Son descripteur d'exécution identifie le moteur et sa version, ainsi que le nom et le SHA-256 du bundle public réellement chargé. Les artifacts JS et Wasm restent séparés ; ni leur nom CI, ni leur répertoire, ni l'index agrégé ne permet à l'un d'écraser l'autre.
+
+Le gate de PR exige Chromium pour JS et Wasm. Le profil nightly passe explicitement `-PkadreBrowserEngines=chromium,firefox,webkit` aux mêmes validateurs et exige les trois moteurs pour chaque target. Toute combinaison target/moteur déclarée supportée doit produire une exécution réelle : `skipped`, `ignored` et `NotApplicable` sont interdits et ne peuvent pas être remplacés par une preuve d'un autre target ou moteur.
+
+Les contrats Web restent `planned` tant que ces producteurs n'existent pas : `check` exécute les validateurs JS et Wasm Chromium, mais admet les répertoires absents sans fabriquer mapping, JSON ou résultat de test. Le passage d'un contrat à `active` rend immédiatement obligatoires son mapping, chaque JSON attendu et le rapport JUnit target/moteur corrélé. Le driver Playwright sera ajouté avec le premier attach DOM réel, pas dans cette tranche de fondation.
 
 ## 11. Nightly et release
 

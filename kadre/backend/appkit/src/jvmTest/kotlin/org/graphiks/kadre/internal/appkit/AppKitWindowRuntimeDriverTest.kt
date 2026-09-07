@@ -302,6 +302,40 @@ class AppKitWindowRuntimeDriverTest {
     }
 
     @Test
+    fun ownerCloseWithLiveAttentionReleasesOnTheAppKitOwnerThread() = runBlocking {
+        val port = OwnerThreadAppKitNativeWindowPort("attention-owner-live-close")
+        val native = DriverAttentionNative(port::isMainThread)
+        val broker = AppKitProcessBroker()
+        val owner = broker.newUserAttentionOwner(native)
+        val driver = AppKitWindowRuntimeDriverFactory { port }.create(
+            resources = KadrePolicies.Default.resources,
+            publicAppKitCapabilities = true,
+            enabledWindowUpdateCapabilities = publicAppKitUpdateProperties(),
+            broker = broker,
+            attentionOwner = owner,
+        )
+
+        try {
+            val window = withTimeout(2.seconds) {
+                openedWindow(driver, WindowSpec(title = "attention-owner-live-close"))
+            }
+            assertEquals(
+                KadreResult.Success(Unit),
+                withTimeout(2.seconds) { window.requestAttention(WindowAttention.Informational) },
+            )
+
+            owner.close()
+
+            assertEquals(listOf(1L), native.cancelled)
+            assertEquals(listOf(true), native.cancellationsOnOwnerThread)
+        } finally {
+            driver.closeWithinTimeout()
+            owner.close()
+            port.close()
+        }
+    }
+
+    @Test
     fun driverCloseReportsAttentionCancellationFailureOnceWithoutRestoringTheToken() = runBlocking {
         val port = OwnerThreadAppKitNativeWindowPort("attention-cancel-failure")
         val native = DriverAttentionNative(

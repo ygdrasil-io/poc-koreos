@@ -7,6 +7,7 @@ internal enum class EvidenceKind {
 
 internal data class EvidenceMapping(
     val contractId: String,
+    val target: String,
     val kind: EvidenceKind,
     val evidenceId: String,
     val testClass: String,
@@ -14,7 +15,7 @@ internal data class EvidenceMapping(
 )
 
 internal object ContractEvidenceMapping {
-    private const val Header = "contractId\tkind\tevidenceId\ttestClass\ttestName"
+    private const val Header = "contractId\ttarget\tkind\tevidenceId\ttestClass\ttestName"
 
     fun parse(text: String): List<EvidenceMapping> {
         val lines = text.lineSequence()
@@ -26,14 +27,15 @@ internal object ContractEvidenceMapping {
 
         return lines.drop(1).mapIndexed { index, line ->
             val columns = line.split('\t')
-            require(columns.size == 5) { "line ${index + 2}: expected 5 columns" }
+            require(columns.size == 6) { "line ${index + 2}: expected 6 columns" }
             require(columns.none(String::isBlank)) { "line ${index + 2}: columns must not be blank" }
             EvidenceMapping(
                 contractId = columns[0],
-                kind = columns[1].toEvidenceKind(),
-                evidenceId = columns[2],
-                testClass = columns[3],
-                testName = columns[4],
+                target = columns[1],
+                kind = columns[2].toEvidenceKind(),
+                evidenceId = columns[3],
+                testClass = columns[4],
+                testName = columns[5],
             )
         }
     }
@@ -49,6 +51,8 @@ internal fun validateMappings(
     contract: ContractRecord,
     mappings: List<EvidenceMapping>,
 ): List<String> = buildList {
+    if (contract.status != ContractStatus.Active) return@buildList
+
     mappings.asSequence()
         .map(EvidenceMapping::contractId)
         .filter { it != contract.contractId }
@@ -57,6 +61,32 @@ internal fun validateMappings(
         .forEach { add("${contract.contractId}: unknown contractId: $it") }
 
     val relevant = mappings.filter { it.contractId == contract.contractId }
+    relevant.asSequence()
+        .map(EvidenceMapping::target)
+        .filter { it !in contract.requiredTargets }
+        .distinct()
+        .sorted()
+        .forEach { add("${contract.contractId}[$it]: target is not required") }
+
+    contract.requiredTargets.forEach { target ->
+        addAll(validateTargetMappings(contract, target, relevant.filter { it.target == target }))
+    }
+}
+
+internal fun validateTargetMappings(
+    contract: ContractRecord,
+    target: String,
+    mappings: List<EvidenceMapping>,
+): List<String> = buildList {
+    if (contract.status != ContractStatus.Active) return@buildList
+    if (target !in contract.requiredTargets) {
+        add("${contract.contractId}[$target]: target is not required")
+        return@buildList
+    }
+
+    val relevant = mappings.filter {
+        it.contractId == contract.contractId && it.target == target
+    }
     EvidenceKind.entries.forEach { kind ->
         relevant.asSequence()
             .filter { it.kind == kind }
@@ -65,11 +95,12 @@ internal fun validateMappings(
             .filterValues { it > 1 }
             .keys
             .sorted()
-            .forEach { add("${contract.contractId}: duplicate ${kind.label}: $it") }
+            .forEach { add("${contract.contractId}[$target]: duplicate ${kind.label}: $it") }
     }
 
     compareEvidence(
         contract = contract,
+        target = target,
         kind = EvidenceKind.Scenario,
         expected = contract.scenarios,
         mappings = relevant,
@@ -77,6 +108,7 @@ internal fun validateMappings(
     )
     compareEvidence(
         contract = contract,
+        target = target,
         kind = EvidenceKind.Sentinel,
         expected = contract.sentinels,
         mappings = relevant,
@@ -86,6 +118,7 @@ internal fun validateMappings(
 
 private fun compareEvidence(
     contract: ContractRecord,
+    target: String,
     kind: EvidenceKind,
     expected: List<String>,
     mappings: List<EvidenceMapping>,
@@ -97,10 +130,10 @@ private fun compareEvidence(
         .map(EvidenceMapping::evidenceId)
         .toSet()
     (expectedIds - actualIds).sorted().forEach {
-        errors += "${contract.contractId}: missing ${kind.label}: $it"
+        errors += "${contract.contractId}[$target]: missing ${kind.label}: $it"
     }
     (actualIds - expectedIds).sorted().forEach {
-        errors += "${contract.contractId}: unknown ${kind.label}: $it"
+        errors += "${contract.contractId}[$target]: unknown ${kind.label}: $it"
     }
 }
 
