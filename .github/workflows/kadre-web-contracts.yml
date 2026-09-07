@@ -51,3 +51,4 @@ jobs:
             kadre/contracts/driver/web/build/dist/
             kadre/contracts/driver/web/build/contract-evidence/
           if-no-files-found: ignore
+          include-hidden-files: true

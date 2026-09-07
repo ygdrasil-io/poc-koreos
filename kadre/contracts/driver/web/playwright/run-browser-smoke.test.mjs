@@ -110,6 +110,9 @@ test('a partial HTTP request is held through graceful drain and closed by forced
   await waitForFile(fixture.connectionClosed, 1_000);
   await assert.rejects(access(fixture.diagnostics, fsConstants.F_OK), { code: 'ENOENT' });
   await assert.rejects(access(fixture.preservedDiagnostics, fsConstants.F_OK), { code: 'ENOENT' });
+  const quarantines = await diagnosticQuarantines(fixture);
+  assert.equal(quarantines.length, 1, `expected one durable quarantine, found ${quarantines.join(', ')}`);
+  await assertCompleteDiagnostics(quarantines[0], 0);
 });
 
 test('a diagnostic-removal failure preserves diagnostics and still tears down the server', {
@@ -138,34 +141,24 @@ test('a diagnostic-removal failure preserves diagnostics and still tears down th
   await waitForFile(fixture.connectionClosed, 1_000);
 });
 
-test('a quarantine deletion failure restores complete diagnostics to the visible preservation path', {
+test('a deferred quarantine deletion failure leaves current diagnostics visible and complete', {
   skip: process.platform === 'win32' && 'Windows chmod does not provide a deterministic remove failure',
   timeout: 20_000,
 }, async (context) => {
   const fixture = await createFixture('quarantine-remove-failure');
+  const obsoleteQuarantine = await createObsoleteQuarantine(fixture);
+  await chmod(obsoleteQuarantine, 0o500);
   const execution = runSmoke(fixture);
   context.after(async () => {
-    await writeFile(fixture.preservationRelease, 'release').catch(() => undefined);
     await stopProcess(execution.child);
-    await chmod(fixture.preservedDiagnostics, 0o700).catch(() => undefined);
     await fixture.dispose();
   });
 
-  await waitForFileWhileRunning(fixture.preservationPublished, execution, 10_000);
-  await chmod(fixture.preservedDiagnostics, 0o500);
-  await writeFile(fixture.preservationRelease, 'release');
-
   const result = await execution.completion;
 
-  assert.notEqual(normalizedExitStatus(result), 0, 'a quarantine deletion failure must fail the smoke');
-  assert.match(result.stderr, /EACCES|EPERM/, 'the runner must surface the quarantine deletion failure');
-  assert.equal(await readFile(fixture.preservedDiagnosticMarker, 'utf8'), 'diagnostic evidence');
-  assert.equal((await readdir(fixture.preservedDiagnosticBulkDirectory)).length, 2_500);
-  assert.equal(
-    (await readdir(fixture.diagnosticsParent)).some((entry) => entry.startsWith('.playwright-delete-')),
-    false,
-    'the only diagnostic copy must not remain at a hidden random path',
-  );
+  assert.notEqual(normalizedExitStatus(result), 0, 'a deferred quarantine deletion failure must fail the smoke');
+  assert.match(result.stderr, /EACCES|EPERM/, 'the runner must surface the deferred quarantine deletion failure');
+  await assertCompleteDiagnostics(fixture.preservedDiagnostics);
 });
 
 for (const signal of ['SIGINT', 'SIGTERM']) {
@@ -192,6 +185,72 @@ for (const signal of ['SIGINT', 'SIGTERM']) {
     assert.equal((await readdir(fixture.preservedDiagnosticBulkDirectory)).length, 2_500);
   });
 }
+
+for (const signal of ['SIGINT', 'SIGTERM']) {
+  test(`${signal} during quarantine removal retains complete visible diagnostics`, {
+    skip: process.platform === 'win32' && 'Windows does not deliver POSIX signals to a child as catchable console signals',
+    timeout: 20_000,
+  }, async (context) => {
+    const fixture = await createFixture('signal-during-quarantine-removal');
+    await createObsoleteQuarantine(fixture);
+    const execution = runSmoke(fixture);
+    context.after(async () => {
+      await writeFile(fixture.quarantineRemovalRelease, 'release').catch(() => undefined);
+      await stopProcess(execution.child);
+      await fixture.dispose();
+    });
+
+    await waitForFileWhileRunning(fixture.quarantineRemovalStarted, execution, 10_000);
+    execution.child.kill(signal);
+    await writeFile(fixture.quarantineRemovalRelease, 'release');
+    const result = await execution.completion;
+
+    assert.equal(normalizedExitStatus(result), signalExitCodes[signal], result.stderr);
+    await assertCompleteDiagnostics(fixture.preservedDiagnostics);
+  });
+}
+
+test('a partially deleted quarantine is never reported as complete diagnostics', {
+  skip: process.platform === 'win32' && 'Windows chmod does not provide a deterministic remove failure',
+  timeout: 20_000,
+}, async (context) => {
+  const fixture = await createFixture('partial-quarantine-failure');
+  await createObsoleteQuarantine(fixture);
+  const execution = runSmoke(fixture);
+  context.after(async () => {
+    await stopProcess(execution.child);
+    await fixture.dispose();
+  });
+
+  const result = await execution.completion;
+  assert.notEqual(normalizedExitStatus(result), 0, 'a partial quarantine deletion failure must fail the smoke');
+  assert.doesNotMatch(result.stderr, /complete obsolete diagnostics/i, result.stderr);
+  await assertCompleteDiagnostics(fixture.preservedDiagnostics);
+});
+
+test('a signal after the diagnostic commit retains the complete durable quarantine', {
+  skip: process.platform === 'win32' && 'Windows does not deliver POSIX signals to a child as catchable console signals',
+  timeout: 20_000,
+}, async (context) => {
+  const fixture = await createFixture('signal-after-diagnostic-commit');
+  const execution = runSmoke(fixture);
+  context.after(async () => {
+    await writeFile(fixture.diagnosticCommitRelease, 'release').catch(() => undefined);
+    await stopProcess(execution.child);
+    await fixture.dispose();
+  });
+
+  await waitForFileWhileRunning(fixture.diagnosticCommitStarted, execution, 10_000);
+  execution.child.kill('SIGTERM');
+  await writeFile(fixture.diagnosticCommitRelease, 'release');
+  const result = await execution.completion;
+
+  assert.equal(normalizedExitStatus(result), signalExitCodes.SIGTERM, result.stderr);
+  await assert.rejects(access(fixture.preservedDiagnostics, fsConstants.F_OK), { code: 'ENOENT' });
+  const quarantines = await diagnosticQuarantines(fixture);
+  assert.equal(quarantines.length, 1, `expected one durable quarantine, found ${quarantines.join(', ')}`);
+  await assertCompleteDiagnostics(quarantines[0]);
+});
 
 for (const [name, report, expectedError] of [
   ['malformed', '<testsuites tests="1"><testsuite><testcase></testsuites>', /not parseable/],
@@ -228,9 +287,11 @@ async function createFixture(scenario, junit = validJunit) {
   const descendantPid = join(root, 'descendant.pid');
   const descendantReady = join(root, 'descendant-ready');
   const descendantTerminated = join(root, 'descendant-terminated');
-  const preservationPause = join(root, 'preservation-pause.cjs');
-  const preservationPublished = join(root, 'preservation-published');
-  const preservationRelease = join(root, 'preservation-release');
+  const fileSystemControl = join(root, 'filesystem-control.cjs');
+  const quarantineRemovalStarted = join(root, 'quarantine-removal-started');
+  const quarantineRemovalRelease = join(root, 'quarantine-removal-release');
+  const diagnosticCommitStarted = join(root, 'diagnostic-commit-started');
+  const diagnosticCommitRelease = join(root, 'diagnostic-commit-release');
   const diagnostics = join(evidence, 'diagnostics', 'playwright');
   const diagnosticsParent = dirname(diagnostics);
   const diagnosticTraceDirectory = join(diagnostics, 'trace');
@@ -246,7 +307,7 @@ async function createFixture(scenario, junit = validJunit) {
   await writeFile(heldClient, heldClientSource, { mode: 0o755 });
   await writeFile(descendant, descendantSource, { mode: 0o755 });
   await writeFile(fakePlaywright, fakePlaywrightSource, { mode: 0o755 });
-  await writeFile(preservationPause, preservationPauseSource, { mode: 0o755 });
+  await writeFile(fileSystemControl, fileSystemControlSource, { mode: 0o755 });
 
   if (process.platform === 'win32') {
     await writeFile(
@@ -277,8 +338,10 @@ async function createFixture(scenario, junit = validJunit) {
     preservedDiagnosticBulkDirectory,
     preservedDiagnosticTraceDirectory,
     preservedDiagnostics,
-    preservationPublished,
-    preservationRelease,
+    quarantineRemovalStarted,
+    quarantineRemovalRelease,
+    diagnosticCommitStarted,
+    diagnosticCommitRelease,
     root,
     async dispose() {
       try {
@@ -297,6 +360,9 @@ async function createFixture(scenario, junit = validJunit) {
       await chmod(diagnosticTraceDirectory, 0o700).catch(() => undefined);
       await chmod(preservedDiagnostics, 0o700).catch(() => undefined);
       await chmod(preservedDiagnosticTraceDirectory, 0o700).catch(() => undefined);
+      for (const entry of await readdir(diagnosticsParent).catch(() => [])) {
+        await chmod(join(diagnosticsParent, entry), 0o700).catch(() => undefined);
+      }
       await rm(root, { force: true, recursive: true });
     },
     environment: {
@@ -311,14 +377,17 @@ async function createFixture(scenario, junit = validJunit) {
       KADRE_RUNNER_TEST_HELD_CLIENT: heldClient,
       KADRE_RUNNER_TEST_HELD_CLIENT_PID: heldClientPid,
       KADRE_RUNNER_TEST_JUNIT: junit,
-      KADRE_RUNNER_TEST_PAUSE_AFTER_RENAME: scenario === 'quarantine-remove-failure'
-        ? preservedDiagnostics
-        : '',
-      KADRE_RUNNER_TEST_PRESERVATION_PUBLISHED: preservationPublished,
-      KADRE_RUNNER_TEST_PRESERVATION_RELEASE: preservationRelease,
+      KADRE_RUNNER_TEST_QUARANTINE_REMOVAL_STARTED: quarantineRemovalStarted,
+      KADRE_RUNNER_TEST_QUARANTINE_REMOVAL_RELEASE: quarantineRemovalRelease,
+      KADRE_RUNNER_TEST_DIAGNOSTIC_COMMIT_STARTED: diagnosticCommitStarted,
+      KADRE_RUNNER_TEST_DIAGNOSTIC_COMMIT_RELEASE: diagnosticCommitRelease,
       KADRE_RUNNER_TEST_SCENARIO: scenario,
-      ...(scenario === 'quarantine-remove-failure' ? {
-        NODE_OPTIONS: [process.env.NODE_OPTIONS, `--require=${preservationPause}`].filter(Boolean).join(' '),
+      ...([
+        'partial-quarantine-failure',
+        'signal-after-diagnostic-commit',
+        'signal-during-quarantine-removal',
+      ].includes(scenario) ? {
+        NODE_OPTIONS: [process.env.NODE_OPTIONS, `--require=${fileSystemControl}`].filter(Boolean).join(' '),
       } : {}),
     },
   };
@@ -404,6 +473,31 @@ function waitForEntryWhileRunning(entry, execution, timeout) {
     await stopProcess(execution.child);
     throw new Error('timed out waiting for the watched diagnostic entry');
   });
+}
+
+async function createObsoleteQuarantine(fixture) {
+  const quarantine = join(fixture.diagnosticsParent, '.playwright-quarantine-obsolete-fixture');
+  const traceDirectory = join(quarantine, 'trace');
+  await mkdir(traceDirectory, { recursive: true });
+  await writeFile(join(traceDirectory, 'trace.txt'), 'obsolete diagnostic evidence');
+  return quarantine;
+}
+
+async function diagnosticQuarantines(fixture) {
+  return (await readdir(fixture.diagnosticsParent))
+    .filter((entry) => entry.startsWith('.playwright-quarantine-'))
+    .map((entry) => join(fixture.diagnosticsParent, entry));
+}
+
+async function assertCompleteDiagnostics(path, expectedBulkCount = 2_500) {
+  assert.equal(await readFile(join(path, 'trace', 'trace.txt'), 'utf8'), 'diagnostic evidence');
+  let bulkCount = 0;
+  try {
+    bulkCount = (await readdir(join(path, 'bulk'))).length;
+  } catch (error) {
+    if (error.code !== 'ENOENT') throw error;
+  }
+  assert.equal(bulkCount, expectedBulkCount, `incomplete diagnostic bulk data at ${path}`);
 }
 
 function withTimeout(promise, timeout, onTimeout) {
@@ -495,7 +589,11 @@ function writeResults() {
   const traceDirectory = join(process.env.KADRE_PLAYWRIGHT_OUTPUT_DIR, 'trace');
   mkdirSync(traceDirectory, { recursive: true });
   writeFileSync(join(traceDirectory, 'trace.txt'), 'diagnostic evidence');
-  if (scenario === 'quarantine-remove-failure' || scenario === 'signal-during-preservation') {
+  if (scenario === 'quarantine-remove-failure'
+      || scenario === 'signal-during-preservation'
+      || scenario === 'signal-during-quarantine-removal'
+      || scenario === 'signal-after-diagnostic-commit'
+      || scenario === 'partial-quarantine-failure') {
     const bulkDirectory = join(process.env.KADRE_PLAYWRIGHT_OUTPUT_DIR, 'bulk');
     mkdirSync(bulkDirectory, { recursive: true });
     for (let index = 0; index < 2_500; index += 1) {
@@ -531,23 +629,41 @@ process.on('SIGTERM', () => {
 setInterval(() => undefined, 1_000);
 `;
 
-const preservationPauseSource = String.raw`
+const fileSystemControlSource = String.raw`
 const { existsSync, writeFileSync } = require('node:fs');
 const fileSystem = require('node:fs/promises');
-const { resolve } = require('node:path');
+const { basename, join } = require('node:path');
 
 const rename = fileSystem.rename.bind(fileSystem);
+const rm = fileSystem.rm.bind(fileSystem);
 fileSystem.rename = async (source, destination) => {
   const result = await rename(source, destination);
-  if (process.env.KADRE_RUNNER_TEST_PAUSE_AFTER_RENAME
-      && resolve(destination) === resolve(process.env.KADRE_RUNNER_TEST_PAUSE_AFTER_RENAME)) {
-    writeFileSync(process.env.KADRE_RUNNER_TEST_PRESERVATION_PUBLISHED, 'published');
+  if (process.env.KADRE_RUNNER_TEST_SCENARIO === 'signal-after-diagnostic-commit'
+      && basename(destination).startsWith('.playwright-quarantine-current-')) {
+    writeFileSync(process.env.KADRE_RUNNER_TEST_DIAGNOSTIC_COMMIT_STARTED, 'started');
     const deadline = Date.now() + 10_000;
-    while (!existsSync(process.env.KADRE_RUNNER_TEST_PRESERVATION_RELEASE)) {
-      if (Date.now() >= deadline) throw new Error('timed out waiting to release diagnostic preservation');
+    while (!existsSync(process.env.KADRE_RUNNER_TEST_DIAGNOSTIC_COMMIT_RELEASE)) {
+      if (Date.now() >= deadline) throw new Error('timed out waiting to release diagnostic commit');
       await new Promise((resolveDelay) => setTimeout(resolveDelay, 10));
     }
   }
   return result;
+};
+
+fileSystem.rm = async (path, options) => {
+  if (!basename(path).startsWith('.playwright-quarantine-')) return rm(path, options);
+  if (process.env.KADRE_RUNNER_TEST_SCENARIO === 'signal-during-quarantine-removal') {
+    writeFileSync(process.env.KADRE_RUNNER_TEST_QUARANTINE_REMOVAL_STARTED, 'started');
+    const deadline = Date.now() + 10_000;
+    while (!existsSync(process.env.KADRE_RUNNER_TEST_QUARANTINE_REMOVAL_RELEASE)) {
+      if (Date.now() >= deadline) throw new Error('timed out waiting to release quarantine removal');
+      await new Promise((resolveDelay) => setTimeout(resolveDelay, 10));
+    }
+  }
+  if (process.env.KADRE_RUNNER_TEST_SCENARIO === 'partial-quarantine-failure') {
+    await rm(join(path, 'trace', 'trace.txt'), { force: false });
+    await fileSystem.chmod(path, 0o500);
+  }
+  return rm(path, options);
 };
 `;
