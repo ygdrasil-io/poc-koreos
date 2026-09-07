@@ -167,6 +167,8 @@ Une phase peut compter plusieurs PRs mais n’active aucun contrat Web incomplet
 - le snapshot de capabilities et la documentation de disponibilité ;
 - un gate obligatoire sans skip, retry automatique ni fallback masqué.
 
+Une capability conditionnelle prouve aussi, en PR, la branche observable qui la rend disponible et celle qui la rend indisponible. Une simple déclaration de capability ne remplace jamais ce scénario.
+
 Le chemin de preuve browser est immuable :
 
 ```text
@@ -200,21 +202,22 @@ Chaque phase peut être une stack de PRs : une fondation runtime/bridge, les tes
 
 #### Objectif
 
-Introduire les targets JS et Wasm, la façade Web interne initiale et le driver navigateur sans créer de composant vide ni promettre prématurément une API complète.
+Introduire les targets JS et Wasm, la façade Web initiale et le driver navigateur sans créer de composant vide ni promettre prématurément une API complète.
 
 #### Contenu
 
 - matérialiser `platform:web`, ses source sets partagés et ses façades DOM JS/Wasm ;
-- matérialiser `contracts:driver:web` avec Playwright, un serveur local déterministe, watchdog des processus enfants et archivage de trace seulement en échec ;
+- matérialiser `contracts:driver:web`, dépendant de `contracts:suite`, avec Playwright, un serveur local déterministe, watchdog des processus enfants et archivage de trace seulement en échec ;
 - construire et charger un bundle Kotlin/JS puis Kotlin/Wasm-JS distinct, sans collision de répertoire ou d’artifact ;
-- établir l’attach interne minimal sur un élément créé par la fixture, avec un parent scope réel et une primary surface sans `Window` ;
+- établir l’attach vertical par la façade Kadre publique sur un élément créé par la fixture, avec un parent scope réel et une primary surface sans `Window` ;
 - connecter les validateurs déjà réservés au producer browser réel, sans activer un contrat dont tous les scénarios ne sont pas encore présents ;
 - ajouter le consumer TypeScript minimal qui charge le package réellement publié dès que la façade exportée devient disponible.
 
 #### Gate de sortie
 
 - les deux bundles sont exécutés dans Chromium par le même driver ;
-- aucun module n’est purement structurel : la fixture prouve un attach DOM interne et un teardown ;
+- aucun module n’est purement structurel : la fixture prouve un attach DOM par l’API publique et un teardown ;
+- le driver stimule la façade publique et ne dépend ni d’un mapper, ni d’un owner, ni d’un attach interne ;
 - les répertoires de preuve JS et Wasm sont distincts et le validateur refuse leur confusion ;
 - aucune capability Web incomplète n’est encore déclarée `Supported` ou activée dans le registre.
 
@@ -236,7 +239,8 @@ Livrer les deux overloads `HTMLElement.attachKadre` avec un lifecycle complet, m
 
 #### Gate de sortie
 
-- un contrat Web d’attach/lifecycle est ajouté et devient `active` seulement avec les scénarios JS et Wasm Chromium ;
+- `BCK-001` reste `planned` jusqu’à la phase 4 : son entrée de registre inclut les scénarios obligatoires de `WebWindowProvider`, qui ne peuvent pas être couverts honnêtement avant cette phase ;
+- les scénarios d’attach/lifecycle sont toutefois écrits dès cette phase contre l’API publique, afin de devenir une partie des preuves `BCK-001` sans réécriture ni test interne lors de son activation ;
 - les scénarios couvrent au minimum élément initialement déconnecté, detach durable, detach/reinsert, transfert inter-document, changement de ShadowRoot, sessions indépendantes, duplicate attach, focus concurrent et pagehide persisted ;
 - chaque transition publie state avant event, respecte les policies de delivery et ne produit aucune callback après termination ;
 - un cahier manuel browser est introduit ici pour compléter les cas que Playwright ne peut pas rendre fiables (bfcache réel, focus navigateur et Shadow DOM hôte). Il est informatif tant que la cible n’est pas publiquement promise, puis devient une condition de sortie de la capability concernée.
@@ -272,7 +276,7 @@ Traduire les interactions DOM ordinaires vers les modèles input communs, avec s
 #### Contenu
 
 - listeners target-specific de clavier, pointer, wheel, focus et sortie de surface ;
-- mapping vers les types communs de key, modifiers, pointer, touch, buttons et scroll ;
+- mapping vers les types communs de key, modifiers, pointer, buttons et scroll ;
 - réduction sérialisée de `SurfaceInput.state`, reset de focus et gestion de l’overflow suivant la policy ;
 - support de pointer capture uniquement lorsqu’il respecte l’ownership de surface ;
 - application de `SurfaceUpdate.inputDefaultBehavior` au bon point de dispatch, sans `preventDefault` global ou inconditionnel ;
@@ -302,6 +306,7 @@ Gérer les opérations browser qui doivent partir d’un handler utilisateur et 
 
 #### Gate de sortie
 
+- `BCK-001` devient `active` dans cette phase uniquement, avec tous ses scénarios d’attach/lifecycle de phase 1 et ses scénarios `WebWindowProvider` livrés ici pour JS et Wasm Chromium ;
 - les tests distinguent l’exécution synchrone depuis le handler de la demande suspendue tardive ;
 - une action non supportée ne touche aucune API navigateur ; les erreurs callback deviennent la failure fermée promise ;
 - provider absent, contexte identique, `defaultView` nul, scope absente/inactive, élément invalide ou déconnecté sont tous rejetés avec le code spécifié ;
@@ -338,6 +343,7 @@ Rendre les managers communs honnêtes face aux APIs navigateur hétérogènes, p
 #### Contenu
 
 - inventaire d’affichage et de device basé sur les primitives Web réellement disponibles ;
+- si l’inventaire display complet est indisponible, publication obligatoire de `DisplayInventory.Enumerated` contenant l’unique display `HostViewport` plutôt qu’un inventaire vide ou `Unavailable` générique ;
 - Gamepad API : découverte, connection/disconnection, snapshots, routing et effets uniquement lorsque le navigateur fournit une primitive compatible ;
 - exposition de l’état de permission, du secure context et des préconditions d’activation sans permission prompt implicite ;
 - subscriptions annulables, snapshots cohérents et cleanup des polling/rAF éventuels ;
@@ -347,6 +353,7 @@ Rendre les managers communs honnêtes face aux APIs navigateur hétérogènes, p
 
 - toute capability dépendante d’un matériel ou d’un navigateur est prouvée sur un environnement contrôlé et, si nécessaire, dans le nightly plutôt que simulée dans le gate PR ;
 - l’absence de matériel, de secure context ou d’autorisation produit l’état/outcome prévu, jamais un inventaire vide déclaré complet ;
+- l’absence d’inventaire display complet produit exactement `Enumerated(primary = viewport, displays = listOf(viewport))` avec `DisplayType.HostViewport` ;
 - hot-plug, révocation, déconnexion et fin de session libèrent leurs subscriptions et effets ;
 - une capability impossible à standardiser est documentée `Unsupported` et reçoit un scénario de non-appel natif.
 
@@ -359,6 +366,7 @@ Intégrer les primitives de capture Web sans masquer leurs contraintes de sécur
 #### Contenu
 
 - mapping des sources et permissions Web vers `CaptureManager` lorsque le navigateur permet réellement la capture promise ;
+- lorsque le navigateur interdit l’inventaire préalable, `CaptureTarget.Source` est structurellement `Unsupported(CaptureOpen)` ; `HostChoice` avec `HostPickerOnly` et `Surface` conservent leurs chemins et capabilities séparés ;
 - ouverture, état, arrêt et teardown des `CaptureSession` ;
 - livraison bornée des frames, copies nécessaires des payloads et arrêt immédiat des tracks/streams ;
 - distinction explicite entre capture de surface, fenêtre, écran ou caméra lorsque le navigateur ne les garantit pas sous la même sémantique ;
@@ -368,6 +376,7 @@ Intégrer les primitives de capture Web sans masquer leurs contraintes de sécur
 
 - aucune prompt de permission n’est déclenchée implicitement par énumération ou readback ;
 - refus utilisateur, révocation, source perdue, fin de track et fermeture de session ont chacun un outcome fermé et des ressources libérées ;
+- les preuves distinguent explicitement `Source` sans inventaire, refusé avant tout picker, de `HostChoice`/`HostPickerOnly` et de `Surface` lorsqu’ils sont disponibles ;
 - les frames ne sont pas réémises après stop et ne laissent aucun objet DOM/stream accessible à une session terminée ;
 - les capacités dépendant d’un vrai écran, d’une permission ou d’un navigateur particulier sont complétées par une preuve nightly et un cahier manuel, jamais par un skip en CI PR.
 
