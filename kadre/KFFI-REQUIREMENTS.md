@@ -4,8 +4,10 @@ Ce registre contient uniquement les gaps rencontrés pendant l'implémentation d
 
 La tranche d’API raw-input commune ne consomme aucun symbole KFFI : elle définit
 seulement le membre `SurfaceInput.requestRawInput`, ses budgets et ses échecs.
-L’audit des primitives AppKit est différé à la tranche Kextract/KFFI dédiée ;
-aucun binding ou fallback FFI n’est introduit ici.
+Le bridge AppKit consomme exclusivement l’adapter KFFI typé de tap listen-only :
+Kadre ne crée ni event tap, ni callback FFM, ni `MemorySegment` local. Les
+symboles bas niveau sont générés par Kextract ; l’adapter de confort KFFI reste
+la seule surface appelée par Kadre.
 
 | ID | Statut | Priorité | Domaine | Besoin KFFI | Usage Kadre bloqué | Workaround autorisé | Référence |
 |---|---|---:|---|---|---|---|---|
@@ -16,6 +18,7 @@ aucun binding ou fallback FFI n’est introduit ici.
 | KFFI-OBJC-005 | closed | blocking | synthèse et injection d’événements AppKit | `NSApplication.postScrollWheelEvent(AppKitScrollWheelEvent)` public typé, avec unités et phases CoreGraphics | preuve O3 Phase 4 de la queue et de la conversion scroll native; la livraison au responder reste le cahier manuel car l’événement converti n’a pas de fenêtre associée | aucun `MemorySegment` brut, factory Objective-C générique, block ou downcall local dans Kadre | KFFI snapshot `1.0.0-SNAPSHOT:20260829.040320-20`, `APPKIT-PHASE-4-INPUT-DESIGN.md`, scénario O3 `appkit-input-native-scroll` |
 | KFFI-OBJC-006 | pending publication | blocking | `NSTextInputClient` managé | signatures `void(id, SEL, SEL)` et `id(id, SEL)`, conversion sûre de `SEL`, résultats `NSAttributedString`/`NSArray` retenus jusqu’à la révocation du receiver | Phase 6 : IME AppKit par surface, sans fuite de `MemorySegment`, de struct ABI ni d’owner Objective-C dans Kadre | aucun callback Panama, `ObjCStructArg`, selector/downcall ou lifetime FFI local ; la PR KFFI est consommée uniquement depuis Maven local avant publication | [Kextract #60](https://github.com/klang-toolkit/kextract/pull/60), [KFFI #62](https://github.com/Graphiks-org/kffi/pull/62), branche KFFI `feat/managed-ime-callbacks` |
 | KFFI-OBJC-007 | pending review | blocking | protocol Objective-C reçu en callback | Kextract génère, pour les protocoles explicitement demandés, un receiver privé `MemorySegment.as…()` afin que les méthodes typées du protocole soient appelées sans cast ni selector manuel dans le consommateur | Phase 7 : `NSDraggingInfo` emprunté par `NSDraggingDestination` doit être lu avant le retour de la callback ; Kadre ne peut pas exposer son pointeur ni réécrire les méthodes du protocole | aucun cast ou `msgSend` local ; Kadre ne consomme que le receiver généré, puis retient/copie ses valeurs avant de rendre la callback | [Kextract #61](https://github.com/klang-toolkit/kextract/pull/61), [KFFI #63](https://github.com/Graphiks-org/kffi/pull/63), branche KFFI `feat/objc-protocol-receivers` |
+| KFFI-OBJC-008 | pending review | blocking | CoreGraphics listen-only event tap | API KFFI `CGListenOnlyEventTap` construite au-dessus des symboles générés `CGEventTapCreate`, `CGEventTapEnable`, `CGEventGetIntegerValueField`, `CGPreflightListenEventAccess` et `CGRequestListenEventAccess`; le callback reste listen-only et retourne l’événement natif sans mutation | Phase 8 : source raw input AppKit globale, permission Input Monitoring, réactivation après timeout et copie immédiate des deltas | aucun downcall, callback FFM, pointeur, mask ou réactivation écrits dans Kadre ; Maven local est réservé à la validation de la PR stackée avant publication | [KFFI #64](https://github.com/Graphiks-org/kffi/pull/64), branche KFFI `feat/raw-input-tap-events` |
 
 ## Critères du bridge callback
 

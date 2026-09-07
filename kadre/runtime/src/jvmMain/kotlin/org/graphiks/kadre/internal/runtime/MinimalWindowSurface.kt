@@ -99,6 +99,7 @@ internal class RuntimeWindowSurface(
     private val commandPort: SurfaceCommandPort,
     private val textInputPort: TextInputPort = UnsupportedTextInputPort,
     private val rawInputCoordinator: RawInputCoordinator? = null,
+    rawInputCapability: Capability<Unit> = unsupported(KadreOperation.RawInputAccess),
     private val commandsEnabled: Boolean,
     enabledCapabilities: SurfaceCapabilities,
     private val eventStampSource: () -> EventStamp,
@@ -147,6 +148,7 @@ internal class RuntimeWindowSurface(
         eventCollectorGate = collectorAllocator.newGate(maxCollectorsPerFlow),
         textInputPort = textInputPort,
         rawInputCoordinator = rawInputCoordinator,
+        rawInputCapability = rawInputCapability,
         dragAndDropAvailable = enabledCapabilities.supportsDropInteraction(),
         resources = resources,
         dropTransferBudget = dropTransferBudget,
@@ -196,6 +198,10 @@ internal class RuntimeWindowSurface(
         }
     }
     override val input: SurfaceInput = surfaceInput
+
+    internal fun updateRawInputCapability(capability: Capability<Unit>) {
+        surfaceInput.updateRawInputCapability(capability)
+    }
 
     @OptIn(DelicateKadreApi::class)
     override fun installInteractionHandler(
@@ -1304,6 +1310,7 @@ private class RuntimeSurfaceInput(
     private val eventCollectorGate: RuntimeEventCollectorGate,
     private val textInputPort: TextInputPort,
     private val rawInputCoordinator: RawInputCoordinator?,
+    rawInputCapability: Capability<Unit>,
     private val dragAndDropAvailable: Boolean,
     private val resources: ResourceBudgetPolicy,
     private val dropTransferBudget: RuntimeDropTransferBudget,
@@ -1316,6 +1323,7 @@ private class RuntimeSurfaceInput(
     private var currentState = unsupportedInputState(
         textInput = textInputPort.capability,
         dragAndDrop = if (dragAndDropAvailable) FeatureAvailability.Available else FeatureAvailability.Unsupported,
+        rawInput = rawInputCapability,
     )
     private var nextPointerIdentity = 0L
     private var nextDropOfferIdentity = 0L
@@ -1431,6 +1439,18 @@ private class RuntimeSurfaceInput(
         return rawInputCoordinator
             ?.requestAccess(surfaceId)
             ?: KadreResult.Failure(KadreFailure.Unsupported(KadreOperation.RawInputAccess))
+    }
+
+    fun updateRawInputCapability(capability: Capability<Unit>) {
+        synchronized(lock) {
+            if (terminal != null || currentState.capabilities.rawInput == capability) return
+            setStateLocked(
+                currentState.copy(
+                    capabilities = currentState.capabilities.copy(rawInput = capability),
+                    revision = currentState.revision.next(),
+                ),
+            )
+        }
     }
 
     fun presentDrop(
@@ -2749,18 +2769,20 @@ private fun replacePointer(existing: List<PointerState>, pointer: PointerState):
 private fun unsupportedInputState(
     textInput: Capability<Unit> = unsupported(KadreOperation.TextInput),
     dragAndDrop: FeatureAvailability = FeatureAvailability.Unsupported,
+    rawInput: Capability<Unit> = unsupported(KadreOperation.RawInputAccess),
 ): SurfaceInputState = SurfaceInputState(
     keyboard = KeyboardState(emptySet()),
     pointers = emptyList(),
     touches = emptyList(),
     modifiers = KeyboardModifiers(emptySet()),
-    capabilities = unsupportedInputCapabilities(textInput, dragAndDrop),
+    capabilities = unsupportedInputCapabilities(textInput, dragAndDrop, rawInput),
     revision = InputStateRevision(0L),
 )
 
 private fun unsupportedInputCapabilities(
     textInput: Capability<Unit> = unsupported(KadreOperation.TextInput),
     dragAndDrop: FeatureAvailability = FeatureAvailability.Unsupported,
+    rawInput: Capability<Unit> = unsupported(KadreOperation.RawInputAccess),
 ): InputCapabilities = InputCapabilities(
     keyboard = FeatureAvailability.Unsupported,
     pointer = FeatureAvailability.Unsupported,
@@ -2768,7 +2790,7 @@ private fun unsupportedInputCapabilities(
     gestures = FeatureAvailability.Unsupported,
     dragAndDrop = dragAndDrop,
     textInput = textInput,
-    rawInput = unsupported(KadreOperation.RawInputAccess),
+    rawInput = rawInput,
 )
 
 private fun unavailableInputCapabilities(failure: KadreFailure): InputCapabilities = InputCapabilities(

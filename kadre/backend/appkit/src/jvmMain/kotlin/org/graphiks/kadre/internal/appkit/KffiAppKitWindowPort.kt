@@ -127,6 +127,17 @@ private fun String.numericVersionOrNull(): AppKitNumericVersion? {
 
 private val APPKIT_FULLSCREEN_MINIMUM_VERSION = AppKitNumericVersion(10L, 7L, 0L)
 
+/** Version-only guard for the CoreGraphics Input Monitoring API used by raw input. */
+internal class AppKitRawInputAvailability(
+    systemVersion: String = System.getProperty("os.version", ""),
+) {
+    val isAvailable: Boolean = systemVersion.numericVersionOrNull()
+        ?.let { it >= APPKIT_RAW_INPUT_MINIMUM_VERSION }
+        ?: false
+}
+
+private val APPKIT_RAW_INPUT_MINIMUM_VERSION = AppKitNumericVersion(10L, 15L, 0L)
+
 /** Runtime guard for the AppKit text-input client and its input-context owner. */
 internal class AppKitTextInputAvailability(
     systemVersion: String = System.getProperty("os.version", ""),
@@ -2280,7 +2291,7 @@ private fun release(receiver: MemorySegment) {
     ObjCRuntime.msgSend(null, receiver, ObjCRuntime.sel("release"))
 }
 
-private object KffiAppKitMainThread {
+internal object KffiAppKitMainThread {
     private const val INVOKE_SELECTOR = "kadreInvoke:"
     private val invokerClass: ObjCManagedClass by lazy {
         ObjCManagedClass.registerOnce(
