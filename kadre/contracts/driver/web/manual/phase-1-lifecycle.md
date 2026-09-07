@@ -48,10 +48,34 @@ mkdir "$kadre_manual_dir/js" "$kadre_manual_dir/wasm"
 cp kadre/contracts/driver/web/build/dist/js/productionExecutable/kadre-web-phase0.js "$kadre_manual_dir/js/"
 cp -R kadre/contracts/driver/web/build/dist/wasmJs/productionExecutable/. "$kadre_manual_dir/wasm/"
 cat > "$kadre_manual_dir/js/index.html" <<'EOF'
-<!doctype html><meta charset="utf-8"><body><script src="./kadre-web-phase0.js"></script></body>
+<!doctype html><meta charset="utf-8"><body>
+<script>
+window.__kadrePageLifecycle = [];
+for (const type of ["pagehide", "pageshow"]) {
+  addEventListener(type, (event) => {
+    const persisted = event.persisted;
+    window.__kadrePageLifecycle.push({ type, persisted });
+    console.log(type, persisted);
+  });
+}
+</script>
+<script src="./kadre-web-phase0.js"></script>
+</body>
 EOF
 cat > "$kadre_manual_dir/wasm/index.html" <<'EOF'
-<!doctype html><meta charset="utf-8"><body><script src="./kadre-web-phase0-wasm.js"></script></body>
+<!doctype html><meta charset="utf-8"><body>
+<script>
+window.__kadrePageLifecycle = [];
+for (const type of ["pagehide", "pageshow"]) {
+  addEventListener(type, (event) => {
+    const persisted = event.persisted;
+    window.__kadrePageLifecycle.push({ type, persisted });
+    console.log(type, persisted);
+  });
+}
+</script>
+<script src="./kadre-web-phase0-wasm.js"></script>
+</body>
 EOF
 for kadre_manual_target in js wasm; do
   cat > "$kadre_manual_dir/$kadre_manual_target/next.html" <<'EOF'
@@ -94,16 +118,14 @@ has passed.
 
 Open `http://127.0.0.1:8080/js/index.html?scenario=pagehide` (or replace `js`
 with `wasm`) and wait for `document.body.dataset.kadreReady === "true"`.
-Enable **Preserve log** in DevTools, then enter this command in the console:
+Enable **Preserve log** in DevTools. The temporary page already installed a
+pre-bundle listener that records `{ type, persisted }` in
+`window.__kadrePageLifecycle` and writes the same events to the console.
 
-```js
-addEventListener("pagehide", (event) => console.log("pagehide", event.persisted));
-addEventListener("pageshow", (event) => console.log("pageshow", event.persisted));
-```
-
-Navigate with the following command, then use the browser Back action. Record
-the two logged `persisted` values. To request a non-persisted comparison,
-repeat after entering the `unload` listener below before navigation:
+Navigate with the following command, then use the browser Back action. Inspect
+both the preserved DevTools console and `window.__kadrePageLifecycle` on the
+current page. To request a non-persisted comparison, repeat after entering the
+`unload` listener below before navigation:
 
 ```js
 location.assign("http://127.0.0.1:8080/js/next.html");
@@ -117,9 +139,12 @@ For both cases, `pagehide` terminates the original session immediately with
 `Stopped(HostDetached)`. On a persisted return,
 `document.body.dataset.kadrePagehideSession` remains `"terminated"` and
 `document.body.dataset.kadrePagehideOutcome` remains `"host-detached"`; a
-later `pageshow` does not resurrect the original session. On a non-persisted
-return the fixture is a new page load, so do not confuse a newly created
-fixture session with resurrection of the old one.
+later `pageshow` does not resurrect the original session. A preserved bfcache
+page retains its original listener and lifecycle array. A non-persisted return
+is a fresh document with a fresh pre-bundle listener and array; its new
+`pageshow` is recorded there, while **Preserve log** still shows the old page's
+`pagehide`. Do not confuse a newly created fixture session with resurrection of
+the old one.
 
 ### 2. Browser/tab focus and document visibility
 
@@ -144,9 +169,11 @@ attributes again after each transition.
 
 Only the focused host in a visible, focused document is
 `Attached + Foreground + Active`. The other host is foreground but inactive;
-every host is `Attached + Background + Inactive` while the document is hidden
-or its browsing context is unfocused. Returning focus can make a currently
-connected host foreground again, but cannot resurrect a terminated session.
+a connected host in a visible document whose browsing context is blurred is
+also `Attached + Foreground + Inactive`. `Attached + Background + Inactive`
+applies only while the document is hidden or the element is disconnected.
+Returning focus can make a currently connected host foreground again, but
+cannot resurrect a terminated session.
 
 ### 3. External Shadow DOM container removal
 
@@ -241,6 +268,10 @@ when connected to a visible origin document and active only when focused. No
 terminal outcome is produced by a Manual disconnection alone. The fixture does
 not expose Kotlin stop handles; in its observable terminal scenarios,
 inter-document transfer and `pagehide` produce `Stopped(HostDetached)`.
+
+For reference only, outside this fixture: `KadreSession.requestStop()` produces
+`Stopped(HostRequested)` and `KadreScope.requestStop()` produces
+`Stopped(ApplicationRequested)`.
 
 ### 5. Cross-document adoption through a host-created iframe
 
