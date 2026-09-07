@@ -21,6 +21,9 @@ import org.graphiks.kadre.application.VisibilityState
 import org.graphiks.kadre.diagnostics.KadrePlatform
 import org.graphiks.kadre.diagnostics.KadreFailure
 import org.graphiks.kadre.diagnostics.KadreResult
+import org.graphiks.kadre.diagnostics.Capability
+import org.graphiks.kadre.diagnostics.FeatureAvailability
+import org.graphiks.kadre.internal.runtime.DisplayPortSnapshot
 import org.graphiks.kadre.internal.runtime.RuntimeHostController
 import org.graphiks.kadre.window.WindowAttention
 import org.graphiks.kadre.window.WindowId
@@ -37,6 +40,19 @@ import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.seconds
 
 class AppKitProcessBrokerTest {
+    @Test
+    fun hostTerminationClosesTheProcessWideDisplayObserver() {
+        val native = RecordingProcessDisplayNative()
+        val broker = AppKitProcessBroker(
+            displayBrokerFactory = { AppKitDisplayBroker(native) },
+        )
+        broker.openDisplayPort()
+
+        broker.accept(AppKitLifecycleSignal.HostTerminated)
+
+        assertEquals(1, native.closeCount)
+    }
+
     @Test
     fun brokerReplacesAndCancelsOnlyTheRequestingWindowsAttention() {
         val broker = AppKitProcessBroker()
@@ -369,6 +385,21 @@ private class RecordingLifecycleTarget(
     }
 
     override fun detach() = Unit
+}
+
+private class RecordingProcessDisplayNative : AppKitDisplayNative {
+    var closeCount: Int = 0
+        private set
+
+    override val enumerationCapability: Capability<Unit> = Capability.Supported(Unit, FeatureAvailability.Available)
+
+    override fun snapshot(): DisplayPortSnapshot = error("the process-broker test does not enumerate")
+
+    override fun observeReconfiguration(listener: () -> Unit): AutoCloseable = AutoCloseable {}
+
+    override fun close() {
+        closeCount += 1
+    }
 }
 
 private class BlockingLifecycleTarget : AppKitLifecycleTarget {

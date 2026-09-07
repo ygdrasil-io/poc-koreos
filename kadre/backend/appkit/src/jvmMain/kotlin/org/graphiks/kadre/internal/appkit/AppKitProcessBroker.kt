@@ -36,7 +36,11 @@ internal class AppKitRuntimeHost(
 }
 
 /** Coordinates process-wide AppKit ownership without retaining a current Kadre session. */
-internal class AppKitProcessBroker {
+internal class AppKitProcessBroker(
+    private val displayBrokerFactory: () -> AppKitDisplayBroker = {
+        AppKitDisplayBroker(KffiAppKitDisplayNative())
+    },
+) {
     private val lock = Any()
     private val deliveryLock = Any()
     private val embeddedHosts = linkedMapOf<AppKitLifecycleTarget, AppKitUserAttentionOwner?>()
@@ -52,8 +56,11 @@ internal class AppKitProcessBroker {
             bridgeAvailable = AppKitRawInputAvailability().isAvailable,
         )
     }
+    private val displayBroker = lazy(displayBrokerFactory)
 
     fun openRawInputPort(): AppKitRawInputPort = rawInputBroker.value.openPort()
+
+    fun openDisplayPort(): AppKitDisplayPort = displayBroker.value.openPort()
 
     fun tryAcquireStandalone(
         attentionOwner: AppKitUserAttentionOwner? = null,
@@ -191,6 +198,7 @@ internal class AppKitProcessBroker {
                     }
                 }
                 if (rawInputBroker.isInitialized()) rawInputBroker.value.close()
+                if (displayBroker.isInitialized()) displayBroker.value.close()
                 return@delivery
             }
 

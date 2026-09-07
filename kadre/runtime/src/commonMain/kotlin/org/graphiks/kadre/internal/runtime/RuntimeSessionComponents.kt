@@ -5,6 +5,7 @@ import org.graphiks.kadre.application.EventStamp
 import org.graphiks.kadre.application.SessionId
 import org.graphiks.kadre.diagnostics.KadreDiagnostic
 import org.graphiks.kadre.diagnostics.KadreFailure
+import org.graphiks.kadre.display.DisplayManager
 import org.graphiks.kadre.policy.InputDeliveryPolicy
 import org.graphiks.kadre.policy.WindowDeliveryPolicy
 import org.graphiks.kadre.surface.HostSurface
@@ -36,21 +37,25 @@ public class RuntimeSessionComponents private constructor(
      * idempotent.
      */
     public val rawInputPort: RawInputPort?,
+    /** Optional session-owned display port projected as the public [DisplayManager]. */
+    public val displayPort: DisplayPort?,
     private val closeAction: () -> Unit,
     primarySurface: RuntimePrimarySurface?,
 ) : AutoCloseable {
     public constructor(
         windows: WindowManager,
         rawInputPort: RawInputPort? = null,
+        displayPort: DisplayPort? = null,
         closeAction: () -> Unit = {},
-    ) : this(windows, rawInputPort, closeAction, null)
+    ) : this(windows, rawInputPort, displayPort, closeAction, null)
 
     public constructor(
         windows: WindowManager,
         primarySurface: RuntimePrimarySurface,
         rawInputPort: RawInputPort? = null,
+        displayPort: DisplayPort? = null,
         closeAction: () -> Unit = {},
-    ) : this(windows, rawInputPort, closeAction, primarySurface)
+    ) : this(windows, rawInputPort, displayPort, closeAction, primarySurface)
 
     private val lock = RuntimeLock()
     private var closed = false
@@ -81,6 +86,11 @@ public class RuntimeSessionComponents private constructor(
             }
             try {
                 rawInputPort?.close()
+            } catch (cause: Throwable) {
+                failure = failure.withSuppressed(cause)
+            }
+            try {
+                displayPort?.close()
             } catch (cause: Throwable) {
                 failure = failure.withSuppressed(cause)
             }

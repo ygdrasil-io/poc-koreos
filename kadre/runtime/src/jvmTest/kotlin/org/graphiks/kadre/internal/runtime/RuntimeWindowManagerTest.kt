@@ -35,6 +35,7 @@ import org.graphiks.kadre.diagnostics.KadreResourceKind
 import org.graphiks.kadre.diagnostics.KadreResult
 import org.graphiks.kadre.display.DisplayId
 import org.graphiks.kadre.display.DisplayMode
+import org.graphiks.kadre.display.DisplayModeId
 import org.graphiks.kadre.input.InputEvent
 import org.graphiks.kadre.input.KeyLocation
 import org.graphiks.kadre.input.KeyState
@@ -4201,6 +4202,7 @@ class RuntimeWindowManagerTest {
     private fun exclusiveFullscreenFixture(): FullscreenMode.Exclusive = FullscreenMode.Exclusive(
         displayId = DisplayId(1L),
         mode = DisplayMode(
+            id = DisplayModeId(1L),
             physicalSize = PhysicalSize(1920, 1080),
             refreshRateHz = 60.0,
             bitDepth = 24,

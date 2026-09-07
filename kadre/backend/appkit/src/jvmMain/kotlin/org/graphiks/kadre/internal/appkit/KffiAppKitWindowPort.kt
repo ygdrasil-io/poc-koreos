@@ -103,7 +103,7 @@ internal class AppKitFullscreenAvailability(
         ?: false
 }
 
-private data class AppKitNumericVersion(
+internal data class AppKitNumericVersion(
     val major: Long,
     val minor: Long,
     val patch: Long,
@@ -112,7 +112,7 @@ private data class AppKitNumericVersion(
         compareValuesBy(this, other, AppKitNumericVersion::major, AppKitNumericVersion::minor, AppKitNumericVersion::patch)
 }
 
-private fun String.numericVersionOrNull(): AppKitNumericVersion? {
+internal fun String.numericVersionOrNull(): AppKitNumericVersion? {
     val parts = split('.')
     if (parts.isEmpty() || parts.size > 3) return null
     val values = parts.map { component ->

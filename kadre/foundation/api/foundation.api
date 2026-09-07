@@ -1914,16 +1914,24 @@ public final class org/graphiks/kadre/display/DisplayManagerState {
 }
 
 public final class org/graphiks/kadre/display/DisplayMode {
-	public fun <init> (Lorg/graphiks/kadre/surface/PhysicalSize;Ljava/lang/Double;Ljava/lang/Integer;)V
-	public final fun component1 ()Lorg/graphiks/kadre/surface/PhysicalSize;
-	public final fun component2 ()Ljava/lang/Double;
-	public final fun component3 ()Ljava/lang/Integer;
-	public final fun copy (Lorg/graphiks/kadre/surface/PhysicalSize;Ljava/lang/Double;Ljava/lang/Integer;)Lorg/graphiks/kadre/display/DisplayMode;
-	public static synthetic fun copy$default (Lorg/graphiks/kadre/display/DisplayMode;Lorg/graphiks/kadre/surface/PhysicalSize;Ljava/lang/Double;Ljava/lang/Integer;ILjava/lang/Object;)Lorg/graphiks/kadre/display/DisplayMode;
+	public fun <init> (Lorg/graphiks/kadre/display/DisplayModeId;Lorg/graphiks/kadre/surface/PhysicalSize;Ljava/lang/Double;Ljava/lang/Integer;)V
+	public final fun component1 ()Lorg/graphiks/kadre/display/DisplayModeId;
+	public final fun component2 ()Lorg/graphiks/kadre/surface/PhysicalSize;
+	public final fun component3 ()Ljava/lang/Double;
+	public final fun component4 ()Ljava/lang/Integer;
+	public final fun copy (Lorg/graphiks/kadre/display/DisplayModeId;Lorg/graphiks/kadre/surface/PhysicalSize;Ljava/lang/Double;Ljava/lang/Integer;)Lorg/graphiks/kadre/display/DisplayMode;
+	public static synthetic fun copy$default (Lorg/graphiks/kadre/display/DisplayMode;Lorg/graphiks/kadre/display/DisplayModeId;Lorg/graphiks/kadre/surface/PhysicalSize;Ljava/lang/Double;Ljava/lang/Integer;ILjava/lang/Object;)Lorg/graphiks/kadre/display/DisplayMode;
 	public fun equals (Ljava/lang/Object;)Z
 	public final fun getBitDepth ()Ljava/lang/Integer;
+	public final fun getId ()Lorg/graphiks/kadre/display/DisplayModeId;
 	public final fun getPhysicalSize ()Lorg/graphiks/kadre/surface/PhysicalSize;
 	public final fun getRefreshRateHz ()Ljava/lang/Double;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class org/graphiks/kadre/display/DisplayModeId {
+	public fun equals (Ljava/lang/Object;)Z
 	public fun hashCode ()I
 	public fun toString ()Ljava/lang/String;
 }

@@ -88,6 +88,15 @@ fournissent pas leur bridge et son contrat de permission. Tous les adapters
 doivent appliquer les budgets par accès, sans injecter ces événements dans
 `SurfaceInput.events`.
 
+L’inventaire AppKit utilise l’association publique `NSScreen.CGDirectDisplayID`,
+introduite par macOS 26. Avant cette version, `DisplayCapabilities.enumeration`
+reste `Unsupported(DisplayAccess)` : Kadre ne rapproche jamais `NSScreen` et
+CoreGraphics par une heuristique de géométrie ou une clé privée. Lorsqu’il est
+disponible, les bounds et work areas proviennent de CoreGraphics dans l’espace
+physique du bureau virtuel ; `WindowCapabilities.outerPosition` reste toutefois
+`Unsupported` jusqu’à une preuve matérielle séparée sur des écrans à échelles
+mixtes.
+
 L’absence de `Window` sur Android View ou sur le host Web initial ne ferme pas sa surface et ne fabrique aucune `WindowCapabilities`. `WindowManagerState.windows` reste vide ; Android publie `requestWindow = Unsupported(RequestWindow)`, tandis que Web suit son provider. `N(CaptureOpen)` pour `CaptureTarget.Source` n’interdit pas `HostChoice`; `sourceEnumeration`, `hostPicker` et les capabilities de target décrivent séparément ces chemins.
 
 Les gestures sont des observations host-native ou des recognizers installés explicitement par l’adapter. Kadre ne promet aucun recognizer logiciel universel. Un adapter peut supporter pointer/touch tout en publiant gestures `Unsupported`.

@@ -116,7 +116,14 @@ internal class SessionRuntime(
         throw cause
     }
     private val runtimeWindows = runtimeComponents.windows
-    private val runtimeDisplays = UnsupportedDisplayManager(
+    private val runtimeDisplays: DisplayManager = runtimeComponents.displayPort?.let { port ->
+        RuntimeDisplayManager(
+            port = port,
+            eventStampSource = ::nextStamp,
+            collectorAllocator = eventCollectorAllocator,
+            maxCollectorsPerFlow = policy.resources.maxEventCollectorsPerFlow,
+        )
+    } ?: UnsupportedDisplayManager(
         eventCollectorAllocator,
         policy.resources.maxEventCollectorsPerFlow,
     )
@@ -383,6 +390,9 @@ internal class SessionRuntime(
     }
 
     private fun closeRuntimeComponents() {
+        runCatching { (runtimeDisplays as? AutoCloseable)?.close() }
+            .exceptionOrNull()
+            ?.let(failureReporter)
         runCatching { runtimeComponents.close() }
             .exceptionOrNull()
             ?.let(failureReporter)

@@ -56,6 +56,9 @@ import org.graphiks.kadre.diagnostics.KadreOperation
 import org.graphiks.kadre.diagnostics.KadrePlatform
 import org.graphiks.kadre.diagnostics.KadreResourceKind
 import org.graphiks.kadre.diagnostics.KadreResult
+import org.graphiks.kadre.display.DisplayManager
+import org.graphiks.kadre.internal.runtime.DisplayPort
+import org.graphiks.kadre.internal.runtime.DisplayPortSnapshot
 import org.graphiks.kadre.internal.runtime.desktop.DesktopBackendKind
 import org.graphiks.kadre.internal.runtime.desktop.DesktopBackendProvider
 import org.graphiks.kadre.internal.runtime.desktop.DesktopEmbeddedRequest
@@ -130,6 +133,43 @@ import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
 class AppKitBackendProviderTest {
+    @Test
+    fun embeddedSessionProjectsTheConfiguredDisplayPortAndClosesItWithTheSession() = kotlinx.coroutines.runBlocking {
+        val native = EmbeddedNativeApplication()
+        val port = ProviderDisplayPort()
+        val provider = AppKitBackendProvider.forTesting(
+            nativeApplication = native,
+            broker = AppKitProcessBroker(),
+            displayPortFactory = { port },
+            availability = { true },
+        )
+        val parentScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob())
+        val observedDisplays = CompletableDeferred<DisplayManager>()
+
+        try {
+            val session = provider.attach(
+                DesktopEmbeddedRequest(
+                    parentScope,
+                    KadreApplicationFactory {
+                        KadreApplication {
+                            observedDisplays.complete(displays)
+                            kotlinx.coroutines.awaitCancellation()
+                        }
+                    },
+                    DesktopIntegrationKind.AppKitMainLoop,
+                    KadrePolicies.Default,
+                ),
+            ).requireSession()
+
+            assertIs<KadreResult.Success<*>>(observedDisplays.await().requestAccess())
+            session.close()
+            session.awaitTermination()
+            assertEquals(1, port.closeCount)
+        } finally {
+            parentScope.cancel()
+        }
+    }
+
     @Test
     fun embeddedAttentionIsUnsupportedByDefaultWithoutTouchingTheNativeBroker() = kotlinx.coroutines.runBlocking {
         val native = EmbeddedNativeApplication()
@@ -3351,6 +3391,24 @@ private fun publicWindowRequest(
     KadrePolicies.Default,
     allowUserAttention,
 )
+
+private class ProviderDisplayPort : DisplayPort {
+    var closeCount: Int = 0
+        private set
+
+    override val enumerationCapability: Capability<Unit> = Capability.Supported(Unit, FeatureAvailability.Available)
+
+    override suspend fun requestSnapshot(): KadreResult<DisplayPortSnapshot> =
+        KadreResult.Success(DisplayPortSnapshot(primaryKey = null, displays = emptyList()))
+
+    override fun installSnapshotObserver(
+        observer: (KadreResult<DisplayPortSnapshot>) -> Unit,
+    ): AutoCloseable = AutoCloseable {}
+
+    override fun close() {
+        closeCount += 1
+    }
+}
 
 @OptIn(
     org.graphiks.kadre.diagnostics.DelicateKadreApi::class,

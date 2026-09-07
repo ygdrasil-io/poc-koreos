@@ -21,6 +21,7 @@ import org.graphiks.kadre.internal.runtime.RuntimeSessionComponents
 import org.graphiks.kadre.internal.runtime.RuntimeSessionComponentsFactory
 import org.graphiks.kadre.internal.runtime.RuntimeSessionObserver
 import org.graphiks.kadre.internal.runtime.RuntimeSessionStopHandler
+import org.graphiks.kadre.internal.runtime.DisplayPort
 import org.graphiks.kadre.internal.runtime.RawInputPort
 import org.graphiks.kadre.internal.runtime.desktop.DesktopBackendKind
 import org.graphiks.kadre.internal.runtime.desktop.DesktopBackendProvider
@@ -37,6 +38,7 @@ public class AppKitBackendProvider private constructor(
     private val windowDriverFactory: AppKitWindowRuntimeDriverFactory,
     private val fullscreenAvailability: AppKitFullscreenAvailability,
     private val rawInputPortFactory: () -> RawInputPort?,
+    private val displayPortFactory: () -> DisplayPort?,
     private val availability: () -> Boolean,
 ) : DesktopBackendProvider {
     public constructor() : this(
@@ -45,6 +47,13 @@ public class AppKitBackendProvider private constructor(
         AppKitWindowRuntimeDriverFactory(),
         AppKitFullscreenAvailability(),
         { if (isMacOs()) ProcessAppKitProcessBroker.value.openRawInputPort() else null },
+        {
+            if (isMacOs() && AppKitDisplayAvailability().isAvailable) {
+                ProcessAppKitProcessBroker.value.openDisplayPort()
+            } else {
+                null
+            }
+        },
         ::isMacOs,
     )
 
@@ -224,6 +233,7 @@ public class AppKitBackendProvider private constructor(
             windowDriverFactory: AppKitWindowRuntimeDriverFactory = AppKitWindowRuntimeDriverFactory(),
             fullscreenAvailability: AppKitFullscreenAvailability = AppKitFullscreenAvailability(),
             rawInputPortFactory: () -> RawInputPort? = { null },
+            displayPortFactory: () -> DisplayPort? = { null },
             availability: () -> Boolean,
         ): AppKitBackendProvider = AppKitBackendProvider(
             nativeApplication,
@@ -231,6 +241,7 @@ public class AppKitBackendProvider private constructor(
             windowDriverFactory,
             fullscreenAvailability,
             rawInputPortFactory,
+            displayPortFactory,
             availability,
         )
 
@@ -286,6 +297,7 @@ public class AppKitBackendProvider private constructor(
         RuntimeSessionComponents(
             windows = driver.manager,
             rawInputPort = rawInputPortFactory(),
+            displayPort = displayPortFactory(),
             closeAction = driver::close,
         )
     }

@@ -718,6 +718,8 @@ public data class DisplayManagerState(
     public val revision: DisplayManagerRevision,
 )
 
+public class DisplayModeId internal constructor(value: Long)
+
 public sealed interface DisplayInventory {
     public data class Enumerated(
         public val primary: Display?,
@@ -735,7 +737,7 @@ public interface Display {
 }
 ```
 
-`DisplayManager.state` est l’unique snapshot atomique de l’inventaire, des capabilities d’énumération et de leur révision. Les displays remplacent `MonitorHandle` et `VideoMode`. Leur inventaire est observable et ne fabrique pas de monitor synthétique pour masquer une absence d’énumération. Un backend peut néanmoins exposer explicitement un display de type `HostViewport` lorsqu’il ne représente que le viewport courant. `DisplayState` décrit ce type, le nom optionnel, les bounds physiques dans l’espace du bureau virtuel, la work area, le scale factor, le mode courant et les modes réellement connus.
+`DisplayManager.state` est l’unique snapshot atomique de l’inventaire, des capabilities d’énumération et de leur révision. Les displays remplacent `MonitorHandle` et `VideoMode`. Leur inventaire est observable et ne fabrique pas de monitor synthétique pour masquer une absence d’énumération. Un backend peut néanmoins exposer explicitement un display de type `HostViewport` lorsqu’il ne représente que le viewport courant. `DisplayState` décrit ce type, le nom optionnel, les bounds physiques dans l’espace du bureau virtuel, la work area, le scale factor, le mode courant et les modes réellement connus. `DisplayModeId` est opaque, ne vaut que pour la lifetime du display connecté et distingue deux modes natifs ayant les mêmes métriques visibles.
 
 `Display` est un handle vivant tant qu’il appartient à `DisplayInventory.Enumerated.displays`. Son `DisplayState` contient un `DisplayConnectionState`; une disparition publie d’abord l’état terminal `Disconnected`, retire ensuite le handle de `DisplayManagerState.inventory` dans une nouvelle révision, puis admet `DisplayManager.events.Removed` avec cette révision. Comme le state du handle et celui du manager sont deux cellules distinctes, une lecture concurrente peut brièvement voir le handle terminal dans l’ancien inventaire, mais jamais le nouvel inventaire avec un état non terminal ni l’événement avant les deux mises à jour. Le handle retiré conserve son ID et son dernier snapshot terminal pour les références existantes. Une réapparition après le retrait crée un nouveau `DisplayId`, même si le backend reconnaît le même matériel ; aucune identité persistante cross-session ou cross-connexion n’est inférée.
 
