@@ -1141,6 +1141,59 @@ class KffiAppKitWindowPortMacOsTest {
     }
 
     @Test
+    fun nativeContentViewRoutesFlagsChangedWithoutReadingUnavailableCharactersOnMacOs() {
+        if (!isMacOsHost()) return
+
+        val peerId = AppKitWindowPeerId(82L)
+        val stimuli = mutableListOf<AppKitSurfaceStimulus>()
+        val peer = KffiAppKitWindowPort().prepare(
+            id = peerId,
+            spec = WindowSpec(contentSize = LogicalSize(240.0, 135.0)),
+            acceptSurfaceStimulus = stimuli::add,
+            acceptStimulus = { },
+        )
+
+        try {
+            assertEquals(
+                KadreResult.Success(Unit),
+                peer.withDesktopHandle(admitCallback = { true }) { handle ->
+                    val appKitHandle = assertIs<RuntimeDesktopNativeWindowHandle.AppKit>(handle)
+                    val view = NSView(MemorySegment.ofAddress(appKitHandle.nsViewAddress.toLong()))
+                    val event = NSEvent.keyEventWithType_location_modifierFlags_timestamp_windowNumber_context_characters_charactersIgnoringModifiers_isARepeat_keyCode(
+                        type = NSEventType.NSEventTypeFlagsChanged,
+                        location = NSPoint(12.5, 4.0),
+                        flags = NSEventModifierFlags(0L),
+                        time = 1.0,
+                        wNum = 0L,
+                        unusedPassNil = MemorySegment.NULL,
+                        keys = "",
+                        ukeys = "",
+                        flag = false,
+                        code = 0x38,
+                    )
+                    view.flagsChanged(event)
+                },
+            )
+            assertEquals(
+                AppKitSurfaceStimulus.KeyChanged(
+                    peerId,
+                    AppKitInput.KeyChanged(
+                        physicalKey = PhysicalKey.Code(0x07, 0xe1),
+                        logicalKey = LogicalKey.Named(org.graphiks.kadre.input.NamedKey.Shift),
+                        location = KeyLocation.Left,
+                        keyState = KeyState.Released,
+                        repeat = false,
+                        modifiers = KeyboardModifiers(emptySet()),
+                    ),
+                ),
+                stimuli.filterIsInstance<AppKitSurfaceStimulus.KeyChanged>().single(),
+            )
+        } finally {
+            peer.close()
+        }
+    }
+
+    @Test
     fun nativeContentViewAdvertisesPointerTrackingAndRoutesPointerEventsOnMacOs() {
         if (!isMacOsHost()) return
 
