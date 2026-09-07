@@ -4,8 +4,11 @@ plugins {
 }
 
 kotlin {
+    applyDefaultHierarchyTemplate()
     jvmToolchain(25)
     jvm()
+    js { browser() }
+    wasmJs { browser() }
     explicitApi()
 
     sourceSets {
@@ -15,6 +18,12 @@ kotlin {
         jvmMain.dependencies {
             api(project(":kadre:platform:desktop"))
         }
+        jsMain.dependencies {
+            api(project(":kadre:platform:web"))
+        }
+        wasmJsMain.dependencies {
+            api(project(":kadre:platform:web"))
+        }
     }
 }
 
@@ -23,6 +32,7 @@ tasks.named("check") {
     dependsOn(":kadre:contracts:validator:check")
     dependsOn(":kadre:backend:appkit:check")
     dependsOn(":kadre:platform:desktop:check")
+    dependsOn(":kadre:platform:web:check")
     dependsOn(":kadre:runtime:check")
     dependsOn("validateKotlinConsumer")
     dependsOn("validateJavaConsumer")

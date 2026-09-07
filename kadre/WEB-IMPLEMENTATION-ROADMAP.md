@@ -75,7 +75,7 @@ Il n’existe ni `backend:web`, ni bridge FFI, ni modification KFFI/Kextract dan
 
 ### 3.2 Deux façades SDK, un noyau sémantique
 
-Les signatures utilisant `HTMLElement` existent distinctement en `jsMain` et `wasmJsMain`, avec les types SDK exacts (`org.w3c.dom.HTMLElement` et `web.html.HTMLElement`). Le code partagé ne publie aucun type DOM.
+Les signatures utilisant `HTMLElement` existent distinctement en `jsMain` et `wasmJsMain`, avec le type SDK exact `org.w3c.dom.HTMLElement` fourni par chaque toolchain. Le code partagé ne publie aucun type DOM.
 
 ```text
 API publique JS ou Wasm

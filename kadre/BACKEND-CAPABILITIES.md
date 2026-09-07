@@ -38,7 +38,7 @@ Les checks runtime sont l’autorité. Une table statique de versions ne peut ja
 | Android `View` | `View` + `LifecycleOwner` | `G`, la View attachée | toujours `null` | `N(RequestWindow)` ; requête immédiatement `Rejected` | premier `View.onDetachedFromWindow` ou destruction du lifecycle owner |
 | UIKit `UIWindowScene` | la scène | `G`, `surfaceView` fournie | `G`, `UIWindow` de la scène | `C + S`, via activation d’une nouvelle scène | `sceneDidDisconnect` |
 | Web JS `org.w3c.dom.HTMLElement` | élément DOM + browsing context | `G`, l’élément | toujours `null` | `H + S`; sans provider `Rejected(Unsupported)` | `pagehide`, destruction du context ou policy DOM |
-| Web Wasm `web.html.HTMLElement` | élément DOM + browsing context | `G`, l’élément | toujours `null` | `H + S`; sans provider `Rejected(Unsupported)` | `pagehide`, destruction du context ou policy DOM |
+| Web Wasm `org.w3c.dom.HTMLElement` | élément DOM + browsing context | `G`, l’élément | toujours `null` | `H + S`; sans provider `Rejected(Unsupported)` | `pagehide`, destruction du context ou policy DOM |
 | Desktop `Embedded` | boucle UI identifiée dans les options | toujours `null`; surfaces accessibles via `Window.surface` | `null` jusqu’à première fenêtre de la session | `G`, `OpenedHere` | fermeture explicite du host ou arrêt de l’intégration |
 | Desktop `Standalone` | processus/loop lancé par la commodité | toujours `null`; surfaces accessibles via `Window.surface` | `null` jusqu’à première fenêtre | `G`, `OpenedHere` | arrêt demandé ; fermeture dernière fenêtre si option activée |
 
@@ -130,7 +130,7 @@ La scope parent est créée et possédée par l’adapter sur le main dispatcher
 
 ### 6.3 Web (`org.graphiks.kadre.platform.web`)
 
-Les deux targets exposent sémantiquement la même surface mais utilisent leur type SDK natif (`org.w3c.dom.HTMLElement` en JS, `web.html.HTMLElement` en Wasm) :
+Les deux targets exposent sémantiquement la même surface et utilisent le type SDK `org.w3c.dom.HTMLElement` fourni par leurs toolchains respectives :
 
 ```kotlin
 public enum class WebAttachmentPolicy { StopWhenDetached, Manual }
