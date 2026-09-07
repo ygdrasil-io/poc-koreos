@@ -167,7 +167,7 @@ Une phase peut compter plusieurs PRs mais n’active aucun contrat Web incomplet
 - le snapshot de capabilities et la documentation de disponibilité ;
 - un gate obligatoire sans skip, retry automatique ni fallback masqué.
 
-Une capability conditionnelle prouve aussi, en PR, la branche observable qui la rend disponible et celle qui la rend indisponible. Une simple déclaration de capability ne remplace jamais ce scénario.
+Une capability conditionnelle prouve, en PR, la branche réellement observable sur le runner. Lorsque les deux branches sont réalisables, l’ensemble nightly/release couvre au moins un chemin `Supported` et un chemin `Unsupported`. Une simple déclaration de capability ne remplace jamais ce scénario.
 
 Le chemin de preuve browser est immuable :
 
