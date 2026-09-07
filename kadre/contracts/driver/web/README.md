@@ -14,12 +14,13 @@ rtk ./gradlew :kadre:contracts:driver:web:jsBrowserSmoke :kadre:contracts:driver
 
 The target-specific Playwright suites are
 [web-lifecycle.spec.mjs](playwright/web-lifecycle.spec.mjs). They exercise the
-public `HTMLElement.attachKadre` API and emit target-specific JUnit and
-diagnostic artifacts for the lifecycle scenarios that will later belong to a
-contract proof. The tests cover deterministic lifecycle behaviour: ownership,
-detach/reinsert, cross-document transfer, Shadow DOM observation, `Manual`
-reconnection, focus and visibility reduction, `pagehide`, and the absence of
-Kadre-created DOM or a primary window.
+public `HTMLElement.attachKadre` API and emit target-specific JUnit results for
+the lifecycle scenarios that will later belong to a contract proof. Playwright
+diagnostics are removed after a successful smoke; they are preserved on a
+failure or interruption. The tests cover deterministic lifecycle behaviour:
+ownership, detach/reinsert, cross-document transfer, Shadow DOM observation,
+`Manual` reconnection, focus and visibility reduction, `pagehide`, and the
+absence of Kadre-created DOM or a primary window.
 
 `BCK-001` remains `planned` in Phase 1. No active contract gate consumes these
 artifacts and this driver does not activate that capability.
