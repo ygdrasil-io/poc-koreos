@@ -4,6 +4,22 @@ import { existsSync } from 'node:fs';
 import { basename, extname, join, relative, resolve, sep } from 'node:path';
 import { spawn } from 'node:child_process';
 
+const POSIX_TERM_GRACE_MILLISECONDS = 1_000;
+const POSIX_KILL_GRACE_MILLISECONDS = 1_000;
+const PROCESS_TREE_TERMINATION_TIMEOUT_MILLISECONDS = 5_000;
+const CHILD_CLOSE_TIMEOUT_MILLISECONDS = 5_000;
+const WINDOWS_TASKKILL_TIMEOUT_MILLISECONDS = 3_000;
+const WINDOWS_TASKKILL_REAP_TIMEOUT_MILLISECONDS = 1_000;
+const signalExitCodes = { SIGINT: 2, SIGTERM: 15 };
+
+class SmokeInterruptedError extends Error {
+  constructor(signal, cleanupError) {
+    super(`Playwright browser smoke interrupted by ${signal}`);
+    this.signal = signal;
+    this.cleanupError = cleanupError;
+  }
+}
+
 const argumentsByName = new Map(process.argv.slice(2).map((argument) => {
   const [name, value] = argument.split('=', 2);
   return [name, value];
@@ -27,6 +43,8 @@ const distributionRoot = await realpath(distribution);
 const entryScript = await findEntryScript(distributionRoot);
 const server = await serveDistribution(distributionRoot, entryScript);
 let passed = false;
+let interruptedSignal;
+let interruptedCleanupError;
 
 try {
   const command = process.platform === 'win32' ? 'node_modules/.bin/playwright.cmd' : 'node_modules/.bin/playwright';
@@ -48,11 +66,25 @@ try {
     throw new Error(`Playwright ${target} smoke reported a failure, error, or skip in ${junitOutput}`);
   }
   passed = true;
+} catch (error) {
+  if (error instanceof SmokeInterruptedError) {
+    interruptedSignal = error.signal;
+    interruptedCleanupError = error.cleanupError;
+  } else {
+    throw error;
+  }
 } finally {
   if (passed) await rm(playwrightOutput, { force: true, recursive: true });
   await new Promise((resolveClose, rejectClose) => {
     server.instance.close((error) => error ? rejectClose(error) : resolveClose());
   });
+}
+
+if (interruptedSignal) {
+  if (interruptedCleanupError) {
+    console.error(`Playwright cleanup after ${interruptedSignal} failed: ${interruptedCleanupError.message}`);
+  }
+  exitForSignal(interruptedSignal, !interruptedCleanupError);
 }
 
 function parseTimeout(value) {
@@ -65,68 +97,243 @@ function parseTimeout(value) {
 
 function runWithWatchdog(command, argumentsList, options, timeout) {
   return new Promise((resolveRun, rejectRun) => {
-    const child = spawn(command, argumentsList, {
-      ...options,
-      detached: process.platform !== 'win32',
-    });
+    let child;
+    let timer;
     let settled = false;
-    let timedOut = false;
-    let termination = Promise.resolve();
-    const timer = setTimeout(() => {
-      timedOut = true;
-      termination = terminateProcessTree(child.pid);
-    }, timeout);
+    let cleanup;
+    let resolveChildClose;
+    const childClose = new Promise((resolveClose) => {
+      resolveChildClose = resolveClose;
+    });
+    const signalHandlers = new Map([
+      ['SIGINT', () => scheduleCleanup({ type: 'signal', signal: 'SIGINT' })],
+      ['SIGTERM', () => scheduleCleanup({ type: 'signal', signal: 'SIGTERM' })],
+    ]);
 
-    const settle = async (callback) => {
+    for (const [signal, handler] of signalHandlers) process.on(signal, handler);
+
+    const finish = (completion) => {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
-      await callback();
+      for (const [signal, handler] of signalHandlers) process.off(signal, handler);
+      completion();
+    };
+    const finishFailure = (error) => finish(() => rejectRun(error));
+    const finishSuccess = (result) => finish(() => resolveRun(result));
+
+    const scheduleCleanup = (reason) => {
+      if (cleanup) return cleanup;
+      cleanup = cleanUp(reason).then(
+        () => {
+          if (reason.type === 'exit-failure') {
+            finishSuccess({ status: reason.status });
+            return;
+          }
+          finishFailure(cleanupFailure(reason));
+        },
+        (error) => finishFailure(cleanupFailure(reason, error)),
+      );
+      return cleanup;
     };
 
-    child.once('error', (error) => {
-      void settle(async () => {
-        await terminateProcessTree(child.pid);
-        rejectRun(error);
+    const cleanUp = async () => {
+      const failures = [];
+      if (child?.pid) {
+        try {
+          await withDeadline(
+            terminateProcessTree(child.pid),
+            PROCESS_TREE_TERMINATION_TIMEOUT_MILLISECONDS,
+            `process-tree termination for ${child.pid}`,
+          );
+        } catch (error) {
+          failures.push(error);
+        }
+      }
+      try {
+        await withDeadline(
+          childClose,
+          CHILD_CLOSE_TIMEOUT_MILLISECONDS,
+          'Playwright child close observation',
+        );
+      } catch (error) {
+        failures.push(error);
+      }
+      if (failures.length > 0) throw new AggregateError(failures, 'browser smoke cleanup did not complete');
+    };
+
+    try {
+      child = spawn(command, argumentsList, {
+        ...options,
+        detached: process.platform !== 'win32',
       });
+    } catch (error) {
+      finishFailure(error);
+      return;
+    }
+
+    child.once('error', (error) => {
+      if (!child.pid) {
+        finishFailure(error);
+        return;
+      }
+      scheduleCleanup({ type: 'spawn-error', error });
     });
     child.once('close', (status) => {
-      void settle(async () => {
-        if (timedOut) {
-          await termination;
-          rejectRun(new Error(`Playwright exceeded configured timeout of ${timeout}ms; terminated its process tree`));
-          return;
-        }
-        if (status !== 0) await terminateProcessTree(child.pid);
-        resolveRun({ status });
-      });
+      resolveChildClose();
+      if (settled || cleanup) return;
+      if (status === 0) {
+        finishSuccess({ status });
+        return;
+      }
+      scheduleCleanup({ type: 'exit-failure', status });
     });
+    timer = setTimeout(() => {
+      scheduleCleanup({ type: 'watchdog', timeout });
+    }, timeout);
   });
 }
 
 async function terminateProcessTree(pid) {
   if (!pid) return;
   if (process.platform === 'win32') {
-    await new Promise((resolveTermination) => {
-      const killer = spawn('taskkill', ['/pid', String(pid), '/T', '/F'], { stdio: 'ignore', windowsHide: true });
-      killer.once('error', resolveTermination);
-      killer.once('close', resolveTermination);
-    });
+    await terminateWindowsProcessTree(pid);
     return;
   }
+  const failures = [];
   try {
     process.kill(-pid, 'SIGTERM');
   } catch (error) {
     if (error.code === 'ESRCH') return;
-    throw error;
+    failures.push(error);
   }
-  await new Promise((resolveGrace) => setTimeout(resolveGrace, 1_000));
+  try {
+    if (await waitForProcessGroupExit(pid, POSIX_TERM_GRACE_MILLISECONDS)) return;
+  } catch (error) {
+    failures.push(error);
+  }
   try {
     process.kill(-pid, 'SIGKILL');
   } catch (error) {
-    if (error.code !== 'ESRCH') throw error;
+    if (error.code === 'ESRCH') return;
+    failures.push(error);
+  }
+  try {
+    if (!await waitForProcessGroupExit(pid, POSIX_KILL_GRACE_MILLISECONDS)) {
+      failures.push(new Error(`process group ${pid} remained alive after SIGKILL`));
+    }
+  } catch (error) {
+    failures.push(error);
+  }
+  if (failures.length > 0) throw new AggregateError(failures, `could not fully terminate process group ${pid}`);
+}
+
+async function terminateWindowsProcessTree(pid) {
+  let helper;
+  try {
+    helper = spawn('taskkill', ['/pid', String(pid), '/T', '/F'], { stdio: 'ignore', windowsHide: true });
+  } catch (error) {
+    throw new Error(`could not start taskkill for ${pid}: ${error.message}`, { cause: error });
+  }
+  const helperClosed = new Promise((resolveClose, rejectClose) => {
+    helper.once('error', rejectClose);
+    helper.once('close', (status) => resolveClose(status));
+  });
+  try {
+    const status = await withDeadline(
+      helperClosed,
+      WINDOWS_TASKKILL_TIMEOUT_MILLISECONDS,
+      `taskkill helper for ${pid}`,
+    );
+    if (status !== 0) throw new Error(`taskkill for ${pid} exited with status ${status}`);
+  } catch (error) {
+    try {
+      helper.kill('SIGKILL');
+    } catch (killError) {
+      if (killError.code !== 'ESRCH') throw new AggregateError([error, killError], `taskkill helper for ${pid} could not be stopped`);
+    }
+    try {
+      await withDeadline(helperClosed.catch(() => undefined), WINDOWS_TASKKILL_REAP_TIMEOUT_MILLISECONDS, `taskkill helper reaping for ${pid}`);
+    } catch {
+      // The helper was explicitly killed; its bounded reaping failure is already represented by the original taskkill failure.
+    }
+    throw error;
   }
 }
+
+async function waitForProcessGroupExit(pid, timeout) {
+  const deadline = Date.now() + timeout;
+  while (Date.now() < deadline) {
+    try {
+      process.kill(-pid, 0);
+    } catch (error) {
+      if (error.code === 'ESRCH') return true;
+      throw error;
+    }
+    await delay(25);
+  }
+  try {
+    process.kill(-pid, 0);
+    return false;
+  } catch (error) {
+    if (error.code === 'ESRCH') return true;
+    throw error;
+  }
+}
+
+function withDeadline(promise, timeout, operation) {
+  return new Promise((resolveResult, rejectResult) => {
+    const timer = setTimeout(() => {
+      rejectResult(new Error(`${operation} exceeded ${timeout}ms`));
+    }, timeout);
+    promise.then(
+      (result) => {
+        clearTimeout(timer);
+        resolveResult(result);
+      },
+      (error) => {
+        clearTimeout(timer);
+        rejectResult(error);
+      },
+    );
+  });
+}
+
+function cleanupFailure(reason, cleanupError) {
+  if (reason.type === 'signal') return new SmokeInterruptedError(reason.signal, cleanupError);
+  if (cleanupError) {
+    return new Error(`Playwright cleanup after ${cleanupDescription(reason)} failed: ${cleanupError.message}`, { cause: cleanupError });
+  }
+  if (reason.type === 'watchdog') {
+    return new Error(`Playwright exceeded configured timeout of ${reason.timeout}ms; terminated its process tree`);
+  }
+  if (reason.type === 'spawn-error') return reason.error;
+  return new Error(`unexpected browser smoke cleanup reason: ${reason.type}`);
+}
+
+function cleanupDescription(reason) {
+  if (reason.type === 'signal') return `${reason.signal} signal`;
+  if (reason.type === 'watchdog') return `the ${reason.timeout}ms watchdog`;
+  if (reason.type === 'spawn-error') return 'a Playwright spawn error';
+  return 'a Playwright failure';
+}
+
+function delay(milliseconds) {
+  return new Promise((resolveDelay) => setTimeout(resolveDelay, milliseconds));
+}
+
+function exitForSignal(signal, safeToResignal) {
+  if (safeToResignal && process.listenerCount(signal) === 0) {
+    try {
+      process.kill(process.pid, signal);
+      return;
+    } catch {
+      // Fall through to the conventional numeric exit status below.
+    }
+  }
+  process.exitCode = 128 + signalExitCodes[signal];
+}
+
 
 async function findEntryScript(directory) {
   const scripts = await findFiles(directory, (path) => extname(path) === '.js');
