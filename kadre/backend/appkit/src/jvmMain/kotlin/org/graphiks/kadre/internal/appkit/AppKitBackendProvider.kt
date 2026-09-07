@@ -8,6 +8,7 @@ import kotlinx.coroutines.runBlocking
 import org.graphiks.kadre.application.ActivationState
 import org.graphiks.kadre.application.AttachmentState
 import org.graphiks.kadre.application.KadreSession
+import org.graphiks.kadre.application.LifecycleCapabilities
 import org.graphiks.kadre.application.LifecycleState
 import org.graphiks.kadre.application.SessionOutcome
 import org.graphiks.kadre.application.VisibilityState
@@ -87,6 +88,7 @@ public class AppKitBackendProvider private constructor(
         } else {
             null
         }
+        val memoryPressureAvailability = broker.memoryPressureAvailability()
         val registration = try {
             val hostFactory: (LifecycleState) -> AppKitRuntimeHost = { initial ->
                 AppKitRuntimeHost(
@@ -97,6 +99,7 @@ public class AppKitBackendProvider private constructor(
                             attentionOwner = attentionOwner,
                         ),
                         initialLifecycleState = initial,
+                        initialLifecycleCapabilities = LifecycleCapabilities(memoryPressureAvailability),
                         sessionObserver = RuntimeSessionObserver { _, _ -> owner.close() },
                     ),
                 )
@@ -146,29 +149,34 @@ public class AppKitBackendProvider private constructor(
         try {
             val nativeLoopReturned = AtomicBoolean(false)
             val lastWindowStop = AppKitLastWindowStopBridge()
-            val host = RuntimeHostController.withComponents(
-                platform = KadrePlatform.AppKit,
-                componentsFactory = windowComponentsFactory(
-                    request.policy.resources,
-                    if (request.stopWhenLastWindowClosed) lastWindowStop::request else null,
-                    attentionOwner,
+            val memoryPressureAvailability = broker.memoryPressureAvailability()
+            val host = AppKitRuntimeHost(
+                RuntimeHostController.withComponents(
+                    platform = KadrePlatform.AppKit,
+                    componentsFactory = windowComponentsFactory(
+                        request.policy.resources,
+                        if (request.stopWhenLastWindowClosed) lastWindowStop::request else null,
+                        attentionOwner,
+                    ),
+                    initialLifecycleState = LifecycleState(
+                        AttachmentState.Attached,
+                        VisibilityState.Background,
+                        ActivationState.Inactive,
+                    ),
+                    initialLifecycleCapabilities = LifecycleCapabilities(memoryPressureAvailability),
+                    // Stop AppKit before committing the terminal outcome so a native stop failure
+                    // can still become the authoritative SessionOutcome.
+                    sessionStopHandler = RuntimeSessionStopHandler {
+                        if (nativeLoopReturned.get()) {
+                            null
+                        } else {
+                            requestNativeStop()
+                        }
+                    },
                 ),
-                initialLifecycleState = LifecycleState(
-                    AttachmentState.Attached,
-                    VisibilityState.Background,
-                    ActivationState.Inactive,
-                ),
-                // Stop AppKit before committing the terminal outcome so a native stop failure
-                // can still become the authoritative SessionOutcome.
-                sessionStopHandler = RuntimeSessionStopHandler {
-                    if (nativeLoopReturned.get()) {
-                        null
-                    } else {
-                        requestNativeStop()
-                    }
-                },
             )
-            val attached = host.attach(parentScope, request.applicationFactory, request.policy)
+            lease.installMemoryTarget(host)
+            val attached = host.controller.attach(parentScope, request.applicationFactory, request.policy)
             if (attached is KadreResult.Failure) return attached
             val session = (attached as KadreResult.Success).value
             lastWindowStop.install(session)
@@ -185,10 +193,10 @@ public class AppKitBackendProvider private constructor(
                 host.detach()
             } catch (_: Exception) {
                 nativeLoopReturned.set(true)
-                host.fail(runFailure())
+                host.controller.fail(runFailure())
             } catch (_: LinkageError) {
                 nativeLoopReturned.set(true)
-                host.fail(runFailure())
+                host.controller.fail(runFailure())
             }
 
             return KadreResult.Success(runBlocking { session.awaitTermination() })

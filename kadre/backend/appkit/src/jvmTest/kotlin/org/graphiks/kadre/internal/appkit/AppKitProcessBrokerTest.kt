@@ -15,6 +15,7 @@ import org.graphiks.kadre.application.KadreApplicationFactory
 import org.graphiks.kadre.application.KadreLifecycle
 import org.graphiks.kadre.application.KadreSession
 import org.graphiks.kadre.application.LifecycleState
+import org.graphiks.kadre.application.MemoryPressureLevel
 import org.graphiks.kadre.application.SessionOutcome
 import org.graphiks.kadre.application.SessionStopReason
 import org.graphiks.kadre.application.VisibilityState
@@ -40,6 +41,18 @@ import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.seconds
 
 class AppKitProcessBrokerTest {
+    @Test
+    fun processMemoryPressureCapabilityClosesItsNativeOwnerOnHostTermination() {
+        val native = RecordingProcessMemoryPressureNative()
+        val broker = AppKitProcessBroker(memoryPressureNative = native)
+
+        assertEquals(FeatureAvailability.Available, broker.memoryPressureAvailability())
+
+        broker.accept(AppKitLifecycleSignal.HostTerminated)
+
+        assertEquals(1, native.closeCount)
+    }
+
     @Test
     fun hostTerminationClosesTheProcessWideDisplayObserver() {
         val native = RecordingProcessDisplayNative()
@@ -398,6 +411,15 @@ private class RecordingProcessDisplayNative : AppKitDisplayNative {
     override fun observeReconfiguration(listener: () -> Unit): AutoCloseable = AutoCloseable {}
 
     override fun close() {
+        closeCount += 1
+    }
+}
+
+private class RecordingProcessMemoryPressureNative : AppKitMemoryPressureNative {
+    var closeCount: Int = 0
+        private set
+
+    override fun open(listener: (MemoryPressureLevel) -> Unit): AutoCloseable = AutoCloseable {
         closeCount += 1
     }
 }

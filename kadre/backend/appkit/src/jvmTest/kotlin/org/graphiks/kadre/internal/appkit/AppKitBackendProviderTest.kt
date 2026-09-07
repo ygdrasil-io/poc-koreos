@@ -47,6 +47,8 @@ import org.graphiks.kadre.application.KadreApplicationFactory
 import org.graphiks.kadre.application.KadreLifecycle
 import org.graphiks.kadre.application.KadreScope
 import org.graphiks.kadre.application.KadreSession
+import org.graphiks.kadre.application.HostSignal
+import org.graphiks.kadre.application.MemoryPressureLevel
 import org.graphiks.kadre.application.SessionOutcome
 import org.graphiks.kadre.application.SessionStopReason
 import org.graphiks.kadre.diagnostics.Capability
@@ -133,6 +135,37 @@ import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
 class AppKitBackendProviderTest {
+    @Test
+    fun embeddedSessionPublishesAvailableMemoryPressureAndReceivesNativeSignals() = kotlinx.coroutines.runBlocking {
+        val nativeApplication = EmbeddedNativeApplication()
+        val memoryPressureNative = ProviderMemoryPressureNative()
+        val provider = AppKitBackendProvider.forTesting(
+            nativeApplication = nativeApplication,
+            broker = AppKitProcessBroker(memoryPressureNative = memoryPressureNative),
+            availability = { true },
+        )
+        val parentScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob())
+        val observedLifecycle = CompletableDeferred<KadreLifecycle>()
+
+        try {
+            val session = provider.attach(embeddedRequest(parentScope, observedLifecycle)).requireSession()
+            val lifecycle = observedLifecycle.await()
+
+            assertEquals(FeatureAvailability.Available, lifecycle.capabilities.value.memoryPressure)
+            val signal = async(start = CoroutineStart.UNDISPATCHED) {
+                lifecycle.signals.filterIsInstance<HostSignal.MemoryPressure>().first()
+            }
+            memoryPressureNative.emit(MemoryPressureLevel.Critical)
+            assertEquals(MemoryPressureLevel.Critical, withTimeout(2.seconds) { signal.await() }.level)
+
+            session.close()
+            session.awaitTermination()
+        } finally {
+            parentScope.cancel()
+        }
+        Unit
+    }
+
     @Test
     fun embeddedSessionProjectsTheConfiguredDisplayPortAndClosesItWithTheSession() = kotlinx.coroutines.runBlocking {
         val native = EmbeddedNativeApplication()
@@ -3407,6 +3440,20 @@ private class ProviderDisplayPort : DisplayPort {
 
     override fun close() {
         closeCount += 1
+    }
+}
+
+private class ProviderMemoryPressureNative : AppKitMemoryPressureNative {
+    private var listener: ((MemoryPressureLevel) -> Unit)? = null
+
+    override fun open(listener: (MemoryPressureLevel) -> Unit): AutoCloseable {
+        check(this.listener == null) { "memory-pressure source is already open" }
+        this.listener = listener
+        return AutoCloseable { this.listener = null }
+    }
+
+    fun emit(level: MemoryPressureLevel) {
+        checkNotNull(listener)(level)
     }
 }
 

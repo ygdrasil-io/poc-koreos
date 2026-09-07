@@ -97,6 +97,16 @@ physique du bureau virtuel ; `WindowCapabilities.outerPosition` reste toutefois
 `Unsupported` jusqu’à une preuve matérielle séparée sur des écrans à échelles
 mixtes.
 
+Sur AppKit, la pression mémoire est une source `Dispatch` unique pour le
+processus. Elle est installée à la première session et rend
+`LifecycleCapabilities.memoryPressure = Available` seulement après succès de
+cette installation. Un échec de linkage ou de création publie
+`Unavailable(PlatformFailure(AppKit, "memory-pressure", "source-exception"))`;
+il ne fabrique aucun signal. `WARN` devient `Moderate` et `CRITICAL` devient
+`Critical`. Le callback natif est relayé hors de sa pile, puis diffusé aux
+sessions vivantes : fermer une session ne ferme pas la source process-wide,
+alors que la terminaison du host la ferme avant tout nouveau relayage.
+
 L’absence de `Window` sur Android View ou sur le host Web initial ne ferme pas sa surface et ne fabrique aucune `WindowCapabilities`. `WindowManagerState.windows` reste vide ; Android publie `requestWindow = Unsupported(RequestWindow)`, tandis que Web suit son provider. `N(CaptureOpen)` pour `CaptureTarget.Source` n’interdit pas `HostChoice`; `sourceEnumeration`, `hostPicker` et les capabilities de target décrivent séparément ces chemins.
 
 Les gestures sont des observations host-native ou des recognizers installés explicitement par l’adapter. Kadre ne promet aucun recognizer logiciel universel. Un adapter peut supporter pointer/touch tout en publiant gestures `Unsupported`.
