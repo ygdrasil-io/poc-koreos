@@ -1,0 +1,12 @@
+{
+  "name": "kadre-web-contract-driver",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "playwright test --config playwright/playwright.config.mjs"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.60.0"
+  }
+}

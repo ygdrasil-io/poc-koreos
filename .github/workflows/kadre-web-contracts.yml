@@ -1,0 +1,53 @@
+name: Kadre Web Contracts
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  web-contracts:
+    name: web-contracts
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 25
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "25"
+          cache: gradle
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: kadre/contracts/driver/web/package-lock.json
+
+      - name: Install locked Playwright dependencies
+        run: npm ci --prefix kadre/contracts/driver/web
+
+      - name: Provision Chromium
+        run: npx --prefix kadre/contracts/driver/web playwright install --with-deps chromium
+
+      - name: Run Web browser contract smoke gate
+        run: timeout --foreground --kill-after=30s 8m ./gradlew :kadre:contracts:driver:web:jsBrowserSmoke :kadre:contracts:driver:web:wasmJsBrowserSmoke :kadre:contracts:validator:check --console=plain
+
+      - name: Upload Web diagnostics and evidence
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: kadre-web-contract-failure-artifacts
+          path: |
+            kadre/contracts/driver/web/build/dist/
+            kadre/contracts/driver/web/build/contract-evidence/
+          if-no-files-found: ignore
