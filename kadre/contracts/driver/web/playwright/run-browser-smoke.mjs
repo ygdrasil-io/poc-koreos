@@ -14,88 +14,99 @@ const SERVER_GRACEFUL_DRAIN_TIMEOUT_MILLISECONDS = 1_000;
 const SERVER_FORCED_DRAIN_TIMEOUT_MILLISECONDS = 1_000;
 const signalExitCodes = { SIGINT: 2, SIGTERM: 15 };
 
-class SmokeInterruptedError extends Error {
-  constructor(signal, cleanupError) {
-    super(`Playwright browser smoke interrupted by ${signal}`);
-    this.signal = signal;
-    this.cleanupError = cleanupError;
-  }
-}
+async function runBrowserSmoke(argumentsList) {
+  const argumentsByName = new Map(argumentsList.map((argument) => {
+    const [name, value] = argument.split('=', 2);
+    return [name, value];
+  }));
+  const target = argumentsByName.get('--target');
+  const distribution = argumentsByName.get('--distribution');
+  const evidence = argumentsByName.get('--evidence');
+  const timeoutMilliseconds = parseTimeout(argumentsByName.get('--timeout-ms'));
 
-const argumentsByName = new Map(process.argv.slice(2).map((argument) => {
-  const [name, value] = argument.split('=', 2);
-  return [name, value];
-}));
-const target = argumentsByName.get('--target');
-const distribution = argumentsByName.get('--distribution');
-const evidence = argumentsByName.get('--evidence');
-const timeoutMilliseconds = parseTimeout(argumentsByName.get('--timeout-ms'));
-
-if (!['js', 'wasmJs'].includes(target) || !distribution || !evidence) {
-  throw new Error('expected --target=js|wasmJs, --distribution=<directory>, and --evidence=<directory>');
-}
-if (!existsSync(distribution)) {
-  throw new Error(`missing ${target} browser distribution: ${distribution}`);
-}
-
-const junitDirectory = join(evidence, 'test-results', 'browser', 'chromium');
-const junitOutput = join(junitDirectory, 'TEST-web-phase0.xml');
-const playwrightOutput = join(evidence, 'diagnostics', 'playwright');
-const distributionRoot = await realpath(distribution);
-const entryScript = await findEntryScript(distributionRoot);
-const server = await serveDistribution(distributionRoot, entryScript);
-let passed = false;
-let interruptedSignal;
-let interruptedCleanupError;
-let serverCloseError;
-
-try {
-  const command = process.platform === 'win32' ? 'node_modules/.bin/playwright.cmd' : 'node_modules/.bin/playwright';
-  const result = await runWithWatchdog(command, ['test', '--config', 'playwright/playwright.config.mjs'], {
-    cwd: process.cwd(),
-    env: {
-      ...process.env,
-      KADRE_FIXTURE_URL: `${server.url}/index.html`,
-      KADRE_JUNIT_OUTPUT: junitOutput,
-      KADRE_PLAYWRIGHT_OUTPUT_DIR: playwrightOutput,
-    },
-    stdio: 'inherit',
-  }, timeoutMilliseconds);
-  if (result.status !== 0) {
-    throw new Error(`Playwright ${target} smoke failed with exit status ${result.status}`);
+  if (!['js', 'wasmJs'].includes(target) || !distribution || !evidence) {
+    throw new Error('expected --target=js|wasmJs, --distribution=<directory>, and --evidence=<directory>');
   }
-  const junit = await readFile(junitOutput, 'utf8');
-  if (/<(?:failure|error|skipped)\b|(?:failures|errors|skipped)="[1-9]\d*"/.test(junit)) {
-    throw new Error(`Playwright ${target} smoke reported a failure, error, or skip in ${junitOutput}`);
+  if (!existsSync(distribution)) {
+    throw new Error(`missing ${target} browser distribution: ${distribution}`);
   }
-  passed = true;
-} catch (error) {
-  if (error instanceof SmokeInterruptedError) {
-    interruptedSignal = error.signal;
-    interruptedCleanupError = error.cleanupError;
-  } else {
-    throw error;
-  }
-} finally {
-  if (passed) await rm(playwrightOutput, { force: true, recursive: true });
+
+  const junitDirectory = join(evidence, 'test-results', 'browser', 'chromium');
+  const junitOutput = join(junitDirectory, 'TEST-web-phase0.xml');
+  const playwrightOutput = join(evidence, 'diagnostics', 'playwright');
+  const distributionRoot = await realpath(distribution);
+  const entryScript = await findEntryScript(distributionRoot);
+  const server = await serveDistribution(distributionRoot, entryScript);
+  const coordinator = new TerminalCoordinator();
+  let businessSucceeded = false;
+  let serverFinalized = false;
+
+  coordinator.installSignalHandlers();
   try {
-    await closeServer(server);
+    const command = process.platform === 'win32' ? 'node_modules/.bin/playwright.cmd' : 'node_modules/.bin/playwright';
+    const result = await runWithWatchdog(command, ['test', '--config', 'playwright/playwright.config.mjs'], {
+      cwd: process.cwd(),
+      env: {
+        ...process.env,
+        KADRE_FIXTURE_URL: `${server.url}/index.html`,
+        KADRE_JUNIT_OUTPUT: junitOutput,
+        KADRE_PLAYWRIGHT_OUTPUT_DIR: playwrightOutput,
+      },
+      stdio: 'inherit',
+    }, timeoutMilliseconds, coordinator);
+
+    if (!coordinator.hasTerminalReason()) {
+      if (result.status !== 0) {
+        coordinator.recordTerminal({ type: 'exit-failure', status: result.status, target });
+      } else {
+        const junit = await readFile(junitOutput, 'utf8');
+        if (/<(?:failure|error|skipped)\b|(?:failures|errors|skipped)="[1-9]\d*"/.test(junit)) {
+          throw new Error(`Playwright ${target} smoke reported a failure, error, or skip in ${junitOutput}`);
+        }
+        if (!coordinator.hasTerminalReason()) businessSucceeded = true;
+      }
+    }
   } catch (error) {
-    serverCloseError = error;
-  }
-}
+    coordinator.recordTerminal({ type: 'business-error', error });
+  } finally {
+    const childFinalization = coordinator.hasTerminalReason()
+      ? coordinator.cleanUpChild()
+      : Promise.resolve();
+    const [serverResult] = await Promise.allSettled([
+      closeServer(server),
+      childFinalization,
+    ]);
+    if (serverResult.status === 'fulfilled') {
+      serverFinalized = true;
+    } else {
+      coordinator.recordFinalizationFailure(serverResult.reason);
+    }
+    await coordinator.finishChildCleanup();
+    coordinator.disposeChildHandles();
 
-if (interruptedSignal) {
-  if (interruptedCleanupError) {
-    console.error(`Playwright cleanup after ${interruptedSignal} failed: ${interruptedCleanupError.message}`);
+    if (businessSucceeded && serverFinalized && coordinator.canRemoveDiagnostics()) {
+      try {
+        await rm(playwrightOutput, { force: true, recursive: true });
+      } catch (error) {
+        coordinator.recordFinalizationFailure(error);
+      }
+    }
+    await coordinator.finishChildCleanup();
+    coordinator.removeSignalHandlers();
   }
-  if (serverCloseError) {
-    console.error(`Browser smoke server close after ${interruptedSignal} failed: ${serverCloseError.message}`);
-  }
-  exitForSignal(interruptedSignal, !interruptedCleanupError && !serverCloseError);
-}
 
-if (serverCloseError) throw serverCloseError;
+  const signal = coordinator.signal();
+  if (signal) {
+    for (const error of coordinator.allCleanupFailures()) {
+      console.error(`Browser smoke cleanup after ${signal} failed: ${error.message}`);
+    }
+    exitForSignal(signal, coordinator.allCleanupFailures().length === 0);
+    return;
+  }
+
+  const error = coordinator.failure(target);
+  if (error) throw error;
+}
 
 function parseTimeout(value) {
   if (value === undefined) return 90_000;
@@ -105,108 +116,186 @@ function parseTimeout(value) {
   return Number(value);
 }
 
-function runWithWatchdog(command, argumentsList, options, timeout) {
-  return new Promise((resolveRun, rejectRun) => {
-    let child;
-    let timer;
-    let settled = false;
-    let cleanup;
-    let resolveChildClose;
-    const childClose = new Promise((resolveClose) => {
-      resolveChildClose = resolveClose;
+function reduceTerminalState(state, event) {
+  if (event.type === 'terminal') {
+    if (state.reason?.type === 'signal') return state;
+    if (event.reason.type !== 'signal' && state.reason !== null) return state;
+    return { ...state, reason: event.reason };
+  }
+  if (event.type === 'child-cleanup-failure') {
+    return { ...state, childCleanupFailures: [...state.childCleanupFailures, event.error] };
+  }
+  if (event.type === 'finalization-failure') {
+    return { ...state, finalizationFailures: [...state.finalizationFailures, event.error] };
+  }
+  throw new Error(`unexpected terminal coordinator event: ${event.type}`);
+}
+
+class TerminalCoordinator {
+  constructor() {
+    this.state = {
+      reason: null,
+      childCleanupFailures: [],
+      finalizationFailures: [],
+    };
+    this.child = null;
+    this.childClose = Promise.resolve({ signal: null, status: null });
+    this.childCleanup = null;
+    this.childHandles = new Set();
+    this.signalHandlers = new Map([
+      ['SIGINT', () => this.recordTerminal({ type: 'signal', signal: 'SIGINT' })],
+      ['SIGTERM', () => this.recordTerminal({ type: 'signal', signal: 'SIGTERM' })],
+    ]);
+    this.terminalRequested = new Promise((resolveRequest) => {
+      this.resolveTerminalRequest = resolveRequest;
     });
-    const signalHandlers = new Map([
-      ['SIGINT', () => scheduleCleanup({ type: 'signal', signal: 'SIGINT' })],
-      ['SIGTERM', () => scheduleCleanup({ type: 'signal', signal: 'SIGTERM' })],
+  }
+
+  installSignalHandlers() {
+    for (const [signal, handler] of this.signalHandlers) process.on(signal, handler);
+  }
+
+  removeSignalHandlers() {
+    for (const [signal, handler] of this.signalHandlers) process.off(signal, handler);
+  }
+
+  attachChild(child) {
+    this.child = child;
+    this.childHandles.add(child);
+    this.childClose = new Promise((resolveClose) => {
+      child.once('close', (status, signal) => resolveClose({ signal, status }));
+    });
+    child.once('error', (error) => {
+      this.recordTerminal({ type: 'spawn-error', error });
+    });
+  }
+
+  recordTerminal(reason) {
+    const previousReason = this.state.reason;
+    this.state = reduceTerminalState(this.state, { type: 'terminal', reason });
+    if (previousReason === null && this.state.reason !== null) this.resolveTerminalRequest();
+    if (reason.type === 'signal') void this.cleanUpChild();
+  }
+
+  recordFinalizationFailure(error) {
+    this.state = reduceTerminalState(this.state, { type: 'finalization-failure', error });
+  }
+
+  hasTerminalReason() {
+    return this.state.reason !== null;
+  }
+
+  signal() {
+    return this.state.reason?.type === 'signal' ? this.state.reason.signal : null;
+  }
+
+  canRemoveDiagnostics() {
+    return this.state.reason === null
+      && this.state.childCleanupFailures.length === 0
+      && this.state.finalizationFailures.length === 0;
+  }
+
+  cleanUpChild() {
+    if (!this.childCleanup) this.childCleanup = this.performChildCleanup();
+    return this.childCleanup;
+  }
+
+  async performChildCleanup() {
+    if (!this.child) return;
+    const operations = [];
+    if (this.child.pid) {
+      operations.push(withDeadline(
+        terminateProcessTree(this.child.pid, this.childHandles),
+        PROCESS_TREE_TERMINATION_TIMEOUT_MILLISECONDS,
+        `process-tree termination for ${this.child.pid}`,
+      ));
+    }
+    operations.push(withDeadline(
+      this.childClose,
+      CHILD_CLOSE_TIMEOUT_MILLISECONDS,
+      'Playwright child close observation',
+    ));
+
+    const results = await Promise.allSettled(operations);
+    for (const result of results) {
+      if (result.status === 'rejected') {
+        this.state = reduceTerminalState(this.state, {
+          type: 'child-cleanup-failure',
+          error: result.reason,
+        });
+      }
+    }
+    this.disposeChildHandles();
+  }
+
+  async finishChildCleanup() {
+    if (this.childCleanup) await this.childCleanup;
+  }
+
+  disposeChildHandles() {
+    for (const child of this.childHandles) releaseChildHandle(child);
+  }
+
+  allCleanupFailures() {
+    return [...this.state.childCleanupFailures, ...this.state.finalizationFailures];
+  }
+
+  failure(target) {
+    const cleanupFailures = this.allCleanupFailures();
+    const reason = this.state.reason;
+    if (cleanupFailures.length > 0) {
+      if (!reason && cleanupFailures.length === 1) return cleanupFailures[0];
+      const description = reason ? cleanupDescription(reason) : 'finalization';
+      return new AggregateError(cleanupFailures, `Browser smoke cleanup after ${description} failed`);
+    }
+    if (!reason) return null;
+    if (reason.type === 'watchdog') {
+      return new Error(`Playwright exceeded configured timeout of ${reason.timeout}ms; terminated its process tree`);
+    }
+    if (reason.type === 'spawn-error' || reason.type === 'business-error') return reason.error;
+    if (reason.type === 'exit-failure') {
+      return new Error(`Playwright ${target} smoke failed with exit status ${reason.status}`);
+    }
+    return new Error(`unexpected browser smoke terminal reason: ${reason.type}`);
+  }
+}
+
+async function runWithWatchdog(command, argumentsList, options, timeout, coordinator) {
+  if (coordinator.hasTerminalReason()) return { status: null };
+
+  let child;
+  try {
+    child = spawn(command, argumentsList, {
+      ...options,
+      detached: process.platform !== 'win32',
+    });
+  } catch (error) {
+    coordinator.recordTerminal({ type: 'spawn-error', error });
+    return { status: null };
+  }
+
+  coordinator.attachChild(child);
+  const timer = setTimeout(() => {
+    coordinator.recordTerminal({ type: 'watchdog', timeout });
+  }, timeout);
+
+  try {
+    const event = await Promise.race([
+      coordinator.childClose.then((result) => ({ type: 'child-close', ...result })),
+      coordinator.terminalRequested.then(() => ({ type: 'terminal-requested' })),
     ]);
 
-    for (const [signal, handler] of signalHandlers) process.on(signal, handler);
-
-    const finish = (completion) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      for (const [signal, handler] of signalHandlers) process.off(signal, handler);
-      completion();
-    };
-    const finishFailure = (error) => finish(() => rejectRun(error));
-    const finishSuccess = (result) => finish(() => resolveRun(result));
-
-    const scheduleCleanup = (reason) => {
-      if (cleanup) return cleanup;
-      cleanup = cleanUp(reason).then(
-        () => {
-          if (reason.type === 'exit-failure') {
-            finishSuccess({ status: reason.status });
-            return;
-          }
-          finishFailure(cleanupFailure(reason));
-        },
-        (error) => finishFailure(cleanupFailure(reason, error)),
-      );
-      return cleanup;
-    };
-
-    const cleanUp = async () => {
-      const failures = [];
-      const cleanupChildren = new Set();
-      if (child?.pid) {
-        cleanupChildren.add(child);
-        try {
-          await withDeadline(
-            terminateProcessTree(child.pid, cleanupChildren),
-            PROCESS_TREE_TERMINATION_TIMEOUT_MILLISECONDS,
-            `process-tree termination for ${child.pid}`,
-          );
-        } catch (error) {
-          failures.push(error);
-        }
-      }
-      try {
-        await withDeadline(
-          childClose,
-          CHILD_CLOSE_TIMEOUT_MILLISECONDS,
-          'Playwright child close observation',
-        );
-      } catch (error) {
-        failures.push(error);
-      }
-      if (failures.length > 0) {
-        for (const cleanupChild of cleanupChildren) releaseChildHandle(cleanupChild);
-        throw new AggregateError(failures, 'browser smoke cleanup did not complete');
-      }
-    };
-
-    try {
-      child = spawn(command, argumentsList, {
-        ...options,
-        detached: process.platform !== 'win32',
-      });
-    } catch (error) {
-      finishFailure(error);
-      return;
+    if (event.type === 'child-close' && event.status === 0 && !coordinator.hasTerminalReason()) {
+      return { status: 0 };
+    }
+    if (event.type === 'child-close' && !coordinator.hasTerminalReason()) {
+      coordinator.recordTerminal({ type: 'exit-failure', status: event.status });
     }
 
-    child.once('error', (error) => {
-      if (!child.pid) {
-        finishFailure(error);
-        return;
-      }
-      scheduleCleanup({ type: 'spawn-error', error });
-    });
-    child.once('close', (status) => {
-      resolveChildClose();
-      if (settled || cleanup) return;
-      if (status === 0) {
-        finishSuccess({ status });
-        return;
-      }
-      scheduleCleanup({ type: 'exit-failure', status });
-    });
-    timer = setTimeout(() => {
-      scheduleCleanup({ type: 'watchdog', timeout });
-    }, timeout);
-  });
+    return { status: event.type === 'child-close' ? event.status : null };
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 async function terminateProcessTree(pid, cleanupChildren) {
@@ -314,18 +403,6 @@ function withDeadline(promise, timeout, operation) {
       },
     );
   });
-}
-
-function cleanupFailure(reason, cleanupError) {
-  if (reason.type === 'signal') return new SmokeInterruptedError(reason.signal, cleanupError);
-  if (cleanupError) {
-    return new Error(`Playwright cleanup after ${cleanupDescription(reason)} failed: ${cleanupError.message}`, { cause: cleanupError });
-  }
-  if (reason.type === 'watchdog') {
-    return new Error(`Playwright exceeded configured timeout of ${reason.timeout}ms; terminated its process tree`);
-  }
-  if (reason.type === 'spawn-error') return reason.error;
-  return new Error(`unexpected browser smoke cleanup reason: ${reason.type}`);
 }
 
 function cleanupDescription(reason) {
@@ -440,18 +517,21 @@ async function drainServer(server) {
     );
     return;
   } catch (gracefulError) {
-    destroyServerConnections(server);
+    const destroyFailures = destroyServerConnections(server);
     try {
       await withDeadline(
         server.closePromise,
         SERVER_FORCED_DRAIN_TIMEOUT_MILLISECONDS,
         'browser smoke server forced drain',
       );
+      if (destroyFailures.length > 0) {
+        throw new AggregateError(destroyFailures, 'browser smoke server forced teardown failed');
+      }
       return;
     } catch (forcedError) {
-      releaseServerHandle(server);
+      const releaseFailures = releaseServerHandle(server);
       throw new AggregateError(
-        [gracefulError, forcedError],
+        [gracefulError, ...destroyFailures, forcedError, ...releaseFailures],
         'browser smoke server did not close within bounded drains',
       );
     }
@@ -459,30 +539,37 @@ async function drainServer(server) {
 }
 
 function destroyServerConnections(server) {
-  server.instance.closeAllConnections?.();
+  const failures = [];
+  try {
+    server.instance.closeAllConnections?.();
+  } catch (error) {
+    failures.push(error);
+  }
   for (const socket of server.sockets) {
     try {
       socket.destroy();
-    } catch {
-      // A socket can race with its own close event; the forced drain remains bounded.
+    } catch (error) {
+      failures.push(error);
     }
   }
+  return failures;
 }
 
 function releaseServerHandle(server) {
-  destroyServerConnections(server);
+  const failures = destroyServerConnections(server);
   try {
     server.instance.unref();
-  } catch {
-    // The server may already have closed while its callback was being observed.
+  } catch (error) {
+    failures.push(error);
   }
   for (const socket of server.sockets) {
     try {
       socket.unref();
-    } catch {
-      // Destroyed sockets do not retain a handle.
+    } catch (error) {
+      failures.push(error);
     }
   }
+  return failures;
 }
 
 function isWithin(root, path) {
@@ -497,3 +584,5 @@ function contentType(path) {
     default: return 'application/octet-stream';
   }
 }
+
+await runBrowserSmoke(process.argv.slice(2));

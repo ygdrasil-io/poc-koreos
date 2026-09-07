@@ -49,10 +49,21 @@ val installPlaywright by tasks.registering(Exec::class) {
     outputs.dir(layout.projectDirectory.dir("node_modules"))
 }
 
+val browserSmokeRunnerTest by tasks.registering(Exec::class) {
+    group = "verification"
+    description = "Tests bounded browser smoke termination and finalization."
+    workingDir(projectDir)
+    commandLine("node", "--test", "playwright/run-browser-smoke.test.mjs")
+    inputs.files(
+        layout.projectDirectory.file("playwright/run-browser-smoke.mjs"),
+        layout.projectDirectory.file("playwright/run-browser-smoke.test.mjs"),
+    )
+}
+
 fun registerBrowserSmoke(target: String, distributionTask: String) = tasks.register<Exec>("${target}BrowserSmoke") {
     group = "verification"
     description = "Runs the $target public Web attach smoke in Chromium."
-    dependsOn(installPlaywright, distributionTask)
+    dependsOn(browserSmokeRunnerTest, installPlaywright, distributionTask)
     workingDir(projectDir)
     commandLine(
         "node",
