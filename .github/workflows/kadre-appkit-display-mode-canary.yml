@@ -1,0 +1,58 @@
+name: Kadre AppKit Display Mode Canary
+
+on:
+  workflow_dispatch:
+    inputs:
+      apply_mode_canary:
+        description: Run CGDisplayCapture, switch to one alternate mode, and restore it.
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+jobs:
+  display-mode-canary:
+    name: display-mode-canary
+    runs-on: macos-15
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run display-mode canary
+        id: canary
+        run: |
+          mkdir -p build/appkit-display-mode-canary
+          arguments=(--inspect-only)
+          if [[ '${{ inputs.apply_mode_canary }}' == 'true' ]]; then
+            arguments=(--apply-mode-canary)
+          fi
+          swift scripts/appkit-display-mode-canary.swift "${arguments[@]}" \
+            --output build/appkit-display-mode-canary/report.json
+          cat build/appkit-display-mode-canary/report.json
+
+      - name: Require successful requested mode change
+        if: inputs.apply_mode_canary == true
+        run: |
+          python3 - <<'PY'
+          import json
+
+          with open("build/appkit-display-mode-canary/report.json", encoding="utf-8") as report_file:
+              report = json.load(report_file)
+
+          if report["status"] != "passed":
+              raise SystemExit(f"display-mode canary did not pass: {report['status']}")
+          if report["modeChange"]["restoreResult"] != 0 or not report["modeChange"]["restoredOriginalMode"]:
+              raise SystemExit("display-mode canary did not restore the original mode")
+          PY
+
+      - name: Upload canary report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: appkit-display-mode-canary
+          path: build/appkit-display-mode-canary/report.json
+          if-no-files-found: warn
