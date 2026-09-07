@@ -38,6 +38,7 @@ public fun main() {
         "focus" -> focusScenario()
         "pagehide" -> attachScenario("pagehide")
         "host-owned" -> hostOwnedScenario()
+        "identity-no-expando" -> identityNoExpandoScenario()
         else -> phaseZeroScenario()
     }
     document.body!!.setAttribute("data-kadre-ready", "true")
@@ -88,6 +89,14 @@ private fun duplicateScenario() {
 private fun focusScenario() {
     attachAndObserve(createHost("focus-a"), "focus-a")
     attachAndObserve(createHost("focus-b"), "focus-b")
+}
+
+private fun identityNoExpandoScenario() {
+    val host = createHost("identity")
+    document.addEventListener("kadre-attach-identity", {
+        val attached = attachAndObserve(host, "identity")
+        document.body!!.setAttribute("data-kadre-identity-attach", describeAttach(attached))
+    })
 }
 
 private fun hostOwnedScenario() {

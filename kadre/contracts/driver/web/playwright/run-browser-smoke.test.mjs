@@ -119,6 +119,21 @@ test('a partial HTTP request is held through graceful drain and closed by forced
   );
 });
 
+test('GET /index.html with a scenario query serves the fixture HTML', {
+  timeout: 10_000,
+}, async (context) => {
+  const fixture = await createFixture('query-route');
+  context.after(() => fixture.dispose());
+
+  const result = await runSmoke(fixture).completion;
+
+  assert.equal(normalizedExitStatus(result), 0, result.stderr);
+  assert.equal(
+    await readFile(fixture.queryResponse, 'utf8'),
+    '<!doctype html><html><body><script src="/fixture.js"></script></body></html>',
+  );
+});
+
 test('successful cleanup atomically retains unreadable diagnostics without copying their contents', {
   skip: process.platform === 'win32' && 'Windows chmod does not provide a deterministic remove failure',
   timeout: 10_000,
@@ -245,6 +260,7 @@ async function createFixture(scenario, junit = validJunit) {
   const diagnosticPreservationRelease = join(root, 'diagnostic-preservation-release');
   const diagnosticCommitStarted = join(root, 'diagnostic-commit-started');
   const diagnosticCommitRelease = join(root, 'diagnostic-commit-release');
+  const queryResponse = join(root, 'query-response.html');
   const diagnostics = join(evidence, 'diagnostics', 'playwright');
   const diagnosticsParent = dirname(diagnostics);
   const diagnosticTraceDirectory = join(diagnostics, 'trace');
@@ -289,6 +305,7 @@ async function createFixture(scenario, junit = validJunit) {
     preservedDiagnosticMarker,
     preservedDiagnosticTraceDirectory,
     preservedDiagnostics,
+    queryResponse,
     diagnosticPreservationStarted,
     diagnosticPreservationRelease,
     diagnosticCommitStarted,
@@ -328,6 +345,7 @@ async function createFixture(scenario, junit = validJunit) {
       KADRE_RUNNER_TEST_HELD_CLIENT: heldClient,
       KADRE_RUNNER_TEST_HELD_CLIENT_PID: heldClientPid,
       KADRE_RUNNER_TEST_JUNIT: junit,
+      KADRE_RUNNER_TEST_QUERY_RESPONSE: queryResponse,
       KADRE_RUNNER_TEST_DIAGNOSTIC_PRESERVATION_STARTED: diagnosticPreservationStarted,
       KADRE_RUNNER_TEST_DIAGNOSTIC_PRESERVATION_RELEASE: diagnosticPreservationRelease,
       KADRE_RUNNER_TEST_DIAGNOSTIC_COMMIT_STARTED: diagnosticCommitStarted,
@@ -495,8 +513,17 @@ if (scenario === 'watchdog') {
   writeFileSync(process.env.KADRE_RUNNER_TEST_DESCENDANT_PID, String(descendant.pid));
   descendant.unref();
   waitForFile(process.env.KADRE_RUNNER_TEST_DESCENDANT_READY, 'descendant did not start').then(writeResults);
+} else if (scenario === 'query-route') {
+  requestFixtureWithQuery().then(writeResults);
 } else {
   writeResults();
+}
+
+async function requestFixtureWithQuery() {
+  const response = await fetch(process.env.KADRE_FIXTURE_URL + '?scenario=x');
+  if (response.status !== 200) throw new Error('query fixture returned HTTP ' + response.status);
+  const html = await response.text();
+  writeFileSync(process.env.KADRE_RUNNER_TEST_QUERY_RESPONSE, html);
 }
 
 async function waitForConnection() {

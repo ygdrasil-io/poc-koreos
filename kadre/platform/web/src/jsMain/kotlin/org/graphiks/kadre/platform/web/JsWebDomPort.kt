@@ -4,7 +4,6 @@ import org.w3c.dom.Document
 import org.w3c.dom.HTMLElement
 import org.w3c.dom.MutationObserver
 import org.w3c.dom.MutationObserverInit
-import org.w3c.dom.Node
 import org.w3c.dom.ShadowRoot
 import org.w3c.dom.Window
 import org.w3c.dom.events.Event
@@ -16,8 +15,9 @@ internal class JsWebDomPort(element: HTMLElement) : WebHostPort {
     private val originDocument: Document = checkNotNull(element.ownerDocument)
     private val originWindow: Window? = originDocument.defaultView
     private var lifecycleObserver: ((WebLifecycleSnapshot) -> Unit)? = null
-    private var mutationObserver: MutationObserver? = null
-    private var observedRoot: Node? = null
+    private var documentObserver: MutationObserver? = null
+    private var shadowRootObserver: MutationObserver? = null
+    private var observedShadowRoot: ShadowRoot? = null
     private var reconnectAnimationFrame: Int? = null
     private var active: Boolean = false
     private var browsingContextFocused: Boolean = originDocument.hasFocus()
@@ -69,8 +69,9 @@ internal class JsWebDomPort(element: HTMLElement) : WebHostPort {
         element?.addEventListener("focusin", subtreeFocusInListener)
         element?.addEventListener("focusout", subtreeFocusOutListener)
 
+        installDocumentObserver()
         val current = checkNotNull(element)
-        if (current.isConnected) installObserverForCurrentRoot(current) else scheduleReconnect()
+        if (current.isConnected) updateShadowRootObserver(current) else scheduleReconnect()
     }
 
     override fun release() {
@@ -82,13 +83,15 @@ internal class JsWebDomPort(element: HTMLElement) : WebHostPort {
         runCatching { originWindow?.removeEventListener("pagehide", pagehideListener) }
         runCatching { element?.removeEventListener("focusin", subtreeFocusInListener) }
         runCatching { element?.removeEventListener("focusout", subtreeFocusOutListener) }
-        runCatching { mutationObserver?.disconnect() }
+        runCatching { documentObserver?.disconnect() }
+        runCatching { shadowRootObserver?.disconnect() }
         reconnectAnimationFrame?.let { animationFrame ->
             runCatching { originWindow?.cancelAnimationFrame(animationFrame) }
         }
         reconnectAnimationFrame = null
-        observedRoot = null
-        mutationObserver = null
+        documentObserver = null
+        observedShadowRoot = null
+        shadowRootObserver = null
         lifecycleObserver = null
         element = null
     }
@@ -99,23 +102,35 @@ internal class JsWebDomPort(element: HTMLElement) : WebHostPort {
         if (!active || current.ownerDocument !== originDocument) return
         if (current.isConnected) {
             cancelReconnect()
-            installObserverForCurrentRoot(current)
+            updateShadowRootObserver(current)
         } else {
-            mutationObserver?.disconnect()
-            mutationObserver = null
-            observedRoot = null
+            disconnectShadowRootObserver()
             scheduleReconnect()
         }
     }
 
-    private fun installObserverForCurrentRoot(current: HTMLElement) {
-        val root = current.observationRoot() ?: return
-        if (observedRoot === root) return
-        mutationObserver?.disconnect()
+    private fun installDocumentObserver() {
+        check(documentObserver == null)
         val next = MutationObserver { _, _ -> safely { handleMutationBatch() } }
-        mutationObserver = next
-        observedRoot = root
-        next.observe(root, MutationObserverInit(childList = true, subtree = true))
+        documentObserver = next
+        next.observe(originDocument, MutationObserverInit(childList = true, subtree = true))
+    }
+
+    private fun updateShadowRootObserver(current: HTMLElement) {
+        val shadowRoot = current.getRootNode() as? ShadowRoot
+        if (observedShadowRoot === shadowRoot) return
+        disconnectShadowRootObserver()
+        if (shadowRoot == null) return
+        val next = MutationObserver { _, _ -> safely { handleMutationBatch() } }
+        shadowRootObserver = next
+        observedShadowRoot = shadowRoot
+        next.observe(shadowRoot, MutationObserverInit(childList = true, subtree = true))
+    }
+
+    private fun disconnectShadowRootObserver() {
+        shadowRootObserver?.disconnect()
+        shadowRootObserver = null
+        observedShadowRoot = null
     }
 
     private fun scheduleReconnect() {
@@ -127,7 +142,7 @@ internal class JsWebDomPort(element: HTMLElement) : WebHostPort {
                 val current = element ?: return@safely
                 deliverSnapshot()
                 if (!active || current.ownerDocument !== originDocument) return@safely
-                if (current.isConnected) installObserverForCurrentRoot(current) else scheduleReconnect()
+                if (current.isConnected) updateShadowRootObserver(current) else scheduleReconnect()
             }
         }
     }
@@ -172,10 +187,6 @@ private fun HTMLElement.surfaceSnapshot(): WebSurfaceSnapshot {
         physicalHeight = logicalHeight.toInt(),
         scaleFactor = 1.0,
     )
-}
-
-private fun HTMLElement.observationRoot(): Node? = getRootNode().let { root ->
-    if (root is Document || root is ShadowRoot) root else null
 }
 
 private external interface JsDocumentVisibility {

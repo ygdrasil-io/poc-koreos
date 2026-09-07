@@ -29,6 +29,24 @@ import kotlin.time.Duration.Companion.seconds
 
 class WebHostSessionTest {
     @Test
+    fun registryUsesReferentialIdentityWhenValuesAreEqual() {
+        val registry = WebHostRegistry()
+        val first = EqualityCollidingIdentity()
+        val second = EqualityCollidingIdentity()
+
+        val firstReservation = assertIs<KadreResult.Success<WebHostReservation>>(registry.reserve(first)).value
+        val secondReservation = assertIs<KadreResult.Success<WebHostReservation>>(registry.reserve(second)).value
+        assertEquals(
+            KadreResult.Failure(KadreFailure.AlreadyInUse(KadreResourceKind.Host)),
+            registry.reserve(first),
+        )
+
+        firstReservation.release()
+        assertIs<KadreResult.Success<WebHostReservation>>(registry.reserve(first)).value.release()
+        secondReservation.release()
+    }
+
+    @Test
     fun registryRejectsADuplicateReservationAndReleasesItExactlyOnce() {
         val registry = WebHostRegistry()
         val identity = Any()
@@ -252,5 +270,10 @@ class WebHostSessionTest {
         fun deliver(snapshot: WebLifecycleSnapshot) {
             checkNotNull(lifecycleObserver).invoke(snapshot)
         }
+    }
+
+    private class EqualityCollidingIdentity {
+        override fun equals(other: Any?): Boolean = other is EqualityCollidingIdentity
+        override fun hashCode(): Int = 1
     }
 }

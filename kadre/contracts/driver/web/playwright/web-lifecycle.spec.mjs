@@ -40,13 +40,27 @@ test('moving into a same-document ShadowRoot reinstalls observation on that root
 
   await page.locator('[data-kadre-host="shadow"]').evaluate((host) => {
     const shadowHost = document.createElement('section');
+    shadowHost.setAttribute('data-kadre-shadow-container', 'external');
     document.body.appendChild(shadowHost);
     shadowHost.attachShadow({ mode: 'open' }).appendChild(host);
   });
   await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => resolve())));
-  await page.locator('[data-kadre-host="shadow"]').evaluate((host) => host.remove());
+  await page.locator('[data-kadre-shadow-container="external"]').evaluate((container) => container.remove());
 
   await expect(page.locator('body')).toHaveAttribute('data-kadre-shadow-session', 'terminated');
+});
+
+test('attaching preserves the provided element own-property identity surface', async ({ page }) => {
+  await loadScenario(page, 'identity-no-expando');
+  const host = page.locator('[data-kadre-host="identity"]');
+  const propertiesBefore = await host.evaluate((element) => Object.getOwnPropertyNames(element).sort());
+
+  await page.evaluate(() => document.dispatchEvent(new Event('kadre-attach-identity')));
+  await expect(page.locator('body')).toHaveAttribute('data-kadre-identity-attach', 'success');
+
+  const propertiesAfter = await host.evaluate((element) => Object.getOwnPropertyNames(element).sort());
+  expect(propertiesAfter).toEqual(propertiesBefore);
+  expect(propertiesAfter.some((property) => property.includes('kotlinHashCodeValue'))).toBe(false);
 });
 
 test('an inter-document transfer terminates the session', async ({ page }) => {

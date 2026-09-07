@@ -11,17 +11,19 @@ import org.graphiks.kadre.diagnostics.KadreResult
  * and Wasm without allowing either DOM SDK type into this common source set.
  */
 internal class WebHostRegistry {
-    private val reservations = mutableSetOf<Any>()
+    private val reservations = mutableListOf<Any>()
 
     fun reserve(identity: Any): KadreResult<WebHostReservation> {
-        if (!reservations.add(identity)) {
+        if (reservations.any { reserved -> reserved === identity }) {
             return KadreResult.Failure(KadreFailure.AlreadyInUse(KadreResourceKind.Host))
         }
+        reservations.add(identity)
         return KadreResult.Success(WebHostReservation(this, identity))
     }
 
     internal fun release(identity: Any) {
-        reservations.remove(identity)
+        val reservationIndex = reservations.indexOfFirst { reserved -> reserved === identity }
+        if (reservationIndex >= 0) reservations.removeAt(reservationIndex)
     }
 
     internal companion object {
