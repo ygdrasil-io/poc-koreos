@@ -11,6 +11,8 @@ import org.graphiks.kadre.application.KadreSession
 import org.graphiks.kadre.diagnostics.KadreFailure
 import org.graphiks.kadre.diagnostics.KadreOperation
 import org.graphiks.kadre.diagnostics.KadreResult
+import org.graphiks.kadre.surface.LogicalSize
+import org.graphiks.kadre.surface.PhysicalSize
 import org.graphiks.kadre.surface.SurfaceAttachmentState
 import org.graphiks.kadre.window.WindowRequestOutcome
 import org.graphiks.kadre.window.WindowSpec
@@ -40,6 +42,8 @@ class JsWebAttachTest {
 
         assertEquals(before, document.getElementsByTagName("*").length)
         assertNotNull(scope.primarySurface.value)
+        assertEquals(LogicalSize(320.0, 180.0), scope.primarySurface.value!!.state.value.logicalSize)
+        assertEquals(PhysicalSize(320, 180), scope.primarySurface.value!!.state.value.physicalSize)
         assertNull(scope.windows.state.value.primary)
         assertTrue(scope.windows.state.value.windows.isEmpty())
 
@@ -90,5 +94,9 @@ class JsWebAttachTest {
     }
 
     private fun existingHostElement(): HTMLElement =
-        (document.createElement("div") as HTMLElement).also(document.body!!::appendChild)
+        (document.createElement("div") as HTMLElement).also {
+            it.style.width = "320px"
+            it.style.height = "180px"
+            document.body!!.appendChild(it)
+        }
 }

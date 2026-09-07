@@ -3,6 +3,7 @@
 import org.gradle.jvm.tasks.Jar
 import org.jetbrains.kotlin.gradle.tasks.BaseKotlinCompile
 import org.jetbrains.kotlin.gradle.tasks.Kotlin2JsCompile
+import org.jetbrains.kotlin.gradle.tasks.KotlinCompileCommon
 import java.io.File
 
 plugins {
@@ -14,6 +15,8 @@ group = "org.graphiks.kadre.internal"
 
 val foundationJvmJar = project(":kadre:foundation").tasks.named<Jar>("jvmJar")
 val foundationProject = project(":kadre:foundation")
+val foundationAllMetadataJar = foundationProject.tasks.named<Jar>("allMetadataJar")
+val foundationCommonMainMetadata = foundationProject.layout.buildDirectory.dir("classes/kotlin/metadata/commonMain")
 val foundationJsMain = foundationProject.layout.buildDirectory.dir("classes/kotlin/js/main")
 val foundationWasmJsMain = foundationProject.layout.buildDirectory.dir("classes/kotlin/wasmJs/main")
 val runtimeJsMain = layout.buildDirectory.dir("classes/kotlin/js/main")
@@ -46,6 +49,13 @@ tasks.withType<BaseKotlinCompile>().configureEach {
     if (name.endsWith("Jvm")) {
         dependsOn(foundationJvmJar)
         friendPaths.from(foundationJvmJar.flatMap(Jar::getArchiveFile))
+    }
+}
+
+tasks.withType<KotlinCompileCommon>().configureEach {
+    if (name == "compileCommonMainKotlinMetadata" || name == "compileWebMainKotlinMetadata") {
+        dependsOn(foundationAllMetadataJar)
+        friendPaths.from(foundationCommonMainMetadata)
     }
 }
 

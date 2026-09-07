@@ -1,3 +1,5 @@
+@file:OptIn(org.jetbrains.kotlin.gradle.ExperimentalWasmDsl::class)
+
 plugins {
     id("org.jetbrains.kotlin.multiplatform")
     id("maven-publish")
@@ -44,6 +46,7 @@ val contractPublications = tasks.register("publishContractArtifacts") {
     dependsOn(":kadre:foundation:publishAllPublicationsToContractTestRepository")
     dependsOn(":kadre:backend:appkit:publishAllPublicationsToContractTestRepository")
     dependsOn(":kadre:platform:desktop:publishAllPublicationsToContractTestRepository")
+    dependsOn(":kadre:platform:web:publishAllPublicationsToContractTestRepository")
     dependsOn(":kadre:runtime:publishAllPublicationsToContractTestRepository")
 }
 

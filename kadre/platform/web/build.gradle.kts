@@ -1,6 +1,9 @@
 @file:OptIn(org.jetbrains.kotlin.gradle.ExperimentalWasmDsl::class)
 
+import org.gradle.jvm.tasks.Jar
+import org.jetbrains.kotlin.gradle.tasks.BaseKotlinCompile
 import org.jetbrains.kotlin.gradle.tasks.Kotlin2JsCompile
+import org.jetbrains.kotlin.gradle.tasks.KotlinCompileCommon
 import java.io.File
 
 plugins {
@@ -9,6 +12,8 @@ plugins {
 }
 
 val foundationProject = project(":kadre:foundation")
+val foundationAllMetadataJar = foundationProject.tasks.named<Jar>("allMetadataJar")
+val foundationCommonMainMetadata = foundationProject.layout.buildDirectory.dir("classes/kotlin/metadata/commonMain")
 val runtimeProject = project(":kadre:runtime")
 val foundationJsMain = foundationProject.layout.buildDirectory.dir("classes/kotlin/js/main")
 val foundationWasmJsMain = foundationProject.layout.buildDirectory.dir("classes/kotlin/wasmJs/main")
@@ -32,8 +37,15 @@ kotlin {
             implementation(libs.kotlinx.coroutines.test)
         }
         wasmJsMain.dependencies {
-            implementation("org.jetbrains.kotlinx:kotlinx-browser:0.5.0")
+            api("org.jetbrains.kotlinx:kotlinx-browser:0.5.0")
         }
+    }
+}
+
+tasks.withType<KotlinCompileCommon>().configureEach {
+    if (name == "compileCommonMainKotlinMetadata" || name == "compileWebMainKotlinMetadata") {
+        dependsOn(foundationAllMetadataJar)
+        friendPaths.from(foundationCommonMainMetadata)
     }
 }
 

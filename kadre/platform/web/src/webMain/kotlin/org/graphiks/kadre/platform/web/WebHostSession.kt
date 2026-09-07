@@ -56,8 +56,14 @@ internal data class WebSurfaceSnapshot(
     val scaleFactor: Double,
 )
 
+internal interface WebHostPort {
+    val initialSnapshot: WebSurfaceSnapshot
+
+    fun release()
+}
+
 internal class WebHostSession(
-    private val snapshot: WebSurfaceSnapshot,
+    private val port: WebHostPort,
 ) {
     fun attach(
         parentScope: CoroutineScope,
@@ -66,7 +72,7 @@ internal class WebHostSession(
     ): KadreResult<KadreSession> = RuntimeHostController.withPrimarySurface(
         platform = KadrePlatform.Web,
         primarySurfaceFactory = { id ->
-            val surface = WebHostSurface(id, snapshot)
+            val surface = WebHostSurface(id, port)
             RuntimePrimarySurface(surface, surface::detach)
         },
     ).attach(parentScope, applicationFactory, policy)
@@ -74,15 +80,15 @@ internal class WebHostSession(
 
 private class WebHostSurface(
     override val id: SurfaceId,
-    snapshot: WebSurfaceSnapshot,
+    private val port: WebHostPort,
 ) : HostSurface {
     private var detached: Boolean = false
     private val mutableState = MutableStateFlow(
         SurfaceState(
             attachment = SurfaceAttachmentState.Attached,
-            logicalSize = LogicalSize(snapshot.logicalWidth, snapshot.logicalHeight),
-            physicalSize = PhysicalSize(snapshot.physicalWidth, snapshot.physicalHeight),
-            scaleFactor = snapshot.scaleFactor,
+            logicalSize = LogicalSize(port.initialSnapshot.logicalWidth, port.initialSnapshot.logicalHeight),
+            physicalSize = PhysicalSize(port.initialSnapshot.physicalWidth, port.initialSnapshot.physicalHeight),
+            scaleFactor = port.initialSnapshot.scaleFactor,
             safeAreaInsets = LogicalInsets(0.0, 0.0, 0.0, 0.0),
             visibility = SurfaceVisibility.Visible,
             occlusion = SurfaceOcclusion.Visible,
@@ -117,11 +123,15 @@ private class WebHostSurface(
     fun detach() {
         if (detached) return
         detached = true
-        val current = mutableState.value
-        mutableState.value = current.copy(
-            attachment = SurfaceAttachmentState.Detached,
-            revision = SurfaceRevision(current.revision.value + 1L),
-        )
+        try {
+            val current = mutableState.value
+            mutableState.value = current.copy(
+                attachment = SurfaceAttachmentState.Detached,
+                revision = SurfaceRevision(current.revision.value + 1L),
+            )
+        } finally {
+            port.release()
+        }
     }
 }
 

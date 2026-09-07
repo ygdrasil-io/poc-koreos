@@ -31,7 +31,7 @@ public fun HTMLElement.attachKadre(
     windowProvider: WebWindowProvider? = null,
 ): KadreResult<KadreSession> {
     if (!isConnected) return KadreResult.Failure(KadreFailure.InvalidRequest("element"))
-    return WebHostSession(snapshot()).attach(parentScope, applicationFactory, policy)
+    return WebHostSession(JsWebHostPort(this)).attach(parentScope, applicationFactory, policy)
 }
 
 public fun HTMLElement.attachKadre(
@@ -45,6 +45,16 @@ public fun HTMLElement.attachKadre(
     policy = policy,
     attachmentPolicy = attachmentPolicy,
 )
+
+private class JsWebHostPort(element: HTMLElement) : WebHostPort {
+    private var element: HTMLElement? = element
+
+    override val initialSnapshot: WebSurfaceSnapshot = element.snapshot()
+
+    override fun release() {
+        element = null
+    }
+}
 
 private fun HTMLElement.snapshot(): WebSurfaceSnapshot {
     val logicalWidth = max(clientWidth.toDouble(), 1.0)
