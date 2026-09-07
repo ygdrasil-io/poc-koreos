@@ -22,7 +22,18 @@
 - Keep `LifecycleCapabilities.memoryPressure` unsupported in this phase. `APK-018` observes the public `Unsupported` capability only; no test proves silence by waiting.
 - Kextract and KFFI PRs may stack and KFFI may be published locally for dependent Kadre tests. No Kadre PR merges with a temporary artifact coordinate.
 - Each new active contract row has every ID in **Contract evidence allocation** mapped in `evidence.tsv`, and `:kadre:contracts:validator:check` remains green.
+- `kadre/contracts/validator/build.gradle.kts` is extended before activation so its explicit AppKit and runtime gate lists contain every contract in the allocation table. `check` generates and validates both AppKit and runtime evidence; no newly active contract can be omitted merely because its prefix was absent from the original lists.
 - The plans and design docs under `docs/superpowers/` are removed in the final implementation-cleanup PR before its final review, not before their implementation tasks have an approved replacement.
+
+## Recorded CI feasibility decision
+
+On 2026-09-07, the manually dispatched `macos-15` display-mode canary observed
+one ephemeral display with twelve modes, captured it, selected an alternate
+mode, read the candidate back, restored the original mode, and released the
+capture. Every CoreGraphics result was `0`. The final `APK-016` proof may
+therefore use a manually dispatched controlled CI canary. It must exercise the
+generated Kadre path after Task 12; ordinary PR checks never change a display
+mode.
 
 ---
 
@@ -139,7 +150,7 @@ public enum class RawInputOverflowAction {
 - Create: `kadre/runtime/src/jvmMain/kotlin/org/graphiks/kadre/internal/runtime/RawInputCoordinator.kt`
 - Modify: `kadre/runtime/src/jvmMain/kotlin/org/graphiks/kadre/internal/runtime/{RuntimeSessionComponents,MinimalWindowSurface,RuntimeWindowManager,RuntimeDiagnostics}.kt`
 - Create: `kadre/runtime/src/jvmTest/kotlin/org/graphiks/kadre/internal/runtime/RawInputCoordinatorTest.kt`
-- Modify: `kadre/runtime/contracts/evidence.tsv`, `kadre/contracts/registry/contracts.tsv`, `kadre/TEST-STRATEGY.md`
+- Modify: `kadre/runtime/contracts/evidence.tsv`, `kadre/contracts/registry/contracts.tsv`, `kadre/contracts/validator/build.gradle.kts`, `kadre/contracts/validator/src/jvmTest/kotlin/org/graphiks/kadre/contracts/ContractRegistryTest.kt`, `kadre/TEST-STRATEGY.md`
 
 **Consumes:** Task 1 declarations and existing runtime collector admission/diagnostics facilities.
 
@@ -147,27 +158,27 @@ public enum class RawInputOverflowAction {
 
 ```kotlin
 internal interface RawInputPort : AutoCloseable {
-    public val events: Flow<RawInputPortEvent>
     suspend fun requestAccess(): KadreResult<RawInputPortLease>
     override fun close()
 }
 
-internal sealed interface RawInputPortEvent {
-    public data class Input(public val event: RawInputEvent) : RawInputPortEvent
-    public data class Availability(public val availability: FeatureAvailability) : RawInputPortEvent
-    public data class Terminal(public val failure: KadreFailure) : RawInputPortEvent
+internal sealed interface RawInputPortLeaseEvent {
+    public data class Input(public val event: RawInputEvent) : RawInputPortLeaseEvent
+    public data class Availability(public val availability: FeatureAvailability) : RawInputPortLeaseEvent
+    public data class Terminal(public val failure: KadreFailure) : RawInputPortLeaseEvent
 }
 
 internal interface RawInputPortLease : AutoCloseable {
+    public val events: Flow<RawInputPortLeaseEvent>
     override fun close()
 }
 ```
 
-`RawInputPort`, `RawInputPortLease`, and `RawInputCoordinator` are the exact internal names for this phase. The port exposes only Kadre values and callback registration, never AppKit/KFFI types.
+`RawInputPort`, `RawInputPortLease`, and `RawInputCoordinator` are the exact internal names for this phase. `requestAccess()` creates one independent native registration; `RawInputPortLease.events` belongs only to that registration. The port exposes only Kadre values and callback registration, never AppKit/KFFI types.
 
 - [ ] **Step 1: Write independent O2 trace tests.**
 
-  Create a deterministic fake port and model traces covering: two accesses on one surface and two surfaces receive the same copied event; each access has a separate capacity; drop-oldest/drop-latest produce one `EventLoss`; `CloseAccess` closes only its own flow with `KadreException(SourceOverflow(RawInputAccess))`; budget exhaustion happens before permission/native admission; permission waiter cancellation only removes that waiter; revocation orders capability then all suspended accesses then source stop; recovery returns those accesses to `Active`; detach/window/session close normally closes descendants.
+  Create a deterministic fake port that returns one independently controlled `RawInputPortLease` per `requestAccess()`. Model traces covering: two accesses on one surface and two surfaces receive the same copied event through distinct lease flows; cancelling or closing one lease never cancels another; each access has a separate capacity; drop-oldest/drop-latest produce one `EventLoss`; `CloseAccess` closes only its own flow with `KadreException(SourceOverflow(RawInputAccess))`; budget exhaustion happens before permission/native admission; permission waiter cancellation only removes that waiter; revocation orders capability then all suspended accesses then source stop; recovery returns those accesses to `Active`; detach/window/session close normally closes descendants.
 
 - [ ] **Step 2: Run the new O2 test class and verify it fails before coordinator implementation.**
 
@@ -177,11 +188,11 @@ internal interface RawInputPortLease : AutoCloseable {
 
 - [ ] **Step 3: Implement admission, lifecycle, and per-access queues.**
 
-  Give every access a private queue constructed from `policy.input.rawInput`, keep the session counter under `maxConcurrentRawInputAccesses`, and make the port registration fan out copied `RawInputEvent` values. A slow or closed access is removed independently. Surface lifecycle ownership, rather than focus, determines closure. `SurfaceInput.events` and ordinary input reducers must never receive raw stimuli.
+  Give every access a private queue constructed from `policy.input.rawInput`, keep the session counter under `maxConcurrentRawInputAccesses`, and subscribe the access only to its returned lease flow. The coordinator never creates a shared raw stream or forwards an event between leases: process-wide fan-out is the backend broker's responsibility. A slow or closed access is removed independently. Surface lifecycle ownership, rather than focus, determines closure. `SurfaceInput.events` and ordinary input reducers must never receive raw stimuli.
 
 - [ ] **Step 4: Register the complete planned O2 contract without activating it.**
 
-  Add `INP-002` with `status=planned`, the six scenarios and five sentinels from the allocation table, and the matching `runtime` mappings after the tests exist. Leave raw input capability unsupported until Task 5 completes its O3 bridge and Task 12 changes the registry state.
+  Add every new allocation-table contract row with `status=planned` so the gate can refer to a complete, known registry from this stack onward. Add the six `INP-002` scenarios and five sentinels plus its matching runtime mappings after the tests exist. In `validator/build.gradle.kts`, add every allocation-table ID to explicit `appKitContractIds` or `runtimeContractIds` lists, make the lists a partition of the complete evidence-gate list, and make `check` depend on `generateAppKitContractEvidence` as well as runtime/browser evidence. Extend `ContractRegistryTest` with one planned contract from each new producer list and one active contract that fails when it is absent from its producer list. Leave raw input capability unsupported until Task 5 completes its O3 bridge and Task 12 changes the registry state.
 
 - [ ] **Step 5: Verify and commit.**
 
@@ -198,8 +209,8 @@ internal interface RawInputPortLease : AutoCloseable {
 
 **Files:**
 - Modify: `kadre/KFFI-REQUIREMENTS.md`
-- External Kextract checkout: `/Users/chaos/workspace/wgpu4k-native/kextract`
-- External KFFI checkout: `/Users/chaos/workspace/graphiks-kffi/kffi`
+- External Kextract checkout: `/Users/chaos/workspace/graphiks-kffi/third_party/kextract`
+- External KFFI checkout: `/Users/chaos/workspace/graphiks-kffi`
 
 **Consumes:** The raw bridge requirements in spec section 3.2.
 
@@ -211,7 +222,7 @@ internal interface RawInputPortLease : AutoCloseable {
 
 - [ ] **Step 2: Run the KFFI test against the published base artifact.**
 
-  Run from the KFFI checkout: `rtk ./gradlew jvmTest --tests '*RawInput*'`
+  Run from the KFFI checkout: `rtk ./gradlew :kffi-objc:jvmTest --tests '*RawInput*'`
 
   Expected: either PASS with all declarations generated or a compilation failure naming each absent generated declaration.
 
@@ -230,7 +241,7 @@ internal interface RawInputPortLease : AutoCloseable {
 ### Task 4: Regenerate, validate, and locally publish KFFI raw-input bindings
 
 **Files:**
-- External KFFI checkout: `/Users/chaos/workspace/graphiks-kffi/kffi`
+- External KFFI checkout: `/Users/chaos/workspace/graphiks-kffi`
 - Modify in KFFI: generated binding output and its generated-source macOS tests only
 - Modify: `kadre/build.gradle.kts` only while resolving the local KFFI artifact for dependent stack validation
 
@@ -244,7 +255,7 @@ internal interface RawInputPortLease : AutoCloseable {
 
 - [ ] **Step 2: Run KFFI generation and native tests.**
 
-  Run the guide-mandated generation verification plus `rtk ./gradlew jvmTest --tests '*RawInput*'`. Expected: the binding test proves callback owner revocation and does not assert Kadre behavior.
+  Run the guide-mandated generation verification plus `rtk ./gradlew :kffi-objc:jvmTest --tests '*RawInput*'`. Expected: the binding test proves callback owner revocation and does not assert Kadre behavior.
 
 - [ ] **Step 3: Publish a local snapshot and make Kadre consume it only for this stack.**
 
@@ -321,7 +332,7 @@ public enum class SurfaceContrast { Standard, Increased, Unknown }
 
 - [ ] **Step 1: Write failing API/value tests and compile consumers.**
 
-  Test unforgeable/opaque `DisplayModeId`, distinct modes with identical scalar descriptions, display removal requiring terminal `Disconnected`, `SurfaceContrast` closed values, and one appearance event for a changed `(theme, contrast)` pair. Update consumer code to require the new `DisplayMode.id` and `AppearanceChanged`.
+  Test unforgeable/opaque `DisplayModeId`, value equality/hash-code consistency and stable diagnostic `toString()` for equal and unequal IDs, distinct modes with identical scalar descriptions, display removal requiring terminal `Disconnected`, `SurfaceContrast` closed values, and one appearance event for a changed `(theme, contrast)` pair. Update consumer code to require the new `DisplayMode.id` and `AppearanceChanged`.
 
 - [ ] **Step 2: Run the focused checks before implementation.**
 
@@ -343,8 +354,10 @@ public enum class SurfaceContrast { Standard, Increased, Unknown }
 
 **Files:**
 - Create: `kadre/runtime/src/jvmMain/kotlin/org/graphiks/kadre/internal/runtime/{DisplayPort,DisplayCoordinator}.kt`
+- Create: `kadre/runtime/src/jvmMain/kotlin/org/graphiks/kadre/internal/runtime/OuterGeometryReducer.kt`
 - Modify: `kadre/runtime/src/jvmMain/kotlin/org/graphiks/kadre/internal/runtime/{RuntimeSessionComponents,RuntimeWindowManager,MinimalWindowSurface,UnsupportedManagers}.kt`
 - Create: `kadre/runtime/src/jvmTest/kotlin/org/graphiks/kadre/internal/runtime/DisplayCoordinatorTest.kt`
+- Create: `kadre/runtime/src/jvmTest/kotlin/org/graphiks/kadre/internal/runtime/OuterGeometryReducerTest.kt`
 - Modify: `kadre/runtime/contracts/evidence.tsv`, `kadre/contracts/registry/contracts.tsv`, `kadre/{TEST-STRATEGY,OPERATION-CONTRACTS}.md`
 
 **Consumes:** Task 6 public model.
@@ -371,7 +384,7 @@ complete fingerprinted mode list. It is never public and is consumed only by
 
 - [ ] **Step 1: Write model-based O2 traces.**
 
-  Cover coherent complete snapshot publication, only-added mode fingerprint IDs, unchanged-fingerprint stability, terminal `Disconnected → inventory without handle → Removed` ordering, a reconnection receiving a new `DisplayId`, invalid/unknown inventory behavior, no mode-list fabrication, half-open physical point ownership, negative coordinates, and surface state-before-appearance-event/no-change suppression. Add deterministic unsupported-memory tests to `RUN-008` only.
+  Cover coherent complete snapshot publication, only-added mode fingerprint IDs, unchanged-fingerprint stability, terminal `Disconnected → inventory without handle → Removed` ordering, a reconnection receiving a new `DisplayId`, invalid/unknown inventory behavior, no mode-list fabrication, half-open physical point ownership, negative coordinates, and surface state-before-appearance-event/no-change suppression. In `OuterGeometryReducerTest`, cover state-before-event for an externally supplied contained readback, `outerBounds = null` for a straddling readback, a contained-after-straddling fresh republish, and rejection of a half-open-gap position without fabricating a physical rectangle or applying scale. Add deterministic unsupported-memory tests to `RUN-008` only.
 
 - [ ] **Step 2: Run the test class and confirm it fails.**
 
@@ -381,7 +394,7 @@ complete fingerprinted mode list. It is never public and is consumed only by
 
 - [ ] **Step 3: Implement projection with no native leakage.**
 
-  Feed immutable snapshots into the coordinator. It owns `DisplayId`, `DisplayModeId`, handles and revisions; native fingerprints/mode handles stay in the port. Publish `DisplayManager.state` before display events and preserve final handles. Route scale and `(theme, contrast)` together through the existing surface stimulus path. Leave memory pressure structurally unsupported.
+  Feed immutable snapshots into the coordinator. It owns `DisplayId`, `DisplayModeId`, handles and revisions; native fingerprints/mode handles stay in the port. `OuterGeometryReducer` accepts only a port readback already expressed in the global physical coordinate space, performs contained/straddling and half-open target validation, and never converts AppKit points or derives a scale. Publish `DisplayManager.state` before display events and preserve final handles. Route scale and `(theme, contrast)` together through the existing surface stimulus path. Leave memory pressure structurally unsupported.
 
 - [ ] **Step 4: Register all common contract evidence.**
 
@@ -397,8 +410,8 @@ complete fingerprinted mode list. It is never public and is consumed only by
 
 **Files:**
 - Modify: `kadre/KFFI-REQUIREMENTS.md`
-- External Kextract checkout: `/Users/chaos/workspace/wgpu4k-native/kextract`
-- External KFFI checkout: `/Users/chaos/workspace/graphiks-kffi/kffi`
+- External Kextract checkout: `/Users/chaos/workspace/graphiks-kffi/third_party/kextract`
+- External KFFI checkout: `/Users/chaos/workspace/graphiks-kffi`
 
 **Consumes:** Spec sections 4–5 and Task 7 ports.
 
@@ -410,7 +423,7 @@ complete fingerprinted mode list. It is never public and is consumed only by
 
 - [ ] **Step 2: Run the binding tests before Kextract changes.**
 
-  Run from KFFI: `rtk ./gradlew jvmTest --tests '*Display*' --tests '*Appearance*'`
+  Run from KFFI: `rtk ./gradlew :kffi-objc:jvmTest --tests '*Display*' --tests '*Appearance*'`
 
   Expected: compile failures enumerate any missing generated primitive.
 
@@ -429,7 +442,7 @@ complete fingerprinted mode list. It is never public and is consumed only by
 ### Task 9: Regenerate, validate, and locally publish KFFI display bindings
 
 **Files:**
-- External KFFI checkout: `/Users/chaos/workspace/graphiks-kffi/kffi`
+- External KFFI checkout: `/Users/chaos/workspace/graphiks-kffi`
 - Modify in KFFI: generator output, generated-source macOS tests, and Kextract dependency pin
 - Modify: `kadre/build.gradle.kts` only for temporary local test resolution
 
@@ -443,7 +456,7 @@ complete fingerprinted mode list. It is never public and is consumed only by
 
 - [ ] **Step 2: Run KFFI native binding tests and local publish.**
 
-  Run the guide-mandated generation check and `rtk ./gradlew jvmTest --tests '*Display*' --tests '*Appearance*'`, then publish the local snapshot.
+  Run the guide-mandated generation check and `rtk ./gradlew :kffi-objc:jvmTest --tests '*Display*' --tests '*Appearance*'`, then publish the local snapshot.
 
 - [ ] **Step 3: Compile Kadre against that exact local snapshot.**
 
@@ -478,7 +491,7 @@ complete fingerprinted mode list. It is never public and is consumed only by
 
 - [ ] **Step 3: Implement broker snapshots and the coordinate transform exactly.**
 
-  `AppKitDisplayBroker` owns only native display observation and full immutable snapshots; the session port feeds Task 7. For bounds, require the whole `NSWindow.frame` to lie in one `NSScreen.frame`; convert both the window frame and screen frame with `convertRectToBacking`, subtract the screen backing origin, add the matching `CGDisplayBounds` origin, and invert y. For mutation, reverse those exact operations and use `convertRectFromBacking`. Never derive physical coordinates by multiplying `backingScaleFactor`; return `outerBounds = null` for straddling.
+  `AppKitDisplayBroker` owns only native display observation and full immutable snapshots; the session port feeds Task 7. For bounds, require the whole `NSWindow.frame` to lie in one `NSScreen.frame`; convert both the window frame and screen frame with `convertRectToBacking`, subtract the screen backing origin, add the matching `CGDisplayBounds` origin, and invert y. Send only the resulting global physical readback to Task 7's `OuterGeometryReducer`. For mutation, reverse those exact operations and use `convertRectFromBacking`. Never derive physical coordinates by multiplying `backingScaleFactor`; return `outerBounds = null` for straddling.
 
 - [ ] **Step 4: Add the manual display protocol.**
 
@@ -500,7 +513,7 @@ complete fingerprinted mode list. It is never public and is consumed only by
 
 **Consumes:** Task 7 display handles/mode IDs and the existing borderless fullscreen barrier.
 
-**Produces:** A process-wide logical lease protocol and portable window-request/update rules for exclusive mode.
+**Produces:** A process-wide logical lease authority injected into session-local coordinators, plus portable window-request/update rules for exclusive mode. The AppKit process broker creates exactly one authority for the process in Task 12; no `RuntimeSessionComponents` constructor creates a private replacement.
 
 ```kotlin
 internal interface ExclusiveDisplayPort {
@@ -516,7 +529,7 @@ only the internal display fingerprint/native key and never expose a KFFI handle.
 
 - [ ] **Step 1: Write model-based exclusive traces.**
 
-  Test capability domain `{Borderless}` while exclusive is absent/quarantined and `{Borderless, Exclusive}` only when fully admitted; initial exclusive request reserves before native peer publication; invalid/stale mode is rejected exactly; same owner/same mode is no-op; same owner mode change rolls back; cross-display reservation retains old lease until target commit; pre-capture cancellation outcomes; post-capture request coroutine cancellation ends internally as `RequesterDetached` with no published orphan; `await()` cancellation does not cancel; display loss publishes windowed effective state then an uncorrelated event; restore failure quarantines the display and excludes every session.
+  Test capability domain `{Borderless}` while exclusive is absent/quarantined and `{Borderless, Exclusive}` only when fully admitted; two independent `RuntimeSessionComponents` injected with the same authority cannot acquire the same display; initial exclusive request reserves before native peer publication; invalid/stale mode is rejected exactly; same owner/same mode is no-op; same owner mode change rolls back; cross-display reservation retains old lease until target commit; pre-capture cancellation outcomes; post-capture request coroutine cancellation ends internally as `RequesterDetached` with no published orphan; `await()` cancellation does not cancel; display loss publishes windowed effective state then an uncorrelated event; restore failure quarantines the display and excludes every session.
 
 - [ ] **Step 2: Run focused tests and verify failure.**
 
@@ -526,7 +539,7 @@ only the internal display fingerprint/native key and never expose a KFFI handle.
 
 - [ ] **Step 3: Implement serialised lease and cancellation authority.**
 
-  Model only commands/readbacks in the runtime port. The coordinator owns no `DisplayId` allocation or native mode handle; it serializes process-wide display leases, retains a lease through target commit, and quarantines a lease until mode restoration, capture release, and fresh readback all reconcile. `Window.apply` waits for terminal native authority; it cannot return `Accepted` for an unfinished exclusive transition.
+  Model only commands/readbacks in the runtime port. The injected authority, rather than a session-local coordinator, serializes process-wide display leases; the coordinator owns no `DisplayId` allocation or native mode handle. It retains a lease through target commit and quarantines a lease until mode restoration, capture release, and fresh readback all reconcile. `Window.apply` waits for terminal native authority; it cannot return `Accepted` for an unfinished exclusive transition.
 
 - [ ] **Step 4: Complete the O2 mappings.**
 
@@ -543,8 +556,12 @@ only the internal display fingerprint/native key and never expose a KFFI handle.
 **Files:**
 - Create: `kadre/backend/appkit/src/jvmMain/kotlin/org/graphiks/kadre/internal/appkit/AppKitExclusiveDisplayPort.kt`
 - Modify: `kadre/backend/appkit/src/jvmMain/kotlin/org/graphiks/kadre/internal/appkit/{AppKitDisplayBroker,AppKitWindowRuntimeDriver,AppKitNativeWindowPort,KffiAppKitWindowPort,AppKitBackendProvider}.kt`
+- Modify: `kadre/backend/appkit/src/jvmMain/kotlin/org/graphiks/kadre/internal/appkit/AppKitProcessBroker.kt`
 - Modify: `kadre/backend/appkit/src/jvmTest/kotlin/org/graphiks/kadre/internal/appkit/{AppKitBackendProviderTest,AppKitWindowRuntimeDriverTest,KffiAppKitWindowPortMacOsTest}.kt`
+- Create: `kadre/backend/appkit/src/jvmTest/kotlin/org/graphiks/kadre/internal/appkit/AppKitExclusiveDisplayModeCanaryTest.kt`
 - Create: `kadre/backend/appkit/manual/{Phase9ExclusiveHarness.kt,phase-9-exclusive-fullscreen.md}`
+- Modify: `.github/workflows/kadre-appkit-display-mode-canary.yml`
+- Delete: `scripts/appkit-display-mode-canary.swift`, `scripts/test-appkit-display-mode-canary.sh`
 - Modify: `kadre/{DESIGN,PUBLIC-API-CATALOG,OPERATION-CONTRACTS,BACKEND-CAPABILITIES,POLICY-PROFILES,KFFI-REQUIREMENTS,INTEROP-EXPORTS,APPKIT-IMPLEMENTATION-ROADMAP,TEST-STRATEGY}.md`
 - Modify: `kadre/{runtime,backend/appkit}/contracts/evidence.tsv`, `kadre/contracts/registry/contracts.tsv`
 - Delete before final review: `docs/superpowers/specs/2026-09-07-appkit-phases-8-9-design.md`, `docs/superpowers/plans/2026-09-07-appkit-phases-8-9.md`
@@ -555,7 +572,7 @@ only the internal display fingerprint/native key and never expose a KFFI handle.
 
 - [ ] **Step 1: Write O3 tests at the public AppKit boundary.**
 
-  Verify the generated capture/release/mode APIs are used through the port; no missing bridge leaves `Borderless` unsupported; initial exclusive windows stay unpublished until terminal; a user cancellation after capture does not roll back the native transition; released/removed display yields the effective `Windowed` state before failure/event; a failed restoration quarantines; subsequent sessions cannot acquire it; and normal exit restores mode/releases capture. Include `APK-018` only as direct public observation of unsupported memory pressure.
+  Verify the generated capture/release/mode APIs are used through the port; no missing bridge leaves `Borderless` unsupported; the `AppKitProcessBroker` injects one lease authority into two sessions; initial exclusive windows stay unpublished until terminal; a user cancellation after capture does not roll back the native transition; released/removed display yields the effective `Windowed` state before failure/event; a failed restoration quarantines; subsequent sessions cannot acquire it; and normal exit restores mode/releases capture. `AppKitExclusiveDisplayModeCanaryTest` is opt-in through `-PkadreAppKitDisplayModeCanary=true`, enters exclusive mode through the public Kadre API, asserts candidate readback and original-mode restoration, and writes evidence for the workflow. Include `APK-018` only as direct public observation of unsupported memory pressure.
 
 - [ ] **Step 2: Run focused AppKit tests and prove they fail first.**
 
@@ -565,11 +582,11 @@ only the internal display fingerprint/native key and never expose a KFFI handle.
 
 - [ ] **Step 3: Implement the AppKit port without leaking KFFI.**
 
-  The port performs capture, native mode change, window configuration/readback, restoration, and release on its native owner thread. It reports immutable completion/readback stimuli only. On any restoration failure it reports cleanup failure and lets Task 11 preserve quarantine. It must not make a test-only mode change, expose native identifiers, or write any FFI code outside generated KFFI calls.
+  The port performs capture, native mode change, window configuration/readback, restoration, and release on its native owner thread. It reports immutable completion/readback stimuli only. `AppKitProcessBroker` creates exactly one injected lease authority for all AppKit sessions. On any restoration failure it reports cleanup failure and lets Task 11 preserve quarantine. It must not expose native identifiers or write any FFI code outside generated KFFI calls.
 
 - [ ] **Step 4: Finalize manual protocol and all activation documentation.**
 
-  The manual protocol covers real multi-display mode entry/exit, mode restoration after app close, display removal during exclusive, permission denial/recovery for raw input, and expected diagnostics. Update every normative document in the file list, including `INTEROP-EXPORTS.md`, to match the final public ABI. Mark `INP-002`, `APK-013`, `DSP-001`, `APK-014`, `WIN-007`, `APK-015`, `WIN-008`, `APK-016`, `RUN-007`, `APK-017`, `RUN-008`, and `APK-018` active only if every allocation-table mapping is executable.
+  The manual protocol covers real multi-display mode entry/exit, mode restoration after app close, display removal during exclusive, permission denial/recovery for raw input, and expected diagnostics. Replace the exploratory Swift canary with a `workflow_dispatch` job that runs `AppKitExclusiveDisplayModeCanaryTest` with its opt-in Gradle property, uploads its evidence, and fails unless candidate readback plus original-mode restoration succeed. It remains absent from pull-request triggers. Update every normative document in the file list, including `INTEROP-EXPORTS.md`, to match the final public ABI. Mark `INP-002`, `APK-013`, `DSP-001`, `APK-014`, `WIN-007`, `APK-015`, `WIN-008`, `APK-016`, `RUN-007`, `APK-017`, `RUN-008`, and `APK-018` active only if every allocation-table mapping is executable.
 
 - [ ] **Step 5: Run the complete gate against the published KFFI artifact.**
 
@@ -597,7 +614,6 @@ only the internal display fingerprint/native key and never expose a KFFI handle.
 | PR stack | Required commands before review | Native/manual boundary |
 |---:|---|---|
 | 1, 6 | `rtk ./gradlew :kadre:foundation:check :kadre:validateKotlinConsumer :kadre:validateJavaConsumer` | none |
-| 2, 7, 11 | `rtk ./gradlew :kadre:runtime:check :kadre:contracts:validator:check` | deterministic O2 only |
 | 3, 8 | Kextract contribution-guide generation/test commands | no Kadre behavior test |
 | 4, 9 | KFFI guide generation/test commands plus local Kadre compilation | local snapshot only |
 | 5, 10, 12 | `rtk ./gradlew :kadre:backend:appkit:check :kadre:contracts:validator:check` | O3 plus versioned manual protocol |
@@ -611,7 +627,7 @@ only the internal display fingerprint/native key and never expose a KFFI handle.
 - Complete display snapshots, opaque mode IDs, stable/retired identities, capability honesty, contrast, scale propagation, and unsupported memory pressure are covered by Tasks 6–10 and Task 12.
 - Global physical geometry, contained/straddling readback, gaps, rounding, and inverse conversion are covered by Tasks 7 and 10.
 - Initial/update exclusive operations, cancellation boundaries, leases, quarantine/reconciliation, display loss, and per-kind capability domains are covered by Tasks 11–12.
-- Kextract-first generation, KFFI regeneration/local publication/published-artifact validation, docs, consumers, registry evidence, O2/O3 gates, and manual protocols are explicitly assigned.
+- Kextract-first generation, KFFI regeneration/local publication/published-artifact validation, docs, consumers, complete validator producer lists, O2/O3 gates, the controlled CI canary, and manual protocols are explicitly assigned.
 
 ### Placeholder scan
 
@@ -619,4 +635,4 @@ The plan contains no unbounded implementation step. The two generator audit task
 
 ### Type consistency
 
-The public signatures reproduce the approved spec: `SurfaceInput.requestRawInput(): KadreResult<RawInputAccess>`, `RawInputDeliveryPolicy`, `RawInputOverflowAction`, `DisplayModeId`, `DisplayMode.id`, `SurfaceContrast`, and `SurfaceEvent.AppearanceChanged`. Runtime/AppKit ports remain internal and Kotlin-only; no public API consumes a native/KFFI type.
+The public signatures reproduce the approved spec: `SurfaceInput.requestRawInput(): KadreResult<RawInputAccess>`, `RawInputDeliveryPolicy`, `RawInputOverflowAction`, `DisplayModeId`, `DisplayMode.id`, `SurfaceContrast`, and `SurfaceEvent.AppearanceChanged`. Raw port event flows are lease-local, and exclusive lease authority is process-wide by injection. Runtime/AppKit ports remain internal and Kotlin-only; no public API consumes a native/KFFI type.

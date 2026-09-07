@@ -5,6 +5,14 @@
 **Scope:** phase 8 (raw input and permission) and phase 9 (display inventory,
 system observations, outer geometry, and exclusive fullscreen).
 
+**CI feasibility decision (2026-09-07):** a manually dispatched `macos-15`
+canary completed a captured display-mode transition on GitHub's ephemeral
+display.  It found one display with twelve modes, changed to an alternate
+mode, read that mode back, restored the original mode, and released capture;
+all CoreGraphics result codes were zero.  A controlled O3 mode-transition
+canary is therefore feasible in CI.  It remains an explicit manual workflow,
+never an ordinary pull-request check.
+
 ## 1. Goal and non-goals
 
 Kadre exposes raw global input only when macOS has granted the corresponding
@@ -149,6 +157,13 @@ backing-pixel scale.  AppKit therefore publishes them unchanged as
 `RawInputUnit.DeviceCount`, never as either pixel unit.  The event-tap bridge
 does not establish a stable physical-device identity, so every AppKit
 `RawInputEvent` has `deviceId = null`.
+
+The internal port represents each registration as an independently closeable
+lease with its own immutable event flow.  There is deliberately no shared
+`RawInputPort.events` flow: a common flow would make a port's queue, collector,
+or cancellation semantics accidentally define the public fan-out contract.
+The AppKit broker fans out at the native boundary; the session coordinator
+subscribes to one lease per public access and applies that access's own budget.
 
 ### 3.2 Native permission and source contract
 
@@ -427,6 +442,15 @@ lease, capture the display, change mode, configure/read back the window, then
 publish its terminal outcome.  `Window.apply` waits for that completion; it
 does not return `Accepted` merely because a native transition began.
 
+The automated O3 transition proof is a manually dispatched CI canary.  Once
+the generated bridge exists, that workflow invokes a public Kadre exclusive
+fullscreen scenario; it must not keep a second handwritten native sequence as
+the production proof.  It runs only after confirming the controlled-runner
+preconditions (one ephemeral display and an alternate mode), then requires
+native capture, mode change, candidate readback, original-mode restoration,
+and release to succeed.  It uploads its evidence.  Normal pull-request CI
+does not invoke the canary.
+
 Applying the same exclusive `(displayId, DisplayModeId)` from its current
 owner is a no-op: it has no native call, revision, or event.  A same-owner mode
 change keeps the lease and restores the previous mode if the new native mode
@@ -495,7 +519,7 @@ sentinel, contract-evidence mapping, and mandatory CI gate.
 | `WIN-007` | O2 | global physical outer geometry, readback ordering, and invalid/stale/closed boundaries |
 | `APK-015` | O3 | AppKit outer-frame conversion, public readback, external move, and teardown |
 | `WIN-008` | O2 | display lease arbitration, initial exclusive request, owner no-op/mode/display change, cancellation after capture, rollback, display loss, and teardown restoration |
-| `APK-016` | O3 | AppKit exclusive capability activation, generated native bridge ownership, and non-disruptive readback path |
+| `APK-016` | O3 | AppKit exclusive capability activation, generated native bridge ownership, and the manually dispatched controlled mode-transition/readback/restoration path |
 | `RUN-007` | O2 | atomic theme/contrast reduction, state-before-appearance-event ordering, and unchanged-pair suppression |
 | `APK-017` | O3 | AppKit effective-appearance bridge, public appearance readback, and callback teardown |
 | `RUN-008` | O2 | honest memory-pressure availability, signal ordering, and no-signal unsupported path |
@@ -511,15 +535,17 @@ the absence of a callback; `RUN-008` covers the deterministic unsupported
 runtime behavior.
 
 An automated runner cannot reliably grant Input Monitoring permission, connect
-another display, alter a physical display mode, or induce memory pressure.
-The CI therefore verifies the safe native bridge, denied/unavailable state,
-and deterministic runtime behavior, but never declares those physical effects
-tested when they did not occur.  Versioned manual protocols cover permission
-grant/revocation, multiple displays and HiDPI migration, exclusive entry/exit
-and restoration, and genuine memory-pressure observation.  They supplement,
-but do not replace, active O2/O3 contracts.  A future positive memory-pressure
-bridge receives a new planned contract only after a non-synthetic O3 scenario
-exists; it is outside this phase's activation.
+another display, or induce memory pressure.  It can, however, drive the
+ephemeral single-display transition established by the recorded manual CI
+canary above.  The normal CI gate therefore verifies safe native bridges,
+denied/unavailable states, and deterministic runtime behavior; a separate
+manual workflow verifies the generated public exclusive transition and its
+restoration.  Versioned manual protocols still cover permission
+grant/revocation, genuine multiple-display and HiDPI migration, and genuine
+memory-pressure observation.  They supplement, but do not replace, active
+O2/O3 contracts.  A future positive memory-pressure bridge receives a new
+planned contract only after a non-synthetic O3 scenario exists; it is outside
+this phase's activation.
 
 ## 8. Stacked delivery order
 
