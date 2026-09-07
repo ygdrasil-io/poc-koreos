@@ -2,6 +2,7 @@ package org.graphiks.kadre.internal.appkit
 
 import kotlinx.coroutines.suspendCancellableCoroutine
 import org.graphiks.kadre.diagnostics.KadreFailure
+import org.graphiks.kadre.diagnostics.KadreResult
 import org.graphiks.kadre.diagnostics.KadreException
 import org.graphiks.kadre.diagnostics.KadrePlatform
 import org.graphiks.kadre.diagnostics.KadreResourceKind
@@ -19,6 +20,7 @@ import org.graphiks.kadre.internal.runtime.RuntimeDesktopNativeWindowHandle
 import org.graphiks.kadre.internal.runtime.RuntimeDesktopWindowHandleAccess
 import org.graphiks.kadre.internal.runtime.RuntimeWindowManager
 import org.graphiks.kadre.internal.runtime.RuntimeSynchronousInteraction
+import org.graphiks.kadre.internal.runtime.DropTransferSource
 import org.graphiks.kadre.internal.runtime.SurfaceCommandPort
 import org.graphiks.kadre.internal.runtime.SurfaceInitialSnapshot
 import org.graphiks.kadre.internal.runtime.SurfaceRedrawCommand
@@ -55,6 +57,8 @@ import org.graphiks.kadre.window.WindowSpec
 import org.graphiks.kadre.window.WindowSystemButtons
 import org.graphiks.kadre.window.WindowProperty
 import org.graphiks.kadre.surface.SurfaceId
+import org.graphiks.kadre.surface.LogicalPoint
+import org.graphiks.kadre.input.DropOfferId
 import org.graphiks.kadre.surface.SurfaceCapabilities
 import org.graphiks.kadre.interaction.InteractionAction
 import org.graphiks.kadre.interaction.InteractionKind
@@ -103,6 +107,9 @@ internal class AppKitWindowRuntimeDriver internal constructor(
         synchronousInteractionSink = { surfaceId, event, supported, invokeNative ->
             manager.dispatchSynchronousInteraction(surfaceId, event, supported, invokeNative)
         },
+        synchronousDropSink = { surfaceId, source, position ->
+            manager.dispatchSynchronousDrop(surfaceId, source, position) { KadreResult.Success(Unit) }
+        },
     )
     private val attentionPort: AppKitWindowAttentionPort? = if (broker != null && attentionOwner != null) {
         BrokeredAppKitWindowAttentionPort(commandPort, broker, attentionOwner)
@@ -140,7 +147,10 @@ internal class AppKitWindowRuntimeDriver internal constructor(
 
 internal interface AppKitWindowAttentionPort : WindowAttentionPort
 
-private val APPKIT_HANDLER_INTERACTIONS = setOf(InteractionKind.BeginWindowMove)
+private val APPKIT_HANDLER_INTERACTIONS = setOf(
+    InteractionKind.BeginWindowMove,
+    InteractionKind.AcceptDrop,
+)
 
 private fun appKitSurfaceCapabilities(publicSurfaceCapabilities: Boolean): SurfaceCapabilities {
     val unsupportedUpdate = Capability.Unsupported(KadreFailure.Unsupported(KadreOperation.UpdateSurface))
@@ -258,6 +268,11 @@ private class AppKitWindowCommandPort(
         Set<InteractionKind>,
         (InteractionAction) -> org.graphiks.kadre.diagnostics.KadreResult<Unit>,
     ) -> Boolean,
+    private val synchronousDropSink: (
+        SurfaceId,
+        DropTransferSource,
+        LogicalPoint,
+    ) -> DropOfferId?,
 ) : WindowCommandPort, SurfaceCommandPort {
     private val lock = Any()
     private val nextPeerId = AtomicLong(0L)
@@ -489,6 +504,9 @@ private class AppKitWindowCommandPort(
                 acceptSurfaceStimulus = ::enqueueSurfaceStimulus,
                 dispatchSynchronousInteraction = { event, invokeNative ->
                     dispatchSynchronousInteraction(entry, event, invokeNative)
+                },
+                dispatchSynchronousDrop = { source, position ->
+                    dispatchSynchronousDrop(entry, source, position)
                 },
                 reportCallbackFailure = ::reportFailure,
                 readInitialWindowSnapshot = initialWindowReadbackRequired,
@@ -822,6 +840,9 @@ private class AppKitWindowCommandPort(
         is AppKitSurfaceStimulus.InputObservationChanged,
         is AppKitSurfaceStimulus.KeyChanged,
         is AppKitSurfaceStimulus.PointerInput,
+        is AppKitSurfaceStimulus.DropMoved,
+        is AppKitSurfaceStimulus.DropExited,
+        is AppKitSurfaceStimulus.DropPerformed,
         -> true
 
         else -> false
@@ -858,6 +879,47 @@ private class AppKitWindowCommandPort(
             }?.surfaceId
         } ?: return false
         return synchronousInteractionSink(surfaceId, event, APPKIT_HANDLER_INTERACTIONS, invokeNative)
+    }
+
+    private fun dispatchSynchronousDrop(
+        entry: PeerEntry,
+        source: DropTransferSource,
+        position: LogicalPoint,
+    ): DropOfferId? {
+        val readiness = synchronized(lock) {
+            when {
+                closed || entry.removed || entry.surfaceCleanupReserved || entry.closeAdmitted ->
+                    RuntimeSurfaceReadiness.Closed
+
+                else -> entry.surfaceReadiness
+            }
+        }
+        val ready = when (readiness) {
+            RuntimeSurfaceReadiness.Draining -> drainBufferedSurfaceStimuli(entry)
+            RuntimeSurfaceReadiness.Live -> true
+            RuntimeSurfaceReadiness.Buffering,
+            RuntimeSurfaceReadiness.Closed,
+            -> false
+        }
+        if (!ready) {
+            source.close()
+            return null
+        }
+        val surfaceId = synchronized(lock) {
+            byPeer[entry.peerId]?.takeIf {
+                it === entry &&
+                    !closed &&
+                    !it.removed &&
+                    !it.surfaceCleanupReserved &&
+                    !it.closeAdmitted &&
+                    it.surfaceReadiness == RuntimeSurfaceReadiness.Live
+            }?.surfaceId
+        }
+        if (surfaceId == null) {
+            source.close()
+            return null
+        }
+        return synchronousDropSink(surfaceId, source, position)
     }
 
     private fun acceptStimulus(stimulus: AppKitWindowStimulus) {
@@ -1947,6 +2009,9 @@ private fun AppKitSurfaceStimulus.toRuntime(surfaceId: SurfaceId): SurfaceStimul
         )
         is AppKitInput.KeyChanged -> error("key input must not use a pointer stimulus")
     }
+    is AppKitSurfaceStimulus.DropMoved -> SurfaceStimulus.DropMoved(surfaceId, offerId, position)
+    is AppKitSurfaceStimulus.DropExited -> SurfaceStimulus.DropExited(surfaceId, offerId)
+    is AppKitSurfaceStimulus.DropPerformed -> SurfaceStimulus.DropPerformed(surfaceId, offerId, position)
 }
 
 private fun AppKitSurfaceSnapshot.toRuntimeSnapshot(): SurfaceInitialSnapshot = SurfaceInitialSnapshot(

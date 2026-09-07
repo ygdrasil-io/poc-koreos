@@ -436,10 +436,11 @@ public sealed interface InteractionAction {
 public sealed interface InteractionActionOutcome {
     public val requestId: InteractionRequestId
     public val stamp: EventStamp
-    public data class Committed(override val requestId: InteractionRequestId, public val windowRequestId: WindowRequestId?, override val stamp: EventStamp) : InteractionActionOutcome
-    public data class Rejected(override val requestId: InteractionRequestId, public val failure: KadreFailure, override val stamp: EventStamp) : InteractionActionOutcome
-    public data class Expired(override val requestId: InteractionRequestId, override val stamp: EventStamp) : InteractionActionOutcome
-    public data class OwnerClosed(override val requestId: InteractionRequestId, override val stamp: EventStamp) : InteractionActionOutcome
+    public val dropOfferId: DropOfferId?
+    public data class Committed(override val requestId: InteractionRequestId, public val windowRequestId: WindowRequestId?, override val stamp: EventStamp, override val dropOfferId: DropOfferId? = null) : InteractionActionOutcome
+    public data class Rejected(override val requestId: InteractionRequestId, public val failure: KadreFailure, override val stamp: EventStamp, override val dropOfferId: DropOfferId? = null) : InteractionActionOutcome
+    public data class Expired(override val requestId: InteractionRequestId, override val stamp: EventStamp, override val dropOfferId: DropOfferId? = null) : InteractionActionOutcome
+    public data class OwnerClosed(override val requestId: InteractionRequestId, override val stamp: EventStamp, override val dropOfferId: DropOfferId? = null) : InteractionActionOutcome
 }
 
 public sealed interface InteractionTrigger {
@@ -470,10 +471,11 @@ public sealed interface InteractionEvent {
     public data class PointerPressed(public val button: PointerButton, public val position: LogicalPoint, override val stamp: EventStamp) : InteractionEvent
     public data class KeyPressed(public val physicalKey: PhysicalKey, override val stamp: EventStamp) : InteractionEvent
     public data class TouchStarted(public val touchId: TouchId, public val position: LogicalPoint, override val stamp: EventStamp) : InteractionEvent
+    public data class DropEntered(public val offer: DropOffer, public val position: LogicalPoint, override val stamp: EventStamp) : InteractionEvent
 }
 ```
 
-`InteractionContext.request` n’accepte que l’action dont `InteractionKind` est présent dans `SurfaceCapabilities.handlerInteractions`. `armInteraction` exige l’action dans `armedInteractions.actions` et le kind dérivé du trigger dans `armedInteractions.triggers`; `PointerPressed(null)` et `KeyPressed(null)` restent respectivement `PointerPress` et `KeyPress`. Les deux sets de `ArmedInteractionConstraints` sont non vides. `Committed.windowRequestId` est non-null exactement pour `OpenWindow`.
+`InteractionContext.request` n’accepte que l’action dont `InteractionKind` est présent dans `SurfaceCapabilities.handlerInteractions`. `armInteraction` exige l’action dans `armedInteractions.actions` et le kind dérivé du trigger dans `armedInteractions.triggers`; `PointerPressed(null)` et `KeyPressed(null)` restent respectivement `PointerPress` et `KeyPress`. Les deux sets de `ArmedInteractionConstraints` sont non vides. `Committed.windowRequestId` est non-null exactement pour `OpenWindow`. `InteractionEvent.DropEntered` est l’unique callback qui porte une offre nécessitant une décision synchrone ; `InteractionActionOutcome.dropOfferId` est non-null exactement pour une tentative `AcceptDrop`, afin de corréler le résultat sans transporter de payload closable.
 
 ## 6. Input, IME, drop et raw input
 

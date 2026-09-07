@@ -6,15 +6,18 @@ import org.graphiks.kadre.diagnostics.KadreResult
 import org.graphiks.kadre.diagnostics.KadreOperation
 import org.graphiks.kadre.internal.runtime.RuntimeDesktopNativeWindowHandle
 import org.graphiks.kadre.internal.runtime.RuntimeSynchronousInteraction
+import org.graphiks.kadre.internal.runtime.DropTransferSource
 import org.graphiks.kadre.internal.runtime.TextInputCursorCommand
 import org.graphiks.kadre.internal.runtime.TextInputDocumentCommand
 import org.graphiks.kadre.internal.runtime.TextInputOpenCommand
 import org.graphiks.kadre.internal.runtime.TextInputOwner
 import org.graphiks.kadre.internal.runtime.TextInputPort
 import org.graphiks.kadre.interaction.InteractionAction
+import org.graphiks.kadre.input.DropOfferId
 import org.graphiks.kadre.internal.runtime.SurfaceMetrics
 import org.graphiks.kadre.internal.runtime.WindowPeerOwner
 import org.graphiks.kadre.surface.PropertyChange
+import org.graphiks.kadre.surface.LogicalPoint
 import org.graphiks.kadre.surface.SurfaceFocus
 import org.graphiks.kadre.surface.SurfaceOcclusion
 import org.graphiks.kadre.surface.SurfaceTheme
@@ -119,6 +122,23 @@ internal sealed interface AppKitSurfaceStimulus {
         override val peerId: AppKitWindowPeerId,
         val input: AppKitInput,
     ) : AppKitSurfaceStimulus
+
+    data class DropMoved(
+        override val peerId: AppKitWindowPeerId,
+        val offerId: DropOfferId,
+        val position: LogicalPoint,
+    ) : AppKitSurfaceStimulus
+
+    data class DropExited(
+        override val peerId: AppKitWindowPeerId,
+        val offerId: DropOfferId,
+    ) : AppKitSurfaceStimulus
+
+    data class DropPerformed(
+        override val peerId: AppKitWindowPeerId,
+        val offerId: DropOfferId,
+        val position: LogicalPoint,
+    ) : AppKitSurfaceStimulus
 }
 
 /** One completely prepared AppKit window and the full reverse-order ownership chain it requires. */
@@ -131,6 +151,7 @@ internal class AppKitWindowPeer private constructor(
     private val geometryObserver: AppKitNativeGeometryObserverOwner?,
     private val surfaceObserver: AppKitNativeSurfaceObserverOwner?,
     private val inputObserver: AppKitNativeInputObserverOwner?,
+    private val dropObserver: AppKitNativeDropObserverOwner?,
     nativeTextInputPort: AppKitNativeTextInputPort,
     private val callbackGate: AppKitWindowCallbackGate,
     internal val initialWindowSnapshot: AppKitWindowMutationSnapshot?,
@@ -158,6 +179,10 @@ internal class AppKitWindowPeer private constructor(
     private fun releaseNativeResources() {
         port.onMainThread {
             var failure: Throwable? = null
+            dropObserver?.let { observer ->
+                failure = runSuppressing(failure, observer::revokeCallbacks)
+                failure = closeSuppressing(failure, observer)
+            }
             inputObserver?.let { observer ->
                 failure = runSuppressing(failure, observer::revokeCallbacks)
                 failure = closeSuppressing(failure, observer)
@@ -380,6 +405,13 @@ internal class AppKitWindowPeer private constructor(
                 RuntimeSynchronousInteraction,
                 (InteractionAction) -> KadreResult<Unit>,
             ) -> Boolean = { _, _ -> false },
+            dispatchSynchronousDrop: (
+                DropTransferSource,
+                LogicalPoint,
+            ) -> DropOfferId? = { source, _ ->
+                source.close()
+                null
+            },
             readInitialWindowSnapshot: Boolean = false,
             reportCallbackFailure: (Throwable) -> Unit = {},
         ): AppKitWindowPeer {
@@ -389,6 +421,7 @@ internal class AppKitWindowPeer private constructor(
                 acceptSurfaceStimulus,
                 reportCallbackFailure,
                 dispatchSynchronousInteraction,
+                dispatchSynchronousDrop,
             )
             return port.onMainThread {
                 var window: AppKitNativeWindowOwner? = null
@@ -397,6 +430,7 @@ internal class AppKitWindowPeer private constructor(
                 var geometryObserver: AppKitNativeGeometryObserverOwner? = null
                 var surfaceObserver: AppKitNativeSurfaceObserverOwner? = null
                 var inputObserver: AppKitNativeInputObserverOwner? = null
+                var dropObserver: AppKitNativeDropObserverOwner? = null
                 var textInputPort: AppKitNativeTextInputPort? = null
                 var contentAttached = false
                 var delegateMayBeAttached = false
@@ -467,6 +501,16 @@ internal class AppKitWindowPeer private constructor(
                             pointerInstalled = observer.pointerInstalled,
                         )
                     }
+                    dropObserver = port.observeDrop(
+                        window,
+                        contentView,
+                        AppKitDropCallbacks(
+                            entered = callbackGate::dropEntered,
+                            moved = callbackGate::dropMoved,
+                            exited = callbackGate::dropExited,
+                            performed = callbackGate::dropPerformed,
+                        ),
+                    )
                     AppKitWindowPeer(
                         id,
                         port,
@@ -476,6 +520,7 @@ internal class AppKitWindowPeer private constructor(
                         geometryObserver,
                         surfaceObserver,
                         inputObserver,
+                        dropObserver,
                         checkNotNull(textInputPort),
                         callbackGate,
                         initialWindowSnapshot,
@@ -483,6 +528,10 @@ internal class AppKitWindowPeer private constructor(
                 } catch (failure: Throwable) {
                     callbackGate.revoke()
                     var cleanupFailure: Throwable? = failure
+                    dropObserver?.let { observer ->
+                        cleanupFailure = runSuppressing(cleanupFailure, observer::revokeCallbacks)
+                        cleanupFailure = closeSuppressing(cleanupFailure, observer)
+                    }
                     inputObserver?.let { observer ->
                         cleanupFailure = runSuppressing(cleanupFailure, observer::revokeCallbacks)
                         cleanupFailure = closeSuppressing(cleanupFailure, observer)
@@ -594,6 +643,7 @@ private class AppKitWindowCallbackGate(
         RuntimeSynchronousInteraction,
         (InteractionAction) -> KadreResult<Unit>,
     ) -> Boolean,
+    private val dispatchSynchronousDrop: (DropTransferSource, LogicalPoint) -> DropOfferId?,
 ) {
     @Suppress("PLATFORM_CLASS_MAPPED_TO_KOTLIN")
     private val lock = Object()
@@ -612,6 +662,7 @@ private class AppKitWindowCallbackGate(
     private var activePointerCallbacks = 0
     private val activePointerCallbackThreads = linkedMapOf<Thread, Int>()
     private val deferredPointerCallbackCleanup = ArrayDeque<() -> Unit>()
+    private var activeDropOfferId: DropOfferId? = null
 
     fun duringManagedGeometryMutation(
         block: () -> NativeWindowMutationResult?,
@@ -774,6 +825,53 @@ private class AppKitWindowCallbackGate(
         stimulus?.let(::publishSurface)
     }
 
+    fun dropEntered(source: DropTransferSource, position: LogicalPoint): Boolean {
+        val admitted = synchronized(lock) { surfaceAccepting }
+        if (!admitted) {
+            source.close()
+            return false
+        }
+        val offerId = dispatchSynchronousDrop(source, position) ?: return false
+        return synchronized(lock) {
+            if (!surfaceAccepting) {
+                false
+            } else {
+                activeDropOfferId = offerId
+                true
+            }
+        }
+    }
+
+    fun dropMoved(position: LogicalPoint): Boolean {
+        val stimulus = synchronized(lock) {
+            activeDropOfferId?.takeIf { surfaceAccepting }
+                ?.let { AppKitSurfaceStimulus.DropMoved(peerId, it, position) }
+        }
+        stimulus?.let(::publishSurface)
+        return stimulus != null
+    }
+
+    fun dropExited() {
+        val stimulus = synchronized(lock) {
+            activeDropOfferId?.takeIf { surfaceAccepting }?.let { offerId ->
+                activeDropOfferId = null
+                AppKitSurfaceStimulus.DropExited(peerId, offerId)
+            }
+        }
+        stimulus?.let(::publishSurface)
+    }
+
+    fun dropPerformed(position: LogicalPoint): Boolean {
+        val stimulus = synchronized(lock) {
+            activeDropOfferId?.takeIf { surfaceAccepting }?.let { offerId ->
+                activeDropOfferId = null
+                AppKitSurfaceStimulus.DropPerformed(peerId, offerId, position)
+            }
+        } ?: return false
+        publishSurface(stimulus)
+        return true
+    }
+
     fun geometryChanged(snapshot: AppKitWindowGeometrySnapshot) {
         val stimulus = synchronized(lock) {
             if (!accepting) {
@@ -878,6 +976,7 @@ private class AppKitWindowCallbackGate(
         synchronized(lock) {
             accepting = false
             surfaceAccepting = false
+            activeDropOfferId = null
         }
     }
 
@@ -891,6 +990,7 @@ private class AppKitWindowCallbackGate(
         val runNow = synchronized(lock) {
             accepting = false
             surfaceAccepting = false
+            activeDropOfferId = null
             if (activePointerCallbacks == 0) {
                 true
             } else if ((activePointerCallbackThreads[Thread.currentThread()] ?: 0) > 0) {

@@ -10,6 +10,7 @@ import org.graphiks.kadre.internal.runtime.TextInputCursorCommand
 import org.graphiks.kadre.internal.runtime.TextInputDocumentCommand
 import org.graphiks.kadre.internal.runtime.TextInputObservation
 import org.graphiks.kadre.internal.runtime.TextInputOwner
+import org.graphiks.kadre.internal.runtime.DropTransferSource
 import org.graphiks.kadre.input.KeyLocation
 import org.graphiks.kadre.input.KeyState
 import org.graphiks.kadre.input.KeyboardModifiers
@@ -123,6 +124,13 @@ internal interface AppKitNativeWindowPort {
         view: AppKitNativeViewOwner,
         callbacks: AppKitInputCallbacks,
     ): AppKitNativeInputObserverOwner? = null
+
+    /** Installs one `NSDraggingDestination` bridge after the regular input observer is ready. */
+    fun observeDrop(
+        window: AppKitNativeWindowOwner,
+        view: AppKitNativeViewOwner,
+        callbacks: AppKitDropCallbacks,
+    ): AppKitNativeDropObserverOwner? = null
 
     /** Returns only when the native window is known not to reference its delegate. */
     fun detachDelegate(window: AppKitNativeWindowOwner)
@@ -366,6 +374,22 @@ internal interface AppKitNativeInputObserverOwner : AutoCloseable {
     val keyboardInstalled: Boolean
     val pointerInstalled: Boolean
 
+    fun revokeCallbacks()
+
+    override fun close()
+}
+
+/** Callback boundary for one retained, runtime-owned drag payload. */
+internal class AppKitDropCallbacks(
+    val entered: (DropTransferSource, LogicalPoint) -> Boolean,
+    /** Returns whether the native destination must continue advertising an admitted copy. */
+    val moved: (LogicalPoint) -> Boolean,
+    val exited: () -> Unit,
+    val performed: (LogicalPoint) -> Boolean,
+)
+
+/** Owns native drag-destination callback admission for one content view. */
+internal interface AppKitNativeDropObserverOwner : AutoCloseable {
     fun revokeCallbacks()
 
     override fun close()

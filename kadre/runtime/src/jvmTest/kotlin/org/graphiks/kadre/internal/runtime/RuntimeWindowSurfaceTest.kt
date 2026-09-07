@@ -1,6 +1,7 @@
 package org.graphiks.kadre.internal.runtime
 
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
@@ -12,6 +13,8 @@ import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.take
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.advanceTimeBy
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.graphiks.kadre.application.EventStamp
 import org.graphiks.kadre.application.EventDeliverySpan
@@ -27,6 +30,14 @@ import org.graphiks.kadre.diagnostics.KadrePlatform
 import org.graphiks.kadre.diagnostics.KadreResourceKind
 import org.graphiks.kadre.diagnostics.KadreResult
 import org.graphiks.kadre.input.DeviceId
+import org.graphiks.kadre.input.DropItemDescriptor
+import org.graphiks.kadre.input.DropItemKind
+import org.graphiks.kadre.input.DropItemReadMode
+import org.graphiks.kadre.input.DropOffer
+import org.graphiks.kadre.input.DropOfferId
+import org.graphiks.kadre.input.DropOfferState
+import org.graphiks.kadre.input.DropOfferTerminationReason
+import org.graphiks.kadre.input.DropTransfer
 import org.graphiks.kadre.input.InputEvent
 import org.graphiks.kadre.input.InputStateResetReason
 import org.graphiks.kadre.input.KeyLocation
@@ -45,6 +56,10 @@ import org.graphiks.kadre.input.TextInputEvent
 import org.graphiks.kadre.input.TextInputState
 import org.graphiks.kadre.input.TextRange
 import org.graphiks.kadre.interaction.InteractionHandler
+import org.graphiks.kadre.interaction.InteractionAction
+import org.graphiks.kadre.interaction.InteractionActionOutcome
+import org.graphiks.kadre.interaction.InteractionEvent
+import org.graphiks.kadre.interaction.InteractionKind
 import org.graphiks.kadre.policy.CollectorOverflowAction
 import org.graphiks.kadre.policy.ContinuousDelivery
 import org.graphiks.kadre.policy.IngressOverflowAction
@@ -83,9 +98,369 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.nanoseconds
+import kotlin.time.Duration.Companion.seconds
 
-@OptIn(ExperimentalCoroutinesApi::class)
+@OptIn(DelicateKadreApi::class, ExperimentalCoroutinesApi::class)
 class RuntimeWindowSurfaceTest {
+    @Test
+    fun dropEntryUsesOneRuntimeStampForTheInputAndSynchronousInteraction() = runTest {
+        val stamps = StampSource()
+        val surface = surface(
+            commandsEnabled = true,
+            capabilities = dropInteractionCapabilities(),
+            eventStampSource = stamps::next,
+        )
+        var interactionStamp: EventStamp? = null
+        assertIs<KadreResult.Success<*>>(
+            surface.installInteractionHandler(
+                InteractionHandler { context, event ->
+                    val entered = assertIs<InteractionEvent.DropEntered>(event)
+                    interactionStamp = entered.stamp
+                    context.request(InteractionAction.AcceptDrop(entered.offer.id))
+                },
+            ),
+        )
+        val input = async(UnconfinedTestDispatcher(testScheduler), start = CoroutineStart.UNDISPATCHED) {
+            surface.input.events.take(1).toList().single()
+        }
+
+        assertIs<DropOfferId>(
+            surface.dispatchSynchronousDrop(
+                RecordingDropTransferSource(),
+                LogicalPoint(12.0, 8.0),
+            ) { KadreResult.Success(Unit) },
+        )
+
+        assertEquals(
+            interactionStamp,
+            assertIs<InputEvent.DropEntered>(input.await()).stamp,
+        )
+    }
+
+    @Test
+    fun dropOfferIsAcceptedSynchronouslyAndHandsItsTransferToOneClaimant() = runTest {
+        val source = RecordingDropTransferSource()
+        val surface = surface(
+            commandsEnabled = true,
+            capabilities = dropInteractionCapabilities(),
+        )
+        var offered: DropOffer? = null
+        val registration = assertIs<org.graphiks.kadre.interaction.InteractionRegistration>(
+            assertIs<KadreResult.Success<*>>(
+                surface.installInteractionHandler(
+                    InteractionHandler { context, event ->
+                        val entered = assertIs<InteractionEvent.DropEntered>(event)
+                        offered = entered.offer
+                        assertIs<KadreResult.Success<*>>(
+                            context.request(InteractionAction.AcceptDrop(entered.offer.id)),
+                        )
+                    },
+                ),
+            ).value,
+        )
+        val events = async(UnconfinedTestDispatcher(testScheduler), start = CoroutineStart.UNDISPATCHED) {
+            surface.input.events.take(2).toList()
+        }
+        val outcomes = async(UnconfinedTestDispatcher(testScheduler), start = CoroutineStart.UNDISPATCHED) {
+            registration.outcomes.take(1).toList().single()
+        }
+
+        val offerId = assertIs<DropOfferId>(
+            surface.dispatchSynchronousDrop(
+                source = source,
+                position = LogicalPoint(12.0, 8.0),
+                invokeNative = { KadreResult.Success(Unit) },
+            ),
+        )
+        val offer = checkNotNull(offered)
+        assertEquals(offerId, offer.id)
+        assertEquals(DropOfferState.Accepted, offer.state.value)
+        assertEquals(
+            offerId,
+            assertIs<InteractionActionOutcome.Committed>(outcomes.await()).dropOfferId,
+        )
+
+        assertTrue(
+            surface.accept(
+                SurfaceStimulus.DropPerformed(surface.id, offerId, LogicalPoint(12.0, 8.0)),
+            ),
+        )
+        assertEquals(DropOfferState.TransferAvailable, offer.state.value)
+        assertIs<KadreResult.Success<DropTransfer>>(offer.claimTransfer())
+        assertEquals(DropOfferState.Claimed, offer.state.value)
+        assertEquals(
+            KadreResult.Failure(KadreFailure.AlreadyInUse(KadreResourceKind.DropTransfer)),
+            offer.claimTransfer(),
+        )
+
+        val delivered = events.await()
+        assertIs<InputEvent.DropEntered>(delivered[0])
+        assertIs<InputEvent.Dropped>(delivered[1])
+    }
+
+    @Test
+    fun unacceptedDropIsTerminalAndAReplacementClosesThePreviousSource() = runTest {
+        val rejectedSource = RecordingDropTransferSource()
+        val surface = surface(
+            commandsEnabled = true,
+            capabilities = dropInteractionCapabilities(),
+        )
+        val rejection = async(UnconfinedTestDispatcher(testScheduler), start = CoroutineStart.UNDISPATCHED) {
+            surface.input.events.take(1).toList().single()
+        }
+
+        assertEquals(
+            null,
+            surface.dispatchSynchronousDrop(
+                source = rejectedSource,
+                position = LogicalPoint(1.0, 2.0),
+                invokeNative = { KadreResult.Success(Unit) },
+            ),
+        )
+        val rejected = assertIs<InputEvent.DropEntered>(rejection.await()).offer
+        assertEquals(
+            DropOfferState.Terminated(DropOfferTerminationReason.Rejected),
+            rejected.state.value,
+        )
+        assertTrue(rejectedSource.closed)
+
+        val acceptedOffers = mutableListOf<DropOffer>()
+        assertIs<KadreResult.Success<*>>(
+            surface.installInteractionHandler(
+                InteractionHandler { context, event ->
+                    val entered = assertIs<InteractionEvent.DropEntered>(event)
+                    acceptedOffers += entered.offer
+                    context.request(InteractionAction.AcceptDrop(entered.offer.id))
+                },
+            ),
+        )
+        val firstSource = RecordingDropTransferSource()
+        assertIs<DropOfferId>(
+            surface.dispatchSynchronousDrop(firstSource, LogicalPoint(3.0, 4.0)) { KadreResult.Success(Unit) },
+        )
+        val replacementSource = RecordingDropTransferSource()
+        assertIs<DropOfferId>(
+            surface.dispatchSynchronousDrop(replacementSource, LogicalPoint(5.0, 6.0)) { KadreResult.Success(Unit) },
+        )
+        val first = acceptedOffers[0]
+        val replacement = acceptedOffers[1]
+
+        assertEquals(
+            DropOfferState.Terminated(DropOfferTerminationReason.LeftSurface),
+            first.state.value,
+        )
+        assertTrue(firstSource.closed)
+        assertEquals(DropOfferState.Accepted, replacement.state.value)
+    }
+
+    @Test
+    fun surfaceTeardownClosesATransferAlreadyHandedToTheApplication() = runTest {
+        val source = RecordingDropTransferSource()
+        val surface = surface(
+            commandsEnabled = true,
+            capabilities = dropInteractionCapabilities(),
+        )
+        lateinit var offer: DropOffer
+        assertIs<KadreResult.Success<*>>(
+            surface.installInteractionHandler(
+                InteractionHandler { context, event ->
+                    offer = assertIs<InteractionEvent.DropEntered>(event).offer
+                    context.request(InteractionAction.AcceptDrop(offer.id))
+                },
+            ),
+        )
+        val offerId = assertIs<DropOfferId>(
+            surface.dispatchSynchronousDrop(source, LogicalPoint(2.0, 4.0)) { KadreResult.Success(Unit) },
+        )
+        assertTrue(surface.accept(SurfaceStimulus.DropPerformed(surface.id, offerId, LogicalPoint(2.0, 4.0))))
+        val transfer = assertIs<KadreResult.Success<DropTransfer>>(offer.claimTransfer()).value
+
+        assertTrue(surface.detach())
+
+        assertTrue(source.closed)
+        assertEquals(
+            KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.DropTransfer)),
+            transfer.items.single().collectBytes(1) { },
+        )
+    }
+
+    @Test
+    fun dropReadsEnforceTheirByteChunkAndSingleConsumerBoundaries() = runTest {
+        val source = RecordingDropTransferSource(
+            chunks = listOf(byteArrayOf(1, 2), byteArrayOf(3, 4, 5)),
+            sizeBytes = null,
+        )
+        val surface = dropCapableSurface(
+            resources = KadrePolicies.Default.resources.copy(maxDropChunkBytes = 2),
+        )
+        val transfer = surface.claimPerformedTransfer(source)
+        val item = transfer.items.single()
+        val delivered = mutableListOf<ByteArray>()
+
+        assertEquals(
+            KadreResult.Failure(KadreFailure.InvalidRequest("maxBytes")),
+            item.collectBytes(0) { },
+        )
+        assertEquals(
+            KadreResult.Failure(KadreFailure.ResourceLimitExceeded(KadreResourceKind.DropItem, 2)),
+            item.collectBytes(10) { delivered += it },
+        )
+        assertEquals(1, delivered.size)
+        assertTrue(delivered.single().contentEquals(byteArrayOf(1, 2)))
+
+        val singleUse = RecordingDropTransferSource(
+            chunks = listOf(byteArrayOf(1)),
+            sizeBytes = 1,
+            readMode = DropItemReadMode.SingleUse,
+        )
+        val singleTransfer = dropCapableSurface().claimPerformedTransfer(singleUse)
+        val singleItem = singleTransfer.items.single()
+        assertEquals(KadreResult.Success(Unit), singleItem.collectBytes(1) { })
+        assertEquals(
+            KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.DropItem)),
+            singleItem.collectBytes(1) { },
+        )
+    }
+
+    @Test
+    fun dropTransferBudgetIsReservedBeforeNativeAcceptanceAndReleasedOnClose() = runTest {
+        val resources = KadrePolicies.Default.resources.copy(maxConcurrentDropTransfers = 1)
+        val budget = RuntimeDropTransferBudget(resources.maxConcurrentDropTransfers)
+        val firstSurface = dropCapableSurface(resources, budget)
+        val firstTransfer = firstSurface.claimPerformedTransfer(RecordingDropTransferSource())
+
+        val secondSurface = dropCapableSurface(resources, budget)
+        assertIs<KadreResult.Success<*>>(
+            secondSurface.installInteractionHandler(
+                InteractionHandler { context, event ->
+                    val entered = assertIs<InteractionEvent.DropEntered>(event)
+                    context.request(InteractionAction.AcceptDrop(entered.offer.id))
+                },
+            ),
+        )
+        var nativeAccepted = false
+        assertEquals(
+            null,
+            secondSurface.dispatchSynchronousDrop(
+                RecordingDropTransferSource(),
+                LogicalPoint(4.0, 2.0),
+            ) {
+                nativeAccepted = true
+                KadreResult.Success(Unit)
+            },
+        )
+        assertFalse(nativeAccepted)
+
+        firstTransfer.close()
+        assertIs<DropOfferId>(
+            secondSurface.dispatchSynchronousDrop(
+                RecordingDropTransferSource(),
+                LogicalPoint(4.0, 2.0),
+            ) { KadreResult.Success(Unit) },
+        )
+    }
+
+    @Test
+    fun unclaimedDropTransferTimesOutAndReleasesItsReservation() = runTest {
+        val resources = KadrePolicies.Default.resources.copy(
+            maxConcurrentDropTransfers = 1,
+            dropTransferClaimTimeout = 1.seconds,
+        )
+        val budget = RuntimeDropTransferBudget(resources.maxConcurrentDropTransfers)
+        val surface = dropCapableSurface(resources, budget, this)
+        lateinit var offer: DropOffer
+        assertIs<KadreResult.Success<*>>(
+            surface.installInteractionHandler(
+                InteractionHandler { context, event ->
+                    offer = assertIs<InteractionEvent.DropEntered>(event).offer
+                    context.request(InteractionAction.AcceptDrop(offer.id))
+                },
+            ),
+        )
+        val source = RecordingDropTransferSource()
+        val offerId = assertIs<DropOfferId>(
+            surface.dispatchSynchronousDrop(source, LogicalPoint(2.0, 4.0)) { KadreResult.Success(Unit) },
+        )
+        assertTrue(surface.accept(SurfaceStimulus.DropPerformed(surface.id, offerId, LogicalPoint(2.0, 4.0))))
+
+        advanceTimeBy(1.seconds)
+        runCurrent()
+
+        assertEquals(
+            DropOfferState.Terminated(DropOfferTerminationReason.ClaimTimedOut),
+            offer.state.value,
+        )
+        assertTrue(source.closed)
+        assertEquals(
+            KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.DropTransfer)),
+            offer.claimTransfer(),
+        )
+        assertIs<DropOfferId>(
+            surface.dispatchSynchronousDrop(
+                RecordingDropTransferSource(),
+                LogicalPoint(2.0, 4.0),
+            ) { KadreResult.Success(Unit) },
+        )
+    }
+
+    @Test
+    fun oversizedDropDescriptorsCloseInputWithoutPublishingAPartialOffer() = runTest {
+        val resources = KadrePolicies.Default.resources.copy(maxCollectionElementsPerValue = 1)
+        val source = RecordingDropTransferSource(itemCount = 2)
+        val surface = dropCapableSurface(resources)
+        var handlerCalls = 0
+        assertIs<KadreResult.Success<*>>(
+            surface.installInteractionHandler(
+                InteractionHandler { _, _ -> handlerCalls += 1 },
+            ),
+        )
+
+        assertEquals(
+            null,
+            surface.dispatchSynchronousDrop(source, LogicalPoint(1.0, 1.0)) { KadreResult.Success(Unit) },
+        )
+
+        assertEquals(0, handlerCalls)
+        assertTrue(source.closed)
+        assertEquals(
+            FeatureAvailability.Unavailable(
+                KadreFailure.ResourceLimitExceeded(KadreResourceKind.RetainedPayload, 1),
+            ),
+            surface.input.state.value.capabilities.dragAndDrop,
+        )
+    }
+
+    @Test
+    fun closingADropTransferWinsOnceTheCurrentChunkCallbackReturns() = runTest {
+        val source = BlockingDropTransferSource()
+        val transfer = dropCapableSurface().claimPerformedTransfer(source)
+        val read = async(start = CoroutineStart.UNDISPATCHED) {
+            transfer.items.single().collectBytes(10) { }
+        }
+
+        source.callbackReturned.await()
+        transfer.close()
+        source.finish.complete(Unit)
+
+        assertEquals(
+            KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.DropTransfer)),
+            read.await(),
+        )
+    }
+
+    @Test
+    fun cancellingAReplayableDropReadLeavesTheTransferOpenForTheNextReader() = runTest {
+        val source = RecordingDropTransferSource(chunks = listOf(byteArrayOf(1)), sizeBytes = 1)
+        val transfer = dropCapableSurface().claimPerformedTransfer(source)
+        val item = transfer.items.single()
+
+        assertFailsWith<kotlinx.coroutines.CancellationException> {
+            item.collectBytes(1) { throw kotlinx.coroutines.CancellationException("test cancellation") }
+        }
+        assertEquals(KadreResult.Success(Unit), item.collectBytes(1) { })
+        assertFalse(source.closed)
+    }
+
     @Test
     fun textInputAllowsOneSessionAndSerializesDocumentRevisions() = runTest {
         val port = RecordingTextInputPort()
@@ -1846,6 +2221,12 @@ class RuntimeWindowSurfaceTest {
         failureReporter: RuntimeFailureReporter = RuntimeFailureReporter(reported::add),
         deliveryPolicy: WindowDeliveryPolicy = KadrePolicies.Default.window,
         inputDeliveryPolicy: InputDeliveryPolicy = KadrePolicies.Default.input,
+        resources: org.graphiks.kadre.policy.ResourceBudgetPolicy = KadrePolicies.Default.resources,
+        dropTransferBudget: RuntimeDropTransferBudget = RuntimeDropTransferBudget(
+            resources.maxConcurrentDropTransfers,
+        ),
+        dropTransferScope: CoroutineScope? = null,
+        eventStampSource: () -> EventStamp = StampSource()::next,
         maxCollectorsPerFlow: Int = KadrePolicies.Default.resources.maxEventCollectorsPerFlow,
         collectorAllocator: RuntimeEventCollectorAllocator = RuntimeEventCollectorAllocator(
             KadrePolicies.Default.resources.maxEventCollectorsPerSession,
@@ -1864,14 +2245,51 @@ class RuntimeWindowSurfaceTest {
         textInputPort = textInputPort,
         commandsEnabled = commandsEnabled,
         enabledCapabilities = capabilities,
-        eventStampSource = StampSource()::next,
+        eventStampSource = eventStampSource,
         failureReporter = failureReporter,
         deliveryPolicy = deliveryPolicy,
         inputDeliveryPolicy = inputDeliveryPolicy,
+        resources = resources,
+        dropTransferBudget = dropTransferBudget,
+        dropTransferScope = dropTransferScope,
         maxCollectorsPerFlow = maxCollectorsPerFlow,
         collectorAllocator = collectorAllocator,
         sessionFailureHandler = sessionFailureHandler,
     )
+
+    private fun dropCapableSurface(
+        resources: org.graphiks.kadre.policy.ResourceBudgetPolicy = KadrePolicies.Default.resources,
+        dropTransferBudget: RuntimeDropTransferBudget = RuntimeDropTransferBudget(
+            resources.maxConcurrentDropTransfers,
+        ),
+        dropTransferScope: CoroutineScope? = null,
+    ): RuntimeWindowSurface = surface(
+            commandsEnabled = true,
+            capabilities = dropInteractionCapabilities(),
+            resources = resources,
+            dropTransferBudget = dropTransferBudget,
+            dropTransferScope = dropTransferScope,
+        )
+
+    private suspend fun RuntimeWindowSurface.claimPerformedTransfer(
+        source: DropTransferSource,
+    ): DropTransfer {
+        var offer: DropOffer? = null
+        assertIs<KadreResult.Success<*>>(
+            installInteractionHandler(
+                InteractionHandler { context, event ->
+                    offer = assertIs<InteractionEvent.DropEntered>(event).offer
+                    context.request(InteractionAction.AcceptDrop(checkNotNull(offer).id))
+                },
+            ),
+        )
+        val offerId = assertIs<DropOfferId>(
+            dispatchSynchronousDrop(source, LogicalPoint(1.0, 1.0)) { KadreResult.Success(Unit) },
+        )
+        val activeOffer = checkNotNull(offer)
+        assertTrue(accept(SurfaceStimulus.DropPerformed(id, offerId, LogicalPoint(1.0, 1.0))))
+        return assertIs<KadreResult.Success<DropTransfer>>(activeOffer.claimTransfer()).value
+    }
 
     private class RecordingSurfaceCommandPort : SurfaceCommandPort {
         val redrawCommands = mutableListOf<SurfaceRedrawCommand>()
@@ -1940,6 +2358,67 @@ class RuntimeWindowSurfaceTest {
         }
     }
 
+    private class RecordingDropTransferSource(
+        private val chunks: List<ByteArray> = listOf(byteArrayOf(1, 2, 3, 4)),
+        sizeBytes: Long? = 4L,
+        readMode: DropItemReadMode = DropItemReadMode.Replayable,
+        itemCount: Int = 1,
+    ) : DropTransferSource {
+        var closed = false
+        override val items: List<DropItemSource> = List(itemCount) {
+            object : DropItemSource {
+                override val descriptor = DropItemDescriptor(
+                    displayName = "text.txt",
+                    sizeBytes = sizeBytes,
+                    mimeTypes = listOf("text/plain"),
+                    kind = DropItemKind.Text,
+                )
+                override val readMode = readMode
+
+                override suspend fun collectBytes(
+                    maxChunkBytes: Int,
+                    collector: suspend (ByteArray) -> Unit,
+                ): KadreResult<Unit> {
+                    for (chunk in chunks) collector(chunk.copyOf())
+                    return KadreResult.Success(Unit)
+                }
+            }
+        }
+
+        override fun close() {
+            closed = true
+        }
+    }
+
+    private class BlockingDropTransferSource : DropTransferSource {
+        val callbackReturned = CompletableDeferred<Unit>()
+        val finish = CompletableDeferred<Unit>()
+
+        override val items: List<DropItemSource> = listOf(
+            object : DropItemSource {
+                override val descriptor = DropItemDescriptor(
+                    displayName = "text.txt",
+                    sizeBytes = 1,
+                    mimeTypes = listOf("text/plain"),
+                    kind = DropItemKind.Text,
+                )
+                override val readMode = DropItemReadMode.Replayable
+
+                override suspend fun collectBytes(
+                    maxChunkBytes: Int,
+                    collector: suspend (ByteArray) -> Unit,
+                ): KadreResult<Unit> {
+                    collector(byteArrayOf(1))
+                    callbackReturned.complete(Unit)
+                    finish.await()
+                    return KadreResult.Success(Unit)
+                }
+            },
+        )
+
+        override fun close() = Unit
+    }
+
     private class StampSource {
         private var sequence = 0L
 
@@ -1961,6 +2440,13 @@ class RuntimeWindowSurfaceTest {
         handlerInteractions = unsupported(KadreOperation.InstallInteractionHandler),
         armedInteractions = unsupported(KadreOperation.ArmInteraction),
         platformAccess = unsupported(KadreOperation.PlatformSurfaceAccess),
+    )
+
+    private fun dropInteractionCapabilities(): SurfaceCapabilities = phaseThreeCapabilities().copy(
+        handlerInteractions = Capability.Supported(
+            setOf(InteractionKind.AcceptDrop),
+            FeatureAvailability.Available,
+        ),
     )
 
     private fun SurfaceCapabilities.allUnsupported(): Boolean = listOf<Capability<*>>(

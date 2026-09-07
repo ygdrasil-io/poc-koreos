@@ -6,6 +6,7 @@ import org.graphiks.kadre.application.EventStamp
 import org.graphiks.kadre.diagnostics.DelicateKadreApi
 import org.graphiks.kadre.diagnostics.KadreFailure
 import org.graphiks.kadre.diagnostics.KadreResult
+import org.graphiks.kadre.input.DropOffer
 import org.graphiks.kadre.input.DropOfferId
 import org.graphiks.kadre.input.PhysicalKey
 import org.graphiks.kadre.input.PointerButton
@@ -53,27 +54,33 @@ public sealed interface InteractionAction {
 public sealed interface InteractionActionOutcome {
     public val requestId: InteractionRequestId
     public val stamp: EventStamp
+    /** The offer correlation, present only for an [InteractionAction.AcceptDrop] outcome. */
+    public val dropOfferId: DropOfferId?
 
     public data class Committed(
         override val requestId: InteractionRequestId,
         public val windowRequestId: WindowRequestId?,
         override val stamp: EventStamp,
+        override val dropOfferId: DropOfferId? = null,
     ) : InteractionActionOutcome
 
     public data class Rejected(
         override val requestId: InteractionRequestId,
         public val failure: KadreFailure,
         override val stamp: EventStamp,
+        override val dropOfferId: DropOfferId? = null,
     ) : InteractionActionOutcome
 
     public data class Expired(
         override val requestId: InteractionRequestId,
         override val stamp: EventStamp,
+        override val dropOfferId: DropOfferId? = null,
     ) : InteractionActionOutcome
 
     public data class OwnerClosed(
         override val requestId: InteractionRequestId,
         override val stamp: EventStamp,
+        override val dropOfferId: DropOfferId? = null,
     ) : InteractionActionOutcome
 }
 
@@ -128,6 +135,13 @@ public sealed interface InteractionEvent {
 
     public data class TouchStarted(
         public val touchId: TouchId,
+        public val position: LogicalPoint,
+        override val stamp: EventStamp,
+    ) : InteractionEvent
+
+    /** A drop offer whose host requires an immediate accept-or-reject decision. */
+    public data class DropEntered(
+        public val offer: DropOffer,
         public val position: LogicalPoint,
         override val stamp: EventStamp,
     ) : InteractionEvent
