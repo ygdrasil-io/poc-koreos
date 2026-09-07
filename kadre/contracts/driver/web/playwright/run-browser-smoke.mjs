@@ -1,5 +1,5 @@
 import { createServer } from 'node:http';
-import { cp, readFile, readdir, realpath, rename, rm, stat } from 'node:fs/promises';
+import { readFile, readdir, realpath, rename, rm, stat } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { basename, dirname, extname, join, relative, resolve, sep } from 'node:path';
 import { spawn } from 'node:child_process';
@@ -40,6 +40,9 @@ async function runBrowserSmoke(argumentsList) {
   const preservedPlaywrightOutput = join(evidence, 'diagnostics', 'playwright-preserved');
   const distributionRoot = await realpath(distribution);
   const entryScript = await findEntryScript(distributionRoot);
+  // Recursive cleanup is restricted to prior runs and must finish before
+  // Playwright can create the current run's diagnostic snapshot.
+  await removeOldDiagnosticQuarantines(dirname(playwrightOutput));
   const server = await serveDistribution(distributionRoot, entryScript);
   const coordinator = new TerminalCoordinator();
   let businessSucceeded = false;
@@ -194,67 +197,53 @@ function assertZeroJunitOutcomes(element, location) {
 
 async function removeSuccessfulDiagnostics(output, preservedOutput, coordinator) {
   const suffix = `${process.pid}-${Date.now()}`;
-  const stagingOutput = join(dirname(preservedOutput), `.playwright-preservation-${suffix}`);
   const committedQuarantine = join(dirname(preservedOutput), `.playwright-quarantine-current-${suffix}`);
-  const obsoleteQuarantines = await findDiagnosticQuarantines(dirname(preservedOutput));
 
-  try {
-    if (existsSync(preservedOutput)) {
-      const obsoletePreservation = join(dirname(preservedOutput), `.playwright-quarantine-obsolete-${suffix}`);
+  if (existsSync(preservedOutput)) {
+    const obsoletePreservation = join(dirname(preservedOutput), `.playwright-quarantine-obsolete-${suffix}`);
+    try {
       await boundedDiagnosticOperation(
         rename(preservedOutput, obsoletePreservation),
         `retiring stale diagnostics at ${preservedOutput}`,
       );
-      obsoleteQuarantines.push(obsoletePreservation);
+    } catch (error) {
+      throw new Error(`Could not retire stale diagnostics at ${preservedOutput}: ${error.message}`, { cause: error });
     }
-    if (!existsSync(output)) {
-      return;
-    }
+  }
+  if (!existsSync(output)) return;
 
+  try {
     await boundedDiagnosticOperation(
-      cp(output, stagingOutput, { errorOnExist: true, force: false, recursive: true }),
-      `copying diagnostics from ${output}`,
-    );
-    await boundedDiagnosticOperation(
-      rename(stagingOutput, preservedOutput),
+      rename(output, preservedOutput),
       `publishing preserved diagnostics at ${preservedOutput}`,
     );
-    if (coordinator.signal()) return;
+  } catch (error) {
+    throw new Error(`Could not atomically preserve successful diagnostics at ${preservedOutput}: ${error.message}`, { cause: error });
+  }
+  if (coordinator.signal()) return;
 
-    for (const quarantine of obsoleteQuarantines) {
-      try {
-        await boundedDiagnosticOperation(
-          rm(quarantine, { force: true, recursive: true }),
-          `removing obsolete diagnostic quarantine at ${quarantine}`,
-        );
-      } catch (error) {
-        throw new Error(`Could not remove obsolete diagnostic quarantine at ${quarantine}; current diagnostics preserved at ${preservedOutput}: ${error.message}`, { cause: error });
-      }
-      if (coordinator.signal()) return;
-    }
+  // Commit point: invoking this final atomic rename transfers the complete
+  // current snapshot to durable quarantine. No recursive deletion follows it.
+  try {
+    await boundedDiagnosticOperation(
+      rename(preservedOutput, committedQuarantine),
+      `committing durable diagnostic quarantine at ${committedQuarantine}`,
+    );
+  } catch (error) {
+    throw new Error(`Could not commit durable diagnostic quarantine; complete diagnostics preserved at ${preservedOutput}: ${error.message}`, { cause: error });
+  }
+}
 
+async function removeOldDiagnosticQuarantines(directory) {
+  for (const quarantine of await findDiagnosticQuarantines(directory)) {
     try {
       await boundedDiagnosticOperation(
-        rm(output, { force: true, recursive: true }),
-        `removing diagnostics at ${output}`,
+        rm(quarantine, { force: true, recursive: true }),
+        `removing old diagnostic quarantine at ${quarantine}`,
       );
     } catch (error) {
-      throw new Error(`Could not remove successful diagnostics; complete diagnostics preserved at ${preservedOutput}: ${error.message}`, { cause: error });
+      throw new Error(`Could not remove old diagnostic quarantine at ${quarantine}: ${error.message}`, { cause: error });
     }
-    if (coordinator.signal()) return;
-
-    // Commit point: invoking this final atomic rename transfers the complete
-    // snapshot to durable quarantine. No recursive deletion follows it.
-    try {
-      await boundedDiagnosticOperation(
-        rename(preservedOutput, committedQuarantine),
-        `committing durable diagnostic quarantine at ${committedQuarantine}`,
-      );
-    } catch (error) {
-      throw new Error(`Could not commit durable diagnostic quarantine; complete diagnostics preserved at ${preservedOutput}: ${error.message}`, { cause: error });
-    }
-  } finally {
-    await removeDiagnosticsBestEffort(stagingOutput);
   }
 }
 
@@ -276,17 +265,6 @@ async function findDiagnosticQuarantines(directory) {
 
 function boundedDiagnosticOperation(operation, description) {
   return withDeadline(operation, DIAGNOSTIC_OPERATION_TIMEOUT_MILLISECONDS, description);
-}
-
-async function removeDiagnosticsBestEffort(path) {
-  try {
-    await boundedDiagnosticOperation(
-      rm(path, { force: true, recursive: true }),
-      `best-effort diagnostic cleanup at ${path}`,
-    );
-  } catch {
-    // Hidden retirement paths never masquerade as the normal diagnostics for a clean smoke.
-  }
 }
 
 function reduceTerminalState(state, event) {

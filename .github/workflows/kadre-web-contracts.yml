@@ -43,7 +43,7 @@ jobs:
         run: ./gradlew :kadre:contracts:driver:web:browserSmokeRunnerTest :kadre:contracts:driver:web:jsBrowserSmoke :kadre:contracts:driver:web:wasmJsBrowserSmoke :kadre:contracts:validator:check --console=plain
 
       - name: Upload Web diagnostics and evidence
-        if: failure()
+        if: failure() || cancelled()
         uses: actions/upload-artifact@v4
         with:
           name: kadre-web-contract-failure-artifacts
