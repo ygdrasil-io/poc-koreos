@@ -136,6 +136,11 @@ public class RuntimeWindowManager public constructor(
     private val eventClockOrigin = System.nanoTime()
     private var sessionEventStampSource: (() -> EventStamp)? = null
     private var exclusiveDisplayTargetResolver: ExclusiveDisplayTargetResolver? = null
+    private var exclusiveFullscreenPort: ExclusiveFullscreenPort? = null
+    private var exclusiveFullscreenAvailability: ExclusiveFullscreenAvailability =
+        ExclusiveFullscreenAvailability.Unavailable(KadreFailure.Unsupported(KadreOperation.UpdateWindow))
+    private var exclusiveFullscreenAvailabilityObservation: AutoCloseable? = null
+    private var exclusiveFullscreenDisplayLossObservation: AutoCloseable? = null
     private var rawInputCoordinator: RawInputCoordinator? = null
     private var rawInputCapability: Capability<Unit> = unsupported(KadreOperation.RawInputAccess)
     private var rawInputCapabilityObservation: AutoCloseable? = null
@@ -194,6 +199,44 @@ public class RuntimeWindowManager public constructor(
         }
     }
     private val updateStimulusSink = WindowUpdateCommandStimulusSink(::acceptWindowUpdateStimulus)
+    private val exclusiveFullscreenCommandSink = object : ExclusiveFullscreenCommandSink {
+        override fun captureCommitted(windowId: WindowId, operationId: WindowOperationId): Boolean {
+            val window = synchronized(lock) { dispatchedWindowUpdates[operationId] }
+                ?.takeIf { it.id == windowId } ?: return false
+            return window.markExclusiveCaptureCommitted(operationId)
+        }
+
+        override fun completed(
+            windowId: WindowId,
+            operationId: WindowOperationId,
+            effectiveState: WindowState,
+        ) {
+            val window = synchronized(lock) { dispatchedWindowUpdates.remove(operationId) }
+                ?.takeIf { it.id == windowId } ?: return
+            window.applyNativeUpdate(operationId, effectiveState)
+        }
+
+        override fun failed(
+            windowId: WindowId,
+            operationId: WindowOperationId,
+            failure: KadreFailure,
+            effectiveState: WindowState?,
+            publicationOperationId: WindowOperationId?,
+        ) {
+            val window = synchronized(lock) { dispatchedWindowUpdates.remove(operationId) }
+                ?.takeIf { it.id == windowId } ?: return
+            if (effectiveState == null) {
+                window.rejectDispatchedUpdate(operationId, failure)
+            } else {
+                window.applyCommittedFailure(
+                    operationId,
+                    effectiveState,
+                    publicationOperationId,
+                    failure,
+                )
+            }
+        }
+    }
     private val fullscreenObservationSink = object : WindowFullscreenObservationSink {
         override fun accept(
             windowId: WindowId,
@@ -296,6 +339,46 @@ public class RuntimeWindowManager public constructor(
             }
             exclusiveDisplayTargetResolver = resolver
         }
+    }
+
+    /** Installs the session's exclusive broker seam before any window admission. */
+    internal fun installExclusiveFullscreenPort(port: ExclusiveFullscreenPort) {
+        synchronized(lock) {
+            check(pending.isEmpty() && committed.isEmpty()) {
+                "exclusive fullscreen port must be installed before window admission"
+            }
+            check(exclusiveFullscreenPort == null) { "exclusive fullscreen port was already installed" }
+            exclusiveFullscreenPort = port
+            exclusiveFullscreenAvailability = port.availability
+        }
+        exclusiveFullscreenAvailabilityObservation =
+            port.installAvailabilityObserver(::updateExclusiveFullscreenAvailability)
+        exclusiveFullscreenDisplayLossObservation =
+            port.installDisplayLossObserver(::acceptExclusiveFullscreenDisplayLoss)
+    }
+
+    private fun updateExclusiveFullscreenAvailability(availability: ExclusiveFullscreenAvailability) {
+        val windows = synchronized(lock) {
+            if (exclusiveFullscreenAvailability == availability) return
+            exclusiveFullscreenAvailability = availability
+            committed.values.map { it.window }
+        }
+        windows.forEach { it.updateExclusiveFullscreenAvailability(availability) }
+    }
+
+    private fun acceptExclusiveFullscreenDisplayLoss(loss: ExclusiveFullscreenDisplayLoss) {
+        val window = synchronized(lock) {
+            val matchingWindow = committed.values
+                .firstOrNull { it.window.id == loss.windowId }
+                ?.window
+                ?: return
+            loss.operationId?.let { operationId ->
+                if (dispatchedWindowUpdates[operationId] !== matchingWindow) return
+                dispatchedWindowUpdates.remove(operationId)
+            }
+            matchingWindow
+        }
+        window.applyExclusiveDisplayLoss(loss)
     }
 
     /**
@@ -482,6 +565,10 @@ public class RuntimeWindowManager public constructor(
                 .forEach(::forceCloseLocked)
             attentionPort
         }
+        exclusiveFullscreenAvailabilityObservation?.close()
+        exclusiveFullscreenAvailabilityObservation = null
+        exclusiveFullscreenDisplayLossObservation?.close()
+        exclusiveFullscreenDisplayLossObservation = null
         drainAttentionReleases()
         rawInputCapabilityObservation?.close()
         synchronized(lock) { rawInputCoordinator }?.close()
@@ -597,6 +684,10 @@ public class RuntimeWindowManager public constructor(
     }
 
     internal fun dispatchWindowUpdate(window: RuntimeWindow, pending: PendingWindowUpdate) {
+        pending.exclusiveTransition?.let {
+            dispatchExclusiveFullscreenUpdate(window, pending, it)
+            return
+        }
         beforeWindowUpdateRegistration(window, pending)
         val command = WindowUpdateCommand(
             windowId = window.id,
@@ -616,6 +707,106 @@ public class RuntimeWindowManager public constructor(
             synchronized(lock) { dispatchedWindowUpdates.remove(pending.operationId) }
             window.rejectDispatchedUpdate(pending.operationId, dispatch.failure)
         }
+    }
+
+    private fun dispatchExclusiveFullscreenUpdate(
+        window: RuntimeWindow,
+        pending: PendingWindowUpdate,
+        transition: ExclusiveFullscreenTransition,
+    ) {
+        beforeWindowUpdateRegistration(window, pending)
+        val port = synchronized(lock) { exclusiveFullscreenPort }
+        if (port == null) {
+            window.rejectDispatchedUpdate(
+                pending.operationId,
+                KadreFailure.Unsupported(KadreOperation.UpdateWindow),
+            )
+            return
+        }
+        val command = ExclusiveFullscreenCommand(
+            windowId = window.id,
+            operationId = pending.operationId,
+            target = checkNotNull(transition.target),
+            sink = exclusiveFullscreenCommandSink,
+        )
+        if (!window.beginNativeUpdateDispatch(pending.operationId)) return
+        synchronized(lock) { dispatchedWindowUpdates[pending.operationId] = window }
+        when (transition) {
+            is ExclusiveFullscreenTransition.Enter -> {
+                when (val reservation = guardPort("exclusive-reserve-exception") { port.reserve(command) }) {
+                    is GuardedCall.Success -> if (reservation.value is KadreResult.Failure) {
+                        synchronized(lock) { dispatchedWindowUpdates.remove(pending.operationId) }
+                        window.rejectDispatchedUpdate(pending.operationId, reservation.value.reason)
+                    }
+                    is GuardedCall.Failure -> {
+                        synchronized(lock) { dispatchedWindowUpdates.remove(pending.operationId) }
+                        window.rejectDispatchedUpdate(pending.operationId, reservation.failure)
+                    }
+                }
+            }
+            is ExclusiveFullscreenTransition.Exit -> {
+                when (val release = guardPort("exclusive-release-exception") { port.release(command) }) {
+                    is GuardedCall.Success -> Unit
+                    is GuardedCall.Failure -> {
+                        synchronized(lock) { dispatchedWindowUpdates.remove(pending.operationId) }
+                        window.rejectDispatchedUpdate(pending.operationId, release.failure)
+                    }
+                }
+            }
+        }
+    }
+
+    internal fun resolveExclusiveTarget(request: FullscreenMode.Exclusive): KadreResult<ExclusiveDisplayTarget> {
+        val resolver = synchronized(lock) { exclusiveDisplayTargetResolver }
+            ?: return KadreResult.Failure(KadreFailure.Unsupported(KadreOperation.UpdateWindow))
+        return resolver.resolveExclusiveTarget(request.displayId, request.mode)
+    }
+
+    internal fun exclusiveFullscreenAvailable(): Boolean = synchronized(lock) {
+        exclusiveFullscreenPort != null &&
+            exclusiveFullscreenAvailability == ExclusiveFullscreenAvailability.Available
+    }
+
+    internal fun cancelExclusiveReservation(
+        window: RuntimeWindow,
+        operationId: WindowOperationId,
+        failure: KadreFailure,
+    ) {
+        val port = synchronized(lock) { exclusiveFullscreenPort } ?: return
+        val outcome = guardPort("exclusive-cancellation-exception") {
+            port.cancelReservation(operationId)
+        }
+        if (
+            outcome is GuardedCall.Success &&
+            outcome.value == ExclusiveFullscreenCancellationOutcome.CancelledBeforeCommit
+        ) {
+            synchronized(lock) { dispatchedWindowUpdates.remove(operationId) }
+            window.terminaliseReservedExclusive(operationId, failure)
+        }
+    }
+
+    internal fun withdrawExclusiveReservation(window: RuntimeWindow, operationId: WindowOperationId) {
+        val port = synchronized(lock) { exclusiveFullscreenPort } ?: return
+        val outcome = guardPort("exclusive-cancellation-exception") {
+            port.cancelReservation(operationId)
+        }
+        if (
+            outcome is GuardedCall.Success &&
+            outcome.value == ExclusiveFullscreenCancellationOutcome.CancelledBeforeCommit
+        ) {
+            synchronized(lock) { dispatchedWindowUpdates.remove(operationId) }
+            window.withdrawDispatchedUpdate(operationId)
+        } else {
+            window.detachDispatchedUpdateWaiter(operationId)
+        }
+    }
+
+    internal fun releaseExclusiveWindow(windowId: WindowId) {
+        val port = synchronized(lock) { exclusiveFullscreenPort } ?: return
+        val release = guardPort("exclusive-window-release-exception") {
+            port.releaseWindow(windowId)
+        }
+        if (release is GuardedCall.Failure) safeReport(KadreException(release.failure))
     }
 
     internal fun withdrawWindowUpdate(window: RuntimeWindow, operationId: WindowOperationId) {
@@ -1285,6 +1476,7 @@ public class RuntimeWindowManager public constructor(
             enabledWindowUpdateCapabilities = enabledWindowUpdateCapabilities,
             acceptedAttention = if (attentionPort == null) null else acceptedAttention,
             fullscreenAvailabilityFailure = fullscreenAvailabilityFailure,
+            initialExclusiveFullscreenAvailability = exclusiveFullscreenAvailability,
             eventCollectorGate = collectorAllocator.newGate(sessionMaxCollectorsPerFlow),
             deliveryPolicy = windowDeliveryPolicy,
             eventStampSource = ::nextEventStamp,
@@ -1637,10 +1829,11 @@ internal class RuntimeWindow(
     override val surface: RuntimeWindowSurface,
     private val manager: RuntimeWindowManager,
     private val platform: KadrePlatform,
-    publicWindowCapabilities: Boolean,
+    private val publicWindowCapabilities: Boolean,
     enabledWindowUpdateCapabilities: Set<WindowProperty>,
-    acceptedAttention: Set<WindowAttention>?,
+    private val acceptedAttention: Set<WindowAttention>?,
     private val fullscreenAvailabilityFailure: KadreFailure.PlatformFailure?,
+    initialExclusiveFullscreenAvailability: ExclusiveFullscreenAvailability,
     eventCollectorGate: RuntimeEventCollectorGate,
     deliveryPolicy: WindowDeliveryPolicy,
     private val eventStampSource: () -> EventStamp,
@@ -1655,6 +1848,7 @@ internal class RuntimeWindow(
             enabledWindowUpdateCapabilities,
             acceptedAttention,
             fullscreenAvailabilityFailure,
+            initialExclusiveFullscreenAvailability,
         ),
     )
     private val supportedWindowUpdateProperties =
@@ -1670,6 +1864,7 @@ internal class RuntimeWindow(
     private val pendingUpdates = ArrayDeque<PendingWindowUpdate>()
     private var dispatchedUpdate: PendingWindowUpdate? = null
     private var desiredLevel: WindowLevel = spec.level
+    private var activeExclusiveTarget: ExclusiveDisplayTarget? = null
     private var fullscreenBarrier: FullscreenBarrier? = null
     private var fullscreenTombstone: FullscreenTombstone? = null
     private var eventDeliveryClosePending = false
@@ -1705,6 +1900,104 @@ internal class RuntimeWindow(
 
     fun desiredLevel(): WindowLevel = synchronized(updateLock) { desiredLevel }
 
+    fun updateExclusiveFullscreenAvailability(availability: ExclusiveFullscreenAvailability) {
+        val cancellation = synchronized(updateLock) {
+            mutableCapabilities.value = windowCapabilities(
+                publicWindowCapabilities,
+                supportedWindowUpdateProperties,
+                acceptedAttention,
+                fullscreenAvailabilityFailure,
+                availability,
+            )
+            val pending = dispatchedUpdate?.takeIf {
+                availability is ExclusiveFullscreenAvailability.Unavailable &&
+                    it.exclusivePhase == ExclusiveFullscreenPhase.Reserved &&
+                    !it.cancellationRequested
+            }
+            pending?.cancellationRequested = true
+            pending?.operationId?.let { it to availability }
+        }
+        cancellation?.let { (operationId, currentAvailability) ->
+            manager.cancelExclusiveReservation(
+                this,
+                operationId,
+                (currentAvailability as ExclusiveFullscreenAvailability.Unavailable).failure,
+            )
+        }
+    }
+
+    fun terminaliseReservedExclusive(operationId: WindowOperationId, failure: KadreFailure) {
+        var closeEventDelivery = false
+        synchronized(updateLock) {
+            val pending = dispatchedUpdate?.takeIf {
+                it.operationId == operationId && it.exclusivePhase == ExclusiveFullscreenPhase.Reserved
+            } ?: return
+            dispatchedUpdate = null
+            pending.result.complete(KadreResult.Failure(failure))
+            closeEventDelivery = takePendingEventDeliveryCloseLocked()
+        }
+        if (closeEventDelivery) eventFlow.close()
+        dispatchNextUpdate()
+    }
+
+    fun applyExclusiveDisplayLoss(loss: ExclusiveFullscreenDisplayLoss): Boolean {
+        val failure = KadreFailure.PlatformFailure(
+            KadrePlatform.AppKit,
+            "exclusive-fullscreen",
+            "display-lost",
+        )
+        var publication: WindowStatePublication? = null
+        var completion: PendingWindowUpdate? = null
+        var diagnostic = false
+        synchronized(updateLock) {
+            val lifecycle = mutableState.value
+            if (lifecycle.phase != WindowPhase.Open) return false
+            val pending = dispatchedUpdate?.takeIf {
+                it.exclusiveTransition != null &&
+                    (loss.operationId == null || it.operationId == loss.operationId)
+            }
+            if (pending == null && activeExclusiveTarget == null && lifecycle.fullscreen !is FullscreenMode.Exclusive) {
+                return false
+            }
+            if (pending != null) {
+                dispatchedUpdate = null
+                completion = pending
+            } else {
+                diagnostic = true
+            }
+            activeExclusiveTarget = null
+            val effective = loss.effectiveState.copy(
+                phase = WindowPhase.Open,
+                fullscreen = FullscreenMode.Windowed,
+                revision = WindowRevision(lifecycle.revision.value + 1L),
+            )
+            mutableState.value = effective
+            eventPublicationsInFlight += 1
+            publication = WindowStatePublication(
+                lifecycle,
+                effective,
+                operationId = null,
+                forcedChanged = setOf(WindowProperty.Fullscreen),
+            )
+        }
+        try {
+            publishStatePublication(checkNotNull(publication))
+        } finally {
+            completion?.let { pending ->
+                pending.result.complete(KadreResult.Failure(failure))
+                if (pending.waiterDetached) diagnostic = true
+            }
+            if (diagnostic) manager.reportDetachedWindowUpdateFailure(failure)
+            val closeEventDelivery = synchronized(updateLock) {
+                eventPublicationsInFlight -= 1
+                takePendingEventDeliveryCloseLocked()
+            }
+            if (closeEventDelivery) eventFlow.close()
+            dispatchNextUpdate()
+        }
+        return true
+    }
+
     suspend fun applyUpdate(update: WindowUpdate): KadreResult<WindowUpdateOutcome> {
         currentCoroutineContext().ensureActive()
         val pending: PendingWindowUpdate
@@ -1727,7 +2020,28 @@ internal class RuntimeWindow(
             invalidChromeField(supportedUpdate, current)?.let { field ->
                 return KadreResult.Failure(KadreFailure.InvalidRequest(field))
             }
-            val canonicalUpdate = canonicalMutationUpdate(supportedUpdate, current)
+            val requestedFullscreen = (supportedUpdate.fullscreen as? PropertyChange.Set)?.value
+            val exclusiveTransition = when {
+                requestedFullscreen is FullscreenMode.Exclusive && current.fullscreen == FullscreenMode.Windowed -> {
+                    ExclusiveFullscreenTransition.Enter(requestedFullscreen, target = null)
+                }
+                requestedFullscreen == FullscreenMode.Windowed && current.fullscreen is FullscreenMode.Exclusive -> {
+                    val target = activeExclusiveTarget
+                        ?: return KadreResult.Failure(
+                            KadreFailure.PlatformFailure(platform, "exclusive-fullscreen", "missing-lease"),
+                        )
+                    ExclusiveFullscreenTransition.Exit(target)
+                }
+                requestedFullscreen is FullscreenMode.Exclusive || current.fullscreen is FullscreenMode.Exclusive -> {
+                    return KadreResult.Failure(KadreFailure.InvalidRequest("fullscreen"))
+                }
+                else -> null
+            }
+            val canonicalUpdate = if (exclusiveTransition == null) {
+                canonicalMutationUpdate(supportedUpdate, current)
+            } else {
+                supportedUpdate
+            }
             val candidate = candidateFor(canonicalUpdate, current)
                 ?: return KadreResult.Failure(KadreFailure.InvalidRequest("sizeConstraints"))
             update.expectedRevision?.let { expected ->
@@ -1736,8 +2050,8 @@ internal class RuntimeWindow(
                 }
             }
             val operationId = RuntimeProcessIds.nextWindowOperationId()
-            val exclusive = (supportedUpdate.fullscreen as? PropertyChange.Set)?.value as? FullscreenMode.Exclusive
-            if (exclusive != null) {
+            var resolvedExclusiveTransition = exclusiveTransition
+            if (exclusiveTransition is ExclusiveFullscreenTransition.Enter && !manager.exclusiveFullscreenAvailable()) {
                 return KadreResult.Success(
                     WindowUpdateOutcome.PartiallyApplied(
                         operationId,
@@ -1751,7 +2065,22 @@ internal class RuntimeWindow(
                     ),
                 )
             }
-            if (supportedUpdate.fullscreen is PropertyChange.Set && fullscreenAvailabilityFailure != null) {
+            if (exclusiveTransition is ExclusiveFullscreenTransition.Enter) {
+                when (val resolved = manager.resolveExclusiveTarget(exclusiveTransition.request)) {
+                    is KadreResult.Failure -> return resolved
+                    is KadreResult.Success -> {
+                        resolvedExclusiveTransition = ExclusiveFullscreenTransition.Enter(
+                            exclusiveTransition.request,
+                            resolved.value,
+                        )
+                    }
+                }
+            }
+            if (
+                supportedUpdate.fullscreen is PropertyChange.Set &&
+                exclusiveTransition == null &&
+                fullscreenAvailabilityFailure != null
+            ) {
                 return KadreResult.Failure(fullscreenAvailabilityFailure)
             }
             if (
@@ -1782,6 +2111,7 @@ internal class RuntimeWindow(
                     expectedRevision = update.expectedRevision,
                     update = canonicalUpdate,
                     rejected = rejected,
+                    exclusiveTransition = resolvedExclusiveTransition,
                 )
                 pendingUpdates.addLast(pending)
             }
@@ -1829,6 +2159,7 @@ internal class RuntimeWindow(
                 )
             }
             mutableState.value = effective
+            updateExclusiveOwnershipAfterReadback(pending, effective)
             updateDesiredLevelAfterReadback(pending, effective, backendRejected)
             publication = WindowStatePublication(lifecycle, effective, operationId)
             completion = pending
@@ -1884,6 +2215,7 @@ internal class RuntimeWindow(
                     },
                 )
             }
+            updateExclusiveOwnershipAfterReadback(pending, candidate)
             updateDesiredLevelAfterReadback(pending, candidate, backendRejected)
             completion = pending
         }
@@ -2326,6 +2658,21 @@ internal class RuntimeWindow(
         }
     }
 
+    private fun updateExclusiveOwnershipAfterReadback(
+        pending: PendingWindowUpdate,
+        effective: WindowState,
+    ) {
+        when {
+            pending.exclusiveTransition is ExclusiveFullscreenTransition.Enter &&
+                effective.fullscreen is FullscreenMode.Exclusive -> {
+                activeExclusiveTarget = pending.exclusiveTransition.target
+            }
+            pending.exclusiveTransition != null && effective.fullscreen == FullscreenMode.Windowed -> {
+                activeExclusiveTarget = null
+            }
+        }
+    }
+
     /** Accepts an uncorrelated native observation after the peer has filtered its own setters. */
     fun observeNativeUpdate(state: WindowState): Boolean {
         val publication = synchronized(updateLock) {
@@ -2413,7 +2760,18 @@ internal class RuntimeWindow(
                     candidate.result.complete(KadreResult.Failure(KadreFailure.InvalidRequest(field)))
                     continue
                 }
-                candidate.update = canonicalMutationUpdate(candidate.update, current)
+                val transitionStillValid = when (candidate.exclusiveTransition) {
+                    is ExclusiveFullscreenTransition.Enter -> current.fullscreen == FullscreenMode.Windowed
+                    is ExclusiveFullscreenTransition.Exit -> current.fullscreen is FullscreenMode.Exclusive
+                    null -> true
+                }
+                if (!transitionStillValid) {
+                    candidate.result.complete(KadreResult.Failure(KadreFailure.InvalidRequest("fullscreen")))
+                    continue
+                }
+                if (candidate.exclusiveTransition == null) {
+                    candidate.update = canonicalMutationUpdate(candidate.update, current)
+                }
                 val effectiveCandidate = candidateFor(candidate.update, current)
                 if (effectiveCandidate == null) {
                     candidate.result.complete(KadreResult.Failure(KadreFailure.InvalidRequest("sizeConstraints")))
@@ -2434,7 +2792,7 @@ internal class RuntimeWindow(
                 }
                 if (candidate.result.isCompleted) continue
                 dispatchedUpdate = candidate
-                fullscreenTarget(candidate.update)?.let { target ->
+                fullscreenTarget(candidate.update)?.takeIf { candidate.exclusiveTransition == null }?.let { target ->
                     fullscreenBarrier = FullscreenBarrier(
                         operationId = candidate.operationId,
                         target = target,
@@ -2453,8 +2811,22 @@ internal class RuntimeWindow(
         var closeEventDelivery = false
         var drainNext = false
         var withdrawDispatched = false
+        var withdrawExclusive = false
         synchronized(updateLock) {
             if (dispatchedUpdate === pending) {
+                if (pending.exclusiveTransition != null) {
+                    if (
+                        pending.exclusiveTransition is ExclusiveFullscreenTransition.Exit ||
+                        pending.exclusivePhase != ExclusiveFullscreenPhase.Reserved
+                    ) {
+                        pending.waiterDetached = true
+                        return
+                    }
+                    if (pending.cancellationRequested) return
+                    pending.cancellationRequested = true
+                    withdrawExclusive = true
+                    return@synchronized
+                }
                 if (pending.isFullscreenUpdate() && pending.nativeDispatchStarted) {
                     pending.waiterDetached = true
                     return
@@ -2479,6 +2851,7 @@ internal class RuntimeWindow(
         }
         if (closeEventDelivery) eventFlow.close()
         if (drainNext) dispatchNextUpdate()
+        if (withdrawExclusive) manager.withdrawExclusiveReservation(this, pending.operationId)
         if (withdrawDispatched) manager.withdrawWindowUpdate(this, pending.operationId)
     }
 
@@ -2493,6 +2866,16 @@ internal class RuntimeWindow(
             pending.result.complete(KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.Window)))
             false
         }
+    }
+
+    fun markExclusiveCaptureCommitted(operationId: WindowOperationId): Boolean = synchronized(updateLock) {
+        val pending = dispatchedUpdate?.takeIf {
+            it.operationId == operationId && it.exclusiveTransition is ExclusiveFullscreenTransition.Enter
+        } ?: return@synchronized false
+        if (pending.exclusivePhase != ExclusiveFullscreenPhase.Reserved) return@synchronized false
+        pending.exclusivePhase = ExclusiveFullscreenPhase.Committing
+        pending.nativeDispatchStarted = true
+        true
     }
 
     fun beginFullscreenSelectorInvocation(operationId: WindowOperationId): Boolean = synchronized(updateLock) {
@@ -2584,6 +2967,7 @@ internal class RuntimeWindow(
         stamp: EventStamp,
     ): WindowOperationId? {
         var fullscreenOperationId: WindowOperationId? = null
+        var releaseExclusive = false
         val closingState = synchronized(updateLock) {
             val current = mutableState.value
             if (current.phase != WindowPhase.Open) return null
@@ -2596,7 +2980,12 @@ internal class RuntimeWindow(
             dispatchedUpdate?.takeIf { !it.nativeDispatchStarted || it.isFullscreenUpdate() }?.let { pending ->
                 dispatchedUpdate = null
                 if (pending.isFullscreenUpdate()) fullscreenOperationId = pending.operationId
+                if (pending.exclusiveTransition != null) releaseExclusive = true
                 pending.result.complete(KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.Window)))
+            }
+            if (activeExclusiveTarget != null) {
+                activeExclusiveTarget = null
+                releaseExclusive = true
             }
             fullscreenBarrier = null
             current.copy(
@@ -2605,6 +2994,7 @@ internal class RuntimeWindow(
             ).also { mutableState.value = it }
         }
         surface.detach()
+        if (releaseExclusive) manager.releaseExclusiveWindow(id)
         publish(
             WindowEvent.Closing(
                 reason = reason,
@@ -2697,7 +3087,28 @@ internal data class PendingWindowUpdate(
     var backendRegistrationEntered: Boolean = false,
     var nativeDispatchStarted: Boolean = false,
     var waiterDetached: Boolean = false,
+    val exclusiveTransition: ExclusiveFullscreenTransition? = null,
+    var exclusivePhase: ExclusiveFullscreenPhase? = when (exclusiveTransition) {
+        is ExclusiveFullscreenTransition.Enter -> ExclusiveFullscreenPhase.Reserved
+        is ExclusiveFullscreenTransition.Exit -> ExclusiveFullscreenPhase.Releasing
+        null -> null
+    },
 )
+
+internal sealed interface ExclusiveFullscreenTransition {
+    val target: ExclusiveDisplayTarget?
+
+    data class Enter(
+        val request: FullscreenMode.Exclusive,
+        override val target: ExclusiveDisplayTarget?,
+    ) : ExclusiveFullscreenTransition
+
+    data class Exit(
+        override val target: ExclusiveDisplayTarget,
+    ) : ExclusiveFullscreenTransition
+}
+
+internal enum class ExclusiveFullscreenPhase { Reserved, Committing, Releasing }
 
 private enum class FullscreenPhase { PreparedLocal, InvokingSelector, DrainingTerminals, AwaitingLocal, External }
 
@@ -2781,6 +3192,7 @@ private fun windowCapabilities(
     enabledWindowUpdateCapabilities: Set<WindowProperty>,
     acceptedAttention: Set<WindowAttention>?,
     fullscreenAvailabilityFailure: KadreFailure.PlatformFailure?,
+    exclusiveFullscreenAvailability: ExclusiveFullscreenAvailability,
 ): WindowCapabilities = WindowCapabilities(
     title = if (publicWindowCapabilities) {
         enabledWindowUpdateCapabilities.capability(WindowProperty.Title, Unit)
@@ -2804,7 +3216,12 @@ private fun windowCapabilities(
     fullscreen = if (publicWindowCapabilities) {
         if (WindowProperty.Fullscreen in enabledWindowUpdateCapabilities) {
             Capability.Supported(
-                setOf(FullscreenKind.Borderless),
+                buildSet {
+                    add(FullscreenKind.Borderless)
+                    if (exclusiveFullscreenAvailability == ExclusiveFullscreenAvailability.Available) {
+                        add(FullscreenKind.Exclusive)
+                    }
+                },
                 fullscreenAvailabilityFailure
                     ?.let(FeatureAvailability::Unavailable)
                     ?: FeatureAvailability.Available,

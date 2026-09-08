@@ -19,6 +19,85 @@ import org.graphiks.kadre.window.WindowRevision
 import java.util.IdentityHashMap
 import java.util.concurrent.atomic.AtomicBoolean
 
+/** Dynamic process capability for new exclusive-fullscreen reservations. */
+internal sealed interface ExclusiveFullscreenAvailability {
+    data object Available : ExclusiveFullscreenAvailability
+
+    data class Unavailable(val failure: KadreFailure) : ExclusiveFullscreenAvailability
+}
+
+/** Immediate knowledge about withdrawal of an exclusive reservation before capture. */
+internal sealed interface ExclusiveFullscreenCancellationOutcome {
+    data object CancelledBeforeCommit : ExclusiveFullscreenCancellationOutcome
+    data object TooLate : ExclusiveFullscreenCancellationOutcome
+}
+
+/** Authoritative external loss of a held display or its exact mode. */
+internal data class ExclusiveFullscreenDisplayLoss(
+    val windowId: WindowId,
+    val operationId: WindowOperationId?,
+    val effectiveState: WindowState,
+)
+
+/**
+ * Runtime-private exclusive transaction. Native identities and lifecycle resources never leave
+ * this unstable runtime/backend seam.
+ */
+internal class ExclusiveFullscreenCommand internal constructor(
+    val windowId: WindowId,
+    val operationId: WindowOperationId,
+    val target: ExclusiveDisplayTarget,
+    private val sink: ExclusiveFullscreenCommandSink,
+) {
+    /** Signals the irreversible display-capture boundary. */
+    fun captureCommitted(): Boolean = sink.captureCommitted(windowId, operationId)
+
+    /** Completes after the backend has read back the effective window and display state. */
+    fun completed(effectiveState: WindowState) {
+        sink.completed(windowId, operationId, effectiveState)
+    }
+
+    /** Completes a failure before capture, or after capture with an authoritative readback. */
+    fun failed(failure: KadreFailure, effectiveState: WindowState? = null) {
+        sink.failed(windowId, operationId, failure, effectiveState, publicationOperationId = operationId)
+    }
+}
+
+internal interface ExclusiveFullscreenCommandSink {
+    fun captureCommitted(windowId: WindowId, operationId: WindowOperationId): Boolean
+
+    fun completed(windowId: WindowId, operationId: WindowOperationId, effectiveState: WindowState)
+
+    fun failed(
+        windowId: WindowId,
+        operationId: WindowOperationId,
+        failure: KadreFailure,
+        effectiveState: WindowState?,
+        publicationOperationId: WindowOperationId?,
+    )
+}
+
+/** Runtime-private port implemented by the process-wide exclusive broker. */
+internal interface ExclusiveFullscreenPort {
+    val availability: ExclusiveFullscreenAvailability
+
+    fun installAvailabilityObserver(
+        observer: (ExclusiveFullscreenAvailability) -> Unit,
+    ): AutoCloseable
+
+    fun installDisplayLossObserver(
+        observer: (ExclusiveFullscreenDisplayLoss) -> Unit,
+    ): AutoCloseable
+
+    fun reserve(command: ExclusiveFullscreenCommand): KadreResult<Unit>
+
+    fun release(command: ExclusiveFullscreenCommand)
+
+    fun cancelReservation(operationId: WindowOperationId): ExclusiveFullscreenCancellationOutcome
+
+    fun releaseWindow(windowId: WindowId)
+}
+
 /**
  * Unstable backend SPI used by the runtime window state machine.
  *
