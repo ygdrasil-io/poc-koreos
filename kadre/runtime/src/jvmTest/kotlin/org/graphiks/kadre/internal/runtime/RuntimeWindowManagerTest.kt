@@ -1180,6 +1180,33 @@ class RuntimeWindowManagerTest {
     }
 
     @Test
+    fun exclusiveCapabilityRefreshPreservesTheInitiallyMaskedMutationDomain() = runTest {
+        val port = DeterministicWindowCommandPort()
+        val exclusivePort = DeterministicExclusiveFullscreenPort()
+        val manager = manager(
+            port,
+            publicWindowCapabilities = true,
+            enabledWindowUpdateCapabilities = setOf(WindowProperty.Fullscreen),
+            exclusiveFullscreenPort = exclusivePort,
+        )
+        val window = openFullscreenWindow(manager, port)
+
+        fun maskedMutationCapabilities(): List<Capability<*>> = window.capabilities.value.run {
+            listOf(contentSize, minimumSize, maximumSize, resizable)
+        }
+
+        assertTrue(maskedMutationCapabilities().all { it is Capability.Unsupported })
+        exclusivePort.publishAvailability(
+            ExclusiveFullscreenAvailability.Unavailable(
+                KadreFailure.TemporarilyUnavailable(retryable = true),
+            ),
+        )
+        assertTrue(maskedMutationCapabilities().all { it is Capability.Unsupported })
+        exclusivePort.publishAvailability(ExclusiveFullscreenAvailability.Available)
+        assertTrue(maskedMutationCapabilities().all { it is Capability.Unsupported })
+    }
+
+    @Test
     fun fullscreenCapabilityPreservesItsBorderlessDomainWhenAvailabilityIsUnavailable() = runTest {
         val port = DeterministicWindowCommandPort()
         val unavailable = KadreFailure.PlatformFailure(
@@ -1594,6 +1621,42 @@ class RuntimeWindowManagerTest {
     }
 
     @Test
+    fun nonFullscreenUpdatesRemainAdmittedWhileExclusiveIsActive() = runTest {
+        val port = DeterministicWindowCommandPort()
+        val exclusivePort = DeterministicExclusiveFullscreenPort()
+        val manager = manager(
+            port,
+            enabledWindowUpdateCapabilities = fullscreenProperties() + WindowProperty.Title,
+            exclusiveFullscreenPort = exclusivePort,
+        )
+        manager.installExclusiveDisplayTargetResolver { _, _ ->
+            KadreResult.Success(ExclusiveDisplayTarget(displayKey = 41L, modeKey = 84L))
+        }
+        val window = openFullscreenWindow(manager, port)
+        val requested = exclusiveFullscreenFixture()
+        val enter = async(start = CoroutineStart.UNDISPATCHED) {
+            window.apply(WindowUpdate(fullscreen = PropertyChange.Set(requested)))
+        }
+        exclusivePort.reservations.single().run {
+            assertTrue(captureCommitted())
+            completed(window.state.value.copy(fullscreen = requested))
+        }
+        assertIs<WindowUpdateOutcome.Applied>(enter.await().successValue())
+
+        val update = async(start = CoroutineStart.UNDISPATCHED) {
+            window.apply(WindowUpdate(title = PropertyChange.Set("exclusive-title")))
+        }
+        val command = port.updateCommands.single()
+        command.applied(window.state.value.copy(title = "exclusive-title"))
+
+        assertEquals(
+            "exclusive-title",
+            assertIs<WindowUpdateOutcome.Applied>(update.await().successValue()).state.title,
+        )
+        assertEquals(requested, window.state.value.fullscreen)
+    }
+
+    @Test
     fun exclusiveResolutionPrecedesTheFullscreenBarrierAndReservationFollowsIt() = runTest {
         val port = DeterministicWindowCommandPort()
         val exclusivePort = DeterministicExclusiveFullscreenPort()
@@ -1831,6 +1894,256 @@ class RuntimeWindowManagerTest {
             assertIs<WindowUpdateOutcome.Applied>(result.await().successValue()).state.fullscreen,
         )
         assertEquals(FullscreenMode.Windowed, second.state.value.fullscreen)
+    }
+
+    @Test
+    fun exclusiveDisplayLossRejectsAnOrdinaryInFlightOperationIdForTheSameWindow() = runTest {
+        val port = DeterministicWindowCommandPort()
+        val exclusivePort = DeterministicExclusiveFullscreenPort()
+        val manager = manager(
+            port,
+            enabledWindowUpdateCapabilities = fullscreenProperties() + WindowProperty.Title,
+            exclusiveFullscreenPort = exclusivePort,
+        )
+        manager.installExclusiveDisplayTargetResolver { _, _ ->
+            KadreResult.Success(ExclusiveDisplayTarget(displayKey = 41L, modeKey = 84L))
+        }
+        val window = openFullscreenWindow(manager, port)
+        val requested = exclusiveFullscreenFixture()
+        val enter = async(start = CoroutineStart.UNDISPATCHED) {
+            window.apply(WindowUpdate(fullscreen = PropertyChange.Set(requested)))
+        }
+        exclusivePort.reservations.single().run {
+            assertTrue(captureCommitted())
+            completed(window.state.value.copy(fullscreen = requested))
+        }
+        assertIs<WindowUpdateOutcome.Applied>(enter.await().successValue())
+        val title = async(start = CoroutineStart.UNDISPATCHED) {
+            window.apply(WindowUpdate(title = PropertyChange.Set("still-owned")))
+        }
+        val titleCommand = port.updateCommands.single()
+
+        try {
+            exclusivePort.publishDisplayLoss(
+                ExclusiveFullscreenDisplayLoss(
+                    windowId = window.id,
+                    operationId = titleCommand.operationId,
+                    effectiveState = window.state.value.copy(fullscreen = FullscreenMode.Windowed),
+                ),
+            )
+            assertEquals(requested, window.state.value.fullscreen)
+
+            titleCommand.applied(window.state.value.copy(title = "still-owned"))
+            assertEquals(
+                "still-owned",
+                assertIs<WindowUpdateOutcome.Applied>(title.await().successValue()).state.title,
+            )
+        } finally {
+            title.cancelAndJoin()
+            manager.close()
+        }
+    }
+
+    @Test
+    fun exclusiveDisplayLossRejectsNullOperationIdDuringAnInFlightTransaction() = runTest {
+        val port = DeterministicWindowCommandPort()
+        val exclusivePort = DeterministicExclusiveFullscreenPort()
+        val manager = manager(
+            port,
+            enabledWindowUpdateCapabilities = fullscreenProperties(),
+            exclusiveFullscreenPort = exclusivePort,
+        )
+        manager.installExclusiveDisplayTargetResolver { _, _ ->
+            KadreResult.Success(ExclusiveDisplayTarget(displayKey = 41L, modeKey = 84L))
+        }
+        val window = openFullscreenWindow(manager, port)
+        val requested = exclusiveFullscreenFixture()
+        val result = async(start = CoroutineStart.UNDISPATCHED) {
+            window.apply(WindowUpdate(fullscreen = PropertyChange.Set(requested)))
+        }
+        val command = exclusivePort.reservations.single()
+        assertTrue(command.captureCommitted())
+
+        try {
+            exclusivePort.publishDisplayLoss(
+                ExclusiveFullscreenDisplayLoss(
+                    windowId = window.id,
+                    operationId = null,
+                    effectiveState = window.state.value.copy(fullscreen = FullscreenMode.Windowed),
+                ),
+            )
+            testScheduler.runCurrent()
+
+            assertFalse(result.isCompleted)
+            command.completed(window.state.value.copy(fullscreen = requested))
+            assertIs<WindowUpdateOutcome.Applied>(result.await().successValue())
+        } finally {
+            result.cancelAndJoin()
+            manager.close()
+        }
+    }
+
+    @Test
+    fun exclusiveDisplayLossAcceptsTheMatchingInFlightWindowAndOperationPair() = runTest {
+        val port = DeterministicWindowCommandPort()
+        val exclusivePort = DeterministicExclusiveFullscreenPort()
+        val manager = manager(
+            port,
+            enabledWindowUpdateCapabilities = fullscreenProperties(),
+            exclusiveFullscreenPort = exclusivePort,
+        )
+        manager.installExclusiveDisplayTargetResolver { _, _ ->
+            KadreResult.Success(ExclusiveDisplayTarget(displayKey = 41L, modeKey = 84L))
+        }
+        val window = openFullscreenWindow(manager, port)
+        val result = async(start = CoroutineStart.UNDISPATCHED) {
+            window.apply(
+                WindowUpdate(fullscreen = PropertyChange.Set(exclusiveFullscreenFixture())),
+            )
+        }
+        val command = exclusivePort.reservations.single()
+        assertTrue(command.captureCommitted())
+
+        exclusivePort.publishDisplayLoss(
+            ExclusiveFullscreenDisplayLoss(
+                windowId = window.id,
+                operationId = command.operationId,
+                effectiveState = window.state.value.copy(fullscreen = FullscreenMode.Windowed),
+            ),
+        )
+
+        assertEquals(
+            KadreFailure.PlatformFailure(
+                KadrePlatform.AppKit,
+                "exclusive-fullscreen",
+                "display-lost",
+            ),
+            assertIs<KadreResult.Failure>(result.await()).reason,
+        )
+        assertEquals(WindowPhase.Open, window.state.value.phase)
+        assertEquals(FullscreenMode.Windowed, window.state.value.fullscreen)
+    }
+
+    @Test
+    fun exclusiveDisplayLossReportsCancellationThatOccursDuringEventPublication() = runTest {
+        val publicationEntered = CountDownLatch(1)
+        val releasePublication = CountDownLatch(1)
+        val pausePublication = AtomicBoolean(false)
+        val reported = CopyOnWriteArrayList<Throwable>()
+        val port = DeterministicWindowCommandPort()
+        val exclusivePort = DeterministicExclusiveFullscreenPort()
+        val manager = manager(
+            port,
+            reported = reported,
+            enabledWindowUpdateCapabilities = fullscreenProperties(),
+            exclusiveFullscreenPort = exclusivePort,
+        )
+        installWindowEventPolicy(
+            manager,
+            KadrePolicies.Default.window,
+            eventStampSource = {
+                if (pausePublication.compareAndSet(true, false)) {
+                    publicationEntered.countDown()
+                    check(releasePublication.await(2, TimeUnit.SECONDS))
+                }
+                EventStamp(SessionSequence(0L), SessionInstant(0.nanoseconds), null)
+            },
+        )
+        manager.installExclusiveDisplayTargetResolver { _, _ ->
+            KadreResult.Success(ExclusiveDisplayTarget(displayKey = 41L, modeKey = 84L))
+        }
+        val window = openFullscreenWindow(manager, port)
+        val caller = async(start = CoroutineStart.UNDISPATCHED) {
+            window.apply(
+                WindowUpdate(fullscreen = PropertyChange.Set(exclusiveFullscreenFixture())),
+            )
+        }
+        val command = exclusivePort.reservations.single()
+        assertTrue(command.captureCommitted())
+        pausePublication.set(true)
+        val terminal = async(Dispatchers.Default) {
+            exclusivePort.publishDisplayLoss(
+                ExclusiveFullscreenDisplayLoss(
+                    windowId = window.id,
+                    operationId = command.operationId,
+                    effectiveState = window.state.value.copy(fullscreen = FullscreenMode.Windowed),
+                ),
+            )
+        }
+
+        try {
+            assertTrue(publicationEntered.await(2, TimeUnit.SECONDS))
+            caller.cancelAndJoin()
+            releasePublication.countDown()
+            terminal.await()
+
+            assertEquals(
+                KadreFailure.PlatformFailure(
+                    KadrePlatform.AppKit,
+                    "exclusive-fullscreen",
+                    "display-lost",
+                ),
+                assertIs<KadreException>(reported.single()).failure,
+            )
+        } finally {
+            releasePublication.countDown()
+            caller.cancelAndJoin()
+            terminal.cancelAndJoin()
+            manager.close()
+        }
+    }
+
+    @Test
+    fun exclusiveCapabilityDropPublishesEveryWindowBeforeCancellingReservedWork() = runTest {
+        val trace = CopyOnWriteArrayList<String>()
+        val port = DeterministicWindowCommandPort()
+        val exclusivePort = DeterministicExclusiveFullscreenPort().apply {
+            cancellationOutcome = ExclusiveFullscreenCancellationOutcome.CancelledBeforeCommit
+        }
+        val manager = manager(
+            port,
+            maxWindows = 2,
+            maxPending = 2,
+            publicWindowCapabilities = true,
+            enabledWindowUpdateCapabilities = fullscreenProperties(),
+            exclusiveFullscreenPort = exclusivePort,
+        )
+        manager.installExclusiveDisplayTargetResolver { _, _ ->
+            KadreResult.Success(ExclusiveDisplayTarget(displayKey = 41L, modeKey = 84L))
+        }
+        val firstRequest = manager.requestWindow(WindowSpec()).successValue()
+        val secondRequest = manager.requestWindow(WindowSpec()).successValue()
+        val first = commit(firstRequest, port.openCommands[0])
+        val second = commit(secondRequest, port.openCommands[1])
+        val pending = async(start = CoroutineStart.UNDISPATCHED) {
+            first.apply(
+                WindowUpdate(fullscreen = PropertyChange.Set(exclusiveFullscreenFixture())),
+            )
+        }
+        val command = exclusivePort.reservations.single()
+        exclusivePort.onCancelReservation = {
+            listOf(first, second).forEachIndexed { index, window ->
+                val fullscreen = assertIs<Capability.Supported<Set<FullscreenKind>>>(
+                    window.capabilities.value.fullscreen,
+                )
+                assertEquals(setOf(FullscreenKind.Borderless), fullscreen.constraints)
+                trace += "window-${index + 1}-published"
+            }
+            trace += "reservation-cancelled"
+        }
+
+        exclusivePort.publishAvailability(
+            ExclusiveFullscreenAvailability.Unavailable(
+                KadreFailure.TemporarilyUnavailable(retryable = true),
+            ),
+        )
+
+        assertEquals(
+            listOf("window-1-published", "window-2-published", "reservation-cancelled"),
+            trace,
+        )
+        assertIs<KadreResult.Failure>(pending.await())
+        assertFalse(command.captureCommitted())
     }
 
     @Test
@@ -4983,6 +5296,7 @@ class RuntimeWindowManagerTest {
         val releasedWindows = CopyOnWriteArrayList<WindowId>()
         var cancellationOutcome: ExclusiveFullscreenCancellationOutcome =
             ExclusiveFullscreenCancellationOutcome.TooLate
+        var onCancelReservation: (WindowOperationId) -> Unit = {}
 
         override val availability: ExclusiveFullscreenAvailability
             get() = currentAvailability
@@ -5014,6 +5328,7 @@ class RuntimeWindowManagerTest {
             operationId: WindowOperationId,
         ): ExclusiveFullscreenCancellationOutcome {
             cancelledReservations += operationId
+            onCancelReservation(operationId)
             return cancellationOutcome
         }
 
