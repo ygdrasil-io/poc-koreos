@@ -36,12 +36,17 @@ public fun interface RuntimeSessionStopHandler {
     public fun stop(sessionId: SessionId): KadreFailure.PlatformFailure?
 }
 
+internal fun interface RuntimeSessionRevocationHandler {
+    fun revoke(sessionId: SessionId)
+}
+
 @OptIn(ExperimentalKadreApi::class)
 public class RuntimeHostController private constructor(
     override val platform: KadrePlatform,
     initialLifecycleState: LifecycleState,
     initialLifecycleCapabilities: LifecycleCapabilities,
     private val failureReporter: RuntimeFailureReporter,
+    private val sessionRevocationHandler: RuntimeSessionRevocationHandler,
     private val sessionStopHandler: RuntimeSessionStopHandler,
     private val sessionObserver: RuntimeSessionObserver,
     private val clockFactory: RuntimeClockFactory,
@@ -59,6 +64,7 @@ public class RuntimeHostController private constructor(
         initialLifecycleState,
         initialLifecycleCapabilities,
         failureReporter,
+        NO_SESSION_REVOCATION,
         sessionStopHandler,
         sessionObserver,
         MonotonicRuntimeClockFactory,
@@ -96,6 +102,7 @@ public class RuntimeHostController private constructor(
                 initialLifecycleCapabilities = initialLifecycle.second,
                 clock = clock,
                 failureReporter = ::reportFailure,
+                onRevoking = ::sessionRevoking,
                 onStopping = ::sessionStopping,
                 onTerminated = ::sessionTerminated,
                 componentsFactory = componentsFactory,
@@ -178,6 +185,27 @@ public class RuntimeHostController private constructor(
         targets.forEach(SessionRuntime::hostDetached)
     }
 
+    /**
+     * Immediately publishes host detachment for a runtime that may be destroyed without a
+     * cooperative shutdown opportunity, such as browser pagehide.
+     */
+    internal fun detachImmediately() {
+        val detachedState = LifecycleState(
+            AttachmentState.Detached,
+            VisibilityState.Background,
+            ActivationState.Inactive,
+        )
+        val targets = lock.withLock {
+            if (!detached) {
+                detached = true
+                lifecycleState = detachedState
+            }
+            sessions.toList()
+        }
+        targets.forEach { it.updateLifecycle(detachedState) }
+        targets.forEach(SessionRuntime::hostDetachedImmediately)
+    }
+
     public fun fail(failure: KadreFailure.PlatformFailure) {
         val targets = lock.withLock { sessions.toList() }
         targets.forEach { it.hostFailed(failure) }
@@ -196,6 +224,10 @@ public class RuntimeHostController private constructor(
             reportFailure(cause)
             null
         }
+
+    private fun sessionRevoking(session: SessionRuntime) {
+        sessionRevocationHandler.revoke(session.id)
+    }
 
     private fun sessionTerminated(session: SessionRuntime, outcome: SessionOutcome) {
         lock.withLock { sessions.remove(session) }
@@ -233,6 +265,7 @@ public class RuntimeHostController private constructor(
             initialLifecycleState,
             initialLifecycleCapabilities,
             failureReporter,
+            NO_SESSION_REVOCATION,
             sessionStopHandler,
             sessionObserver,
             clockFactory,
@@ -258,6 +291,7 @@ public class RuntimeHostController private constructor(
             initialLifecycleState,
             initialLifecycleCapabilities,
             failureReporter,
+            NO_SESSION_REVOCATION,
             sessionStopHandler,
             sessionObserver,
             MonotonicRuntimeClockFactory,
@@ -276,20 +310,44 @@ public class RuntimeHostController private constructor(
             sessionStopHandler: RuntimeSessionStopHandler = RuntimeSessionStopHandler { null },
             sessionObserver: RuntimeSessionObserver = RuntimeSessionObserver { _, _ -> },
             primarySurfaceFactory: (SurfaceId) -> RuntimePrimarySurface,
-        ): RuntimeHostController = withComponents(
+        ): RuntimeHostController = withPrimarySurface(
             platform = platform,
-            componentsFactory = RuntimeSessionComponentsFactory { sessionId, _ ->
-                RuntimeSessionComponents(
-                    windows = UnsupportedWindowManager(RuntimeProcessIds::nextWindowRequestId),
-                    primarySurface = primarySurfaceFactory(RuntimeProcessIds.nextSurfaceId()),
-                )
-            },
+            sessionRevocationHandler = NO_SESSION_REVOCATION,
             initialLifecycleState = initialLifecycleState,
             initialLifecycleCapabilities = initialLifecycleCapabilities,
             failureReporter = failureReporter,
             sessionStopHandler = sessionStopHandler,
             sessionObserver = sessionObserver,
+            primarySurfaceFactory = primarySurfaceFactory,
         )
 
+        internal fun withPrimarySurface(
+            platform: KadrePlatform,
+            sessionRevocationHandler: RuntimeSessionRevocationHandler,
+            initialLifecycleState: LifecycleState = DEFAULT_LIFECYCLE_STATE,
+            initialLifecycleCapabilities: LifecycleCapabilities = DEFAULT_LIFECYCLE_CAPABILITIES,
+            failureReporter: RuntimeFailureReporter = RuntimeFailureReporter { },
+            sessionStopHandler: RuntimeSessionStopHandler = RuntimeSessionStopHandler { null },
+            sessionObserver: RuntimeSessionObserver = RuntimeSessionObserver { _, _ -> },
+            primarySurfaceFactory: (SurfaceId) -> RuntimePrimarySurface,
+        ): RuntimeHostController = RuntimeHostController(
+            platform = platform,
+            initialLifecycleState = initialLifecycleState,
+            initialLifecycleCapabilities = initialLifecycleCapabilities,
+            failureReporter = failureReporter,
+            sessionRevocationHandler = sessionRevocationHandler,
+            sessionStopHandler = sessionStopHandler,
+            sessionObserver = sessionObserver,
+            clockFactory = MonotonicRuntimeClockFactory,
+            componentsFactory = RuntimeSessionComponentsFactory { _, _ ->
+                RuntimeSessionComponents(
+                    windows = UnsupportedWindowManager(RuntimeProcessIds::nextWindowRequestId),
+                    primarySurface = primarySurfaceFactory(RuntimeProcessIds.nextSurfaceId()),
+                )
+            },
+        )
+
+        private val NO_SESSION_REVOCATION: RuntimeSessionRevocationHandler =
+            RuntimeSessionRevocationHandler { }
     }
 }

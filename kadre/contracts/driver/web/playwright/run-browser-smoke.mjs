@@ -634,9 +634,10 @@ async function serveDistribution(realRoot, entryScript) {
   const sockets = new Set();
   const instance = createServer(async (request, response) => {
     try {
-      const requestedPath = request.url === '/index.html'
+      const requestPathname = new URL(request.url, 'http://127.0.0.1').pathname;
+      const requestedPath = requestPathname === '/index.html'
         ? null
-        : resolve(realRoot, `.${new URL(request.url, 'http://127.0.0.1').pathname}`);
+        : resolve(realRoot, `.${requestPathname}`);
       if (requestedPath === null) {
         response.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
         response.end(`<!doctype html><html><body><script src="/${entryScript}"></script></body></html>`);

@@ -361,6 +361,27 @@ class RuntimeHostControllerTest {
     }
 
     @Test
+    fun immediateHostDetachPublishesTerminationWithoutAwaitingANonCooperativeApplication() = runTest {
+        val blocker = CompletableDeferred<Unit>()
+        val host = RuntimeHostController(KadrePlatform.Fake)
+        val session = attach(host) {
+            withContext(NonCancellable) { blocker.await() }
+        }
+        testScheduler.runCurrent()
+        val expected = SessionOutcome.Stopped(SessionStopReason.HostDetached)
+
+        host.detachImmediately()
+
+        try {
+            assertEquals(SessionState.Terminated(expected), session.state.value)
+            assertEquals(expected, session.awaitTermination())
+        } finally {
+            blocker.complete(Unit)
+            testScheduler.runCurrent()
+        }
+    }
+
+    @Test
     fun platformFailureTerminatesTheSessionAndNotifiesItsObserverOnce() = runTest {
         val observed = mutableListOf<Pair<org.graphiks.kadre.application.SessionId, SessionOutcome>>()
         val host = RuntimeHostController(

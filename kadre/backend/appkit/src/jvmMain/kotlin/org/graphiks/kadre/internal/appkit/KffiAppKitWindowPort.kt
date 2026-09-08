@@ -561,12 +561,21 @@ private fun NSEvent.toObservation(): NSEventObservation {
     val eventDetails = when (eventType) {
         NSEventType.NSEventTypeKeyDown,
         NSEventType.NSEventTypeKeyUp,
-        NSEventType.NSEventTypeFlagsChanged,
         -> NSEventObservation.Details.Keyboard(
             keyCode = keyCode().toInt() and 0xffff,
             characters = charactersAsString(),
             charactersIgnoringModifiers = charactersIgnoringModifiersAsString(),
             isRepeat = isARepeat(),
+        )
+
+        // AppKit rejects `characters`, `charactersIgnoringModifiers`, and `isARepeat` for
+        // a FlagsChanged event. Its modifier key code and modifier flags are sufficient for
+        // Kadre's transition mapping.
+        NSEventType.NSEventTypeFlagsChanged -> NSEventObservation.Details.Keyboard(
+            keyCode = keyCode().toInt() and 0xffff,
+            characters = "",
+            charactersIgnoringModifiers = "",
+            isRepeat = false,
         )
 
         NSEventType.NSEventTypeMouseMoved,

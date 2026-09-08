@@ -54,12 +54,21 @@ internal class SessionRuntime(
     initialLifecycleCapabilities: LifecycleCapabilities,
     private val clock: RuntimeClock,
     private val failureReporter: (Throwable) -> Unit,
+    private val onRevoking: (SessionRuntime) -> Unit,
     private val onStopping: (SessionRuntime) -> KadreFailure.PlatformFailure?,
     private val onTerminated: (SessionRuntime, SessionOutcome) -> Unit,
     componentsFactory: RuntimeSessionComponentsFactory,
 ) : KadreSession {
     private val lock = RuntimeLock()
     private val parentJob = checkNotNull(parentScope.coroutineContext[Job])
+    private var parentCancellationEnabled = false
+    private var parentCancellationPending = false
+    private val parentCancellationHandle: DisposableHandle = parentJob.invokeOnCompletion(
+        onCancelling = true,
+        invokeImmediately = true,
+    ) { cause ->
+        if (cause != null) parentCancellationObserved()
+    }
     private val rootJob = SupervisorJob(parentJob)
     private val baseContext = parentScope.coroutineContext.minusKey(Job)
     private val rootScope = CoroutineScope(baseContext + rootJob)
@@ -101,6 +110,7 @@ internal class SessionRuntime(
         components
     } catch (cause: Throwable) {
         rootJob.cancel()
+        parentCancellationHandle.dispose()
         throw cause
     }
     private val runtimeWindows = runtimeComponents.windows
@@ -118,29 +128,23 @@ internal class SessionRuntime(
     private var startupJob: Job? = null
     private var applicationJob: Deferred<Unit>? = null
     private var selectedOutcome: SessionOutcome? = null
+    private var targetRevoked = false
     private var stopHandlerStarted = false
     private var finished = false
-    private var parentCancellationHandle: DisposableHandle? = null
 
     override val state: StateFlow<SessionState> = mutableState.asStateFlow()
 
     fun start() {
-        val cancellationHandle = parentJob.invokeOnCompletion(
-            onCancelling = true,
-            invokeImmediately = true,
-        ) { cause ->
-            if (cause != null) parentCancelled()
-        }
-        val mayStart = lock.withLock {
+        val cancellationPending = lock.withLock {
             if (finished) {
-                false
+                return
             } else {
-                parentCancellationHandle = cancellationHandle
-                true
+                parentCancellationEnabled = true
+                parentCancellationPending || !parentJob.isActive
             }
         }
-        if (!mayStart) {
-            cancellationHandle.dispose()
+        if (cancellationPending) {
+            parentCancelled()
             return
         }
 
@@ -213,6 +217,22 @@ internal class SessionRuntime(
         requestTermination(SessionOutcome.Stopped(SessionStopReason.HostDetached))
     }
 
+    fun hostDetachedImmediately() {
+        val final = lock.withLock {
+            if (finished) return
+            selectedOutcome = selectOutcome(
+                selectedOutcome,
+                SessionOutcome.Stopped(SessionStopReason.HostDetached),
+            )
+            mutableState.value = SessionState.Stopping
+            revokeTargetResources()
+            startupJob?.cancel()
+            applicationJob?.cancel()
+            checkNotNull(selectedOutcome)
+        }
+        finish(final)
+    }
+
     fun hostFailed(failure: KadreFailure.PlatformFailure) {
         requestTermination(SessionOutcome.Failed(failure))
     }
@@ -232,10 +252,23 @@ internal class SessionRuntime(
             if (finished) return
             selectedOutcome = selectOutcome(selectedOutcome, outcome)
             mutableState.value = SessionState.Stopping
+            revokeTargetResources()
             startupJob?.cancel()
             applicationJob?.cancel()
         }
         finish(outcome)
+    }
+
+    private fun parentCancellationObserved() {
+        val shouldTerminate = lock.withLock {
+            if (parentCancellationEnabled) {
+                true
+            } else {
+                parentCancellationPending = true
+                false
+            }
+        }
+        if (shouldTerminate) parentCancelled()
     }
 
     private fun applicationCompleted(cause: Throwable?) {
@@ -273,6 +306,7 @@ internal class SessionRuntime(
             if (finished) return
             selectedOutcome = selectOutcome(selectedOutcome, proposed)
             mutableState.value = SessionState.Stopping
+            revokeTargetResources()
             startupJob?.cancel()
             applicationJob?.cancel()
             if (stopHandlerStarted) return
@@ -320,7 +354,7 @@ internal class SessionRuntime(
             val final = checkNotNull(selectedOutcome)
             final
         }
-        parentCancellationHandle?.dispose()
+        parentCancellationHandle.dispose()
         closeRuntimeComponents()
         mutableState.value = SessionState.Terminated(final)
         terminal.complete(final)
@@ -341,13 +375,22 @@ internal class SessionRuntime(
         }
         if (!shouldDispose) return
 
-        parentCancellationHandle?.dispose()
+        parentCancellationHandle.dispose()
         closeRuntimeComponents()
         rootJob.cancel()
     }
 
     private fun closeRuntimeComponents() {
         runCatching { runtimeComponents.close() }
+            .exceptionOrNull()
+            ?.let(failureReporter)
+    }
+
+    /** Must be called with [lock] held, before cancelling either session job. */
+    private fun revokeTargetResources() {
+        if (targetRevoked) return
+        targetRevoked = true
+        runCatching { onRevoking(this) }
             .exceptionOrNull()
             ?.let(failureReporter)
     }

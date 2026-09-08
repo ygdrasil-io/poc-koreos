@@ -10,6 +10,7 @@ import org.graphiks.kadre.application.KadreScope
 import org.graphiks.kadre.application.KadreSession
 import org.graphiks.kadre.diagnostics.KadreFailure
 import org.graphiks.kadre.diagnostics.KadreOperation
+import org.graphiks.kadre.diagnostics.KadreResourceKind
 import org.graphiks.kadre.diagnostics.KadreResult
 import org.graphiks.kadre.surface.LogicalSize
 import org.graphiks.kadre.surface.PhysicalSize
@@ -25,6 +26,55 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class WasmWebAttachTest {
+    @Test
+    fun connectedDomPortInstallsItsLifecycleObserver() {
+        val host = existingHostElement()
+        val port = WasmWebDomPort(host)
+
+        try {
+            port.installLifecycleObserver { }
+        } finally {
+            port.release()
+            host.remove()
+        }
+    }
+
+    @Test
+    fun manualPolicyAcceptsAnInitiallyDisconnectedHost() = runTest {
+        val host = document.createElement("div") as HTMLElement
+        val scopeReady = CompletableDeferred<KadreScope>()
+
+        val session = assertIs<KadreResult.Success<KadreSession>>(
+            host.attachKadre(this, attachmentPolicy = WebAttachmentPolicy.Manual) {
+                scopeReady.complete(this)
+                awaitCancellation()
+            },
+        ).value
+        testScheduler.runCurrent()
+
+        assertNotNull(scopeReady.await().primarySurface.value)
+
+        session.requestStop()
+        testScheduler.runCurrent()
+    }
+
+    @Test
+    fun duplicateAttachUsesTheHostElementAsItsStableIdentity() = runTest {
+        val host = existingHostElement()
+        val owner = assertIs<KadreResult.Success<KadreSession>>(
+            host.attachKadre(this) { awaitCancellation() },
+        ).value
+
+        assertEquals(
+            KadreResult.Failure(KadreFailure.AlreadyInUse(KadreResourceKind.Host)),
+            host.attachKadre(this) { awaitCancellation() },
+        )
+
+        owner.requestStop()
+        testScheduler.runCurrent()
+        host.remove()
+    }
+
     @Test
     fun applicationOverloadAttachesToTheExistingHostWithoutCreatingAnotherElement() = runTest {
         val host = existingHostElement()
