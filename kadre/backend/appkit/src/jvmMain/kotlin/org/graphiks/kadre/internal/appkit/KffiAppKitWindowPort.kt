@@ -73,11 +73,13 @@ import org.graphiks.kffi.objc.NSWindowStyleMask
 import org.graphiks.kffi.objc.NSWorkspace
 import org.graphiks.kffi.objc.NSWorkspaceAccessibilityDisplayOptionsDidChangeNotification
 import org.graphiks.kffi.objc.appkit.ExclusiveWindowPresentationLease
+import org.graphiks.kffi.objc.appkit.ExclusiveWindowPresentationCloseResult
 import org.graphiks.kffi.objc.appkit.ExclusiveWindowPresentationOpenResult
 import org.graphiks.kffi.objc.appkit.ExclusiveWindowPresentationResult
 import org.graphiks.kffi.objc.appkit.ExclusiveWindowPresentationRestoreResult
 import org.graphiks.kffi.objc.appkit.ExclusiveWindowPresentationReadbackResult
 import org.graphiks.kffi.objc.appkit.ExclusiveWindowPresentationServices
+import org.graphiks.kffi.objc.appkit.ExclusiveWindowPresentationTerminalRestoration
 import org.graphiks.kffi.objc.ObjCRuntime
 import org.graphiks.kffi.objc.accessibilityDisplayShouldIncreaseContrast
 import org.graphiks.kffi.objc.effectiveAppearance
@@ -2440,6 +2442,44 @@ internal fun ExclusiveWindowPresentationRestoreResult.toKadrePresentationResult(
     ExclusiveWindowPresentationRestoreResult.WindowGone -> presentationFailure("window-gone")
     ExclusiveWindowPresentationRestoreResult.Closed -> presentationFailure("closed")
     ExclusiveWindowPresentationRestoreResult.WrongThread -> presentationFailure("wrong-thread")
+}
+
+internal fun ExclusiveWindowPresentationCloseResult.toKadrePresentationResult(): AppKitExclusivePresentationResult = when (this) {
+    ExclusiveWindowPresentationCloseResult.WrongThread -> presentationFailure("wrong-thread")
+    is ExclusiveWindowPresentationCloseResult.Terminated -> {
+        val restorationFailures: List<KadreFailure.PlatformFailure>
+        val hasRepresentableReadback: Boolean
+        when (val terminalRestoration = restoration) {
+            ExclusiveWindowPresentationTerminalRestoration.NotRequired -> {
+                restorationFailures = emptyList()
+                hasRepresentableReadback = false
+            }
+            is ExclusiveWindowPresentationTerminalRestoration.Restored -> {
+                restorationFailures = emptyList()
+                hasRepresentableReadback = true
+            }
+            is ExclusiveWindowPresentationTerminalRestoration.PartiallyRestored -> {
+                restorationFailures = terminalRestoration.failures
+                    .map { exclusivePresentationFailure(it.operation.name) }
+                    .ifEmpty { listOf(exclusivePresentationFailure("partial-restore")) }
+                hasRepresentableReadback = terminalRestoration.readback != null
+            }
+            ExclusiveWindowPresentationTerminalRestoration.WindowGone -> {
+                restorationFailures = listOf(exclusivePresentationFailure("window-gone"))
+                hasRepresentableReadback = false
+            }
+        }
+        val failures = restorationFailures + cleanupFailures.map { exclusivePresentationFailure(it.operation.name) }
+        if (failures.isEmpty()) {
+            AppKitExclusivePresentationResult.Readback
+        } else {
+            AppKitExclusivePresentationResult.Failed(
+                failure = failures.first(),
+                hasRepresentableReadback = hasRepresentableReadback,
+                diagnostics = failures.drop(1),
+            )
+        }
+    }
 }
 
 private fun exclusivePresentationFailure(code: String): KadreFailure.PlatformFailure = KadreFailure.PlatformFailure(

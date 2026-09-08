@@ -12,6 +12,7 @@ import org.graphiks.kffi.objc.appkit.ExclusiveDisplayLeaseOpenResult
 import org.graphiks.kffi.objc.appkit.ExclusiveDisplayNativeFailure
 import org.graphiks.kffi.objc.appkit.ExclusiveDisplayNativeOperation
 import org.graphiks.kffi.objc.appkit.ExclusiveWindowPresentationFailure
+import org.graphiks.kffi.objc.appkit.ExclusiveWindowPresentationCloseResult
 import org.graphiks.kffi.objc.appkit.ExclusiveWindowPresentationLease
 import org.graphiks.kffi.objc.appkit.ExclusiveWindowPresentationOpenResult
 import org.graphiks.kffi.objc.appkit.ExclusiveWindowPresentationOperation
@@ -19,6 +20,7 @@ import org.graphiks.kffi.objc.appkit.ExclusiveWindowPresentationReadback
 import org.graphiks.kffi.objc.appkit.ExclusiveWindowPresentationReadbackResult
 import org.graphiks.kffi.objc.appkit.ExclusiveWindowPresentationRestoreResult
 import org.graphiks.kffi.objc.appkit.ExclusiveWindowPresentationResult
+import org.graphiks.kffi.objc.appkit.ExclusiveWindowPresentationTerminalRestoration
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -35,7 +37,11 @@ class KffiAppKitDisplayNativeTest {
             override fun readback() = ExclusiveWindowPresentationReadbackResult.WindowGone
             override fun restore() = ExclusiveWindowPresentationRestoreResult.WindowGone
             override val lastRestoreResult: ExclusiveWindowPresentationRestoreResult? = null
-            override fun close() = ExclusiveWindowPresentationRestoreResult.WindowGone
+            override val lastCloseResult: ExclusiveWindowPresentationCloseResult.Terminated? = null
+            override fun close() = ExclusiveWindowPresentationCloseResult.Terminated(
+                ExclusiveWindowPresentationTerminalRestoration.WindowGone,
+                emptyList(),
+            )
         }
         assertIs<AppKitExclusivePresentationOpenResult.Opened>(
             ExclusiveWindowPresentationOpenResult.Opened(lease).toKadrePresentationOpenResult(),
@@ -87,6 +93,59 @@ class KffiAppKitDisplayNativeTest {
         )
         assertEquals("presentation-restore-level", restored.failure.code)
         assertEquals(listOf("presentation-restore-frame"), restored.diagnostics.map { it.code })
+    }
+
+    @Test
+    fun presentationCloseAdapterPreservesTerminalRestorationAndCleanupFailures() {
+        val restoreFailure = presentationFailure(ExclusiveWindowPresentationOperation.RestoreFrame)
+        val releaseOwnerFailure = presentationFailure(ExclusiveWindowPresentationOperation.ReleaseOwner)
+        val restoreLevelFailure = presentationFailure(ExclusiveWindowPresentationOperation.RestoreLevel)
+        val results = listOf(
+            ExclusiveWindowPresentationCloseResult.Terminated(
+                ExclusiveWindowPresentationTerminalRestoration.NotRequired,
+                emptyList(),
+            ) to (null to emptyList()),
+            ExclusiveWindowPresentationCloseResult.Terminated(
+                ExclusiveWindowPresentationTerminalRestoration.Restored(presentationReadback()),
+                emptyList(),
+            ) to (null to emptyList()),
+            ExclusiveWindowPresentationCloseResult.Terminated(
+                ExclusiveWindowPresentationTerminalRestoration.Restored(presentationReadback()),
+                listOf(releaseOwnerFailure),
+            ) to ("presentation-release-owner" to emptyList()),
+            ExclusiveWindowPresentationCloseResult.Terminated(
+                ExclusiveWindowPresentationTerminalRestoration.PartiallyRestored(null, listOf(restoreFailure)),
+                listOf(releaseOwnerFailure),
+            ) to ("presentation-restore-frame" to listOf("presentation-release-owner")),
+            ExclusiveWindowPresentationCloseResult.Terminated(
+                ExclusiveWindowPresentationTerminalRestoration.PartiallyRestored(null, emptyList()),
+                listOf(releaseOwnerFailure),
+            ) to ("presentation-partial-restore" to listOf("presentation-release-owner")),
+            ExclusiveWindowPresentationCloseResult.Terminated(
+                ExclusiveWindowPresentationTerminalRestoration.WindowGone,
+                emptyList(),
+            ) to ("presentation-window-gone" to emptyList()),
+            ExclusiveWindowPresentationCloseResult.Terminated(
+                ExclusiveWindowPresentationTerminalRestoration.WindowGone,
+                listOf(releaseOwnerFailure),
+            ) to ("presentation-window-gone" to listOf("presentation-release-owner")),
+            ExclusiveWindowPresentationCloseResult.Terminated(
+                ExclusiveWindowPresentationTerminalRestoration.NotRequired,
+                listOf(releaseOwnerFailure, restoreLevelFailure),
+            ) to ("presentation-release-owner" to listOf("presentation-restore-level")),
+            ExclusiveWindowPresentationCloseResult.WrongThread to ("presentation-wrong-thread" to emptyList()),
+        )
+
+        results.forEach { (result, expected) ->
+            val mapped = result.toKadrePresentationResult()
+            if (expected.first == null) {
+                assertEquals(AppKitExclusivePresentationResult.Readback, mapped)
+            } else {
+                val failed = assertIs<AppKitExclusivePresentationResult.Failed>(mapped)
+                assertEquals(expected.first, failed.failure.code)
+                assertEquals(expected.second, failed.diagnostics.map { it.code })
+            }
+        }
     }
     @Test
     fun exclusiveBridgeRejectsMissingAndStaleDisplayMappingsBeforeKffiCapture() {
@@ -299,8 +358,9 @@ private fun presentationReadback(): ExclusiveWindowPresentationReadback = Exclus
     level = 0L,
 )
 
-private fun presentationFailure(): ExclusiveWindowPresentationFailure =
-    ExclusiveWindowPresentationFailure(ExclusiveWindowPresentationOperation.RestoreLevel, "level")
+private fun presentationFailure(
+    operation: ExclusiveWindowPresentationOperation = ExclusiveWindowPresentationOperation.RestoreLevel,
+): ExclusiveWindowPresentationFailure = ExclusiveWindowPresentationFailure(operation, operation.name)
 
 private fun assertPresentationCode(result: AppKitExclusivePresentationResult, expected: String?) {
     if (expected == null) {
