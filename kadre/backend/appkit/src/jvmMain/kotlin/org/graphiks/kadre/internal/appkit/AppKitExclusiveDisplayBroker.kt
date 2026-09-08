@@ -397,7 +397,8 @@ internal class AppKitExclusiveDisplayBroker(
             entry.lease?.let { releaseLateLease(entry.displayKey, entry.token, it) }
             return
         }
-        val release = runCatching { current.lease?.release() }.getOrNull()
+        val releaseAttempt = callRelease(current.lease)
+        val release = releaseAttempt.value
         val exit = callPresentation {
             current.port?.windowPort()?.exit(current.windowRequest(FullscreenMode.Windowed))
         }
@@ -420,7 +421,7 @@ internal class AppKitExclusiveDisplayBroker(
             command,
             effective,
             failure,
-            diagnostics = diagnostics + presentation.failures() + exit.failures(),
+            diagnostics = diagnostics + presentation.failures() + exit.failures() + listOfNotNull(releaseAttempt.failure),
         )
     }
 
@@ -698,6 +699,9 @@ internal class AppKitExclusiveDisplayBroker(
         } ?: return
         publish(outcome.publication)
         if (failure != null && effectiveState == null) outcome.windowId?.let { windowId ->
+            (failure as? KadreFailure.PlatformFailure)?.let { primary ->
+                outcome.port?.windowPort()?.reportDiagnostic(primary)
+            }
             outcome.port?.windowPort()?.terminalize(windowId)
         }
         val loss = outcome.loss
@@ -984,8 +988,22 @@ internal class AppKitExclusiveDisplayBroker(
             DisplayReadbackAttempt(null, exclusiveFailure("coregraphics-readback-exception"))
         }
 
+    private fun callRelease(lease: AppKitExclusiveDisplayLease?): DisplayReleaseAttempt =
+        try {
+            DisplayReleaseAttempt(lease?.release())
+        } catch (_: Exception) {
+            DisplayReleaseAttempt(null, exclusiveFailure("coregraphics-release-exception"))
+        } catch (_: LinkageError) {
+            DisplayReleaseAttempt(null, exclusiveFailure("coregraphics-release-exception"))
+        }
+
     private data class DisplayReadbackAttempt(
         val value: AppKitExclusiveDisplayReadback?,
+        val failure: KadreFailure.PlatformFailure? = null,
+    )
+
+    private data class DisplayReleaseAttempt(
+        val value: AppKitExclusiveDisplayReleaseResult?,
         val failure: KadreFailure.PlatformFailure? = null,
     )
 

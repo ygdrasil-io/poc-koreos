@@ -329,16 +329,20 @@ private class AppKitWindowCommandPort(
         }
     }
 
-    override fun enter(request: AppKitExclusiveWindowRequest): AppKitExclusiveWindowResult =
-        presentationResult(
+    override fun enter(request: AppKitExclusiveWindowRequest): AppKitExclusiveWindowResult {
+        val presentation = synchronized(lock) { byWindow[request.windowId]?.exclusivePresentation }
+        return presentationResult(
             request,
-            synchronized(lock) { byWindow[request.windowId]?.exclusivePresentation }?.present(request.displayId),
+            presentation?.let { nativePort.onMainThread { it.present(request.displayId) } },
             request.requestedFullscreen,
         )
+    }
 
     override fun exit(request: AppKitExclusiveWindowRequest): AppKitExclusiveWindowResult {
         val entry = synchronized(lock) { byWindow[request.windowId] }
-        val result = entry?.exclusivePresentation?.restore()
+        val result = entry?.exclusivePresentation?.let { presentation ->
+            nativePort.onMainThread(presentation::restore)
+        }
         if (result == AppKitExclusivePresentationResult.Readback) {
             synchronized(lock) { if (entry.exclusivePresentation != null) entry.exclusivePresentation = null }
         }
@@ -360,9 +364,19 @@ private class AppKitWindowCommandPort(
         }
         // Closing the peer first turns an unrecoverable partial restore into KFFI's terminal WindowGone path,
         // which releases its registry ownership before another exclusive entry may be admitted.
-        entry.peer?.close()
-        lease?.close()
-        entry.owner.close()
+        val failures = mutableListOf<Throwable>()
+        try {
+            entry.peer?.close()
+        } catch (cause: Exception) {
+            failures += cause
+        } catch (cause: LinkageError) {
+            failures += cause
+        } finally {
+            failures += closeExclusivePresentation(lease)
+            issueNativeTerminal(entry)
+            scheduleCleanup(entry)
+        }
+        failures.forEach(::reportFailure)
     }
 
     override fun reportDiagnostic(failure: KadreFailure.PlatformFailure) {
@@ -1611,16 +1625,18 @@ private class AppKitWindowCommandPort(
             if (entry.removed && entry.cleanupFinished) return
             entry.peer to entry.exclusivePresentation.also { entry.exclusivePresentation = null }
         }
-        val failure = try {
+        val failures = mutableListOf<Throwable>()
+        try {
             peer?.close()
-            presentation?.close()
-            null
         } catch (cause: Exception) {
-            cause
+            failures += cause
         } catch (cause: LinkageError) {
-            cause
+            failures += cause
+        } finally {
+            failures += closeExclusivePresentation(presentation)
         }
-        failure?.let(::reportFailure)
+        failures.forEach(::reportFailure)
+        val failure = failures.firstOrNull()
         val completion = synchronized(lock) {
             entry.peer = null
             entry.cleanupFinished = true
@@ -1639,6 +1655,26 @@ private class AppKitWindowCommandPort(
         val heldMutations = synchronized(lock) { removeEntryLocked(entry) }
         heldMutations.forEach { pending ->
             pending.command.failed(KadreFailure.Closed(KadreResourceKind.Window))
+        }
+    }
+
+    private fun closeExclusivePresentation(
+        presentation: AppKitExclusivePresentationLease?,
+    ): List<Throwable> {
+        if (presentation == null) return emptyList()
+        val result = try {
+            nativePort.onMainThread(presentation::close)
+        } catch (cause: Exception) {
+            return listOf(cause)
+        } catch (cause: LinkageError) {
+            return listOf(cause)
+        }
+        return when (result) {
+            AppKitExclusivePresentationResult.Readback -> emptyList()
+            is AppKitExclusivePresentationResult.Failed -> buildList {
+                add(KadreException(result.failure))
+                result.diagnostics.filter { it != result.failure }.forEach { add(KadreException(it)) }
+            }
         }
     }
 
