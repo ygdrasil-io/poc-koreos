@@ -167,6 +167,7 @@ class AppKitWindowRuntimeDriverTest {
             exclusivePort.release(exit)
 
             assertEquals(1, presentation.restoreCount)
+            assertEquals(1, presentation.closeCount)
             assertEquals(1, displayLease.releaseCount)
             assertEquals(emptyList(), nativePort.fullscreenToggleTargets)
         } finally {
@@ -4831,12 +4832,67 @@ class AppKitWindowRuntimeDriverTest {
             assertEquals(1, presentationLease.closeCount)
             assertTrue(reported.contains(nativeCloseFailure))
             assertEquals(
-                setOf(presentationFailure, presentationDiagnostic),
-                reported.filterIsInstance<KadreException>().map(KadreException::failure).toSet(),
+                listOf(presentationFailure, presentationDiagnostic),
+                reported.filterIsInstance<KadreException>().map(KadreException::failure),
             )
         } finally {
             driver.close()
         }
+    }
+
+    @Test
+    fun terminalizeClosesExclusivePresentationBeforeClosingNativePeer() = runBlocking {
+        val trace = mutableListOf<String>()
+        lateinit var port: DeterministicAppKitNativeWindowPort
+        val presentationLease = RecordingAppKitExclusivePresentationLease(
+            onClose = { trace += "presentation-close" },
+            isMainThread = { port.isInsideMainThreadCall() },
+        )
+        port = DeterministicAppKitNativeWindowPort(
+            name = "terminal-presentation-before-peer",
+            beforeCloseWindow = { trace += "peer-close" },
+            exclusivePresentationLease = presentationLease,
+        )
+        val driver = AppKitWindowRuntimeDriverFactory { port }.create(KadrePolicies.Default.resources)
+
+        try {
+            val window = openedWindow(driver, WindowSpec(title = "terminal-presentation-before-peer"))
+            val exclusiveWindowPort = driver.exclusiveWindowPort()
+            assertEquals(AppKitExclusiveWindowPreparation.Prepared, exclusiveWindowPort.prepare(exclusiveWindowRequest(window.id)))
+
+            exclusiveWindowPort.terminalize(window.id)
+
+            withTimeout(2.seconds) { window.state.first { it.phase == WindowPhase.Closed } }
+            assertEquals(listOf("presentation-close", "peer-close"), trace)
+        } finally {
+            driver.close()
+        }
+    }
+
+    @Test
+    fun driverCloseClosesExclusivePresentationBeforeClosingNativePeer() = runBlocking {
+        val trace = mutableListOf<String>()
+        lateinit var port: DeterministicAppKitNativeWindowPort
+        val presentationLease = RecordingAppKitExclusivePresentationLease(
+            onClose = { trace += "presentation-close" },
+            isMainThread = { port.isInsideMainThreadCall() },
+        )
+        port = DeterministicAppKitNativeWindowPort(
+            name = "cleanup-presentation-before-peer",
+            beforeCloseWindow = { trace += "peer-close" },
+            exclusivePresentationLease = presentationLease,
+        )
+        val driver = AppKitWindowRuntimeDriverFactory { port }.create(KadrePolicies.Default.resources)
+
+        val window = openedWindow(driver, WindowSpec(title = "cleanup-presentation-before-peer"))
+        assertEquals(
+            AppKitExclusiveWindowPreparation.Prepared,
+            driver.exclusiveWindowPort().prepare(exclusiveWindowRequest(window.id)),
+        )
+
+        driver.close()
+
+        assertEquals(listOf("presentation-close", "peer-close"), trace)
     }
 
     @Test
@@ -6110,6 +6166,7 @@ private inline fun <reified T : Any> appKitIdentity(value: Long): T = T::class.j
 
 private class RecordingAppKitExclusivePresentationLease(
     private val closeResult: AppKitExclusivePresentationResult = AppKitExclusivePresentationResult.Readback,
+    private val onClose: () -> Unit = { },
     private val isMainThread: () -> Boolean = { true },
 ) : AppKitExclusivePresentationLease {
     val presentedDisplayIds = mutableListOf<Int>()
@@ -6133,6 +6190,7 @@ private class RecordingAppKitExclusivePresentationLease(
     override fun close(): AppKitExclusivePresentationResult {
         check(isMainThread()) { "exclusive close must run on the AppKit main thread" }
         closeCount += 1
+        onClose()
         return closeResult
     }
 }

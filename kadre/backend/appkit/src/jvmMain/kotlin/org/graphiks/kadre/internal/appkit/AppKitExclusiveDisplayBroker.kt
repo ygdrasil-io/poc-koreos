@@ -319,7 +319,8 @@ internal class AppKitExclusiveDisplayBroker(
                 } == true
             }
         ) {
-            val release = runCatching(lease::release).getOrNull()
+            val releaseAttempt = callRelease(lease)
+            val release = releaseAttempt.value
             val exit = callPresentation {
                 current.port?.windowPort()?.exit(current.windowRequest(FullscreenMode.Windowed))
             }
@@ -332,10 +333,11 @@ internal class AppKitExclusiveDisplayBroker(
                     is AppKitExclusiveWindowResult.Failed -> exit.effectiveState
                     null -> current.owner?.let { current.port?.windowPort()?.readback(it.windowId) }
                 },
-                release?.failures?.takeIf { it.isNotEmpty() }?.first()
-                    ?: current.terminalFailure
-                    ?: (exit as? AppKitExclusiveWindowResult.Failed)?.failure,
-                diagnostics = exit.failures(),
+                current.terminalFailure
+                    ?: (exit as? AppKitExclusiveWindowResult.Failed)?.failure
+                    ?: release?.failures?.firstOrNull()
+                    ?: releaseAttempt.failure,
+                diagnostics = exit.failures() + listOfNotNull(releaseAttempt.failure),
             )
             return
         }
@@ -434,7 +436,8 @@ internal class AppKitExclusiveDisplayBroker(
         if (current == null) {
             releaseLateLease(entry.displayKey, entry.token, lease)
         } else {
-            val release = runCatching(lease::release).getOrNull()
+            val releaseAttempt = callRelease(lease)
+            val release = releaseAttempt.value
             val exit = callPresentation { current.port?.windowPort()?.exit(current.windowRequest(FullscreenMode.Windowed)) }
             val effective = when (exit) {
                 is AppKitExclusiveWindowResult.Read -> exit.effectiveState
@@ -446,9 +449,10 @@ internal class AppKitExclusiveDisplayBroker(
                 release,
                 null,
                 effective,
-                release?.failures?.takeIf { it.isNotEmpty() }?.first()
-                    ?: (exit as? AppKitExclusiveWindowResult.Failed)?.failure,
-                diagnostics = exit.failures(),
+                (exit as? AppKitExclusiveWindowResult.Failed)?.failure
+                    ?: release?.failures?.firstOrNull()
+                    ?: releaseAttempt.failure,
+                diagnostics = exit.failures() + listOfNotNull(releaseAttempt.failure),
             )
         }
     }
@@ -608,14 +612,15 @@ internal class AppKitExclusiveDisplayBroker(
         token: Long,
         lease: AppKitExclusiveDisplayLease,
     ) {
-        val result = runCatching(lease::release).getOrNull()
+        val releaseAttempt = callRelease(lease)
+        val result = releaseAttempt.value
         val transition = synchronized(lock) {
             entries[displayKey]?.takeIf { it.token == token && it.state == LeaseState.Quarantined }?.let { entry ->
                 if (result?.terminal is AppKitExclusiveDisplayTerminal.Released) {
                     entry.state = LeaseState.Released
                     entries.remove(displayKey)
                 } else {
-                    quarantineLocked(entry, lease)
+                    quarantineLocked(entry, lease, releaseAttempt.failure)
                 }
                 BrokerTransition(
                     publication = availabilityPublicationLocked(),
@@ -633,7 +638,8 @@ internal class AppKitExclusiveDisplayBroker(
                 it.token == token && (it.state == LeaseState.Releasing || it.releaseRequested && it.lease != null)
             }?.also { it.state = LeaseState.Releasing }
         } ?: return
-        val result = runCatching { entry.lease?.release() }.getOrNull()
+        val releaseAttempt = callRelease(entry.lease)
+        val result = releaseAttempt.value
         val exit = callPresentation {
             entry.port?.windowPort()?.exit(entry.windowRequest(FullscreenMode.Windowed))
         }
@@ -643,12 +649,18 @@ internal class AppKitExclusiveDisplayBroker(
             null -> entry.owner?.let { entry.port?.windowPort()?.readback(it.windowId) }
         }
         val failure = when {
-            result == null -> exclusiveFailure("release-exception")
-            result.failures.isNotEmpty() -> result.failures.first()
             exit is AppKitExclusiveWindowResult.Failed -> exit.failure
-            else -> null
+            result?.failures?.isNotEmpty() == true -> result.failures.first()
+            else -> releaseAttempt.failure
         }
-        terminalRelease(entry, result, entry.command, effective, failure, diagnostics = exit.failures())
+        terminalRelease(
+            entry,
+            result,
+            entry.command,
+            effective,
+            failure,
+            diagnostics = exit.failures() + listOfNotNull(releaseAttempt.failure),
+        )
     }
 
     private fun terminalRelease(
@@ -682,7 +694,11 @@ internal class AppKitExclusiveDisplayBroker(
                     current.state = LeaseState.Released
                     entries.remove(entry.displayKey)
                 } else {
-                    quarantineLocked(current, recoveryOverride ?: current.lease ?: current.recovery)
+                    quarantineLocked(
+                        current,
+                        recoveryOverride ?: current.lease ?: current.recovery,
+                        failure,
+                    )
                 }
                 current.command = null
                 val publication = availabilityPublicationLocked()
@@ -815,7 +831,11 @@ internal class AppKitExclusiveDisplayBroker(
         targets.observation?.close()
     }
 
-    private fun quarantineLocked(entry: Entry, recovery: AppKitExclusiveDisplayLease?) {
+    private fun quarantineLocked(
+        entry: Entry,
+        recovery: AppKitExclusiveDisplayLease?,
+        terminalFailure: KadreFailure? = null,
+    ) {
         entry.state = LeaseState.Quarantined
         entry.recovery = recovery
         entry.lease = null
@@ -827,7 +847,7 @@ internal class AppKitExclusiveDisplayBroker(
         entry.reconfigurationPending = false
         entry.displayLossPending = false
         entry.lossOperationId = null
-        entry.terminalFailure = null
+        entry.terminalFailure = terminalFailure ?: entry.terminalFailure
         entry.recoveryScheduled = false
     }
 
@@ -864,7 +884,8 @@ internal class AppKitExclusiveDisplayBroker(
         token: Long,
         recovery: AppKitExclusiveDisplayLease,
     ) {
-        val result = runCatching(recovery::release).getOrNull()
+        val releaseAttempt = callRelease(recovery)
+        val result = releaseAttempt.value
         val transition = synchronized(lock) {
             entries[displayKey]?.takeIf {
                 it.token == token &&
@@ -876,6 +897,8 @@ internal class AppKitExclusiveDisplayBroker(
                     entry.state = LeaseState.Released
                     entry.recovery = null
                     entries.remove(displayKey)
+                } else if (releaseAttempt.failure != null) {
+                    entry.terminalFailure = releaseAttempt.failure
                 }
                 BrokerTransition(
                     publication = availabilityPublicationLocked(),

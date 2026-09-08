@@ -111,6 +111,42 @@ class AppKitExclusiveDisplayBrokerTest {
     }
 
     @Test
+    fun ordinaryReleaseReportsTheTypedCoreGraphicsExceptionInsteadOfFlatteningIt() {
+        val executor = QueuedExclusiveExecutor()
+        val lease = RecordingExclusiveDisplayLease(
+            displayKey = 71L,
+            modeKey = 701L,
+            releaseFailure = IllegalStateException("release exploded"),
+        )
+        val windowPort = RecordingExclusiveWindowPort()
+        val broker = AppKitExclusiveDisplayBroker(
+            RecordingExclusiveDisplayBridge(leasesToOpen = ArrayDeque(listOf(lease))),
+        )
+        val port = broker.openPort(executor, windowPort)
+        val enter = command(83L, 831L, 71L, 701L)
+
+        assertEquals(KadreResult.Success(Unit), port.reserve(enter))
+        executor.runAll()
+
+        val exit = RecordingExclusiveCommand(
+            windowId = enter.windowId,
+            operationId = identity<WindowOperationId>(832L),
+            displayKey = enter.displayKey,
+            modeKey = enter.modeKey,
+            requestedFullscreen = FullscreenMode.Windowed,
+        )
+        port.release(exit)
+        executor.runAll()
+
+        assertEquals(
+            KadreFailure.PlatformFailure(KadrePlatform.AppKit, "exclusive-fullscreen", "coregraphics-release-exception"),
+            exit.failures.single().first,
+        )
+        assertEquals(1, lease.releaseCount)
+        assertIs<ExclusiveFullscreenAvailability.Unavailable>(port.availability)
+    }
+
+    @Test
     fun failedPresentationAggregatesReadbackExitAndReportedReleaseDiagnostics() {
         val executor = QueuedExclusiveExecutor()
         val reportedRelease = KadreFailure.PlatformFailure(

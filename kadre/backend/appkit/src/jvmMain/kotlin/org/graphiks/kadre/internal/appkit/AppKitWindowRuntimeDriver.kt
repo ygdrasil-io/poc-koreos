@@ -340,15 +340,18 @@ private class AppKitWindowCommandPort(
 
     override fun exit(request: AppKitExclusiveWindowRequest): AppKitExclusiveWindowResult {
         val entry = synchronized(lock) { byWindow[request.windowId] }
-        val result = entry?.exclusivePresentation?.let { presentation ->
+        val presentation = entry?.exclusivePresentation
+        val result = presentation?.let {
             nativePort.onMainThread(presentation::restore)
         }
         if (result == AppKitExclusivePresentationResult.Readback) {
-            synchronized(lock) { if (entry.exclusivePresentation != null) entry.exclusivePresentation = null }
+            closeExclusivePresentation(presentation).forEach(::reportFailure)
+            synchronized(lock) {
+                if (entry.exclusivePresentation === presentation) entry.exclusivePresentation = null
+            }
         }
         if (result is AppKitExclusivePresentationResult.Failed) {
             // A partial KFFI restore is not an honest terminal public state, even when it supplied a readback.
-            // The terminal path closes the peer before closing the managed lease so KFFI releases its duplicate guard.
             terminalize(request.windowId)
             return AppKitExclusiveWindowResult.Failed(result.failure, null, result.diagnostics)
         }
@@ -359,20 +362,19 @@ private class AppKitWindowCommandPort(
 
     override fun terminalize(windowId: WindowId) {
         val entry = synchronized(lock) { byWindow[windowId] } ?: return
-        val lease = synchronized(lock) {
-            entry.exclusivePresentation.also { entry.exclusivePresentation = null }
-        }
-        // Closing the peer first turns an unrecoverable partial restore into KFFI's terminal WindowGone path,
-        // which releases its registry ownership before another exclusive entry may be admitted.
+        val lease = synchronized(lock) { entry.exclusivePresentation }
         val failures = mutableListOf<Throwable>()
         try {
+            failures += closeExclusivePresentation(lease)
+            synchronized(lock) {
+                if (entry.exclusivePresentation === lease) entry.exclusivePresentation = null
+            }
             entry.peer?.close()
         } catch (cause: Exception) {
             failures += cause
         } catch (cause: LinkageError) {
             failures += cause
         } finally {
-            failures += closeExclusivePresentation(lease)
             issueNativeTerminal(entry)
             scheduleCleanup(entry)
         }
@@ -1523,19 +1525,23 @@ private class AppKitWindowCommandPort(
     }
 
     private fun performNativeClose(entry: PeerEntry) {
-        val peer = synchronized(lock) {
+        val (peer, presentation) = synchronized(lock) {
             if (entry.removed || entry.nativeTerminalIssued) return
-            entry.peer
+            entry.peer to entry.exclusivePresentation
         }
-        val failure = try {
+        val failures = mutableListOf<Throwable>()
+        try {
+            failures += closeExclusivePresentation(presentation)
+            synchronized(lock) {
+                if (entry.exclusivePresentation === presentation) entry.exclusivePresentation = null
+            }
             peer?.commitNativeClose()
-            null
         } catch (cause: Exception) {
-            cause
+            failures += cause
         } catch (cause: LinkageError) {
-            cause
+            failures += cause
         }
-        failure?.let(::reportFailure)
+        failures.forEach(::reportFailure)
         issueNativeTerminal(entry)
         scheduleCleanup(entry)
     }
@@ -1623,17 +1629,19 @@ private class AppKitWindowCommandPort(
     private fun performCleanup(entry: PeerEntry) {
         val (peer, presentation) = synchronized(lock) {
             if (entry.removed && entry.cleanupFinished) return
-            entry.peer to entry.exclusivePresentation.also { entry.exclusivePresentation = null }
+            entry.peer to entry.exclusivePresentation
         }
         val failures = mutableListOf<Throwable>()
         try {
+            failures += closeExclusivePresentation(presentation)
+            synchronized(lock) {
+                if (entry.exclusivePresentation === presentation) entry.exclusivePresentation = null
+            }
             peer?.close()
         } catch (cause: Exception) {
             failures += cause
         } catch (cause: LinkageError) {
             failures += cause
-        } finally {
-            failures += closeExclusivePresentation(presentation)
         }
         failures.forEach(::reportFailure)
         val failure = failures.firstOrNull()
