@@ -6,11 +6,10 @@ import org.graphiks.kadre.diagnostics.KadreException
 import org.graphiks.kadre.diagnostics.KadreFailure
 import org.graphiks.kadre.diagnostics.KadreResourceKind
 import org.graphiks.kadre.diagnostics.KadreResult
-import java.util.concurrent.atomic.AtomicBoolean
 
 /** One session-owned allocator shared by every public event-flow source in that session. */
 internal class RuntimeEventCollectorAllocator(internal val sessionLimit: Int) {
-    private val lock = Any()
+    private val lock = RuntimeLock()
     private val activeByFlow = mutableMapOf<RuntimeEventCollectorGate, Int>()
     private var activeInSession = 0
 
@@ -26,7 +25,7 @@ internal class RuntimeEventCollectorAllocator(internal val sessionLimit: Int) {
     internal fun tryAcquire(
         gate: RuntimeEventCollectorGate,
         perFlowLimit: Int,
-    ): KadreResult<RuntimeEventCollectorLease> = synchronized(lock) {
+    ): KadreResult<RuntimeEventCollectorLease> = lock.withLock {
         val activeInFlow = activeByFlow[gate] ?: 0
         when {
             activeInFlow >= perFlowLimit -> KadreResult.Failure(
@@ -52,7 +51,7 @@ internal class RuntimeEventCollectorAllocator(internal val sessionLimit: Int) {
     }
 
     private fun release(gate: RuntimeEventCollectorGate) {
-        synchronized(lock) {
+        lock.withLock {
             val activeInFlow = checkNotNull(activeByFlow[gate]) {
                 "event collector gate was released without an active lease"
             }
@@ -77,10 +76,19 @@ internal class RuntimeEventCollectorGate internal constructor(
 internal class RuntimeEventCollectorLease internal constructor(
     private val releaseAction: () -> Unit,
 ) : AutoCloseable {
-    private val closed = AtomicBoolean(false)
+    private val lock = RuntimeLock()
+    private var closed = false
 
     override fun close() {
-        if (closed.compareAndSet(false, true)) releaseAction()
+        val shouldRelease = lock.withLock {
+            if (closed) {
+                false
+            } else {
+                closed = true
+                true
+            }
+        }
+        if (shouldRelease) releaseAction()
     }
 }
 

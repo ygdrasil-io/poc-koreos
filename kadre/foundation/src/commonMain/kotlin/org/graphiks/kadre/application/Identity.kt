@@ -1,6 +1,7 @@
 package org.graphiks.kadre.application
 
 import kotlin.time.Duration
+import kotlin.jvm.JvmInline
 
 public class SessionId internal constructor(private val value: Long) {
     init {

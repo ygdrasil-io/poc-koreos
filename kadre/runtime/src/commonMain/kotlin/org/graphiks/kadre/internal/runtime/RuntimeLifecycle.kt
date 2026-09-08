@@ -22,6 +22,7 @@ internal class RuntimeLifecycle(
     collectorAllocator: RuntimeEventCollectorAllocator,
     maxCollectorsPerFlow: Int,
 ) : KadreLifecycle {
+    private val lock = RuntimeLock()
     private val mutableState = MutableStateFlow(initialState)
     private val mutableCapabilities = MutableStateFlow(initialCapabilities)
     private val mutableEvents = MutableSharedFlow<LifecycleEvent>(extraBufferCapacity = EVENT_BUFFER_CAPACITY)
@@ -36,26 +37,23 @@ internal class RuntimeLifecycle(
         collectorAllocator.newGate(maxCollectorsPerFlow),
     )
 
-    @Synchronized
-    fun updateState(next: LifecycleState): LifecycleState {
+    fun updateState(next: LifecycleState): LifecycleState = lock.withLock {
         val previous = mutableState.value
-        if (previous == next) return previous
-        if (previous.attachment == org.graphiks.kadre.application.AttachmentState.Detached) return previous
+        if (previous == next) return@withLock previous
+        if (previous.attachment == org.graphiks.kadre.application.AttachmentState.Detached) return@withLock previous
 
         mutableState.value = next
         check(mutableEvents.tryEmit(LifecycleEvent(previous, next, nextStamp()))) {
             "lifecycle event buffer overflow"
         }
-        return next
+        next
     }
 
-    @Synchronized
-    fun updateCapabilities(next: LifecycleCapabilities) {
+    fun updateCapabilities(next: LifecycleCapabilities) = lock.withLock {
         if (mutableCapabilities.value != next) mutableCapabilities.value = next
     }
 
-    @Synchronized
-    fun emitMemoryPressure(level: MemoryPressureLevel) {
+    fun emitMemoryPressure(level: MemoryPressureLevel) = lock.withLock {
         require(mutableState.value.attachment != org.graphiks.kadre.application.AttachmentState.Detached) {
             "lifecycle is detached"
         }

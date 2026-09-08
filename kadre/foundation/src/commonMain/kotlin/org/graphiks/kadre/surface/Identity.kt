@@ -1,5 +1,7 @@
 package org.graphiks.kadre.surface
 
+import kotlin.jvm.JvmInline
+
 public class SurfaceId internal constructor(private val value: Long) {
     init {
         require(value >= 0) { "value must be non-negative" }

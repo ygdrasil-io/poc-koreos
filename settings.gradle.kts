@@ -71,6 +71,8 @@ rootProject.name = "kadre"
 include(":kadre")
 include(":kadre:foundation")
 include(":kadre:contracts:validator")
+include(":kadre:contracts:driver:web")
 include(":kadre:platform:desktop")
+include(":kadre:platform:web")
 include(":kadre:runtime")
 include(":kadre:backend:appkit")

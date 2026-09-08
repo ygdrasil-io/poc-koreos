@@ -1,5 +1,7 @@
 package org.graphiks.kadre.input
 
+import kotlin.jvm.JvmInline
+
 public class DeviceId internal constructor(private val value: Long) {
     init { require(value >= 0) }
     override fun equals(other: Any?): Boolean = other is DeviceId && value == other.value

@@ -1,11 +1,16 @@
+@file:OptIn(org.jetbrains.kotlin.gradle.ExperimentalWasmDsl::class)
+
 plugins {
     id("org.jetbrains.kotlin.multiplatform")
     id("maven-publish")
 }
 
 kotlin {
+    applyDefaultHierarchyTemplate()
     jvmToolchain(25)
     jvm()
+    js { browser() }
+    wasmJs { browser() }
     explicitApi()
 
     sourceSets {
@@ -15,6 +20,12 @@ kotlin {
         jvmMain.dependencies {
             api(project(":kadre:platform:desktop"))
         }
+        jsMain.dependencies {
+            api(project(":kadre:platform:web"))
+        }
+        wasmJsMain.dependencies {
+            api(project(":kadre:platform:web"))
+        }
     }
 }
 
@@ -23,6 +34,7 @@ tasks.named("check") {
     dependsOn(":kadre:contracts:validator:check")
     dependsOn(":kadre:backend:appkit:check")
     dependsOn(":kadre:platform:desktop:check")
+    dependsOn(":kadre:platform:web:check")
     dependsOn(":kadre:runtime:check")
     dependsOn("validateKotlinConsumer")
     dependsOn("validateJavaConsumer")
@@ -34,6 +46,7 @@ val contractPublications = tasks.register("publishContractArtifacts") {
     dependsOn(":kadre:foundation:publishAllPublicationsToContractTestRepository")
     dependsOn(":kadre:backend:appkit:publishAllPublicationsToContractTestRepository")
     dependsOn(":kadre:platform:desktop:publishAllPublicationsToContractTestRepository")
+    dependsOn(":kadre:platform:web:publishAllPublicationsToContractTestRepository")
     dependsOn(":kadre:runtime:publishAllPublicationsToContractTestRepository")
 }
 

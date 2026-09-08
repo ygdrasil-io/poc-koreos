@@ -12,6 +12,7 @@ import org.graphiks.kadre.application.KadreApplication
 import org.graphiks.kadre.application.KadreApplicationFactory
 import org.graphiks.kadre.application.KadreScope
 import org.graphiks.kadre.application.KadreSession
+import org.graphiks.kadre.application.EventStamp
 import org.graphiks.kadre.application.SessionOutcome
 import org.graphiks.kadre.application.SessionState
 import org.graphiks.kadre.diagnostics.Capability
@@ -19,6 +20,11 @@ import org.graphiks.kadre.diagnostics.KadreFailure
 import org.graphiks.kadre.diagnostics.KadreOperation
 import org.graphiks.kadre.diagnostics.KadrePlatform
 import org.graphiks.kadre.diagnostics.KadreResult
+import org.graphiks.kadre.policy.InputDeliveryPolicy
+import org.graphiks.kadre.policy.WindowDeliveryPolicy
+import org.graphiks.kadre.surface.HostSurface
+import org.graphiks.kadre.surface.SurfaceId
+import org.graphiks.kadre.surface.SurfaceState
 import org.graphiks.kadre.window.WindowManager
 import org.graphiks.kadre.window.WindowManagerCapabilities
 import org.graphiks.kadre.window.WindowManagerRevision
@@ -31,10 +37,51 @@ import kotlin.test.assertFalse
 import kotlin.test.assertSame
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
+import kotlin.test.assertFailsWith
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 
 class RuntimeSessionComponentsTest {
+    @Test
+    fun configurationFailureReturnsAnAttachFailureAndClosesCreatedComponents() = runTest {
+        var componentsClosed = 0
+        var componentScopeJob: Job? = null
+        val host = RuntimeHostController.withComponents(
+            platform = KadrePlatform.Fake,
+            componentsFactory = RuntimeSessionComponentsFactory { _, rootScope ->
+                componentScopeJob = rootScope.coroutineContext[Job]
+                RuntimeSessionComponents(FailingInstallWindowManager()) { componentsClosed += 1 }
+            },
+        )
+
+        val result = host.attach(this, KadreApplicationFactory { KadreApplication { } })
+
+        assertEquals(
+            KadreResult.Failure(
+                KadreFailure.PlatformFailure(KadrePlatform.Fake, "runtime-session-components", "create-failed"),
+            ),
+            result,
+        )
+        assertEquals(1, componentsClosed)
+        assertFalse(componentScopeJob!!.isActive)
+    }
+
+    @Test
+    fun primarySurfaceTeardownCannotSkipComponentCleanup() {
+        var componentsClosed = 0
+        val components = RuntimeSessionComponents(
+            windows = RecordingWindowManager(),
+            closeAction = { componentsClosed += 1 },
+            primarySurface = RuntimePrimarySurface(ThrowingCloseSurface()) {
+                error("surface close")
+            },
+        )
+
+        assertFailsWith<IllegalStateException> { components.close() }
+
+        assertEquals(1, componentsClosed)
+    }
+
     @Test
     fun injectedWindowManagerIsVisibleThroughItsSessionScope() = runTest {
         val manager = RecordingWindowManager()
@@ -243,7 +290,7 @@ class RuntimeSessionComponentsTest {
             RuntimeSessionComponents(manager) { closeCount += 1 }
     }
 
-    private class RecordingWindowManager : WindowManager {
+    private open class RecordingWindowManager : WindowManager {
         private val mutableState = MutableStateFlow(
             WindowManagerState(
                 primary = null,
@@ -260,4 +307,38 @@ class RuntimeSessionComponentsTest {
         override suspend fun requestWindow(spec: WindowSpec): KadreResult<WindowRequest> =
             KadreResult.Failure(KadreFailure.Unsupported(KadreOperation.RequestWindow))
     }
+
+    private class FailingInstallWindowManager : RecordingWindowManager(), RuntimeSessionWindowManager {
+        override fun installSessionConfiguration(
+            deliveryPolicy: WindowDeliveryPolicy,
+            inputDeliveryPolicy: InputDeliveryPolicy,
+            source: () -> EventStamp,
+            sessionFailureHandler: (KadreFailure) -> Unit,
+            collectorAllocator: Any,
+            maxCollectorsPerFlow: Int,
+            dropTransferScope: CoroutineScope?,
+        ) {
+            error("configuration")
+        }
+    }
+
+    private class ThrowingCloseSurface : HostSurface by RuntimeHostSurface(
+        SurfaceId(0L),
+        SurfaceState(
+            attachment = org.graphiks.kadre.surface.SurfaceAttachmentState.Attached,
+            logicalSize = org.graphiks.kadre.surface.LogicalSize(1.0, 1.0),
+            physicalSize = org.graphiks.kadre.surface.PhysicalSize(1, 1),
+            scaleFactor = 1.0,
+            safeAreaInsets = org.graphiks.kadre.surface.LogicalInsets(0.0, 0.0, 0.0, 0.0),
+            visibility = org.graphiks.kadre.surface.SurfaceVisibility.Visible,
+            occlusion = org.graphiks.kadre.surface.SurfaceOcclusion.Visible,
+            focus = org.graphiks.kadre.surface.SurfaceFocus.Focused,
+            theme = org.graphiks.kadre.surface.SurfaceTheme.Unknown,
+            cursor = org.graphiks.kadre.surface.CursorStyle.System(org.graphiks.kadre.surface.CursorIcon.Default),
+            pointerCapture = org.graphiks.kadre.surface.PointerCaptureMode.None,
+            hitTesting = org.graphiks.kadre.surface.HitTestingMode.Enabled,
+            inputDefaultBehavior = org.graphiks.kadre.surface.InputDefaultBehavior.HostDefault,
+            revision = org.graphiks.kadre.surface.SurfaceRevision(0L),
+        ),
+    )
 }

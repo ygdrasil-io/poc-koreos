@@ -1,5 +1,7 @@
 package org.graphiks.kadre.window
 
+import kotlin.jvm.JvmInline
+
 public class WindowId internal constructor(private val value: Long) {
     init { require(value >= 0) }
     override fun equals(other: Any?): Boolean = other is WindowId && value == other.value
