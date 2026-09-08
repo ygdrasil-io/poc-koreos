@@ -76,6 +76,12 @@ internal interface AppKitExclusiveDisplayBridge {
     val availability: AppKitExclusiveBridgeAvailability
 
     fun open(displayKey: Long, modeKey: Long): AppKitExclusiveDisplayOpenResult
+
+    fun open(
+        displayKey: Long,
+        modeKey: Long,
+        inventory: DisplayPortSnapshot?,
+    ): AppKitExclusiveDisplayOpenResult = open(displayKey, modeKey)
 }
 
 /** Task 5 production placeholder; Task 6 replaces it with the managed KFFI lease adapter. */
@@ -145,6 +151,9 @@ internal interface AppKitExclusiveWindowPort {
         error("exclusive presentation is not installed")
 
     fun readback(windowId: WindowId): WindowState? = null
+
+    /** Uses the phase-5 native peer teardown when no honest public readback can be produced. */
+    fun terminalize(windowId: WindowId) = Unit
 }
 
 /** Small command view which prevents the process registry from depending on runtime internals. */
@@ -257,7 +266,8 @@ internal class AppKitExclusiveDisplayBroker(
                 return
             }
         }
-        when (val opened = callOpen(entry.displayKey, entry.modeKey)) {
+        val inventory = synchronized(lock) { latestInventory }
+        when (val opened = callOpen(entry.displayKey, entry.modeKey, inventory)) {
             is AppKitExclusiveDisplayOpenResult.FailedBeforeCapture -> terminalBeforeCapture(
                 entry,
                 entry.terminalFailure ?: opened.failure,
@@ -399,11 +409,21 @@ internal class AppKitExclusiveDisplayBroker(
         if (current == null) {
             releaseLateLease(entry.displayKey, entry.token, lease)
         } else {
-            terminalRelease(current, runCatching(lease::release).getOrNull(), null, null, null)
+            val release = runCatching(lease::release).getOrNull()
+            val exit = callPresentation { current.port?.windowPort()?.exit(current.windowRequest(FullscreenMode.Windowed)) }
+            val effective = when (exit) {
+                is AppKitExclusiveWindowResult.Read -> exit.effectiveState
+                is AppKitExclusiveWindowResult.Failed -> exit.effectiveState
+                null -> null
+            }
+            terminalRelease(current, release, null, effective, (exit as? AppKitExclusiveWindowResult.Failed)?.failure)
         }
     }
 
     private fun terminalBeforeCapture(entry: Entry, failure: KadreFailure) {
+        val preparedExit = callPresentation {
+            entry.port?.windowPort()?.exit(entry.windowRequest(FullscreenMode.Windowed))
+        }
         val terminal = synchronized(lock) {
             entries[entry.displayKey]?.takeIf { it.token == entry.token }?.let { current ->
                 current.state = LeaseState.Released
@@ -614,7 +634,7 @@ internal class AppKitExclusiveDisplayBroker(
                 } else {
                     null
                 }
-                val terminalCommand = command ?: current.command
+            val terminalCommand = command ?: current.command
                 if (released) {
                     current.state = LeaseState.Released
                     entries.remove(entry.displayKey)
@@ -626,6 +646,7 @@ internal class AppKitExclusiveDisplayBroker(
                 TerminalOutcome(
                     command = terminalCommand,
                     port = targetPort,
+                    windowId = targetOwner?.windowId,
                     loss = lossDelivery,
                     publication = publication,
                     scheduleRecovery = !released && (closed || targetPort?.isOpen() == false),
@@ -634,6 +655,9 @@ internal class AppKitExclusiveDisplayBroker(
             }
         } ?: return
         publish(outcome.publication)
+        if (failure != null && effectiveState == null) outcome.windowId?.let { windowId ->
+            outcome.port?.windowPort()?.terminalize(windowId)
+        }
         val loss = outcome.loss
         if (loss != null) {
             loss.port.publishDisplayLoss(
@@ -887,9 +911,13 @@ internal class AppKitExclusiveDisplayBroker(
             AppKitExclusiveWindowPreparation.Failed(exclusiveFailure("presentation-exception"), null)
         }
 
-    private fun callOpen(displayKey: Long, modeKey: Long): AppKitExclusiveDisplayOpenResult =
+    private fun callOpen(
+        displayKey: Long,
+        modeKey: Long,
+        inventory: DisplayPortSnapshot?,
+    ): AppKitExclusiveDisplayOpenResult =
         try {
-            bridge.open(displayKey, modeKey)
+            bridge.open(displayKey, modeKey, inventory)
         } catch (_: Exception) {
             AppKitExclusiveDisplayOpenResult.FailedBeforeCapture(exclusiveFailure("capture-exception"))
         } catch (_: LinkageError) {
@@ -1060,6 +1088,7 @@ internal class AppKitExclusiveDisplayBroker(
     private data class TerminalOutcome(
         val command: AppKitExclusiveBrokerCommand?,
         val port: AppKitExclusiveFullscreenPort?,
+        val windowId: WindowId?,
         val loss: LossDelivery?,
         val publication: AvailabilityPublication?,
         val scheduleRecovery: Boolean,

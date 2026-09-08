@@ -32,6 +32,35 @@ import kotlin.test.assertTrue
 
 class AppKitExclusiveDisplayBrokerTest {
     @Test
+    fun failedBeforeCaptureRestoresThePreparedPresentationLease() {
+        val executor = QueuedExclusiveExecutor()
+        val windowPort = RecordingExclusiveWindowPort()
+        val broker = AppKitExclusiveDisplayBroker(RecordingExclusiveDisplayBridge())
+        val port = broker.openPort(executor, windowPort)
+
+        assertEquals(KadreResult.Success(Unit), port.reserve(command(89L, 891L, 71L, 701L)))
+        executor.runAll()
+
+        assertEquals(1, windowPort.exitRequests.size)
+    }
+
+    @Test
+    fun unrepresentablePresentationRestoreTerminalizesTheNativePeerBeforeFailureCompletion() {
+        val executor = QueuedExclusiveExecutor()
+        val windowPort = RecordingExclusiveWindowPort(failEnter = true, failExit = true)
+        val bridge = RecordingExclusiveDisplayBridge(openCapturedLeases = true)
+        val broker = AppKitExclusiveDisplayBroker(bridge)
+        val port = broker.openPort(executor, windowPort)
+        val command = command(88L, 881L, 71L, 701L)
+
+        assertEquals(KadreResult.Success(Unit), port.reserve(command))
+        executor.runAll()
+
+        assertEquals(listOf(command.windowId), windowPort.terminalized)
+        assertEquals(1, bridge.leases.single().releaseCount)
+    }
+
+    @Test
     fun entryPreparesPresentationBeforeCaptureAndPresentsOnlyAfterCapture() {
         val trace = mutableListOf<String>()
         val bridge = RecordingExclusiveDisplayBridge(openCapturedLeases = true, trace = trace)
@@ -521,9 +550,12 @@ private class SelfReconfiguringExclusiveBridge(
 
 private class RecordingExclusiveWindowPort(
     private val trace: MutableList<String>? = null,
+    private val failEnter: Boolean = false,
+    private val failExit: Boolean = false,
 ) : AppKitExclusiveWindowPort {
     val enterRequests = mutableListOf<AppKitExclusiveWindowRequest>()
     val exitRequests = mutableListOf<AppKitExclusiveWindowRequest>()
+    val terminalized = mutableListOf<WindowId>()
 
     override fun prepare(request: AppKitExclusiveWindowRequest): AppKitExclusiveWindowPreparation {
         trace?.add("prepare")
@@ -533,13 +565,25 @@ private class RecordingExclusiveWindowPort(
     override fun enter(request: AppKitExclusiveWindowRequest): AppKitExclusiveWindowResult {
         trace?.add("present")
         enterRequests += request
+        if (failEnter) return AppKitExclusiveWindowResult.Failed(
+            KadreFailure.PlatformFailure(KadrePlatform.AppKit, "exclusive-fullscreen", "present-failed"),
+            null,
+        )
         return AppKitExclusiveWindowResult.Read(windowState(request.requestedFullscreen))
     }
 
     override fun exit(request: AppKitExclusiveWindowRequest): AppKitExclusiveWindowResult {
         trace?.add("restore")
         exitRequests += request
+        if (failExit) return AppKitExclusiveWindowResult.Failed(
+            KadreFailure.PlatformFailure(KadrePlatform.AppKit, "exclusive-fullscreen", "restore-failed"),
+            null,
+        )
         return AppKitExclusiveWindowResult.Read(windowState(FullscreenMode.Windowed))
+    }
+
+    override fun terminalize(windowId: WindowId) {
+        terminalized += windowId
     }
 }
 

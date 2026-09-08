@@ -347,19 +347,30 @@ private class AppKitWindowCommandPort(
 
     override fun readback(windowId: WindowId): WindowState? = windowState(windowId)
 
+    override fun terminalize(windowId: WindowId) {
+        synchronized(lock) { byWindow[windowId] }?.owner?.close()
+    }
+
     private fun presentationResult(
         request: AppKitExclusiveWindowRequest,
         result: AppKitExclusivePresentationResult?,
         fullscreen: FullscreenMode,
     ): AppKitExclusiveWindowResult = when (result) {
-        AppKitExclusivePresentationResult.Readback -> windowState(request.windowId)?.let { state ->
-            AppKitExclusiveWindowResult.Read(state.copy(fullscreen = fullscreen))
+        AppKitExclusivePresentationResult.Readback -> presentationReadback(request.windowId, fullscreen)?.let { state ->
+            AppKitExclusiveWindowResult.Read(state)
         } ?: AppKitExclusiveWindowResult.Failed(exclusivePresentationUnavailable(), null)
         is AppKitExclusivePresentationResult.Failed -> AppKitExclusiveWindowResult.Failed(
             result.failure,
-            windowState(request.windowId)?.takeIf { result.hasRepresentableReadback }?.copy(fullscreen = fullscreen),
+            presentationReadback(request.windowId, fullscreen).takeIf { result.hasRepresentableReadback },
         )
         null -> AppKitExclusiveWindowResult.Failed(exclusivePresentationUnavailable(), null)
+    }
+
+    private fun presentationReadback(windowId: WindowId, fullscreen: FullscreenMode): WindowState? {
+        val entry = synchronized(lock) { byWindow[windowId] } ?: return null
+        val snapshot = entry.peer?.readWindow() ?: return null
+        val current = windowState(windowId) ?: return null
+        return snapshot.withMutationFrom(current).copy(fullscreen = fullscreen)
     }
 
     override fun requestOpen(command: WindowOpenCommand) {

@@ -327,6 +327,11 @@ internal class AppKitWindowPeer private constructor(
         }
     }
 
+    /** Reads the full phase-5 public projection after a KFFI presentation readback certified native liveness. */
+    internal fun readWindow(): AppKitWindowMutationSnapshot? = port.onMainThread {
+        if (closed.get()) null else port.readWindow(window)
+    }
+
     /** Restores the persistent level and returns a fresh authoritative native snapshot. */
     internal fun completeFullscreen(desiredLevel: WindowLevel): AppKitFullscreenCompletion =
         port.onMainThread {

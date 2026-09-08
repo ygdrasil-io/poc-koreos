@@ -42,12 +42,16 @@ internal class KffiAppKitDisplayNative(
 ) : AppKitDisplayNative {
     private val mappingLock = Any()
     private var displayIdsByKey: Map<Long, Int> = emptyMap()
+    private var mappedSnapshot: DisplayPortSnapshot? = null
 
     override val enumerationCapability: Capability<Unit> =
         Capability.Supported(Unit, FeatureAvailability.Available)
 
     override fun snapshot(): DisplayPortSnapshot {
-        synchronized(mappingLock) { displayIdsByKey = emptyMap() }
+        synchronized(mappingLock) {
+            displayIdsByKey = emptyMap()
+            mappedSnapshot = null
+        }
         return KffiAppKitMainThread.call {
         val displays = services.enumerateDisplays()
         val screensByDisplayId = services.enumerateScreens().associateBy(KffiAppKitNativeScreen::displayId)
@@ -67,13 +71,14 @@ internal class KffiAppKitDisplayNative(
         )
         synchronized(mappingLock) {
             displayIdsByKey = displays.associate { display -> display.id.displayKey() to display.id }
+            mappedSnapshot = snapshot
         }
         snapshot
         }
     }
 
-    internal fun nativeDisplayId(displayKey: Long): Int? = synchronized(mappingLock) {
-        displayIdsByKey[displayKey]
+    internal fun nativeDisplayId(displayKey: Long, expectedSnapshot: DisplayPortSnapshot? = null): Int? = synchronized(mappingLock) {
+        if (expectedSnapshot != null && expectedSnapshot !== mappedSnapshot) null else displayIdsByKey[displayKey]
     }
 
     override fun observeReconfiguration(listener: () -> Unit): AutoCloseable =
@@ -94,8 +99,15 @@ internal class KffiAppKitExclusiveDisplayBridge(
             KadreFailure.PlatformFailure(KadrePlatform.AppKit, "exclusive-fullscreen", "os-version-unavailable"),
         )
 
-    override fun open(displayKey: Long, modeKey: Long): AppKitExclusiveDisplayOpenResult {
-        val displayId = displaySource.nativeDisplayId(displayKey)
+    override fun open(displayKey: Long, modeKey: Long): AppKitExclusiveDisplayOpenResult =
+        open(displayKey, modeKey, inventory = null)
+
+    override fun open(
+        displayKey: Long,
+        modeKey: Long,
+        inventory: DisplayPortSnapshot?,
+    ): AppKitExclusiveDisplayOpenResult {
+        val displayId = displaySource.nativeDisplayId(displayKey, inventory)
             ?: return AppKitExclusiveDisplayOpenResult.FailedBeforeCapture(
                 KadreFailure.PlatformFailure(KadrePlatform.AppKit, "exclusive-fullscreen", "display-mapping-unavailable"),
             )

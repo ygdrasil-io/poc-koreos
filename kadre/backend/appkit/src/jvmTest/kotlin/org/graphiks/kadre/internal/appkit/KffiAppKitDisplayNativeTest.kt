@@ -59,11 +59,14 @@ class KffiAppKitDisplayNativeTest {
         )
 
         assertIs<AppKitExclusiveDisplayOpenResult.FailedBeforeCapture>(bridge.open(17L, 701L))
-        native.snapshot()
+        val firstSnapshot = native.snapshot()
         assertIs<AppKitExclusiveDisplayOpenResult.FailedBeforeCapture>(bridge.open(18L, 701L))
         assertIs<AppKitExclusiveDisplayOpenResult.FailedBeforeCapture>(bridge.open(17L, 701L))
+        val refreshedSnapshot = native.snapshot()
+        assertIs<AppKitExclusiveDisplayOpenResult.FailedBeforeCapture>(bridge.open(17L, 701L, firstSnapshot))
+        assertIs<AppKitExclusiveDisplayOpenResult.FailedBeforeCapture>(bridge.open(17L, 701L, refreshedSnapshot))
 
-        assertEquals(listOf(17 to 701L), opens)
+        assertEquals(listOf(17 to 701L, 17 to 701L), opens)
     }
 
     @Test
