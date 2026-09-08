@@ -214,12 +214,14 @@ internal class AppKitExclusiveDisplayBroker(
             ).also { entries[command.displayKey] = it }
         }
         if (port.dispatch { commit(entry.displayKey, entry.token) }) return KadreResult.Success(Unit)
-        synchronized(lock) {
+        val idleObservation = synchronized(lock) {
             entries[entry.displayKey]?.takeIf { it.token == entry.token }?.let {
                 it.state = LeaseState.Released
                 entries.remove(entry.displayKey)
             }
+            detachIdleDisplayObservationLocked()
         }
+        idleObservation?.close()
         return KadreResult.Failure(KadreFailure.TemporarilyUnavailable(retryable = true))
     }
 
@@ -379,7 +381,11 @@ internal class AppKitExclusiveDisplayBroker(
             entries[entry.displayKey]?.takeIf { it.token == entry.token }?.let { current ->
                 current.state = LeaseState.Released
                 entries.remove(entry.displayKey)
-                CommandDelivery(current.port, current.command).also {
+                CommandDelivery(
+                    port = current.port,
+                    command = current.command,
+                    idleObservation = detachIdleDisplayObservationLocked(),
+                ).also {
                     current.command = null
                     current.port = null
                     current.owner = null
@@ -389,6 +395,7 @@ internal class AppKitExclusiveDisplayBroker(
         terminal?.command?.let { command ->
             terminal.port.dispatchOrRun { command.failed(failure) }
         }
+        terminal?.idleObservation?.close()
     }
 
     private fun terminalAfterCapture(
@@ -421,16 +428,24 @@ internal class AppKitExclusiveDisplayBroker(
     fun cancelReservation(
         port: AppKitExclusiveFullscreenPort,
         operationId: WindowOperationId,
-    ): ExclusiveFullscreenCancellationOutcome = synchronized(lock) {
-        val entry = entries.values.firstOrNull {
-            it.owner?.sessionId == port.sessionId && it.operationId == operationId
-        } ?: return@synchronized ExclusiveFullscreenCancellationOutcome.TooLate
-        if (entry.state != LeaseState.Reserved) return@synchronized ExclusiveFullscreenCancellationOutcome.TooLate
-        entry.state = LeaseState.Released
-        entry.command = null
-        entry.port = null
-        entries.remove(entry.displayKey)
-        ExclusiveFullscreenCancellationOutcome.CancelledBeforeCommit
+    ): ExclusiveFullscreenCancellationOutcome {
+        var idleObservation: AutoCloseable? = null
+        val outcome = synchronized(lock) {
+            val entry = entries.values.firstOrNull {
+                it.owner?.sessionId == port.sessionId && it.operationId == operationId
+            } ?: return@synchronized ExclusiveFullscreenCancellationOutcome.TooLate
+            if (entry.state != LeaseState.Reserved) {
+                return@synchronized ExclusiveFullscreenCancellationOutcome.TooLate
+            }
+            entry.state = LeaseState.Released
+            entry.command = null
+            entry.port = null
+            entries.remove(entry.displayKey)
+            idleObservation = detachIdleDisplayObservationLocked()
+            ExclusiveFullscreenCancellationOutcome.CancelledBeforeCommit
+        }
+        idleObservation?.close()
+        return outcome
     }
 
     fun release(port: AppKitExclusiveFullscreenPort, command: AppKitExclusiveBrokerCommand) {
@@ -454,15 +469,20 @@ internal class AppKitExclusiveDisplayBroker(
     }
 
     fun releaseWindow(port: AppKitExclusiveFullscreenPort, windowId: WindowId) {
+        var idleObservation: AutoCloseable? = null
         val action = synchronized(lock) {
             val entry = entries.values.firstOrNull { it.owner == Owner(port.sessionId, windowId) }
-                ?: return@synchronized null
+                ?: run {
+                    idleObservation = detachIdleDisplayObservationLocked()
+                    return@synchronized null
+                }
             when (entry.state) {
                 LeaseState.Reserved -> {
                     entry.state = LeaseState.Released
                     entry.command = null
                     entry.port = null
                     entries.remove(entry.displayKey)
+                    idleObservation = detachIdleDisplayObservationLocked()
                     null
                 }
                 LeaseState.Committing -> {
@@ -481,6 +501,7 @@ internal class AppKitExclusiveDisplayBroker(
                 -> null
             }
         }
+        idleObservation?.close()
         if (action != null && !port.dispatch { releaseEntry(action.first, action.second) }) {
             abandonToRecovery(action.first, action.second)
         }
@@ -492,7 +513,7 @@ internal class AppKitExclusiveDisplayBroker(
         lease: AppKitExclusiveDisplayLease,
     ) {
         val result = runCatching(lease::release).getOrNull()
-        val publication = synchronized(lock) {
+        val transition = synchronized(lock) {
             entries[displayKey]?.takeIf { it.token == token && it.state == LeaseState.Quarantined }?.let { entry ->
                 if (result?.terminal is AppKitExclusiveDisplayTerminal.Released) {
                     entry.state = LeaseState.Released
@@ -500,10 +521,14 @@ internal class AppKitExclusiveDisplayBroker(
                 } else {
                     quarantineLocked(entry, lease)
                 }
-                availabilityPublicationLocked()
+                BrokerTransition(
+                    publication = availabilityPublicationLocked(),
+                    idleObservation = detachIdleDisplayObservationLocked(),
+                )
             }
         }
-        publish(publication)
+        publish(transition?.publication)
+        transition?.idleObservation?.close()
     }
 
     private fun releaseEntry(displayKey: Long, token: Long) {
@@ -570,6 +595,7 @@ internal class AppKitExclusiveDisplayBroker(
                     loss = lossDelivery,
                     publication = publication,
                     scheduleRecovery = !released && (closed || targetPort?.isOpen() == false),
+                    idleObservation = detachIdleDisplayObservationLocked(),
                 )
             }
         } ?: return
@@ -595,6 +621,7 @@ internal class AppKitExclusiveDisplayBroker(
             }
         }
         if (outcome.scheduleRecovery) scheduleRecovery(entry.displayKey, entry.token)
+        outcome.idleObservation?.close()
     }
 
     fun closePort(port: AppKitExclusiveFullscreenPort) {
@@ -631,6 +658,7 @@ internal class AppKitExclusiveDisplayBroker(
                 quarantines = entries.values
                     .filter { it.state == LeaseState.Quarantined }
                     .map { it.displayKey to it.token },
+                idleObservation = detachIdleDisplayObservationLocked(),
             )
         }
         actions.releases.forEach { (displayKey, token) ->
@@ -639,6 +667,7 @@ internal class AppKitExclusiveDisplayBroker(
             }
         }
         actions.quarantines.forEach { (displayKey, token) -> scheduleRecovery(displayKey, token) }
+        actions.idleObservation?.close()
     }
 
     override fun close() {
@@ -728,7 +757,7 @@ internal class AppKitExclusiveDisplayBroker(
         recovery: AppKitExclusiveDisplayLease,
     ) {
         val result = runCatching(recovery::release).getOrNull()
-        val publication = synchronized(lock) {
+        val transition = synchronized(lock) {
             entries[displayKey]?.takeIf {
                 it.token == token &&
                     it.state == LeaseState.Quarantined &&
@@ -740,10 +769,14 @@ internal class AppKitExclusiveDisplayBroker(
                     entry.recovery = null
                     entries.remove(displayKey)
                 }
-                availabilityPublicationLocked()
+                BrokerTransition(
+                    publication = availabilityPublicationLocked(),
+                    idleObservation = detachIdleDisplayObservationLocked(),
+                )
             }
         }
-        publish(publication)
+        publish(transition?.publication)
+        transition?.idleObservation?.close()
     }
 
     private fun availabilityPublicationLocked(): AvailabilityPublication? {
@@ -755,6 +788,18 @@ internal class AppKitExclusiveDisplayBroker(
 
     private fun publish(publication: AvailabilityPublication?) {
         publication?.ports?.forEach { it.publishAvailability(publication.availability) }
+    }
+
+    /** Detaches only after the last session port and the last lease/recovery entry are gone. */
+    private fun detachIdleDisplayObservationLocked(): AutoCloseable? {
+        if (ports.isNotEmpty() || entries.isNotEmpty()) return null
+        val observation = displayObservation
+        displayObservation = null
+        displayObservationAttempted = false
+        displayObservationFailure = null
+        latestInventory = null
+        publishedAvailability = null
+        return observation
     }
 
     private fun AppKitExclusiveFullscreenPort?.dispatchOrRun(task: () -> Unit) {
@@ -901,7 +946,14 @@ internal class AppKitExclusiveDisplayBroker(
                     LeaseState.Released -> Unit
                 }
             }
-            ReconfigurationActions(nextAvailability, availabilityTargets, reserved, active, quarantines)
+            ReconfigurationActions(
+                availability = nextAvailability,
+                availabilityTargets = availabilityTargets,
+                reserved = reserved,
+                active = active,
+                quarantines = quarantines,
+                idleObservation = detachIdleDisplayObservationLocked(),
+            )
         }
         actions.availabilityTargets.forEach { it.publishAvailability(actions.availability) }
         actions.reserved.forEach { terminal ->
@@ -909,6 +961,7 @@ internal class AppKitExclusiveDisplayBroker(
         }
         actions.active.forEach { (displayKey, token) -> scheduleDisplayLoss(displayKey, token) }
         actions.quarantines.forEach { (displayKey, token) -> scheduleRecovery(displayKey, token) }
+        actions.idleObservation?.close()
     }
 
     private fun reconcileCommittedEntry(entry: Entry): Boolean {
@@ -950,9 +1003,15 @@ internal class AppKitExclusiveDisplayBroker(
         val ports: List<AppKitExclusiveFullscreenPort>,
     )
 
+    private data class BrokerTransition(
+        val publication: AvailabilityPublication?,
+        val idleObservation: AutoCloseable?,
+    )
+
     private data class CommandDelivery(
         val port: AppKitExclusiveFullscreenPort?,
         val command: AppKitExclusiveBrokerCommand?,
+        val idleObservation: AutoCloseable?,
     )
 
     private data class TerminalOutcome(
@@ -961,11 +1020,13 @@ internal class AppKitExclusiveDisplayBroker(
         val loss: LossDelivery?,
         val publication: AvailabilityPublication?,
         val scheduleRecovery: Boolean,
+        val idleObservation: AutoCloseable?,
     )
 
     private data class PortCloseActions(
         val releases: List<Pair<Long, Long>>,
         val quarantines: List<Pair<Long, Long>>,
+        val idleObservation: AutoCloseable?,
     )
 
     private data class BrokerCloseActions(
@@ -980,6 +1041,7 @@ internal class AppKitExclusiveDisplayBroker(
         val reserved: List<ReservedTerminal>,
         val active: List<Pair<Long, Long>>,
         val quarantines: List<Pair<Long, Long>>,
+        val idleObservation: AutoCloseable?,
     )
 
     private data class LossDelivery(

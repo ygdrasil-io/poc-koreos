@@ -32,6 +32,121 @@ import kotlin.test.assertTrue
 
 class AppKitExclusiveDisplayBrokerTest {
     @Test
+    fun closingLastIdlePortReleasesObservationAndFutureOpenInstallsFreshSnapshot() {
+        val displayNative = RecordingBrokerDisplayNative(displaySnapshot(71L, 500L))
+        val displayBroker = AppKitDisplayBroker(displayNative, ImmediateDisplayDispatcher)
+        val broker = AppKitExclusiveDisplayBroker(RecordingExclusiveDisplayBridge(), displayBroker)
+
+        val first = broker.openPort(QueuedExclusiveExecutor(), UnusedExclusiveWindowPort)
+        assertEquals(1, displayNative.observationOpenCount)
+        assertEquals(1, displayNative.snapshotCount)
+
+        first.close()
+
+        assertEquals(1, displayNative.observationCloseCount)
+        val second = broker.openPort(QueuedExclusiveExecutor(), UnusedExclusiveWindowPort)
+        assertEquals(2, displayNative.observationOpenCount)
+        assertEquals(2, displayNative.snapshotCount)
+
+        second.close()
+        assertEquals(2, displayNative.observationCloseCount)
+    }
+
+    @Test
+    fun closingLastPortAfterConfirmedReleaseReleasesObservationExactlyOnce() {
+        val displayNative = RecordingBrokerDisplayNative(displaySnapshot(71L, 701L))
+        val displayBroker = AppKitDisplayBroker(displayNative, ImmediateDisplayDispatcher)
+        val bridge = RecordingExclusiveDisplayBridge(openCapturedLeases = true)
+        val executor = QueuedExclusiveExecutor()
+        val broker = AppKitExclusiveDisplayBroker(bridge, displayBroker)
+        val port = broker.openPort(executor, RecordingExclusiveWindowPort())
+        val enter = command(20L, 201L, 71L, 701L)
+        assertEquals(KadreResult.Success(Unit), port.reserve(enter))
+        executor.runAll()
+        port.release(
+            RecordingExclusiveCommand(
+                windowId = enter.windowId,
+                operationId = identity<WindowOperationId>(202L),
+                displayKey = enter.displayKey,
+                modeKey = enter.modeKey,
+                requestedFullscreen = FullscreenMode.Windowed,
+            ),
+        )
+        executor.runAll()
+
+        assertEquals(0, displayNative.observationCloseCount)
+        port.close()
+
+        assertEquals(1, displayNative.observationCloseCount)
+        port.close()
+        assertEquals(1, displayNative.observationCloseCount)
+    }
+
+    @Test
+    fun activeEntryRetainsObservationAfterLastPortClosesUntilReleaseTerminal() {
+        val displayNative = RecordingBrokerDisplayNative(displaySnapshot(71L, 701L))
+        val displayBroker = AppKitDisplayBroker(displayNative, ImmediateDisplayDispatcher)
+        val bridge = RecordingExclusiveDisplayBridge(openCapturedLeases = true)
+        val executor = QueuedExclusiveExecutor()
+        val broker = AppKitExclusiveDisplayBroker(bridge, displayBroker)
+        val port = broker.openPort(executor, RecordingExclusiveWindowPort())
+        assertEquals(KadreResult.Success(Unit), port.reserve(command(21L, 211L, 71L, 701L)))
+        executor.runAll()
+
+        port.close()
+
+        assertEquals(0, displayNative.observationCloseCount)
+        executor.runAll()
+        assertEquals(1, bridge.leases.single().releaseCount)
+        assertEquals(1, displayNative.observationCloseCount)
+    }
+
+    @Test
+    fun quarantinedEntryRetainsObservationUntilRecoveryConfirmsRelease() {
+        val displayNative = RecordingBrokerDisplayNative(displaySnapshot(71L, 701L))
+        val displayBroker = AppKitDisplayBroker(displayNative, ImmediateDisplayDispatcher)
+        val lease = RecordingExclusiveDisplayLease(
+            displayKey = 71L,
+            modeKey = 701L,
+            releaseTerminals = ArrayDeque(
+                listOf(
+                    AppKitExclusiveDisplayTerminal.Unknown,
+                    AppKitExclusiveDisplayTerminal.Released(500L),
+                ),
+            ),
+        )
+        val recoveryExecutor = QueuedExclusiveExecutor()
+        val executor = QueuedExclusiveExecutor()
+        val broker = AppKitExclusiveDisplayBroker(
+            RecordingExclusiveDisplayBridge(leasesToOpen = ArrayDeque(listOf(lease))),
+            displayBroker,
+            recoveryExecutor,
+        )
+        val port = broker.openPort(executor, RecordingExclusiveWindowPort())
+        val enter = command(22L, 221L, 71L, 701L)
+        assertEquals(KadreResult.Success(Unit), port.reserve(enter))
+        executor.runAll()
+        port.release(
+            RecordingExclusiveCommand(
+                windowId = enter.windowId,
+                operationId = identity<WindowOperationId>(222L),
+                displayKey = enter.displayKey,
+                modeKey = enter.modeKey,
+                requestedFullscreen = FullscreenMode.Windowed,
+            ),
+        )
+        executor.runAll()
+
+        port.close()
+
+        assertEquals(0, displayNative.observationCloseCount)
+        assertEquals(1, recoveryExecutor.pendingTaskCount)
+        recoveryExecutor.runAll()
+        assertEquals(2, lease.releaseCount)
+        assertEquals(1, displayNative.observationCloseCount)
+    }
+
+    @Test
     fun competingSessionsReserveOneDisplayBeforeAnyNativeCall() {
         val bridge = RecordingExclusiveDisplayBridge()
         val firstExecutor = QueuedExclusiveExecutor()
@@ -400,6 +515,12 @@ private class RecordingBrokerDisplayNative(
     var snapshot: DisplayPortSnapshot,
 ) : AppKitDisplayNative {
     private var listener: (() -> Unit)? = null
+    var observationOpenCount = 0
+        private set
+    var observationCloseCount = 0
+        private set
+    var snapshotCount = 0
+        private set
     var reconfigurationCount = 0
         private set
     var snapshotFailure: Throwable? = null
@@ -409,12 +530,21 @@ private class RecordingBrokerDisplayNative(
         org.graphiks.kadre.diagnostics.FeatureAvailability.Available,
     )
 
-    override fun snapshot(): DisplayPortSnapshot = snapshotFailure?.let { throw it } ?: snapshot
+    override fun snapshot(): DisplayPortSnapshot {
+        snapshotCount += 1
+        return snapshotFailure?.let { throw it } ?: snapshot
+    }
 
     override fun observeReconfiguration(listener: () -> Unit): AutoCloseable {
         check(this.listener == null)
+        observationOpenCount += 1
         this.listener = listener
-        return AutoCloseable { if (this.listener === listener) this.listener = null }
+        return AutoCloseable {
+            if (this.listener === listener) {
+                this.listener = null
+                observationCloseCount += 1
+            }
+        }
     }
 
     fun emitReconfiguration() {
