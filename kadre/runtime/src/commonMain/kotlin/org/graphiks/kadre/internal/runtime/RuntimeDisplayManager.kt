@@ -82,6 +82,11 @@ internal class RuntimeDisplayManager(
         displayId: DisplayId,
         mode: DisplayMode,
     ): KadreResult<ExclusiveDisplayTarget> = lock.withLock {
+        if (closed) {
+            return@withLock KadreResult.Failure(
+                KadreFailure.Closed(org.graphiks.kadre.diagnostics.KadreResourceKind.Display),
+            )
+        }
         if (mutableState.value.inventory !is DisplayInventory.Enumerated) {
             return@withLock KadreResult.Failure(
                 KadreFailure.TemporarilyUnavailable(retryable = true),

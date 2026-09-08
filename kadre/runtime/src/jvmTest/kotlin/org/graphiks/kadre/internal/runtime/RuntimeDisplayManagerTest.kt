@@ -58,6 +58,21 @@ class RuntimeDisplayManagerTest {
     }
 
     @Test
+    fun rejectsAnExclusiveTargetAfterTheDisplayManagerIsClosed() = runTest {
+        val manager = manager(FakeDisplayPort(snapshot = snapshot(displayKeys = listOf(11L))))
+        manager.requestAccess()
+        val display = enumerated(manager).single()
+        val mode = display.state.value.modes.single()
+
+        manager.close()
+
+        assertEquals(
+            KadreFailure.Closed(org.graphiks.kadre.diagnostics.KadreResourceKind.Display),
+            failureOf(manager.resolveExclusiveTarget(display.id, mode)),
+        )
+    }
+
+    @Test
     fun rejectsAnExclusiveTargetForAnUnknownOrDisconnectedDisplay() = runTest {
         val port = FakeDisplayPort(snapshot = snapshot(displayKeys = listOf(11L)))
         val manager = manager(port)
