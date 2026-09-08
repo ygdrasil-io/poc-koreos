@@ -29,6 +29,116 @@ import kotlin.time.Duration.Companion.nanoseconds
 
 class RuntimeDisplayManagerTest {
     @Test
+    fun publicDisplayAndModeHandlesRemainDistinctAcrossManagersWithMatchingNativeKeys() = runTest {
+        val first = manager(FakeDisplayPort(snapshot = snapshot(displayKeys = listOf(11L))))
+        val second = manager(FakeDisplayPort(snapshot = snapshot(displayKeys = listOf(11L))))
+
+        first.requestAccess()
+        second.requestAccess()
+
+        val firstDisplay = assertIs<DisplayInventory.Enumerated>(first.state.value.inventory).displays.single()
+        val secondDisplay = assertIs<DisplayInventory.Enumerated>(second.state.value.inventory).displays.single()
+
+        assertFalse(firstDisplay.id == secondDisplay.id)
+        assertFalse(firstDisplay.state.value.modes.single().id == secondDisplay.state.value.modes.single().id)
+    }
+
+    @Test
+    fun resolvesTheCurrentDisplayModeToItsOpaqueNativeTarget() = runTest {
+        val manager = manager(FakeDisplayPort(snapshot = snapshot(displayKeys = listOf(11L))))
+        manager.requestAccess()
+        val display = enumerated(manager).single()
+        val mode = display.state.value.modes.single()
+
+        val result = assertIs<KadreResult.Success<ExclusiveDisplayTarget>>(
+            manager.resolveExclusiveTarget(display.id, mode),
+        )
+
+        assertEquals(ExclusiveDisplayTarget(displayKey = 11L, modeKey = 1L), result.value)
+    }
+
+    @Test
+    fun rejectsAnExclusiveTargetForAnUnknownOrDisconnectedDisplay() = runTest {
+        val port = FakeDisplayPort(snapshot = snapshot(displayKeys = listOf(11L)))
+        val manager = manager(port)
+        manager.requestAccess()
+        val display = enumerated(manager).single()
+        val mode = display.state.value.modes.single()
+
+        assertEquals(
+            KadreFailure.InvalidRequest("fullscreen"),
+            failureOf(manager.resolveExclusiveTarget(org.graphiks.kadre.display.DisplayId(999L), mode)),
+        )
+
+        port.publish(snapshot(displayKeys = emptyList()))
+
+        assertEquals(
+            KadreFailure.InvalidRequest("fullscreen"),
+            failureOf(manager.resolveExclusiveTarget(display.id, mode)),
+        )
+    }
+
+    @Test
+    fun rejectsAnExclusiveTargetWhoseHandleComesFromAnotherManager() = runTest {
+        val first = manager(FakeDisplayPort(snapshot = snapshot(displayKeys = listOf(11L))))
+        val second = manager(FakeDisplayPort(snapshot = snapshot(displayKeys = listOf(11L))))
+        first.requestAccess()
+        second.requestAccess()
+        val foreignDisplay = enumerated(second).single()
+
+        assertEquals(
+            KadreFailure.InvalidRequest("fullscreen"),
+            failureOf(first.resolveExclusiveTarget(foreignDisplay.id, foreignDisplay.state.value.modes.single())),
+        )
+    }
+
+    @Test
+    fun rejectsAnExclusiveTargetWithAModeFromAnotherDisplayOrADivergentCopy() = runTest {
+        val manager = manager(
+            FakeDisplayPort(
+                snapshot = snapshotOf(
+                    displays = listOf(display(key = 11L), display(key = 12L)),
+                ),
+            ),
+        )
+        manager.requestAccess()
+        val (first, second) = enumerated(manager)
+        val mode = first.state.value.modes.single()
+
+        assertEquals(
+            KadreFailure.InvalidRequest("fullscreen"),
+            failureOf(manager.resolveExclusiveTarget(first.id, second.state.value.modes.single())),
+        )
+        assertEquals(
+            KadreFailure.InvalidRequest("fullscreen"),
+            failureOf(manager.resolveExclusiveTarget(first.id, mode.copy(bitDepth = 30))),
+        )
+    }
+
+    @Test
+    fun rejectsAnExclusiveTargetForARemovedModeAndDefersWhileInventoryIsUnavailable() = runTest {
+        val port = FakeDisplayPort(snapshot = snapshot(displayKeys = listOf(11L)))
+        val manager = manager(port)
+        manager.requestAccess()
+        val display = enumerated(manager).single()
+        val mode = display.state.value.modes.single()
+
+        port.publish(snapshotOf(displays = listOf(display(key = 11L, modes = emptyList(), currentModeKey = null))))
+
+        assertEquals(
+            KadreFailure.InvalidRequest("fullscreen"),
+            failureOf(manager.resolveExclusiveTarget(display.id, mode)),
+        )
+
+        port.publishFailure(KadreFailure.PlatformFailure(KadrePlatform.AppKit, "display", "reconfigure"))
+
+        assertEquals(
+            KadreFailure.TemporarilyUnavailable(retryable = true),
+            failureOf(manager.resolveExclusiveTarget(display.id, mode)),
+        )
+    }
+
+    @Test
     fun requestAccessPublishesTheCompleteSnapshotBeforeTheAddedEvent() = runTest {
         val port = FakeDisplayPort(snapshot = snapshot(displayKeys = listOf(11L)))
         val manager = manager(port)
@@ -92,27 +202,40 @@ class RuntimeDisplayManagerTest {
         maxCollectorsPerFlow = 4,
     )
 
-    private fun snapshot(displayKeys: List<Long>): DisplayPortSnapshot = DisplayPortSnapshot(
-        primaryKey = displayKeys.firstOrNull(),
-        displays = displayKeys.map { key ->
-            DisplayPortDisplay(
-                key = key,
-                type = DisplayType.Physical,
-                name = "Display $key",
-                bounds = PhysicalRect(PhysicalPoint(0, 0), PhysicalSize(1920, 1080)),
-                workArea = PhysicalRect(PhysicalPoint(0, 0), PhysicalSize(1920, 1040)),
-                scaleFactor = 2.0,
-                currentModeKey = 1,
-                modes = listOf(
-                    DisplayPortMode(
-                        key = 1,
-                        physicalSize = PhysicalSize(1920, 1080),
-                        refreshRateHz = 60.0,
-                        bitDepth = 24,
-                    ),
-                ),
-            )
-        },
+    private fun enumerated(manager: RuntimeDisplayManager) =
+        assertIs<DisplayInventory.Enumerated>(manager.state.value.inventory).displays
+
+    private fun failureOf(result: KadreResult<ExclusiveDisplayTarget>): KadreFailure =
+        assertIs<KadreResult.Failure>(result).reason
+
+    private fun snapshot(displayKeys: List<Long>): DisplayPortSnapshot =
+        snapshotOf(displays = displayKeys.map(::display))
+
+    private fun snapshotOf(displays: List<DisplayPortDisplay>): DisplayPortSnapshot = DisplayPortSnapshot(
+        primaryKey = displays.firstOrNull()?.key,
+        displays = displays,
+    )
+
+    private fun display(
+        key: Long,
+        modes: List<DisplayPortMode> = listOf(mode()),
+        currentModeKey: Long? = modes.firstOrNull()?.key,
+    ): DisplayPortDisplay = DisplayPortDisplay(
+        key = key,
+        type = DisplayType.Physical,
+        name = "Display $key",
+        bounds = PhysicalRect(PhysicalPoint(0, 0), PhysicalSize(1920, 1080)),
+        workArea = PhysicalRect(PhysicalPoint(0, 0), PhysicalSize(1920, 1040)),
+        scaleFactor = 2.0,
+        currentModeKey = currentModeKey,
+        modes = modes,
+    )
+
+    private fun mode(): DisplayPortMode = DisplayPortMode(
+        key = 1,
+        physicalSize = PhysicalSize(1920, 1080),
+        refreshRateHz = 60.0,
+        bitDepth = 24,
     )
 }
 

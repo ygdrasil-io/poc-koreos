@@ -115,18 +115,21 @@ internal class SessionRuntime(
         parentCancellationHandle.dispose()
         throw cause
     }
-    private val runtimeWindows = runtimeComponents.windows
-    private val runtimeDisplays: DisplayManager = runtimeComponents.displayPort?.let { port ->
+    private val runtimeDisplayManager = runtimeComponents.displayPort?.let { port ->
         RuntimeDisplayManager(
             port = port,
             eventStampSource = ::nextStamp,
             collectorAllocator = eventCollectorAllocator,
             maxCollectorsPerFlow = policy.resources.maxEventCollectorsPerFlow,
         )
-    } ?: UnsupportedDisplayManager(
+    }
+    private val runtimeDisplays: DisplayManager = runtimeDisplayManager ?: UnsupportedDisplayManager(
         eventCollectorAllocator,
         policy.resources.maxEventCollectorsPerFlow,
     )
+    private val runtimeWindows = runtimeComponents.windows.also {
+        runtimeDisplayManager?.let(runtimeComponents::installExclusiveDisplayTargetResolver)
+    }
     private val runtimeDevices = UnsupportedDeviceManager(
         eventCollectorAllocator,
         policy.resources.maxEventCollectorsPerFlow,

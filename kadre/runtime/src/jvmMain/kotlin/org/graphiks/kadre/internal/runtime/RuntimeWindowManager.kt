@@ -135,6 +135,7 @@ public class RuntimeWindowManager public constructor(
     private val eventSequence = AtomicLong(0L)
     private val eventClockOrigin = System.nanoTime()
     private var sessionEventStampSource: (() -> EventStamp)? = null
+    private var exclusiveDisplayTargetResolver: ExclusiveDisplayTargetResolver? = null
     private var rawInputCoordinator: RawInputCoordinator? = null
     private var rawInputCapability: Capability<Unit> = unsupported(KadreOperation.RawInputAccess)
     private var rawInputCapabilityObservation: AutoCloseable? = null
@@ -283,6 +284,19 @@ public class RuntimeWindowManager public constructor(
         {},
         null,
     )
+
+    /** Installs the display resolver before any window can be admitted for this session. */
+    override fun installExclusiveDisplayTargetResolver(resolver: ExclusiveDisplayTargetResolver) {
+        synchronized(lock) {
+            check(pending.isEmpty() && committed.isEmpty()) {
+                "exclusive display target resolver must be installed before window admission"
+            }
+            check(exclusiveDisplayTargetResolver == null) {
+                "exclusive display target resolver was already installed"
+            }
+            exclusiveDisplayTargetResolver = resolver
+        }
+    }
 
     /**
      * Unstable backend SPI accepting one immutable observation or acknowledgement.

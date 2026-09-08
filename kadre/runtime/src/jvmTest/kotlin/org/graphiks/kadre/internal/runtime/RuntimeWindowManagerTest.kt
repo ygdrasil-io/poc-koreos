@@ -107,6 +107,21 @@ import java.util.concurrent.atomic.AtomicBoolean
 @OptIn(ExperimentalCoroutinesApi::class)
 class RuntimeWindowManagerTest {
     @Test
+    fun exclusiveDisplayTargetResolverMustBeInstalledBeforeWindowAdmission() = runTest {
+        val manager = manager(DeterministicWindowCommandPort())
+        val resolver = ExclusiveDisplayTargetResolver { _, _ ->
+            KadreResult.Failure(KadreFailure.InvalidRequest("fullscreen"))
+        }
+
+        manager.installExclusiveDisplayTargetResolver(resolver)
+        manager.requestWindow(WindowSpec())
+
+        assertFailsWith<IllegalStateException> {
+            manager.installExclusiveDisplayTargetResolver(resolver)
+        }
+    }
+
+    @Test
     fun windowIngressSerializesConcurrentPublicationsAndEnforcesDiscreteAdmission() = runTest {
         val policy = KadrePolicies.Default.window.copy(
             geometryChanges = ContinuousDelivery.Coalesced,

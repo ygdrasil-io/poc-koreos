@@ -121,6 +121,10 @@ public class RuntimeSessionComponents private constructor(
             rawInputPort,
         )
     }
+
+    internal fun installExclusiveDisplayTargetResolver(resolver: ExclusiveDisplayTargetResolver) {
+        (windows as? RuntimeSessionWindowManager)?.installExclusiveDisplayTargetResolver(resolver)
+    }
 }
 
 internal interface RuntimeSessionWindowManager {
@@ -135,6 +139,8 @@ internal interface RuntimeSessionWindowManager {
         diagnostics: (KadreDiagnostic) -> Unit,
         rawInputPort: RawInputPort?,
     )
+
+    fun installExclusiveDisplayTargetResolver(resolver: ExclusiveDisplayTargetResolver) {}
 }
 
 internal object UnsupportedRuntimeSessionComponentsFactory : RuntimeSessionComponentsFactory {

@@ -24,6 +24,18 @@ import org.graphiks.kadre.display.DisplayMode
 import org.graphiks.kadre.display.DisplayModeId
 import org.graphiks.kadre.display.DisplayRevision
 import org.graphiks.kadre.display.DisplayState
+/** One ephemeral backend target derived from the manager's current display inventory. */
+/** Unstable backend target derived from the manager's current display inventory. */
+public data class ExclusiveDisplayTarget(
+    public val displayKey: Long,
+    public val modeKey: Long,
+)
+
+/** Resolves a public fullscreen request to the current opaque backend display target. */
+public fun interface ExclusiveDisplayTargetResolver {
+    /** A failure is terminal for the requested target and must be propagated without reservation. */
+    public fun resolveExclusiveTarget(displayId: DisplayId, mode: DisplayMode): KadreResult<ExclusiveDisplayTarget>
+}
 
 /** Session-owned projection of complete backend display snapshots. */
 internal class RuntimeDisplayManager(
@@ -32,10 +44,8 @@ internal class RuntimeDisplayManager(
     collectorAllocator: RuntimeEventCollectorAllocator,
     maxCollectorsPerFlow: Int,
     private val platform: KadrePlatform = KadrePlatform.Fake,
-) : DisplayManager, AutoCloseable {
+) : DisplayManager, AutoCloseable, ExclusiveDisplayTargetResolver {
     private val lock = RuntimeLock()
-    private var nextDisplayId = 0L
-    private var nextModeId = 0L
     private val displaysByKey = linkedMapOf<Long, RuntimeDisplay>()
     private var closed = false
     private var observation: AutoCloseable? = null
@@ -66,6 +76,26 @@ internal class RuntimeDisplayManager(
                 KadreResult.Success(state.value)
             }
         }
+    }
+
+    override fun resolveExclusiveTarget(
+        displayId: DisplayId,
+        mode: DisplayMode,
+    ): KadreResult<ExclusiveDisplayTarget> = lock.withLock {
+        if (mutableState.value.inventory !is DisplayInventory.Enumerated) {
+            return@withLock KadreResult.Failure(
+                KadreFailure.TemporarilyUnavailable(retryable = true),
+            )
+        }
+        val entry = displaysByKey.entries.firstOrNull { (_, display) -> display.id == displayId }
+            ?: return@withLock KadreResult.Failure(KadreFailure.InvalidRequest("fullscreen"))
+        val display = entry.value
+        if (display.state.value.connection != DisplayConnectionState.Connected) {
+            return@withLock KadreResult.Failure(KadreFailure.InvalidRequest("fullscreen"))
+        }
+        val modeKey = display.modeKeyFor(mode)
+            ?: return@withLock KadreResult.Failure(KadreFailure.InvalidRequest("fullscreen"))
+        KadreResult.Success(ExclusiveDisplayTarget(entry.key, modeKey))
     }
 
     private fun acceptObservation(observation: KadreResult<DisplayPortSnapshot>) {
@@ -120,7 +150,7 @@ internal class RuntimeDisplayManager(
         snapshot.displays.forEach { source ->
             val existing = displaysByKey[source.key]
             if (existing == null) {
-                RuntimeDisplay(nextDisplayIdentity(), source).also { display ->
+                RuntimeDisplay(RuntimeProcessIds.nextDisplayId(), source).also { display ->
                     displaysByKey[source.key] = display
                     added += display
                 }
@@ -211,10 +241,6 @@ internal class RuntimeDisplayManager(
         )
     }
 
-    private fun nextDisplayIdentity(): DisplayId = DisplayId(nextDisplayId++)
-
-    private fun nextModeIdentity(): DisplayModeId = DisplayModeId(nextModeId++)
-
     private fun nextManagerRevision(current: DisplayManagerRevision): DisplayManagerRevision =
         DisplayManagerRevision(Math.incrementExact(current.value))
 
@@ -246,11 +272,17 @@ internal class RuntimeDisplayManager(
             return id to mutableState.value
         }
 
+        fun modeKeyFor(mode: DisplayMode): Long? {
+            val registered = mutableState.value.modes.firstOrNull { it.id == mode.id } ?: return null
+            if (registered != mode) return null
+            return modeIds.entries.firstOrNull { (_, id) -> id == mode.id }?.key
+        }
+
         private fun stateFor(source: DisplayPortDisplay, revision: DisplayRevision): DisplayState {
             modeIds.keys.retainAll(source.modes.map(DisplayPortMode::key).toSet())
             val modes = source.modes.map { mode ->
                 DisplayMode(
-                    id = modeIds.getOrPut(mode.key, ::nextModeIdentity),
+                    id = modeIds.getOrPut(mode.key) { RuntimeProcessIds.nextDisplayModeId() },
                     physicalSize = mode.physicalSize,
                     refreshRateHz = mode.refreshRateHz,
                     bitDepth = mode.bitDepth,

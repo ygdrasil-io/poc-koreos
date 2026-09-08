@@ -381,7 +381,10 @@ class RuntimeSessionComponentsTest {
             visibility = org.graphiks.kadre.surface.SurfaceVisibility.Visible,
             occlusion = org.graphiks.kadre.surface.SurfaceOcclusion.Visible,
             focus = org.graphiks.kadre.surface.SurfaceFocus.Focused,
-            theme = org.graphiks.kadre.surface.SurfaceTheme.Unknown,
+            appearance = org.graphiks.kadre.surface.SurfaceAppearance(
+                org.graphiks.kadre.surface.SurfaceTheme.Unknown,
+                org.graphiks.kadre.surface.SurfaceContrast.Unknown,
+            ),
             cursor = org.graphiks.kadre.surface.CursorStyle.System(org.graphiks.kadre.surface.CursorIcon.Default),
             pointerCapture = org.graphiks.kadre.surface.PointerCaptureMode.None,
             hitTesting = org.graphiks.kadre.surface.HitTestingMode.Enabled,
