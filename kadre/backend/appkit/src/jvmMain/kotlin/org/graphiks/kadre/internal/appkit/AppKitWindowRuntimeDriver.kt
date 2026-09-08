@@ -342,6 +342,12 @@ private class AppKitWindowCommandPort(
         if (result == AppKitExclusivePresentationResult.Readback) {
             synchronized(lock) { if (entry.exclusivePresentation != null) entry.exclusivePresentation = null }
         }
+        if (result is AppKitExclusivePresentationResult.Failed) {
+            // A partial KFFI restore is not an honest terminal public state, even when it supplied a readback.
+            // The terminal path closes the peer before closing the managed lease so KFFI releases its duplicate guard.
+            terminalize(request.windowId)
+            return AppKitExclusiveWindowResult.Failed(result.failure, null, result.diagnostics)
+        }
         return presentationResult(request, result, FullscreenMode.Windowed)
     }
 
@@ -1601,12 +1607,13 @@ private class AppKitWindowCommandPort(
     }
 
     private fun performCleanup(entry: PeerEntry) {
-        val peer = synchronized(lock) {
+        val (peer, presentation) = synchronized(lock) {
             if (entry.removed && entry.cleanupFinished) return
-            entry.peer
+            entry.peer to entry.exclusivePresentation.also { entry.exclusivePresentation = null }
         }
         val failure = try {
             peer?.close()
+            presentation?.close()
             null
         } catch (cause: Exception) {
             cause

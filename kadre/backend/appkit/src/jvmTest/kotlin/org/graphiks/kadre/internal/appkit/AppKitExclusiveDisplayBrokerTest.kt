@@ -83,6 +83,37 @@ class AppKitExclusiveDisplayBrokerTest {
     }
 
     @Test
+    fun failedAfterCaptureRestoresPresentationForEveryCoreGraphicsTerminal() {
+        listOf(
+            AppKitExclusiveDisplayTerminal.Captured(701L),
+            AppKitExclusiveDisplayTerminal.Released(701L),
+            AppKitExclusiveDisplayTerminal.Unknown,
+        ).forEachIndexed { index, terminal ->
+            val executor = QueuedExclusiveExecutor()
+            val windowPort = RecordingExclusiveWindowPort()
+            val failure = KadreFailure.PlatformFailure(KadrePlatform.AppKit, "exclusive-fullscreen", "capture-$index")
+            val bridge = object : AppKitExclusiveDisplayBridge {
+                override val availability = AppKitExclusiveBridgeAvailability.Available
+                override fun open(displayKey: Long, modeKey: Long) = AppKitExclusiveDisplayOpenResult.FailedAfterCapture(
+                    terminal = terminal,
+                    cleanup = AppKitExclusiveDisplayReleaseResult(terminal),
+                    recovery = null,
+                    failure = failure,
+                )
+            }
+            val broker = AppKitExclusiveDisplayBroker(bridge)
+            val port = broker.openPort(executor, windowPort)
+            val command = command(86L + index, 861L + index, 71L, 701L)
+
+            assertEquals(KadreResult.Success(Unit), port.reserve(command))
+            executor.runAll()
+
+            assertEquals(1, windowPort.exitRequests.size)
+            assertEquals(failure, command.failures.single().first)
+        }
+    }
+
+    @Test
     fun entryPreparesPresentationBeforeCaptureAndPresentsOnlyAfterCapture() {
         val trace = mutableListOf<String>()
         val bridge = RecordingExclusiveDisplayBridge(openCapturedLeases = true, trace = trace)
@@ -93,7 +124,7 @@ class AppKitExclusiveDisplayBrokerTest {
         assertEquals(KadreResult.Success(Unit), port.reserve(command(90L, 901L, 71L, 701L)))
         executor.runAll()
 
-        assertEquals(listOf("prepare", "capture", "present"), trace)
+        assertEquals(listOf("prepare", "capture", "present", "presentation-readback", "coregraphics-readback"), trace)
     }
 
     @Test
@@ -118,7 +149,10 @@ class AppKitExclusiveDisplayBrokerTest {
         )
         executor.runAll()
 
-        assertEquals(listOf("prepare", "capture", "present", "release", "restore"), trace)
+        assertEquals(
+            listOf("prepare", "capture", "present", "presentation-readback", "coregraphics-readback", "release", "restore"),
+            trace,
+        )
     }
 
     @Test
@@ -526,7 +560,9 @@ private class RecordingExclusiveDisplayLease(
         private set
 
     override fun readback(): AppKitExclusiveDisplayReadback =
-        AppKitExclusiveDisplayReadback(AppKitExclusiveDisplayTerminal.Captured(modeKey))
+        AppKitExclusiveDisplayReadback(AppKitExclusiveDisplayTerminal.Captured(modeKey)).also {
+            trace?.add("coregraphics-readback")
+        }
 
     override fun release(): AppKitExclusiveDisplayReleaseResult {
         trace?.add("release")
@@ -592,6 +628,7 @@ private class RecordingExclusiveWindowPort(
             KadreFailure.PlatformFailure(KadrePlatform.AppKit, "exclusive-fullscreen", "present-failed"),
             null,
         )
+        trace?.add("presentation-readback")
         return AppKitExclusiveWindowResult.Read(windowState(request.requestedFullscreen))
     }
 

@@ -11,6 +11,14 @@ import org.graphiks.kffi.objc.appkit.CGDisplayBoundsSnapshot
 import org.graphiks.kffi.objc.appkit.ExclusiveDisplayLeaseOpenResult
 import org.graphiks.kffi.objc.appkit.ExclusiveDisplayNativeFailure
 import org.graphiks.kffi.objc.appkit.ExclusiveDisplayNativeOperation
+import org.graphiks.kffi.objc.appkit.ExclusiveWindowPresentationFailure
+import org.graphiks.kffi.objc.appkit.ExclusiveWindowPresentationLease
+import org.graphiks.kffi.objc.appkit.ExclusiveWindowPresentationOpenResult
+import org.graphiks.kffi.objc.appkit.ExclusiveWindowPresentationOperation
+import org.graphiks.kffi.objc.appkit.ExclusiveWindowPresentationReadback
+import org.graphiks.kffi.objc.appkit.ExclusiveWindowPresentationReadbackResult
+import org.graphiks.kffi.objc.appkit.ExclusiveWindowPresentationRestoreResult
+import org.graphiks.kffi.objc.appkit.ExclusiveWindowPresentationResult
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -20,6 +28,66 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class KffiAppKitDisplayNativeTest {
+    @Test
+    fun presentationOpenAdapterEnumeratesEveryKffiVariant() {
+        val lease = object : ExclusiveWindowPresentationLease {
+            override fun present(displayId: Int) = ExclusiveWindowPresentationResult.WindowGone
+            override fun readback() = ExclusiveWindowPresentationReadbackResult.WindowGone
+            override fun restore() = ExclusiveWindowPresentationRestoreResult.WindowGone
+            override val lastRestoreResult: ExclusiveWindowPresentationRestoreResult? = null
+            override fun close() = ExclusiveWindowPresentationRestoreResult.WindowGone
+        }
+        assertIs<AppKitExclusivePresentationOpenResult.Opened>(
+            ExclusiveWindowPresentationOpenResult.Opened(lease).toKadrePresentationOpenResult(),
+        )
+        listOf(
+            ExclusiveWindowPresentationOpenResult.UnavailablePlatform to "presentation-unavailable-platform",
+            ExclusiveWindowPresentationOpenResult.WrongThread to "presentation-wrong-thread",
+            ExclusiveWindowPresentationOpenResult.DuplicateWindowLease to "presentation-duplicate-window-lease",
+            ExclusiveWindowPresentationOpenResult.WindowGone to "presentation-window-gone",
+            ExclusiveWindowPresentationOpenResult.Failed(presentationFailure()) to "presentation-restore-level",
+        ).forEach { (result, code) ->
+            assertEquals(code, (result.toKadrePresentationOpenResult() as AppKitExclusivePresentationOpenResult.Failed).failure.code)
+        }
+    }
+
+    @Test
+    fun presentationOperationAdaptersEnumerateEveryKffiVariant() {
+        val readback = presentationReadback()
+        val present = listOf(
+            ExclusiveWindowPresentationResult.Presented(readback) to null,
+            ExclusiveWindowPresentationResult.MissingTargetScreen(7) to "presentation-target-unavailable",
+            ExclusiveWindowPresentationResult.WindowGone to "presentation-window-gone",
+            ExclusiveWindowPresentationResult.Closed to "presentation-closed",
+            ExclusiveWindowPresentationResult.WrongThread to "presentation-wrong-thread",
+            ExclusiveWindowPresentationResult.TargetReadbackMismatch(7, null) to "presentation-target-readback-mismatch",
+            ExclusiveWindowPresentationResult.ExternalDivergence(readback, readback) to "presentation-external-divergence",
+            ExclusiveWindowPresentationResult.Failed(presentationFailure()) to "presentation-restore-level",
+        )
+        present.forEach { (result, code) -> assertPresentationCode(result.toKadrePresentationResult(), code) }
+        val observed = listOf(
+            ExclusiveWindowPresentationReadbackResult.Readback(readback) to null,
+            ExclusiveWindowPresentationReadbackResult.WindowGone to "presentation-window-gone",
+            ExclusiveWindowPresentationReadbackResult.Closed to "presentation-closed",
+            ExclusiveWindowPresentationReadbackResult.WrongThread to "presentation-wrong-thread",
+            ExclusiveWindowPresentationReadbackResult.Failed(presentationFailure()) to "presentation-restore-level",
+        )
+        observed.forEach { (result, code) -> assertPresentationCode(result.toKadrePresentationResult(), code) }
+        listOf(
+            ExclusiveWindowPresentationRestoreResult.Restored(readback) to null,
+            ExclusiveWindowPresentationRestoreResult.WindowGone to "presentation-window-gone",
+            ExclusiveWindowPresentationRestoreResult.Closed to "presentation-closed",
+            ExclusiveWindowPresentationRestoreResult.WrongThread to "presentation-wrong-thread",
+        ).forEach { (result, code) -> assertPresentationCode(result.toKadrePresentationResult(), code) }
+        val restored = assertIs<AppKitExclusivePresentationResult.Failed>(
+            ExclusiveWindowPresentationRestoreResult.PartiallyRestored(
+                readback,
+                listOf(presentationFailure(), ExclusiveWindowPresentationFailure(ExclusiveWindowPresentationOperation.RestoreFrame, "frame")),
+            ).toKadrePresentationResult(),
+        )
+        assertEquals("presentation-restore-level", restored.failure.code)
+        assertEquals(listOf("presentation-restore-frame"), restored.diagnostics.map { it.code })
+    }
     @Test
     fun exclusiveBridgeRejectsMissingAndStaleDisplayMappingsBeforeKffiCapture() {
         val native = KffiAppKitDisplayNative(
@@ -221,6 +289,24 @@ class KffiAppKitDisplayNativeTest {
             assertTrue(workArea.origin.y.toLong() + workArea.size.height <=
                 display.bounds.origin.y.toLong() + display.bounds.size.height)
         }
+    }
+}
+
+private fun presentationReadback(): ExclusiveWindowPresentationReadback = ExclusiveWindowPresentationReadback(
+    styleMask = 1L,
+    frame = CGDisplayBoundsSnapshot(0.0, 0.0, 100.0, 100.0),
+    displayId = 7,
+    level = 0L,
+)
+
+private fun presentationFailure(): ExclusiveWindowPresentationFailure =
+    ExclusiveWindowPresentationFailure(ExclusiveWindowPresentationOperation.RestoreLevel, "level")
+
+private fun assertPresentationCode(result: AppKitExclusivePresentationResult, expected: String?) {
+    if (expected == null) {
+        assertEquals(AppKitExclusivePresentationResult.Readback, result)
+    } else {
+        assertEquals(expected, (result as AppKitExclusivePresentationResult.Failed).failure.code)
     }
 }
 

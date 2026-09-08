@@ -346,7 +346,7 @@ internal class AppKitExclusiveDisplayBroker(
         if (
             success != null &&
             success.effectiveState.fullscreen == command.requestedFullscreen &&
-            readback?.terminal == AppKitExclusiveDisplayTerminal.Captured(current.modeKey)
+            readback.value?.terminal == AppKitExclusiveDisplayTerminal.Captured(current.modeKey)
         ) {
             var releaseAfterPresentation = false
             val pendingReconfiguration = synchronized(lock) {
@@ -380,13 +380,14 @@ internal class AppKitExclusiveDisplayBroker(
             releaseLateLease(current.displayKey, current.token, lease)
             return
         }
-        releaseAfterFailedCommit(current, command, presentation)
+        releaseAfterFailedCommit(current, command, presentation, listOfNotNull(readback.failure))
     }
 
     private fun releaseAfterFailedCommit(
         entry: Entry,
         command: AppKitExclusiveBrokerCommand,
         presentation: AppKitExclusiveWindowResult?,
+        diagnostics: List<KadreFailure.PlatformFailure> = emptyList(),
     ) {
         val current = synchronized(lock) {
             entries[entry.displayKey]?.takeIf {
@@ -419,7 +420,7 @@ internal class AppKitExclusiveDisplayBroker(
             command,
             effective,
             failure,
-            diagnostics = presentation.failures(),
+            diagnostics = diagnostics + presentation.failures() + exit.failures(),
         )
     }
 
@@ -974,14 +975,19 @@ internal class AppKitExclusiveDisplayBroker(
             AppKitExclusiveDisplayOpenResult.FailedBeforeCapture(exclusiveFailure("capture-exception"))
         }
 
-    private fun callReadback(lease: AppKitExclusiveDisplayLease): AppKitExclusiveDisplayReadback? =
+    private fun callReadback(lease: AppKitExclusiveDisplayLease): DisplayReadbackAttempt =
         try {
-            lease.readback()
+            DisplayReadbackAttempt(lease.readback())
         } catch (_: Exception) {
-            null
+            DisplayReadbackAttempt(null, exclusiveFailure("coregraphics-readback-exception"))
         } catch (_: LinkageError) {
-            null
+            DisplayReadbackAttempt(null, exclusiveFailure("coregraphics-readback-exception"))
         }
+
+    private data class DisplayReadbackAttempt(
+        val value: AppKitExclusiveDisplayReadback?,
+        val failure: KadreFailure.PlatformFailure? = null,
+    )
 
     private fun exclusiveFailure(code: String): KadreFailure.PlatformFailure =
         KadreFailure.PlatformFailure(org.graphiks.kadre.diagnostics.KadrePlatform.AppKit, "exclusive-fullscreen", code)
