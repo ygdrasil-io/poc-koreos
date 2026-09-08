@@ -198,12 +198,42 @@ dans KFFI et aucun wrapper FFI n'est créé dans Kadre.
 
 ### Fenêtre AppKit
 
-Le port de fenêtre possède une snapshot privée de présentation exclusive :
-style mask, frame, écran et niveau effectifs. À l'entrée il rend la fenêtre
-borderless, la place sans animation sur le frame de l'`NSScreen` correspondant
-au display capturé et conserve cette snapshot. À la sortie il restaure cette
-snapshot avant de relâcher le lease CoreGraphics. Cette présentation n'est pas
-un `toggleFullScreen` et ne produit pas les callbacks AppKit de la phase 5.
+KFFI possède un second lease géré, indépendant du lease CoreGraphics :
+`ExclusiveWindowPresentationLease`. Son ouverture reçoit uniquement une
+`NSWindow` KFFI typée, prend une snapshot détachée
+`(styleMask.rawValue, frame, displayId?, level)` et réserve cette fenêtre contre
+une seconde présentation exclusive, sans la muter. Après l'ouverture du lease
+CoreGraphics, `present(displayId)` résout le `NSScreen` dont
+`CGDirectDisplayID` correspond au display capturé, rend la fenêtre borderless,
+applique sans animation le frame courant de cet écran et le niveau
+`CGShieldingWindowLevel`. Kadre ne transmet ni `MemorySegment`, ni selector,
+ni pointeur. AppKit ne fournit pas de setter `screen` : le screen est donc une
+conséquence du frame et le readback certifie le `displayId?` de `window.screen`,
+il ne prétend jamais assigner un écran.
+
+Le lease n'est disponible que sur macOS 26 ou ultérieur, comme
+`NSScreen.CGDirectDisplayID`; sous cette version KFFI ne fabrique aucun fallback
+heuristique et Kadre ne publie pas `Exclusive`. Toutes ses opérations sont
+confinées au thread principal et retournent une failure fermée `WrongThread`
+plutôt que d'effectuer un dispatch synchrone implicite. Ses snapshots et
+résultats sont entièrement détachés : ils ne contiennent jamais un `NSScreen`,
+une `NSWindow`, un `MemorySegment` ou une référence native. Le lease protège
+aussi une même fenêtre contre une double ouverture et détecte une divergence de
+présentation externe au lieu de l'écraser silencieusement.
+
+À l'entrée, la snapshot de présentation est prise avant toute capture; après
+l'ouverture du lease CoreGraphics et le changement de mode, KFFI appelle
+`present(displayId)`, résout alors le frame courant de l'écran et relit les deux
+leases. À la sortie et sur rollback, le broker termine d'abord le lease
+CoreGraphics (restauration du mode puis libération de capture), puis KFFI tente
+la restauration AppKit sous la topologie ainsi revenue. Une capture non
+confirmée ne bloque pas cet essai, mais le résultat fermé distingue
+`Restored`, `PartiallyRestored`, `TargetUnavailable` et `WindowGone`; chaque
+appel idempotent retente uniquement les composants non restaurés. Les failures
+de CoreGraphics et de présentation sont agrégées sans masquer la cause initiale.
+`close()` ne rend jamais un échec de restauration inobservable : le dernier
+résultat reste consultable via le lease. Cette présentation n'est pas un
+`toggleFullScreen` et ne produit pas les callbacks AppKit de la phase 5.
 
 Les propriétés publiques persistantes (`decorations`, tailles, `level`) restent
 leurs valeurs configurées pendant l'exclusive, comme pendant `Borderless`.
@@ -255,8 +285,9 @@ après commit : readback du state effectif, publication state puis event si ce
 snapshot diffère, puis completion `PlatformFailure`.
 
 Un échec avant capture libère la réservation et retourne la failure native.
-Un échec après capture restaure d'abord la fenêtre et le lease, publie le
-snapshot réellement obtenu puis complète par `PlatformFailure`. Si KFFI ne
+Un échec après capture termine d'abord le lease CoreGraphics, puis tente de
+restaurer la présentation AppKit et publie le snapshot réellement obtenu avant
+de compléter par `PlatformFailure`. Si KFFI ne
 confirme pas positivement la libération de capture, y compris avec un terminal
 `Unknown`, le broker conserve l'entrée en `Quarantined`, retire `Exclusive` de
 toutes les capabilities et refuse toute nouvelle entrée. Seul le même executor
@@ -269,13 +300,14 @@ d'autorité.
 
 ## Sortie, fermeture et reconfiguration
 
-`Windowed` depuis `Exclusive` est une transition terminale du lease : le port
-restaure la fenêtre, KFFI tente de restaurer le mode initial puis libère la
-capture, et le broker libère la réservation. Ensuite seulement Kadre publie le
-snapshot window autoritaire et son événement corrélé. Un échec de restauration
-du mode display n'empêche pas `fullscreen = Windowed` si la présentation AppKit
-a été lue et restaurée : Kadre ne possède plus d'exclusive, et l'appel retourne
-la `PlatformFailure` de nettoyage.
+`Windowed` depuis `Exclusive` est une transition terminale du lease : KFFI
+tente d'abord de restaurer le mode initial puis de libérer la capture; le port
+restaure ensuite la fenêtre sous la topologie obtenue et le broker libère la
+réservation. Ensuite seulement Kadre publie le snapshot window autoritaire et
+son événement corrélé. Un échec de restauration du mode display n'empêche pas
+`fullscreen = Windowed` si la présentation AppKit a été lue et restaurée :
+Kadre ne possède plus d'exclusive, et l'appel retourne la `PlatformFailure` de
+nettoyage.
 
 Un échec de restauration de présentation AppKit est traité séparément. Le port
 relit style mask, system buttons, level et géométrie : les divergences publiques
@@ -317,7 +349,7 @@ Les preuves sont séparées par ce qu'elles peuvent réellement établir :
 
 | Niveau | Preuves requises |
 | --- | --- |
-| O1 runtime | résolution opaque avec collision inter-session et mode complet divergent, précédence des failures, règle `Windowed` intermédiaire, retrait dynamique de capability et terminal d'un `Reserved`, state avant event avant completion, cancellation avant/après commit et perte de display. |
+| O2 runtime | résolution opaque avec collision inter-session et mode complet divergent, précédence des failures, règle `Windowed` intermédiaire, retrait dynamique de capability et terminal d'un `Reserved`, state avant event avant completion, cancellation avant/après commit et perte de display. |
 | O2 KFFI/AppKit fake | ordre capture → set mode → présentation ; restauration → release ; erreurs agrégées, readback `Unknown` et refs libérées ; identité I/O de mode et réordonnancement ; token stale/ABA ; reconfiguration auto-induite ; retrait de capability pendant un lease ; restauration AppKit divergente ou illisible ; arbitrage inter-session du broker. |
 | O3 macOS | smoke pointer-free de disponibilité et readback non disruptif ; aucun runner CI ne change un mode physique ni ne capture l'écran principal. |
 | Manuel | sur un display de test distinct : entrée, vérification du mode et de la fenêtre, sortie, restauration du mode/frame/style ; retrait du display ou changement de mode ; contrôle qu'aucune capture ne survit. |
