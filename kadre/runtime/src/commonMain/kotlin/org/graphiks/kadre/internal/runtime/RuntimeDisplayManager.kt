@@ -24,9 +24,14 @@ import org.graphiks.kadre.display.DisplayMode
 import org.graphiks.kadre.display.DisplayModeId
 import org.graphiks.kadre.display.DisplayRevision
 import org.graphiks.kadre.display.DisplayState
-/** One ephemeral backend target derived from the manager's current display inventory. */
-/** Unstable backend target derived from the manager's current display inventory. */
-public data class ExclusiveDisplayTarget(
+/**
+ * Unstable backend SPI carrying one ephemeral native display target.
+ *
+ * This type is unsupported for applications. Its native keys are confined to the
+ * `org.graphiks.kadre.internal.runtime` backend seam and never form a Kadre public handle.
+ */
+@ConsistentCopyVisibility
+public data class ExclusiveDisplayTarget internal constructor(
     public val displayKey: Long,
     public val modeKey: Long,
 )

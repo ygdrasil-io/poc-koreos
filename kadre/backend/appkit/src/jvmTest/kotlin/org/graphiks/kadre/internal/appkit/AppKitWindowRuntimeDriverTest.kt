@@ -111,6 +111,25 @@ import kotlin.test.assertTrue
 @OptIn(DelicateKadreApi::class)
 class AppKitWindowRuntimeDriverTest {
     @Test
+    fun driverInstallsAndClosesItsProcessExclusivePort() {
+        val broker = AppKitProcessBroker()
+        val driver = AppKitWindowRuntimeDriverFactory {
+            DeterministicAppKitNativeWindowPort("exclusive-port-wiring")
+        }.create(
+            resources = KadrePolicies.Default.resources,
+            broker = broker,
+        )
+        val exclusivePort = assertIs<AppKitExclusiveFullscreenPort>(
+            driver.privateField("exclusiveFullscreenPort").get(driver),
+        )
+
+        assertTrue(exclusivePort.isOpen())
+        driver.close()
+
+        assertFalse(exclusivePort.isOpen())
+    }
+
+    @Test
     fun standaloneAttentionRunsAndReleasesOnTheAppKitOwnerThread() {
         val port = OwnerThreadAppKitNativeWindowPort("attention-owner-thread")
         val native = DriverAttentionNative(port::isMainThread)

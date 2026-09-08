@@ -56,6 +56,11 @@ internal class AppKitProcessBroker(
         AppKitDisplayBroker(KffiAppKitDisplayNative())
     },
     private val memoryPressureNative: AppKitMemoryPressureNative? = null,
+    private val exclusiveDisplayBridge: AppKitExclusiveDisplayBridge = UnsupportedAppKitExclusiveDisplayBridge,
+    private val exclusiveRecoveryExecutor: AppKitExclusiveExecutor = AppKitExclusiveExecutor { task ->
+        task()
+        true
+    },
 ) {
     private val lock = Any()
     private val deliveryLock = Any()
@@ -74,6 +79,13 @@ internal class AppKitProcessBroker(
         )
     }
     private val displayBroker = lazy(displayBrokerFactory)
+    private val exclusiveDisplayBroker = lazy {
+        AppKitExclusiveDisplayBroker(
+            bridge = exclusiveDisplayBridge,
+            displayBroker = displayBroker.value,
+            recoveryExecutor = exclusiveRecoveryExecutor,
+        )
+    }
     private val memoryPressureBroker = lazy {
         AppKitMemoryPressureBroker(checkNotNull(memoryPressureNative), ::deliverMemoryPressure)
     }
@@ -81,6 +93,11 @@ internal class AppKitProcessBroker(
     fun openRawInputPort(): AppKitRawInputPort = rawInputBroker.value.openPort()
 
     fun openDisplayPort(): AppKitDisplayPort = displayBroker.value.openPort()
+
+    fun openExclusiveFullscreenPort(
+        executor: AppKitExclusiveExecutor,
+        windowPort: AppKitExclusiveWindowPort,
+    ): AppKitExclusiveFullscreenPort = exclusiveDisplayBroker.value.openPort(executor, windowPort)
 
     fun memoryPressureAvailability(): FeatureAvailability = synchronized(lock) {
         if (terminated || memoryPressureNative == null) {
@@ -226,6 +243,7 @@ internal class AppKitProcessBroker(
                     }
                 }
                 if (rawInputBroker.isInitialized()) rawInputBroker.value.close()
+                if (exclusiveDisplayBroker.isInitialized()) exclusiveDisplayBroker.value.close()
                 if (displayBroker.isInitialized()) displayBroker.value.close()
                 if (memoryPressureBroker.isInitialized()) memoryPressureBroker.value.close()
                 return@delivery

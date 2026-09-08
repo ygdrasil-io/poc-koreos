@@ -341,8 +341,11 @@ public class RuntimeWindowManager public constructor(
         }
     }
 
-    /** Installs the session's exclusive broker seam before any window admission. */
-    internal fun installExclusiveFullscreenPort(port: ExclusiveFullscreenPort) {
+    /**
+     * Installs the unstable exclusive-fullscreen backend SPI before window admission.
+     * Unsupported for application use.
+     */
+    public fun installExclusiveFullscreenPort(port: ExclusiveFullscreenPort) {
         synchronized(lock) {
             check(pending.isEmpty() && committed.isEmpty()) {
                 "exclusive fullscreen port must be installed before window admission"
@@ -731,6 +734,10 @@ public class RuntimeWindowManager public constructor(
             windowId = window.id,
             operationId = pending.operationId,
             target = checkNotNull(transition.target),
+            requestedFullscreen = when (transition) {
+                is ExclusiveFullscreenTransition.Enter -> transition.request
+                is ExclusiveFullscreenTransition.Exit -> FullscreenMode.Windowed
+            },
             sink = exclusiveFullscreenCommandSink,
         )
         if (!window.beginNativeUpdateDispatch(pending.operationId)) return

@@ -80,7 +80,7 @@ internal data class KffiAppKitNativeDisplay(
 )
 
 internal data class KffiAppKitNativeDisplayMode(
-    val ordinal: Int,
+    val modeIdentity: Long,
     val pixelWidth: Long,
     val pixelHeight: Long,
     val refreshRateHz: Double?,
@@ -88,6 +88,7 @@ internal data class KffiAppKitNativeDisplayMode(
 )
 
 internal data class KffiAppKitNativeCurrentMode(
+    val modeIdentity: Long,
     val pixelWidth: Long,
     val pixelHeight: Long,
     val refreshRateHz: Double?,
@@ -107,7 +108,7 @@ private object SystemKffiAppKitDisplayServices : KffiAppKitDisplayServices {
     override fun enumerateDisplays(): List<KffiAppKitNativeDisplay> = AppKitDisplayServices.enumerate().map { display ->
         val modes = AppKitDisplayServices.allModes(display.id).map { mode ->
             KffiAppKitNativeDisplayMode(
-                ordinal = mode.ordinal,
+                modeIdentity = mode.modeIdentity,
                 pixelWidth = mode.pixelWidth,
                 pixelHeight = mode.pixelHeight,
                 refreshRateHz = mode.refreshRateHz,
@@ -122,6 +123,7 @@ private object SystemKffiAppKitDisplayServices : KffiAppKitDisplayServices {
                 bounds = AppKitDisplayServices.bounds(display.id),
                 modes = modes,
                 currentMode = KffiAppKitNativeCurrentMode(
+                    modeIdentity = current.modeIdentity,
                     pixelWidth = current.pixelWidth,
                     pixelHeight = current.pixelHeight,
                     refreshRateHz = current.refreshRateHz,
@@ -155,9 +157,9 @@ private fun KffiAppKitNativeDisplay.toPortDisplay(screen: KffiAppKitNativeScreen
     }
 
     val modes = modes.map { mode ->
-        check(mode.ordinal >= 0) { "CoreGraphics display mode ordinal must be non-negative" }
+        check(mode.modeIdentity >= 0L) { "CoreGraphics display mode identity must be non-negative" }
         DisplayPortMode(
-            key = mode.ordinal.toLong(),
+            key = mode.modeIdentity,
             physicalSize = PhysicalSize(mode.pixelWidth.toPhysicalDimension("mode width"), mode.pixelHeight.toPhysicalDimension("mode height")),
             refreshRateHz = mode.refreshRateHz,
             bitDepth = null,
@@ -165,16 +167,10 @@ private fun KffiAppKitNativeDisplay.toPortDisplay(screen: KffiAppKitNativeScreen
     }
     check(modes.isNotEmpty()) { "CoreGraphics returned no display modes" }
     check(modes.map(DisplayPortMode::key).distinct().size == modes.size) {
-        "CoreGraphics display mode ordinals must be unique"
+        "CoreGraphics display mode identities must be unique"
     }
-    val matchingMode = modes.filter { mode ->
-        val source = this.modes.first { it.ordinal.toLong() == mode.key }
-        source.pixelWidth == currentMode.pixelWidth &&
-            source.pixelHeight == currentMode.pixelHeight &&
-            source.refreshRateHz == currentMode.refreshRateHz &&
-            source.ioFlags == currentMode.ioFlags
-    }.singleOrNull()
-    check(matchingMode != null) { "Current CoreGraphics display mode has no unique mode ordinal" }
+    val matchingMode = modes.singleOrNull { mode -> mode.key == currentMode.modeIdentity }
+    check(matchingMode != null) { "Current CoreGraphics display mode identity is unavailable" }
 
     return DisplayPortDisplay(
         key = id.displayKey(),

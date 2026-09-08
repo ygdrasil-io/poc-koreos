@@ -1279,6 +1279,7 @@ class RuntimeWindowManagerTest {
         val command = exclusivePort.reservations.single()
         assertEquals(window.id, command.windowId)
         assertEquals(resolvedTarget, command.target)
+        assertEquals(requested, command.requestedFullscreen)
         assertFalse(result.isCompleted)
 
         assertTrue(command.captureCommitted())
@@ -1485,6 +1486,8 @@ class RuntimeWindowManagerTest {
             window.apply(WindowUpdate(fullscreen = PropertyChange.Set(FullscreenMode.Windowed)))
         }
         val release = exclusivePort.releases.single()
+        assertEquals(FullscreenMode.Windowed, release.requestedFullscreen)
+        assertEquals(ExclusiveDisplayTarget(displayKey = 41L, modeKey = 84L), release.target)
         assertFalse(exit.isCompleted)
         release.completed(window.state.value.copy(fullscreen = FullscreenMode.Windowed))
 

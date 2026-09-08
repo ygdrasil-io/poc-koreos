@@ -34,10 +34,10 @@ class KffiAppKitDisplayNativeTest {
                         pixelHeight = 2000,
                         bounds = CGDisplayBoundsSnapshot(-3000.0, 0.0, 3000.0, 2000.0),
                         modes = listOf(
-                            KffiAppKitNativeDisplayMode(0, 1500, 1000, 60.0, 1),
-                            KffiAppKitNativeDisplayMode(1, 3000, 2000, 120.0, 9),
+                            KffiAppKitNativeDisplayMode(701L, 1500, 1000, 60.0, 1),
+                            KffiAppKitNativeDisplayMode(409L, 3000, 2000, 120.0, 9),
                         ),
-                        currentMode = KffiAppKitNativeCurrentMode(3000, 2000, 120.0, 9),
+                        currentMode = KffiAppKitNativeCurrentMode(409L, 3000, 2000, 120.0, 9),
                     ),
                 ),
                 screens = listOf(
@@ -64,10 +64,10 @@ class KffiAppKitDisplayNativeTest {
                         bounds = PhysicalRect(PhysicalPoint(-3000, 0), PhysicalSize(3000, 2000)),
                         workArea = PhysicalRect(PhysicalPoint(-3000, 44), PhysicalSize(3000, 1956)),
                         scaleFactor = 2.0,
-                        currentModeKey = 1,
+                        currentModeKey = 409,
                         modes = listOf(
-                            DisplayPortMode(0, PhysicalSize(1500, 1000), 60.0, null),
-                            DisplayPortMode(1, PhysicalSize(3000, 2000), 120.0, null),
+                            DisplayPortMode(701, PhysicalSize(1500, 1000), 60.0, null),
+                            DisplayPortMode(409, PhysicalSize(3000, 2000), 120.0, null),
                         ),
                     ),
                 ),
@@ -86,8 +86,8 @@ class KffiAppKitDisplayNativeTest {
                         pixelWidth = 1920,
                         pixelHeight = 1080,
                         bounds = CGDisplayBoundsSnapshot(0.0, 0.0, 1920.0, 1080.0),
-                        modes = listOf(KffiAppKitNativeDisplayMode(0, 1920, 1080, 60.0, 0)),
-                        currentMode = KffiAppKitNativeCurrentMode(1920, 1080, 60.0, 0),
+                        modes = listOf(KffiAppKitNativeDisplayMode(701L, 1920, 1080, 60.0, 0)),
+                        currentMode = KffiAppKitNativeCurrentMode(701L, 1920, 1080, 60.0, 0),
                     ),
                 ),
                 screens = emptyList(),
@@ -98,7 +98,7 @@ class KffiAppKitDisplayNativeTest {
     }
 
     @Test
-    fun snapshotRefusesAnAmbiguousCurrentModeInsteadOfInventingAStableModeIdentity() {
+    fun snapshotKeepsStableModeIdentityWhenEnumerationOrderChanges() {
         val native = KffiAppKitDisplayNative(
             RecordingKffiAppKitDisplayServices(
                 displays = listOf(
@@ -108,10 +108,10 @@ class KffiAppKitDisplayNativeTest {
                         pixelHeight = 1080,
                         bounds = CGDisplayBoundsSnapshot(0.0, 0.0, 1920.0, 1080.0),
                         modes = listOf(
-                            KffiAppKitNativeDisplayMode(0, 1920, 1080, 60.0, 0),
-                            KffiAppKitNativeDisplayMode(1, 1920, 1080, 60.0, 0),
+                            KffiAppKitNativeDisplayMode(0L, 1920, 1080, 60.0, 0),
+                            KffiAppKitNativeDisplayMode(401L, 1920, 1080, 60.0, 0),
                         ),
-                        currentMode = KffiAppKitNativeCurrentMode(1920, 1080, 60.0, 0),
+                        currentMode = KffiAppKitNativeCurrentMode(401L, 1920, 1080, 60.0, 0),
                     ),
                 ),
                 screens = listOf(
@@ -127,7 +127,10 @@ class KffiAppKitDisplayNativeTest {
             ),
         )
 
-        assertFailsWith<IllegalStateException> { native.snapshot() }
+        val snapshot = native.snapshot()
+
+        assertEquals(listOf(0L, 401L), snapshot.displays.single().modes.map(DisplayPortMode::key))
+        assertEquals(401L, snapshot.displays.single().currentModeKey)
     }
 
     @Test

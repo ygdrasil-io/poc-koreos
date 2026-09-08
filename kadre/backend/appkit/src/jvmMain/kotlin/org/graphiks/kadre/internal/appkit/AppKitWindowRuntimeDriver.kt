@@ -116,6 +116,10 @@ internal class AppKitWindowRuntimeDriver internal constructor(
     } else {
         null
     }
+    private val exclusiveFullscreenPort: AppKitExclusiveFullscreenPort? = broker?.openExclusiveFullscreenPort(
+        executor = AppKitExclusiveExecutor(commandPort::submitExclusive),
+        windowPort = commandPort,
+    )
 
     internal val manager: RuntimeWindowManager = RuntimeWindowManager(
         resources = resources,
@@ -132,7 +136,10 @@ internal class AppKitWindowRuntimeDriver internal constructor(
         enabledSurfaceCapabilities = appKitSurfaceCapabilities(publicSurfaceCapabilities),
         textInputPortFactory = TextInputPortFactory(commandPort::textInputPort),
         onLastWindowClosed = onLastWindowClosed,
-    ).also(fullscreenObservationSink::install)
+    ).also { manager ->
+        exclusiveFullscreenPort?.let(manager::installExclusiveFullscreenPort)
+        fullscreenObservationSink.install(manager)
+    }
 
     override fun close() {
         if (!closed.compareAndSet(false, true)) return
@@ -140,7 +147,11 @@ internal class AppKitWindowRuntimeDriver internal constructor(
         try {
             manager.close()
         } finally {
-            commandPort.finishClose(drainMode)
+            try {
+                exclusiveFullscreenPort?.close()
+            } finally {
+                commandPort.finishClose(drainMode)
+            }
         }
     }
 }
@@ -169,6 +180,13 @@ private fun appKitSurfaceCapabilities(publicSurfaceCapabilities: Boolean): Surfa
         platformAccess = unsupportedUpdate,
     )
 }
+
+private fun exclusivePresentationUnavailable(): KadreFailure.PlatformFailure =
+    KadreFailure.PlatformFailure(
+        KadrePlatform.AppKit,
+        "exclusive-fullscreen",
+        "presentation-unavailable",
+    )
 
 private class BrokeredAppKitWindowAttentionPort(
     private val commandPort: AppKitWindowCommandPort,
@@ -273,7 +291,7 @@ private class AppKitWindowCommandPort(
         DropTransferSource,
         LogicalPoint,
     ) -> DropOfferId?,
-) : WindowCommandPort, SurfaceCommandPort {
+) : WindowCommandPort, SurfaceCommandPort, AppKitExclusiveWindowPort {
     private val lock = Any()
     private val nextPeerId = AtomicLong(0L)
     private val byRequest = linkedMapOf<WindowRequestId, PeerEntry>()
@@ -288,9 +306,25 @@ private class AppKitWindowCommandPort(
 
     fun submitAttentionCleanup(task: () -> Unit): Boolean = commands.submitFollowUp(task)
 
+    fun submitExclusive(task: () -> Unit): Boolean = commands.submitFollowUp(task)
+
     fun <T> onMainThread(block: () -> T): T = nativePort.onMainThread(block)
 
     fun reportAttentionFailure(cause: Throwable) = reportFailure(cause)
+
+    override fun enter(request: AppKitExclusiveWindowRequest): AppKitExclusiveWindowResult =
+        AppKitExclusiveWindowResult.Failed(
+            failure = exclusivePresentationUnavailable(),
+            effectiveState = windowState(request.windowId),
+        )
+
+    override fun exit(request: AppKitExclusiveWindowRequest): AppKitExclusiveWindowResult =
+        AppKitExclusiveWindowResult.Failed(
+            failure = exclusivePresentationUnavailable(),
+            effectiveState = windowState(request.windowId),
+        )
+
+    override fun readback(windowId: WindowId): WindowState? = windowState(windowId)
 
     override fun requestOpen(command: WindowOpenCommand) {
         val entry = PeerEntry(command, AppKitWindowPeerId(nextPeerId.getAndIncrement()))

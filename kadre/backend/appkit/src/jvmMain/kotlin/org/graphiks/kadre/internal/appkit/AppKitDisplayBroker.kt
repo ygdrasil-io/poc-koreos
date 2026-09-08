@@ -45,6 +45,7 @@ internal class AppKitDisplayBroker(
 ) : AutoCloseable {
     private val lock = Any()
     private val ports = linkedSetOf<AppKitDisplayPort>()
+    private val exclusiveObservers = linkedSetOf<ExclusiveObserver>()
     private var observation: AutoCloseable? = null
     private var reconfigurationPending = false
     private var reconfigurationQueued = false
@@ -58,6 +59,36 @@ internal class AppKitDisplayBroker(
         }
     }
 
+    /** Retains the process observer independently from session-owned [DisplayPort] instances. */
+    internal fun retainExclusiveObservation(
+        observer: (KadreResult<DisplayPortSnapshot>) -> Unit,
+    ): KadreResult<AutoCloseable> = synchronized(lock) {
+        if (closed) {
+            return@synchronized KadreResult.Failure(
+                KadreFailure.Closed(org.graphiks.kadre.diagnostics.KadreResourceKind.Display),
+            )
+        }
+        val registration = ExclusiveObserver(observer)
+        check(exclusiveObservers.add(registration)) { "exclusive display observer is already registered" }
+        try {
+            if (observation == null) observation = native.observeReconfiguration(::acceptNativeReconfiguration)
+        } catch (_: Exception) {
+            exclusiveObservers.remove(registration)
+            return@synchronized KadreResult.Failure(displayFailure("observation-exception"))
+        } catch (_: LinkageError) {
+            exclusiveObservers.remove(registration)
+            return@synchronized KadreResult.Failure(displayFailure("observation-exception"))
+        }
+        val released = AtomicBoolean(false)
+        KadreResult.Success(
+            AutoCloseable {
+                if (released.compareAndSet(false, true)) releaseExclusiveObservation(registration)
+            },
+        )
+    }
+
+    internal fun requestExclusiveSnapshot(): KadreResult<DisplayPortSnapshot> = snapshotResult()
+
     fun requestSnapshot(port: AppKitDisplayPort): KadreResult<DisplayPortSnapshot> {
         if (!synchronized(lock) { !closed && port in ports && port.isOpen() }) {
             return KadreResult.Failure(KadreFailure.Closed(org.graphiks.kadre.diagnostics.KadreResourceKind.Display))
@@ -68,7 +99,7 @@ internal class AppKitDisplayBroker(
     fun closePort(port: AppKitDisplayPort) {
         val toClose = synchronized(lock) {
             ports.remove(port)
-            if (ports.isEmpty()) observation.also { observation = null } else null
+            if (ports.isEmpty() && exclusiveObservers.isEmpty()) observation.also { observation = null } else null
         }
         toClose?.close()
     }
@@ -77,6 +108,7 @@ internal class AppKitDisplayBroker(
         val toClose = synchronized(lock) {
             if (closed) return
             closed = true
+            exclusiveObservers.clear()
             ports.toList().also { ports.clear() } to observation.also { observation = null }
         }
         toClose.first.forEach(AppKitDisplayPort::closeFromBroker)
@@ -93,7 +125,7 @@ internal class AppKitDisplayBroker(
 
     private fun acceptNativeReconfiguration() {
         val dispatch = synchronized(lock) {
-            if (closed || ports.isEmpty()) {
+            if (closed || consumersEmptyLocked()) {
                 false
             } else {
                 reconfigurationPending = true
@@ -112,7 +144,7 @@ internal class AppKitDisplayBroker(
         while (true) {
             val shouldReconfigure = synchronized(lock) {
                 when {
-                    closed || ports.isEmpty() -> {
+                    closed || consumersEmptyLocked() -> {
                         reconfigurationPending = false
                         reconfigurationQueued = false
                         false
@@ -134,8 +166,9 @@ internal class AppKitDisplayBroker(
 
     private fun reconfigure() {
         val result = snapshotResult()
-        val targets = synchronized(lock) { ports.toList() }
-        targets.forEach { port -> port.publish(result) }
+        val targets = synchronized(lock) { ports.toList() to exclusiveObservers.toList() }
+        targets.first.forEach { port -> port.publish(result) }
+        targets.second.forEach { observer -> observer.listener(result) }
     }
 
     private fun snapshotResult(): KadreResult<DisplayPortSnapshot> = try {
@@ -146,10 +179,24 @@ internal class AppKitDisplayBroker(
         KadreResult.Failure(displayFailure())
     }
 
-    private fun displayFailure(): KadreFailure.PlatformFailure = KadreFailure.PlatformFailure(
+    private fun releaseExclusiveObservation(observer: ExclusiveObserver) {
+        val toClose = synchronized(lock) {
+            exclusiveObservers.remove(observer)
+            if (ports.isEmpty() && exclusiveObservers.isEmpty()) observation.also { observation = null } else null
+        }
+        toClose?.close()
+    }
+
+    private fun consumersEmptyLocked(): Boolean = ports.isEmpty() && exclusiveObservers.isEmpty()
+
+    private class ExclusiveObserver(
+        val listener: (KadreResult<DisplayPortSnapshot>) -> Unit,
+    )
+
+    private fun displayFailure(code: String = "enumeration-exception"): KadreFailure.PlatformFailure = KadreFailure.PlatformFailure(
         KadrePlatform.AppKit,
         "display",
-        "enumeration-exception",
+        code,
     )
 }
 

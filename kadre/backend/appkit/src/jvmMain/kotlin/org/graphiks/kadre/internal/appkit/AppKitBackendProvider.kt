@@ -299,7 +299,7 @@ public class AppKitBackendProvider private constructor(
             },
             publicSurfaceCapabilities = true,
             onLastWindowClosed = onLastWindowClosed,
-            broker = if (attentionOwner == null) null else broker,
+            broker = broker,
             attentionOwner = attentionOwner,
         )
         RuntimeSessionComponents(

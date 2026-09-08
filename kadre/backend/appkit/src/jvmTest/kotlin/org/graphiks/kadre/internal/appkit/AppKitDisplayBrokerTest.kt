@@ -92,6 +92,31 @@ class AppKitDisplayBrokerTest {
         assertEquals(listOf(expected), secondObservations)
         broker.close()
     }
+
+    @Test
+    fun exclusiveLeaseObservationOutlivesTheLastDisplayPort() {
+        val native = RecordingAppKitDisplayNative(snapshot = displaySnapshot(17L))
+        val dispatcher = QueuedAppKitDisplayReconfigurationDispatcher()
+        val broker = AppKitDisplayBroker(native, dispatcher)
+        val displayPort = broker.openPort()
+        val exclusiveObservations = mutableListOf<KadreResult<DisplayPortSnapshot>>()
+        val exclusive = assertIs<KadreResult.Success<AutoCloseable>>(
+            broker.retainExclusiveObservation(exclusiveObservations::add),
+        ).value
+
+        displayPort.close()
+        assertEquals(0, native.observerCloseCount)
+        native.snapshot = displaySnapshot(29L)
+        native.emitReconfiguration()
+        dispatcher.runNext()
+
+        assertEquals(
+            listOf<KadreResult<DisplayPortSnapshot>>(KadreResult.Success(displaySnapshot(29L))),
+            exclusiveObservations,
+        )
+        exclusive.close()
+        assertEquals(1, native.observerCloseCount)
+    }
 }
 
 private class RecordingAppKitDisplayNative(
