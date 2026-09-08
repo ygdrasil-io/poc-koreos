@@ -259,9 +259,11 @@ internal class KffiAppKitWindowPort(
             is ExclusiveWindowPresentationOpenResult.Opened -> AppKitExclusivePresentationOpenResult.Opened(
                 KffiExclusivePresentationLease(opened.lease),
             )
-            else -> AppKitExclusivePresentationOpenResult.Failed(
-                exclusivePresentationFailure(opened::class.simpleName ?: "open-failed"),
-            )
+            ExclusiveWindowPresentationOpenResult.UnavailablePlatform -> presentationOpenFailure("unavailable-platform")
+            ExclusiveWindowPresentationOpenResult.WrongThread -> presentationOpenFailure("wrong-thread")
+            ExclusiveWindowPresentationOpenResult.DuplicateWindowLease -> presentationOpenFailure("duplicate-window-lease")
+            ExclusiveWindowPresentationOpenResult.WindowGone -> presentationOpenFailure("window-gone")
+            is ExclusiveWindowPresentationOpenResult.Failed -> presentationOpenFailure(opened.failure)
         }
     }
 
@@ -2386,10 +2388,15 @@ private class KffiExclusivePresentationLease(
 
     override fun restore(): AppKitExclusivePresentationResult = when (val result = lease.restore()) {
         is ExclusiveWindowPresentationRestoreResult.Restored -> AppKitExclusivePresentationResult.Readback
-        is ExclusiveWindowPresentationRestoreResult.PartiallyRestored -> AppKitExclusivePresentationResult.Failed(
-            exclusivePresentationFailure(result.failures.firstOrNull()?.operation?.name ?: "partial-restore"),
-            hasRepresentableReadback = result.readback != null,
-        )
+        is ExclusiveWindowPresentationRestoreResult.PartiallyRestored -> result.toKadrePresentationResult()
+        ExclusiveWindowPresentationRestoreResult.WindowGone -> presentationFailure("window-gone")
+        ExclusiveWindowPresentationRestoreResult.Closed -> presentationFailure("closed")
+        ExclusiveWindowPresentationRestoreResult.WrongThread -> presentationFailure("wrong-thread")
+    }
+
+    override fun close(): AppKitExclusivePresentationResult = when (val result = lease.close()) {
+        is ExclusiveWindowPresentationRestoreResult.Restored -> AppKitExclusivePresentationResult.Readback
+        is ExclusiveWindowPresentationRestoreResult.PartiallyRestored -> result.toKadrePresentationResult()
         ExclusiveWindowPresentationRestoreResult.WindowGone -> presentationFailure("window-gone")
         ExclusiveWindowPresentationRestoreResult.Closed -> presentationFailure("closed")
         ExclusiveWindowPresentationRestoreResult.WrongThread -> presentationFailure("wrong-thread")
@@ -2404,7 +2411,7 @@ private fun ExclusiveWindowPresentationResult.toKadrePresentationResult(): AppKi
     ExclusiveWindowPresentationResult.WrongThread -> presentationFailure("wrong-thread")
     is ExclusiveWindowPresentationResult.TargetReadbackMismatch -> presentationFailure("target-readback-mismatch")
     is ExclusiveWindowPresentationResult.ExternalDivergence -> presentationFailure("external-divergence")
-    is ExclusiveWindowPresentationResult.Failed -> presentationFailure(failure.operation.name)
+    is ExclusiveWindowPresentationResult.Failed -> presentationFailure(failure)
 }
 
 private fun ExclusiveWindowPresentationReadbackResult.toKadrePresentationResult(): AppKitExclusivePresentationResult = when (this) {
@@ -2412,11 +2419,33 @@ private fun ExclusiveWindowPresentationReadbackResult.toKadrePresentationResult(
     ExclusiveWindowPresentationReadbackResult.WindowGone -> presentationFailure("window-gone")
     ExclusiveWindowPresentationReadbackResult.Closed -> presentationFailure("closed")
     ExclusiveWindowPresentationReadbackResult.WrongThread -> presentationFailure("wrong-thread")
-    is ExclusiveWindowPresentationReadbackResult.Failed -> presentationFailure(failure.operation.name)
+    is ExclusiveWindowPresentationReadbackResult.Failed -> presentationFailure(failure)
 }
 
 private fun presentationFailure(code: String): AppKitExclusivePresentationResult.Failed =
     AppKitExclusivePresentationResult.Failed(exclusivePresentationFailure(code), hasRepresentableReadback = false)
+
+private fun presentationOpenFailure(code: String): AppKitExclusivePresentationOpenResult.Failed =
+    AppKitExclusivePresentationOpenResult.Failed(exclusivePresentationFailure(code))
+
+private fun presentationOpenFailure(
+    failure: org.graphiks.kffi.objc.appkit.ExclusiveWindowPresentationFailure,
+): AppKitExclusivePresentationOpenResult.Failed = presentationOpenFailure(failure.operation.name)
+
+private fun presentationFailure(
+    failure: org.graphiks.kffi.objc.appkit.ExclusiveWindowPresentationFailure,
+): AppKitExclusivePresentationResult.Failed = presentationFailure(failure.operation.name)
+
+private fun ExclusiveWindowPresentationRestoreResult.PartiallyRestored.toKadrePresentationResult():
+    AppKitExclusivePresentationResult.Failed {
+    val failures = failures.map { exclusivePresentationFailure(it.operation.name) }
+    val primary = if (failures.isEmpty()) exclusivePresentationFailure("partial-restore") else failures.first()
+    return AppKitExclusivePresentationResult.Failed(
+        failure = primary,
+        hasRepresentableReadback = readback != null,
+        diagnostics = failures.drop(1),
+    )
+}
 
 private fun exclusivePresentationFailure(code: String): KadreFailure.PlatformFailure = KadreFailure.PlatformFailure(
     KadrePlatform.AppKit,

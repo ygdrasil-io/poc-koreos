@@ -164,6 +164,7 @@ internal interface AppKitExclusivePresentationLease {
     fun present(displayId: Int): AppKitExclusivePresentationResult
     fun readback(): AppKitExclusivePresentationResult
     fun restore(): AppKitExclusivePresentationResult
+    fun close(): AppKitExclusivePresentationResult = restore()
 }
 
 /** A success certifies a detached KFFI readback; failures never invent a window state. */
@@ -172,6 +173,8 @@ internal sealed interface AppKitExclusivePresentationResult {
     data class Failed(
         val failure: KadreFailure.PlatformFailure,
         val hasRepresentableReadback: Boolean,
+        /** Every detached KFFI failure observed by this operation, including partial restore cleanup. */
+        val diagnostics: List<KadreFailure.PlatformFailure> = emptyList(),
     ) : AppKitExclusivePresentationResult
 }
 

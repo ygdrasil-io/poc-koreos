@@ -126,6 +126,7 @@ internal sealed interface AppKitExclusiveWindowResult {
     data class Failed(
         val failure: KadreFailure.PlatformFailure,
         val effectiveState: WindowState?,
+        val diagnostics: List<KadreFailure.PlatformFailure> = emptyList(),
     ) : AppKitExclusiveWindowResult
 }
 
@@ -136,6 +137,7 @@ internal sealed interface AppKitExclusiveWindowPreparation {
     data class Failed(
         val failure: KadreFailure.PlatformFailure,
         val effectiveState: WindowState?,
+        val diagnostics: List<KadreFailure.PlatformFailure> = emptyList(),
     ) : AppKitExclusiveWindowPreparation
 }
 
@@ -154,6 +156,9 @@ internal interface AppKitExclusiveWindowPort {
 
     /** Uses the phase-5 native peer teardown when no honest public readback can be produced. */
     fun terminalize(windowId: WindowId) = Unit
+
+    /** Reports a non-primary native cleanup failure without flattening its typed identity. */
+    fun reportDiagnostic(failure: KadreFailure.PlatformFailure) = Unit
 }
 
 /** Small command view which prevents the process registry from depending on runtime internals. */
@@ -314,12 +319,23 @@ internal class AppKitExclusiveDisplayBroker(
                 } == true
             }
         ) {
+            val release = runCatching(lease::release).getOrNull()
+            val exit = callPresentation {
+                current.port?.windowPort()?.exit(current.windowRequest(FullscreenMode.Windowed))
+            }
             terminalRelease(
                 current,
-                runCatching(lease::release).getOrNull(),
+                release,
                 earlyReleaseCommand,
-                current.owner?.let { current.port?.windowPort()?.readback(it.windowId) },
-                current.terminalFailure,
+                when (exit) {
+                    is AppKitExclusiveWindowResult.Read -> exit.effectiveState
+                    is AppKitExclusiveWindowResult.Failed -> exit.effectiveState
+                    null -> current.owner?.let { current.port?.windowPort()?.readback(it.windowId) }
+                },
+                release?.failures?.takeIf { it.isNotEmpty() }?.first()
+                    ?: current.terminalFailure
+                    ?: (exit as? AppKitExclusiveWindowResult.Failed)?.failure,
+                diagnostics = exit.failures(),
             )
             return
         }
@@ -397,7 +413,14 @@ internal class AppKitExclusiveDisplayBroker(
             is AppKitExclusiveWindowResult.Failed -> presentation.failure
             else -> exclusiveFailure("presentation-readback-failed")
         }
-        terminalRelease(current, release, command, effective, failure)
+        terminalRelease(
+            current,
+            release,
+            command,
+            effective,
+            failure,
+            diagnostics = presentation.failures(),
+        )
     }
 
     private fun releaseCapturedWithoutRuntime(entry: Entry, lease: AppKitExclusiveDisplayLease) {
@@ -416,13 +439,24 @@ internal class AppKitExclusiveDisplayBroker(
                 is AppKitExclusiveWindowResult.Failed -> exit.effectiveState
                 null -> null
             }
-            terminalRelease(current, release, null, effective, (exit as? AppKitExclusiveWindowResult.Failed)?.failure)
+            terminalRelease(
+                current,
+                release,
+                null,
+                effective,
+                release?.failures?.takeIf { it.isNotEmpty() }?.first()
+                    ?: (exit as? AppKitExclusiveWindowResult.Failed)?.failure,
+                diagnostics = exit.failures(),
+            )
         }
     }
 
     private fun terminalBeforeCapture(entry: Entry, failure: KadreFailure) {
         val preparedExit = callPresentation {
             entry.port?.windowPort()?.exit(entry.windowRequest(FullscreenMode.Windowed))
+        }
+        if (preparedExit is AppKitExclusiveWindowResult.Failed) {
+            entry.owner?.let { owner -> entry.port?.windowPort()?.terminalize(owner.windowId) }
         }
         val terminal = synchronized(lock) {
             entries[entry.displayKey]?.takeIf { it.token == entry.token }?.let { current ->
@@ -440,7 +474,12 @@ internal class AppKitExclusiveDisplayBroker(
             }
         }
         terminal?.command?.let { command ->
-            terminal.port.dispatchOrRun { command.failed(failure) }
+            terminal.port.dispatchOrRun {
+                preparedExit.failures().filter { it != failure }.forEach {
+                    terminal.port?.windowPort()?.reportDiagnostic(it)
+                }
+                command.failed(failure)
+            }
         }
         terminal?.idleObservation?.close()
     }
@@ -476,6 +515,7 @@ internal class AppKitExclusiveDisplayBroker(
             effectiveState = effectiveState,
             failure = opened.failure,
             recoveryOverride = opened.recovery,
+            diagnostics = exit.failures(),
         )
     }
 
@@ -601,12 +641,12 @@ internal class AppKitExclusiveDisplayBroker(
             null -> entry.owner?.let { entry.port?.windowPort()?.readback(it.windowId) }
         }
         val failure = when {
-            exit is AppKitExclusiveWindowResult.Failed -> exit.failure
             result == null -> exclusiveFailure("release-exception")
             result.failures.isNotEmpty() -> result.failures.first()
+            exit is AppKitExclusiveWindowResult.Failed -> exit.failure
             else -> null
         }
-        terminalRelease(entry, result, entry.command, effective, failure)
+        terminalRelease(entry, result, entry.command, effective, failure, diagnostics = exit.failures())
     }
 
     private fun terminalRelease(
@@ -616,6 +656,7 @@ internal class AppKitExclusiveDisplayBroker(
         effectiveState: WindowState?,
         failure: KadreFailure?,
         recoveryOverride: AppKitExclusiveDisplayLease? = null,
+        diagnostics: List<KadreFailure.PlatformFailure> = emptyList(),
     ) {
         val released = result?.terminal is AppKitExclusiveDisplayTerminal.Released && recoveryOverride == null
         val outcome = synchronized(lock) {
@@ -659,6 +700,10 @@ internal class AppKitExclusiveDisplayBroker(
             outcome.port?.windowPort()?.terminalize(windowId)
         }
         val loss = outcome.loss
+        val cleanupDiagnostics = result?.failures.orEmpty() + diagnostics
+        cleanupDiagnostics.filter { it != failure }.forEach { diagnostic ->
+            outcome.port?.windowPort()?.reportDiagnostic(diagnostic)
+        }
         if (loss != null) {
             loss.port.publishDisplayLoss(
                 ExclusiveFullscreenDisplayLoss(
@@ -862,6 +907,11 @@ internal class AppKitExclusiveDisplayBroker(
 
     private fun AppKitExclusiveFullscreenPort?.dispatchOrRun(task: () -> Unit) {
         if (this == null || !dispatch(task)) task()
+    }
+
+    private fun AppKitExclusiveWindowResult?.failures(): List<KadreFailure.PlatformFailure> = when (this) {
+        is AppKitExclusiveWindowResult.Failed -> listOf(failure) + diagnostics
+        else -> emptyList()
     }
 
     private fun currentAvailabilityLocked(): ExclusiveFullscreenAvailability = when {

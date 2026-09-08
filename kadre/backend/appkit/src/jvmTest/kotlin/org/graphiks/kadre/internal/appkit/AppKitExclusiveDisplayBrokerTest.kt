@@ -45,6 +45,28 @@ class AppKitExclusiveDisplayBrokerTest {
     }
 
     @Test
+    fun failedBeforeCaptureTerminalizesAnUnrestorablePreparedLeaseAndReportsItsTypedFailure() {
+        val executor = QueuedExclusiveExecutor()
+        val windowPort = RecordingExclusiveWindowPort(failExit = true)
+        val broker = AppKitExclusiveDisplayBroker(RecordingExclusiveDisplayBridge())
+        val port = broker.openPort(executor, windowPort)
+        val command = command(87L, 871L, 71L, 701L)
+
+        assertEquals(KadreResult.Success(Unit), port.reserve(command))
+        executor.runAll()
+
+        assertEquals(listOf(command.windowId), windowPort.terminalized)
+        assertEquals(
+            listOf(KadreFailure.PlatformFailure(KadrePlatform.AppKit, "exclusive-fullscreen", "restore-failed")),
+            windowPort.diagnostics,
+        )
+        assertEquals(
+            KadreFailure.PlatformFailure(KadrePlatform.AppKit, "exclusive-fullscreen", "capture-failed"),
+            command.failures.single().first,
+        )
+    }
+
+    @Test
     fun unrepresentablePresentationRestoreTerminalizesTheNativePeerBeforeFailureCompletion() {
         val executor = QueuedExclusiveExecutor()
         val windowPort = RecordingExclusiveWindowPort(failEnter = true, failExit = true)
@@ -556,6 +578,7 @@ private class RecordingExclusiveWindowPort(
     val enterRequests = mutableListOf<AppKitExclusiveWindowRequest>()
     val exitRequests = mutableListOf<AppKitExclusiveWindowRequest>()
     val terminalized = mutableListOf<WindowId>()
+    val diagnostics = mutableListOf<KadreFailure.PlatformFailure>()
 
     override fun prepare(request: AppKitExclusiveWindowRequest): AppKitExclusiveWindowPreparation {
         trace?.add("prepare")
@@ -584,6 +607,10 @@ private class RecordingExclusiveWindowPort(
 
     override fun terminalize(windowId: WindowId) {
         terminalized += windowId
+    }
+
+    override fun reportDiagnostic(failure: KadreFailure.PlatformFailure) {
+        diagnostics += failure
     }
 }
 

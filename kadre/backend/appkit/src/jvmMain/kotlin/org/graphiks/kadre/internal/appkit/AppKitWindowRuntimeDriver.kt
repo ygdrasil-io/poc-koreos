@@ -348,7 +348,19 @@ private class AppKitWindowCommandPort(
     override fun readback(windowId: WindowId): WindowState? = windowState(windowId)
 
     override fun terminalize(windowId: WindowId) {
-        synchronized(lock) { byWindow[windowId] }?.owner?.close()
+        val entry = synchronized(lock) { byWindow[windowId] } ?: return
+        val lease = synchronized(lock) {
+            entry.exclusivePresentation.also { entry.exclusivePresentation = null }
+        }
+        // Closing the peer first turns an unrecoverable partial restore into KFFI's terminal WindowGone path,
+        // which releases its registry ownership before another exclusive entry may be admitted.
+        entry.peer?.close()
+        lease?.close()
+        entry.owner.close()
+    }
+
+    override fun reportDiagnostic(failure: KadreFailure.PlatformFailure) {
+        reportFailure(KadreException(failure))
     }
 
     private fun presentationResult(
@@ -362,6 +374,7 @@ private class AppKitWindowCommandPort(
         is AppKitExclusivePresentationResult.Failed -> AppKitExclusiveWindowResult.Failed(
             result.failure,
             presentationReadback(request.windowId, fullscreen).takeIf { result.hasRepresentableReadback },
+            result.diagnostics,
         )
         null -> AppKitExclusiveWindowResult.Failed(exclusivePresentationUnavailable(), null)
     }
