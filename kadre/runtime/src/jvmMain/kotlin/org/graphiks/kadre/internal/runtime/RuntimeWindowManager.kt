@@ -371,25 +371,18 @@ public class RuntimeWindowManager public constructor(
 
     private fun acceptExclusiveFullscreenDisplayLoss(loss: ExclusiveFullscreenDisplayLoss) {
         val window = synchronized(lock) {
-            val matchingWindow = committed.values
+            committed.values
                 .firstOrNull { it.window.id == loss.windowId }
                 ?.window
-                ?: return
-            val operationId = loss.operationId
-            if (operationId != null) {
-                if (
-                    dispatchedWindowUpdates[operationId] !== matchingWindow ||
-                    !matchingWindow.acceptsExclusiveDisplayLoss(loss)
-                ) {
-                    return
+        } ?: return
+        if (!window.applyExclusiveDisplayLoss(loss)) return
+        loss.operationId?.let { operationId ->
+            synchronized(lock) {
+                if (dispatchedWindowUpdates[operationId] === window) {
+                    dispatchedWindowUpdates.remove(operationId)
                 }
-                dispatchedWindowUpdates.remove(operationId)
-            } else if (!matchingWindow.acceptsExclusiveDisplayLoss(loss)) {
-                return
             }
-            matchingWindow
         }
-        window.applyExclusiveDisplayLoss(loss)
     }
 
     /**
@@ -1954,16 +1947,6 @@ internal class RuntimeWindow(
         }
         if (closeEventDelivery) eventFlow.close()
         dispatchNextUpdate()
-    }
-
-    fun acceptsExclusiveDisplayLoss(loss: ExclusiveFullscreenDisplayLoss): Boolean = synchronized(updateLock) {
-        val pending = dispatchedUpdate
-        loss.operationId?.let { operationId ->
-            return@synchronized pending?.operationId == operationId && pending.exclusiveTransition != null
-        }
-        pending?.exclusiveTransition == null &&
-            activeExclusiveTarget != null &&
-            mutableState.value.fullscreen is FullscreenMode.Exclusive
     }
 
     fun applyExclusiveDisplayLoss(loss: ExclusiveFullscreenDisplayLoss): Boolean {

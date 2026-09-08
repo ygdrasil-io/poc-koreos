@@ -1897,6 +1897,111 @@ class RuntimeWindowManagerTest {
     }
 
     @Test
+    fun exclusiveDisplayLossDoesNotInvertTheManagerAndWindowLockOrder() = runTest {
+        val reported = CopyOnWriteArrayList<Throwable>()
+        val port = DeterministicWindowCommandPort()
+        val exclusivePort = DeterministicExclusiveFullscreenPort()
+        val manager = manager(
+            port,
+            reported = reported,
+            enabledWindowUpdateCapabilities = fullscreenProperties(),
+            exclusiveFullscreenPort = exclusivePort,
+        )
+        manager.installExclusiveDisplayTargetResolver { _, _ ->
+            KadreResult.Success(ExclusiveDisplayTarget(displayKey = 41L, modeKey = 84L))
+        }
+        val window = openFullscreenWindow(manager, port)
+        val requested = exclusiveFullscreenFixture()
+        val enter = async(start = CoroutineStart.UNDISPATCHED) {
+            window.apply(WindowUpdate(fullscreen = PropertyChange.Set(requested)))
+        }
+        exclusivePort.reservations.single().run {
+            assertTrue(captureCommitted())
+            completed(window.state.value.copy(fullscreen = requested))
+        }
+        assertIs<WindowUpdateOutcome.Applied>(enter.await().successValue())
+
+        val updateLock = RuntimeWindow::class.java.getDeclaredField("updateLock").run {
+            isAccessible = true
+            get(window as RuntimeWindow)
+        }
+        val updateLockHeld = CountDownLatch(1)
+        val queryManager = CountDownLatch(1)
+        val holderFinished = CountDownLatch(1)
+        val displayLossFinished = CountDownLatch(1)
+        val threadFailures = CopyOnWriteArrayList<Throwable>()
+        val holder = Thread(
+            {
+                try {
+                    synchronized(updateLock) {
+                        updateLockHeld.countDown()
+                        check(queryManager.await(2, TimeUnit.SECONDS))
+                        manager.exclusiveFullscreenAvailable()
+                    }
+                } catch (cause: Throwable) {
+                    threadFailures += cause
+                } finally {
+                    holderFinished.countDown()
+                }
+            },
+            "exclusive-update-lock-holder",
+        ).apply {
+            isDaemon = true
+            start()
+        }
+        assertTrue(updateLockHeld.await(2, TimeUnit.SECONDS))
+        val displayLoss = Thread(
+            {
+                try {
+                    exclusivePort.publishDisplayLoss(
+                        ExclusiveFullscreenDisplayLoss(
+                            windowId = window.id,
+                            operationId = null,
+                            effectiveState = window.state.value.copy(fullscreen = FullscreenMode.Windowed),
+                        ),
+                    )
+                } catch (cause: Throwable) {
+                    threadFailures += cause
+                } finally {
+                    displayLossFinished.countDown()
+                }
+            },
+            "exclusive-display-loss",
+        ).apply {
+            isDaemon = true
+            start()
+        }
+        val blockedDeadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(2L)
+        while (displayLoss.state != Thread.State.BLOCKED) {
+            check(System.nanoTime() < blockedDeadline) {
+                "display-loss did not reach the window update lock; state=${displayLoss.state}"
+            }
+            Thread.yield()
+        }
+
+        queryManager.countDown()
+
+        assertTrue(
+            holderFinished.await(2, TimeUnit.SECONDS),
+            "window update lock remained blocked on the manager lock",
+        )
+        assertTrue(displayLossFinished.await(2, TimeUnit.SECONDS))
+        holder.join(2_000L)
+        displayLoss.join(2_000L)
+        assertTrue(threadFailures.isEmpty(), threadFailures.joinToString())
+        assertEquals(FullscreenMode.Windowed, window.state.value.fullscreen)
+        assertEquals(
+            KadreFailure.PlatformFailure(
+                KadrePlatform.AppKit,
+                "exclusive-fullscreen",
+                "display-lost",
+            ),
+            assertIs<KadreException>(reported.single()).failure,
+        )
+        manager.close()
+    }
+
+    @Test
     fun exclusiveDisplayLossRejectsAnOrdinaryInFlightOperationIdForTheSameWindow() = runTest {
         val port = DeterministicWindowCommandPort()
         val exclusivePort = DeterministicExclusiveFullscreenPort()
