@@ -74,6 +74,32 @@ import kotlin.test.assertTrue
 
 class KffiAppKitWindowPortMacOsTest {
     @Test
+    fun exclusivePresentationSmokeOnlyOpensAndReadsDetachedSnapshotOnMacOs26() {
+        if (!isMacOsHost() || !AppKitDisplayAvailability().isAvailable) return
+
+        val port = KffiAppKitWindowPort()
+        var window: AppKitNativeWindowOwner? = null
+        try {
+            port.onMainThread {
+                window = port.createWindow(WindowSpec(contentSize = LogicalSize(240.0, 135.0)))
+                val opened = assertIs<AppKitExclusivePresentationOpenResult.Opened>(
+                    port.openExclusivePresentation(checkNotNull(window)),
+                )
+
+                assertEquals(AppKitExclusivePresentationResult.Readback, opened.lease.readback())
+                assertEquals(AppKitExclusivePresentationResult.Readback, opened.lease.restore())
+            }
+        } finally {
+            port.onMainThread {
+                window?.let { nativeWindow ->
+                    port.closeWindow(nativeWindow)
+                    nativeWindow.close()
+                }
+            }
+        }
+    }
+
+    @Test
     fun fullscreenAvailabilityUsesNumericMacOsVersionOrdering() {
         assertFalse(AppKitFullscreenAvailability("10.6.8").isAvailable)
         assertTrue(AppKitFullscreenAvailability("10.7.0").isAvailable)

@@ -43,6 +43,10 @@ internal data class AppKitExclusiveDisplayReleaseResult(
 internal interface AppKitExclusiveDisplayLease : AutoCloseable {
     val displayKey: Long
 
+    /** The KFFI-certified CoreGraphics identity, never inferred from a public display handle. */
+    val displayId: Int
+        get() = displayKey.toInt()
+
     fun readback(): AppKitExclusiveDisplayReadback
 
     fun release(): AppKitExclusiveDisplayReleaseResult
@@ -106,6 +110,7 @@ internal data class AppKitExclusiveWindowRequest(
     val token: Long,
     val windowId: WindowId,
     val requestedFullscreen: FullscreenMode,
+    val displayId: Int = displayKey.toInt(),
 )
 
 /** Authoritative presentation readback, optionally accompanied by a typed failure. */
@@ -118,8 +123,21 @@ internal sealed interface AppKitExclusiveWindowResult {
     ) : AppKitExclusiveWindowResult
 }
 
+/** A presentation snapshot is opened before CoreGraphics mutates a display. */
+internal sealed interface AppKitExclusiveWindowPreparation {
+    data object Prepared : AppKitExclusiveWindowPreparation
+
+    data class Failed(
+        val failure: KadreFailure.PlatformFailure,
+        val effectiveState: WindowState?,
+    ) : AppKitExclusiveWindowPreparation
+}
+
 /** Presentation boundary implemented by the AppKit window port in Task 6. */
 internal interface AppKitExclusiveWindowPort {
+    fun prepare(request: AppKitExclusiveWindowRequest): AppKitExclusiveWindowPreparation =
+        AppKitExclusiveWindowPreparation.Prepared
+
     fun enter(request: AppKitExclusiveWindowRequest): AppKitExclusiveWindowResult =
         error("exclusive presentation is not installed")
 
@@ -230,6 +248,15 @@ internal class AppKitExclusiveDisplayBroker(
             entries[displayKey]?.takeIf { it.token == token && it.state == LeaseState.Reserved }
                 ?.also { it.state = LeaseState.Committing }
         } ?: return
+        when (val preparation = callPreparation { entry.port?.windowPort()?.prepare(entry.windowRequest(entry.command?.requestedFullscreen ?: FullscreenMode.Windowed)) }) {
+            null,
+            AppKitExclusiveWindowPreparation.Prepared,
+            -> Unit
+            is AppKitExclusiveWindowPreparation.Failed -> {
+                terminalBeforeCapture(entry, preparation.failure)
+                return
+            }
+        }
         when (val opened = callOpen(entry.displayKey, entry.modeKey)) {
             is AppKitExclusiveDisplayOpenResult.FailedBeforeCapture -> terminalBeforeCapture(
                 entry,
@@ -286,7 +313,7 @@ internal class AppKitExclusiveDisplayBroker(
             )
             return
         }
-        val request = current.windowRequest(command.requestedFullscreen)
+        val request = current.windowRequest(command.requestedFullscreen, lease.displayId)
         val presentation = callPresentation { current.port?.windowPort()?.enter(request) }
         val readback = callReadback(lease)
         val success = presentation as? AppKitExclusiveWindowResult.Read
@@ -343,10 +370,10 @@ internal class AppKitExclusiveDisplayBroker(
             entry.lease?.let { releaseLateLease(entry.displayKey, entry.token, it) }
             return
         }
+        val release = runCatching { current.lease?.release() }.getOrNull()
         val exit = callPresentation {
             current.port?.windowPort()?.exit(current.windowRequest(FullscreenMode.Windowed))
         }
-        val release = runCatching { current.lease?.release() }.getOrNull()
         val effective = when (exit) {
             is AppKitExclusiveWindowResult.Read -> exit.effectiveState
             is AppKitExclusiveWindowResult.Failed -> exit.effectiveState
@@ -412,8 +439,15 @@ internal class AppKitExclusiveDisplayBroker(
             opened.recovery?.release()
             return
         }
-        val effectiveState = terminalEntry.owner?.let { owner ->
-            terminalEntry.port?.windowPort()?.readback(owner.windowId)
+        val exit = callPresentation {
+            terminalEntry.port?.windowPort()?.exit(terminalEntry.windowRequest(FullscreenMode.Windowed))
+        }
+        val effectiveState = when (exit) {
+            is AppKitExclusiveWindowResult.Read -> exit.effectiveState
+            is AppKitExclusiveWindowResult.Failed -> exit.effectiveState
+            null -> terminalEntry.owner?.let { owner ->
+                terminalEntry.port?.windowPort()?.readback(owner.windowId)
+            }
         }
         terminalRelease(
             entry = terminalEntry,
@@ -537,10 +571,10 @@ internal class AppKitExclusiveDisplayBroker(
                 it.token == token && (it.state == LeaseState.Releasing || it.releaseRequested && it.lease != null)
             }?.also { it.state = LeaseState.Releasing }
         } ?: return
+        val result = runCatching { entry.lease?.release() }.getOrNull()
         val exit = callPresentation {
             entry.port?.windowPort()?.exit(entry.windowRequest(FullscreenMode.Windowed))
         }
-        val result = runCatching { entry.lease?.release() }.getOrNull()
         val effective = when (exit) {
             is AppKitExclusiveWindowResult.Read -> exit.effectiveState
             is AppKitExclusiveWindowResult.Failed -> exit.effectiveState
@@ -844,6 +878,15 @@ internal class AppKitExclusiveDisplayBroker(
             AppKitExclusiveWindowResult.Failed(exclusiveFailure("presentation-exception"), null)
         }
 
+    private fun callPreparation(block: () -> AppKitExclusiveWindowPreparation?): AppKitExclusiveWindowPreparation? =
+        try {
+            block()
+        } catch (_: Exception) {
+            AppKitExclusiveWindowPreparation.Failed(exclusiveFailure("presentation-exception"), null)
+        } catch (_: LinkageError) {
+            AppKitExclusiveWindowPreparation.Failed(exclusiveFailure("presentation-exception"), null)
+        }
+
     private fun callOpen(displayKey: Long, modeKey: Long): AppKitExclusiveDisplayOpenResult =
         try {
             bridge.open(displayKey, modeKey)
@@ -1069,8 +1112,8 @@ internal class AppKitExclusiveDisplayBroker(
         var terminalFailure: KadreFailure? = null,
         var recoveryScheduled: Boolean = false,
     ) {
-        fun windowRequest(fullscreen: FullscreenMode): AppKitExclusiveWindowRequest =
-            AppKitExclusiveWindowRequest(displayKey, modeKey, token, checkNotNull(owner).windowId, fullscreen)
+        fun windowRequest(fullscreen: FullscreenMode, displayId: Int = displayKey.toInt()): AppKitExclusiveWindowRequest =
+            AppKitExclusiveWindowRequest(displayKey, modeKey, token, checkNotNull(owner).windowId, fullscreen, displayId)
     }
 
     private enum class LeaseState {

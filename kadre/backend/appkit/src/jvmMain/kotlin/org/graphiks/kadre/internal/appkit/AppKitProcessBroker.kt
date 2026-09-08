@@ -433,5 +433,10 @@ internal class AppKitProcessBroker(
 }
 
 internal object ProcessAppKitProcessBroker {
-    val value: AppKitProcessBroker = AppKitProcessBroker(memoryPressureNative = KffiAppKitMemoryPressureNative)
+    private val displaySource = KffiAppKitDisplayNative()
+    val value: AppKitProcessBroker = AppKitProcessBroker(
+        displayBrokerFactory = { AppKitDisplayBroker(displaySource) },
+        memoryPressureNative = KffiAppKitMemoryPressureNative,
+        exclusiveDisplayBridge = KffiAppKitExclusiveDisplayBridge(displaySource),
+    )
 }

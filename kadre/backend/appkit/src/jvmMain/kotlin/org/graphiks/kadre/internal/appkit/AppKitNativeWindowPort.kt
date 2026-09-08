@@ -105,6 +105,12 @@ internal interface AppKitNativeWindowPort {
         error("AppKit fullscreen level restoration is not installed")
     }
 
+    /** Opens a pointer-free AppKit presentation snapshot without mutating the native window. */
+    fun openExclusivePresentation(window: AppKitNativeWindowOwner): AppKitExclusivePresentationOpenResult =
+        AppKitExclusivePresentationOpenResult.Failed(
+            KadreFailure.PlatformFailure(org.graphiks.kadre.diagnostics.KadrePlatform.AppKit, "exclusive-fullscreen", "presentation-unavailable"),
+        )
+
     /** Installs the native geometry observer for one peer, when the port supports it. */
     fun observeGeometry(
         window: AppKitNativeWindowOwner,
@@ -147,6 +153,26 @@ internal interface AppKitNativeWindowPort {
 
 internal interface AppKitNativeWindowOwner : AutoCloseable {
     override fun close()
+}
+
+internal sealed interface AppKitExclusivePresentationOpenResult {
+    data class Opened(val lease: AppKitExclusivePresentationLease) : AppKitExclusivePresentationOpenResult
+    data class Failed(val failure: KadreFailure.PlatformFailure) : AppKitExclusivePresentationOpenResult
+}
+
+internal interface AppKitExclusivePresentationLease {
+    fun present(displayId: Int): AppKitExclusivePresentationResult
+    fun readback(): AppKitExclusivePresentationResult
+    fun restore(): AppKitExclusivePresentationResult
+}
+
+/** A success certifies a detached KFFI readback; failures never invent a window state. */
+internal sealed interface AppKitExclusivePresentationResult {
+    data object Readback : AppKitExclusivePresentationResult
+    data class Failed(
+        val failure: KadreFailure.PlatformFailure,
+        val hasRepresentableReadback: Boolean,
+    ) : AppKitExclusivePresentationResult
 }
 
 /** Identifies the native mutation field whose setter or readback actually failed. */

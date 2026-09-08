@@ -312,19 +312,55 @@ private class AppKitWindowCommandPort(
 
     fun reportAttentionFailure(cause: Throwable) = reportFailure(cause)
 
+    override fun prepare(request: AppKitExclusiveWindowRequest): AppKitExclusiveWindowPreparation {
+        val entry = synchronized(lock) {
+            byWindow[request.windowId]?.takeIf { !closed && !it.removed && it.exclusivePresentation == null }
+        } ?: return AppKitExclusiveWindowPreparation.Failed(exclusivePresentationUnavailable(), windowState(request.windowId))
+        return when (val opened = entry.peer?.openExclusivePresentation()) {
+            is AppKitExclusivePresentationOpenResult.Opened -> {
+                synchronized(lock) {
+                    if (!entry.removed && entry.exclusivePresentation == null) entry.exclusivePresentation = opened.lease
+                }
+                AppKitExclusiveWindowPreparation.Prepared
+            }
+            is AppKitExclusivePresentationOpenResult.Failed ->
+                AppKitExclusiveWindowPreparation.Failed(opened.failure, windowState(request.windowId))
+            null -> AppKitExclusiveWindowPreparation.Failed(exclusivePresentationUnavailable(), windowState(request.windowId))
+        }
+    }
+
     override fun enter(request: AppKitExclusiveWindowRequest): AppKitExclusiveWindowResult =
-        AppKitExclusiveWindowResult.Failed(
-            failure = exclusivePresentationUnavailable(),
-            effectiveState = windowState(request.windowId),
+        presentationResult(
+            request,
+            synchronized(lock) { byWindow[request.windowId]?.exclusivePresentation }?.present(request.displayId),
+            request.requestedFullscreen,
         )
 
-    override fun exit(request: AppKitExclusiveWindowRequest): AppKitExclusiveWindowResult =
-        AppKitExclusiveWindowResult.Failed(
-            failure = exclusivePresentationUnavailable(),
-            effectiveState = windowState(request.windowId),
-        )
+    override fun exit(request: AppKitExclusiveWindowRequest): AppKitExclusiveWindowResult {
+        val entry = synchronized(lock) { byWindow[request.windowId] }
+        val result = entry?.exclusivePresentation?.restore()
+        if (result == AppKitExclusivePresentationResult.Readback) {
+            synchronized(lock) { if (entry.exclusivePresentation != null) entry.exclusivePresentation = null }
+        }
+        return presentationResult(request, result, FullscreenMode.Windowed)
+    }
 
     override fun readback(windowId: WindowId): WindowState? = windowState(windowId)
+
+    private fun presentationResult(
+        request: AppKitExclusiveWindowRequest,
+        result: AppKitExclusivePresentationResult?,
+        fullscreen: FullscreenMode,
+    ): AppKitExclusiveWindowResult = when (result) {
+        AppKitExclusivePresentationResult.Readback -> windowState(request.windowId)?.let { state ->
+            AppKitExclusiveWindowResult.Read(state.copy(fullscreen = fullscreen))
+        } ?: AppKitExclusiveWindowResult.Failed(exclusivePresentationUnavailable(), null)
+        is AppKitExclusivePresentationResult.Failed -> AppKitExclusiveWindowResult.Failed(
+            result.failure,
+            windowState(request.windowId)?.takeIf { result.hasRepresentableReadback }?.copy(fullscreen = fullscreen),
+        )
+        null -> AppKitExclusiveWindowResult.Failed(exclusivePresentationUnavailable(), null)
+    }
 
     override fun requestOpen(command: WindowOpenCommand) {
         val entry = PeerEntry(command, AppKitWindowPeerId(nextPeerId.getAndIncrement()))
@@ -1640,6 +1676,7 @@ private class AppKitWindowCommandPort(
     ) {
         val surfaceId: SurfaceId = command.surfaceId
         var peer: AppKitWindowPeer? = null
+        var exclusivePresentation: AppKitExclusivePresentationLease? = null
         var cancellationRequested: Boolean = false
         var commitIssued: Boolean = false
         var surfaceReadiness: RuntimeSurfaceReadiness = RuntimeSurfaceReadiness.Buffering

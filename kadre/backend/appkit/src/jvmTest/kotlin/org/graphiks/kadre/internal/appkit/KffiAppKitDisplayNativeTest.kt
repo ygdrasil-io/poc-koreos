@@ -8,14 +8,64 @@ import org.graphiks.kadre.surface.PhysicalPoint
 import org.graphiks.kadre.surface.PhysicalRect
 import org.graphiks.kadre.surface.PhysicalSize
 import org.graphiks.kffi.objc.appkit.CGDisplayBoundsSnapshot
+import org.graphiks.kffi.objc.appkit.ExclusiveDisplayLeaseOpenResult
+import org.graphiks.kffi.objc.appkit.ExclusiveDisplayNativeFailure
+import org.graphiks.kffi.objc.appkit.ExclusiveDisplayNativeOperation
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
+import kotlin.test.assertIs
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class KffiAppKitDisplayNativeTest {
+    @Test
+    fun exclusiveBridgeRejectsMissingAndStaleDisplayMappingsBeforeKffiCapture() {
+        val native = KffiAppKitDisplayNative(
+            RecordingKffiAppKitDisplayServices(
+                displays = listOf(
+                    KffiAppKitNativeDisplay(
+                        id = 17,
+                        pixelWidth = 1920,
+                        pixelHeight = 1080,
+                        bounds = CGDisplayBoundsSnapshot(0.0, 0.0, 1920.0, 1080.0),
+                        modes = listOf(KffiAppKitNativeDisplayMode(701L, 1920, 1080, 60.0, 0)),
+                        currentMode = KffiAppKitNativeCurrentMode(701L, 1920, 1080, 60.0, 0),
+                    ),
+                ),
+                screens = listOf(
+                    KffiAppKitNativeScreen(
+                        displayId = 17,
+                        isPrimary = true,
+                        frame = CGDisplayBoundsSnapshot(0.0, 0.0, 1920.0, 1080.0),
+                        visibleFrame = CGDisplayBoundsSnapshot(0.0, 0.0, 1920.0, 1080.0),
+                        backingScaleFactor = 1.0,
+                        name = "Display",
+                    ),
+                ),
+            ),
+        )
+        val opens = mutableListOf<Pair<Int, Long>>()
+        val bridge = KffiAppKitExclusiveDisplayBridge(
+            displaySource = native,
+            platformAvailability = AppKitDisplayAvailability("26.0"),
+            openLease = { displayId, modeKey ->
+                opens += displayId to modeKey
+                ExclusiveDisplayLeaseOpenResult.FailedBeforeCapture(
+                    ExclusiveDisplayNativeFailure(ExclusiveDisplayNativeOperation.Capture, "denied"),
+                )
+            },
+        )
+
+        assertIs<AppKitExclusiveDisplayOpenResult.FailedBeforeCapture>(bridge.open(17L, 701L))
+        native.snapshot()
+        assertIs<AppKitExclusiveDisplayOpenResult.FailedBeforeCapture>(bridge.open(18L, 701L))
+        assertIs<AppKitExclusiveDisplayOpenResult.FailedBeforeCapture>(bridge.open(17L, 701L))
+
+        assertEquals(listOf(17 to 701L), opens)
+    }
+
     @Test
     fun displayInventoryRequiresThePublicMacOs26ScreenIdentity() {
         assertFalse(AppKitDisplayAvailability("25.6").isAvailable)

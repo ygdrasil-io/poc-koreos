@@ -4,6 +4,8 @@ package org.graphiks.kadre.internal.appkit
 
 import org.graphiks.kadre.diagnostics.Capability
 import org.graphiks.kadre.diagnostics.FeatureAvailability
+import org.graphiks.kadre.diagnostics.KadreFailure
+import org.graphiks.kadre.diagnostics.KadrePlatform
 import org.graphiks.kadre.internal.runtime.DisplayPortDisplay
 import org.graphiks.kadre.internal.runtime.DisplayPortMode
 import org.graphiks.kadre.internal.runtime.DisplayPortSnapshot
@@ -11,10 +13,15 @@ import org.graphiks.kadre.display.DisplayType
 import org.graphiks.kadre.surface.PhysicalPoint
 import org.graphiks.kadre.surface.PhysicalRect
 import org.graphiks.kadre.surface.PhysicalSize
-import org.graphiks.kffi.objc.appkit.AppKitDisplayServices
 import org.graphiks.kffi.objc.appkit.AppKitScreenServices
 import org.graphiks.kffi.objc.appkit.CGDisplayBoundsSnapshot
 import org.graphiks.kffi.objc.appkit.CGDisplayReconfigurationObserver
+import org.graphiks.kffi.objc.appkit.AppKitDisplayServices
+import org.graphiks.kffi.objc.appkit.ExclusiveDisplayLease
+import org.graphiks.kffi.objc.appkit.ExclusiveDisplayLeaseOpenResult
+import org.graphiks.kffi.objc.appkit.ExclusiveDisplayNativeFailure
+import org.graphiks.kffi.objc.appkit.ExclusiveDisplayReleaseResult
+import org.graphiks.kffi.objc.appkit.ExclusiveDisplayTerminal
 import kotlin.math.abs
 import kotlin.math.roundToLong
 
@@ -33,10 +40,15 @@ private val APPKIT_DISPLAY_MINIMUM_VERSION = AppKitNumericVersion(26L, 0L, 0L)
 internal class KffiAppKitDisplayNative(
     private val services: KffiAppKitDisplayServices = SystemKffiAppKitDisplayServices,
 ) : AppKitDisplayNative {
+    private val mappingLock = Any()
+    private var displayIdsByKey: Map<Long, Int> = emptyMap()
+
     override val enumerationCapability: Capability<Unit> =
         Capability.Supported(Unit, FeatureAvailability.Available)
 
-    override fun snapshot(): DisplayPortSnapshot = KffiAppKitMainThread.call {
+    override fun snapshot(): DisplayPortSnapshot {
+        synchronized(mappingLock) { displayIdsByKey = emptyMap() }
+        return KffiAppKitMainThread.call {
         val displays = services.enumerateDisplays()
         val screensByDisplayId = services.enumerateScreens().associateBy(KffiAppKitNativeScreen::displayId)
         check(screensByDisplayId.size == displays.size && displays.all { it.id in screensByDisplayId }) {
@@ -46,13 +58,22 @@ internal class KffiAppKitDisplayNative(
             "AppKit must report exactly one primary screen"
         }
 
-        DisplayPortSnapshot(
+        val snapshot = DisplayPortSnapshot(
             primaryKey = screensByDisplayId.values.single(KffiAppKitNativeScreen::isPrimary).displayId.displayKey(),
             displays = displays.map { display ->
                 val screen = checkNotNull(screensByDisplayId[display.id])
                 display.toPortDisplay(screen)
             },
         )
+        synchronized(mappingLock) {
+            displayIdsByKey = displays.associate { display -> display.id.displayKey() to display.id }
+        }
+        snapshot
+        }
+    }
+
+    internal fun nativeDisplayId(displayKey: Long): Int? = synchronized(mappingLock) {
+        displayIdsByKey[displayKey]
     }
 
     override fun observeReconfiguration(listener: () -> Unit): AutoCloseable =
@@ -60,6 +81,74 @@ internal class KffiAppKitDisplayNative(
 
     override fun close() = Unit
 }
+
+/** Production adapter for the managed KFFI CoreGraphics lease; no Kadre FFI is involved. */
+internal class KffiAppKitExclusiveDisplayBridge(
+    private val displaySource: KffiAppKitDisplayNative,
+    private val platformAvailability: AppKitDisplayAvailability = AppKitDisplayAvailability(),
+    private val openLease: (Int, Long) -> ExclusiveDisplayLeaseOpenResult = AppKitDisplayServices::openExclusiveLease,
+) : AppKitExclusiveDisplayBridge {
+    override val availability: AppKitExclusiveBridgeAvailability
+        get() = if (platformAvailability.isAvailable) AppKitExclusiveBridgeAvailability.Available
+        else AppKitExclusiveBridgeAvailability.Unavailable(
+            KadreFailure.PlatformFailure(KadrePlatform.AppKit, "exclusive-fullscreen", "os-version-unavailable"),
+        )
+
+    override fun open(displayKey: Long, modeKey: Long): AppKitExclusiveDisplayOpenResult {
+        val displayId = displaySource.nativeDisplayId(displayKey)
+            ?: return AppKitExclusiveDisplayOpenResult.FailedBeforeCapture(
+                KadreFailure.PlatformFailure(KadrePlatform.AppKit, "exclusive-fullscreen", "display-mapping-unavailable"),
+            )
+        return try {
+            openLease(displayId, modeKey).toKadreResult(displayKey)
+        } catch (_: Exception) {
+            AppKitExclusiveDisplayOpenResult.FailedBeforeCapture(coreGraphicsFailure("open-exception"))
+        } catch (_: LinkageError) {
+            AppKitExclusiveDisplayOpenResult.FailedBeforeCapture(coreGraphicsFailure("open-exception"))
+        }
+    }
+}
+
+private fun ExclusiveDisplayLeaseOpenResult.toKadreResult(displayKey: Long): AppKitExclusiveDisplayOpenResult = when (this) {
+    is ExclusiveDisplayLeaseOpenResult.Opened -> AppKitExclusiveDisplayOpenResult.Opened(lease.toKadreLease(displayKey))
+    is ExclusiveDisplayLeaseOpenResult.FailedBeforeCapture ->
+        AppKitExclusiveDisplayOpenResult.FailedBeforeCapture(failure.toKadreFailure())
+    is ExclusiveDisplayLeaseOpenResult.FailedAfterCapture -> AppKitExclusiveDisplayOpenResult.FailedAfterCapture(
+        terminal = terminal.toKadreTerminal(),
+        cleanup = cleanup.toKadreRelease(),
+        recovery = recovery?.toKadreLease(displayKey),
+        failure = failure.toKadreFailure(),
+    )
+}
+
+private fun ExclusiveDisplayLease.toKadreLease(displayKey: Long): AppKitExclusiveDisplayLease =
+    object : AppKitExclusiveDisplayLease {
+        override val displayKey: Long = displayKey
+        override val displayId: Int = this@toKadreLease.displayId
+
+        override fun readback(): AppKitExclusiveDisplayReadback =
+            AppKitExclusiveDisplayReadback(this@toKadreLease.readback().terminal.toKadreTerminal())
+
+        override fun release(): AppKitExclusiveDisplayReleaseResult =
+            this@toKadreLease.release().toKadreRelease()
+    }
+
+private fun ExclusiveDisplayReleaseResult.toKadreRelease(): AppKitExclusiveDisplayReleaseResult =
+    AppKitExclusiveDisplayReleaseResult(terminal.toKadreTerminal(), failures.map(ExclusiveDisplayNativeFailure::toKadreFailure))
+
+private fun ExclusiveDisplayTerminal.toKadreTerminal(): AppKitExclusiveDisplayTerminal = when (this) {
+    is ExclusiveDisplayTerminal.Captured -> AppKitExclusiveDisplayTerminal.Captured(modeIdentity)
+    is ExclusiveDisplayTerminal.Released -> AppKitExclusiveDisplayTerminal.Released(modeIdentity)
+    ExclusiveDisplayTerminal.Unknown -> AppKitExclusiveDisplayTerminal.Unknown
+}
+
+private fun ExclusiveDisplayNativeFailure.toKadreFailure(): KadreFailure.PlatformFailure =
+    coreGraphicsFailure(operation.name.toKebabCase())
+
+private fun String.toKebabCase(): String = replace(Regex("(?<!^)([A-Z])"), "-$1").lowercase()
+
+private fun coreGraphicsFailure(code: String): KadreFailure.PlatformFailure =
+    KadreFailure.PlatformFailure(KadrePlatform.AppKit, "exclusive-fullscreen", "coregraphics-$code")
 
 /** Detached KFFI data source, allowing the mapping invariants to be unit tested without AppKit. */
 internal interface KffiAppKitDisplayServices {

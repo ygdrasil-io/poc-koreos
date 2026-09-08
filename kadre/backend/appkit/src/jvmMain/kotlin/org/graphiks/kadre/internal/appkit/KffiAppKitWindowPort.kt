@@ -72,6 +72,11 @@ import org.graphiks.kffi.objc.NSWindowOcclusionState
 import org.graphiks.kffi.objc.NSWindowStyleMask
 import org.graphiks.kffi.objc.NSWorkspace
 import org.graphiks.kffi.objc.NSWorkspaceAccessibilityDisplayOptionsDidChangeNotification
+import org.graphiks.kffi.objc.appkit.ExclusiveWindowPresentationLease
+import org.graphiks.kffi.objc.appkit.ExclusiveWindowPresentationOpenResult
+import org.graphiks.kffi.objc.appkit.ExclusiveWindowPresentationResult
+import org.graphiks.kffi.objc.appkit.ExclusiveWindowPresentationRestoreResult
+import org.graphiks.kffi.objc.appkit.ExclusiveWindowPresentationServices
 import org.graphiks.kffi.objc.ObjCRuntime
 import org.graphiks.kffi.objc.accessibilityDisplayShouldIncreaseContrast
 import org.graphiks.kffi.objc.effectiveAppearance
@@ -245,6 +250,18 @@ internal class KffiAppKitWindowPort(
     override fun restoreWindowLevel(window: AppKitNativeWindowOwner, desiredLevel: WindowLevel) {
         requireMainThread()
         window.kffiWindowOwner().restoreLevel(desiredLevel)
+    }
+
+    override fun openExclusivePresentation(window: AppKitNativeWindowOwner): AppKitExclusivePresentationOpenResult {
+        requireMainThread()
+        return when (val opened = ExclusiveWindowPresentationServices.open(window.kffiWindow())) {
+            is ExclusiveWindowPresentationOpenResult.Opened -> AppKitExclusivePresentationOpenResult.Opened(
+                KffiExclusivePresentationLease(opened.lease),
+            )
+            else -> AppKitExclusivePresentationOpenResult.Failed(
+                exclusivePresentationFailure(opened::class.simpleName ?: "open-failed"),
+            )
+        }
     }
 
     override fun observeGeometry(
@@ -2356,4 +2373,44 @@ internal object KffiAppKitMainThread {
 
 private class MainThreadOutcome<T>(
     val result: Result<T>,
+)
+
+/** Keeps the managed KFFI presentation owner private to the native AppKit port. */
+private class KffiExclusivePresentationLease(
+    private val lease: ExclusiveWindowPresentationLease,
+) : AppKitExclusivePresentationLease {
+    override fun present(displayId: Int): AppKitExclusivePresentationResult = when (val result = lease.present(displayId)) {
+        is ExclusiveWindowPresentationResult.Presented -> AppKitExclusivePresentationResult.Readback
+        else -> AppKitExclusivePresentationResult.Failed(
+            exclusivePresentationFailure(result::class.simpleName ?: "present-failed"),
+            hasRepresentableReadback = false,
+        )
+    }
+
+    override fun readback(): AppKitExclusivePresentationResult = when (val result = lease.readback()) {
+        is org.graphiks.kffi.objc.appkit.ExclusiveWindowPresentationReadbackResult.Readback ->
+            AppKitExclusivePresentationResult.Readback
+        else -> AppKitExclusivePresentationResult.Failed(
+            exclusivePresentationFailure(result::class.simpleName ?: "readback-failed"),
+            hasRepresentableReadback = false,
+        )
+    }
+
+    override fun restore(): AppKitExclusivePresentationResult = when (val result = lease.restore()) {
+        is ExclusiveWindowPresentationRestoreResult.Restored -> AppKitExclusivePresentationResult.Readback
+        is ExclusiveWindowPresentationRestoreResult.PartiallyRestored -> AppKitExclusivePresentationResult.Failed(
+            exclusivePresentationFailure("partial-restore"),
+            hasRepresentableReadback = result.readback != null,
+        )
+        else -> AppKitExclusivePresentationResult.Failed(
+            exclusivePresentationFailure(result::class.simpleName ?: "restore-failed"),
+            hasRepresentableReadback = false,
+        )
+    }
+}
+
+private fun exclusivePresentationFailure(code: String): KadreFailure.PlatformFailure = KadreFailure.PlatformFailure(
+    KadrePlatform.AppKit,
+    "exclusive-fullscreen",
+    "presentation-${code.replace(Regex("(?<!^)([A-Z])"), "-$1").lowercase()}",
 )

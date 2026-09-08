@@ -32,6 +32,45 @@ import kotlin.test.assertTrue
 
 class AppKitExclusiveDisplayBrokerTest {
     @Test
+    fun entryPreparesPresentationBeforeCaptureAndPresentsOnlyAfterCapture() {
+        val trace = mutableListOf<String>()
+        val bridge = RecordingExclusiveDisplayBridge(openCapturedLeases = true, trace = trace)
+        val executor = QueuedExclusiveExecutor()
+        val broker = AppKitExclusiveDisplayBroker(bridge)
+        val port = broker.openPort(executor, RecordingExclusiveWindowPort(trace))
+
+        assertEquals(KadreResult.Success(Unit), port.reserve(command(90L, 901L, 71L, 701L)))
+        executor.runAll()
+
+        assertEquals(listOf("prepare", "capture", "present"), trace)
+    }
+
+    @Test
+    fun exitReleasesCoreGraphicsBeforeRestoringPresentation() {
+        val trace = mutableListOf<String>()
+        val bridge = RecordingExclusiveDisplayBridge(openCapturedLeases = true, trace = trace)
+        val executor = QueuedExclusiveExecutor()
+        val broker = AppKitExclusiveDisplayBroker(bridge)
+        val port = broker.openPort(executor, RecordingExclusiveWindowPort(trace))
+        val enter = command(91L, 911L, 71L, 701L)
+
+        assertEquals(KadreResult.Success(Unit), port.reserve(enter))
+        executor.runAll()
+        port.release(
+            RecordingExclusiveCommand(
+                windowId = enter.windowId,
+                operationId = identity<WindowOperationId>(912L),
+                displayKey = enter.displayKey,
+                modeKey = enter.modeKey,
+                requestedFullscreen = FullscreenMode.Windowed,
+            ),
+        )
+        executor.runAll()
+
+        assertEquals(listOf("prepare", "capture", "present", "release", "restore"), trace)
+    }
+
+    @Test
     fun closingLastIdlePortReleasesObservationAndFutureOpenInstallsFreshSnapshot() {
         val displayNative = RecordingBrokerDisplayNative(displaySnapshot(71L, 500L))
         val displayBroker = AppKitDisplayBroker(displayNative, ImmediateDisplayDispatcher)
@@ -379,6 +418,7 @@ class AppKitExclusiveDisplayBrokerTest {
 private class RecordingExclusiveDisplayBridge(
     private val openCapturedLeases: Boolean = false,
     private val leasesToOpen: ArrayDeque<RecordingExclusiveDisplayLease> = ArrayDeque(),
+    private val trace: MutableList<String>? = null,
 ) : AppKitExclusiveDisplayBridge {
     val opens = mutableListOf<Pair<Long, Long>>()
     val leases = mutableListOf<RecordingExclusiveDisplayLease>()
@@ -386,13 +426,14 @@ private class RecordingExclusiveDisplayBridge(
     override val availability = AppKitExclusiveBridgeAvailability.Available
 
     override fun open(displayKey: Long, modeKey: Long): AppKitExclusiveDisplayOpenResult {
+        trace?.add("capture")
         opens += displayKey to modeKey
         if (leasesToOpen.isNotEmpty()) {
             return AppKitExclusiveDisplayOpenResult.Opened(leasesToOpen.removeFirst().also(leases::add))
         }
         if (openCapturedLeases) {
             return AppKitExclusiveDisplayOpenResult.Opened(
-                RecordingExclusiveDisplayLease(displayKey, modeKey).also(leases::add),
+                RecordingExclusiveDisplayLease(displayKey, modeKey, trace = trace).also(leases::add),
             )
         }
         return AppKitExclusiveDisplayOpenResult.FailedBeforeCapture(
@@ -428,6 +469,7 @@ private class RecordingExclusiveDisplayLease(
     override val displayKey: Long,
     private val modeKey: Long,
     private val releaseTerminals: ArrayDeque<AppKitExclusiveDisplayTerminal> = ArrayDeque(),
+    private val trace: MutableList<String>? = null,
 ) : AppKitExclusiveDisplayLease {
     var releaseCount = 0
         private set
@@ -436,6 +478,7 @@ private class RecordingExclusiveDisplayLease(
         AppKitExclusiveDisplayReadback(AppKitExclusiveDisplayTerminal.Captured(modeKey))
 
     override fun release(): AppKitExclusiveDisplayReleaseResult {
+        trace?.add("release")
         releaseCount += 1
         return AppKitExclusiveDisplayReleaseResult(
             if (releaseTerminals.isEmpty()) {
@@ -476,16 +519,25 @@ private class SelfReconfiguringExclusiveBridge(
     }
 }
 
-private class RecordingExclusiveWindowPort : AppKitExclusiveWindowPort {
+private class RecordingExclusiveWindowPort(
+    private val trace: MutableList<String>? = null,
+) : AppKitExclusiveWindowPort {
     val enterRequests = mutableListOf<AppKitExclusiveWindowRequest>()
     val exitRequests = mutableListOf<AppKitExclusiveWindowRequest>()
 
+    override fun prepare(request: AppKitExclusiveWindowRequest): AppKitExclusiveWindowPreparation {
+        trace?.add("prepare")
+        return AppKitExclusiveWindowPreparation.Prepared
+    }
+
     override fun enter(request: AppKitExclusiveWindowRequest): AppKitExclusiveWindowResult {
+        trace?.add("present")
         enterRequests += request
         return AppKitExclusiveWindowResult.Read(windowState(request.requestedFullscreen))
     }
 
     override fun exit(request: AppKitExclusiveWindowRequest): AppKitExclusiveWindowResult {
+        trace?.add("restore")
         exitRequests += request
         return AppKitExclusiveWindowResult.Read(windowState(FullscreenMode.Windowed))
     }
