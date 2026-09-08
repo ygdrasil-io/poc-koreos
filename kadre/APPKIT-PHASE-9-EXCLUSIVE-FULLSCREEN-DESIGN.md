@@ -30,7 +30,8 @@ lease natif et un état public terminal non ambigu.
 
 Cette tranche ne fournit ni renderer, ni widget system, ni changement de
 résolution automatique. Elle ne déduit jamais un mode depuis ses métriques
-visibles : seul le couple opaque `DisplayId` / `DisplayModeId` désigne la cible.
+visibles : seul le couple `DisplayId` / `DisplayMode` issu du même inventaire
+de session désigne la cible ; son `DisplayModeId` reste opaque.
 
 ## Disponibilité et capability
 
@@ -54,17 +55,32 @@ exclusive est indisponible.
 Une fois prête, la capability devient
 `Capability.Supported({ Borderless, Exclusive }, Available)`. Si le bridge de
 reconfiguration cesse d'être fiable, `Exclusive` est retiré de cet ensemble
-avant toute nouvelle admission. Un lease déjà actif est alors terminalisé selon
-la section « Reconfiguration ». `FeatureAvailability` ne certifie donc pas que
-le display demandé est libre ; l'arbitrage est fait par l'opération.
+avant toute nouvelle entrée exclusive. Un lease déjà actif est alors
+terminalisé selon la section « Reconfiguration » ; sa sortie vers `Windowed`,
+son nettoyage et sa fermeture restent toujours admis. `FeatureAvailability` ne
+certifie donc pas que le display demandé est libre ; l'arbitrage est fait par
+l'opération.
+
+Le broker désactive d'abord l'admission exclusive sous son lock, publie ensuite
+la capability sans `Exclusive` pour toutes les fenêtres vivantes sur l'executor
+AppKit, puis traite les leases actifs. Une commande déjà `Reserved` mais pas
+encore capturée passe atomiquement à `Released`, libère sa réservation si
+`{ displayKey, token }` correspond toujours, puis complète son
+`PendingWindowUpdate` par `TemporarilyUnavailable(retryable = true)`. Si le
+bridge a produit une failure stable, cette completion est sa
+`PlatformFailure` exacte. Une commande `Committing` ou `Active` est menée
+jusqu'à son terminal. La phase 5 conserve sa propre availability pour
+`Borderless` : perdre la primitive exclusive ne retire jamais ce mode.
 
 ## Frontières de responsabilité
 
 ### Runtime et identité publique
 
 `RuntimeDisplayManager` reste l'unique endroit qui transforme les clés natives
-de `DisplayPort` en `DisplayId` et `DisplayModeId` publics. Il expose en interne
-une résolution éphémère :
+de `DisplayPort` en `DisplayId` et `DisplayModeId` publics. Les deux compteurs
+sont process-wide, et non plus locaux à un manager : un handle d'une autre
+session ne peut donc jamais égaler par accident un handle local. Il expose en
+interne une résolution éphémère :
 
 ```kotlin
 internal data class ExclusiveDisplayTarget(
@@ -74,11 +90,14 @@ internal data class ExclusiveDisplayTarget(
 ```
 
 Cette résolution ne réussit que si l'inventaire courant est `Enumerated`, que
-le display appartient encore à cette session et est `Connected`, et que le mode
-est encore présent dans son snapshot. `displayKey` et `modeKey` ne franchissent
-jamais l'API publique et ne sont ni des pointeurs ni des descriptions de mode.
+le `DisplayId` appartient à ce manager et est `Connected`, et que le
+`DisplayMode` complet est égal au mode actuellement enregistré sous son
+`DisplayModeId` pour ce display. Cette dernière comparaison rejette un mode
+provenant d'un autre display, d'une autre session ou modifié par copie. Les
+`displayKey` et `modeKey` ne franchissent jamais l'API publique et ne sont ni
+des pointeurs ni des descriptions de mode.
 
-Un ID inconnu, déconnecté ou un mode retiré est un
+Un ID inconnu, déconnecté, étranger, un mode retiré ou divergent est un
 `InvalidRequest("fullscreen")` avant toute réservation. Une énumération
 indisponible ou en cours de renouvellement est
 `TemporarilyUnavailable(retryable = true)`. Ces deux résultats évitent à la
@@ -89,8 +108,9 @@ problème temporaire d'inventaire avec une feature absente.
 
 `AppKitProcessBroker` possède un unique `AppKitExclusiveDisplayBroker` pour le
 processus. Son registre est indexé par la clé native du display ; son owner est
-la paire de session et de fenêtre, jamais une coroutine appelante. Il ne garde
-ni `Window`, ni session après leur fermeture.
+la paire de session et de fenêtre, jamais une coroutine appelante. Chaque
+réservation alloue en plus un token monotone unique. Le broker ne garde ni
+`Window`, ni session après leur fermeture.
 
 Le broker réserve la clé avant le premier appel natif. Une réservation active,
 y compris depuis une autre session embarquée, retourne
@@ -98,44 +118,83 @@ y compris depuis une autre session embarquée, retourne
 peut détenir qu'une seule réservation, ce qui rend impossible une bascule
 directe `Exclusive(A) → Exclusive(B)`.
 
+Le cycle de vie fermé est `Reserved → Committing → Active → Releasing →
+Released`, ou `Quarantined` si CoreGraphics ne confirme pas la libération. Tous
+les callbacks et nettoyages portent `{ displayKey, token }` ; ils sont ignorés
+s'ils ne désignent plus l'entrée courante. Cette règle évite qu'un callback ou
+un cleanup tardif libère le lease réattribué au même display. Une reconfiguration
+provoquée par `capture`, `set mode`, restauration ou `release` est mémorisée
+pendant `Committing`/`Releasing`, puis réconciliée une fois le readback terminal
+effectué ; elle ne peut pas terminer la transaction réentrante.
+
 Le même broker observe les reconfigurations CoreGraphics et notifie le seul
-owner concerné. Le routage vers le runtime est sérialisé sur l'executor AppKit
-afin de préserver l'ordre state, event, completion. Ainsi deux sessions ne
+owner concerné avec son token. Le routage vers le runtime est sérialisé sur
+l'executor AppKit afin de préserver l'ordre state, event, completion. Le
+callback est révoqué avant le teardown de son owner. Ainsi deux sessions ne
 peuvent jamais capturer simultanément le même display, même si elles ont leur
 propre `DisplayManager`.
 
 ### KFFI et CoreGraphics
 
 Kadre ne manipule ni `MemorySegment`, ni `CGDisplayModeRef`, ni callback FFI.
-KFFI fournit un owner pointer-free, closeable et idempotent, conceptuellement :
+KFFI fournit des résultats pointer-free, closeables et idempotents,
+conceptuellement :
 
 ```kotlin
 interface ExclusiveDisplayLease : AutoCloseable {
     val displayId: Int
-    fun targetStillEffective(): Boolean
-    override fun close()
+    fun readback(): ExclusiveDisplayReadback
+    fun release(): ExclusiveDisplayReleaseResult
+    override fun close() { release() }
+}
+
+sealed interface ExclusiveDisplayLeaseOpenResult {
+    data class Opened(val lease: ExclusiveDisplayLease) : ExclusiveDisplayLeaseOpenResult
+    data class FailedBeforeCapture(val failure: ExclusiveDisplayNativeFailure) : ExclusiveDisplayLeaseOpenResult
+    data class FailedAfterCapture(
+        val terminal: ExclusiveDisplayTerminal,
+        val cleanup: ExclusiveDisplayReleaseResult,
+        val recovery: ExclusiveDisplayLease?,
+        val failure: ExclusiveDisplayNativeFailure,
+    ) : ExclusiveDisplayLeaseOpenResult
 }
 
 fun AppKitDisplayServices.openExclusiveLease(
     displayId: Int,
-    modeOrdinal: Int,
-): ExclusiveDisplayLease
+    modeIdentity: Long,
+): ExclusiveDisplayLeaseOpenResult
 ```
 
 Son ouverture copie et détient le mode initial, résout le mode cible à partir
-de l'ordinal du snapshot frais, capture le display, applique le mode cible,
+de son identité I/O stable dans le snapshot frais, capture le display, applique
+le mode cible,
 puis conserve les références nécessaires jusqu'à `close()`. Toute erreur après
 la capture tente, dans cet ordre, restauration du mode initial, libération de
-la capture et libération de toutes les références. `close()` suit exactement
+la capture et libération de toutes les références. `release()` suit exactement
 le même ordre et agrège les erreurs sans abandonner les nettoyages suivants.
+`ExclusiveDisplayTerminal` est fermé : `Captured(modeIdentity)`,
+`Released(modeIdentity?)` ou `Unknown`. `Unknown` représente explicitement un
+readback qui ne peut pas certifier le mode ni la capture ; il n'invente aucune
+valeur. `ExclusiveDisplayReadback` porte le mode certifié et si la capture est
+encore retenue ; `ExclusiveDisplayReleaseResult` porte le même terminal et
+toutes les erreurs de cleanup. Kadre peut donc distinguer sans heuristique un
+refus pré-commit d'une failure après capture et publier l'état effectif avant sa
+failure. Lorsque la capture est toujours retenue ou inconnue, `recovery` est
+l'unique owner qui peut retenter `release()` ; il ne peut servir ni à entrer une
+nouvelle exclusive, ni à changer de mode. Il est obligatoirement non nul pour
+`Captured` et `Unknown`, et obligatoirement nul pour `Released`.
 
-L'égalité du mode actif est faite par identité CoreGraphics ou API d'égalité
-native correspondante, jamais par largeur, hauteur, taux de rafraîchissement ou
-flags. Si les bindings générés nécessaires manquent, l'évolution commence dans
-Kextract, est régénérée et validée dans KFFI, puis Kadre consomme le snapshot
-publié. Le helper KFFI peut encapsuler une ressource durable ; aucun binding
-généré n'est écrit à la main dans KFFI et aucun wrapper FFI n'est créé dans
-Kadre.
+`CGDisplayModeGetIODisplayModeID`, déjà généré, fournit l'identité I/O du mode.
+KFFI la normalise en clé `Long` non négative et l'exige unique dans chaque liste
+de modes. Une valeur absente ou dupliquée rend le snapshot invalide ; Kadre ne
+publie alors pas un inventaire partiel. L'ordinal de liste ne peut servir qu'à
+l'itération interne et ne traverse jamais `DisplayPort`. Le helper vérifie le
+mode actif par cette identité et l'égalité CoreFoundation correspondante, jamais
+par largeur, hauteur, taux de rafraîchissement ou flags. Si les bindings générés
+nécessaires manquent, l'évolution commence dans Kextract, est régénérée et
+validée dans KFFI, puis Kadre consomme le snapshot publié. Le helper KFFI peut
+encapsuler une ressource durable ; aucun binding généré n'est écrit à la main
+dans KFFI et aucun wrapper FFI n'est créé dans Kadre.
 
 ### Fenêtre AppKit
 
@@ -157,19 +216,24 @@ la géométrie publique AppKit est déjà portable sur les écrans mixed-scale.
 La précédence d'admission d'un update exclusif est :
 
 1. fenêtre ouverte ;
-2. forme valide (`Clear`, update mixte et toute transition fullscreen autre que
-   `Windowed → Exclusive` ou `Exclusive → Windowed` rejetée) ;
+2. forme valide (`Clear`, update mixte et toute transition impliquant
+   `Exclusive` autre que `Windowed → Exclusive` ou `Exclusive → Windowed`
+   rejetée) ;
 3. `expectedRevision` ;
-4. presence de `Exclusive` dans la capability ;
-5. résolution fraîche du couple display/mode ;
+4. pour une entrée `Windowed → Exclusive`, présence de `Exclusive` dans la
+   capability ; une sortie `Exclusive → Windowed` ne dépend jamais de cette
+   capability ;
+5. pour une entrée seulement, résolution fraîche du couple display/mode ; une
+   sortie utilise son lease interne et ne dépend pas de l'inventaire public ;
 6. absence de barrière fullscreen ou de fermeture ;
-7. réservation process-wide ;
-8. canonisation/no-op.
+7. pour une entrée seulement, réservation process-wide ;
+8. canonisation/no-op permis seulement pour les transitions non exclusives de
+   la phase 5.
 
-Une demande identique à un lease réellement actif est un no-op `Applied` : elle
-ne réinstalle pas le mode et ne crée ni révision ni événement. Une égalité de
-valeur sans lease actif n'est jamais un no-op ; la réconciliation de perte aura
-préalablement ramené l'état à `Windowed`.
+Toute demande `Set(Exclusive(...))` alors que l'état courant est déjà
+`Exclusive` est rejetée à l'étape 2, avant résolution et réservation, même si
+la cible est identique. Elle ne peut donc ni devenir un no-op ni réinstaller le
+mode. La réconciliation de perte ramène préalablement l'état à `Windowed`.
 
 Après la réservation, la séquence est :
 
@@ -185,28 +249,49 @@ La capture réussie est la frontière de commit. Avant elle, une cancellation
 retire la commande et libère seulement sa réservation. Après elle, la
 cancellation détache le waiter : la transaction atteint quand même un état
 terminal et le diagnostic de session porte une failure qui n'aurait plus de
-caller. Aucun `Accepted` n'est renvoyé pour une mutation exclusive.
+caller. Aucun `Accepted` n'est renvoyé pour une mutation exclusive. Le résultat
+KFFI `FailedAfterCapture` suit le même chemin qu'une failure du port de fenêtre
+après commit : readback du state effectif, publication state puis event si ce
+snapshot diffère, puis completion `PlatformFailure`.
 
 Un échec avant capture libère la réservation et retourne la failure native.
 Un échec après capture restaure d'abord la fenêtre et le lease, publie le
-snapshot réellement obtenu puis complète par `PlatformFailure`. L'absence de
-succès ne signifie jamais rollback implicite ; l'état et les événements restent
-la source d'autorité.
+snapshot réellement obtenu puis complète par `PlatformFailure`. Si KFFI ne
+confirme pas positivement la libération de capture, y compris avec un terminal
+`Unknown`, le broker conserve l'entrée en `Quarantined`, retire `Exclusive` de
+toutes les capabilities et refuse toute nouvelle entrée. Seul le même executor
+AppKit peut retenter `release()` avec le `recovery` du token concerné, lors d'une
+reconfiguration ultérieure ou du teardown process-wide. Une confirmation de
+release fait passer l'entrée à `Released`; elle ne réactive `Exclusive` que si
+l'observer et l'inventaire sont à nouveau certifiés. L'absence de succès ne
+signifie jamais rollback implicite ; l'état et les événements restent la source
+d'autorité.
 
 ## Sortie, fermeture et reconfiguration
 
 `Windowed` depuis `Exclusive` est une transition terminale du lease : le port
 restaure la fenêtre, KFFI tente de restaurer le mode initial puis libère la
-capture, et le broker libère la réservation. Ensuite seulement Kadre publie
-`Windowed` et l'événement corrélé. Si une étape de restauration échoue, la
-capture et la réservation sont néanmoins libérées ; `WindowState` devient
-`Windowed` car Kadre ne possède plus d'exclusive, et l'appel retourne la
-`PlatformFailure` de nettoyage.
+capture, et le broker libère la réservation. Ensuite seulement Kadre publie le
+snapshot window autoritaire et son événement corrélé. Un échec de restauration
+du mode display n'empêche pas `fullscreen = Windowed` si la présentation AppKit
+a été lue et restaurée : Kadre ne possède plus d'exclusive, et l'appel retourne
+la `PlatformFailure` de nettoyage.
 
-La fermeture d'une fenêtre, le teardown de session et la terminaison du broker
-utilisent le même chemin, sans waiter à compléter. Les erreurs sont rapportées
-comme diagnostics et ne retiennent jamais une capture après la destruction du
-peer.
+Un échec de restauration de présentation AppKit est traité séparément. Le port
+relit style mask, system buttons, level et géométrie : les divergences publiques
+représentables sont publiées avec `fullscreen = Windowed` et tous les
+`WindowProperty` effectivement modifiés dans un seul événement. Si aucun
+snapshot public honnête ne peut être relu, Kadre terminalise la fenêtre par le
+chemin de fermeture native de phase 5 et complète par `PlatformFailure` ; il ne
+publie jamais un `WindowState.Open` inventé. Si la capture n'est pas confirmée
+libérée, le state de fenêtre résulte de ce même readback de présentation, mais
+le broker est `Quarantined` et aucune autre fenêtre ne peut réclamer ce display.
+
+La fermeture d'une fenêtre et le teardown de session utilisent le même chemin,
+sans waiter à compléter. Les erreurs sont rapportées comme diagnostics. Aucun
+peer ni session ne retient une capture après sa destruction ; si sa libération
+n'est pas confirmée, seul le broker process-wide conserve le `recovery`
+quarantiné du token jusqu'à confirmation de release ou terminaison du processus.
 
 Lors d'une reconfiguration, le broker lit un snapshot frais. Une modification
 sans rapport avec le display détenu laisse le lease actif. En revanche, ces
@@ -232,8 +317,8 @@ Les preuves sont séparées par ce qu'elles peuvent réellement établir :
 
 | Niveau | Preuves requises |
 | --- | --- |
-| O1 runtime | résolution opaque, précédence des failures, règle `Windowed` intermédiaire, state avant event avant completion, cancellation avant/après commit et perte de display. |
-| O2 KFFI/AppKit fake | ordre capture → set mode → présentation ; restauration → release ; erreurs agrégées ; refs libérées ; identité de mode non déduite des métriques ; arbitrage inter-session du broker. |
+| O1 runtime | résolution opaque avec collision inter-session et mode complet divergent, précédence des failures, règle `Windowed` intermédiaire, retrait dynamique de capability et terminal d'un `Reserved`, state avant event avant completion, cancellation avant/après commit et perte de display. |
+| O2 KFFI/AppKit fake | ordre capture → set mode → présentation ; restauration → release ; erreurs agrégées, readback `Unknown` et refs libérées ; identité I/O de mode et réordonnancement ; token stale/ABA ; reconfiguration auto-induite ; retrait de capability pendant un lease ; restauration AppKit divergente ou illisible ; arbitrage inter-session du broker. |
 | O3 macOS | smoke pointer-free de disponibilité et readback non disruptif ; aucun runner CI ne change un mode physique ni ne capture l'écran principal. |
 | Manuel | sur un display de test distinct : entrée, vérification du mode et de la fenêtre, sortie, restauration du mode/frame/style ; retrait du display ou changement de mode ; contrôle qu'aucune capture ne survit. |
 
