@@ -184,6 +184,7 @@ internal class AppKitExclusiveDisplayBroker(
 ) : AutoCloseable {
     private val lock = Any()
     private val entries = linkedMapOf<Long, Entry>()
+    private val orphanedRecoveries = linkedMapOf<RecoveryKey, OrphanedRecovery>()
     private val ports = linkedSetOf<AppKitExclusiveFullscreenPort>()
     private var nextSessionId = 0L
     private var nextToken = 0L
@@ -501,7 +502,7 @@ internal class AppKitExclusiveDisplayBroker(
                 current.command = command
             }
         } ?: run {
-            opened.recovery?.release()
+            opened.recovery?.let { recovery -> releaseOrQuarantineOrphanedRecovery(entry, recovery) }
             return
         }
         val exit = callPresentation {
@@ -910,6 +911,59 @@ internal class AppKitExclusiveDisplayBroker(
         transition?.idleObservation?.close()
     }
 
+    /** Retains a recovery lease which returned after its original entry was terminalized concurrently. */
+    private fun releaseOrQuarantineOrphanedRecovery(entry: Entry, recovery: AppKitExclusiveDisplayLease) {
+        val releaseAttempt = callRelease(recovery)
+        if (releaseAttempt.value?.terminal is AppKitExclusiveDisplayTerminal.Released) return
+        val key = RecoveryKey(entry.displayKey, entry.token)
+        val transition = synchronized(lock) {
+            orphanedRecoveries[key] = OrphanedRecovery(
+                lease = recovery,
+                terminalFailure = releaseAttempt.failure
+                    ?: releaseAttempt.value?.failures?.firstOrNull()
+                    ?: quarantineFailure,
+            )
+            BrokerTransition(
+                publication = availabilityPublicationLocked(),
+                idleObservation = detachIdleDisplayObservationLocked(),
+            )
+        }
+        publish(transition.publication)
+        transition.idleObservation?.close()
+        scheduleOrphanedRecovery(key)
+    }
+
+    private fun scheduleOrphanedRecovery(key: RecoveryKey) {
+        val recovery = synchronized(lock) {
+            orphanedRecoveries[key]?.takeIf { !it.recoveryScheduled }?.also { it.recoveryScheduled = true }?.lease
+        } ?: return
+        if (!recoveryExecutor.dispatch { recoverOrphaned(key, recovery) }) {
+            synchronized(lock) { orphanedRecoveries[key]?.recoveryScheduled = false }
+        }
+    }
+
+    private fun recoverOrphaned(key: RecoveryKey, recovery: AppKitExclusiveDisplayLease) {
+        val releaseAttempt = callRelease(recovery)
+        val transition = synchronized(lock) {
+            orphanedRecoveries[key]?.takeIf { it.lease === recovery }?.let { orphaned ->
+                orphaned.recoveryScheduled = false
+                if (releaseAttempt.value?.terminal is AppKitExclusiveDisplayTerminal.Released) {
+                    orphanedRecoveries.remove(key)
+                } else {
+                    orphaned.terminalFailure = releaseAttempt.failure
+                        ?: releaseAttempt.value?.failures?.firstOrNull()
+                        ?: quarantineFailure
+                }
+                BrokerTransition(
+                    publication = availabilityPublicationLocked(),
+                    idleObservation = detachIdleDisplayObservationLocked(),
+                )
+            }
+        }
+        publish(transition?.publication)
+        transition?.idleObservation?.close()
+    }
+
     private fun availabilityPublicationLocked(): AvailabilityPublication? {
         val availability = currentAvailabilityLocked()
         if (publishedAvailability == availability) return null
@@ -923,7 +977,7 @@ internal class AppKitExclusiveDisplayBroker(
 
     /** Detaches only after the last session port and the last lease/recovery entry are gone. */
     private fun detachIdleDisplayObservationLocked(): AutoCloseable? {
-        if (ports.isNotEmpty() || entries.isNotEmpty()) return null
+        if (ports.isNotEmpty() || entries.isNotEmpty() || orphanedRecoveries.isNotEmpty()) return null
         val observation = displayObservation
         displayObservation = null
         displayObservationAttempted = false
@@ -946,7 +1000,7 @@ internal class AppKitExclusiveDisplayBroker(
         closed -> ExclusiveFullscreenAvailability.Unavailable(
             KadreFailure.TemporarilyUnavailable(retryable = true),
         )
-        entries.values.any { it.state == LeaseState.Quarantined } ->
+        entries.values.any { it.state == LeaseState.Quarantined } || orphanedRecoveries.isNotEmpty() ->
             ExclusiveFullscreenAvailability.Unavailable(quarantineFailure)
         bridge.availability is AppKitExclusiveBridgeAvailability.Available ->
             if (displayBroker == null || displayObservation != null && latestInventory != null) {
@@ -1241,6 +1295,17 @@ internal class AppKitExclusiveDisplayBroker(
         fun windowRequest(fullscreen: FullscreenMode, displayId: Int = displayKey.toInt()): AppKitExclusiveWindowRequest =
             AppKitExclusiveWindowRequest(displayKey, modeKey, token, checkNotNull(owner).windowId, fullscreen, displayId)
     }
+
+    private data class RecoveryKey(
+        val displayKey: Long,
+        val token: Long,
+    )
+
+    private data class OrphanedRecovery(
+        val lease: AppKitExclusiveDisplayLease,
+        var terminalFailure: KadreFailure.PlatformFailure,
+        var recoveryScheduled: Boolean = false,
+    )
 
     private enum class LeaseState {
         Reserved,

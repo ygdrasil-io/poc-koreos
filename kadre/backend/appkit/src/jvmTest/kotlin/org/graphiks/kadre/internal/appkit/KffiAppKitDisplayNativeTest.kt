@@ -133,6 +133,7 @@ class KffiAppKitDisplayNativeTest {
                 ExclusiveWindowPresentationTerminalRestoration.NotRequired,
                 listOf(releaseOwnerFailure, restoreLevelFailure),
             ) to ("presentation-release-owner" to listOf("presentation-restore-level")),
+            ExclusiveWindowPresentationCloseResult.Closing to ("presentation-closing" to emptyList()),
             ExclusiveWindowPresentationCloseResult.WrongThread to ("presentation-wrong-thread" to emptyList()),
         )
 
@@ -146,6 +147,22 @@ class KffiAppKitDisplayNativeTest {
                 assertEquals(expected.second, failed.diagnostics.map { it.code })
             }
         }
+    }
+
+    @Test
+    fun presentationCloseAdapterKeepsKffiClosingRetryableAndOnlyForgetsTerminalLeases() {
+        val closing = assertIs<AppKitExclusivePresentationCloseResult.Incomplete>(
+            ExclusiveWindowPresentationCloseResult.Closing.toKadrePresentationCloseResult(),
+        )
+        assertEquals("presentation-closing", closing.result.failure.code)
+
+        val terminated = assertIs<AppKitExclusivePresentationCloseResult.Terminal>(
+            ExclusiveWindowPresentationCloseResult.Terminated(
+                ExclusiveWindowPresentationTerminalRestoration.NotRequired,
+                emptyList(),
+            ).toKadrePresentationCloseResult(),
+        )
+        assertEquals(AppKitExclusivePresentationResult.Readback, terminated.result)
     }
     @Test
     fun exclusiveBridgeRejectsMissingAndStaleDisplayMappingsBeforeKffiCapture() {

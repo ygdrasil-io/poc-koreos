@@ -164,7 +164,8 @@ internal interface AppKitExclusivePresentationLease {
     fun present(displayId: Int): AppKitExclusivePresentationResult
     fun readback(): AppKitExclusivePresentationResult
     fun restore(): AppKitExclusivePresentationResult
-    fun close(): AppKitExclusivePresentationResult = restore()
+    fun close(): AppKitExclusivePresentationCloseResult =
+        AppKitExclusivePresentationCloseResult.Terminal(restore())
 }
 
 /** A success certifies a detached KFFI readback; failures never invent a window state. */
@@ -176,6 +177,24 @@ internal sealed interface AppKitExclusivePresentationResult {
         /** Every detached KFFI failure observed by this operation, including partial restore cleanup. */
         val diagnostics: List<KadreFailure.PlatformFailure> = emptyList(),
     ) : AppKitExclusivePresentationResult
+}
+
+/**
+ * Separates a KFFI terminal close outcome from an invocation which could not terminalize the lease yet.
+ *
+ * A [Terminal] result releases Kadre's reference even when it carries cleanup diagnostics. An [Incomplete]
+ * result must retain the lease so a later lifecycle cleanup can retry terminalization.
+ */
+internal sealed interface AppKitExclusivePresentationCloseResult {
+    data class Terminal(
+        override val result: AppKitExclusivePresentationResult,
+    ) : AppKitExclusivePresentationCloseResult
+
+    data class Incomplete(
+        override val result: AppKitExclusivePresentationResult.Failed,
+    ) : AppKitExclusivePresentationCloseResult
+
+    val result: AppKitExclusivePresentationResult
 }
 
 /** Identifies the native mutation field whose setter or readback actually failed. */

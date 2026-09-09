@@ -2381,7 +2381,7 @@ private class KffiExclusivePresentationLease(
 
     override fun restore(): AppKitExclusivePresentationResult = lease.restore().toKadrePresentationResult()
 
-    override fun close(): AppKitExclusivePresentationResult = lease.close().toKadrePresentationResult()
+    override fun close(): AppKitExclusivePresentationCloseResult = lease.close().toKadrePresentationCloseResult()
 }
 
 internal fun ExclusiveWindowPresentationOpenResult.toKadrePresentationOpenResult(): AppKitExclusivePresentationOpenResult = when (this) {
@@ -2445,6 +2445,7 @@ internal fun ExclusiveWindowPresentationRestoreResult.toKadrePresentationResult(
 }
 
 internal fun ExclusiveWindowPresentationCloseResult.toKadrePresentationResult(): AppKitExclusivePresentationResult = when (this) {
+    ExclusiveWindowPresentationCloseResult.Closing -> presentationFailure("closing")
     ExclusiveWindowPresentationCloseResult.WrongThread -> presentationFailure("wrong-thread")
     is ExclusiveWindowPresentationCloseResult.Terminated -> {
         val restorationFailures: List<KadreFailure.PlatformFailure>
@@ -2480,6 +2481,17 @@ internal fun ExclusiveWindowPresentationCloseResult.toKadrePresentationResult():
             )
         }
     }
+}
+
+internal fun ExclusiveWindowPresentationCloseResult.toKadrePresentationCloseResult(): AppKitExclusivePresentationCloseResult = when (this) {
+    is ExclusiveWindowPresentationCloseResult.Terminated ->
+        AppKitExclusivePresentationCloseResult.Terminal(toKadrePresentationResult())
+
+    ExclusiveWindowPresentationCloseResult.Closing ->
+        AppKitExclusivePresentationCloseResult.Incomplete(presentationFailure("closing"))
+
+    ExclusiveWindowPresentationCloseResult.WrongThread ->
+        AppKitExclusivePresentationCloseResult.Incomplete(presentationFailure("wrong-thread"))
 }
 
 private fun exclusivePresentationFailure(code: String): KadreFailure.PlatformFailure = KadreFailure.PlatformFailure(

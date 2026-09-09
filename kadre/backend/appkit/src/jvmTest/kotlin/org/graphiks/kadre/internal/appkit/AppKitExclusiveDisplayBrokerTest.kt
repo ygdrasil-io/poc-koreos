@@ -147,6 +147,175 @@ class AppKitExclusiveDisplayBrokerTest {
     }
 
     @Test
+    fun failedAfterCaptureWithoutItsEntryQuarantinesAThrownRecoveryInsteadOfEscapingOrLosingIt() {
+        val executor = QueuedExclusiveExecutor()
+        val recoveryExecutor = QueuedExclusiveExecutor()
+        var throwOnRelease = true
+        val recovery = object : AppKitExclusiveDisplayLease {
+            override val displayKey: Long = 71L
+
+            override fun readback(): AppKitExclusiveDisplayReadback =
+                AppKitExclusiveDisplayReadback(AppKitExclusiveDisplayTerminal.Captured(701L))
+
+            override fun release(): AppKitExclusiveDisplayReleaseResult {
+                if (throwOnRelease) throw IllegalStateException("orphaned release exploded")
+                return AppKitExclusiveDisplayReleaseResult(AppKitExclusiveDisplayTerminal.Released(500L))
+            }
+        }
+        lateinit var broker: AppKitExclusiveDisplayBroker
+        val bridge = object : AppKitExclusiveDisplayBridge {
+            override val availability = AppKitExclusiveBridgeAvailability.Available
+
+            override fun open(displayKey: Long, modeKey: Long): AppKitExclusiveDisplayOpenResult {
+                @Suppress("UNCHECKED_CAST")
+                val entries = broker.javaClass.getDeclaredField("entries").apply { isAccessible = true }
+                    .get(broker) as MutableMap<Long, Any>
+                entries.clear()
+                return AppKitExclusiveDisplayOpenResult.FailedAfterCapture(
+                    terminal = AppKitExclusiveDisplayTerminal.Unknown,
+                    cleanup = AppKitExclusiveDisplayReleaseResult(AppKitExclusiveDisplayTerminal.Unknown),
+                    recovery = recovery,
+                    failure = KadreFailure.PlatformFailure(KadrePlatform.AppKit, "exclusive-fullscreen", "capture-failed"),
+                )
+            }
+        }
+        broker = AppKitExclusiveDisplayBroker(bridge, recoveryExecutor = recoveryExecutor)
+        val port = broker.openPort(executor, RecordingExclusiveWindowPort())
+
+        assertEquals(KadreResult.Success(Unit), port.reserve(command(85L, 852L, 71L, 701L)))
+        executor.runAll()
+
+        assertIs<ExclusiveFullscreenAvailability.Unavailable>(port.availability)
+        assertEquals(1, recoveryExecutor.pendingTaskCount)
+        throwOnRelease = false
+        recoveryExecutor.runAll()
+        executor.runAll()
+
+        assertEquals(ExclusiveFullscreenAvailability.Available, port.availability)
+    }
+
+    @Test
+    fun capturedWithoutRuntimeQuarantinesAReleaseExceptionUntilScheduledRecoveryCertifiesRelease() {
+        val executor = QueuedExclusiveExecutor()
+        val recoveryExecutor = QueuedExclusiveExecutor()
+        val firstFailure = IllegalStateException("captured without runtime release exploded")
+        val lease = RecordingExclusiveDisplayLease(
+            displayKey = 71L,
+            modeKey = 701L,
+            releaseFailureSequence = ArrayDeque(listOf(firstFailure, null)),
+        )
+        lateinit var broker: AppKitExclusiveDisplayBroker
+        val bridge = object : AppKitExclusiveDisplayBridge {
+            override val availability = AppKitExclusiveBridgeAvailability.Available
+
+            override fun open(displayKey: Long, modeKey: Long): AppKitExclusiveDisplayOpenResult {
+                @Suppress("UNCHECKED_CAST")
+                val entries = broker.javaClass.getDeclaredField("entries").apply { isAccessible = true }
+                    .get(broker) as Map<Long, Any>
+                checkNotNull(entries[displayKey]).javaClass.getDeclaredField("command").apply { isAccessible = true }
+                    .set(entries.getValue(displayKey), null)
+                return AppKitExclusiveDisplayOpenResult.Opened(lease)
+            }
+        }
+        broker = AppKitExclusiveDisplayBroker(bridge = bridge, recoveryExecutor = recoveryExecutor)
+        val port = broker.openPort(executor, RecordingExclusiveWindowPort())
+        val command = RecordingExclusiveCommand(
+            windowId = identity<WindowId>(86L),
+            operationId = identity<WindowOperationId>(862L),
+            displayKey = 71L,
+            modeKey = 701L,
+            requestedFullscreen = exclusiveFullscreen(701L),
+        )
+
+        assertEquals(KadreResult.Success(Unit), port.reserve(command))
+        executor.runAll()
+
+        assertIs<ExclusiveFullscreenAvailability.Unavailable>(port.availability)
+        assertEquals(emptyList(), command.failures)
+        port.close()
+        assertEquals(1, recoveryExecutor.pendingTaskCount)
+        recoveryExecutor.runAll()
+
+        assertEquals(2, lease.releaseCount)
+    }
+
+    @Test
+    fun earlyReleaseKeepsThePresentationFailurePrimaryAndReportsTheReleaseExceptionAsDiagnostic() {
+        val executor = QueuedExclusiveExecutor()
+        val releaseFailure = IllegalStateException("early release exploded")
+        val lease = RecordingExclusiveDisplayLease(
+            displayKey = 71L,
+            modeKey = 701L,
+            releaseFailure = releaseFailure,
+        )
+        lateinit var broker: AppKitExclusiveDisplayBroker
+        val bridge = object : AppKitExclusiveDisplayBridge {
+            override val availability = AppKitExclusiveBridgeAvailability.Available
+
+            override fun open(displayKey: Long, modeKey: Long): AppKitExclusiveDisplayOpenResult {
+                @Suppress("UNCHECKED_CAST")
+                val entries = broker.javaClass.getDeclaredField("entries").apply { isAccessible = true }
+                    .get(broker) as Map<Long, Any>
+                val entry = checkNotNull(entries[displayKey])
+                entry.javaClass.getDeclaredField("releaseRequested").apply { isAccessible = true }
+                    .setBoolean(entry, true)
+                return AppKitExclusiveDisplayOpenResult.Opened(lease)
+            }
+        }
+        broker = AppKitExclusiveDisplayBroker(bridge)
+        val windowPort = RecordingExclusiveWindowPort(failExit = true)
+        val port = broker.openPort(executor, windowPort)
+        val command = command(87L, 872L, 71L, 701L)
+
+        assertEquals(KadreResult.Success(Unit), port.reserve(command))
+        executor.runAll()
+
+        assertEquals("restore-failed", (command.failures.single().first as KadreFailure.PlatformFailure).code)
+        assertTrue(windowPort.diagnostics.any { it.code == "coregraphics-release-exception" })
+        assertIs<ExclusiveFullscreenAvailability.Unavailable>(port.availability)
+        assertEquals(1, lease.releaseCount)
+    }
+
+    @Test
+    fun lateQuarantineKeepsAReleaseExceptionRecoverableInsteadOfDiscardingTheCapturedLease() {
+        val executor = QueuedExclusiveExecutor()
+        val recoveryExecutor = QueuedExclusiveExecutor()
+        val lease = RecordingExclusiveDisplayLease(
+            displayKey = 71L,
+            modeKey = 701L,
+            releaseFailureSequence = ArrayDeque(listOf(IllegalStateException("late release exploded"), null)),
+        )
+        lateinit var broker: AppKitExclusiveDisplayBroker
+        val bridge = object : AppKitExclusiveDisplayBridge {
+            override val availability = AppKitExclusiveBridgeAvailability.Available
+
+            override fun open(displayKey: Long, modeKey: Long): AppKitExclusiveDisplayOpenResult {
+                @Suppress("UNCHECKED_CAST")
+                val entries = broker.javaClass.getDeclaredField("entries").apply { isAccessible = true }
+                    .get(broker) as Map<Long, Any>
+                val entry = checkNotNull(entries[displayKey])
+                val state = entry.javaClass.getDeclaredField("state").apply { isAccessible = true }
+                state.set(
+                    entry,
+                    state.type.enumConstants.single { (it as Enum<*>).name == "Quarantined" },
+                )
+                return AppKitExclusiveDisplayOpenResult.Opened(lease)
+            }
+        }
+        broker = AppKitExclusiveDisplayBroker(bridge, recoveryExecutor = recoveryExecutor)
+        val port = broker.openPort(executor, RecordingExclusiveWindowPort())
+
+        assertEquals(KadreResult.Success(Unit), port.reserve(command(88L, 873L, 71L, 701L)))
+        executor.runAll()
+
+        assertIs<ExclusiveFullscreenAvailability.Unavailable>(port.availability)
+        port.close()
+        assertEquals(1, recoveryExecutor.pendingTaskCount)
+        recoveryExecutor.runAll()
+        assertEquals(2, lease.releaseCount)
+    }
+
+    @Test
     fun failedPresentationAggregatesReadbackExitAndReportedReleaseDiagnostics() {
         val executor = QueuedExclusiveExecutor()
         val reportedRelease = KadreFailure.PlatformFailure(
@@ -662,11 +831,12 @@ private class RecordingExclusiveCommand(
     override val modeKey: Long,
     override val requestedFullscreen: FullscreenMode,
     private val trace: MutableList<String>? = null,
+    private val captureCommittedValue: Boolean = true,
 ) : AppKitExclusiveBrokerCommand {
     val completions = mutableListOf<WindowState>()
     val failures = mutableListOf<Pair<KadreFailure, WindowState?>>()
 
-    override fun captureCommitted(): Boolean = true
+    override fun captureCommitted(): Boolean = captureCommittedValue
 
     override fun completed(effectiveState: WindowState) {
         completions += effectiveState
@@ -684,6 +854,7 @@ private class RecordingExclusiveDisplayLease(
     private val releaseTerminals: ArrayDeque<AppKitExclusiveDisplayTerminal> = ArrayDeque(),
     private val trace: MutableList<String>? = null,
     private val releaseFailure: Throwable? = null,
+    private val releaseFailureSequence: ArrayDeque<Throwable?> = ArrayDeque(),
     private val readbackFailure: Throwable? = null,
     private val releaseFailures: List<KadreFailure.PlatformFailure> = emptyList(),
 ) : AppKitExclusiveDisplayLease {
@@ -700,6 +871,7 @@ private class RecordingExclusiveDisplayLease(
     override fun release(): AppKitExclusiveDisplayReleaseResult {
         trace?.add("release")
         releaseCount += 1
+        if (releaseFailureSequence.isNotEmpty()) releaseFailureSequence.removeFirst()?.let { throw it }
         releaseFailure?.let { throw it }
         return AppKitExclusiveDisplayReleaseResult(
             if (releaseTerminals.isEmpty()) {

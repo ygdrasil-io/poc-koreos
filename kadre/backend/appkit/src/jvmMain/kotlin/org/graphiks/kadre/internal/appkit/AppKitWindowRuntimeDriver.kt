@@ -345,9 +345,21 @@ private class AppKitWindowCommandPort(
             nativePort.onMainThread(presentation::restore)
         }
         if (result == AppKitExclusivePresentationResult.Readback) {
-            closeExclusivePresentation(presentation).forEach(::reportFailure)
-            synchronized(lock) {
-                if (entry.exclusivePresentation === presentation) entry.exclusivePresentation = null
+            when (val close = closeExclusivePresentation(presentation)) {
+                is ExclusivePresentationCloseAttempt.Terminal -> {
+                    close.failures.forEach(::reportFailure)
+                    clearExclusivePresentation(entry, presentation)
+                }
+                is ExclusivePresentationCloseAttempt.Incomplete -> {
+                    close.failures.forEach(::reportFailure)
+                    terminalize(request.windowId)
+                    return AppKitExclusiveWindowResult.Failed(
+                        presentationCloseFailure(close),
+                        null,
+                        presentationCloseDiagnostics(close),
+                    )
+                }
+                ExclusivePresentationCloseAttempt.Absent -> Unit
             }
         }
         if (result is AppKitExclusivePresentationResult.Failed) {
@@ -365,11 +377,15 @@ private class AppKitWindowCommandPort(
         val lease = synchronized(lock) { entry.exclusivePresentation }
         val failures = mutableListOf<Throwable>()
         try {
-            failures += closeExclusivePresentation(lease)
-            synchronized(lock) {
-                if (entry.exclusivePresentation === lease) entry.exclusivePresentation = null
+            when (val close = closeExclusivePresentation(lease)) {
+                is ExclusivePresentationCloseAttempt.Terminal -> {
+                    failures += close.failures
+                    clearExclusivePresentation(entry, lease)
+                    entry.peer?.close()
+                }
+                is ExclusivePresentationCloseAttempt.Incomplete -> failures += close.failures
+                ExclusivePresentationCloseAttempt.Absent -> entry.peer?.close()
             }
-            entry.peer?.close()
         } catch (cause: Exception) {
             failures += cause
         } catch (cause: LinkageError) {
@@ -1531,11 +1547,15 @@ private class AppKitWindowCommandPort(
         }
         val failures = mutableListOf<Throwable>()
         try {
-            failures += closeExclusivePresentation(presentation)
-            synchronized(lock) {
-                if (entry.exclusivePresentation === presentation) entry.exclusivePresentation = null
+            when (val close = closeExclusivePresentation(presentation)) {
+                is ExclusivePresentationCloseAttempt.Terminal -> {
+                    failures += close.failures
+                    clearExclusivePresentation(entry, presentation)
+                    peer?.commitNativeClose()
+                }
+                is ExclusivePresentationCloseAttempt.Incomplete -> failures += close.failures
+                ExclusivePresentationCloseAttempt.Absent -> peer?.commitNativeClose()
             }
-            peer?.commitNativeClose()
         } catch (cause: Exception) {
             failures += cause
         } catch (cause: LinkageError) {
@@ -1632,18 +1652,31 @@ private class AppKitWindowCommandPort(
             entry.peer to entry.exclusivePresentation
         }
         val failures = mutableListOf<Throwable>()
+        var retryPresentationClose = false
         try {
-            failures += closeExclusivePresentation(presentation)
-            synchronized(lock) {
-                if (entry.exclusivePresentation === presentation) entry.exclusivePresentation = null
+            when (val close = closeExclusivePresentation(presentation)) {
+                is ExclusivePresentationCloseAttempt.Terminal -> {
+                    failures += close.failures
+                    clearExclusivePresentation(entry, presentation)
+                    peer?.close()
+                }
+                is ExclusivePresentationCloseAttempt.Incomplete -> {
+                    failures += close.failures
+                    retryPresentationClose = true
+                }
+                ExclusivePresentationCloseAttempt.Absent -> peer?.close()
             }
-            peer?.close()
         } catch (cause: Exception) {
             failures += cause
         } catch (cause: LinkageError) {
             failures += cause
         }
         failures.forEach(::reportFailure)
+        if (retryPresentationClose) {
+            synchronized(lock) { entry.cleanupScheduled = false }
+            scheduleCleanup(entry)
+            return
+        }
         val failure = failures.firstOrNull()
         val completion = synchronized(lock) {
             entry.peer = null
@@ -1666,24 +1699,61 @@ private class AppKitWindowCommandPort(
         }
     }
 
+    private fun clearExclusivePresentation(entry: PeerEntry?, presentation: AppKitExclusivePresentationLease?) {
+        if (entry == null || presentation == null) return
+        synchronized(lock) {
+            if (entry.exclusivePresentation === presentation) entry.exclusivePresentation = null
+        }
+    }
+
     private fun closeExclusivePresentation(
         presentation: AppKitExclusivePresentationLease?,
-    ): List<Throwable> {
-        if (presentation == null) return emptyList()
-        val result = try {
+    ): ExclusivePresentationCloseAttempt {
+        if (presentation == null) return ExclusivePresentationCloseAttempt.Absent
+        val close: AppKitExclusivePresentationCloseResult = try {
             nativePort.onMainThread(presentation::close)
         } catch (cause: Exception) {
-            return listOf(cause)
+            return ExclusivePresentationCloseAttempt.Incomplete(listOf(cause))
         } catch (cause: LinkageError) {
-            return listOf(cause)
+            return ExclusivePresentationCloseAttempt.Incomplete(listOf(cause))
         }
-        return when (result) {
-            AppKitExclusivePresentationResult.Readback -> emptyList()
-            is AppKitExclusivePresentationResult.Failed -> buildList {
-                add(KadreException(result.failure))
-                result.diagnostics.filter { it != result.failure }.forEach { add(KadreException(it)) }
-            }
+        val failures = close.result.failures()
+        return when (close) {
+            is AppKitExclusivePresentationCloseResult.Terminal -> ExclusivePresentationCloseAttempt.Terminal(failures)
+            is AppKitExclusivePresentationCloseResult.Incomplete -> ExclusivePresentationCloseAttempt.Incomplete(failures)
         }
+    }
+
+    private fun presentationCloseFailure(
+        close: ExclusivePresentationCloseAttempt.Incomplete,
+    ): KadreFailure.PlatformFailure =
+        (close.failures.firstOrNull() as? KadreException)
+            ?.failure as? KadreFailure.PlatformFailure
+            ?: platformFailure("presentation-close-exception")
+
+    private fun presentationCloseDiagnostics(
+        close: ExclusivePresentationCloseAttempt.Incomplete,
+    ): List<KadreFailure.PlatformFailure> = close.failures.drop(1)
+        .mapNotNull { (it as? KadreException)?.failure as? KadreFailure.PlatformFailure }
+
+    private fun AppKitExclusivePresentationResult.failures(): List<Throwable> = when (this) {
+        AppKitExclusivePresentationResult.Readback -> emptyList()
+        is AppKitExclusivePresentationResult.Failed -> buildList {
+            add(KadreException(failure))
+            diagnostics.filter { it != failure }.forEach { add(KadreException(it)) }
+        }
+    }
+
+    private sealed interface ExclusivePresentationCloseAttempt {
+        data object Absent : ExclusivePresentationCloseAttempt
+
+        data class Terminal(
+            val failures: List<Throwable>,
+        ) : ExclusivePresentationCloseAttempt
+
+        data class Incomplete(
+            val failures: List<Throwable>,
+        ) : ExclusivePresentationCloseAttempt
     }
 
     private fun issueNativeTerminal(entry: PeerEntry) {

@@ -4870,6 +4870,89 @@ class AppKitWindowRuntimeDriverTest {
     }
 
     @Test
+    fun terminalizeRetainsAThrownPresentationCloseForCleanupRetryBeforeClosingThePeer() = runBlocking {
+        val trace = mutableListOf<String>()
+        val closeFailure = IllegalStateException("presentation close invocation failed")
+        var attempts = 0
+        lateinit var port: DeterministicAppKitNativeWindowPort
+        val presentationLease = RecordingAppKitExclusivePresentationLease(
+            onClose = {
+                trace += "presentation-close"
+                if (++attempts == 1) throw closeFailure
+            },
+            isMainThread = { port.isInsideMainThreadCall() },
+        )
+        port = DeterministicAppKitNativeWindowPort(
+            name = "terminal-presentation-close-retry",
+            beforeCloseWindow = { trace += "peer-close" },
+            exclusivePresentationLease = presentationLease,
+        )
+        val reported = CopyOnWriteArrayList<Throwable>()
+        val driver = AppKitWindowRuntimeDriverFactory { port }.create(
+            resources = KadrePolicies.Default.resources,
+            failureReporter = RuntimeFailureReporter(reported::add),
+        )
+
+        try {
+            val window = openedWindow(driver, WindowSpec(title = "terminal-presentation-close-retry"))
+            val exclusiveWindowPort = driver.exclusiveWindowPort()
+            assertEquals(AppKitExclusiveWindowPreparation.Prepared, exclusiveWindowPort.prepare(exclusiveWindowRequest(window.id)))
+
+            exclusiveWindowPort.terminalize(window.id)
+
+            withTimeout(2.seconds) { window.state.first { it.phase == WindowPhase.Closed } }
+            assertEquals(listOf("presentation-close", "presentation-close", "peer-close"), trace)
+            assertTrue(reported.contains(closeFailure))
+        } finally {
+            driver.close()
+        }
+    }
+
+    @Test
+    fun programmaticNativeCloseRetriesExclusivePresentationBeforeCommittingThePeerClose() = runBlocking {
+        val trace = mutableListOf<String>()
+        val closeFailure = IllegalStateException("programmatic presentation close invocation failed")
+        var attempts = 0
+        lateinit var port: DeterministicAppKitNativeWindowPort
+        val presentationLease = RecordingAppKitExclusivePresentationLease(
+            onClose = {
+                trace += "presentation-close"
+                if (++attempts == 1) throw closeFailure
+            },
+            isMainThread = { port.isInsideMainThreadCall() },
+        )
+        port = DeterministicAppKitNativeWindowPort(
+            name = "programmatic-presentation-close-retry",
+            beforeCloseWindow = { trace += "peer-close" },
+            exclusivePresentationLease = presentationLease,
+        )
+        val reported = CopyOnWriteArrayList<Throwable>()
+        val driver = AppKitWindowRuntimeDriverFactory { port }.create(
+            resources = KadrePolicies.Default.resources,
+            failureReporter = RuntimeFailureReporter(reported::add),
+        )
+
+        try {
+            val window = openedWindow(driver, WindowSpec(title = "programmatic-presentation-close-retry"))
+            assertEquals(
+                AppKitExclusiveWindowPreparation.Prepared,
+                driver.exclusiveWindowPort().prepare(exclusiveWindowRequest(window.id)),
+            )
+
+            assertIs<WindowCloseOutcome.Accepted>(window.close().successValue())
+
+            withTimeout(2.seconds) {
+                window.state.first { it.phase == WindowPhase.Closed }
+                while ("programmatic-presentation-close-retry" !in port.closedWindowTitles) yield()
+            }
+            assertEquals(listOf("presentation-close", "presentation-close", "peer-close"), trace)
+            assertTrue(reported.contains(closeFailure))
+        } finally {
+            driver.close()
+        }
+    }
+
+    @Test
     fun driverCloseClosesExclusivePresentationBeforeClosingNativePeer() = runBlocking {
         val trace = mutableListOf<String>()
         lateinit var port: DeterministicAppKitNativeWindowPort
@@ -6187,11 +6270,11 @@ private class RecordingAppKitExclusivePresentationLease(
         return closeResult.also { restoreCount += 1 }
     }
 
-    override fun close(): AppKitExclusivePresentationResult {
+    override fun close(): AppKitExclusivePresentationCloseResult {
         check(isMainThread()) { "exclusive close must run on the AppKit main thread" }
         closeCount += 1
         onClose()
-        return closeResult
+        return AppKitExclusivePresentationCloseResult.Terminal(closeResult)
     }
 }
 
