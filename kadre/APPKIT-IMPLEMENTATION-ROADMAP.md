@@ -5,6 +5,12 @@
 **Cible :** macOS sur JVM 25, backend AppKit via KFFI.
 **Mode de livraison :** tranches verticales pilotées par le risque, découpables en plusieurs PRs revues séparément.
 
+**Lecture du statut :** une sous-tranche peut être fusionnée tout en restant
+`planned` dans le registre. Elle n'est alors pas un contrat AppKit fermé : son
+code et ses tests locaux existent, mais les scénarios et sentinelles O2/O3 ne
+sont pas encore produits et validés par le gate. Seul le statut `active`
+accompagné de son evidence rend une capability officiellement livrée.
+
 Ce document ordonne la suite de l’implémentation AppKit après le standalone headless. Il ne remplace aucune spécification normative et ne rouvre pas l’API publique fermée.
 
 Les autorités restent, par ordre de responsabilité :
@@ -386,11 +392,13 @@ charge le fullscreen natif `Borderless` corrélé aux notifications AppKit.
 `Window.apply` attend la completion terminale et retourne `Applied`,
 `PartiallyApplied` pour un champ
 refusé, ou une failure corrélée après commit ; jamais un `Accepted`
-intermédiaire. La sous-tranche garde `Exclusive` hors scope jusqu'à la phase
-Display, refuse l'initialisation `Borderless` non corrélable, rejette
-l'initialisation `Exclusive` par `RequestWindow`, et expose exactement
-`WindowCapabilities.fullscreen = Supported({Borderless}, availability)`. Les
-contrats `WIN-005` et `APK-010` sont actifs ; le cahier manuel
+intermédiaire. L'initialisation `Borderless` non corrélable reste refusée.
+`Exclusive` est désormais traité par la sous-tranche display dédiée
+`APPKIT-PHASE-9-EXCLUSIVE-FULLSCREEN-DESIGN.md` : son implémentation existe,
+mais `WIN-008` et `APK-016` restent `planned` jusqu'à leur evidence O2/O3.
+Avant cette activation, l'absence de support runtime d'`Exclusive` produit le
+refus de champ explicite ; elle ne réduit jamais la capability `Borderless`.
+Les contrats `WIN-005` et `APK-010` sont actifs ; le cahier manuel
 `backend/appkit/manual/phase-5-fullscreen.md` reste non bloquant et extérieur à
 la CI.
 
@@ -404,9 +412,10 @@ un opt-in explicite ; dans les deux topologies, toute visibilité dépend de la
 politique OS/utilisateur/host. Le harness
 `phase5AdvancedWindowHarness` enregistre séparément les observations humaines.
 `contentProtection` reste `Unsupported(UpdateWindow)` : AppKit ne fournit pas
-de primitive anti-capture utilisable ici. Blur, icône, resize, position externe,
-fullscreen exclusif et interactions armées restent reportés ou explicitement
-non supportés.
+de primitive anti-capture utilisable ici. Blur, icône, resize, position externe
+et interactions armées restent reportés ou explicitement non supportés. Le
+fullscreen exclusif n'est plus une lacune de phase 5 : il dépend de la
+fermeture contractuelle de la phase 9.
 
 #### Contenu
 
@@ -427,6 +436,14 @@ non supportés.
   terminale, ou failure est couverte.
 
 ### Phase 6 — IME, touch et gestures
+
+#### Livraison actuelle
+
+Le bridge IME est fusionné : session de texte possédée par le runtime,
+`NSTextInputClient`, composition, sélection, surrounding text et cursor rect
+suivent le cycle de vie de la surface. Touch et gestures restent `Unsupported`
+tant qu'un bridge natif distinct, ses capabilities et leurs preuves n'ont pas
+été livrés. La phase 6 n'est donc pas terminée.
 
 #### Objectif
 
@@ -449,6 +466,14 @@ Couvrir les entrées enrichies liées à la vue AppKit et à son focus.
 - aucune gesture logicielle universelle n’est simulée.
 
 ### Phase 7 — Drag-and-drop
+
+#### Livraison actuelle
+
+Le bridge `NSDraggingDestination`, les transferts bornés et le cahier manuel
+phase 7 sont fusionnés. La fermeture de phase reste à matérialiser dans le
+registre : elle nécessite des contrats dédiés et leur evidence O2/O3 pour les
+claims, budgets, cancellation et teardown. Cette sous-tranche ne doit pas être
+confondue avec une phase contractuellement close.
 
 #### Objectif
 
@@ -475,6 +500,15 @@ Respecter la décision synchrone de `NSDraggingDestination` tout en exposant un 
 
 ### Phase 8 — Raw input et permissions
 
+#### Livraison actuelle
+
+Le coordinator runtime et le bridge AppKit process-wide sont fusionnés :
+permission Input Monitoring, source listen-only, fan-out explicite et budgets
+isolés par `RawInputAccess`. `INP-002` et `APK-013` sont néanmoins `planned`;
+aucune evidence n'est encore enregistrée. La phase 8 reste ouverte jusqu'à
+l'activation conjointe de ces deux contrats, jamais par simple existence du
+code ou par une exécution locale non tracée.
+
 #### Objectif
 
 Exposer l’input global uniquement lorsque la capability et la permission macOS le permettent.
@@ -497,6 +531,16 @@ Exposer l’input global uniquement lorsque la capability et la permission macOS
 - le raw input ne falsifie pas une dépendance au focus ordinaire.
 
 ### Phase 9 — Displays, pression mémoire et changements système
+
+#### Livraison actuelle
+
+L'inventaire AppKit conditionné par version, l'observation d'appearance, la
+source de pression mémoire et le broker de fullscreen exclusif sont fusionnés.
+`outerPosition` reste explicitement `Unsupported` en attente d'une preuve
+matérielle multi-écran à échelles mixtes. Les contrats `DSP-001`, `WIN-007`,
+`WIN-008`, `RUN-007`, `RUN-008` et `APK-014` à `APK-018` sont tous `planned`
+et sans evidence : la phase 9 n'est pas encore fermée, même lorsque le backend
+dispose d'une implémentation conditionnelle.
 
 #### Objectif
 
