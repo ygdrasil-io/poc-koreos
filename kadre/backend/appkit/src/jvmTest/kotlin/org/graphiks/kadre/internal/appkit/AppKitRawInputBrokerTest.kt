@@ -61,13 +61,13 @@ class AppKitRawInputBrokerTest {
         val firstRequest = async { firstPort.requestAccess() }
 
         withTimeout(2.seconds) { native.permissionRequestStarted.await() }
-        val secondRequest = async { secondPort.requestAccess() }
+        val secondRequest = async(start = CoroutineStart.UNDISPATCHED) { secondPort.requestAccess() }
         permissionResult.complete(true)
 
         val first = firstRequest.await().requireValue()
         val second = secondRequest.await().requireValue()
-        val firstEvent = async { first.events.filterInput().first() }
-        val secondEvent = async { second.events.filterInput().first() }
+        val firstEvent = async(start = CoroutineStart.UNDISPATCHED) { first.events.filterInput().first() }
+        val secondEvent = async(start = CoroutineStart.UNDISPATCHED) { second.events.filterInput().first() }
 
         native.emit(AppKitRawInputNativeEvent.Motion(deltaX = 17L, deltaY = -3L))
 
