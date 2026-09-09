@@ -278,7 +278,10 @@ public class AppKitBackendProvider private constructor(
             broker = if (attentionOwner == null) null else broker,
             attentionOwner = attentionOwner,
         )
-        RuntimeSessionComponents(driver.manager, driver::close)
+        RuntimeSessionComponents(
+            windows = driver.manager,
+            closeAction = driver::close,
+        )
     }
 }
 

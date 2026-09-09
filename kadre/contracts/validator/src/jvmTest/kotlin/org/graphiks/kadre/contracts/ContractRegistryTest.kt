@@ -12,6 +12,31 @@ import kotlin.test.assertTrue
 
 class ContractRegistryTest {
     @Test
+    fun realRegistryDeclaresEveryPlannedPhaseEightAndNineContract() {
+        val recordsById = ContractRegistry.parse(repositoryFile("kadre/contracts/registry/contracts.tsv").readText())
+            .associateBy(ContractRecord::contractId)
+
+        assertEquals(
+            PHASE_EIGHT_AND_NINE_CONTRACT_IDS,
+            recordsById.keys.intersect(PHASE_EIGHT_AND_NINE_CONTRACT_IDS),
+        )
+        assertTrue(
+            PHASE_EIGHT_AND_NINE_CONTRACT_IDS.all { recordsById.getValue(it).status == ContractStatus.Planned },
+        )
+        assertEquals(
+            listOf(
+                "runtime-raw-admission",
+                "runtime-raw-fanout",
+                "runtime-raw-overflow",
+                "runtime-raw-permission-waiter",
+                "runtime-raw-recovery",
+                "runtime-raw-owner-close",
+            ),
+            recordsById.getValue("INP-002").scenarios,
+        )
+    }
+
+    @Test
     fun realRegistryDeclaresTheExactPlannedWebContracts() {
         val recordsById = ContractRegistry.parse(repositoryFile("kadre/contracts/registry/contracts.tsv").readText())
             .associateBy(ContractRecord::contractId)
@@ -460,6 +485,10 @@ class ContractRegistryTest {
     private companion object {
         const val COMMIT = "0123456789abcdef0123456789abcdef01234567"
         val WEB_CONTRACT_IDS = setOf("BCK-001", "INT-002", "INT-003", "INT-004")
+        val PHASE_EIGHT_AND_NINE_CONTRACT_IDS = setOf(
+            "INP-002", "APK-013", "DSP-001", "APK-014", "WIN-007", "APK-015",
+            "WIN-008", "APK-016", "RUN-007", "APK-017", "RUN-008", "APK-018",
+        )
         const val HEADER =
             "contractId\tstatus\tsource\tsubject\trisk\toracle\tscenarios\trequiredTargets\tconditionalCapabilities\tsentinels\tretirementRef"
         const val MAPPING_HEADER = "contractId\ttarget\tkind\tevidenceId\ttestClass\ttestName"

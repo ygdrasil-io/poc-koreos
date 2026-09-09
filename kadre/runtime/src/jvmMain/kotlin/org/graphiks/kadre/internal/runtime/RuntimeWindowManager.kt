@@ -20,6 +20,7 @@ import org.graphiks.kadre.application.SessionInstant
 import org.graphiks.kadre.application.SessionSequence
 import org.graphiks.kadre.diagnostics.Capability
 import org.graphiks.kadre.diagnostics.FeatureAvailability
+import org.graphiks.kadre.diagnostics.KadreDiagnostic
 import org.graphiks.kadre.diagnostics.KadreException
 import org.graphiks.kadre.diagnostics.KadreFailure
 import org.graphiks.kadre.diagnostics.KadreOperation
@@ -132,6 +133,7 @@ public class RuntimeWindowManager public constructor(
     private val eventSequence = AtomicLong(0L)
     private val eventClockOrigin = System.nanoTime()
     private var sessionEventStampSource: (() -> EventStamp)? = null
+    private var rawInputCoordinator: RawInputCoordinator? = null
     private var windowDeliveryPolicy: WindowDeliveryPolicy = KadrePolicies.Default.window
     private var surfaceDeliveryPolicy: WindowDeliveryPolicy = KadrePolicies.Default.window
     private var surfaceInputDeliveryPolicy: InputDeliveryPolicy = KadrePolicies.Default.input
@@ -223,7 +225,25 @@ public class RuntimeWindowManager public constructor(
         collectorAllocator: Any,
         maxCollectorsPerFlow: Int,
         dropTransferScope: CoroutineScope?,
+        diagnostics: (KadreDiagnostic) -> Unit,
+        rawInputPort: RawInputPort?,
     ) {
+        val runtimeCollectorAllocator = collectorAllocator as? RuntimeEventCollectorAllocator
+            ?: error("runtime session collector allocator has an invalid type")
+        val coordinator = rawInputPort?.let { port ->
+            RawInputCoordinator(
+                port = port,
+                rawPolicy = inputDeliveryPolicy.rawInput,
+                maxConcurrentRawInputAccesses = resources.maxConcurrentRawInputAccesses,
+                scope = checkNotNull(dropTransferScope) {
+                    "raw input requires the session root scope"
+                },
+                diagnostics = diagnostics,
+                diagnosticStampSource = source,
+                collectorAllocator = runtimeCollectorAllocator,
+                maxCollectorsPerFlow = maxCollectorsPerFlow,
+            )
+        }
         synchronized(lock) {
             check(sessionEventStampSource == null) { "window event stamp source was already installed" }
             check(pending.isEmpty() && committed.isEmpty()) { "window event stamp source must be installed before admission" }
@@ -232,10 +252,10 @@ public class RuntimeWindowManager public constructor(
             surfaceDeliveryPolicy = deliveryPolicy
             surfaceInputDeliveryPolicy = inputDeliveryPolicy
             surfaceSessionFailureHandler = sessionFailureHandler
-            sessionEventCollectorAllocator = collectorAllocator as? RuntimeEventCollectorAllocator
-                ?: error("runtime session collector allocator has an invalid type")
+            sessionEventCollectorAllocator = runtimeCollectorAllocator
             sessionMaxCollectorsPerFlow = maxCollectorsPerFlow
             this.dropTransferScope = dropTransferScope
+            rawInputCoordinator = coordinator
         }
     }
 
@@ -253,6 +273,8 @@ public class RuntimeWindowManager public constructor(
         sessionFailureHandler,
         collectorAllocator,
         maxCollectorsPerFlow,
+        null,
+        {},
         null,
     )
 
@@ -441,6 +463,7 @@ public class RuntimeWindowManager public constructor(
             attentionPort
         }
         drainAttentionReleases()
+        synchronized(lock) { rawInputCoordinator }?.close()
         portToClose?.let(::safeCloseAttentionPort)
     }
 
@@ -1205,6 +1228,7 @@ public class RuntimeWindowManager public constructor(
             initialSnapshot = initialSurfaceSnapshot ?: fallbackSurfaceSnapshot(effectiveSpec),
             commandPort = surfaceCommandPort,
             textInputPort = textInputPortFactory.create(record.surfaceId),
+            rawInputCoordinator = rawInputCoordinator,
             commandsEnabled = publicSurfaceCapabilities,
             enabledCapabilities = enabledSurfaceCapabilities,
             eventStampSource = ::nextEventStamp,

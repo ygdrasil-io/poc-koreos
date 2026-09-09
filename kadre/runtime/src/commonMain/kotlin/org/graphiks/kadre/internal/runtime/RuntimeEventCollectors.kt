@@ -70,7 +70,7 @@ internal class RuntimeEventCollectorGate internal constructor(
     private val allocator: RuntimeEventCollectorAllocator,
     private val perFlowLimit: Int,
 ) {
-    fun tryAcquire(): KadreResult<RuntimeEventCollectorLease> = allocator.tryAcquire(this, perFlowLimit)
+    internal fun tryAcquire(): KadreResult<RuntimeEventCollectorLease> = allocator.tryAcquire(this, perFlowLimit)
 }
 
 internal class RuntimeEventCollectorLease internal constructor(

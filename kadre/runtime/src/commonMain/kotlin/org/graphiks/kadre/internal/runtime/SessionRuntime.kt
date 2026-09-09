@@ -102,6 +102,8 @@ internal class SessionRuntime(
                 eventCollectorAllocator,
                 policy.resources.maxEventCollectorsPerFlow,
                 rootScope,
+                runtimeDiagnostics::report,
+                components.rawInputPort,
             )
         } catch (cause: Throwable) {
             runCatching { components.close() }
