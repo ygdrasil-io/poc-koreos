@@ -251,8 +251,10 @@ internal class RuntimeDisplayManager(
         )
     }
 
-    private fun nextManagerRevision(current: DisplayManagerRevision): DisplayManagerRevision =
-        DisplayManagerRevision(Math.incrementExact(current.value))
+    private fun nextManagerRevision(current: DisplayManagerRevision): DisplayManagerRevision {
+        check(current.value < Long.MAX_VALUE) { "display manager revision space exhausted" }
+        return DisplayManagerRevision(current.value + 1L)
+    }
 
     private inner class RuntimeDisplay(
         override val id: DisplayId,
@@ -312,8 +314,10 @@ internal class RuntimeDisplayManager(
         }
     }
 
-    private fun nextDisplayRevision(current: DisplayRevision): DisplayRevision =
-        DisplayRevision(Math.incrementExact(current.value))
+    private fun nextDisplayRevision(current: DisplayRevision): DisplayRevision {
+        check(current.value < Long.MAX_VALUE) { "display revision space exhausted" }
+        return DisplayRevision(current.value + 1L)
+    }
 
     private companion object {
         const val EVENT_BUFFER_CAPACITY = 32
