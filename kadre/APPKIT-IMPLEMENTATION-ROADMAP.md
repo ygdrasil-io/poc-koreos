@@ -441,9 +441,27 @@ fermeture contractuelle de la phase 9.
 
 Le bridge IME est fusionné : session de texte possédée par le runtime,
 `NSTextInputClient`, composition, sélection, surrounding text et cursor rect
-suivent le cycle de vie de la surface. Touch et gestures restent `Unsupported`
-tant qu'un bridge natif distinct, ses capabilities et leurs preuves n'ont pas
-été livrés. La phase 6 n'est donc pas terminée.
+suivent le cycle de vie de la surface. Le bridge touch/gestures installe sur la
+content view les quatre callbacks `NSTouch` indirects et les callbacks natifs
+magnify, rotate, swipe et pressure. Le runtime garde les identités publiques,
+les callbacks KFFI ne livrent que des snapshots immuables et le teardown retire
+les capabilities après révocation de l'admission.
+
+Le support publié est exact et dépend de la version : touch à partir de macOS
+10.6 ; `Pan`, `Pinch` et `Rotation` à partir de 10.7 ;
+`TouchpadPressure` à partir de 10.10.3 ; jamais de `DoubleTap` synthétique. Les
+positions indirectes sont les positions normalisées du trackpad projetées dans
+les bounds logiques courants de la surface, avec inversion de l'axe Y vers
+l'origine Kadre en haut à gauche ; ce ne sont pas des coordonnées window-local
+rapportées par AppKit.
+
+Les tests JVM couvrent conversion, lifecycle, subset de capability, séparation
+du pointer et révocation. Le test macOS instancie la vraie managed content view
+et vérifie les selectors et leur admission, sans fabriquer un faux `NSTouch` à
+partir d'un événement souris. La réception de contacts/gestures physiques reste
+une preuve matérielle manuelle ; l'installation des selectors ne prétend pas
+garantir la présence du hardware. La phase n'est donc pas déclarée
+contractuellement `active` sur cette seule preuve automatisée.
 
 #### Objectif
 
@@ -463,7 +481,9 @@ Couvrir les entrées enrichies liées à la vue AppKit et à son focus.
 - aucune composition ne survit à la perte de focus ou au teardown ;
 - callbacks IME révoqués avant destruction de la vue ;
 - touch et gestures restent distincts du pointer ;
-- aucune gesture logicielle universelle n’est simulée.
+- aucune gesture logicielle universelle n’est simulée ;
+- le cahier manuel observe au moins un contact indirect et chaque gesture
+  annoncée sur un trackpad compatible avant fermeture contractuelle de la phase.
 
 ### Phase 7 — Drag-and-drop
 

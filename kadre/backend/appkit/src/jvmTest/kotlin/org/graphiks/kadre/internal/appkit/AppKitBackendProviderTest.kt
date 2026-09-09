@@ -3061,8 +3061,8 @@ class AppKitBackendProviderTest {
             assertTrue(report.contains("INPUT_CAPABILITIES\tkeyboard=Available\tpointer=Available"), report)
             assertTrue(
                 report.contains(
-                    "\ttouch=Unsupported" +
-                        "\tgestures=Unsupported(failure=Unsupported(operation=GestureInput))" +
+                    "\ttouch=Available" +
+                        "\tgestures=Supported(constraints=[Pan, Pinch, Rotation, TouchpadPressure], availability=Available)" +
                         "\tdragAndDrop=Available",
                 ),
                 report,

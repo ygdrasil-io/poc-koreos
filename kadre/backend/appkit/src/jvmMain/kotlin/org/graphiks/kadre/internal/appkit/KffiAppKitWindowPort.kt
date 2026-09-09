@@ -18,6 +18,7 @@ import org.graphiks.kadre.input.TextInputAction
 import org.graphiks.kadre.input.TextRange
 import org.graphiks.kadre.input.KeyLocation
 import org.graphiks.kadre.input.KeyState
+import org.graphiks.kadre.input.GestureKind
 import org.graphiks.kadre.input.KeyboardModifiers
 import org.graphiks.kadre.input.LogicalKey
 import org.graphiks.kadre.input.ModifierKey
@@ -25,6 +26,7 @@ import org.graphiks.kadre.input.NamedKey
 import org.graphiks.kadre.input.PhysicalKey
 import org.graphiks.kadre.input.PointerButton
 import org.graphiks.kadre.input.PointerButtonState
+import org.graphiks.kadre.input.TouchPhase
 import org.graphiks.kadre.surface.LogicalInsets
 import org.graphiks.kadre.surface.LogicalDelta
 import org.graphiks.kadre.surface.LogicalPoint
@@ -56,6 +58,7 @@ import org.graphiks.kffi.objc.NSDraggingInfo
 import org.graphiks.kffi.objc.NSEdgeInsets
 import org.graphiks.kffi.objc.NSEvent
 import org.graphiks.kffi.objc.NSEventModifierFlags
+import org.graphiks.kffi.objc.NSEventPhase
 import org.graphiks.kffi.objc.NSEventType
 import org.graphiks.kffi.objc.NSNotificationCenter
 import org.graphiks.kffi.objc.NSPoint
@@ -63,6 +66,8 @@ import org.graphiks.kffi.objc.NSRange
 import org.graphiks.kffi.objc.NSRect
 import org.graphiks.kffi.objc.NSSize
 import org.graphiks.kffi.objc.NSThread
+import org.graphiks.kffi.objc.NSTouchTypeMask
+import org.graphiks.kffi.objc.NSTouchPhase
 import org.graphiks.kffi.objc.NSTextInputContext
 import org.graphiks.kffi.objc.NSView
 import org.graphiks.kffi.objc.NSWindow
@@ -82,9 +87,11 @@ import org.graphiks.kffi.objc.appkit.ExclusiveWindowPresentationServices
 import org.graphiks.kffi.objc.appkit.ExclusiveWindowPresentationTerminalRestoration
 import org.graphiks.kffi.objc.ObjCRuntime
 import org.graphiks.kffi.objc.accessibilityDisplayShouldIncreaseContrast
+import org.graphiks.kffi.objc.allowedTouchTypes
 import org.graphiks.kffi.objc.effectiveAppearance
 import org.graphiks.kffi.objc.convertBaseToScreen
 import org.graphiks.kffi.objc.safeAreaInsets
+import org.graphiks.kffi.objc.setAllowedTouchTypes
 import org.graphiks.kffi.objc.asNSDraggingInfo
 import org.graphiks.kffi.objc.registerForDraggedTypes
 import org.graphiks.kffi.objc.unregisterDraggedTypes
@@ -164,6 +171,39 @@ internal class AppKitTextInputAvailability(
 private val APPKIT_TEXT_INPUT_MINIMUM_VERSION = AppKitNumericVersion(10L, 6L, 0L)
 private val APPKIT_RECT_TO_SCREEN_MINIMUM_VERSION = AppKitNumericVersion(10L, 7L, 0L)
 
+/** Version-derived AppKit touch and gesture subset; it does not imply attached hardware. */
+internal data class AppKitTouchGestureAvailability(
+    val touchInstalled: Boolean,
+    val gestureKinds: Set<GestureKind>,
+    val usesAllowedTouchTypes: Boolean = false,
+) {
+    companion object {
+        fun forSystemVersion(systemVersion: String): AppKitTouchGestureAvailability {
+            val version = systemVersion.numericVersionOrNull()
+                ?: return AppKitTouchGestureAvailability(false, emptySet())
+            return AppKitTouchGestureAvailability(
+                touchInstalled = version >= APPKIT_TOUCH_MINIMUM_VERSION,
+                gestureKinds = buildSet {
+                    if (version >= APPKIT_PHASED_GESTURE_MINIMUM_VERSION) {
+                        add(GestureKind.Pan)
+                        add(GestureKind.Pinch)
+                        add(GestureKind.Rotation)
+                    }
+                    if (version >= APPKIT_PRESSURE_GESTURE_MINIMUM_VERSION) {
+                        add(GestureKind.TouchpadPressure)
+                    }
+                },
+                usesAllowedTouchTypes = version >= APPKIT_ALLOWED_TOUCH_TYPES_MINIMUM_VERSION,
+            )
+        }
+    }
+}
+
+private val APPKIT_TOUCH_MINIMUM_VERSION = AppKitNumericVersion(10L, 6L, 0L)
+private val APPKIT_PHASED_GESTURE_MINIMUM_VERSION = AppKitNumericVersion(10L, 7L, 0L)
+private val APPKIT_PRESSURE_GESTURE_MINIMUM_VERSION = AppKitNumericVersion(10L, 10L, 3L)
+private val APPKIT_ALLOWED_TOUCH_TYPES_MINIMUM_VERSION = AppKitNumericVersion(10L, 12L, 2L)
+
 /** Public-KFFI-backed AppKit port. Native addresses remain private to this implementation. */
 internal class KffiAppKitWindowPort(
     private val createUnconfiguredWindow: (WindowSpec) -> AppKitNativeWindowOwner =
@@ -172,6 +212,8 @@ internal class KffiAppKitWindowPort(
         ::configureKffiWindow,
     private val fullscreenAvailability: AppKitFullscreenAvailability = AppKitFullscreenAvailability(),
     private val textInputAvailability: AppKitTextInputAvailability = AppKitTextInputAvailability(),
+    private val touchGestureAvailability: AppKitTouchGestureAvailability =
+        AppKitTouchGestureAvailability.forSystemVersion(System.getProperty("os.version", "")),
     private val collectionBehaviorWindow: (AppKitNativeWindowOwner) -> NSWindow =
         AppKitNativeWindowOwner::kffiWindow,
 ) : AppKitNativeWindowPort {
@@ -274,6 +316,7 @@ internal class KffiAppKitWindowPort(
         val inputAdmission = KffiViewInputAdmission()
         val dropAdmission = KffiViewDropAdmission()
         val textInputAdmission = KffiViewTextInputAdmission(textInputAvailability)
+        lateinit var nativeView: NSView
         val instance = contentViewClass.createInstance {
             onVoid(VIEW_DID_CHANGE_EFFECTIVE_APPEARANCE) {
                 appearanceAdmission.viewDidChangeEffectiveAppearance()
@@ -283,6 +326,11 @@ internal class KffiAppKitWindowPort(
             }
             APPKIT_INPUT_EVENT_SELECTORS.forEach { selector ->
                 onVoidObject(selector) { event -> inputAdmission.observe(NSEvent(event.ptr)) }
+            }
+            APPKIT_TOUCH_GESTURE_EVENT_SELECTORS.forEach { selector ->
+                onNSEvent(selector) { observation ->
+                    inputAdmission.observe(observation, nativeView.currentLogicalSize())
+                }
             }
             onULongObject(DRAGGING_ENTERED, fallback = NSDragOperation.NSDragOperationNone.rawValue) { info ->
                 dropAdmission.draggingEntered(info.ptr.asNSDraggingInfo())
@@ -331,6 +379,7 @@ internal class KffiAppKitWindowPort(
         }
         return try {
             val view = NSView(instance.receiver.ptr)
+            nativeView = view
             view.setFrame(contentRect(spec))
             view.registerKadreDropTypes()
             KffiViewOwner(view, instance, appearanceAdmission, inputAdmission, dropAdmission, textInputAdmission)
@@ -429,6 +478,7 @@ internal class KffiAppKitWindowPort(
             window = window.kffiWindow(),
             viewOwner = view.kffiViewOwner(),
             callbacks = callbacks,
+            touchGestureAvailability = touchGestureAvailability,
         )
     }
 
@@ -540,7 +590,8 @@ internal class KffiAppKitWindowPort(
                     DRAGGING_EXITED to ObjCMethodSignatures.VoidObject,
                     PERFORM_DRAG_OPERATION to ObjCMethodSignatures.BooleanObject,
                     CONCLUDE_DRAG_OPERATION to ObjCMethodSignatures.VoidObject,
-                ) + APPKIT_INPUT_EVENT_SELECTORS.associateWith { ObjCMethodSignatures.VoidObject },
+                ) + APPKIT_INPUT_EVENT_SELECTORS.associateWith { ObjCMethodSignatures.VoidObject } +
+                    APPKIT_TOUCH_GESTURE_EVENT_SELECTORS.associateWith { ObjCMethodSignatures.VoidObject },
             )
         }
 
@@ -564,6 +615,17 @@ private val APPKIT_INPUT_EVENT_SELECTORS = listOf(
     "mouseEntered:",
     "mouseExited:",
     "mouseCancelled:",
+)
+
+private val APPKIT_TOUCH_GESTURE_EVENT_SELECTORS = listOf(
+    "touchesBeganWithEvent:",
+    "touchesMovedWithEvent:",
+    "touchesEndedWithEvent:",
+    "touchesCancelledWithEvent:",
+    "magnifyWithEvent:",
+    "rotateWithEvent:",
+    "swipeWithEvent:",
+    "pressureChangeWithEvent:",
 )
 
 private const val INSERT_TEXT_REPLACEMENT_RANGE = "insertText:replacementRange:"
@@ -667,6 +729,136 @@ internal fun NSEventObservation.toAppKitInput(): AppKitInput? = when (type) {
     -> pointerInput(details as? NSEventObservation.Details.Pointer ?: return null)
 
     else -> null
+}
+
+internal data class AppKitTouchSample<Token : Any>(
+    val token: Token,
+    val phase: TouchPhase,
+    val normalizedX: Double,
+    val normalizedY: Double,
+)
+
+/** Validates contacts before mutating the KFFI-token to runtime-identity lifetime table. */
+internal class AppKitTouchAdapter<Token : Any> {
+    private data class ActiveContact(val nativeIdentity: Any, val lastValidPosition: LogicalPoint)
+
+    private val activeContacts = mutableMapOf<Token, ActiveContact>()
+
+    fun convert(samples: List<AppKitTouchSample<Token>>, contentSize: LogicalSize): List<AppKitInput.TouchChanged> =
+        samples.mapNotNull { sample -> convert(sample, contentSize) }
+
+    private fun convert(sample: AppKitTouchSample<Token>, contentSize: LogicalSize): AppKitInput.TouchChanged? {
+        val projected = projectNormalizedTouchPosition(
+            NSEventObservation.Position(sample.normalizedX, sample.normalizedY),
+            contentSize,
+        )
+        return when (sample.phase) {
+            TouchPhase.Started -> {
+                if (projected == null || activeContacts.containsKey(sample.token)) return null
+                val contact = ActiveContact(Any(), projected)
+                activeContacts[sample.token] = contact
+                AppKitInput.TouchChanged(contact.nativeIdentity, TouchPhase.Started, projected)
+            }
+
+            TouchPhase.Moved -> {
+                val contact = activeContacts[sample.token] ?: return null
+                if (projected == null) return null
+                activeContacts[sample.token] = contact.copy(lastValidPosition = projected)
+                AppKitInput.TouchChanged(contact.nativeIdentity, TouchPhase.Moved, projected)
+            }
+
+            TouchPhase.Ended,
+            TouchPhase.Cancelled,
+            -> {
+                val contact = activeContacts.remove(sample.token) ?: return null
+                if (projected == null) {
+                    AppKitInput.TouchChanged(
+                        contact.nativeIdentity,
+                        TouchPhase.Cancelled,
+                        contact.lastValidPosition,
+                    )
+                } else {
+                    AppKitInput.TouchChanged(contact.nativeIdentity, sample.phase, projected)
+                }
+            }
+        }
+    }
+
+    fun clear() = activeContacts.clear()
+}
+
+/** Projects AppKit's normalized indirect-trackpad coordinates into current logical content bounds. */
+internal fun projectNormalizedTouchPosition(
+    position: NSEventObservation.Position,
+    contentSize: LogicalSize,
+): LogicalPoint? {
+    if (!position.x.isFinite() || !position.y.isFinite()) return null
+    if (position.x !in 0.0..1.0 || position.y !in 0.0..1.0) return null
+    return LogicalPoint(position.x * contentSize.width, (1.0 - position.y) * contentSize.height)
+}
+
+internal fun NSTouchPhase.toKadreTouchPhaseOrNull(): TouchPhase? = when (this) {
+    NSTouchPhase.NSTouchPhaseBegan -> TouchPhase.Started
+    NSTouchPhase.NSTouchPhaseMoved -> TouchPhase.Moved
+    NSTouchPhase.NSTouchPhaseEnded -> TouchPhase.Ended
+    NSTouchPhase.NSTouchPhaseCancelled -> TouchPhase.Cancelled
+    else -> null
+}
+
+private fun NSEventPhase.toKadreTouchPhaseOrNull(): TouchPhase? = when (this) {
+    NSEventPhase.NSEventPhaseBegan -> TouchPhase.Started
+    NSEventPhase.NSEventPhaseChanged -> TouchPhase.Moved
+    NSEventPhase.NSEventPhaseEnded -> TouchPhase.Ended
+    NSEventPhase.NSEventPhaseCancelled -> TouchPhase.Cancelled
+    else -> null
+}
+
+internal fun NSEventObservation.toAppKitInputs(
+    contentSize: LogicalSize,
+    touchAdapter: AppKitTouchAdapter<NSEventObservation.TouchId>? = null,
+): List<AppKitInput> = when (val detail = details) {
+    is NSEventObservation.Details.Touches -> {
+        val adapter = touchAdapter ?: return emptyList()
+        adapter.convert(
+            detail.touches.mapNotNull { touch ->
+                AppKitTouchSample(
+                    token = touch.id,
+                    phase = touch.phase.toKadreTouchPhaseOrNull() ?: return@mapNotNull null,
+                    normalizedX = touch.position.x,
+                    normalizedY = touch.position.y,
+                )
+            },
+            contentSize,
+        )
+    }
+    is NSEventObservation.Details.Magnification -> {
+        if (type != NSEventType.NSEventTypeMagnify) return emptyList()
+        val phase = detail.phase.toKadreTouchPhaseOrNull() ?: return emptyList()
+        val scale = 1.0 + detail.value
+        if (!scale.isFinite() || scale <= 0.0) emptyList()
+        else listOf(AppKitInput.Gesture(GestureKind.Pinch, phase, scale = scale))
+    }
+    is NSEventObservation.Details.Rotation -> {
+        if (type != NSEventType.NSEventTypeRotate) return emptyList()
+        val phase = detail.phase.toKadreTouchPhaseOrNull() ?: return emptyList()
+        val radians = Math.toRadians(detail.value.toDouble())
+        if (!radians.isFinite()) emptyList()
+        else listOf(AppKitInput.Gesture(GestureKind.Rotation, phase, rotationRadians = radians))
+    }
+    is NSEventObservation.Details.Swipe -> {
+        if (type != NSEventType.NSEventTypeSwipe) return emptyList()
+        val phase = detail.phase.toKadreTouchPhaseOrNull() ?: return emptyList()
+        if (!detail.deltaX.isFinite() || !detail.deltaY.isFinite()) emptyList()
+        else listOf(AppKitInput.Gesture(GestureKind.Pan, phase, delta = LogicalDelta(detail.deltaX, detail.deltaY)))
+    }
+    is NSEventObservation.Details.Pressure -> {
+        if (type != NSEventType.NSEventTypePressure) return emptyList()
+        val phase = detail.phase.toKadreTouchPhaseOrNull() ?: return emptyList()
+        val pressure = detail.pressure.toDouble()
+        if (!pressure.isFinite() || pressure !in 0.0..1.0) emptyList()
+        else listOf(AppKitInput.Gesture(GestureKind.TouchpadPressure, phase, pressure = pressure))
+    }
+    else -> listOfNotNull(toAppKitInput())
 }
 
 private fun NSEventObservation.keyboardInput(
@@ -1317,10 +1509,17 @@ private class KffiViewInputAdmission {
     fun install(
         callbacks: AppKitInputCallbacks,
         pointerEnabled: Boolean,
+        touchGestureAvailability: AppKitTouchGestureAvailability,
         invokeNativeMove: (NSEvent) -> KadreResult<Unit>,
         deliverToTextInput: (NSEvent) -> Unit,
     ): AutoCloseable {
-        val observer = KffiViewInputObserver(callbacks, pointerEnabled, invokeNativeMove, deliverToTextInput)
+        val observer = KffiViewInputObserver(
+            callbacks,
+            pointerEnabled,
+            touchGestureAvailability,
+            invokeNativeMove,
+            deliverToTextInput,
+        )
         check(this.observer.compareAndSet(null, observer)) {
             "AppKit view input callbacks are already observed"
         }
@@ -1340,18 +1539,42 @@ private class KffiViewInputAdmission {
         }
     }
 
+    fun observe(observation: NSEventObservation, contentSize: LogicalSize) {
+        observer.get()?.observe(observation, contentSize)
+    }
+
     fun revoke(observer: KffiViewInputObserver) {
-        this.observer.compareAndSet(observer, null)
+        if (this.observer.compareAndSet(observer, null)) observer.revoke()
     }
 }
 
 private class KffiViewInputObserver(
     val callbacks: AppKitInputCallbacks,
     private val pointerEnabled: Boolean,
+    private val touchGestureAvailability: AppKitTouchGestureAvailability,
     val invokeNativeMove: (NSEvent) -> KadreResult<Unit>,
     val deliverToTextInput: (NSEvent) -> Unit,
 ) {
-    fun accepts(input: AppKitInput): Boolean = input is AppKitInput.KeyChanged || pointerEnabled
+    private val touchAdapter = AppKitTouchAdapter<NSEventObservation.TouchId>()
+
+    fun accepts(input: AppKitInput): Boolean = when (input) {
+        is AppKitInput.KeyChanged -> true
+        is AppKitInput.PointerEntered,
+        is AppKitInput.PointerMoved,
+        is AppKitInput.PointerButtonChanged,
+        AppKitInput.PointerLeft,
+        -> pointerEnabled
+        is AppKitInput.TouchChanged -> touchGestureAvailability.touchInstalled
+        is AppKitInput.Gesture -> input.kind in touchGestureAvailability.gestureKinds
+    }
+
+    fun observe(observation: NSEventObservation, contentSize: LogicalSize) {
+        observation.toAppKitInputs(contentSize, touchAdapter)
+            .filter(::accepts)
+            .forEach(callbacks.input)
+    }
+
+    fun revoke() = touchAdapter.clear()
 }
 
 private class KffiViewInputObservation(
@@ -1857,14 +2080,31 @@ private fun textInputPlatformFailure(code: String): KadreFailure.PlatformFailure
 private class KffiInputObserverOwner private constructor(
     private val observation: AutoCloseable,
     private val pointerTracking: ObjCPointerTracking,
+    private val touchObservation: AutoCloseable?,
+    override val touchInstalled: Boolean,
+    override val gestureKinds: Set<GestureKind>,
 ) : AppKitNativeInputObserverOwner {
     private val closed = AtomicBoolean(false)
+    private val revoked = AtomicBoolean(false)
 
     override val keyboardInstalled: Boolean = true
     override val pointerInstalled: Boolean = true
 
     override fun revokeCallbacks() {
-        observation.close()
+        if (!revoked.compareAndSet(false, true)) return
+        var failure: Throwable? = null
+        try {
+            observation.close()
+        } catch (closeFailure: Throwable) {
+            failure = closeFailure
+        }
+        try {
+            touchObservation?.close()
+        } catch (closeFailure: Throwable) {
+            if (failure != null && failure !== closeFailure) failure.addSuppressed(closeFailure)
+            else failure = closeFailure
+        }
+        failure?.let { throw it }
     }
 
     override fun close() {
@@ -1892,10 +2132,12 @@ private class KffiInputObserverOwner private constructor(
             window: NSWindow,
             viewOwner: KffiViewOwner,
             callbacks: AppKitInputCallbacks,
+            touchGestureAvailability: AppKitTouchGestureAvailability,
         ): KffiInputObserverOwner {
             val observation = viewOwner.inputAdmission.install(
                 callbacks = callbacks,
                 pointerEnabled = true,
+                touchGestureAvailability = touchGestureAvailability,
                 invokeNativeMove = { event ->
                     try {
                         window.performWindowDragWithEvent(event.ptr)
@@ -1909,13 +2151,28 @@ private class KffiInputObserverOwner private constructor(
                 deliverToTextInput = viewOwner::handleTextInputEvent,
             )
             var pointerTracking: ObjCPointerTracking? = null
+            var touchObservation: AutoCloseable? = null
             return try {
                 check(window.makeFirstResponder(viewOwner.view.ptr)) {
                     "AppKit refused the Kadre content view as first responder"
                 }
                 pointerTracking = viewOwner.view.installPointerTracking(window)
-                KffiInputObserverOwner(observation, checkNotNull(pointerTracking))
+                if (touchGestureAvailability.touchInstalled) {
+                    touchObservation = viewOwner.view.installIndirectTouchObservation(touchGestureAvailability)
+                }
+                KffiInputObserverOwner(
+                    observation = observation,
+                    pointerTracking = checkNotNull(pointerTracking),
+                    touchObservation = touchObservation,
+                    touchInstalled = touchObservation != null,
+                    gestureKinds = touchGestureAvailability.gestureKinds.toSet(),
+                )
             } catch (failure: Throwable) {
+                try {
+                    touchObservation?.close()
+                } catch (closeFailure: Throwable) {
+                    if (closeFailure !== failure) failure.addSuppressed(closeFailure)
+                }
                 try {
                     pointerTracking?.close()
                 } catch (closeFailure: Throwable) {
@@ -1930,6 +2187,19 @@ private class KffiInputObserverOwner private constructor(
             }
         }
     }
+}
+
+private fun NSView.installIndirectTouchObservation(
+    availability: AppKitTouchGestureAvailability,
+): AutoCloseable {
+    if (availability.usesAllowedTouchTypes) {
+        val previous = allowedTouchTypes()
+        setAllowedTouchTypes(previous + NSTouchTypeMask.NSTouchTypeMaskIndirect)
+        return AutoCloseable { setAllowedTouchTypes(previous) }
+    }
+    val previous = acceptsTouchEvents()
+    setAcceptsTouchEvents(true)
+    return AutoCloseable { setAcceptsTouchEvents(previous) }
 }
 
 /** Owns just the revocable callback admission; `NSView` remains the native destination owner. */
@@ -2167,6 +2437,11 @@ private fun readMetrics(view: NSView, window: NSWindow): SurfaceMetrics {
         scaleFactor = scaleFactor,
         safeAreaInsets = view.safeAreaInsets().toLogicalInsets(),
     )
+}
+
+private fun NSView.currentLogicalSize(): LogicalSize {
+    val size = bounds().size
+    return LogicalSize(size.width, size.height)
 }
 
 internal fun NSEdgeInsets.toLogicalInsets(): LogicalInsets = LogicalInsets(

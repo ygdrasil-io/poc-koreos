@@ -539,6 +539,7 @@ private class AppKitWindowCommandPort(
                 it.cleanupCompletion = CleanupCompletion.ProgrammaticClose
             }
         }
+        revokeInputObservationForCleanup(entry)
         scheduleNativeClose(entry)
         return OpenedWindowCloseOutcome.Accepted
     }
@@ -789,14 +790,16 @@ private class AppKitWindowCommandPort(
         var deliverInputInline = false
         var drainBufferedInputInline = false
         var entryToDrain: PeerEntry? = null
+        val cleanupWithdrawal = stimulus is AppKitSurfaceStimulus.InputObservationRevoked
         val accepted = synchronized(lock) {
             val entry = byPeer[stimulus.peerId]
             if (
                 entry != null &&
-                !closed &&
                 !entry.removed &&
-                !entry.surfaceCleanupReserved &&
-                !entry.closeAdmitted
+                (
+                    (cleanupWithdrawal && entry.commitIssued && entry.surfaceReadiness != RuntimeSurfaceReadiness.Closed) ||
+                        (!closed && !entry.surfaceCleanupReserved && !entry.closeAdmitted)
+                )
             ) {
                 when (entry.surfaceReadiness) {
                     RuntimeSurfaceReadiness.Buffering -> entry.bufferedSurfaceStimuli.addLast(stimulus)
@@ -829,8 +832,8 @@ private class AppKitWindowCommandPort(
             drainBufferedSurfaceStimuli(entryToDrain)
         }
         if (accepted && deliverInputInline) {
-            // A pointer-down interaction enters the runtime synchronously. Deliver its preceding
-            // live input callback inline, rather than waiting on this queue, to preserve AppKit order.
+            // Live input callbacks enter the runtime synchronously so a later callback cannot
+            // overtake them while the command queue is occupied.
             acceptSurfaceStimulus(stimulus)
         }
     }
@@ -959,9 +962,10 @@ private class AppKitWindowCommandPort(
     }
 
     private fun acceptSurfaceStimulus(stimulus: AppKitSurfaceStimulus) {
+        val cleanupWithdrawal = stimulus is AppKitSurfaceStimulus.InputObservationRevoked
         val surfaceId = synchronized(lock) {
             byPeer[stimulus.peerId]?.takeIf {
-                !it.removed && !it.surfaceCleanupReserved && it.commitIssued
+                !it.removed && it.commitIssued && (cleanupWithdrawal || !it.surfaceCleanupReserved)
             }?.surfaceId
         } ?: return
         surfaceStimulusSink(stimulus.toRuntime(surfaceId))
@@ -970,8 +974,11 @@ private class AppKitWindowCommandPort(
     private fun AppKitSurfaceStimulus.affectsSurfaceInput(): Boolean = when (this) {
         is AppKitSurfaceStimulus.FocusChanged,
         is AppKitSurfaceStimulus.InputObservationChanged,
+        is AppKitSurfaceStimulus.InputObservationRevoked,
         is AppKitSurfaceStimulus.KeyChanged,
         is AppKitSurfaceStimulus.PointerInput,
+        is AppKitSurfaceStimulus.TouchInput,
+        is AppKitSurfaceStimulus.GestureInput,
         is AppKitSurfaceStimulus.DropMoved,
         is AppKitSurfaceStimulus.DropExited,
         is AppKitSurfaceStimulus.DropPerformed,
@@ -1068,6 +1075,7 @@ private class AppKitWindowCommandPort(
 
             is AppKitWindowStimulus.NativeClosed -> {
                 synchronized(lock) { entry.surfaceCleanupReserved = true }
+                revokeInputObservationForCleanup(entry)
                 entry.peer?.markNativeClosed()
                 issueNativeTerminal(entry)
                 scheduleCleanup(entry)
@@ -1547,6 +1555,13 @@ private class AppKitWindowCommandPort(
         }
         val failures = mutableListOf<Throwable>()
         try {
+            peer?.revokeInputObservationForCleanup()
+        } catch (cause: Exception) {
+            failures += cause
+        } catch (cause: LinkageError) {
+            failures += cause
+        }
+        try {
             when (val close = closeExclusivePresentation(presentation)) {
                 is ExclusivePresentationCloseAttempt.Terminal -> {
                     failures += close.failures
@@ -1564,6 +1579,16 @@ private class AppKitWindowCommandPort(
         failures.forEach(::reportFailure)
         issueNativeTerminal(entry)
         scheduleCleanup(entry)
+    }
+
+    private fun revokeInputObservationForCleanup(entry: PeerEntry) {
+        try {
+            entry.peer?.revokeInputObservationForCleanup()
+        } catch (cause: Exception) {
+            reportFailure(cause)
+        } catch (cause: LinkageError) {
+            reportFailure(cause)
+        }
     }
 
     private suspend fun <R> withDesktopHandle(
@@ -2197,6 +2222,15 @@ private fun AppKitSurfaceStimulus.toRuntime(surfaceId: SurfaceId): SurfaceStimul
         surfaceId,
         keyboardInstalled,
         pointerInstalled,
+        touchInstalled,
+        gestureKinds,
+    )
+    is AppKitSurfaceStimulus.InputObservationRevoked -> SurfaceStimulus.InputObservationChanged(
+        surfaceId,
+        keyboardInstalled = false,
+        pointerInstalled = false,
+        touchInstalled = false,
+        gestureKinds = emptySet(),
     )
     is AppKitSurfaceStimulus.KeyChanged -> SurfaceStimulus.KeyChanged(
         surfaceId,
@@ -2235,7 +2269,25 @@ private fun AppKitSurfaceStimulus.toRuntime(surfaceId: SurfaceId): SurfaceStimul
             org.graphiks.kadre.input.PointerKind.Mouse,
         )
         is AppKitInput.KeyChanged -> error("key input must not use a pointer stimulus")
+        is AppKitInput.TouchChanged -> error("touch input must not use a pointer stimulus")
+        is AppKitInput.Gesture -> error("gesture input must not use a pointer stimulus")
     }
+    is AppKitSurfaceStimulus.TouchInput -> SurfaceStimulus.TouchChanged(
+        surfaceId = surfaceId,
+        nativeIdentity = input.nativeIdentity,
+        phase = input.phase,
+        position = input.position,
+        pressure = input.pressure,
+    )
+    is AppKitSurfaceStimulus.GestureInput -> SurfaceStimulus.Gesture(
+        surfaceId = surfaceId,
+        kind = input.kind,
+        phase = input.phase,
+        delta = input.delta,
+        scale = input.scale,
+        rotationRadians = input.rotationRadians,
+        pressure = input.pressure,
+    )
     is AppKitSurfaceStimulus.DropMoved -> SurfaceStimulus.DropMoved(surfaceId, offerId, position)
     is AppKitSurfaceStimulus.DropExited -> SurfaceStimulus.DropExited(surfaceId, offerId)
     is AppKitSurfaceStimulus.DropPerformed -> SurfaceStimulus.DropPerformed(surfaceId, offerId, position)

@@ -55,18 +55,21 @@ import org.graphiks.kadre.input.DropOffer
 import org.graphiks.kadre.input.DropTransfer
 import org.graphiks.kadre.input.InputEvent
 import org.graphiks.kadre.input.InputStateResetReason
+import org.graphiks.kadre.input.GestureKind
 import org.graphiks.kadre.input.PointerButton
 import org.graphiks.kadre.input.PointerButtonState
 import org.graphiks.kadre.input.TextDocumentRevision
 import org.graphiks.kadre.input.TextInputConfig
 import org.graphiks.kadre.input.TextInputEvent
 import org.graphiks.kadre.input.TextRange
+import org.graphiks.kadre.input.TouchPhase
 import org.graphiks.kadre.interaction.InteractionAction
 import org.graphiks.kadre.interaction.InteractionActionOutcome
 import org.graphiks.kadre.interaction.InteractionEvent
 import org.graphiks.kadre.interaction.InteractionHandler
 import org.graphiks.kadre.interaction.InteractionKind
 import org.graphiks.kadre.policy.KadrePolicies
+import org.graphiks.kadre.surface.LogicalDelta
 import org.graphiks.kadre.surface.LogicalInsets
 import org.graphiks.kadre.surface.LogicalPoint
 import org.graphiks.kadre.surface.LogicalSize
@@ -3843,6 +3846,136 @@ class AppKitWindowRuntimeDriverTest {
     }
 
     @Test
+    fun liveTouchAndGestureCannotBeOvertakenByLaterKeyboardAndPointerInput() = runBlocking {
+        val queueBlocked = CountDownLatch(1)
+        val releaseQueue = CountDownLatch(1)
+        val blockOnce = AtomicBoolean(true)
+        val nativeTouchIdentity = Any()
+        val touchPosition = LogicalPoint(13.0, 17.0)
+        val pointerPosition = LogicalPoint(19.0, 23.0)
+        val physicalKey = PhysicalKey.Unidentified("ordered-after-gesture")
+        val port = DeterministicAppKitNativeWindowPort(
+            name = "live-touch-gesture-order",
+            inputObservationInstalled = true,
+            beforeGeometrySetter = {
+                if (blockOnce.compareAndSet(true, false)) {
+                    queueBlocked.countDown()
+                    check(releaseQueue.await(2, TimeUnit.SECONDS))
+                }
+            },
+        )
+        val driver = AppKitWindowRuntimeDriverFactory { port }.create(
+            resources = KadrePolicies.Default.resources,
+            publicAppKitCapabilities = true,
+            enabledWindowUpdateCapabilities = publicAppKitUpdateProperties(),
+        )
+
+        try {
+            val window = openedWindow(driver, WindowSpec(title = "live-touch-gesture-order"))
+            val delivered = async(start = CoroutineStart.UNDISPATCHED) {
+                window.surface.input.events.take(4).toList()
+            }
+            val blockingUpdate = async(Dispatchers.Default) {
+                window.apply(WindowUpdate(title = PropertyChange.Set("queue-blocked")))
+            }
+            assertTrue(queueBlocked.await(2, TimeUnit.SECONDS))
+
+            port.emitInput(
+                "live-touch-gesture-order",
+                AppKitInput.TouchChanged(nativeTouchIdentity, TouchPhase.Started, touchPosition),
+            )
+            port.emitInput(
+                "live-touch-gesture-order",
+                AppKitInput.Gesture(
+                    kind = GestureKind.Pan,
+                    phase = TouchPhase.Moved,
+                    delta = LogicalDelta(2.0, 3.0),
+                ),
+            )
+            port.emitInput(
+                "live-touch-gesture-order",
+                AppKitInput.KeyChanged(
+                    physicalKey,
+                    LogicalKey.Unidentified("ordered-after-gesture"),
+                    KeyLocation.Standard,
+                    KeyState.Pressed,
+                    repeat = false,
+                    KeyboardModifiers(emptySet()),
+                ),
+            )
+            port.emitInput("live-touch-gesture-order", AppKitInput.PointerEntered(pointerPosition))
+
+            val events = withTimeout(2.seconds) { delivered.await() }
+            assertIs<InputEvent.TouchChanged>(events[0])
+            assertIs<InputEvent.Gesture>(events[1])
+            assertIs<InputEvent.Key>(events[2])
+            assertIs<InputEvent.PointerEntered>(events[3])
+            assertFalse(blockingUpdate.isCompleted)
+
+            releaseQueue.countDown()
+            assertIs<WindowUpdateOutcome.Applied>(withTimeout(2.seconds) { blockingUpdate.await() }.successValue())
+            Unit
+        } finally {
+            releaseQueue.countDown()
+            driver.close()
+        }
+    }
+
+    @Test
+    fun touchAndGestureTakeOverTheUnownedReadinessDrainInNativeCallbackOrder() = runBlocking {
+        val drainPaused = CountDownLatch(1)
+        val releaseDrain = CountDownLatch(1)
+        val nativeTouchIdentity = Any()
+        val port = DeterministicAppKitNativeWindowPort(
+            name = "touch-gesture-readiness-order",
+            inputObservationInstalled = true,
+        )
+        val driver = AppKitWindowRuntimeDriverFactory { port }.create(
+            resources = KadrePolicies.Default.resources,
+            beforeRuntimeSurfaceReadyDrain = {
+                drainPaused.countDown()
+                check(releaseDrain.await(2, TimeUnit.SECONDS))
+            },
+        )
+
+        try {
+            val request = driver.manager.requestWindow(WindowSpec(title = "touch-gesture-readiness-order"))
+                .successValue()
+            assertTrue(drainPaused.await(2, TimeUnit.SECONDS))
+            val window = assertIs<WindowRequestOutcome.OpenedHere>(request.await()).window
+            val delivered = async(start = CoroutineStart.UNDISPATCHED) {
+                window.surface.input.events.take(2).toList()
+            }
+
+            port.emitInput(
+                "touch-gesture-readiness-order",
+                AppKitInput.TouchChanged(
+                    nativeTouchIdentity,
+                    TouchPhase.Started,
+                    LogicalPoint(29.0, 31.0),
+                ),
+            )
+            port.emitInput(
+                "touch-gesture-readiness-order",
+                AppKitInput.Gesture(
+                    kind = GestureKind.Pinch,
+                    phase = TouchPhase.Moved,
+                    scale = 1.1,
+                ),
+            )
+
+            val events = withTimeout(2.seconds) { delivered.await() }
+            assertIs<InputEvent.TouchChanged>(events[0])
+            assertIs<InputEvent.Gesture>(events[1])
+            assertEquals(2L, window.surface.input.state.value.revision.value)
+            Unit
+        } finally {
+            releaseDrain.countDown()
+            driver.close()
+        }
+    }
+
+    @Test
     fun readinessHandoffDrainsPreCommitObservationBeforeLivePointerDown() = runBlocking {
         data class HandlerInputSnapshot(
             val revision: Long,
@@ -4622,6 +4755,55 @@ class AppKitWindowRuntimeDriverTest {
     }
 
     @Test
+    fun closeWithdrawsInputCapabilityOnceBeforeViewReleaseDespiteNativeRestorationFailure() = runBlocking {
+        val restorationFailure = IllegalStateException("touch-admission-restore")
+        val reported = CopyOnWriteArrayList<Throwable>()
+        val gestures = setOf(GestureKind.Pan, GestureKind.Pinch)
+        val port = DeterministicAppKitNativeWindowPort(
+            name = "input-withdrawal-cleanup",
+            inputObservationInstalled = true,
+            inputTouchInstalled = true,
+            inputGestureKinds = gestures,
+            inputRevocationFailure = restorationFailure,
+        )
+        val driver = AppKitWindowRuntimeDriverFactory { port }.create(
+            resources = KadrePolicies.Default.resources,
+            failureReporter = RuntimeFailureReporter(reported::add),
+        )
+
+        try {
+            val window = openedWindow(driver, WindowSpec(title = "input-withdrawal-cleanup"))
+            assertEquals(FeatureAvailability.Available, window.surface.input.state.value.capabilities.touch)
+            assertEquals(
+                gestures,
+                assertIs<Capability.Supported<Set<GestureKind>>>(
+                    window.surface.input.state.value.capabilities.gestures,
+                ).constraints,
+            )
+
+            port.emitNativeClosed("input-withdrawal-cleanup")
+            withTimeout(2.seconds) {
+                window.state.first { it.phase == WindowPhase.Closed }
+                while ("release:view" !in port.inputCleanupTrace) yield()
+            }
+
+            val closedInput = window.surface.input.state.value
+            assertEquals(2L, closedInput.revision.value)
+            assertEquals(FeatureAvailability.Unsupported, closedInput.capabilities.touch)
+            assertIs<Capability.Unsupported>(closedInput.capabilities.gestures)
+            assertEquals(1, port.inputCleanupTrace.count { it == "revoke:input" })
+            assertTrue(
+                port.inputCleanupTrace.indexOf("revoke:input") <
+                    port.inputCleanupTrace.indexOf("release:view"),
+            )
+            assertEquals(1, reported.size)
+            assertTrue(reported.single() === restorationFailure)
+        } finally {
+            driver.close()
+        }
+    }
+
+    @Test
     fun requesterCancellationAfterCommitReservationDoesNotRollBackTheOpenedWindow() = runBlocking {
         val commitReserved = CountDownLatch(1)
         val allowCommitDelivery = CountDownLatch(1)
@@ -5293,6 +5475,9 @@ internal class DeterministicAppKitNativeWindowPort(
     private val afterSurfaceActivationBeforeCommit: (DeterministicAppKitNativeWindowPort) -> Unit = { },
     private val inputObservationInstalled: Boolean = false,
     private val inputObservationInstalledFor: Set<String> = emptySet(),
+    private val inputTouchInstalled: Boolean = false,
+    private val inputGestureKinds: Set<GestureKind> = emptySet(),
+    private val inputRevocationFailure: Throwable? = null,
     private val dropObservationInstalled: Boolean = false,
     private val afterInputObservationBeforeCommit: (DeterministicAppKitNativeWindowPort) -> Unit = { },
     private val effectiveGeometry: AppKitWindowGeometrySnapshot? = null,
@@ -5342,6 +5527,7 @@ internal class DeterministicAppKitNativeWindowPort(
     val fullscreenToggleLevels = CopyOnWriteArrayList<WindowLevel>()
     val fullscreenRestoreLevels = CopyOnWriteArrayList<WindowLevel>()
     val fullscreenReadbackTitles = CopyOnWriteArrayList<String>()
+    val inputCleanupTrace = CopyOnWriteArrayList<String>()
     private val nativeMoveCallCounts = linkedMapOf<String, Int>()
     private val nativeMoveThreads = linkedMapOf<String, Thread>()
     private val ownerThread = Thread.currentThread()
@@ -5395,7 +5581,8 @@ internal class DeterministicAppKitNativeWindowPort(
         }
     }
 
-    override fun createContentView(spec: WindowSpec): AppKitNativeViewOwner = RecordingNativeViewOwner()
+    override fun createContentView(spec: WindowSpec): AppKitNativeViewOwner =
+        RecordingNativeViewOwner(inputCleanupTrace)
 
     override fun textInputPort(view: AppKitNativeViewOwner): AppKitNativeTextInputPort =
         configuredTextInputPort ?: super.textInputPort(view)
@@ -5597,7 +5784,13 @@ internal class DeterministicAppKitNativeWindowPort(
     ): AppKitNativeInputObserverOwner? = if (
         inputObservationInstalled || window.recordingWindow().identity in inputObservationInstalledFor
     ) {
-        RecordingNativeInputObserver(callbacks).also { observer ->
+        RecordingNativeInputObserver(
+            callbacks,
+            inputCleanupTrace,
+            inputTouchInstalled,
+            inputGestureKinds,
+            inputRevocationFailure,
+        ).also { observer ->
         val identity = window.recordingWindow().identity
         check(inputObservers.put(identity, observer) == null) { "$name duplicate test input observer" }
         afterInputObservationBeforeCommit(this)
@@ -5796,11 +5989,13 @@ internal class DeterministicAppKitNativeWindowPort(
         }
     }
 
-    private class RecordingNativeViewOwner : AppKitNativeViewOwner {
+    private class RecordingNativeViewOwner(
+        private val inputCleanupTrace: MutableList<String>,
+    ) : AppKitNativeViewOwner {
         private val released = AtomicBoolean(false)
 
         override fun close() {
-            released.compareAndSet(false, true)
+            if (released.compareAndSet(false, true)) inputCleanupTrace += "release:view"
         }
     }
 
@@ -5880,8 +6075,13 @@ internal class DeterministicAppKitNativeWindowPort(
 
     private class RecordingNativeInputObserver(
         private val callbacks: AppKitInputCallbacks,
+        private val cleanupTrace: MutableList<String>,
+        override val touchInstalled: Boolean,
+        override val gestureKinds: Set<GestureKind>,
+        private val revocationFailure: Throwable?,
     ) : AppKitNativeInputObserverOwner {
         private val accepting = AtomicBoolean(true)
+        private val revoked = AtomicBoolean(false)
         override val keyboardInstalled: Boolean = true
         override val pointerInstalled: Boolean = true
 
@@ -5904,10 +6104,15 @@ internal class DeterministicAppKitNativeWindowPort(
         }
 
         override fun revokeCallbacks() {
+            if (!revoked.compareAndSet(false, true)) return
+            cleanupTrace += "revoke:input"
             accepting.set(false)
+            revocationFailure?.let { throw it }
         }
 
-        override fun close() = Unit
+        override fun close() {
+            cleanupTrace += "release:input"
+        }
     }
 
     private class RecordingNativeDropObserver(
