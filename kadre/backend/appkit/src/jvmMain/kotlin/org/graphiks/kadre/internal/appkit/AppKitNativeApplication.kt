@@ -119,6 +119,7 @@ internal class KffiAppKitNativeApplication : AppKitNativeApplication {
         }
         try {
             current.run()
+            eventLoopAdmitted = false
             pendingStopThread?.join()
         } finally {
             eventLoopAdmitted = false
