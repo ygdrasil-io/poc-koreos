@@ -15,7 +15,9 @@ import org.graphiks.kadre.application.SessionOutcome
 import org.graphiks.kadre.application.SessionState
 import org.graphiks.kadre.application.SessionStopReason
 import org.graphiks.kadre.application.VisibilityState
+import org.graphiks.kadre.diagnostics.DelicateKadreApi
 import org.graphiks.kadre.diagnostics.KadreFailure
+import org.graphiks.kadre.diagnostics.KadreOperation
 import org.graphiks.kadre.diagnostics.KadrePlatform
 import org.graphiks.kadre.diagnostics.KadreResourceKind
 import org.graphiks.kadre.diagnostics.KadreResult
@@ -29,6 +31,35 @@ import kotlin.test.assertIs
 import kotlin.time.Duration.Companion.seconds
 
 class WebHostSessionTest {
+    @OptIn(DelicateKadreApi::class)
+    @Test
+    fun hostSurfaceRawInputIsExplicitlyUnsupported() = runTest {
+        val scopeReady = CompletableDeferred<KadreScope>()
+        val session = successful(
+            WebHostSession(RecordingPort(Any(), snapshot()), WebHostRegistry()).attach(
+                this,
+                KadreApplicationFactory {
+                    KadreApplication {
+                        scopeReady.complete(this)
+                        awaitCancellation()
+                    }
+                },
+                KadrePolicies.Default,
+            ),
+        )
+        testScheduler.runCurrent()
+
+        try {
+            assertEquals(
+                KadreResult.Failure(KadreFailure.Unsupported(KadreOperation.RawInputAccess)),
+                scopeReady.await().primarySurface.value?.input?.requestRawInput(),
+            )
+        } finally {
+            session.requestStop()
+            testScheduler.runCurrent()
+        }
+    }
+
     @Test
     fun registryUsesReferentialIdentityWhenValuesAreEqual() {
         val registry = WebHostRegistry()

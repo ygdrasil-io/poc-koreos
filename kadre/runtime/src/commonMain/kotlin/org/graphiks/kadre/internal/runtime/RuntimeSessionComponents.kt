@@ -3,6 +3,7 @@ package org.graphiks.kadre.internal.runtime
 import kotlinx.coroutines.CoroutineScope
 import org.graphiks.kadre.application.EventStamp
 import org.graphiks.kadre.application.SessionId
+import org.graphiks.kadre.diagnostics.KadreDiagnostic
 import org.graphiks.kadre.diagnostics.KadreFailure
 import org.graphiks.kadre.policy.InputDeliveryPolicy
 import org.graphiks.kadre.policy.WindowDeliveryPolicy
@@ -27,19 +28,29 @@ public fun interface RuntimeSessionComponentsFactory {
  */
 public class RuntimeSessionComponents private constructor(
     public val windows: WindowManager,
+    /**
+     * Optional session-owned raw-input port consumed by [RuntimeSessionWindowManager].
+     *
+     * Components retain ownership until their manager has completed configuration. Closing the
+     * component therefore closes the port too; implementations must make [RawInputPort.close]
+     * idempotent.
+     */
+    public val rawInputPort: RawInputPort?,
     private val closeAction: () -> Unit,
     primarySurface: RuntimePrimarySurface?,
 ) : AutoCloseable {
     public constructor(
         windows: WindowManager,
+        rawInputPort: RawInputPort? = null,
         closeAction: () -> Unit = {},
-    ) : this(windows, closeAction, null)
+    ) : this(windows, rawInputPort, closeAction, null)
 
     public constructor(
         windows: WindowManager,
         primarySurface: RuntimePrimarySurface,
+        rawInputPort: RawInputPort? = null,
         closeAction: () -> Unit = {},
-    ) : this(windows, closeAction, primarySurface)
+    ) : this(windows, rawInputPort, closeAction, primarySurface)
 
     private val lock = RuntimeLock()
     private var closed = false
@@ -57,11 +68,23 @@ public class RuntimeSessionComponents private constructor(
             }
         }
         if (shouldClose) {
+            var failure: Throwable? = null
             try {
                 closePrimarySurface?.invoke()
-            } finally {
-                closeAction()
+            } catch (cause: Throwable) {
+                failure = cause
             }
+            try {
+                closeAction()
+            } catch (cause: Throwable) {
+                failure = failure.withSuppressed(cause)
+            }
+            try {
+                rawInputPort?.close()
+            } catch (cause: Throwable) {
+                failure = failure.withSuppressed(cause)
+            }
+            failure?.let { throw it }
         }
     }
 
@@ -73,6 +96,8 @@ public class RuntimeSessionComponents private constructor(
         collectorAllocator: Any,
         maxCollectorsPerFlow: Int,
         dropTransferScope: CoroutineScope,
+        diagnostics: (KadreDiagnostic) -> Unit,
+        rawInputPort: RawInputPort?,
     ) {
         (windows as? RuntimeSessionWindowManager)?.installSessionConfiguration(
             deliveryPolicy,
@@ -82,6 +107,8 @@ public class RuntimeSessionComponents private constructor(
             collectorAllocator,
             maxCollectorsPerFlow,
             dropTransferScope,
+            diagnostics,
+            rawInputPort,
         )
     }
 }
@@ -95,6 +122,8 @@ internal interface RuntimeSessionWindowManager {
         collectorAllocator: Any,
         maxCollectorsPerFlow: Int,
         dropTransferScope: CoroutineScope?,
+        diagnostics: (KadreDiagnostic) -> Unit,
+        rawInputPort: RawInputPort?,
     )
 }
 
@@ -116,4 +145,9 @@ public class RuntimePrimarySurface public constructor(
     internal fun close() {
         teardown()
     }
+}
+
+private fun Throwable?.withSuppressed(cause: Throwable): Throwable = when (this) {
+    null -> cause
+    else -> apply { addSuppressed(cause) }
 }

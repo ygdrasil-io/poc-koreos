@@ -212,7 +212,7 @@ Le registre répartit les scénarios au moins sur ces risques :
 | clavier/pointer/touch | snapshot avant event, unknown conservé, reset sans releases synthétiques, deltas finis |
 | IME | offsets UTF-16, selection valide, anti-stale revision, fermeture de composition |
 | drop | offre unique, claim single-winner, timeout, single-use/replayable, chunks copiés et bornés |
-| raw input | permission, suspension récupérable, overflow terminal, owner fermé |
+| raw input | admission avant native/permission, fan-out explicite isolé par accès, suspension récupérable, overflow terminal diagnostiqué, cancellation tardive et owner fermé |
 | gamepad | routing multi-session, neutralisation, reconnexion avec nouvel ID, ownership des effets |
 | capture | permission/source completeness, stale source, picker, single collector, lease frame, reconfigure et budget octets |
 

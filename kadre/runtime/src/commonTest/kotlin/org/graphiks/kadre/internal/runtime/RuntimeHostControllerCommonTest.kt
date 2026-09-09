@@ -18,6 +18,9 @@ import org.graphiks.kadre.application.KadreSession
 import org.graphiks.kadre.application.SessionOutcome
 import org.graphiks.kadre.application.SessionState
 import org.graphiks.kadre.application.SessionStopReason
+import org.graphiks.kadre.diagnostics.DelicateKadreApi
+import org.graphiks.kadre.diagnostics.KadreFailure
+import org.graphiks.kadre.diagnostics.KadreOperation
 import org.graphiks.kadre.diagnostics.KadrePlatform
 import org.graphiks.kadre.diagnostics.KadreResult
 import org.graphiks.kadre.policy.KadrePolicies
@@ -30,6 +33,7 @@ import org.graphiks.kadre.surface.PhysicalSize
 import org.graphiks.kadre.surface.PointerCaptureMode
 import org.graphiks.kadre.surface.SurfaceAttachmentState
 import org.graphiks.kadre.surface.SurfaceFocus
+import org.graphiks.kadre.surface.SurfaceId
 import org.graphiks.kadre.surface.SurfaceOcclusion
 import org.graphiks.kadre.surface.SurfaceRevision
 import org.graphiks.kadre.surface.SurfaceState
@@ -45,6 +49,19 @@ import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
 class RuntimeHostControllerCommonTest {
+    @OptIn(DelicateKadreApi::class)
+    @Test
+    fun hostSurfaceRawInputIsExplicitlyUnsupported() = runTest {
+        val surface = RuntimeHostSurface(SurfaceId(1L), initialSurfaceState())
+
+        val result = surface.input.requestRawInput()
+
+        assertEquals(
+            KadreResult.Failure(KadreFailure.Unsupported(KadreOperation.RawInputAccess)),
+            result,
+        )
+    }
+
     @Test
     fun attachedHostExposesItsPrimarySurfaceWithoutCreatingAWindow() = runTest {
         lateinit var suppliedSurface: RuntimeHostSurface

@@ -16,6 +16,7 @@ import org.graphiks.kadre.application.EventStamp
 import org.graphiks.kadre.application.SessionOutcome
 import org.graphiks.kadre.application.SessionState
 import org.graphiks.kadre.diagnostics.Capability
+import org.graphiks.kadre.diagnostics.KadreDiagnostic
 import org.graphiks.kadre.diagnostics.KadreFailure
 import org.graphiks.kadre.diagnostics.KadreOperation
 import org.graphiks.kadre.diagnostics.KadrePlatform
@@ -148,6 +149,20 @@ class RuntimeSessionComponentsTest {
 
         assertEquals(1, components[0].closeCount)
         assertEquals(1, components[1].closeCount)
+    }
+
+    @Test
+    fun rawInputPortIsOwnedByItsSessionComponents() {
+        val rawInputPort = RecordingRawInputPort()
+        val components = RuntimeSessionComponents(
+            windows = RecordingWindowManager(),
+            rawInputPort = rawInputPort,
+        )
+
+        components.close()
+        components.close()
+
+        assertEquals(1, rawInputPort.closeCount)
     }
 
     @Test
@@ -317,6 +332,8 @@ class RuntimeSessionComponentsTest {
             collectorAllocator: Any,
             maxCollectorsPerFlow: Int,
             dropTransferScope: CoroutineScope?,
+            diagnostics: (KadreDiagnostic) -> Unit,
+            rawInputPort: RawInputPort?,
         ) {
             error("configuration")
         }
@@ -341,4 +358,16 @@ class RuntimeSessionComponentsTest {
             revision = org.graphiks.kadre.surface.SurfaceRevision(0L),
         ),
     )
+
+    private class RecordingRawInputPort : RawInputPort {
+        var closeCount = 0
+            private set
+
+        override suspend fun requestAccess(): KadreResult<RawInputPortLease> =
+            error("this ownership test never requests raw input")
+
+        override fun close() {
+            closeCount += 1
+        }
+    }
 }

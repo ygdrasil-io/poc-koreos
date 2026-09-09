@@ -17,21 +17,30 @@ kotlin {
 }
 
 val jvmMain = kotlin.targets.getByName("jvm").compilations.getByName("main")
-val contractEvidenceGateIds = listOf(
+val webContractIds = listOf("BCK-001", "INT-002", "INT-003", "INT-004")
+val appKitContractIds = listOf(
     "APK-001", "APK-002", "APK-003", "APK-004", "APK-005", "APK-006",
     "APK-007", "APK-008", "APK-009", "APK-010", "APK-011", "APK-012",
-    "INP-001", "WIN-001", "WIN-002", "WIN-003", "WIN-004", "WIN-005", "WIN-006",
-    "BCK-001", "INT-001", "INT-002", "INT-003", "INT-004",
+    "APK-013", "APK-014", "APK-015", "APK-016", "APK-017", "APK-018",
 )
-val webContractIds = listOf("BCK-001", "INT-002", "INT-003", "INT-004")
-val appKitContractIds = contractEvidenceGateIds.filter { it.startsWith("APK-") }
-val runtimeContractIds = contractEvidenceGateIds.filter { contractId ->
-    contractId !in webContractIds &&
-        (contractId.startsWith("INP-") || contractId.startsWith("WIN-") || contractId.startsWith("INT-"))
+val runtimeContractIds = listOf(
+    "INP-001", "INP-002",
+    "WIN-001", "WIN-002", "WIN-003", "WIN-004", "WIN-005", "WIN-006", "WIN-007", "WIN-008",
+    "DSP-001", "RUN-007", "RUN-008", "INT-001",
+)
+val contractEvidenceGateIds = appKitContractIds + runtimeContractIds + webContractIds
+check(contractEvidenceGateIds.distinct().size == contractEvidenceGateIds.size) {
+    "each configured contract evidence gate must have exactly one explicit producer"
 }
-check((appKitContractIds + runtimeContractIds + webContractIds).toSet() == contractEvidenceGateIds.toSet()) {
-    "every configured contract evidence gate must have an explicit producer"
-}
+val activeContractIds = rootProject.file("kadre/contracts/registry/contracts.tsv")
+    .readLines()
+    .drop(1)
+    .map { line -> line.split('\t') }
+    .filter { columns -> columns[1] == "active" }
+    .map { columns -> columns.first() }
+    .toSet()
+val activeAppKitContractIds = appKitContractIds.filter(activeContractIds::contains)
+val activeRuntimeContractIds = runtimeContractIds.filter(activeContractIds::contains)
 val contractEvidenceTarget = "jvm"
 val gitSha = Regex("[0-9a-fA-F]{40}|[0-9a-fA-F]{64}")
 val repositoryHead = providers.exec {
@@ -75,7 +84,7 @@ val appKitJUnitReports = rootProject.file("kadre/backend/appkit/build/test-resul
 val appKitStandaloneLoopJUnitReports = rootProject.file("kadre/backend/appkit/build/test-results/appKitStandaloneLoopTest")
 val appKitContractEvidenceDirectory = rootProject.file("kadre/backend/appkit/build/contract-evidence")
 val appKitContractAdapter = "appkit-jvm"
-val appKitContractEvidenceTasks = appKitContractIds.map { contractId ->
+val appKitContractEvidenceTasks = activeAppKitContractIds.map { contractId ->
     tasks.register<JavaExec>("generateAppKit${contractId.replace("-", "")}ContractEvidence") {
         group = "verification"
         description = "Generates and validates $contractId evidence from AppKit JUnit reports."
@@ -120,7 +129,7 @@ val validateAppKitContractEvidence by tasks.registering(JavaExec::class) {
         contractEvidenceCommit.get(),
         contractEvidenceTarget,
         "junit",
-        appKitContractIds.joinToString(separator = ","),
+        activeAppKitContractIds.joinToString(separator = ","),
         rootProject.file("kadre/backend/appkit/build").absolutePath,
         listOf(
             "test-results/jvmTest",
@@ -133,7 +142,7 @@ val validateAppKitContractEvidence by tasks.registering(JavaExec::class) {
     inputs.property("contractCommit", contractEvidenceCommit)
     inputs.property("contractTarget", contractEvidenceTarget)
     inputs.property("contractExecutions", "junit")
-    inputs.property("contractGateIds", appKitContractIds)
+    inputs.property("contractGateIds", activeAppKitContractIds)
     inputs.property(
         "junitReportRelativeDirectories",
         listOf("test-results/jvmTest", "test-results/appKitStandaloneLoopTest"),
@@ -152,7 +161,7 @@ val runtimeContractMapping = rootProject.file("kadre/runtime/contracts/evidence.
 val runtimeJUnitReports = rootProject.file("kadre/runtime/build/test-results/jvmTest")
 val runtimeContractEvidenceDirectory = rootProject.file("kadre/runtime/build/contract-evidence")
 val runtimeContractAdapter = "runtime-jvm"
-val runtimeContractEvidenceTasks = runtimeContractIds.map { contractId ->
+val runtimeContractEvidenceTasks = activeRuntimeContractIds.map { contractId ->
     tasks.register<JavaExec>("generateRuntime${contractId.replace("-", "")}ContractEvidence") {
         group = "verification"
         description = "Generates and validates $contractId evidence from runtime JUnit reports."
@@ -192,7 +201,7 @@ val validateRuntimeContractEvidence by tasks.registering(JavaExec::class) {
         contractEvidenceCommit.get(),
         contractEvidenceTarget,
         "junit",
-        runtimeContractIds.joinToString(separator = ","),
+        activeRuntimeContractIds.joinToString(separator = ","),
         rootProject.file("kadre/runtime/build").absolutePath,
         "test-results/jvmTest",
     )
@@ -202,7 +211,7 @@ val validateRuntimeContractEvidence by tasks.registering(JavaExec::class) {
     inputs.property("contractCommit", contractEvidenceCommit)
     inputs.property("contractTarget", contractEvidenceTarget)
     inputs.property("contractExecutions", "junit")
-    inputs.property("contractGateIds", runtimeContractIds)
+    inputs.property("contractGateIds", activeRuntimeContractIds)
     inputs.property("junitReportRelativeDirectories", listOf("test-results/jvmTest"))
 }
 

@@ -11,6 +11,7 @@ import org.graphiks.kadre.application.KadreApplicationFactory
 import org.graphiks.kadre.application.KadreSession
 import org.graphiks.kadre.application.LifecycleState
 import org.graphiks.kadre.diagnostics.Capability
+import org.graphiks.kadre.diagnostics.DelicateKadreApi
 import org.graphiks.kadre.diagnostics.FeatureAvailability
 import org.graphiks.kadre.diagnostics.KadreFailure
 import org.graphiks.kadre.diagnostics.KadreOperation
@@ -21,6 +22,7 @@ import org.graphiks.kadre.input.InputCapabilities
 import org.graphiks.kadre.input.InputStateRevision
 import org.graphiks.kadre.input.KeyboardModifiers
 import org.graphiks.kadre.input.KeyboardState
+import org.graphiks.kadre.input.RawInputAccess
 import org.graphiks.kadre.input.SurfaceInput
 import org.graphiks.kadre.input.SurfaceInputState
 import org.graphiks.kadre.input.TextInputConfig
@@ -259,6 +261,10 @@ private object UnsupportedWebSurfaceInput : SurfaceInput {
 
     override suspend fun openTextInput(config: TextInputConfig): KadreResult<TextInputSession> =
         KadreResult.Failure(unsupportedTextInput)
+
+    @OptIn(DelicateKadreApi::class)
+    override suspend fun requestRawInput(): KadreResult<RawInputAccess> =
+        KadreResult.Failure(KadreFailure.Unsupported(KadreOperation.RawInputAccess))
 }
 
 private fun unsupportedSurfaceCapabilities(): SurfaceCapabilities = SurfaceCapabilities(

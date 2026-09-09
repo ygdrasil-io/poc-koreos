@@ -98,6 +98,7 @@ internal class RuntimeWindowSurface(
     initialSnapshot: SurfaceInitialSnapshot,
     private val commandPort: SurfaceCommandPort,
     private val textInputPort: TextInputPort = UnsupportedTextInputPort,
+    private val rawInputCoordinator: RawInputCoordinator? = null,
     private val commandsEnabled: Boolean,
     enabledCapabilities: SurfaceCapabilities,
     private val eventStampSource: () -> EventStamp,
@@ -145,6 +146,7 @@ internal class RuntimeWindowSurface(
         eventStampSource = eventStampSource,
         eventCollectorGate = collectorAllocator.newGate(maxCollectorsPerFlow),
         textInputPort = textInputPort,
+        rawInputCoordinator = rawInputCoordinator,
         dragAndDropAvailable = enabledCapabilities.supportsDropInteraction(),
         resources = resources,
         dropTransferBudget = dropTransferBudget,
@@ -1301,6 +1303,7 @@ private class RuntimeSurfaceInput(
     private val eventStampSource: () -> EventStamp,
     private val eventCollectorGate: RuntimeEventCollectorGate,
     private val textInputPort: TextInputPort,
+    private val rawInputCoordinator: RawInputCoordinator?,
     private val dragAndDropAvailable: Boolean,
     private val resources: ResourceBudgetPolicy,
     private val dropTransferBudget: RuntimeDropTransferBudget,
@@ -1421,8 +1424,14 @@ private class RuntimeSurfaceInput(
     }
 
     @OptIn(DelicateKadreApi::class)
-    override suspend fun requestRawInput(): KadreResult<RawInputAccess> =
-        KadreResult.Failure(KadreFailure.Unsupported(KadreOperation.RawInputAccess))
+    override suspend fun requestRawInput(): KadreResult<RawInputAccess> {
+        if (synchronized(lock) { terminal != null }) {
+            return KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.InputSource))
+        }
+        return rawInputCoordinator
+            ?.requestAccess(surfaceId)
+            ?: KadreResult.Failure(KadreFailure.Unsupported(KadreOperation.RawInputAccess))
+    }
 
     fun presentDrop(
         source: DropTransferSource,
@@ -1670,6 +1679,7 @@ private class RuntimeSurfaceInput(
         activeTextInput?.close()
         dropToClose?.terminate(DropOfferTerminationReason.OwnerClosed)
         transfersToClose.forEach(RuntimeDropTransfer::close)
+        rawInputCoordinator?.closeOwner(surfaceId)
         finishPublicationAdmission(admission)
     }
 
