@@ -3,6 +3,10 @@ package org.graphiks.kadre.input
 import org.graphiks.kadre.application.EventStamp
 import org.graphiks.kadre.application.SessionInstant
 import org.graphiks.kadre.application.SessionSequence
+import org.graphiks.kadre.diagnostics.Capability
+import org.graphiks.kadre.diagnostics.FeatureAvailability
+import org.graphiks.kadre.diagnostics.KadreFailure
+import org.graphiks.kadre.diagnostics.KadreOperation
 import org.graphiks.kadre.surface.LogicalDelta
 import org.graphiks.kadre.surface.LogicalPoint
 import kotlin.test.Test
@@ -11,6 +15,21 @@ import kotlin.test.assertFailsWith
 import kotlin.time.Duration
 
 class InputValuesTest {
+    @Test
+    fun gestureCapabilityDistinguishesAnExactSupportedSubsetFromUnsupportedInput() {
+        val supportedKinds = setOf(GestureKind.Pinch, GestureKind.Rotation)
+        val supported = testInputCapabilities(
+            gestures = Capability.Supported(supportedKinds, FeatureAvailability.Available),
+        )
+        val unsupportedFailure = KadreFailure.Unsupported(KadreOperation.GestureInput)
+        val unsupported = testInputCapabilities(
+            gestures = Capability.Unsupported(unsupportedFailure),
+        )
+
+        assertEquals(supportedKinds, (supported.gestures as Capability.Supported<*>).constraints)
+        assertEquals(unsupportedFailure, (unsupported.gestures as Capability.Unsupported).failure)
+    }
+
     @Test
     fun validatesPortableKeysAndPressureDomains() {
         assertFailsWith<IllegalArgumentException> { PhysicalKey.Code(-1, 1) }
@@ -124,3 +143,15 @@ class InputValuesTest {
         assertEquals(0.0.toBits(), raw.deltaY.toBits())
     }
 }
+
+private fun testInputCapabilities(
+    gestures: Capability<Set<GestureKind>>,
+): InputCapabilities = InputCapabilities(
+    keyboard = FeatureAvailability.Unsupported,
+    pointer = FeatureAvailability.Unsupported,
+    touch = FeatureAvailability.Unsupported,
+    gestures = gestures,
+    dragAndDrop = FeatureAvailability.Unsupported,
+    textInput = Capability.Unsupported(KadreFailure.Unsupported(KadreOperation.TextInput)),
+    rawInput = Capability.Unsupported(KadreFailure.Unsupported(KadreOperation.RawInputAccess)),
+)

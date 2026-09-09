@@ -11,6 +11,7 @@ import org.graphiks.kadre.input.DropItemReadMode
 import org.graphiks.kadre.input.DropOfferId
 import org.graphiks.kadre.input.KeyLocation
 import org.graphiks.kadre.input.KeyState
+import org.graphiks.kadre.input.GestureKind
 import org.graphiks.kadre.input.KeyboardModifiers
 import org.graphiks.kadre.input.LogicalKey
 import org.graphiks.kadre.input.PenState
@@ -23,6 +24,7 @@ import org.graphiks.kadre.input.TextDocumentRevision
 import org.graphiks.kadre.input.TextInputAction
 import org.graphiks.kadre.input.TextInputConfig
 import org.graphiks.kadre.input.TextRange
+import org.graphiks.kadre.input.TouchPhase
 import org.graphiks.kadre.surface.CursorStyle
 import org.graphiks.kadre.surface.HitTestingMode
 import org.graphiks.kadre.surface.InputDefaultBehavior
@@ -277,6 +279,33 @@ public sealed interface SurfaceStimulus {
         override val surfaceId: SurfaceId,
         public val keyboardInstalled: Boolean,
         public val pointerInstalled: Boolean,
+        public val touchInstalled: Boolean = false,
+        public val gestureKinds: Set<GestureKind> = emptySet(),
+    ) : SurfaceStimulus
+
+    /**
+     * One touch observation whose backend token is meaningful only for the lifetime of the
+     * native contact. The runtime assigns and owns the public touch identity.
+     */
+    public data class TouchChanged(
+        override val surfaceId: SurfaceId,
+        public val nativeIdentity: Any,
+        public val phase: TouchPhase,
+        public val position: LogicalPoint,
+        public val pressure: Double?,
+        public val deviceId: DeviceId? = null,
+    ) : SurfaceStimulus
+
+    /** One backend-normalized gesture observation; stamps and revisions stay runtime-owned. */
+    public data class Gesture(
+        override val surfaceId: SurfaceId,
+        public val kind: GestureKind,
+        public val phase: TouchPhase,
+        public val delta: LogicalDelta? = null,
+        public val scale: Double? = null,
+        public val rotationRadians: Double? = null,
+        public val pressure: Double? = null,
+        public val deviceId: DeviceId? = null,
     ) : SurfaceStimulus
 
     /** One pointer-entry observation; the runtime assigns the public [PointerId]. */

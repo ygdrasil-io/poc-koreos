@@ -152,6 +152,7 @@ public enum class KadreOperation {
     CaptureOpen,
     CaptureCollectFrames,
     RawInputAccess,
+    GestureInput,
     PlatformSurfaceAccess,
     PlatformWindowAccess,
 }

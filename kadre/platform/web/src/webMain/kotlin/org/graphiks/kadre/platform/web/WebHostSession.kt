@@ -249,7 +249,7 @@ private object UnsupportedWebSurfaceInput : SurfaceInput {
                 keyboard = FeatureAvailability.Unsupported,
                 pointer = FeatureAvailability.Unsupported,
                 touch = FeatureAvailability.Unsupported,
-                gestures = FeatureAvailability.Unsupported,
+                gestures = Capability.Unsupported(KadreFailure.Unsupported(KadreOperation.GestureInput)),
                 dragAndDrop = FeatureAvailability.Unsupported,
                 textInput = Capability.Unsupported(unsupportedTextInput),
                 rawInput = Capability.Unsupported(KadreFailure.Unsupported(KadreOperation.RawInputAccess)),

@@ -230,7 +230,7 @@ public data class InputCapabilities(
     public val keyboard: FeatureAvailability,
     public val pointer: FeatureAvailability,
     public val touch: FeatureAvailability,
-    public val gestures: FeatureAvailability,
+    public val gestures: Capability<Set<GestureKind>>,
     public val dragAndDrop: FeatureAvailability,
     public val textInput: Capability<Unit>,
     public val rawInput: Capability<Unit>,
