@@ -5,6 +5,7 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.filterIsInstance
 import kotlinx.coroutines.flow.first
@@ -102,6 +103,7 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
 import kotlin.time.Duration.Companion.seconds
+import kotlin.time.Duration.Companion.milliseconds
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -4900,9 +4902,103 @@ class AppKitWindowRuntimeDriverTest {
 
             exclusiveWindowPort.terminalize(window.id)
 
-            withTimeout(2.seconds) { window.state.first { it.phase == WindowPhase.Closed } }
+            withTimeout(2.seconds) {
+                while ("peer-close" !in trace) yield()
+            }
             assertEquals(listOf("presentation-close", "presentation-close", "peer-close"), trace)
             assertTrue(reported.contains(closeFailure))
+        } finally {
+            driver.close()
+        }
+    }
+
+    @Test
+    fun terminalizeRetriesAnIncompletePresentationCloseOnceBeforeClosingThePeer() = runBlocking {
+        val trace = mutableListOf<String>()
+        val retryableFailure = fullscreenFailureFixture("presentation-retryable-close")
+        lateinit var port: DeterministicAppKitNativeWindowPort
+        val presentationLease = RecordingAppKitExclusivePresentationLease(
+            closeResults = ArrayDeque(
+                listOf(
+                    AppKitExclusivePresentationCloseResult.Incomplete(
+                        AppKitExclusivePresentationResult.Failed(retryableFailure, false),
+                    ),
+                    AppKitExclusivePresentationCloseResult.Terminal(AppKitExclusivePresentationResult.Readback),
+                ),
+            ),
+            onClose = { trace += "presentation-close" },
+            isMainThread = { port.isInsideMainThreadCall() },
+        )
+        port = DeterministicAppKitNativeWindowPort(
+            name = "terminal-incomplete-presentation-close",
+            beforeCloseWindow = { trace += "peer-close" },
+            exclusivePresentationLease = presentationLease,
+        )
+        val driver = AppKitWindowRuntimeDriverFactory { port }.create(KadrePolicies.Default.resources)
+
+        try {
+            val window = openedWindow(driver, WindowSpec(title = "terminal-incomplete-presentation-close"))
+            assertEquals(AppKitExclusiveWindowPreparation.Prepared, driver.exclusiveWindowPort().prepare(exclusiveWindowRequest(window.id)))
+
+            driver.exclusiveWindowPort().terminalize(window.id)
+
+            withTimeout(2.seconds) { window.state.first { it.phase == WindowPhase.Closed } }
+            assertEquals(listOf("presentation-close", "presentation-close", "peer-close"), trace)
+        } finally {
+            driver.close()
+        }
+    }
+
+    @Test
+    fun persistentIncompletePresentationCloseLeavesTheQueueDrainableAndRetriesOnlyAfterDriverClose() = runBlocking {
+        val trace = mutableListOf<String>()
+        val retryableFailure = fullscreenFailureFixture("presentation-still-retryable")
+        val closeResult = AtomicReference<AppKitExclusivePresentationCloseResult>(
+            AppKitExclusivePresentationCloseResult.Incomplete(
+                AppKitExclusivePresentationResult.Failed(retryableFailure, false),
+            ),
+        )
+        lateinit var port: DeterministicAppKitNativeWindowPort
+        val presentationLease = RecordingAppKitExclusivePresentationLease(
+            closeResultProvider = closeResult::get,
+            onClose = { trace += "presentation-close" },
+            isMainThread = { port.isInsideMainThreadCall() },
+        )
+        port = DeterministicAppKitNativeWindowPort(
+            name = "persistent-incomplete-presentation-close",
+            beforeCloseWindow = { trace += "peer-close" },
+            exclusivePresentationLease = presentationLease,
+        )
+        val driver = AppKitWindowRuntimeDriverFactory { port }.create(KadrePolicies.Default.resources)
+
+        try {
+            val window = openedWindow(driver, WindowSpec(title = "persistent-incomplete-presentation-close"))
+            val request = exclusiveWindowRequest(window.id)
+            assertEquals(AppKitExclusiveWindowPreparation.Prepared, driver.exclusiveWindowPort().prepare(request))
+
+            driver.exclusiveWindowPort().terminalize(window.id)
+
+            withTimeout(2.seconds) {
+                while (presentationLease.closeCount < 3) yield()
+            }
+            delay(50.milliseconds)
+            assertEquals(3, presentationLease.closeCount)
+            assertTrue(port.closedWindowTitles.isEmpty())
+            assertIs<AppKitExclusiveWindowPreparation.Failed>(driver.exclusiveWindowPort().prepare(request))
+
+            closeResult.set(AppKitExclusivePresentationCloseResult.Terminal(AppKitExclusivePresentationResult.Readback))
+            driver.close()
+
+            assertEquals(
+                listOf(
+                    "presentation-close",
+                    "presentation-close",
+                    "presentation-close",
+                    "presentation-close",
+                    "peer-close",
+                ),
+                trace,
+            )
         } finally {
             driver.close()
         }
@@ -6249,6 +6345,8 @@ private inline fun <reified T : Any> appKitIdentity(value: Long): T = T::class.j
 
 private class RecordingAppKitExclusivePresentationLease(
     private val closeResult: AppKitExclusivePresentationResult = AppKitExclusivePresentationResult.Readback,
+    private val closeResults: ArrayDeque<AppKitExclusivePresentationCloseResult> = ArrayDeque(),
+    private val closeResultProvider: (() -> AppKitExclusivePresentationCloseResult)? = null,
     private val onClose: () -> Unit = { },
     private val isMainThread: () -> Boolean = { true },
 ) : AppKitExclusivePresentationLease {
@@ -6274,7 +6372,9 @@ private class RecordingAppKitExclusivePresentationLease(
         check(isMainThread()) { "exclusive close must run on the AppKit main thread" }
         closeCount += 1
         onClose()
-        return AppKitExclusivePresentationCloseResult.Terminal(closeResult)
+        return closeResultProvider?.invoke()
+            ?: closeResults.removeFirstOrNull()
+            ?: AppKitExclusivePresentationCloseResult.Terminal(closeResult)
     }
 }
 

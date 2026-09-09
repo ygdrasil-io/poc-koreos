@@ -195,6 +195,115 @@ class AppKitExclusiveDisplayBrokerTest {
     }
 
     @Test
+    fun closingPortRetriesAQuarantinedOrphanOnceAfterItsInitialRecoveryFailed() {
+        val executor = QueuedExclusiveExecutor()
+        val recoveryExecutor = QueuedExclusiveExecutor()
+        val recovery = RecordingExclusiveDisplayLease(
+            displayKey = 71L,
+            modeKey = 701L,
+            releaseFailureSequence = ArrayDeque(
+                listOf(
+                    IllegalStateException("orphaned first release failed"),
+                    IllegalStateException("orphaned scheduled release failed"),
+                    null,
+                ),
+            ),
+        )
+        lateinit var broker: AppKitExclusiveDisplayBroker
+        val bridge = object : AppKitExclusiveDisplayBridge {
+            override val availability = AppKitExclusiveBridgeAvailability.Available
+
+            override fun open(displayKey: Long, modeKey: Long): AppKitExclusiveDisplayOpenResult {
+                @Suppress("UNCHECKED_CAST")
+                val entries = broker.javaClass.getDeclaredField("entries").apply { isAccessible = true }
+                    .get(broker) as MutableMap<Long, Any>
+                entries.clear()
+                return AppKitExclusiveDisplayOpenResult.FailedAfterCapture(
+                    terminal = AppKitExclusiveDisplayTerminal.Unknown,
+                    cleanup = AppKitExclusiveDisplayReleaseResult(AppKitExclusiveDisplayTerminal.Unknown),
+                    recovery = recovery,
+                    failure = KadreFailure.PlatformFailure(KadrePlatform.AppKit, "exclusive-fullscreen", "capture-failed"),
+                )
+            }
+        }
+        broker = AppKitExclusiveDisplayBroker(bridge, recoveryExecutor = recoveryExecutor)
+        val port = broker.openPort(executor, RecordingExclusiveWindowPort())
+
+        assertEquals(KadreResult.Success(Unit), port.reserve(command(185L, 1852L, 71L, 701L)))
+        executor.runAll()
+        assertEquals(1, recoveryExecutor.pendingTaskCount)
+
+        recoveryExecutor.runAll()
+
+        assertEquals(2, recovery.releaseCount)
+        assertEquals(0, recoveryExecutor.pendingTaskCount)
+        assertEquals(listOf("coregraphics-release-exception"), broker.orphanedRecoveryFailureCodes())
+        assertIs<ExclusiveFullscreenAvailability.Unavailable>(port.availability)
+
+        port.close()
+
+        assertEquals(1, recoveryExecutor.pendingTaskCount)
+        recoveryExecutor.runAll()
+        val observer = broker.openPort(QueuedExclusiveExecutor(), UnusedExclusiveWindowPort)
+
+        assertEquals(3, recovery.releaseCount)
+        assertEquals(emptyList(), broker.orphanedRecoveryFailureCodes())
+        assertEquals(ExclusiveFullscreenAvailability.Available, observer.availability)
+        observer.close()
+    }
+
+    @Test
+    fun closingBrokerRetriesAQuarantinedOrphanOnceAfterItsInitialRecoveryFailed() {
+        val executor = QueuedExclusiveExecutor()
+        val recoveryExecutor = QueuedExclusiveExecutor()
+        val recovery = RecordingExclusiveDisplayLease(
+            displayKey = 71L,
+            modeKey = 701L,
+            releaseFailureSequence = ArrayDeque(
+                listOf(
+                    IllegalStateException("orphaned first release failed"),
+                    IllegalStateException("orphaned scheduled release failed"),
+                    null,
+                ),
+            ),
+        )
+        lateinit var broker: AppKitExclusiveDisplayBroker
+        val bridge = object : AppKitExclusiveDisplayBridge {
+            override val availability = AppKitExclusiveBridgeAvailability.Available
+
+            override fun open(displayKey: Long, modeKey: Long): AppKitExclusiveDisplayOpenResult {
+                @Suppress("UNCHECKED_CAST")
+                val entries = broker.javaClass.getDeclaredField("entries").apply { isAccessible = true }
+                    .get(broker) as MutableMap<Long, Any>
+                entries.clear()
+                return AppKitExclusiveDisplayOpenResult.FailedAfterCapture(
+                    terminal = AppKitExclusiveDisplayTerminal.Unknown,
+                    cleanup = AppKitExclusiveDisplayReleaseResult(AppKitExclusiveDisplayTerminal.Unknown),
+                    recovery = recovery,
+                    failure = KadreFailure.PlatformFailure(KadrePlatform.AppKit, "exclusive-fullscreen", "capture-failed"),
+                )
+            }
+        }
+        broker = AppKitExclusiveDisplayBroker(bridge, recoveryExecutor = recoveryExecutor)
+        val port = broker.openPort(executor, RecordingExclusiveWindowPort())
+
+        assertEquals(KadreResult.Success(Unit), port.reserve(command(186L, 1862L, 71L, 701L)))
+        executor.runAll()
+        recoveryExecutor.runAll()
+        assertEquals(2, recovery.releaseCount)
+        assertEquals(0, recoveryExecutor.pendingTaskCount)
+        assertIs<ExclusiveFullscreenAvailability.Unavailable>(port.availability)
+
+        broker.close()
+
+        assertEquals(1, recoveryExecutor.pendingTaskCount)
+        recoveryExecutor.runAll()
+
+        assertEquals(3, recovery.releaseCount)
+        assertEquals(emptyList(), broker.orphanedRecoveryFailureCodes())
+    }
+
+    @Test
     fun capturedWithoutRuntimeQuarantinesAReleaseExceptionUntilScheduledRecoveryCertifiesRelease() {
         val executor = QueuedExclusiveExecutor()
         val recoveryExecutor = QueuedExclusiveExecutor()
@@ -795,6 +904,16 @@ class AppKitExclusiveDisplayBrokerTest {
         modeKey = modeKey,
         requestedFullscreen = exclusiveFullscreen(modeKey),
     )
+}
+
+private fun AppKitExclusiveDisplayBroker.orphanedRecoveryFailureCodes(): List<String> {
+    @Suppress("UNCHECKED_CAST")
+    val recoveries = javaClass.getDeclaredField("orphanedRecoveries").apply { isAccessible = true }
+        .get(this) as Map<Any, Any>
+    return recoveries.values.map { recovery ->
+        (recovery.javaClass.getDeclaredField("terminalFailure").apply { isAccessible = true }
+            .get(recovery) as KadreFailure.PlatformFailure).code
+    }
 }
 
 private class RecordingExclusiveDisplayBridge(

@@ -164,8 +164,7 @@ internal interface AppKitExclusivePresentationLease {
     fun present(displayId: Int): AppKitExclusivePresentationResult
     fun readback(): AppKitExclusivePresentationResult
     fun restore(): AppKitExclusivePresentationResult
-    fun close(): AppKitExclusivePresentationCloseResult =
-        AppKitExclusivePresentationCloseResult.Terminal(restore())
+    fun close(): AppKitExclusivePresentationCloseResult
 }
 
 /** A success certifies a detached KFFI readback; failures never invent a window state. */

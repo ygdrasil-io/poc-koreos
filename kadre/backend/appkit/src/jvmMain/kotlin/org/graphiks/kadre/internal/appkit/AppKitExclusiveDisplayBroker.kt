@@ -783,6 +783,7 @@ internal class AppKitExclusiveDisplayBroker(
                 quarantines = entries.values
                     .filter { it.state == LeaseState.Quarantined }
                     .map { it.displayKey to it.token },
+                orphanedRecoveries = orphanedRecoveries.keys.toList(),
                 idleObservation = detachIdleDisplayObservationLocked(),
             )
         }
@@ -792,6 +793,7 @@ internal class AppKitExclusiveDisplayBroker(
             }
         }
         actions.quarantines.forEach { (displayKey, token) -> scheduleRecovery(displayKey, token) }
+        actions.orphanedRecoveries.forEach(::scheduleOrphanedRecovery)
         actions.idleObservation?.close()
     }
 
@@ -825,10 +827,12 @@ internal class AppKitExclusiveDisplayBroker(
                 ports = targetPorts,
                 observation = displayObservation.also { displayObservation = null },
                 recoveries = recoveries,
+                orphanedRecoveries = orphanedRecoveries.keys.toList(),
             )
         }
         targets.ports.forEach(AppKitExclusiveFullscreenPort::closeFromBroker)
         targets.recoveries.forEach { (displayKey, token) -> scheduleRecovery(displayKey, token) }
+        targets.orphanedRecoveries.forEach(::scheduleOrphanedRecovery)
         targets.observation?.close()
     }
 
@@ -1249,6 +1253,7 @@ internal class AppKitExclusiveDisplayBroker(
     private data class PortCloseActions(
         val releases: List<Pair<Long, Long>>,
         val quarantines: List<Pair<Long, Long>>,
+        val orphanedRecoveries: List<RecoveryKey>,
         val idleObservation: AutoCloseable?,
     )
 
@@ -1256,6 +1261,7 @@ internal class AppKitExclusiveDisplayBroker(
         val ports: List<AppKitExclusiveFullscreenPort>,
         val observation: AutoCloseable?,
         val recoveries: List<Pair<Long, Long>>,
+        val orphanedRecoveries: List<RecoveryKey>,
     )
 
     private data class ReconfigurationActions(

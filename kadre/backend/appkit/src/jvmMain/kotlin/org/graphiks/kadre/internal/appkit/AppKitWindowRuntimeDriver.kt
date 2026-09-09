@@ -1640,6 +1640,7 @@ private class AppKitWindowCommandPort(
             } else {
                 entry.surfaceCleanupReserved = true
                 entry.cleanupScheduled = true
+                entry.cleanupRetrySubmitted = false
                 true
             }
         }
@@ -1673,8 +1674,17 @@ private class AppKitWindowCommandPort(
         }
         failures.forEach(::reportFailure)
         if (retryPresentationClose) {
+            val retry = synchronized(lock) {
+                if (entry.removed || entry.cleanupFinished || entry.cleanupRetrySubmitted) {
+                    entry.cleanupScheduled = false
+                    false
+                } else {
+                    entry.cleanupRetrySubmitted = true
+                    true
+                }
+            }
+            if (retry && commands.submitFollowUp { performCleanup(entry) }) return
             synchronized(lock) { entry.cleanupScheduled = false }
-            scheduleCleanup(entry)
             return
         }
         val failure = failures.firstOrNull()
@@ -1838,6 +1848,7 @@ private class AppKitWindowCommandPort(
         var fullscreenPending: PendingWindowMutationCommand? = null
         var fullscreenTerminalTombstone: AppKitFullscreenTerminalTombstone? = null
         var cleanupScheduled: Boolean = false
+        var cleanupRetrySubmitted: Boolean = false
         var cleanupFinished: Boolean = false
         var cleanupCompletion: CleanupCompletion = CleanupCompletion.None
         var nativeTerminalIssued: Boolean = false
