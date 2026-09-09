@@ -2,6 +2,11 @@
 
 Ce registre contient uniquement les gaps rencontrés pendant l'implémentation de Kadre. Kadre ne génère pas de binding, ne possède pas de couche FFI et n'ajoute pas de downcall/upcall Panama local pour contourner un gap. Un appel Objective-C générique déjà fourni par KFFI peut servir temporairement lorsque son ownership et sa signature sont sûrs ; il est retiré dès que KFFI publie une API typée couvrant le besoin.
 
+La tranche d’API raw-input commune ne consomme aucun symbole KFFI : elle définit
+seulement le membre `SurfaceInput.requestRawInput`, ses budgets et ses échecs.
+L’audit des primitives AppKit est différé à la tranche Kextract/KFFI dédiée ;
+aucun binding ou fallback FFI n’est introduit ici.
+
 | ID | Statut | Priorité | Domaine | Besoin KFFI | Usage Kadre bloqué | Workaround autorisé | Référence |
 |---|---|---:|---|---|---|---|---|
 | KFFI-OBJC-001 | closed | blocking | Objective-C callbacks | `ObjCManagedClass` et `ObjCManagedInstance` fournissent une méthode Objective-C implémentée par une lambda Kotlin/JVM, avec signature finie typée, lifetime closeable, routage thread-safe et libération après la dernière upcall | notifications lifecycle `NSApplication`, `NSWindowDelegate`, callbacks `NSView` input/IME et donc embedded AppKit, fenêtres et input réels | aucun upcall `java.lang.foreign.Linker` local dans Kadre | [KFFI #35](https://github.com/Graphiks-org/kffi/pull/35), artifact `org.graphiks:kffi-objc:1.0.0-SNAPSHOT` |

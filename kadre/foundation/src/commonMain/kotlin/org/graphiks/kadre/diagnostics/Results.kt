@@ -179,6 +179,7 @@ public enum class KadreResourceKind {
     WindowRequest,
     Display,
     InputSource,
+    RawInputAccess,
     InputDevice,
     Gamepad,
     EventCollector,

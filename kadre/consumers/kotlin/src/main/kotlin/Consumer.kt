@@ -31,6 +31,8 @@ public object Consumer {
                 }
             }
 
+    public fun rawInputResource(): KadreResourceKind = KadreResourceKind.RawInputAccess
+
     public fun attachBothForms(scope: CoroutineScope): List<KadreResult<*>> {
         val options = DesktopHostOptions.Embedded(
             integration = org.graphiks.kadre.platform.desktop.DesktopIntegration.AppKitMainLoop,

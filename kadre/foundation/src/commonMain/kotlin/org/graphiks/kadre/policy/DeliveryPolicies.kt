@@ -64,6 +64,21 @@ public enum class ContinuousOverflowAction {
     FailSession,
 }
 
+public data class RawInputDeliveryPolicy(
+    public val capacity: Int,
+    public val onOverflow: RawInputOverflowAction,
+) {
+    init {
+        require(capacity > 0) { "capacity must be positive" }
+    }
+}
+
+public enum class RawInputOverflowAction {
+    DropOldestAndReport,
+    DropLatestAndReport,
+    CloseAccess,
+}
+
 public class SlowCollectorCancellationException internal constructor(message: String) :
     CancellationException(message)
 
@@ -74,6 +89,7 @@ public data class InputDeliveryPolicy(
     public val scroll: ContinuousDelivery,
     public val gestureChanges: ContinuousDelivery,
     public val gamepadChanges: ContinuousDelivery,
+    public val rawInput: RawInputDeliveryPolicy,
 )
 
 public data class WindowDeliveryPolicy(

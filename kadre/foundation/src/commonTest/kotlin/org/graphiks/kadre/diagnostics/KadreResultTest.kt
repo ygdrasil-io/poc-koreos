@@ -28,4 +28,13 @@ class KadreResultTest {
 
         assertEquals(failure, exception.failure)
     }
+
+    @Test
+    fun rawInputFailuresRetainTheirResourceIdentity() {
+        val resourceLimit = KadreFailure.ResourceLimitExceeded(KadreResourceKind.RawInputAccess, 16)
+        val overflow = KadreFailure.SourceOverflow(KadreResourceKind.RawInputAccess)
+
+        assertEquals(KadreResourceKind.RawInputAccess, resourceLimit.resource)
+        assertEquals(KadreResourceKind.RawInputAccess, overflow.resource)
+    }
 }

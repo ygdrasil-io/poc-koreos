@@ -5,7 +5,6 @@ import kotlinx.coroutines.flow.StateFlow
 import org.graphiks.kadre.application.EventStamp
 import org.graphiks.kadre.diagnostics.DelicateKadreApi
 import org.graphiks.kadre.diagnostics.KadreFailure
-import org.graphiks.kadre.diagnostics.KadreOperation
 import org.graphiks.kadre.diagnostics.KadreResult
 import org.graphiks.kadre.surface.LogicalRect
 
@@ -149,10 +148,6 @@ public interface DroppedItem {
 }
 
 public enum class DropItemReadMode { Replayable, SingleUse }
-
-@DelicateKadreApi
-public suspend fun SurfaceInput.requestRawInput(): KadreResult<RawInputAccess> =
-    KadreResult.Failure(KadreFailure.Unsupported(KadreOperation.RawInputAccess))
 
 @DelicateKadreApi
 public interface RawInputAccess : AutoCloseable {

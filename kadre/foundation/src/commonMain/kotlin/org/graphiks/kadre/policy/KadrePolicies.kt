@@ -17,12 +17,13 @@ public object KadrePolicies {
         scroll = ContinuousDelivery.Coalesced,
         gestures = ContinuousDelivery.Coalesced,
         gamepad = ContinuousDelivery.Latest,
+        rawInput = RawInputDeliveryPolicy(256, RawInputOverflowAction.DropOldestAndReport),
         routing = GamepadRouting.ActiveSessionOnly,
         frames = FrameDelivery.Latest,
         frameBytes = 134_217_728,
         diagnosticCapacity = 256,
         resources = ResourceBudgetPolicy(
-            16, 128, 16, 16, 16, 4, 16, 4, 262_144, 30.seconds,
+            16, 128, 16, 16, 16, 4, 16, 16, 4, 262_144, 30.seconds,
             33_554_432, 1_048_576, 4_096, 4_096, 16_777_216,
         ),
     )
@@ -41,12 +42,13 @@ public object KadrePolicies {
         scroll = ContinuousDelivery.Coalesced,
         gestures = ContinuousDelivery.Coalesced,
         gamepad = ContinuousDelivery.Latest,
+        rawInput = RawInputDeliveryPolicy(64, RawInputOverflowAction.DropOldestAndReport),
         routing = GamepadRouting.ActiveSessionOnly,
         frames = FrameDelivery.Latest,
         frameBytes = 67_108_864,
         diagnosticCapacity = 64,
         resources = ResourceBudgetPolicy(
-            8, 64, 8, 8, 8, 2, 8, 2, 65_536, 5.seconds,
+            8, 64, 8, 8, 8, 2, 8, 8, 2, 65_536, 5.seconds,
             8_388_608, 262_144, 2_048, 2_048, 4_194_304,
         ),
     )
@@ -65,12 +67,13 @@ public object KadrePolicies {
         scroll = ContinuousDelivery.Buffered(8192, ContinuousOverflowAction.FailSession),
         gestures = ContinuousDelivery.Buffered(8192, ContinuousOverflowAction.FailSession),
         gamepad = ContinuousDelivery.Buffered(8192, ContinuousOverflowAction.FailSession),
+        rawInput = RawInputDeliveryPolicy(8192, RawInputOverflowAction.CloseAccess),
         routing = GamepadRouting.AllForegroundSessions,
         frames = FrameDelivery.Buffered(3, ContinuousOverflowAction.CloseSource),
         frameBytes = 536_870_912,
         diagnosticCapacity = 8192,
         resources = ResourceBudgetPolicy(
-            16, 128, 32, 16, 16, 4, 32, 8, 1_048_576, 60.seconds,
+            16, 128, 32, 16, 16, 4, 32, 64, 8, 1_048_576, 60.seconds,
             134_217_728, 4_194_304, 16_384, 16_384, 67_108_864,
         ),
     )
@@ -89,6 +92,7 @@ public object KadrePolicies {
         scroll: ContinuousDelivery,
         gestures: ContinuousDelivery,
         gamepad: ContinuousDelivery,
+        rawInput: RawInputDeliveryPolicy,
         routing: GamepadRouting,
         frames: FrameDelivery,
         frameBytes: Long,
@@ -113,7 +117,7 @@ public object KadrePolicies {
             hostSignals = hostSignals,
             window = WindowDeliveryPolicy(events, geometry, redraw),
             deviceEvents = events,
-            input = InputDeliveryPolicy(events, pointer, touch, scroll, gestures, gamepad),
+            input = InputDeliveryPolicy(events, pointer, touch, scroll, gestures, gamepad, rawInput),
             devices = DevicePolicy(
                 gamepadRouting = routing,
                 effectOwnership = DeviceEffectOwnership.ExclusivePerPhysicalDevice,

@@ -21,6 +21,12 @@ class PolicyValidationTest {
             FrameDelivery.Buffered(0, ContinuousOverflowAction.CloseSource)
         }
         assertFailsWith<IllegalArgumentException> {
+            RawInputDeliveryPolicy(0, RawInputOverflowAction.DropOldestAndReport)
+        }
+        assertFailsWith<IllegalArgumentException> {
+            KadrePolicies.Default.resources.copy(maxConcurrentRawInputAccesses = 0)
+        }
+        assertFailsWith<IllegalArgumentException> {
             KadrePolicies.Default.resources.copy(maxRetainedPayloadBytesPerSession = 0)
         }
         assertFailsWith<IllegalArgumentException> {

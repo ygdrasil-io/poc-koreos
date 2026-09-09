@@ -218,7 +218,7 @@ export type KadrePolicyComponent =
   | "diagnostics" | "resources";
 export type KadreResourceKind =
   | "host" | "surface" | "window" | "windowRequest" | "display"
-  | "inputSource" | "inputDevice" | "gamepad" | "eventCollector" | "interaction"
+  | "inputSource" | "rawInputAccess" | "inputDevice" | "gamepad" | "eventCollector" | "interaction"
   | "dropTransfer" | "dropItem" | "cursorImage" | "gamepadEffect"
   | "textInputSession" | "captureSource" | "captureSession" | "captureCollector"
   | "captureBuffer" | "retainedPayload" | "imageResource" | "eventSequence";

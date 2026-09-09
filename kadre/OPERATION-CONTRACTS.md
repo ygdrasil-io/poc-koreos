@@ -177,7 +177,7 @@ que l'action soit absente, rejetée ou committée.
 | `DropOffer.claimTransfer` | `Success(DropTransfer)` | `Busy(DropTransfer)`, `Closed(DropTransfer)`, `Temporary`, `Platform` | exactement un handoff gagnant ; cancellation d’un waiter ne claim pas. Le budget a déjà été réservé avant `TransferAvailable`. |
 | `DroppedItem.collectBytes` | `Success(Unit)` | `Invalid("maxBytes")`, `Busy(DropTransfer)`, `Closed(DropTransfer|DropItem)`, `Limit(DropItem)`, `Temporary`, `Platform` | le caller possède le streaming de cette lecture : sa cancellation l’arrête. Les chunks déjà livrés restent app-owned, mais un échec rend le préfixe sémantiquement invalide. |
 | `DropTransfer.close` | `Unit` | aucune | ferme l’admission ; la lecture active termine avec `Closed(DropTransfer)` après le callback courant. |
-| `SurfaceInput.requestRawInput` | `Success(RawInputAccess)` | `Unsupported(RawInputAccess)`, `Denied(RawInput)`, `Interaction(reason)`, `Busy(InputSource)`, `Closed(InputSource)`, `Temporary`, `Platform` | owner fermé avant handoff ; ensuite le caller le possède. |
+| `SurfaceInput.requestRawInput` | `Success(RawInputAccess)` | `Unsupported(RawInputAccess)`, `Denied(RawInput)`, `Limit(RawInputAccess)`, `Interaction(reason)`, `Busy(InputSource)`, `Closed(InputSource)`, `Temporary`, `Platform` | le budget de session est vérifié avant permission ou admission native ; owner fermé avant handoff, puis le caller possède son accès. |
 | `RawInputAccess.close` | `Unit` | aucune | fermeture non bloquante ; `state = Closed` puis terminaison du flow. |
 
 ## 7.1 Escape hatches plateforme
