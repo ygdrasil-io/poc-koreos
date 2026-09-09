@@ -8,6 +8,7 @@ import kotlinx.coroutines.runBlocking
 import org.graphiks.kadre.application.ActivationState
 import org.graphiks.kadre.application.AttachmentState
 import org.graphiks.kadre.application.KadreSession
+import org.graphiks.kadre.application.LifecycleCapabilities
 import org.graphiks.kadre.application.LifecycleState
 import org.graphiks.kadre.application.SessionOutcome
 import org.graphiks.kadre.application.VisibilityState
@@ -21,6 +22,7 @@ import org.graphiks.kadre.internal.runtime.RuntimeSessionComponents
 import org.graphiks.kadre.internal.runtime.RuntimeSessionComponentsFactory
 import org.graphiks.kadre.internal.runtime.RuntimeSessionObserver
 import org.graphiks.kadre.internal.runtime.RuntimeSessionStopHandler
+import org.graphiks.kadre.internal.runtime.DisplayPort
 import org.graphiks.kadre.internal.runtime.RawInputPort
 import org.graphiks.kadre.internal.runtime.desktop.DesktopBackendKind
 import org.graphiks.kadre.internal.runtime.desktop.DesktopBackendProvider
@@ -37,6 +39,7 @@ public class AppKitBackendProvider private constructor(
     private val windowDriverFactory: AppKitWindowRuntimeDriverFactory,
     private val fullscreenAvailability: AppKitFullscreenAvailability,
     private val rawInputPortFactory: () -> RawInputPort?,
+    private val displayPortFactory: () -> DisplayPort?,
     private val availability: () -> Boolean,
 ) : DesktopBackendProvider {
     public constructor() : this(
@@ -45,6 +48,13 @@ public class AppKitBackendProvider private constructor(
         AppKitWindowRuntimeDriverFactory(),
         AppKitFullscreenAvailability(),
         { if (isMacOs()) ProcessAppKitProcessBroker.value.openRawInputPort() else null },
+        {
+            if (isMacOs() && AppKitDisplayAvailability().isAvailable) {
+                ProcessAppKitProcessBroker.value.openDisplayPort()
+            } else {
+                null
+            }
+        },
         ::isMacOs,
     )
 
@@ -78,6 +88,7 @@ public class AppKitBackendProvider private constructor(
         } else {
             null
         }
+        val memoryPressureAvailability = broker.memoryPressureAvailability()
         val registration = try {
             val hostFactory: (LifecycleState) -> AppKitRuntimeHost = { initial ->
                 AppKitRuntimeHost(
@@ -88,6 +99,7 @@ public class AppKitBackendProvider private constructor(
                             attentionOwner = attentionOwner,
                         ),
                         initialLifecycleState = initial,
+                        initialLifecycleCapabilities = LifecycleCapabilities(memoryPressureAvailability),
                         sessionObserver = RuntimeSessionObserver { _, _ -> owner.close() },
                     ),
                 )
@@ -137,29 +149,34 @@ public class AppKitBackendProvider private constructor(
         try {
             val nativeLoopReturned = AtomicBoolean(false)
             val lastWindowStop = AppKitLastWindowStopBridge()
-            val host = RuntimeHostController.withComponents(
-                platform = KadrePlatform.AppKit,
-                componentsFactory = windowComponentsFactory(
-                    request.policy.resources,
-                    if (request.stopWhenLastWindowClosed) lastWindowStop::request else null,
-                    attentionOwner,
+            val memoryPressureAvailability = broker.memoryPressureAvailability()
+            val host = AppKitRuntimeHost(
+                RuntimeHostController.withComponents(
+                    platform = KadrePlatform.AppKit,
+                    componentsFactory = windowComponentsFactory(
+                        request.policy.resources,
+                        if (request.stopWhenLastWindowClosed) lastWindowStop::request else null,
+                        attentionOwner,
+                    ),
+                    initialLifecycleState = LifecycleState(
+                        AttachmentState.Attached,
+                        VisibilityState.Background,
+                        ActivationState.Inactive,
+                    ),
+                    initialLifecycleCapabilities = LifecycleCapabilities(memoryPressureAvailability),
+                    // Stop AppKit before committing the terminal outcome so a native stop failure
+                    // can still become the authoritative SessionOutcome.
+                    sessionStopHandler = RuntimeSessionStopHandler {
+                        if (nativeLoopReturned.get()) {
+                            null
+                        } else {
+                            requestNativeStop()
+                        }
+                    },
                 ),
-                initialLifecycleState = LifecycleState(
-                    AttachmentState.Attached,
-                    VisibilityState.Background,
-                    ActivationState.Inactive,
-                ),
-                // Stop AppKit before committing the terminal outcome so a native stop failure
-                // can still become the authoritative SessionOutcome.
-                sessionStopHandler = RuntimeSessionStopHandler {
-                    if (nativeLoopReturned.get()) {
-                        null
-                    } else {
-                        requestNativeStop()
-                    }
-                },
             )
-            val attached = host.attach(parentScope, request.applicationFactory, request.policy)
+            lease.installMemoryTarget(host)
+            val attached = host.controller.attach(parentScope, request.applicationFactory, request.policy)
             if (attached is KadreResult.Failure) return attached
             val session = (attached as KadreResult.Success).value
             lastWindowStop.install(session)
@@ -176,10 +193,10 @@ public class AppKitBackendProvider private constructor(
                 host.detach()
             } catch (_: Exception) {
                 nativeLoopReturned.set(true)
-                host.fail(runFailure())
+                host.controller.fail(runFailure())
             } catch (_: LinkageError) {
                 nativeLoopReturned.set(true)
-                host.fail(runFailure())
+                host.controller.fail(runFailure())
             }
 
             return KadreResult.Success(runBlocking { session.awaitTermination() })
@@ -224,6 +241,7 @@ public class AppKitBackendProvider private constructor(
             windowDriverFactory: AppKitWindowRuntimeDriverFactory = AppKitWindowRuntimeDriverFactory(),
             fullscreenAvailability: AppKitFullscreenAvailability = AppKitFullscreenAvailability(),
             rawInputPortFactory: () -> RawInputPort? = { null },
+            displayPortFactory: () -> DisplayPort? = { null },
             availability: () -> Boolean,
         ): AppKitBackendProvider = AppKitBackendProvider(
             nativeApplication,
@@ -231,6 +249,7 @@ public class AppKitBackendProvider private constructor(
             windowDriverFactory,
             fullscreenAvailability,
             rawInputPortFactory,
+            displayPortFactory,
             availability,
         )
 
@@ -280,12 +299,13 @@ public class AppKitBackendProvider private constructor(
             },
             publicSurfaceCapabilities = true,
             onLastWindowClosed = onLastWindowClosed,
-            broker = if (attentionOwner == null) null else broker,
+            broker = broker,
             attentionOwner = attentionOwner,
         )
         RuntimeSessionComponents(
             windows = driver.manager,
             rawInputPort = rawInputPortFactory(),
+            displayPort = displayPortFactory(),
             closeAction = driver::close,
         )
     }

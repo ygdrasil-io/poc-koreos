@@ -24,6 +24,9 @@ import org.graphiks.kadre.diagnostics.KadreResult
 import org.graphiks.kadre.policy.KadrePolicies
 import org.graphiks.kadre.surface.LogicalSize
 import org.graphiks.kadre.surface.PhysicalSize
+import org.graphiks.kadre.surface.SurfaceAppearance
+import org.graphiks.kadre.surface.SurfaceContrast
+import org.graphiks.kadre.surface.SurfaceTheme
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -31,6 +34,34 @@ import kotlin.test.assertIs
 import kotlin.time.Duration.Companion.seconds
 
 class WebHostSessionTest {
+    @Test
+    fun hostSurfaceInitialAppearanceIsUnknown() = runTest {
+        val scopeReady = CompletableDeferred<KadreScope>()
+        val session = successful(
+            WebHostSession(RecordingPort(Any(), snapshot()), WebHostRegistry()).attach(
+                this,
+                KadreApplicationFactory {
+                    KadreApplication {
+                        scopeReady.complete(this)
+                        awaitCancellation()
+                    }
+                },
+                KadrePolicies.Default,
+            ),
+        )
+        testScheduler.runCurrent()
+
+        try {
+            assertEquals(
+                SurfaceAppearance(SurfaceTheme.Unknown, SurfaceContrast.Unknown),
+                scopeReady.await().primarySurface.value?.state?.value?.appearance,
+            )
+        } finally {
+            session.requestStop()
+            testScheduler.runCurrent()
+        }
+    }
+
     @OptIn(DelicateKadreApi::class)
     @Test
     fun hostSurfaceRawInputIsExplicitlyUnsupported() = runTest {

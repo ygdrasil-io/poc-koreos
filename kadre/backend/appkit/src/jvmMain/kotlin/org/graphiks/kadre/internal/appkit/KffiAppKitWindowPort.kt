@@ -31,6 +31,8 @@ import org.graphiks.kadre.surface.LogicalPoint
 import org.graphiks.kadre.surface.LogicalRect
 import org.graphiks.kadre.surface.LogicalSize
 import org.graphiks.kadre.surface.PropertyChange
+import org.graphiks.kadre.surface.SurfaceAppearance
+import org.graphiks.kadre.surface.SurfaceContrast
 import org.graphiks.kadre.surface.SurfaceFocus
 import org.graphiks.kadre.surface.SurfaceOcclusion
 import org.graphiks.kadre.surface.SurfaceTheme
@@ -68,7 +70,18 @@ import org.graphiks.kffi.objc.NSWindowButton
 import org.graphiks.kffi.objc.NSWindowCollectionBehavior
 import org.graphiks.kffi.objc.NSWindowOcclusionState
 import org.graphiks.kffi.objc.NSWindowStyleMask
+import org.graphiks.kffi.objc.NSWorkspace
+import org.graphiks.kffi.objc.NSWorkspaceAccessibilityDisplayOptionsDidChangeNotification
+import org.graphiks.kffi.objc.appkit.ExclusiveWindowPresentationLease
+import org.graphiks.kffi.objc.appkit.ExclusiveWindowPresentationCloseResult
+import org.graphiks.kffi.objc.appkit.ExclusiveWindowPresentationOpenResult
+import org.graphiks.kffi.objc.appkit.ExclusiveWindowPresentationResult
+import org.graphiks.kffi.objc.appkit.ExclusiveWindowPresentationRestoreResult
+import org.graphiks.kffi.objc.appkit.ExclusiveWindowPresentationReadbackResult
+import org.graphiks.kffi.objc.appkit.ExclusiveWindowPresentationServices
+import org.graphiks.kffi.objc.appkit.ExclusiveWindowPresentationTerminalRestoration
 import org.graphiks.kffi.objc.ObjCRuntime
+import org.graphiks.kffi.objc.accessibilityDisplayShouldIncreaseContrast
 import org.graphiks.kffi.objc.effectiveAppearance
 import org.graphiks.kffi.objc.convertBaseToScreen
 import org.graphiks.kffi.objc.safeAreaInsets
@@ -103,7 +116,7 @@ internal class AppKitFullscreenAvailability(
         ?: false
 }
 
-private data class AppKitNumericVersion(
+internal data class AppKitNumericVersion(
     val major: Long,
     val minor: Long,
     val patch: Long,
@@ -112,7 +125,7 @@ private data class AppKitNumericVersion(
         compareValuesBy(this, other, AppKitNumericVersion::major, AppKitNumericVersion::minor, AppKitNumericVersion::patch)
 }
 
-private fun String.numericVersionOrNull(): AppKitNumericVersion? {
+internal fun String.numericVersionOrNull(): AppKitNumericVersion? {
     val parts = split('.')
     if (parts.isEmpty() || parts.size > 3) return null
     val values = parts.map { component ->
@@ -240,6 +253,11 @@ internal class KffiAppKitWindowPort(
     override fun restoreWindowLevel(window: AppKitNativeWindowOwner, desiredLevel: WindowLevel) {
         requireMainThread()
         window.kffiWindowOwner().restoreLevel(desiredLevel)
+    }
+
+    override fun openExclusivePresentation(window: AppKitNativeWindowOwner): AppKitExclusivePresentationOpenResult {
+        requireMainThread()
+        return ExclusiveWindowPresentationServices.open(window.kffiWindow()).toKadrePresentationOpenResult()
     }
 
     override fun observeGeometry(
@@ -2022,14 +2040,14 @@ private class KffiSurfaceObserverOwner private constructor(
         callbacks.visibilityChanged(visibility, occlusion)
     }
 
-    private fun emitTheme() {
+    private fun emitAppearance() {
         requireMainThread()
-        if (accepting.get()) callbacks.themeChanged(readTheme(view))
+        if (accepting.get()) callbacks.appearanceChanged(readAppearance(view))
     }
 
     private fun observeAppearance(admission: KffiViewAppearanceAdmission) {
         check(appearanceObservation == null) { "AppKit view appearance is already observed" }
-        appearanceObservation = admission.observe(::emitTheme)
+        appearanceObservation = admission.observe(::emitAppearance)
     }
 
     companion object {
@@ -2095,6 +2113,14 @@ private class KffiSurfaceObserverOwner private constructor(
                     window.ptr,
                     installedOwner::emitVisibility,
                 )
+                val workspace = NSWorkspace(NSWorkspace.sharedWorkspace())
+                val workspaceCenter = NSNotificationCenter(workspace.notificationCenter())
+                observations += workspaceCenter.observe(
+                    name = NSWorkspaceAccessibilityDisplayOptionsDidChangeNotification,
+                    objectFilter = workspace.ptr,
+                ) {
+                    KffiAppKitMainThread.call(installedOwner::emitAppearance)
+                }
                 installedOwner.initialSnapshot = readSnapshot(view, window)
                 return installedOwner
             } catch (failure: Throwable) {
@@ -2127,7 +2153,7 @@ private fun readSnapshot(view: NSView, window: NSWindow): AppKitSurfaceSnapshot 
         focus = readFocus(window),
         visibility = visibility,
         occlusion = occlusion,
-        theme = readTheme(view),
+        appearance = readAppearance(view),
     )
 }
 
@@ -2174,6 +2200,24 @@ private fun readTheme(view: NSView): SurfaceTheme {
         name.isNotBlank() -> SurfaceTheme.Light
         else -> SurfaceTheme.Unknown
     }
+}
+
+private fun readAppearance(view: NSView): SurfaceAppearance = SurfaceAppearance(
+    theme = readTheme(view),
+    contrast = readContrast(),
+)
+
+private fun readContrast(): SurfaceContrast = try {
+    val workspace = NSWorkspace(NSWorkspace.sharedWorkspace())
+    if (workspace.accessibilityDisplayShouldIncreaseContrast()) {
+        SurfaceContrast.High
+    } else {
+        SurfaceContrast.Normal
+    }
+} catch (_: Exception) {
+    SurfaceContrast.Unknown
+} catch (_: LinkageError) {
+    SurfaceContrast.Unknown
 }
 
 internal class KffiDelegateOwner(
@@ -2325,4 +2369,133 @@ internal object KffiAppKitMainThread {
 
 private class MainThreadOutcome<T>(
     val result: Result<T>,
+)
+
+/** Keeps the managed KFFI presentation owner private to the native AppKit port. */
+private class KffiExclusivePresentationLease(
+    private val lease: ExclusiveWindowPresentationLease,
+) : AppKitExclusivePresentationLease {
+    override fun present(displayId: Int): AppKitExclusivePresentationResult = lease.present(displayId).toKadrePresentationResult()
+
+    override fun readback(): AppKitExclusivePresentationResult = lease.readback().toKadrePresentationResult()
+
+    override fun restore(): AppKitExclusivePresentationResult = lease.restore().toKadrePresentationResult()
+
+    override fun close(): AppKitExclusivePresentationCloseResult = lease.close().toKadrePresentationCloseResult()
+}
+
+internal fun ExclusiveWindowPresentationOpenResult.toKadrePresentationOpenResult(): AppKitExclusivePresentationOpenResult = when (this) {
+    is ExclusiveWindowPresentationOpenResult.Opened -> AppKitExclusivePresentationOpenResult.Opened(
+        KffiExclusivePresentationLease(lease),
+    )
+    ExclusiveWindowPresentationOpenResult.UnavailablePlatform -> presentationOpenFailure("unavailable-platform")
+    ExclusiveWindowPresentationOpenResult.WrongThread -> presentationOpenFailure("wrong-thread")
+    ExclusiveWindowPresentationOpenResult.DuplicateWindowLease -> presentationOpenFailure("duplicate-window-lease")
+    ExclusiveWindowPresentationOpenResult.WindowGone -> presentationOpenFailure("window-gone")
+    is ExclusiveWindowPresentationOpenResult.Failed -> presentationOpenFailure(failure)
+}
+
+internal fun ExclusiveWindowPresentationResult.toKadrePresentationResult(): AppKitExclusivePresentationResult = when (this) {
+    is ExclusiveWindowPresentationResult.Presented -> AppKitExclusivePresentationResult.Readback
+    is ExclusiveWindowPresentationResult.MissingTargetScreen -> presentationFailure("target-unavailable")
+    ExclusiveWindowPresentationResult.WindowGone -> presentationFailure("window-gone")
+    ExclusiveWindowPresentationResult.Closed -> presentationFailure("closed")
+    ExclusiveWindowPresentationResult.WrongThread -> presentationFailure("wrong-thread")
+    is ExclusiveWindowPresentationResult.TargetReadbackMismatch -> presentationFailure("target-readback-mismatch")
+    is ExclusiveWindowPresentationResult.ExternalDivergence -> presentationFailure("external-divergence")
+    is ExclusiveWindowPresentationResult.Failed -> presentationFailure(failure)
+}
+
+internal fun ExclusiveWindowPresentationReadbackResult.toKadrePresentationResult(): AppKitExclusivePresentationResult = when (this) {
+    is ExclusiveWindowPresentationReadbackResult.Readback -> AppKitExclusivePresentationResult.Readback
+    ExclusiveWindowPresentationReadbackResult.WindowGone -> presentationFailure("window-gone")
+    ExclusiveWindowPresentationReadbackResult.Closed -> presentationFailure("closed")
+    ExclusiveWindowPresentationReadbackResult.WrongThread -> presentationFailure("wrong-thread")
+    is ExclusiveWindowPresentationReadbackResult.Failed -> presentationFailure(failure)
+}
+
+private fun presentationFailure(code: String): AppKitExclusivePresentationResult.Failed =
+    AppKitExclusivePresentationResult.Failed(exclusivePresentationFailure(code), hasRepresentableReadback = false)
+
+private fun presentationOpenFailure(code: String): AppKitExclusivePresentationOpenResult.Failed =
+    AppKitExclusivePresentationOpenResult.Failed(exclusivePresentationFailure(code))
+
+private fun presentationOpenFailure(
+    failure: org.graphiks.kffi.objc.appkit.ExclusiveWindowPresentationFailure,
+): AppKitExclusivePresentationOpenResult.Failed = presentationOpenFailure(failure.operation.name)
+
+private fun presentationFailure(
+    failure: org.graphiks.kffi.objc.appkit.ExclusiveWindowPresentationFailure,
+): AppKitExclusivePresentationResult.Failed = presentationFailure(failure.operation.name)
+
+internal fun ExclusiveWindowPresentationRestoreResult.toKadrePresentationResult(): AppKitExclusivePresentationResult = when (this) {
+    is ExclusiveWindowPresentationRestoreResult.Restored -> AppKitExclusivePresentationResult.Readback
+    is ExclusiveWindowPresentationRestoreResult.PartiallyRestored -> {
+        val mappedFailures = failures.map { exclusivePresentationFailure(it.operation.name) }
+        val primary = if (mappedFailures.isEmpty()) exclusivePresentationFailure("partial-restore") else mappedFailures.first()
+        AppKitExclusivePresentationResult.Failed(
+            failure = primary,
+            hasRepresentableReadback = readback != null,
+            diagnostics = mappedFailures.drop(1),
+        )
+    }
+    ExclusiveWindowPresentationRestoreResult.WindowGone -> presentationFailure("window-gone")
+    ExclusiveWindowPresentationRestoreResult.Closed -> presentationFailure("closed")
+    ExclusiveWindowPresentationRestoreResult.WrongThread -> presentationFailure("wrong-thread")
+}
+
+internal fun ExclusiveWindowPresentationCloseResult.toKadrePresentationResult(): AppKitExclusivePresentationResult = when (this) {
+    ExclusiveWindowPresentationCloseResult.Closing -> presentationFailure("closing")
+    ExclusiveWindowPresentationCloseResult.WrongThread -> presentationFailure("wrong-thread")
+    is ExclusiveWindowPresentationCloseResult.Terminated -> {
+        val restorationFailures: List<KadreFailure.PlatformFailure>
+        val hasRepresentableReadback: Boolean
+        when (val terminalRestoration = restoration) {
+            ExclusiveWindowPresentationTerminalRestoration.NotRequired -> {
+                restorationFailures = emptyList()
+                hasRepresentableReadback = false
+            }
+            is ExclusiveWindowPresentationTerminalRestoration.Restored -> {
+                restorationFailures = emptyList()
+                hasRepresentableReadback = true
+            }
+            is ExclusiveWindowPresentationTerminalRestoration.PartiallyRestored -> {
+                restorationFailures = terminalRestoration.failures
+                    .map { exclusivePresentationFailure(it.operation.name) }
+                    .ifEmpty { listOf(exclusivePresentationFailure("partial-restore")) }
+                hasRepresentableReadback = terminalRestoration.readback != null
+            }
+            ExclusiveWindowPresentationTerminalRestoration.WindowGone -> {
+                restorationFailures = listOf(exclusivePresentationFailure("window-gone"))
+                hasRepresentableReadback = false
+            }
+        }
+        val failures = restorationFailures + cleanupFailures.map { exclusivePresentationFailure(it.operation.name) }
+        if (failures.isEmpty()) {
+            AppKitExclusivePresentationResult.Readback
+        } else {
+            AppKitExclusivePresentationResult.Failed(
+                failure = failures.first(),
+                hasRepresentableReadback = hasRepresentableReadback,
+                diagnostics = failures.drop(1),
+            )
+        }
+    }
+}
+
+internal fun ExclusiveWindowPresentationCloseResult.toKadrePresentationCloseResult(): AppKitExclusivePresentationCloseResult = when (this) {
+    is ExclusiveWindowPresentationCloseResult.Terminated ->
+        AppKitExclusivePresentationCloseResult.Terminal(toKadrePresentationResult())
+
+    ExclusiveWindowPresentationCloseResult.Closing ->
+        AppKitExclusivePresentationCloseResult.Incomplete(presentationFailure("closing"))
+
+    ExclusiveWindowPresentationCloseResult.WrongThread ->
+        AppKitExclusivePresentationCloseResult.Incomplete(presentationFailure("wrong-thread"))
+}
+
+private fun exclusivePresentationFailure(code: String): KadreFailure.PlatformFailure = KadreFailure.PlatformFailure(
+    KadrePlatform.AppKit,
+    "exclusive-fullscreen",
+    "presentation-${code.replace(Regex("(?<!^)([A-Z])"), "-$1").lowercase()}",
 )

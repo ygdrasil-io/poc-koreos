@@ -15,15 +15,21 @@ import org.graphiks.kadre.application.KadreApplicationFactory
 import org.graphiks.kadre.application.KadreLifecycle
 import org.graphiks.kadre.application.KadreSession
 import org.graphiks.kadre.application.LifecycleState
+import org.graphiks.kadre.application.MemoryPressureLevel
 import org.graphiks.kadre.application.SessionOutcome
 import org.graphiks.kadre.application.SessionStopReason
 import org.graphiks.kadre.application.VisibilityState
 import org.graphiks.kadre.diagnostics.KadrePlatform
 import org.graphiks.kadre.diagnostics.KadreFailure
 import org.graphiks.kadre.diagnostics.KadreResult
+import org.graphiks.kadre.diagnostics.Capability
+import org.graphiks.kadre.diagnostics.FeatureAvailability
+import org.graphiks.kadre.internal.runtime.DisplayPortSnapshot
 import org.graphiks.kadre.internal.runtime.RuntimeHostController
+import org.graphiks.kadre.window.FullscreenMode
 import org.graphiks.kadre.window.WindowAttention
 import org.graphiks.kadre.window.WindowId
+import org.graphiks.kadre.window.WindowOperationId
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
@@ -37,6 +43,72 @@ import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.seconds
 
 class AppKitProcessBrokerTest {
+    @Test
+    fun processMemoryPressureCapabilityClosesItsNativeOwnerOnHostTermination() {
+        val native = RecordingProcessMemoryPressureNative()
+        val broker = AppKitProcessBroker(memoryPressureNative = native)
+
+        assertEquals(FeatureAvailability.Available, broker.memoryPressureAvailability())
+
+        broker.accept(AppKitLifecycleSignal.HostTerminated)
+
+        assertEquals(1, native.closeCount)
+    }
+
+    @Test
+    fun hostTerminationClosesTheProcessWideDisplayObserver() {
+        val native = RecordingProcessDisplayNative()
+        val broker = AppKitProcessBroker(
+            displayBrokerFactory = { AppKitDisplayBroker(native) },
+        )
+        broker.openDisplayPort()
+
+        broker.accept(AppKitLifecycleSignal.HostTerminated)
+
+        assertEquals(1, native.closeCount)
+    }
+
+    @Test
+    fun exclusivePortsFromDifferentSessionsShareOneProcessRegistry() {
+        val native = RecordingProcessDisplayNative(DisplayPortSnapshot(null, emptyList()))
+        var opens = 0
+        val bridge = object : AppKitExclusiveDisplayBridge {
+            override val availability = AppKitExclusiveBridgeAvailability.Available
+
+            override fun open(displayKey: Long, modeKey: Long): AppKitExclusiveDisplayOpenResult {
+                opens += 1
+                return AppKitExclusiveDisplayOpenResult.FailedBeforeCapture(
+                    KadreFailure.PlatformFailure(KadrePlatform.AppKit, "exclusive-fullscreen", "capture-failed"),
+                )
+            }
+        }
+        val broker = AppKitProcessBroker(
+            displayBrokerFactory = { AppKitDisplayBroker(native) },
+            exclusiveDisplayBridge = bridge,
+        )
+        val firstExecutor = ProcessQueuedExclusiveExecutor()
+        val secondExecutor = ProcessQueuedExclusiveExecutor()
+        val first = broker.openExclusiveFullscreenPort(firstExecutor, UnusedProcessExclusiveWindowPort)
+        val second = broker.openExclusiveFullscreenPort(secondExecutor, UnusedProcessExclusiveWindowPort)
+        val firstCommand = ProcessExclusiveCommand(1L, 11L, 71L, 701L)
+        val secondCommand = ProcessExclusiveCommand(2L, 12L, 71L, 701L)
+
+        assertEquals(KadreResult.Success(Unit), first.reserve(firstCommand))
+        assertEquals(
+            KadreFailure.TemporarilyUnavailable(retryable = true),
+            assertIs<KadreResult.Failure>(second.reserve(secondCommand)).reason,
+        )
+        assertEquals(0, opens)
+
+        broker.accept(AppKitLifecycleSignal.HostTerminated)
+        firstExecutor.runAll()
+
+        assertFalse(first.isOpen())
+        assertFalse(second.isOpen())
+        assertEquals(0, opens)
+        assertEquals(1, native.closeCount)
+    }
+
     @Test
     fun brokerReplacesAndCancelsOnlyTheRequestingWindowsAttention() {
         val broker = AppKitProcessBroker()
@@ -369,6 +441,72 @@ private class RecordingLifecycleTarget(
     }
 
     override fun detach() = Unit
+}
+
+private class RecordingProcessDisplayNative(
+    private val snapshotValue: DisplayPortSnapshot? = null,
+) : AppKitDisplayNative {
+    var closeCount: Int = 0
+        private set
+
+    override val enumerationCapability: Capability<Unit> = Capability.Supported(Unit, FeatureAvailability.Available)
+
+    override fun snapshot(): DisplayPortSnapshot = checkNotNull(snapshotValue) {
+        "the process-broker test does not enumerate"
+    }
+
+    override fun observeReconfiguration(listener: () -> Unit): AutoCloseable = AutoCloseable {}
+
+    override fun close() {
+        closeCount += 1
+    }
+}
+
+private class ProcessQueuedExclusiveExecutor : AppKitExclusiveExecutor {
+    private val tasks = ArrayDeque<() -> Unit>()
+
+    override fun dispatch(task: () -> Unit): Boolean {
+        tasks.addLast(task)
+        return true
+    }
+
+    fun runAll() {
+        while (tasks.isNotEmpty()) tasks.removeFirst().invoke()
+    }
+}
+
+private object UnusedProcessExclusiveWindowPort : AppKitExclusiveWindowPort
+
+private class ProcessExclusiveCommand(
+    window: Long,
+    operation: Long,
+    override val displayKey: Long,
+    override val modeKey: Long,
+) : AppKitExclusiveBrokerCommand {
+    override val windowId: WindowId = attentionWindowId(window)
+    override val operationId: WindowOperationId = WindowOperationId::class.java
+        .getDeclaredConstructor(Long::class.javaPrimitiveType)
+        .apply { isAccessible = true }
+        .newInstance(operation)
+    override val requestedFullscreen: FullscreenMode = FullscreenMode.Windowed
+
+    override fun captureCommitted(): Boolean = true
+
+    override fun completed(effectiveState: org.graphiks.kadre.window.WindowState) = Unit
+
+    override fun failed(
+        failure: KadreFailure,
+        effectiveState: org.graphiks.kadre.window.WindowState?,
+    ) = Unit
+}
+
+private class RecordingProcessMemoryPressureNative : AppKitMemoryPressureNative {
+    var closeCount: Int = 0
+        private set
+
+    override fun open(listener: (MemoryPressureLevel) -> Unit): AutoCloseable = AutoCloseable {
+        closeCount += 1
+    }
 }
 
 private class BlockingLifecycleTarget : AppKitLifecycleTarget {

@@ -18,8 +18,8 @@
 | Package | Déclarations publiques |
 |---|---|
 | `org.graphiks.kadre.application` | `KadreApplication`, `KadreApplicationFactory`, `KadreLaunchContext`, `KadreLaunchReason`, `KadreScope`, `KadreSession`, `SessionState`, `SessionOutcome`, `SessionStopReason`, `RestorationToken`, `KadreHost`, `KadreLifecycle`, `LifecycleState`, `LifecycleCapabilities`, `LifecycleEvent`, `HostSignal`, `MemoryPressureLevel`, `AttachmentState`, `VisibilityState`, `ActivationState`, `SessionId`, `SessionSequence`, `SessionInstant`, `EventStamp`, `EventDeliverySpan` |
-| `org.graphiks.kadre.surface` | `HostSurface`, `SurfaceId`, `SurfaceRevision`, `SurfaceState`, `SurfaceAttachmentState`, `SurfaceVisibility`, `SurfaceOcclusion`, `SurfaceFocus`, `SurfaceTheme`, `SurfaceEvent`, `SurfaceUpdate`, `SurfaceUpdateOutcome`, `RejectedSurfaceField`, `SurfaceProperty`, `SurfaceCapabilities`, `CursorStyle`, `CursorIcon`, `CursorImage`, `PointerCaptureMode`, `HitTestingMode`, `InputDefaultBehavior`, `LogicalPoint`, `LogicalDelta`, `LogicalSize`, `LogicalRect`, `LogicalInsets`, `PhysicalPoint`, `PhysicalSize`, `PhysicalRect`, `PixelRounding`, `PropertyChange`, `BinaryImage`, `ImageFormat`, `ImageConstraints` |
-| `org.graphiks.kadre.display` | `DisplayManager`, `DisplayManagerState`, `DisplayInventory`, `Display`, `DisplayId`, `DisplayManagerRevision`, `DisplayRevision`, `DisplayState`, `DisplayType`, `DisplayConnectionState`, `DisplayMode`, `DisplayCapabilities`, `DisplayEvent` |
+| `org.graphiks.kadre.surface` | `HostSurface`, `SurfaceId`, `SurfaceRevision`, `SurfaceState`, `SurfaceAttachmentState`, `SurfaceVisibility`, `SurfaceOcclusion`, `SurfaceFocus`, `SurfaceTheme`, `SurfaceContrast`, `SurfaceAppearance`, `SurfaceEvent`, `SurfaceUpdate`, `SurfaceUpdateOutcome`, `RejectedSurfaceField`, `SurfaceProperty`, `SurfaceCapabilities`, `CursorStyle`, `CursorIcon`, `CursorImage`, `PointerCaptureMode`, `HitTestingMode`, `InputDefaultBehavior`, `LogicalPoint`, `LogicalDelta`, `LogicalSize`, `LogicalRect`, `LogicalInsets`, `PhysicalPoint`, `PhysicalSize`, `PhysicalRect`, `PixelRounding`, `PropertyChange`, `BinaryImage`, `ImageFormat`, `ImageConstraints` |
+| `org.graphiks.kadre.display` | `DisplayManager`, `DisplayManagerState`, `DisplayInventory`, `Display`, `DisplayId`, `DisplayModeId`, `DisplayManagerRevision`, `DisplayRevision`, `DisplayState`, `DisplayType`, `DisplayConnectionState`, `DisplayMode`, `DisplayCapabilities`, `DisplayEvent` |
 | `org.graphiks.kadre.window` | `WindowManager`, `WindowManagerState`, `WindowManagerCapabilities`, `WindowManagerRevision`, `WindowCreationMode`, `Window`, `WindowId`, `WindowRevision`, `WindowOperationId`, `WindowCloseRequestId`, `WindowRequestId`, `WindowRequest`, `WindowRequestState`, `WindowRequestOutcome`, `WindowCancellationOutcome`, `WindowSpec`, `WindowSpecBuilder`, `WindowState`, `WindowPhase`, `WindowCapabilities`, `LogicalSizeRange`, `FullscreenKind`, `WindowUpdate`, `WindowUpdateOutcome`, `RejectedWindowField`, `WindowProperty`, `WindowCloseOutcome`, `WindowCloseDecision`, `WindowCloseResponseOutcome`, `WindowEvent`, `WindowCloseReason`, `WindowLevel`, `WindowDecorations`, `WindowSystemButtons`, `WindowAttention`, `FullscreenMode`, `ResizeEdge` |
 | `org.graphiks.kadre.interaction` | `InteractionHandler`, `InteractionContext`, `InteractionRegistration`, `ArmedInteraction`, `ArmedInteractionState`, `InteractionAction`, `InteractionActionOutcome`, `InteractionArmOptions`, `InteractionTrigger`, `InteractionTriggerKind`, `ArmedInteractionConstraints`, `InteractionEvent`, `InteractionKind`, `InteractionToken`, `InteractionRequestId` |
 | `org.graphiks.kadre.input` | `DeviceManager`, `DeviceManagerState`, `DeviceManagerRevision`, `DeviceInventory`, `DeviceLifecycleEvent`, `InputDevice`, `InputDeviceDescriptor`, `InputDeviceKind`, `DeviceId`, `DeviceConnectionState`, `SurfaceInput`, `SurfaceInputState`, `InputStateRevision`, `InputCapabilities`, `InputEvent`, `InputStateResetReason`, `KeyboardState`, `KeyboardModifiers`, `ModifierKey`, `KeyState`, `PhysicalKey`, `LogicalKey`, `NamedKey`, `KeyLocation`, `PointerState`, `PointerId`, `PointerKind`, `PointerButton`, `PointerButtonState`, `PenState`, `TouchState`, `TouchId`, `TouchPhase`, `GestureKind`, `ScrollDelta`, `Gamepad`, `GamepadId`, `GamepadRevision`, `GamepadSnapshot`, `GamepadDescriptor`, `GamepadMapping`, `GamepadRoutingState`, `GamepadCapabilities`, `GamepadEffectConstraints`, `GamepadState`, `GamepadButton`, `GamepadAxis`, `GamepadButtonValue`, `GamepadAxisValue`, `GamepadEvent`, `GamepadEffect`, `GamepadEffectKind`, `GamepadEffectSession`, `GamepadEffectState`, `GamepadEffectOutcome`, `GamepadEffectStopReason`, `TextInputConfig`, `TextInputSession`, `TextInputState`, `TextInputEvent`, `TextInputPurpose`, `TextInputAction`, `TextCapitalization`, `TextRange`, `TextDocumentRevision`, `DropOffer`, `DropOfferId`, `DropOfferState`, `DropOfferTerminationReason`, `DropItemDescriptor`, `DropItemKind`, `DropTransfer`, `DroppedItem`, `DropItemReadMode`, `RawInputAccess`, `RawInputState`, `RawInputEvent`, `RawInputUnit`, `KadrePermission`, `PermissionState` |
@@ -53,7 +53,7 @@ Le lifecycle ajoute l’enum fermé `MemoryPressureLevel { Moderate, Critical }`
 Les classes opaques suivantes ont un constructeur `internal`, une égalité/hachage par valeur, un `toString()` redacted et n’exposent pas leur représentation :
 
 ```text
-SessionId, SurfaceId, WindowId, DisplayId, DeviceId, GamepadId,
+SessionId, SurfaceId, WindowId, DisplayId, DisplayModeId, DeviceId, GamepadId,
 CaptureSourceId, WindowCloseRequestId, WindowOperationId,
 WindowRequestId, InteractionToken, InteractionRequestId, DropOfferId,
 PointerId, TouchId
@@ -132,7 +132,7 @@ public data class SurfaceState(
     public val visibility: SurfaceVisibility,
     public val occlusion: SurfaceOcclusion,
     public val focus: SurfaceFocus,
-    public val theme: SurfaceTheme,
+    public val appearance: SurfaceAppearance,
     public val cursor: CursorStyle,
     public val pointerCapture: PointerCaptureMode,
     public val hitTesting: HitTestingMode,
@@ -145,6 +145,11 @@ public enum class SurfaceVisibility { Visible, Hidden }
 public enum class SurfaceOcclusion { Visible, Occluded, Unknown }
 public enum class SurfaceFocus { Focused, Unfocused }
 public enum class SurfaceTheme { Light, Dark, Unknown }
+public enum class SurfaceContrast { Normal, High, Unknown }
+public data class SurfaceAppearance(
+    public val theme: SurfaceTheme,
+    public val contrast: SurfaceContrast,
+)
 
 public sealed interface SurfaceEvent {
     public val stamp: EventStamp
@@ -152,7 +157,7 @@ public sealed interface SurfaceEvent {
     public data class MetricsChanged(public val state: SurfaceState, override val stamp: EventStamp) : SurfaceEvent { override val stateRevision: SurfaceRevision get() = state.revision }
     public data class FocusChanged(public val state: SurfaceState, override val stamp: EventStamp) : SurfaceEvent { override val stateRevision: SurfaceRevision get() = state.revision }
     public data class VisibilityChanged(public val state: SurfaceState, override val stamp: EventStamp) : SurfaceEvent { override val stateRevision: SurfaceRevision get() = state.revision }
-    public data class ThemeChanged(public val state: SurfaceState, override val stamp: EventStamp) : SurfaceEvent { override val stateRevision: SurfaceRevision get() = state.revision }
+    public data class AppearanceChanged(public val state: SurfaceState, override val stamp: EventStamp) : SurfaceEvent { override val stateRevision: SurfaceRevision get() = state.revision }
     public data class RedrawRequested(override val stateRevision: SurfaceRevision, override val stamp: EventStamp) : SurfaceEvent
 }
 
@@ -215,6 +220,7 @@ public enum class DisplayType { Physical, Virtual, HostViewport }
 public enum class DisplayConnectionState { Connected, Disconnected }
 
 public data class DisplayMode(
+    public val id: DisplayModeId,
     public val physicalSize: PhysicalSize,
     public val refreshRateHz: Double?,
     public val bitDepth: Int?,
@@ -1049,7 +1055,7 @@ public interface VirtualSurfaceController {
     ): SurfaceState
     public fun setFocus(surfaceId: SurfaceId, focus: SurfaceFocus): SurfaceState
     public fun setVisibility(surfaceId: SurfaceId, visibility: SurfaceVisibility, occlusion: SurfaceOcclusion): SurfaceState
-    public fun setTheme(surfaceId: SurfaceId, theme: SurfaceTheme): SurfaceState
+    public fun setAppearance(surfaceId: SurfaceId, appearance: SurfaceAppearance): SurfaceState
     public fun setCapabilities(surfaceId: SurfaceId, capabilities: SurfaceCapabilities)
     public fun requestRedraw(surfaceId: SurfaceId)
     public fun detach(surfaceId: SurfaceId)
@@ -1218,7 +1224,7 @@ Les contrôleurs attribuent eux-mêmes IDs, revisions, stamps et operation IDs ;
 
 `VirtualLifecycleController.setVisibility(Background)` publie atomiquement `Background + Inactive`; repasser `Foreground` conserve `Inactive` jusqu’à un `setActivation(Active)` explicite. `setActivation(Active)` exige `Attached + Foreground`. Le detach terminal reste possédé par `FakeKadreHost.detach`; tout appel ultérieur du contrôleur lève `IllegalArgumentException`. `setCapabilities` accepte pour `memoryPressure` uniquement le domaine fermé de `DESIGN.md`, et `memoryPressure` exige la valeur courante `Available` avant d’admettre le signal.
 
-`VirtualKadreClock` démarre à zéro. `advanceBy` rejette une durée négative/non finie, avance l’horloge sans exécuter de task puis `runCurrent` draine dans l’ordre FIFO toutes les tasks maintenant éligibles, y compris celles planifiées récursivement au même instant. `FakeCapabilities.All` supporte chaque capability portable que le fake peut exécuter sémantiquement ; `SurfaceCapabilities.platformAccess` reste toujours `Unsupported(PlatformSurfaceAccess)` et `WindowCapabilities.platformAccess` reste toujours `Unsupported(PlatformWindowAccess)`, car le fake ne forge aucun objet SDK ni handle natif. `Minimal` ne garantit que les axes du lifecycle, les métriques/redraw de la surface primaire et `KadrePolicies.Default`; sa pression mémoire est `Unsupported`. `Custom` vaut `All` moins les opérations et features listées. `unavailableOperations` accepte exactement `HostAttach`, `DisplayAccess`, `RequestWindow`, `UpdateWindow`, `RequestWindowAttention`, `RespondToCloseRequest`, `UpdateSurface`, `InstallInteractionHandler`, `ArmInteraction`, `GamepadEffect`, `TextInput`, `CapturePermission`, `CaptureRefreshSources`, `CaptureOpen` et `RawInputAccess`; toute autre valeur est rejetée au constructeur. Une opération mappée force ses champs `Capability` vers `Capability.Unsupported` ou son champ/state direct vers l’absence structurelle correspondante. Un élément de `unavailableFeatures` force le champ passif ou la sous-feature correspondante vers `FeatureAvailability.Unsupported`; `FakeFeature.MemoryPressure` force `LifecycleCapabilities.memoryPressure`, `FakeFeature.DeviceInventory` publie `DeviceInventory.Unsupported` et une feature `Capture*Target` force le `Capability` de cette target vers `Unsupported(CaptureOpen)`. Les sets sont copiés et une même feature ne possède qu’une clé. `FakeHostOptions(primaryWindow = true, primarySurface = false)` est invalide. Les objets initiaux utilisent 800×600 logical/physical, scale 1, insets zéro, light theme, visible/focused, surface `System(Default) + None + Enabled + HostDefault`, lifecycle `Attached + Foreground + Active` et `WindowSpec()` lorsque présents.
+`VirtualKadreClock` démarre à zéro. `advanceBy` rejette une durée négative/non finie, avance l’horloge sans exécuter de task puis `runCurrent` draine dans l’ordre FIFO toutes les tasks maintenant éligibles, y compris celles planifiées récursivement au même instant. `FakeCapabilities.All` supporte chaque capability portable que le fake peut exécuter sémantiquement ; `SurfaceCapabilities.platformAccess` reste toujours `Unsupported(PlatformSurfaceAccess)` et `WindowCapabilities.platformAccess` reste toujours `Unsupported(PlatformWindowAccess)`, car le fake ne forge aucun objet SDK ni handle natif. `Minimal` ne garantit que les axes du lifecycle, les métriques/redraw de la surface primaire et `KadrePolicies.Default`; sa pression mémoire est `Unsupported`. `Custom` vaut `All` moins les opérations et features listées. `unavailableOperations` accepte exactement `HostAttach`, `DisplayAccess`, `RequestWindow`, `UpdateWindow`, `RequestWindowAttention`, `RespondToCloseRequest`, `UpdateSurface`, `InstallInteractionHandler`, `ArmInteraction`, `GamepadEffect`, `TextInput`, `CapturePermission`, `CaptureRefreshSources`, `CaptureOpen` et `RawInputAccess`; toute autre valeur est rejetée au constructeur. Une opération mappée force ses champs `Capability` vers `Capability.Unsupported` ou son champ/state direct vers l’absence structurelle correspondante. Un élément de `unavailableFeatures` force le champ passif ou la sous-feature correspondante vers `FeatureAvailability.Unsupported`; `FakeFeature.MemoryPressure` force `LifecycleCapabilities.memoryPressure`, `FakeFeature.DeviceInventory` publie `DeviceInventory.Unsupported` et une feature `Capture*Target` force le `Capability` de cette target vers `Unsupported(CaptureOpen)`. Les sets sont copiés et une même feature ne possède qu’une clé. `FakeHostOptions(primaryWindow = true, primarySurface = false)` est invalide. Les objets initiaux utilisent 800×600 logical/physical, scale 1, insets zéro, `SurfaceAppearance(Light, Normal)`, visible/focused, surface `System(Default) + None + Enabled + HostDefault`, lifecycle `Attached + Foreground + Active` et `WindowSpec()` lorsque présents.
 
 `FakeKadreHost.platform` vaut toujours `KadrePlatform.Fake`. Le fake ne produit spontanément aucune `PlatformFailure`; une telle failure ne peut apparaître que si le test l’a fournie explicitement à une méthode `fail*`/`reject`/`enqueueOpenFailure`.
 

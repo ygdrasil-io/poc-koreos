@@ -5,6 +5,7 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.filterIsInstance
 import kotlinx.coroutines.flow.first
@@ -72,6 +73,8 @@ import org.graphiks.kadre.surface.LogicalSize
 import org.graphiks.kadre.surface.PropertyChange
 import org.graphiks.kadre.surface.SurfaceFocus
 import org.graphiks.kadre.surface.SurfaceOcclusion
+import org.graphiks.kadre.surface.SurfaceAppearance
+import org.graphiks.kadre.surface.SurfaceContrast
 import org.graphiks.kadre.surface.SurfaceTheme
 import org.graphiks.kadre.surface.SurfaceVisibility
 import org.graphiks.kadre.surface.toPhysical
@@ -100,6 +103,7 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
 import kotlin.time.Duration.Companion.seconds
+import kotlin.time.Duration.Companion.milliseconds
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -108,6 +112,73 @@ import kotlin.test.assertTrue
 
 @OptIn(DelicateKadreApi::class)
 class AppKitWindowRuntimeDriverTest {
+    @Test
+    fun driverInstallsAndClosesItsProcessExclusivePort() {
+        val broker = AppKitProcessBroker()
+        val driver = AppKitWindowRuntimeDriverFactory {
+            DeterministicAppKitNativeWindowPort("exclusive-port-wiring")
+        }.create(
+            resources = KadrePolicies.Default.resources,
+            broker = broker,
+        )
+        val exclusivePort = assertIs<AppKitExclusiveFullscreenPort>(
+            driver.privateField("exclusiveFullscreenPort").get(driver),
+        )
+
+        assertTrue(exclusivePort.isOpen())
+        driver.close()
+
+        assertFalse(exclusivePort.isOpen())
+    }
+
+    @Test
+    fun exclusiveEntryUsesManagedPresentationWithoutInvokingToggleFullscreen() = runBlocking {
+        lateinit var nativePort: DeterministicAppKitNativeWindowPort
+        val presentation = RecordingAppKitExclusivePresentationLease(
+            isMainThread = { nativePort.isInsideMainThreadCall() },
+        )
+        nativePort = DeterministicAppKitNativeWindowPort(
+            name = "exclusive-no-toggle",
+            exclusivePresentationLease = presentation,
+        )
+        val driver = AppKitWindowRuntimeDriverFactory { nativePort }.create(KadrePolicies.Default.resources)
+        val displayLease = RecordingDriverExclusiveDisplayLease(displayKey = 71L, modeKey = 701L, displayId = 17)
+        val broker = AppKitExclusiveDisplayBroker(
+            object : AppKitExclusiveDisplayBridge {
+                override val availability = AppKitExclusiveBridgeAvailability.Available
+                override fun open(displayKey: Long, modeKey: Long): AppKitExclusiveDisplayOpenResult =
+                    AppKitExclusiveDisplayOpenResult.Opened(displayLease)
+            },
+        )
+        val exclusivePort = broker.openPort(
+            AppKitExclusiveExecutor { task -> task(); true },
+            driver.exclusiveWindowPort(),
+        )
+
+        try {
+            val window = openedWindow(driver, WindowSpec(title = "exclusive-no-toggle"))
+            val enter = RecordingDriverExclusiveCommand(window.id, 91L, 71L, 701L, exclusiveWindowRequest(window.id).requestedFullscreen)
+
+            assertEquals(KadreResult.Success(Unit), exclusivePort.reserve(enter))
+
+            assertEquals(listOf(17), presentation.presentedDisplayIds)
+            assertEquals(1, enter.completions.size)
+            assertEquals(emptyList(), nativePort.fullscreenToggleTargets)
+
+            val exit = RecordingDriverExclusiveCommand(window.id, 92L, 71L, 701L, FullscreenMode.Windowed)
+            exclusivePort.release(exit)
+
+            assertEquals(1, presentation.restoreCount)
+            assertEquals(1, presentation.closeCount)
+            assertEquals(1, displayLease.releaseCount)
+            assertEquals(emptyList(), nativePort.fullscreenToggleTargets)
+        } finally {
+            exclusivePort.close()
+            broker.close()
+            driver.close()
+        }
+    }
+
     @Test
     fun standaloneAttentionRunsAndReleasesOnTheAppKitOwnerThread() {
         val port = OwnerThreadAppKitNativeWindowPort("attention-owner-thread")
@@ -4725,6 +4796,323 @@ class AppKitWindowRuntimeDriverTest {
     }
 
     @Test
+    fun terminalizeClosesExclusivePresentationAndSchedulesCleanupWhenNativePeerCloseFails() = runBlocking {
+        val nativeCloseFailure = IllegalStateException("terminal native close failed")
+        val presentationFailure = fullscreenFailureFixture("presentation-partial-restore")
+        val presentationDiagnostic = fullscreenFailureFixture("presentation-restore-frame")
+        lateinit var port: DeterministicAppKitNativeWindowPort
+        val presentationLease = RecordingAppKitExclusivePresentationLease(
+            closeResult = AppKitExclusivePresentationResult.Failed(
+                failure = presentationFailure,
+                hasRepresentableReadback = true,
+                diagnostics = listOf(presentationDiagnostic),
+            ),
+            isMainThread = { port.isInsideMainThreadCall() },
+        )
+        port = DeterministicAppKitNativeWindowPort(
+            name = "terminal-exclusive-cleanup",
+            closeFailures = mapOf("terminal-exclusive" to nativeCloseFailure),
+            exclusivePresentationLease = presentationLease,
+        )
+        val reported = CopyOnWriteArrayList<Throwable>()
+        val driver = AppKitWindowRuntimeDriverFactory { port }.create(
+            KadrePolicies.Default.resources,
+            RuntimeFailureReporter(reported::add),
+        )
+
+        try {
+            val window = openedWindow(driver, WindowSpec(title = "terminal-exclusive"))
+            val exclusiveWindowPort = driver.exclusiveWindowPort()
+            assertEquals(
+                AppKitExclusiveWindowPreparation.Prepared,
+                exclusiveWindowPort.prepare(exclusiveWindowRequest(window.id)),
+            )
+
+            exclusiveWindowPort.terminalize(window.id)
+
+            withTimeout(2.seconds) { window.state.first { it.phase == WindowPhase.Closed } }
+            assertEquals(1, presentationLease.closeCount)
+            assertTrue(reported.contains(nativeCloseFailure))
+            assertEquals(
+                listOf(presentationFailure, presentationDiagnostic),
+                reported.filterIsInstance<KadreException>().map(KadreException::failure),
+            )
+        } finally {
+            driver.close()
+        }
+    }
+
+    @Test
+    fun terminalizeClosesExclusivePresentationBeforeClosingNativePeer() = runBlocking {
+        val trace = mutableListOf<String>()
+        lateinit var port: DeterministicAppKitNativeWindowPort
+        val presentationLease = RecordingAppKitExclusivePresentationLease(
+            onClose = { trace += "presentation-close" },
+            isMainThread = { port.isInsideMainThreadCall() },
+        )
+        port = DeterministicAppKitNativeWindowPort(
+            name = "terminal-presentation-before-peer",
+            beforeCloseWindow = { trace += "peer-close" },
+            exclusivePresentationLease = presentationLease,
+        )
+        val driver = AppKitWindowRuntimeDriverFactory { port }.create(KadrePolicies.Default.resources)
+
+        try {
+            val window = openedWindow(driver, WindowSpec(title = "terminal-presentation-before-peer"))
+            val exclusiveWindowPort = driver.exclusiveWindowPort()
+            assertEquals(AppKitExclusiveWindowPreparation.Prepared, exclusiveWindowPort.prepare(exclusiveWindowRequest(window.id)))
+
+            exclusiveWindowPort.terminalize(window.id)
+
+            withTimeout(2.seconds) { window.state.first { it.phase == WindowPhase.Closed } }
+            assertEquals(listOf("presentation-close", "peer-close"), trace)
+        } finally {
+            driver.close()
+        }
+    }
+
+    @Test
+    fun terminalizeRetainsAThrownPresentationCloseForCleanupRetryBeforeClosingThePeer() = runBlocking {
+        val trace = mutableListOf<String>()
+        val closeFailure = IllegalStateException("presentation close invocation failed")
+        var attempts = 0
+        lateinit var port: DeterministicAppKitNativeWindowPort
+        val presentationLease = RecordingAppKitExclusivePresentationLease(
+            onClose = {
+                trace += "presentation-close"
+                if (++attempts == 1) throw closeFailure
+            },
+            isMainThread = { port.isInsideMainThreadCall() },
+        )
+        port = DeterministicAppKitNativeWindowPort(
+            name = "terminal-presentation-close-retry",
+            beforeCloseWindow = { trace += "peer-close" },
+            exclusivePresentationLease = presentationLease,
+        )
+        val reported = CopyOnWriteArrayList<Throwable>()
+        val driver = AppKitWindowRuntimeDriverFactory { port }.create(
+            resources = KadrePolicies.Default.resources,
+            failureReporter = RuntimeFailureReporter(reported::add),
+        )
+
+        try {
+            val window = openedWindow(driver, WindowSpec(title = "terminal-presentation-close-retry"))
+            val exclusiveWindowPort = driver.exclusiveWindowPort()
+            assertEquals(AppKitExclusiveWindowPreparation.Prepared, exclusiveWindowPort.prepare(exclusiveWindowRequest(window.id)))
+
+            exclusiveWindowPort.terminalize(window.id)
+
+            withTimeout(2.seconds) {
+                while ("peer-close" !in trace) yield()
+            }
+            assertEquals(listOf("presentation-close", "presentation-close", "peer-close"), trace)
+            assertTrue(reported.contains(closeFailure))
+        } finally {
+            driver.close()
+        }
+    }
+
+    @Test
+    fun terminalizeRetriesAnIncompletePresentationCloseOnceBeforeClosingThePeer() = runBlocking {
+        val trace = mutableListOf<String>()
+        val retryableFailure = fullscreenFailureFixture("presentation-retryable-close")
+        lateinit var port: DeterministicAppKitNativeWindowPort
+        val presentationLease = RecordingAppKitExclusivePresentationLease(
+            closeResults = ArrayDeque(
+                listOf(
+                    AppKitExclusivePresentationCloseResult.Incomplete(
+                        AppKitExclusivePresentationResult.Failed(retryableFailure, false),
+                    ),
+                    AppKitExclusivePresentationCloseResult.Terminal(AppKitExclusivePresentationResult.Readback),
+                ),
+            ),
+            onClose = { trace += "presentation-close" },
+            isMainThread = { port.isInsideMainThreadCall() },
+        )
+        port = DeterministicAppKitNativeWindowPort(
+            name = "terminal-incomplete-presentation-close",
+            beforeCloseWindow = { trace += "peer-close" },
+            exclusivePresentationLease = presentationLease,
+        )
+        val driver = AppKitWindowRuntimeDriverFactory { port }.create(KadrePolicies.Default.resources)
+
+        try {
+            val window = openedWindow(driver, WindowSpec(title = "terminal-incomplete-presentation-close"))
+            assertEquals(AppKitExclusiveWindowPreparation.Prepared, driver.exclusiveWindowPort().prepare(exclusiveWindowRequest(window.id)))
+
+            driver.exclusiveWindowPort().terminalize(window.id)
+
+            withTimeout(2.seconds) { window.state.first { it.phase == WindowPhase.Closed } }
+            assertEquals(listOf("presentation-close", "presentation-close", "peer-close"), trace)
+        } finally {
+            driver.close()
+        }
+    }
+
+    @Test
+    fun persistentIncompletePresentationCloseLeavesTheQueueDrainableAndRetriesOnlyAfterDriverClose() = runBlocking {
+        val trace = mutableListOf<String>()
+        val retryableFailure = fullscreenFailureFixture("presentation-still-retryable")
+        val closeResult = AtomicReference<AppKitExclusivePresentationCloseResult>(
+            AppKitExclusivePresentationCloseResult.Incomplete(
+                AppKitExclusivePresentationResult.Failed(retryableFailure, false),
+            ),
+        )
+        lateinit var port: DeterministicAppKitNativeWindowPort
+        val presentationLease = RecordingAppKitExclusivePresentationLease(
+            closeResultProvider = closeResult::get,
+            onClose = { trace += "presentation-close" },
+            isMainThread = { port.isInsideMainThreadCall() },
+        )
+        port = DeterministicAppKitNativeWindowPort(
+            name = "persistent-incomplete-presentation-close",
+            beforeCloseWindow = { trace += "peer-close" },
+            exclusivePresentationLease = presentationLease,
+        )
+        val driver = AppKitWindowRuntimeDriverFactory { port }.create(KadrePolicies.Default.resources)
+
+        try {
+            val window = openedWindow(driver, WindowSpec(title = "persistent-incomplete-presentation-close"))
+            val request = exclusiveWindowRequest(window.id)
+            assertEquals(AppKitExclusiveWindowPreparation.Prepared, driver.exclusiveWindowPort().prepare(request))
+
+            driver.exclusiveWindowPort().terminalize(window.id)
+
+            withTimeout(2.seconds) {
+                while (presentationLease.closeCount < 3) yield()
+            }
+            delay(50.milliseconds)
+            assertEquals(3, presentationLease.closeCount)
+            assertTrue(port.closedWindowTitles.isEmpty())
+            assertIs<AppKitExclusiveWindowPreparation.Failed>(driver.exclusiveWindowPort().prepare(request))
+
+            closeResult.set(AppKitExclusivePresentationCloseResult.Terminal(AppKitExclusivePresentationResult.Readback))
+            driver.close()
+
+            assertEquals(
+                listOf(
+                    "presentation-close",
+                    "presentation-close",
+                    "presentation-close",
+                    "presentation-close",
+                    "peer-close",
+                ),
+                trace,
+            )
+        } finally {
+            driver.close()
+        }
+    }
+
+    @Test
+    fun programmaticNativeCloseRetriesExclusivePresentationBeforeCommittingThePeerClose() = runBlocking {
+        val trace = mutableListOf<String>()
+        val closeFailure = IllegalStateException("programmatic presentation close invocation failed")
+        var attempts = 0
+        lateinit var port: DeterministicAppKitNativeWindowPort
+        val presentationLease = RecordingAppKitExclusivePresentationLease(
+            onClose = {
+                trace += "presentation-close"
+                if (++attempts == 1) throw closeFailure
+            },
+            isMainThread = { port.isInsideMainThreadCall() },
+        )
+        port = DeterministicAppKitNativeWindowPort(
+            name = "programmatic-presentation-close-retry",
+            beforeCloseWindow = { trace += "peer-close" },
+            exclusivePresentationLease = presentationLease,
+        )
+        val reported = CopyOnWriteArrayList<Throwable>()
+        val driver = AppKitWindowRuntimeDriverFactory { port }.create(
+            resources = KadrePolicies.Default.resources,
+            failureReporter = RuntimeFailureReporter(reported::add),
+        )
+
+        try {
+            val window = openedWindow(driver, WindowSpec(title = "programmatic-presentation-close-retry"))
+            assertEquals(
+                AppKitExclusiveWindowPreparation.Prepared,
+                driver.exclusiveWindowPort().prepare(exclusiveWindowRequest(window.id)),
+            )
+
+            assertIs<WindowCloseOutcome.Accepted>(window.close().successValue())
+
+            withTimeout(2.seconds) {
+                window.state.first { it.phase == WindowPhase.Closed }
+                while ("programmatic-presentation-close-retry" !in port.closedWindowTitles) yield()
+            }
+            assertEquals(listOf("presentation-close", "presentation-close", "peer-close"), trace)
+            assertTrue(reported.contains(closeFailure))
+        } finally {
+            driver.close()
+        }
+    }
+
+    @Test
+    fun driverCloseClosesExclusivePresentationBeforeClosingNativePeer() = runBlocking {
+        val trace = mutableListOf<String>()
+        lateinit var port: DeterministicAppKitNativeWindowPort
+        val presentationLease = RecordingAppKitExclusivePresentationLease(
+            onClose = { trace += "presentation-close" },
+            isMainThread = { port.isInsideMainThreadCall() },
+        )
+        port = DeterministicAppKitNativeWindowPort(
+            name = "cleanup-presentation-before-peer",
+            beforeCloseWindow = { trace += "peer-close" },
+            exclusivePresentationLease = presentationLease,
+        )
+        val driver = AppKitWindowRuntimeDriverFactory { port }.create(KadrePolicies.Default.resources)
+
+        val window = openedWindow(driver, WindowSpec(title = "cleanup-presentation-before-peer"))
+        assertEquals(
+            AppKitExclusiveWindowPreparation.Prepared,
+            driver.exclusiveWindowPort().prepare(exclusiveWindowRequest(window.id)),
+        )
+
+        driver.close()
+
+        assertEquals(listOf("presentation-close", "peer-close"), trace)
+    }
+
+    @Test
+    fun driverCleanupClosesAndReportsExclusivePresentationWhenNativePeerCloseFails() = runBlocking {
+        val nativeCloseFailure = IllegalStateException("cleanup native close failed")
+        val presentationFailure = fullscreenFailureFixture("presentation-partial-restore")
+        lateinit var port: DeterministicAppKitNativeWindowPort
+        val presentationLease = RecordingAppKitExclusivePresentationLease(
+            closeResult = AppKitExclusivePresentationResult.Failed(
+                failure = presentationFailure,
+                hasRepresentableReadback = true,
+            ),
+            isMainThread = { port.isInsideMainThreadCall() },
+        )
+        port = DeterministicAppKitNativeWindowPort(
+            name = "driver-exclusive-cleanup",
+            closeFailures = mapOf("driver-exclusive" to nativeCloseFailure),
+            exclusivePresentationLease = presentationLease,
+        )
+        val reported = CopyOnWriteArrayList<Throwable>()
+        val driver = AppKitWindowRuntimeDriverFactory { port }.create(
+            KadrePolicies.Default.resources,
+            RuntimeFailureReporter(reported::add),
+        )
+
+        openedWindow(driver, WindowSpec(title = "driver-exclusive"))
+        assertEquals(
+            AppKitExclusiveWindowPreparation.Prepared,
+            driver.exclusiveWindowPort().prepare(exclusiveWindowRequest(driver.manager.state.value.windows.single().id)),
+        )
+
+        driver.close()
+
+        assertEquals(1, presentationLease.closeCount)
+        assertTrue(reported.contains(nativeCloseFailure))
+        assertTrue(
+            reported.filterIsInstance<KadreException>().any { it.failure == presentationFailure },
+        )
+    }
+
+    @Test
     fun pendingCleanupFailureDuringDriverCloseDetachesInsteadOfReportingFalseCancellation() = runBlocking {
         val cleanupFailure = IllegalStateException("pending native close failed")
         val preparationStarted = CountDownLatch(1)
@@ -4928,6 +5316,7 @@ internal class DeterministicAppKitNativeWindowPort(
     private val appearanceFailureAfterTransparencySet: Throwable? = null,
     appearanceReadbackFailure: Throwable? = null,
     private val configuredTextInputPort: AppKitNativeTextInputPort? = null,
+    private val exclusivePresentationLease: AppKitExclusivePresentationLease? = null,
 ) : AppKitNativeWindowPort {
     @Volatile
     private var effectiveLevelOverride: WindowLevel? = effectiveLevel
@@ -4960,16 +5349,24 @@ internal class DeterministicAppKitNativeWindowPort(
     private val fullscreenCommitArbitrationPaused = AtomicBoolean(false)
     private val fullscreenCommitArbitrationStarted = CountDownLatch(1)
     private val fullscreenCommitArbitrationRelease = CountDownLatch(1)
+    private val mainThreadCallDepth = ThreadLocal.withInitial { 0 }
 
     override fun isMainThread(): Boolean = true
 
     override fun <T> onMainThread(block: () -> T): T {
-        val result = block()
+        mainThreadCallDepth.set(mainThreadCallDepth.get() + 1)
+        val result = try {
+            block()
+        } finally {
+            mainThreadCallDepth.set(mainThreadCallDepth.get() - 1)
+        }
         if (surfaceObservers.isNotEmpty() && surfaceActivationHookDelivered.compareAndSet(false, true)) {
             afterSurfaceActivationBeforeCommit(this)
         }
         return result
     }
+
+    fun isInsideMainThreadCall(): Boolean = mainThreadCallDepth.get() > 0
 
     override fun createWindow(spec: WindowSpec): AppKitNativeWindowOwner {
         beforeCreateWindow(spec)
@@ -5152,6 +5549,10 @@ internal class DeterministicAppKitNativeWindowPort(
         fullscreenToggleTargets += target.mode
         return true
     }
+
+    override fun openExclusivePresentation(window: AppKitNativeWindowOwner): AppKitExclusivePresentationOpenResult =
+        exclusivePresentationLease?.let(AppKitExclusivePresentationOpenResult::Opened)
+            ?: super.openExclusivePresentation(window)
 
     fun awaitCommitArbitration() {
         check(fullscreenCommitArbitrationStarted.await(2, TimeUnit.SECONDS))
@@ -5817,7 +6218,7 @@ internal fun deterministicSurfaceSnapshot(
     focus = SurfaceFocus.Focused,
     visibility = SurfaceVisibility.Visible,
     occlusion = SurfaceOcclusion.Unknown,
-    theme = SurfaceTheme.Light,
+    appearance = SurfaceAppearance(SurfaceTheme.Light, SurfaceContrast.Normal),
 )
 
 internal fun <T> KadreResult<T>.appKitSuccessValue(): T = when (this) {
@@ -5914,6 +6315,103 @@ private fun AppKitWindowRuntimeDriver.backendCommandInspection(
             fullscreenPending = if (entry.privateField("fullscreenPending").get(entry) == null) 0 else 1,
             heldOrdinaryCommands = (entry.privateField("mutationsHeldBehindFullscreenTransition").get(entry) as Collection<*>).size,
         )
+    }
+}
+
+private fun AppKitWindowRuntimeDriver.exclusiveWindowPort(): AppKitExclusiveWindowPort =
+    privateField("commandPort").get(this) as AppKitExclusiveWindowPort
+
+private fun exclusiveWindowRequest(windowId: org.graphiks.kadre.window.WindowId): AppKitExclusiveWindowRequest =
+    AppKitExclusiveWindowRequest(
+        displayKey = 71L,
+        modeKey = 701L,
+        token = 1L,
+        windowId = windowId,
+        requestedFullscreen = FullscreenMode.Exclusive(
+            displayId = appKitIdentity(71L),
+            mode = org.graphiks.kadre.display.DisplayMode(
+                id = appKitIdentity(701L),
+                physicalSize = org.graphiks.kadre.surface.PhysicalSize(1920, 1080),
+                refreshRateHz = 60.0,
+                bitDepth = 24,
+            ),
+        ),
+    )
+
+private inline fun <reified T : Any> appKitIdentity(value: Long): T = T::class.java
+    .getDeclaredConstructor(Long::class.javaPrimitiveType)
+    .apply { isAccessible = true }
+    .newInstance(value)
+
+private class RecordingAppKitExclusivePresentationLease(
+    private val closeResult: AppKitExclusivePresentationResult = AppKitExclusivePresentationResult.Readback,
+    private val closeResults: ArrayDeque<AppKitExclusivePresentationCloseResult> = ArrayDeque(),
+    private val closeResultProvider: (() -> AppKitExclusivePresentationCloseResult)? = null,
+    private val onClose: () -> Unit = { },
+    private val isMainThread: () -> Boolean = { true },
+) : AppKitExclusivePresentationLease {
+    val presentedDisplayIds = mutableListOf<Int>()
+    var restoreCount: Int = 0
+        private set
+    var closeCount: Int = 0
+        private set
+
+    override fun present(displayId: Int): AppKitExclusivePresentationResult {
+        check(isMainThread()) { "exclusive presentation must run on the AppKit main thread" }
+        return AppKitExclusivePresentationResult.Readback.also { presentedDisplayIds += displayId }
+    }
+
+    override fun readback(): AppKitExclusivePresentationResult = AppKitExclusivePresentationResult.Readback
+
+    override fun restore(): AppKitExclusivePresentationResult {
+        check(isMainThread()) { "exclusive restoration must run on the AppKit main thread" }
+        return closeResult.also { restoreCount += 1 }
+    }
+
+    override fun close(): AppKitExclusivePresentationCloseResult {
+        check(isMainThread()) { "exclusive close must run on the AppKit main thread" }
+        closeCount += 1
+        onClose()
+        return closeResultProvider?.invoke()
+            ?: closeResults.removeFirstOrNull()
+            ?: AppKitExclusivePresentationCloseResult.Terminal(closeResult)
+    }
+}
+
+private class RecordingDriverExclusiveDisplayLease(
+    override val displayKey: Long,
+    private val modeKey: Long,
+    override val displayId: Int,
+) : AppKitExclusiveDisplayLease {
+    var releaseCount: Int = 0
+        private set
+
+    override fun readback(): AppKitExclusiveDisplayReadback =
+        AppKitExclusiveDisplayReadback(AppKitExclusiveDisplayTerminal.Captured(modeKey))
+
+    override fun release(): AppKitExclusiveDisplayReleaseResult =
+        AppKitExclusiveDisplayReleaseResult(AppKitExclusiveDisplayTerminal.Released(modeKey)).also { releaseCount += 1 }
+}
+
+private class RecordingDriverExclusiveCommand(
+    override val windowId: org.graphiks.kadre.window.WindowId,
+    operation: Long,
+    override val displayKey: Long,
+    override val modeKey: Long,
+    override val requestedFullscreen: FullscreenMode,
+) : AppKitExclusiveBrokerCommand {
+    override val operationId: org.graphiks.kadre.window.WindowOperationId = appKitIdentity(operation)
+    val completions = mutableListOf<org.graphiks.kadre.window.WindowState>()
+    val failures = mutableListOf<KadreFailure>()
+
+    override fun captureCommitted(): Boolean = true
+
+    override fun completed(effectiveState: org.graphiks.kadre.window.WindowState) {
+        completions += effectiveState
+    }
+
+    override fun failed(failure: KadreFailure, effectiveState: org.graphiks.kadre.window.WindowState?) {
+        failures += failure
     }
 }
 

@@ -47,6 +47,7 @@ public enum class DisplayType { Physical, Virtual, HostViewport }
 public enum class DisplayConnectionState { Connected, Disconnected }
 
 public data class DisplayMode(
+    public val id: DisplayModeId,
     public val physicalSize: PhysicalSize,
     public val refreshRateHz: Double?,
     public val bitDepth: Int?,

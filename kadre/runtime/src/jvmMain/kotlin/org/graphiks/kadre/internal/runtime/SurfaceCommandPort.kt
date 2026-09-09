@@ -36,7 +36,7 @@ import org.graphiks.kadre.surface.PropertyChange
 import org.graphiks.kadre.surface.SurfaceFocus
 import org.graphiks.kadre.surface.SurfaceId
 import org.graphiks.kadre.surface.SurfaceOcclusion
-import org.graphiks.kadre.surface.SurfaceTheme
+import org.graphiks.kadre.surface.SurfaceAppearance
 import org.graphiks.kadre.surface.SurfaceVisibility
 import org.graphiks.kadre.surface.toPhysical
 
@@ -212,7 +212,7 @@ public data class SurfaceInitialSnapshot(
     public val focus: SurfaceFocus,
     public val visibility: SurfaceVisibility,
     public val occlusion: SurfaceOcclusion,
-    public val theme: SurfaceTheme,
+    public val appearance: SurfaceAppearance,
 )
 
 /**
@@ -240,9 +240,9 @@ public sealed interface SurfaceStimulus {
         public val occlusion: SurfaceOcclusion,
     ) : SurfaceStimulus
 
-    public data class ThemeChanged(
+    public data class AppearanceChanged(
         override val surfaceId: SurfaceId,
-        public val theme: SurfaceTheme,
+        public val appearance: SurfaceAppearance,
     ) : SurfaceStimulus
 
     /** Acknowledges the exact native redraw generation that was consumed. */

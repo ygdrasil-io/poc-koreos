@@ -2,8 +2,11 @@ package org.graphiks.kadre.internal.appkit
 
 import org.graphiks.kadre.application.ActivationState
 import org.graphiks.kadre.application.AttachmentState
+import org.graphiks.kadre.application.LifecycleCapabilities
 import org.graphiks.kadre.application.LifecycleState
+import org.graphiks.kadre.application.MemoryPressureLevel
 import org.graphiks.kadre.application.VisibilityState
+import org.graphiks.kadre.diagnostics.FeatureAvailability
 import org.graphiks.kadre.diagnostics.KadreFailure
 import org.graphiks.kadre.diagnostics.KadrePlatform
 import org.graphiks.kadre.diagnostics.KadreResult
@@ -20,6 +23,10 @@ private typealias AttentionReleaseDispatcher =
 internal interface AppKitLifecycleTarget {
     fun updateLifecycle(state: LifecycleState)
 
+    fun updateLifecycleCapabilities(capabilities: LifecycleCapabilities) = Unit
+
+    fun emitMemoryPressure(level: MemoryPressureLevel) = Unit
+
     fun detach()
 }
 
@@ -30,19 +37,38 @@ internal class AppKitRuntimeHost(
         controller.updateLifecycle(state)
     }
 
+    override fun updateLifecycleCapabilities(capabilities: LifecycleCapabilities) {
+        controller.updateLifecycleCapabilities(capabilities)
+    }
+
+    override fun emitMemoryPressure(level: MemoryPressureLevel) {
+        controller.emitMemoryPressure(level)
+    }
+
     override fun detach() {
         controller.detach()
     }
 }
 
 /** Coordinates process-wide AppKit ownership without retaining a current Kadre session. */
-internal class AppKitProcessBroker {
+internal class AppKitProcessBroker(
+    private val displayBrokerFactory: () -> AppKitDisplayBroker = {
+        AppKitDisplayBroker(KffiAppKitDisplayNative())
+    },
+    private val memoryPressureNative: AppKitMemoryPressureNative? = null,
+    private val exclusiveDisplayBridge: AppKitExclusiveDisplayBridge = UnsupportedAppKitExclusiveDisplayBridge,
+    private val exclusiveRecoveryExecutor: AppKitExclusiveExecutor = AppKitExclusiveExecutor { task ->
+        task()
+        true
+    },
+) {
     private val lock = Any()
     private val deliveryLock = Any()
     private val embeddedHosts = linkedMapOf<AppKitLifecycleTarget, AppKitUserAttentionOwner?>()
     private val attentionTokens = linkedMapOf<WindowId, AppKitUserAttentionToken>()
     private val nextAttentionOwnerId = AtomicLong(0L)
     private var standaloneOwned = false
+    private var standaloneMemoryTarget: AppKitLifecycleTarget? = null
     private var terminated = false
     private var lifecycleState: LifecycleState = EMBEDDED_INITIAL_LIFECYCLE
     private val rawInputBroker = lazy {
@@ -52,8 +78,34 @@ internal class AppKitProcessBroker {
             bridgeAvailable = AppKitRawInputAvailability().isAvailable,
         )
     }
+    private val displayBroker = lazy(displayBrokerFactory)
+    private val exclusiveDisplayBroker = lazy {
+        AppKitExclusiveDisplayBroker(
+            bridge = exclusiveDisplayBridge,
+            displayBroker = displayBroker.value,
+            recoveryExecutor = exclusiveRecoveryExecutor,
+        )
+    }
+    private val memoryPressureBroker = lazy {
+        AppKitMemoryPressureBroker(checkNotNull(memoryPressureNative), ::deliverMemoryPressure)
+    }
 
     fun openRawInputPort(): AppKitRawInputPort = rawInputBroker.value.openPort()
+
+    fun openDisplayPort(): AppKitDisplayPort = displayBroker.value.openPort()
+
+    fun openExclusiveFullscreenPort(
+        executor: AppKitExclusiveExecutor,
+        windowPort: AppKitExclusiveWindowPort,
+    ): AppKitExclusiveFullscreenPort = exclusiveDisplayBroker.value.openPort(executor, windowPort)
+
+    fun memoryPressureAvailability(): FeatureAvailability = synchronized(lock) {
+        if (terminated || memoryPressureNative == null) {
+            FeatureAvailability.Unsupported
+        } else {
+            memoryPressureBroker.value.activate()
+        }
+    }
 
     fun tryAcquireStandalone(
         attentionOwner: AppKitUserAttentionOwner? = null,
@@ -191,6 +243,9 @@ internal class AppKitProcessBroker {
                     }
                 }
                 if (rawInputBroker.isInitialized()) rawInputBroker.value.close()
+                if (exclusiveDisplayBroker.isInitialized()) exclusiveDisplayBroker.value.close()
+                if (displayBroker.isInitialized()) displayBroker.value.close()
+                if (memoryPressureBroker.isInitialized()) memoryPressureBroker.value.close()
                 return@delivery
             }
 
@@ -219,6 +274,7 @@ internal class AppKitProcessBroker {
         synchronized(lock) {
             check(standaloneOwned) { "AppKit standalone ownership is not held" }
             standaloneOwned = false
+            standaloneMemoryTarget = null
         }
         attentionOwner?.close()
     }
@@ -235,6 +291,15 @@ internal class AppKitProcessBroker {
         private val attentionOwner: AppKitUserAttentionOwner?,
     ) : AutoCloseable {
         private val closed = AtomicBoolean(false)
+
+        fun installMemoryTarget(target: AppKitLifecycleTarget) {
+            synchronized(broker.lock) {
+                check(!closed.get()) { "AppKit standalone lease is closed" }
+                check(broker.standaloneOwned) { "AppKit standalone ownership is not held" }
+                check(broker.standaloneMemoryTarget == null) { "AppKit standalone memory target is already installed" }
+                broker.standaloneMemoryTarget = target
+            }
+        }
 
         override fun close() {
             if (closed.compareAndSet(false, true)) broker.releaseStandalone(attentionOwner)
@@ -349,8 +414,29 @@ internal class AppKitProcessBroker {
     } catch (_: LinkageError) {
         false
     }
+
+    private fun deliverMemoryPressure(level: MemoryPressureLevel) {
+        val targets = synchronized(lock) {
+            if (terminated) emptyList()
+            else embeddedHosts.keys.toList() + listOfNotNull(standaloneMemoryTarget)
+        }
+        targets.forEach { target ->
+            try {
+                target.emitMemoryPressure(level)
+            } catch (_: Exception) {
+                // A session may race its terminal teardown after source admission.
+            } catch (_: LinkageError) {
+                // Diagnostics must not let a failing host callback escape the source owner.
+            }
+        }
+    }
 }
 
 internal object ProcessAppKitProcessBroker {
-    val value: AppKitProcessBroker = AppKitProcessBroker()
+    private val displaySource = KffiAppKitDisplayNative()
+    val value: AppKitProcessBroker = AppKitProcessBroker(
+        displayBrokerFactory = { AppKitDisplayBroker(displaySource) },
+        memoryPressureNative = KffiAppKitMemoryPressureNative,
+        exclusiveDisplayBridge = KffiAppKitExclusiveDisplayBridge(displaySource),
+    )
 }

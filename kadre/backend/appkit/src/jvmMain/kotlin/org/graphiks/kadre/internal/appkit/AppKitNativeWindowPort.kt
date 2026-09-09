@@ -26,7 +26,7 @@ import org.graphiks.kadre.surface.LogicalSize
 import org.graphiks.kadre.surface.PropertyChange
 import org.graphiks.kadre.surface.SurfaceFocus
 import org.graphiks.kadre.surface.SurfaceOcclusion
-import org.graphiks.kadre.surface.SurfaceTheme
+import org.graphiks.kadre.surface.SurfaceAppearance
 import org.graphiks.kadre.surface.SurfaceVisibility
 import org.graphiks.kadre.window.WindowDecorations
 import org.graphiks.kadre.window.FullscreenMode
@@ -105,6 +105,12 @@ internal interface AppKitNativeWindowPort {
         error("AppKit fullscreen level restoration is not installed")
     }
 
+    /** Opens a pointer-free AppKit presentation snapshot without mutating the native window. */
+    fun openExclusivePresentation(window: AppKitNativeWindowOwner): AppKitExclusivePresentationOpenResult =
+        AppKitExclusivePresentationOpenResult.Failed(
+            KadreFailure.PlatformFailure(org.graphiks.kadre.diagnostics.KadrePlatform.AppKit, "exclusive-fullscreen", "presentation-unavailable"),
+        )
+
     /** Installs the native geometry observer for one peer, when the port supports it. */
     fun observeGeometry(
         window: AppKitNativeWindowOwner,
@@ -147,6 +153,47 @@ internal interface AppKitNativeWindowPort {
 
 internal interface AppKitNativeWindowOwner : AutoCloseable {
     override fun close()
+}
+
+internal sealed interface AppKitExclusivePresentationOpenResult {
+    data class Opened(val lease: AppKitExclusivePresentationLease) : AppKitExclusivePresentationOpenResult
+    data class Failed(val failure: KadreFailure.PlatformFailure) : AppKitExclusivePresentationOpenResult
+}
+
+internal interface AppKitExclusivePresentationLease {
+    fun present(displayId: Int): AppKitExclusivePresentationResult
+    fun readback(): AppKitExclusivePresentationResult
+    fun restore(): AppKitExclusivePresentationResult
+    fun close(): AppKitExclusivePresentationCloseResult
+}
+
+/** A success certifies a detached KFFI readback; failures never invent a window state. */
+internal sealed interface AppKitExclusivePresentationResult {
+    data object Readback : AppKitExclusivePresentationResult
+    data class Failed(
+        val failure: KadreFailure.PlatformFailure,
+        val hasRepresentableReadback: Boolean,
+        /** Every detached KFFI failure observed by this operation, including partial restore cleanup. */
+        val diagnostics: List<KadreFailure.PlatformFailure> = emptyList(),
+    ) : AppKitExclusivePresentationResult
+}
+
+/**
+ * Separates a KFFI terminal close outcome from an invocation which could not terminalize the lease yet.
+ *
+ * A [Terminal] result releases Kadre's reference even when it carries cleanup diagnostics. An [Incomplete]
+ * result must retain the lease so a later lifecycle cleanup can retry terminalization.
+ */
+internal sealed interface AppKitExclusivePresentationCloseResult {
+    data class Terminal(
+        override val result: AppKitExclusivePresentationResult,
+    ) : AppKitExclusivePresentationCloseResult
+
+    data class Incomplete(
+        override val result: AppKitExclusivePresentationResult.Failed,
+    ) : AppKitExclusivePresentationCloseResult
+
+    val result: AppKitExclusivePresentationResult
 }
 
 /** Identifies the native mutation field whose setter or readback actually failed. */
@@ -304,7 +351,7 @@ internal data class AppKitSurfaceSnapshot(
     val focus: SurfaceFocus,
     val visibility: SurfaceVisibility,
     val occlusion: SurfaceOcclusion,
-    val theme: SurfaceTheme,
+    val appearance: SurfaceAppearance,
 )
 
 /** Callback boundary used only with already-frozen, native-address-free values. */
@@ -312,7 +359,7 @@ internal class AppKitSurfaceCallbacks(
     val metricsChanged: (SurfaceMetrics) -> Unit,
     val focusChanged: (SurfaceFocus) -> Unit,
     val visibilityChanged: (SurfaceVisibility, SurfaceOcclusion) -> Unit,
-    val themeChanged: (SurfaceTheme) -> Unit,
+    val appearanceChanged: (SurfaceAppearance) -> Unit,
     val redrawConsumed: (Long) -> Unit,
 )
 

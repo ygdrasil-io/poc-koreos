@@ -1914,16 +1914,24 @@ public final class org/graphiks/kadre/display/DisplayManagerState {
 }
 
 public final class org/graphiks/kadre/display/DisplayMode {
-	public fun <init> (Lorg/graphiks/kadre/surface/PhysicalSize;Ljava/lang/Double;Ljava/lang/Integer;)V
-	public final fun component1 ()Lorg/graphiks/kadre/surface/PhysicalSize;
-	public final fun component2 ()Ljava/lang/Double;
-	public final fun component3 ()Ljava/lang/Integer;
-	public final fun copy (Lorg/graphiks/kadre/surface/PhysicalSize;Ljava/lang/Double;Ljava/lang/Integer;)Lorg/graphiks/kadre/display/DisplayMode;
-	public static synthetic fun copy$default (Lorg/graphiks/kadre/display/DisplayMode;Lorg/graphiks/kadre/surface/PhysicalSize;Ljava/lang/Double;Ljava/lang/Integer;ILjava/lang/Object;)Lorg/graphiks/kadre/display/DisplayMode;
+	public fun <init> (Lorg/graphiks/kadre/display/DisplayModeId;Lorg/graphiks/kadre/surface/PhysicalSize;Ljava/lang/Double;Ljava/lang/Integer;)V
+	public final fun component1 ()Lorg/graphiks/kadre/display/DisplayModeId;
+	public final fun component2 ()Lorg/graphiks/kadre/surface/PhysicalSize;
+	public final fun component3 ()Ljava/lang/Double;
+	public final fun component4 ()Ljava/lang/Integer;
+	public final fun copy (Lorg/graphiks/kadre/display/DisplayModeId;Lorg/graphiks/kadre/surface/PhysicalSize;Ljava/lang/Double;Ljava/lang/Integer;)Lorg/graphiks/kadre/display/DisplayMode;
+	public static synthetic fun copy$default (Lorg/graphiks/kadre/display/DisplayMode;Lorg/graphiks/kadre/display/DisplayModeId;Lorg/graphiks/kadre/surface/PhysicalSize;Ljava/lang/Double;Ljava/lang/Integer;ILjava/lang/Object;)Lorg/graphiks/kadre/display/DisplayMode;
 	public fun equals (Ljava/lang/Object;)Z
 	public final fun getBitDepth ()Ljava/lang/Integer;
+	public final fun getId ()Lorg/graphiks/kadre/display/DisplayModeId;
 	public final fun getPhysicalSize ()Lorg/graphiks/kadre/surface/PhysicalSize;
 	public final fun getRefreshRateHz ()Ljava/lang/Double;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class org/graphiks/kadre/display/DisplayModeId {
+	public fun equals (Ljava/lang/Object;)Z
 	public fun hashCode ()I
 	public fun toString ()Ljava/lang/String;
 }
@@ -4896,6 +4904,19 @@ public final class org/graphiks/kadre/surface/RejectedSurfaceField {
 	public fun toString ()Ljava/lang/String;
 }
 
+public final class org/graphiks/kadre/surface/SurfaceAppearance {
+	public fun <init> (Lorg/graphiks/kadre/surface/SurfaceTheme;Lorg/graphiks/kadre/surface/SurfaceContrast;)V
+	public final fun component1 ()Lorg/graphiks/kadre/surface/SurfaceTheme;
+	public final fun component2 ()Lorg/graphiks/kadre/surface/SurfaceContrast;
+	public final fun copy (Lorg/graphiks/kadre/surface/SurfaceTheme;Lorg/graphiks/kadre/surface/SurfaceContrast;)Lorg/graphiks/kadre/surface/SurfaceAppearance;
+	public static synthetic fun copy$default (Lorg/graphiks/kadre/surface/SurfaceAppearance;Lorg/graphiks/kadre/surface/SurfaceTheme;Lorg/graphiks/kadre/surface/SurfaceContrast;ILjava/lang/Object;)Lorg/graphiks/kadre/surface/SurfaceAppearance;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getContrast ()Lorg/graphiks/kadre/surface/SurfaceContrast;
+	public final fun getTheme ()Lorg/graphiks/kadre/surface/SurfaceTheme;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
 public final class org/graphiks/kadre/surface/SurfaceAttachmentState : java/lang/Enum {
 	public static final field Attached Lorg/graphiks/kadre/surface/SurfaceAttachmentState;
 	public static final field Detached Lorg/graphiks/kadre/surface/SurfaceAttachmentState;
@@ -4929,9 +4950,32 @@ public final class org/graphiks/kadre/surface/SurfaceCapabilities {
 	public fun toString ()Ljava/lang/String;
 }
 
+public final class org/graphiks/kadre/surface/SurfaceContrast : java/lang/Enum {
+	public static final field High Lorg/graphiks/kadre/surface/SurfaceContrast;
+	public static final field Normal Lorg/graphiks/kadre/surface/SurfaceContrast;
+	public static final field Unknown Lorg/graphiks/kadre/surface/SurfaceContrast;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public static fun valueOf (Ljava/lang/String;)Lorg/graphiks/kadre/surface/SurfaceContrast;
+	public static fun values ()[Lorg/graphiks/kadre/surface/SurfaceContrast;
+}
+
 public abstract interface class org/graphiks/kadre/surface/SurfaceEvent {
 	public abstract fun getStamp ()Lorg/graphiks/kadre/application/EventStamp;
 	public abstract fun getStateRevision-bkNeAcg ()J
+}
+
+public final class org/graphiks/kadre/surface/SurfaceEvent$AppearanceChanged : org/graphiks/kadre/surface/SurfaceEvent {
+	public fun <init> (Lorg/graphiks/kadre/surface/SurfaceState;Lorg/graphiks/kadre/application/EventStamp;)V
+	public final fun component1 ()Lorg/graphiks/kadre/surface/SurfaceState;
+	public final fun component2 ()Lorg/graphiks/kadre/application/EventStamp;
+	public final fun copy (Lorg/graphiks/kadre/surface/SurfaceState;Lorg/graphiks/kadre/application/EventStamp;)Lorg/graphiks/kadre/surface/SurfaceEvent$AppearanceChanged;
+	public static synthetic fun copy$default (Lorg/graphiks/kadre/surface/SurfaceEvent$AppearanceChanged;Lorg/graphiks/kadre/surface/SurfaceState;Lorg/graphiks/kadre/application/EventStamp;ILjava/lang/Object;)Lorg/graphiks/kadre/surface/SurfaceEvent$AppearanceChanged;
+	public fun equals (Ljava/lang/Object;)Z
+	public fun getStamp ()Lorg/graphiks/kadre/application/EventStamp;
+	public final fun getState ()Lorg/graphiks/kadre/surface/SurfaceState;
+	public fun getStateRevision-bkNeAcg ()J
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
 }
 
 public final class org/graphiks/kadre/surface/SurfaceEvent$FocusChanged : org/graphiks/kadre/surface/SurfaceEvent {
@@ -4970,20 +5014,6 @@ public final class org/graphiks/kadre/surface/SurfaceEvent$RedrawRequested : org
 	public static synthetic fun copy-LBNsmKc$default (Lorg/graphiks/kadre/surface/SurfaceEvent$RedrawRequested;JLorg/graphiks/kadre/application/EventStamp;ILjava/lang/Object;)Lorg/graphiks/kadre/surface/SurfaceEvent$RedrawRequested;
 	public fun equals (Ljava/lang/Object;)Z
 	public fun getStamp ()Lorg/graphiks/kadre/application/EventStamp;
-	public fun getStateRevision-bkNeAcg ()J
-	public fun hashCode ()I
-	public fun toString ()Ljava/lang/String;
-}
-
-public final class org/graphiks/kadre/surface/SurfaceEvent$ThemeChanged : org/graphiks/kadre/surface/SurfaceEvent {
-	public fun <init> (Lorg/graphiks/kadre/surface/SurfaceState;Lorg/graphiks/kadre/application/EventStamp;)V
-	public final fun component1 ()Lorg/graphiks/kadre/surface/SurfaceState;
-	public final fun component2 ()Lorg/graphiks/kadre/application/EventStamp;
-	public final fun copy (Lorg/graphiks/kadre/surface/SurfaceState;Lorg/graphiks/kadre/application/EventStamp;)Lorg/graphiks/kadre/surface/SurfaceEvent$ThemeChanged;
-	public static synthetic fun copy$default (Lorg/graphiks/kadre/surface/SurfaceEvent$ThemeChanged;Lorg/graphiks/kadre/surface/SurfaceState;Lorg/graphiks/kadre/application/EventStamp;ILjava/lang/Object;)Lorg/graphiks/kadre/surface/SurfaceEvent$ThemeChanged;
-	public fun equals (Ljava/lang/Object;)Z
-	public fun getStamp ()Lorg/graphiks/kadre/application/EventStamp;
-	public final fun getState ()Lorg/graphiks/kadre/surface/SurfaceState;
 	public fun getStateRevision-bkNeAcg ()J
 	public fun hashCode ()I
 	public fun toString ()Ljava/lang/String;
@@ -5050,7 +5080,7 @@ public final class org/graphiks/kadre/surface/SurfaceRevision {
 }
 
 public final class org/graphiks/kadre/surface/SurfaceState {
-	public synthetic fun <init> (Lorg/graphiks/kadre/surface/SurfaceAttachmentState;Lorg/graphiks/kadre/surface/LogicalSize;Lorg/graphiks/kadre/surface/PhysicalSize;DLorg/graphiks/kadre/surface/LogicalInsets;Lorg/graphiks/kadre/surface/SurfaceVisibility;Lorg/graphiks/kadre/surface/SurfaceOcclusion;Lorg/graphiks/kadre/surface/SurfaceFocus;Lorg/graphiks/kadre/surface/SurfaceTheme;Lorg/graphiks/kadre/surface/CursorStyle;Lorg/graphiks/kadre/surface/PointerCaptureMode;Lorg/graphiks/kadre/surface/HitTestingMode;Lorg/graphiks/kadre/surface/InputDefaultBehavior;JLkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public synthetic fun <init> (Lorg/graphiks/kadre/surface/SurfaceAttachmentState;Lorg/graphiks/kadre/surface/LogicalSize;Lorg/graphiks/kadre/surface/PhysicalSize;DLorg/graphiks/kadre/surface/LogicalInsets;Lorg/graphiks/kadre/surface/SurfaceVisibility;Lorg/graphiks/kadre/surface/SurfaceOcclusion;Lorg/graphiks/kadre/surface/SurfaceFocus;Lorg/graphiks/kadre/surface/SurfaceAppearance;Lorg/graphiks/kadre/surface/CursorStyle;Lorg/graphiks/kadre/surface/PointerCaptureMode;Lorg/graphiks/kadre/surface/HitTestingMode;Lorg/graphiks/kadre/surface/InputDefaultBehavior;JLkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public final fun component1 ()Lorg/graphiks/kadre/surface/SurfaceAttachmentState;
 	public final fun component10 ()Lorg/graphiks/kadre/surface/CursorStyle;
 	public final fun component11 ()Lorg/graphiks/kadre/surface/PointerCaptureMode;
@@ -5064,10 +5094,11 @@ public final class org/graphiks/kadre/surface/SurfaceState {
 	public final fun component6 ()Lorg/graphiks/kadre/surface/SurfaceVisibility;
 	public final fun component7 ()Lorg/graphiks/kadre/surface/SurfaceOcclusion;
 	public final fun component8 ()Lorg/graphiks/kadre/surface/SurfaceFocus;
-	public final fun component9 ()Lorg/graphiks/kadre/surface/SurfaceTheme;
-	public final fun copy--4ct-98 (Lorg/graphiks/kadre/surface/SurfaceAttachmentState;Lorg/graphiks/kadre/surface/LogicalSize;Lorg/graphiks/kadre/surface/PhysicalSize;DLorg/graphiks/kadre/surface/LogicalInsets;Lorg/graphiks/kadre/surface/SurfaceVisibility;Lorg/graphiks/kadre/surface/SurfaceOcclusion;Lorg/graphiks/kadre/surface/SurfaceFocus;Lorg/graphiks/kadre/surface/SurfaceTheme;Lorg/graphiks/kadre/surface/CursorStyle;Lorg/graphiks/kadre/surface/PointerCaptureMode;Lorg/graphiks/kadre/surface/HitTestingMode;Lorg/graphiks/kadre/surface/InputDefaultBehavior;J)Lorg/graphiks/kadre/surface/SurfaceState;
-	public static synthetic fun copy--4ct-98$default (Lorg/graphiks/kadre/surface/SurfaceState;Lorg/graphiks/kadre/surface/SurfaceAttachmentState;Lorg/graphiks/kadre/surface/LogicalSize;Lorg/graphiks/kadre/surface/PhysicalSize;DLorg/graphiks/kadre/surface/LogicalInsets;Lorg/graphiks/kadre/surface/SurfaceVisibility;Lorg/graphiks/kadre/surface/SurfaceOcclusion;Lorg/graphiks/kadre/surface/SurfaceFocus;Lorg/graphiks/kadre/surface/SurfaceTheme;Lorg/graphiks/kadre/surface/CursorStyle;Lorg/graphiks/kadre/surface/PointerCaptureMode;Lorg/graphiks/kadre/surface/HitTestingMode;Lorg/graphiks/kadre/surface/InputDefaultBehavior;JILjava/lang/Object;)Lorg/graphiks/kadre/surface/SurfaceState;
+	public final fun component9 ()Lorg/graphiks/kadre/surface/SurfaceAppearance;
+	public final fun copy--4ct-98 (Lorg/graphiks/kadre/surface/SurfaceAttachmentState;Lorg/graphiks/kadre/surface/LogicalSize;Lorg/graphiks/kadre/surface/PhysicalSize;DLorg/graphiks/kadre/surface/LogicalInsets;Lorg/graphiks/kadre/surface/SurfaceVisibility;Lorg/graphiks/kadre/surface/SurfaceOcclusion;Lorg/graphiks/kadre/surface/SurfaceFocus;Lorg/graphiks/kadre/surface/SurfaceAppearance;Lorg/graphiks/kadre/surface/CursorStyle;Lorg/graphiks/kadre/surface/PointerCaptureMode;Lorg/graphiks/kadre/surface/HitTestingMode;Lorg/graphiks/kadre/surface/InputDefaultBehavior;J)Lorg/graphiks/kadre/surface/SurfaceState;
+	public static synthetic fun copy--4ct-98$default (Lorg/graphiks/kadre/surface/SurfaceState;Lorg/graphiks/kadre/surface/SurfaceAttachmentState;Lorg/graphiks/kadre/surface/LogicalSize;Lorg/graphiks/kadre/surface/PhysicalSize;DLorg/graphiks/kadre/surface/LogicalInsets;Lorg/graphiks/kadre/surface/SurfaceVisibility;Lorg/graphiks/kadre/surface/SurfaceOcclusion;Lorg/graphiks/kadre/surface/SurfaceFocus;Lorg/graphiks/kadre/surface/SurfaceAppearance;Lorg/graphiks/kadre/surface/CursorStyle;Lorg/graphiks/kadre/surface/PointerCaptureMode;Lorg/graphiks/kadre/surface/HitTestingMode;Lorg/graphiks/kadre/surface/InputDefaultBehavior;JILjava/lang/Object;)Lorg/graphiks/kadre/surface/SurfaceState;
 	public fun equals (Ljava/lang/Object;)Z
+	public final fun getAppearance ()Lorg/graphiks/kadre/surface/SurfaceAppearance;
 	public final fun getAttachment ()Lorg/graphiks/kadre/surface/SurfaceAttachmentState;
 	public final fun getCursor ()Lorg/graphiks/kadre/surface/CursorStyle;
 	public final fun getFocus ()Lorg/graphiks/kadre/surface/SurfaceFocus;
@@ -5080,7 +5111,6 @@ public final class org/graphiks/kadre/surface/SurfaceState {
 	public final fun getRevision-bkNeAcg ()J
 	public final fun getSafeAreaInsets ()Lorg/graphiks/kadre/surface/LogicalInsets;
 	public final fun getScaleFactor ()D
-	public final fun getTheme ()Lorg/graphiks/kadre/surface/SurfaceTheme;
 	public final fun getVisibility ()Lorg/graphiks/kadre/surface/SurfaceVisibility;
 	public fun hashCode ()I
 	public fun toString ()Ljava/lang/String;

@@ -21,9 +21,14 @@ import org.graphiks.kadre.diagnostics.KadreFailure
 import org.graphiks.kadre.diagnostics.KadreOperation
 import org.graphiks.kadre.diagnostics.KadrePlatform
 import org.graphiks.kadre.diagnostics.KadreResult
+import org.graphiks.kadre.display.DisplayInventory
+import org.graphiks.kadre.display.DisplayType
 import org.graphiks.kadre.policy.InputDeliveryPolicy
 import org.graphiks.kadre.policy.WindowDeliveryPolicy
 import org.graphiks.kadre.surface.HostSurface
+import org.graphiks.kadre.surface.PhysicalPoint
+import org.graphiks.kadre.surface.PhysicalRect
+import org.graphiks.kadre.surface.PhysicalSize
 import org.graphiks.kadre.surface.SurfaceId
 import org.graphiks.kadre.surface.SurfaceState
 import org.graphiks.kadre.window.WindowManager
@@ -65,6 +70,32 @@ class RuntimeSessionComponentsTest {
         )
         assertEquals(1, componentsClosed)
         assertFalse(componentScopeJob!!.isActive)
+    }
+
+    @Test
+    fun injectedDisplayPortIsProjectedThroughItsSessionScopeAndClosedWithTheSession() = runTest {
+        val port = RecordingDisplayPort()
+        val host = RuntimeHostController.withComponents(
+            platform = KadrePlatform.Fake,
+            componentsFactory = RuntimeSessionComponentsFactory { _, _ ->
+                RuntimeSessionComponents(RecordingWindowManager(), displayPort = port)
+            },
+        )
+        lateinit var observed: KadreScope
+
+        val session = attach(host) {
+            observed = this
+            awaitCancellation()
+        }
+        testScheduler.runCurrent()
+
+        observed.displays.requestAccess()
+        assertIs<DisplayInventory.Enumerated>(observed.displays.state.value.inventory)
+
+        session.close()
+        testScheduler.runCurrent()
+
+        assertEquals(1, port.closeCount)
     }
 
     @Test
@@ -350,7 +381,10 @@ class RuntimeSessionComponentsTest {
             visibility = org.graphiks.kadre.surface.SurfaceVisibility.Visible,
             occlusion = org.graphiks.kadre.surface.SurfaceOcclusion.Visible,
             focus = org.graphiks.kadre.surface.SurfaceFocus.Focused,
-            theme = org.graphiks.kadre.surface.SurfaceTheme.Unknown,
+            appearance = org.graphiks.kadre.surface.SurfaceAppearance(
+                org.graphiks.kadre.surface.SurfaceTheme.Unknown,
+                org.graphiks.kadre.surface.SurfaceContrast.Unknown,
+            ),
             cursor = org.graphiks.kadre.surface.CursorStyle.System(org.graphiks.kadre.surface.CursorIcon.Default),
             pointerCapture = org.graphiks.kadre.surface.PointerCaptureMode.None,
             hitTesting = org.graphiks.kadre.surface.HitTestingMode.Enabled,
@@ -365,6 +399,43 @@ class RuntimeSessionComponentsTest {
 
         override suspend fun requestAccess(): KadreResult<RawInputPortLease> =
             error("this ownership test never requests raw input")
+
+        override fun close() {
+            closeCount += 1
+        }
+    }
+
+    private class RecordingDisplayPort : DisplayPort {
+        var closeCount = 0
+            private set
+
+        override val enumerationCapability: Capability<Unit> = Capability.Supported(
+            Unit,
+            org.graphiks.kadre.diagnostics.FeatureAvailability.Available,
+        )
+
+        override suspend fun requestSnapshot(): KadreResult<DisplayPortSnapshot> = KadreResult.Success(
+            DisplayPortSnapshot(
+                primaryKey = 1,
+                displays = listOf(
+                    DisplayPortDisplay(
+                        key = 1,
+                        type = DisplayType.Physical,
+                        name = "test",
+                        bounds = PhysicalRect(PhysicalPoint(0, 0), PhysicalSize(800, 600)),
+                        workArea = null,
+                        scaleFactor = 1.0,
+                        currentModeKey = 1,
+                        modes = listOf(
+                            DisplayPortMode(1, PhysicalSize(800, 600), 60.0, 24),
+                        ),
+                    ),
+                ),
+            ),
+        )
+
+        override fun installSnapshotObserver(observer: (KadreResult<DisplayPortSnapshot>) -> Unit): AutoCloseable =
+            AutoCloseable { }
 
         override fun close() {
             closeCount += 1

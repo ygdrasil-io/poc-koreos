@@ -32,6 +32,8 @@ import org.graphiks.kadre.surface.LogicalSize
 import org.graphiks.kadre.surface.PhysicalSize
 import org.graphiks.kadre.surface.PointerCaptureMode
 import org.graphiks.kadre.surface.SurfaceAttachmentState
+import org.graphiks.kadre.surface.SurfaceAppearance
+import org.graphiks.kadre.surface.SurfaceContrast
 import org.graphiks.kadre.surface.SurfaceFocus
 import org.graphiks.kadre.surface.SurfaceId
 import org.graphiks.kadre.surface.SurfaceOcclusion
@@ -273,7 +275,7 @@ class RuntimeHostControllerCommonTest {
         visibility = SurfaceVisibility.Visible,
         occlusion = SurfaceOcclusion.Visible,
         focus = SurfaceFocus.Focused,
-        theme = SurfaceTheme.Unknown,
+        appearance = SurfaceAppearance(SurfaceTheme.Unknown, SurfaceContrast.Unknown),
         cursor = CursorStyle.System(org.graphiks.kadre.surface.CursorIcon.Default),
         pointerCapture = PointerCaptureMode.None,
         hitTesting = HitTestingMode.Enabled,

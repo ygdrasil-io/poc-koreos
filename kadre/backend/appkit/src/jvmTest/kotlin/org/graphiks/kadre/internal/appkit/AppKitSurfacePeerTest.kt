@@ -12,6 +12,8 @@ import org.graphiks.kadre.surface.LogicalDelta
 import org.graphiks.kadre.surface.LogicalPoint
 import org.graphiks.kadre.surface.LogicalInsets
 import org.graphiks.kadre.surface.LogicalSize
+import org.graphiks.kadre.surface.SurfaceAppearance
+import org.graphiks.kadre.surface.SurfaceContrast
 import org.graphiks.kadre.surface.SurfaceFocus
 import org.graphiks.kadre.surface.SurfaceOcclusion
 import org.graphiks.kadre.surface.SurfaceTheme
@@ -70,8 +72,10 @@ class AppKitSurfacePeerTest {
         port.emitFocus(SurfaceFocus.Unfocused)
         port.emitVisibility(SurfaceVisibility.Hidden, SurfaceOcclusion.Unknown)
         port.emitVisibility(SurfaceVisibility.Hidden, SurfaceOcclusion.Unknown)
-        port.emitTheme(SurfaceTheme.Dark)
-        port.emitTheme(SurfaceTheme.Dark)
+        port.emitAppearance(SurfaceAppearance(SurfaceTheme.Dark, SurfaceContrast.Normal))
+        port.emitAppearance(SurfaceAppearance(SurfaceTheme.Dark, SurfaceContrast.Normal))
+        port.emitAppearance(SurfaceAppearance(SurfaceTheme.Dark, SurfaceContrast.High))
+        port.emitAppearance(SurfaceAppearance(SurfaceTheme.Dark, SurfaceContrast.High))
 
         assertEquals(
             listOf(
@@ -83,7 +87,14 @@ class AppKitSurfacePeerTest {
                     SurfaceVisibility.Hidden,
                     SurfaceOcclusion.Unknown,
                 ),
-                AppKitSurfaceStimulus.ThemeChanged(PEER_ID, SurfaceTheme.Dark),
+                AppKitSurfaceStimulus.AppearanceChanged(
+                    PEER_ID,
+                    SurfaceAppearance(SurfaceTheme.Dark, SurfaceContrast.Normal),
+                ),
+                AppKitSurfaceStimulus.AppearanceChanged(
+                    PEER_ID,
+                    SurfaceAppearance(SurfaceTheme.Dark, SurfaceContrast.High),
+                ),
             ),
             stimuli,
         )
@@ -154,7 +165,7 @@ class AppKitSurfacePeerTest {
 
         peer.close()
         port.forceLateFocus(SurfaceFocus.Unfocused)
-        port.forceLateTheme(SurfaceTheme.Dark)
+        port.forceLateAppearance(SurfaceAppearance(SurfaceTheme.Dark, SurfaceContrast.Normal))
         port.forceLateRedraw(91L)
 
         assertEquals(
@@ -347,13 +358,13 @@ private class RecordingSurfacePort(
         surface.emitVisibility(visibility, occlusion)
     }
 
-    fun emitTheme(value: SurfaceTheme) = onMainThread { surface.emitTheme(value) }
+    fun emitAppearance(value: SurfaceAppearance) = onMainThread { surface.emitAppearance(value) }
 
     fun completeRedraw(generation: Long) = onMainThread { surface.completeRedraw(generation) }
 
     fun forceLateFocus(value: SurfaceFocus) = onMainThread { surface.forceFocusCallback(value) }
 
-    fun forceLateTheme(value: SurfaceTheme) = onMainThread { surface.forceThemeCallback(value) }
+    fun forceLateAppearance(value: SurfaceAppearance) = onMainThread { surface.forceAppearanceCallback(value) }
 
     fun forceLateRedraw(generation: Long) = onMainThread { surface.forceRedrawCallback(generation) }
 
@@ -415,9 +426,9 @@ private class RecordingSurfaceOwner(
         if (accepting) callbacks.visibilityChanged(visibility, occlusion)
     }
 
-    fun emitTheme(value: SurfaceTheme) {
+    fun emitAppearance(value: SurfaceAppearance) {
         everyCaptureWasOnMainThread = everyCaptureWasOnMainThread && isMainThread()
-        if (accepting) callbacks.themeChanged(value)
+        if (accepting) callbacks.appearanceChanged(value)
     }
 
     override fun requestRedraw(generation: Long) {
@@ -433,8 +444,8 @@ private class RecordingSurfaceOwner(
         callbacks.focusChanged(value)
     }
 
-    fun forceThemeCallback(value: SurfaceTheme) {
-        callbacks.themeChanged(value)
+    fun forceAppearanceCallback(value: SurfaceAppearance) {
+        callbacks.appearanceChanged(value)
     }
 
     fun forceRedrawCallback(generation: Long) {
@@ -487,5 +498,5 @@ private fun initialSnapshot(): AppKitSurfaceSnapshot = AppKitSurfaceSnapshot(
     focus = SurfaceFocus.Focused,
     visibility = SurfaceVisibility.Visible,
     occlusion = SurfaceOcclusion.Visible,
-    theme = SurfaceTheme.Light,
+    appearance = SurfaceAppearance(SurfaceTheme.Light, SurfaceContrast.Normal),
 )

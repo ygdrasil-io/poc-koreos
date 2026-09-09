@@ -47,6 +47,8 @@ import org.graphiks.kadre.application.KadreApplicationFactory
 import org.graphiks.kadre.application.KadreLifecycle
 import org.graphiks.kadre.application.KadreScope
 import org.graphiks.kadre.application.KadreSession
+import org.graphiks.kadre.application.HostSignal
+import org.graphiks.kadre.application.MemoryPressureLevel
 import org.graphiks.kadre.application.SessionOutcome
 import org.graphiks.kadre.application.SessionStopReason
 import org.graphiks.kadre.diagnostics.Capability
@@ -56,6 +58,9 @@ import org.graphiks.kadre.diagnostics.KadreOperation
 import org.graphiks.kadre.diagnostics.KadrePlatform
 import org.graphiks.kadre.diagnostics.KadreResourceKind
 import org.graphiks.kadre.diagnostics.KadreResult
+import org.graphiks.kadre.display.DisplayManager
+import org.graphiks.kadre.internal.runtime.DisplayPort
+import org.graphiks.kadre.internal.runtime.DisplayPortSnapshot
 import org.graphiks.kadre.internal.runtime.desktop.DesktopBackendKind
 import org.graphiks.kadre.internal.runtime.desktop.DesktopBackendProvider
 import org.graphiks.kadre.internal.runtime.desktop.DesktopEmbeddedRequest
@@ -79,6 +84,8 @@ import org.graphiks.kadre.surface.InputDefaultBehavior
 import org.graphiks.kadre.surface.LogicalSize
 import org.graphiks.kadre.surface.PropertyChange
 import org.graphiks.kadre.surface.SurfaceAttachmentState
+import org.graphiks.kadre.surface.SurfaceAppearance
+import org.graphiks.kadre.surface.SurfaceContrast
 import org.graphiks.kadre.surface.SurfaceEvent
 import org.graphiks.kadre.surface.SurfaceFocus
 import org.graphiks.kadre.surface.SurfaceOcclusion
@@ -130,6 +137,74 @@ import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
 class AppKitBackendProviderTest {
+    @Test
+    fun embeddedSessionPublishesAvailableMemoryPressureAndReceivesNativeSignals() = kotlinx.coroutines.runBlocking {
+        val nativeApplication = EmbeddedNativeApplication()
+        val memoryPressureNative = ProviderMemoryPressureNative()
+        val provider = AppKitBackendProvider.forTesting(
+            nativeApplication = nativeApplication,
+            broker = AppKitProcessBroker(memoryPressureNative = memoryPressureNative),
+            availability = { true },
+        )
+        val parentScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob())
+        val observedLifecycle = CompletableDeferred<KadreLifecycle>()
+
+        try {
+            val session = provider.attach(embeddedRequest(parentScope, observedLifecycle)).requireSession()
+            val lifecycle = observedLifecycle.await()
+
+            assertEquals(FeatureAvailability.Available, lifecycle.capabilities.value.memoryPressure)
+            val signal = async(start = CoroutineStart.UNDISPATCHED) {
+                lifecycle.signals.filterIsInstance<HostSignal.MemoryPressure>().first()
+            }
+            memoryPressureNative.emit(MemoryPressureLevel.Critical)
+            assertEquals(MemoryPressureLevel.Critical, withTimeout(2.seconds) { signal.await() }.level)
+
+            session.close()
+            session.awaitTermination()
+        } finally {
+            parentScope.cancel()
+        }
+        Unit
+    }
+
+    @Test
+    fun embeddedSessionProjectsTheConfiguredDisplayPortAndClosesItWithTheSession() = kotlinx.coroutines.runBlocking {
+        val native = EmbeddedNativeApplication()
+        val port = ProviderDisplayPort()
+        val provider = AppKitBackendProvider.forTesting(
+            nativeApplication = native,
+            broker = AppKitProcessBroker(),
+            displayPortFactory = { port },
+            availability = { true },
+        )
+        val parentScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob())
+        val observedDisplays = CompletableDeferred<DisplayManager>()
+
+        try {
+            val session = provider.attach(
+                DesktopEmbeddedRequest(
+                    parentScope,
+                    KadreApplicationFactory {
+                        KadreApplication {
+                            observedDisplays.complete(displays)
+                            kotlinx.coroutines.awaitCancellation()
+                        }
+                    },
+                    DesktopIntegrationKind.AppKitMainLoop,
+                    KadrePolicies.Default,
+                ),
+            ).requireSession()
+
+            assertIs<KadreResult.Success<*>>(observedDisplays.await().requestAccess())
+            session.close()
+            session.awaitTermination()
+            assertEquals(1, port.closeCount)
+        } finally {
+            parentScope.cancel()
+        }
+    }
+
     @Test
     fun embeddedAttentionIsUnsupportedByDefaultWithoutTouchingTheNativeBroker() = kotlinx.coroutines.runBlocking {
         val native = EmbeddedNativeApplication()
@@ -509,7 +584,7 @@ class AppKitBackendProviderTest {
                 focus = SurfaceFocus.Focused,
                 visibility = org.graphiks.kadre.surface.SurfaceVisibility.Hidden,
                 occlusion = SurfaceOcclusion.Occluded,
-                theme = SurfaceTheme.Dark,
+                appearance = SurfaceAppearance(SurfaceTheme.Dark, SurfaceContrast.Normal),
             )
             val port = DeterministicAppKitNativeWindowPort(
                 name = "public-surface-ordering",
@@ -541,7 +616,7 @@ class AppKitBackendProviderTest {
                 assertEquals(initial.focus, initialState.focus)
                 assertEquals(initial.visibility, initialState.visibility)
                 assertEquals(initial.occlusion, initialState.occlusion)
-                assertEquals(initial.theme, initialState.theme)
+                assertEquals(initial.appearance, initialState.appearance)
 
                 val events = Channel<SurfaceEvent>(Channel.UNLIMITED)
                 val collector = launch(start = CoroutineStart.UNDISPATCHED) {
@@ -3351,6 +3426,38 @@ private fun publicWindowRequest(
     KadrePolicies.Default,
     allowUserAttention,
 )
+
+private class ProviderDisplayPort : DisplayPort {
+    var closeCount: Int = 0
+        private set
+
+    override val enumerationCapability: Capability<Unit> = Capability.Supported(Unit, FeatureAvailability.Available)
+
+    override suspend fun requestSnapshot(): KadreResult<DisplayPortSnapshot> =
+        KadreResult.Success(DisplayPortSnapshot(primaryKey = null, displays = emptyList()))
+
+    override fun installSnapshotObserver(
+        observer: (KadreResult<DisplayPortSnapshot>) -> Unit,
+    ): AutoCloseable = AutoCloseable {}
+
+    override fun close() {
+        closeCount += 1
+    }
+}
+
+private class ProviderMemoryPressureNative : AppKitMemoryPressureNative {
+    private var listener: ((MemoryPressureLevel) -> Unit)? = null
+
+    override fun open(listener: (MemoryPressureLevel) -> Unit): AutoCloseable {
+        check(this.listener == null) { "memory-pressure source is already open" }
+        this.listener = listener
+        return AutoCloseable { this.listener = null }
+    }
+
+    fun emit(level: MemoryPressureLevel) {
+        checkNotNull(listener)(level)
+    }
+}
 
 @OptIn(
     org.graphiks.kadre.diagnostics.DelicateKadreApi::class,

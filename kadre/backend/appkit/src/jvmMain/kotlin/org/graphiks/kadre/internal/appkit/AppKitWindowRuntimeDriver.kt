@@ -116,6 +116,10 @@ internal class AppKitWindowRuntimeDriver internal constructor(
     } else {
         null
     }
+    private val exclusiveFullscreenPort: AppKitExclusiveFullscreenPort? = broker?.openExclusiveFullscreenPort(
+        executor = AppKitExclusiveExecutor(commandPort::submitExclusive),
+        windowPort = commandPort,
+    )
 
     internal val manager: RuntimeWindowManager = RuntimeWindowManager(
         resources = resources,
@@ -132,7 +136,10 @@ internal class AppKitWindowRuntimeDriver internal constructor(
         enabledSurfaceCapabilities = appKitSurfaceCapabilities(publicSurfaceCapabilities),
         textInputPortFactory = TextInputPortFactory(commandPort::textInputPort),
         onLastWindowClosed = onLastWindowClosed,
-    ).also(fullscreenObservationSink::install)
+    ).also { manager ->
+        exclusiveFullscreenPort?.let(manager::installExclusiveFullscreenPort)
+        fullscreenObservationSink.install(manager)
+    }
 
     override fun close() {
         if (!closed.compareAndSet(false, true)) return
@@ -140,7 +147,11 @@ internal class AppKitWindowRuntimeDriver internal constructor(
         try {
             manager.close()
         } finally {
-            commandPort.finishClose(drainMode)
+            try {
+                exclusiveFullscreenPort?.close()
+            } finally {
+                commandPort.finishClose(drainMode)
+            }
         }
     }
 }
@@ -169,6 +180,13 @@ private fun appKitSurfaceCapabilities(publicSurfaceCapabilities: Boolean): Surfa
         platformAccess = unsupportedUpdate,
     )
 }
+
+private fun exclusivePresentationUnavailable(): KadreFailure.PlatformFailure =
+    KadreFailure.PlatformFailure(
+        KadrePlatform.AppKit,
+        "exclusive-fullscreen",
+        "presentation-unavailable",
+    )
 
 private class BrokeredAppKitWindowAttentionPort(
     private val commandPort: AppKitWindowCommandPort,
@@ -273,7 +291,7 @@ private class AppKitWindowCommandPort(
         DropTransferSource,
         LogicalPoint,
     ) -> DropOfferId?,
-) : WindowCommandPort, SurfaceCommandPort {
+) : WindowCommandPort, SurfaceCommandPort, AppKitExclusiveWindowPort {
     private val lock = Any()
     private val nextPeerId = AtomicLong(0L)
     private val byRequest = linkedMapOf<WindowRequestId, PeerEntry>()
@@ -288,9 +306,123 @@ private class AppKitWindowCommandPort(
 
     fun submitAttentionCleanup(task: () -> Unit): Boolean = commands.submitFollowUp(task)
 
+    fun submitExclusive(task: () -> Unit): Boolean = commands.submitFollowUp(task)
+
     fun <T> onMainThread(block: () -> T): T = nativePort.onMainThread(block)
 
     fun reportAttentionFailure(cause: Throwable) = reportFailure(cause)
+
+    override fun prepare(request: AppKitExclusiveWindowRequest): AppKitExclusiveWindowPreparation {
+        val entry = synchronized(lock) {
+            byWindow[request.windowId]?.takeIf { !closed && !it.removed && it.exclusivePresentation == null }
+        } ?: return AppKitExclusiveWindowPreparation.Failed(exclusivePresentationUnavailable(), windowState(request.windowId))
+        return when (val opened = entry.peer?.openExclusivePresentation()) {
+            is AppKitExclusivePresentationOpenResult.Opened -> {
+                synchronized(lock) {
+                    if (!entry.removed && entry.exclusivePresentation == null) entry.exclusivePresentation = opened.lease
+                }
+                AppKitExclusiveWindowPreparation.Prepared
+            }
+            is AppKitExclusivePresentationOpenResult.Failed ->
+                AppKitExclusiveWindowPreparation.Failed(opened.failure, windowState(request.windowId))
+            null -> AppKitExclusiveWindowPreparation.Failed(exclusivePresentationUnavailable(), windowState(request.windowId))
+        }
+    }
+
+    override fun enter(request: AppKitExclusiveWindowRequest): AppKitExclusiveWindowResult {
+        val presentation = synchronized(lock) { byWindow[request.windowId]?.exclusivePresentation }
+        return presentationResult(
+            request,
+            presentation?.let { nativePort.onMainThread { it.present(request.displayId) } },
+            request.requestedFullscreen,
+        )
+    }
+
+    override fun exit(request: AppKitExclusiveWindowRequest): AppKitExclusiveWindowResult {
+        val entry = synchronized(lock) { byWindow[request.windowId] }
+        val presentation = entry?.exclusivePresentation
+        val result = presentation?.let {
+            nativePort.onMainThread(presentation::restore)
+        }
+        if (result == AppKitExclusivePresentationResult.Readback) {
+            when (val close = closeExclusivePresentation(presentation)) {
+                is ExclusivePresentationCloseAttempt.Terminal -> {
+                    close.failures.forEach(::reportFailure)
+                    clearExclusivePresentation(entry, presentation)
+                }
+                is ExclusivePresentationCloseAttempt.Incomplete -> {
+                    close.failures.forEach(::reportFailure)
+                    terminalize(request.windowId)
+                    return AppKitExclusiveWindowResult.Failed(
+                        presentationCloseFailure(close),
+                        null,
+                        presentationCloseDiagnostics(close),
+                    )
+                }
+                ExclusivePresentationCloseAttempt.Absent -> Unit
+            }
+        }
+        if (result is AppKitExclusivePresentationResult.Failed) {
+            // A partial KFFI restore is not an honest terminal public state, even when it supplied a readback.
+            terminalize(request.windowId)
+            return AppKitExclusiveWindowResult.Failed(result.failure, null, result.diagnostics)
+        }
+        return presentationResult(request, result, FullscreenMode.Windowed)
+    }
+
+    override fun readback(windowId: WindowId): WindowState? = windowState(windowId)
+
+    override fun terminalize(windowId: WindowId) {
+        val entry = synchronized(lock) { byWindow[windowId] } ?: return
+        val lease = synchronized(lock) { entry.exclusivePresentation }
+        val failures = mutableListOf<Throwable>()
+        try {
+            when (val close = closeExclusivePresentation(lease)) {
+                is ExclusivePresentationCloseAttempt.Terminal -> {
+                    failures += close.failures
+                    clearExclusivePresentation(entry, lease)
+                    entry.peer?.close()
+                }
+                is ExclusivePresentationCloseAttempt.Incomplete -> failures += close.failures
+                ExclusivePresentationCloseAttempt.Absent -> entry.peer?.close()
+            }
+        } catch (cause: Exception) {
+            failures += cause
+        } catch (cause: LinkageError) {
+            failures += cause
+        } finally {
+            issueNativeTerminal(entry)
+            scheduleCleanup(entry)
+        }
+        failures.forEach(::reportFailure)
+    }
+
+    override fun reportDiagnostic(failure: KadreFailure.PlatformFailure) {
+        reportFailure(KadreException(failure))
+    }
+
+    private fun presentationResult(
+        request: AppKitExclusiveWindowRequest,
+        result: AppKitExclusivePresentationResult?,
+        fullscreen: FullscreenMode,
+    ): AppKitExclusiveWindowResult = when (result) {
+        AppKitExclusivePresentationResult.Readback -> presentationReadback(request.windowId, fullscreen)?.let { state ->
+            AppKitExclusiveWindowResult.Read(state)
+        } ?: AppKitExclusiveWindowResult.Failed(exclusivePresentationUnavailable(), null)
+        is AppKitExclusivePresentationResult.Failed -> AppKitExclusiveWindowResult.Failed(
+            result.failure,
+            presentationReadback(request.windowId, fullscreen).takeIf { result.hasRepresentableReadback },
+            result.diagnostics,
+        )
+        null -> AppKitExclusiveWindowResult.Failed(exclusivePresentationUnavailable(), null)
+    }
+
+    private fun presentationReadback(windowId: WindowId, fullscreen: FullscreenMode): WindowState? {
+        val entry = synchronized(lock) { byWindow[windowId] } ?: return null
+        val snapshot = entry.peer?.readWindow() ?: return null
+        val current = windowState(windowId) ?: return null
+        return snapshot.withMutationFrom(current).copy(fullscreen = fullscreen)
+    }
 
     override fun requestOpen(command: WindowOpenCommand) {
         val entry = PeerEntry(command, AppKitWindowPeerId(nextPeerId.getAndIncrement()))
@@ -1409,19 +1541,27 @@ private class AppKitWindowCommandPort(
     }
 
     private fun performNativeClose(entry: PeerEntry) {
-        val peer = synchronized(lock) {
+        val (peer, presentation) = synchronized(lock) {
             if (entry.removed || entry.nativeTerminalIssued) return
-            entry.peer
+            entry.peer to entry.exclusivePresentation
         }
-        val failure = try {
-            peer?.commitNativeClose()
-            null
+        val failures = mutableListOf<Throwable>()
+        try {
+            when (val close = closeExclusivePresentation(presentation)) {
+                is ExclusivePresentationCloseAttempt.Terminal -> {
+                    failures += close.failures
+                    clearExclusivePresentation(entry, presentation)
+                    peer?.commitNativeClose()
+                }
+                is ExclusivePresentationCloseAttempt.Incomplete -> failures += close.failures
+                ExclusivePresentationCloseAttempt.Absent -> peer?.commitNativeClose()
+            }
         } catch (cause: Exception) {
-            cause
+            failures += cause
         } catch (cause: LinkageError) {
-            cause
+            failures += cause
         }
-        failure?.let(::reportFailure)
+        failures.forEach(::reportFailure)
         issueNativeTerminal(entry)
         scheduleCleanup(entry)
     }
@@ -1500,6 +1640,7 @@ private class AppKitWindowCommandPort(
             } else {
                 entry.surfaceCleanupReserved = true
                 entry.cleanupScheduled = true
+                entry.cleanupRetrySubmitted = false
                 true
             }
         }
@@ -1507,19 +1648,46 @@ private class AppKitWindowCommandPort(
     }
 
     private fun performCleanup(entry: PeerEntry) {
-        val peer = synchronized(lock) {
+        val (peer, presentation) = synchronized(lock) {
             if (entry.removed && entry.cleanupFinished) return
-            entry.peer
+            entry.peer to entry.exclusivePresentation
         }
-        val failure = try {
-            peer?.close()
-            null
+        val failures = mutableListOf<Throwable>()
+        var retryPresentationClose = false
+        try {
+            when (val close = closeExclusivePresentation(presentation)) {
+                is ExclusivePresentationCloseAttempt.Terminal -> {
+                    failures += close.failures
+                    clearExclusivePresentation(entry, presentation)
+                    peer?.close()
+                }
+                is ExclusivePresentationCloseAttempt.Incomplete -> {
+                    failures += close.failures
+                    retryPresentationClose = true
+                }
+                ExclusivePresentationCloseAttempt.Absent -> peer?.close()
+            }
         } catch (cause: Exception) {
-            cause
+            failures += cause
         } catch (cause: LinkageError) {
-            cause
+            failures += cause
         }
-        failure?.let(::reportFailure)
+        failures.forEach(::reportFailure)
+        if (retryPresentationClose) {
+            val retry = synchronized(lock) {
+                if (entry.removed || entry.cleanupFinished || entry.cleanupRetrySubmitted) {
+                    entry.cleanupScheduled = false
+                    false
+                } else {
+                    entry.cleanupRetrySubmitted = true
+                    true
+                }
+            }
+            if (retry && commands.submitFollowUp { performCleanup(entry) }) return
+            synchronized(lock) { entry.cleanupScheduled = false }
+            return
+        }
+        val failure = failures.firstOrNull()
         val completion = synchronized(lock) {
             entry.peer = null
             entry.cleanupFinished = true
@@ -1539,6 +1707,63 @@ private class AppKitWindowCommandPort(
         heldMutations.forEach { pending ->
             pending.command.failed(KadreFailure.Closed(KadreResourceKind.Window))
         }
+    }
+
+    private fun clearExclusivePresentation(entry: PeerEntry?, presentation: AppKitExclusivePresentationLease?) {
+        if (entry == null || presentation == null) return
+        synchronized(lock) {
+            if (entry.exclusivePresentation === presentation) entry.exclusivePresentation = null
+        }
+    }
+
+    private fun closeExclusivePresentation(
+        presentation: AppKitExclusivePresentationLease?,
+    ): ExclusivePresentationCloseAttempt {
+        if (presentation == null) return ExclusivePresentationCloseAttempt.Absent
+        val close: AppKitExclusivePresentationCloseResult = try {
+            nativePort.onMainThread(presentation::close)
+        } catch (cause: Exception) {
+            return ExclusivePresentationCloseAttempt.Incomplete(listOf(cause))
+        } catch (cause: LinkageError) {
+            return ExclusivePresentationCloseAttempt.Incomplete(listOf(cause))
+        }
+        val failures = close.result.failures()
+        return when (close) {
+            is AppKitExclusivePresentationCloseResult.Terminal -> ExclusivePresentationCloseAttempt.Terminal(failures)
+            is AppKitExclusivePresentationCloseResult.Incomplete -> ExclusivePresentationCloseAttempt.Incomplete(failures)
+        }
+    }
+
+    private fun presentationCloseFailure(
+        close: ExclusivePresentationCloseAttempt.Incomplete,
+    ): KadreFailure.PlatformFailure =
+        (close.failures.firstOrNull() as? KadreException)
+            ?.failure as? KadreFailure.PlatformFailure
+            ?: platformFailure("presentation-close-exception")
+
+    private fun presentationCloseDiagnostics(
+        close: ExclusivePresentationCloseAttempt.Incomplete,
+    ): List<KadreFailure.PlatformFailure> = close.failures.drop(1)
+        .mapNotNull { (it as? KadreException)?.failure as? KadreFailure.PlatformFailure }
+
+    private fun AppKitExclusivePresentationResult.failures(): List<Throwable> = when (this) {
+        AppKitExclusivePresentationResult.Readback -> emptyList()
+        is AppKitExclusivePresentationResult.Failed -> buildList {
+            add(KadreException(failure))
+            diagnostics.filter { it != failure }.forEach { add(KadreException(it)) }
+        }
+    }
+
+    private sealed interface ExclusivePresentationCloseAttempt {
+        data object Absent : ExclusivePresentationCloseAttempt
+
+        data class Terminal(
+            val failures: List<Throwable>,
+        ) : ExclusivePresentationCloseAttempt
+
+        data class Incomplete(
+            val failures: List<Throwable>,
+        ) : ExclusivePresentationCloseAttempt
     }
 
     private fun issueNativeTerminal(entry: PeerEntry) {
@@ -1606,6 +1831,7 @@ private class AppKitWindowCommandPort(
     ) {
         val surfaceId: SurfaceId = command.surfaceId
         var peer: AppKitWindowPeer? = null
+        var exclusivePresentation: AppKitExclusivePresentationLease? = null
         var cancellationRequested: Boolean = false
         var commitIssued: Boolean = false
         var surfaceReadiness: RuntimeSurfaceReadiness = RuntimeSurfaceReadiness.Buffering
@@ -1622,6 +1848,7 @@ private class AppKitWindowCommandPort(
         var fullscreenPending: PendingWindowMutationCommand? = null
         var fullscreenTerminalTombstone: AppKitFullscreenTerminalTombstone? = null
         var cleanupScheduled: Boolean = false
+        var cleanupRetrySubmitted: Boolean = false
         var cleanupFinished: Boolean = false
         var cleanupCompletion: CleanupCompletion = CleanupCompletion.None
         var nativeTerminalIssued: Boolean = false
@@ -1961,7 +2188,7 @@ private fun AppKitSurfaceStimulus.toRuntime(surfaceId: SurfaceId): SurfaceStimul
     is AppKitSurfaceStimulus.MetricsChanged -> SurfaceStimulus.MetricsChanged(surfaceId, metrics)
     is AppKitSurfaceStimulus.FocusChanged -> SurfaceStimulus.FocusChanged(surfaceId, focus)
     is AppKitSurfaceStimulus.VisibilityChanged -> SurfaceStimulus.VisibilityChanged(surfaceId, visibility, occlusion)
-    is AppKitSurfaceStimulus.ThemeChanged -> SurfaceStimulus.ThemeChanged(surfaceId, theme)
+    is AppKitSurfaceStimulus.AppearanceChanged -> SurfaceStimulus.AppearanceChanged(surfaceId, appearance)
     is AppKitSurfaceStimulus.RedrawConsumed -> SurfaceStimulus.RedrawConsumed(
         surfaceId,
         SurfaceRedrawGeneration.fromNative(generation),
@@ -2019,7 +2246,7 @@ private fun AppKitSurfaceSnapshot.toRuntimeSnapshot(): SurfaceInitialSnapshot = 
     focus = focus,
     visibility = visibility,
     occlusion = occlusion,
-    theme = theme,
+    appearance = appearance,
 )
 
 private fun appKitEffectiveSpec(

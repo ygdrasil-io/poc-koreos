@@ -49,7 +49,7 @@ public data class SurfaceState(
     public val visibility: SurfaceVisibility,
     public val occlusion: SurfaceOcclusion,
     public val focus: SurfaceFocus,
-    public val theme: SurfaceTheme,
+    public val appearance: SurfaceAppearance,
     public val cursor: CursorStyle,
     public val pointerCapture: PointerCaptureMode,
     public val hitTesting: HitTestingMode,
@@ -66,6 +66,13 @@ public enum class SurfaceVisibility { Visible, Hidden }
 public enum class SurfaceOcclusion { Visible, Occluded, Unknown }
 public enum class SurfaceFocus { Focused, Unfocused }
 public enum class SurfaceTheme { Light, Dark, Unknown }
+public enum class SurfaceContrast { Normal, High, Unknown }
+
+/** Effective visual environment supplied by the host for one surface. */
+public data class SurfaceAppearance(
+    public val theme: SurfaceTheme,
+    public val contrast: SurfaceContrast,
+)
 
 public sealed interface SurfaceEvent {
     public val stamp: EventStamp
@@ -83,7 +90,7 @@ public sealed interface SurfaceEvent {
         override val stateRevision: SurfaceRevision get() = state.revision
     }
 
-    public data class ThemeChanged(public val state: SurfaceState, override val stamp: EventStamp) : SurfaceEvent {
+    public data class AppearanceChanged(public val state: SurfaceState, override val stamp: EventStamp) : SurfaceEvent {
         override val stateRevision: SurfaceRevision get() = state.revision
     }
 

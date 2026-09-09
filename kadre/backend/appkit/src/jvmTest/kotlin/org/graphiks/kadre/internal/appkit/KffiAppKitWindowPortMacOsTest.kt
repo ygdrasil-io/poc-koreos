@@ -22,6 +22,7 @@ import org.graphiks.kadre.surface.LogicalPoint
 import org.graphiks.kadre.surface.LogicalInsets
 import org.graphiks.kadre.surface.LogicalSize
 import org.graphiks.kadre.surface.PropertyChange
+import org.graphiks.kadre.surface.SurfaceAppearance
 import org.graphiks.kadre.surface.SurfaceTheme
 import org.graphiks.kadre.window.WindowDecorations
 import org.graphiks.kadre.window.FullscreenMode
@@ -72,6 +73,32 @@ import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
 class KffiAppKitWindowPortMacOsTest {
+    @Test
+    fun exclusivePresentationSmokeOnlyOpensAndReadsDetachedSnapshotOnMacOs26() {
+        if (!isMacOsHost() || !AppKitDisplayAvailability().isAvailable) return
+
+        val port = KffiAppKitWindowPort()
+        var window: AppKitNativeWindowOwner? = null
+        try {
+            port.onMainThread {
+                window = port.createWindow(WindowSpec(contentSize = LogicalSize(240.0, 135.0)))
+                val opened = assertIs<AppKitExclusivePresentationOpenResult.Opened>(
+                    port.openExclusivePresentation(checkNotNull(window)),
+                )
+
+                assertEquals(AppKitExclusivePresentationResult.Readback, opened.lease.readback())
+                assertEquals(AppKitExclusivePresentationResult.Readback, opened.lease.restore())
+            }
+        } finally {
+            port.onMainThread {
+                window?.let { nativeWindow ->
+                    port.closeWindow(nativeWindow)
+                    nativeWindow.close()
+                }
+            }
+        }
+    }
+
     @Test
     fun fullscreenAvailabilityUsesNumericMacOsVersionOrdering() {
         assertFalse(AppKitFullscreenAvailability("10.6.8").isAvailable)
@@ -1017,7 +1044,8 @@ class KffiAppKitWindowPortMacOsTest {
         )
 
         try {
-            val initialTheme = checkNotNull(peer.initialSurfaceSnapshot).theme
+            val initialAppearance = checkNotNull(peer.initialSurfaceSnapshot).appearance
+            val initialTheme = initialAppearance.theme
             val (appearanceName, expectedTheme) = if (initialTheme == SurfaceTheme.Dark) {
                 "NSAppearanceNameAqua" to SurfaceTheme.Light
             } else {
@@ -1038,9 +1066,12 @@ class KffiAppKitWindowPortMacOsTest {
             )
             assertEquals(
                 listOf<AppKitSurfaceStimulus>(
-                    AppKitSurfaceStimulus.ThemeChanged(peerId, expectedTheme),
+                    AppKitSurfaceStimulus.AppearanceChanged(
+                        peerId,
+                        SurfaceAppearance(expectedTheme, initialAppearance.contrast),
+                    ),
                 ),
-                stimuli.filterIsInstance<AppKitSurfaceStimulus.ThemeChanged>(),
+                stimuli.filterIsInstance<AppKitSurfaceStimulus.AppearanceChanged>(),
             )
         } finally {
             peer.close()
