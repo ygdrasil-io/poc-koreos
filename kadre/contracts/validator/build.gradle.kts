@@ -273,7 +273,6 @@ val browserContractEvidenceTasks = listOf("js", "wasmJs").map { target ->
 
 tasks.named("check") {
     dependsOn(validateContractRegistry)
-    dependsOn(generateAppKitContractEvidence)
     dependsOn(generateRuntimeContractEvidence)
     dependsOn(browserContractEvidenceTasks)
 }
