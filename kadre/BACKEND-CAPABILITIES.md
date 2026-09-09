@@ -121,6 +121,24 @@ L’absence de `Window` sur Android View ou sur le host Web initial ne ferme pas
 
 Les gestures sont des observations host-native ou des recognizers installés explicitement par l’adapter. Kadre ne promet aucun recognizer logiciel universel. Un adapter peut supporter pointer/touch tout en publiant gestures `Unsupported`.
 
+Sur AppKit, le touch indirect est installé à partir de macOS 10.6. AppKit ne
+fournit pas une position de contact trackpad dans les coordonnées de la fenêtre :
+Kadre projette donc `NSTouch.normalizedPosition` dans les bounds logiques courants
+de la surface au moment du callback. Cette valeur est une projection de
+coordonnées device, pas une mesure native window-local. L'axe Y est inversé de
+l'origine AppKit en bas à gauche vers l'origine Kadre en haut à gauche. Les phases `None`,
+`Stationary` et `MayBegin` ne produisent aucun événement.
+
+`InputCapabilities.gestures` expose sur AppKit un subset exact : `Pan`, `Pinch`
+et `Rotation` à partir de macOS 10.7, puis `TouchpadPressure` à partir de 10.10.3.
+`DoubleTap` n'est jamais fabriqué. `Pinch` utilise `1 + magnification`, la
+rotation native en degrés est convertie en radians, `Swipe` devient `Pan` et la
+pression n'est publiée que dans `[0,1]`. Le support n'est publié qu'après
+l'installation du receiver et de l'admission touch ; il certifie le chemin
+logiciel, pas la présence d'un trackpad compatible ni l'arrivée d'un événement
+matériel. La révocation ferme d'abord l'admission native, retire les capabilities,
+puis libère la vue, et aucun de ces événements n'entre dans le flux pointer.
+
 Les deux lignes `platformAccess` sont structurelles, pas des probes de permission. Une surface Android/UIKit/Web attachée possède nécessairement le type SDK promis par son extension ; une fenêtre Desktop admise possède nécessairement le `DesktopNativeWindowHandle` correspondant à son backend fixé. Kadre ne publie pas de callback générique pour `UIWindow`, `android.view.Window` ou une surface desktop nue v1 ; leur capability opposée reste donc `Unsupported`, sans faux handle.
 
 ## 5. Formes d’inventaire obligatoires

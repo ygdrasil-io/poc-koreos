@@ -11,12 +11,14 @@ import org.graphiks.kadre.input.TextRange
 import org.graphiks.kadre.internal.runtime.RuntimeDesktopNativeWindowHandle
 import org.graphiks.kadre.input.KeyLocation
 import org.graphiks.kadre.input.KeyState
+import org.graphiks.kadre.input.GestureKind
 import org.graphiks.kadre.input.KeyboardModifiers
 import org.graphiks.kadre.input.LogicalKey
 import org.graphiks.kadre.input.ModifierKey
 import org.graphiks.kadre.input.PhysicalKey
 import org.graphiks.kadre.input.PointerButton
 import org.graphiks.kadre.input.PointerButtonState
+import org.graphiks.kadre.input.TouchPhase
 import org.graphiks.kadre.surface.LogicalDelta
 import org.graphiks.kadre.surface.LogicalPoint
 import org.graphiks.kadre.surface.LogicalInsets
@@ -39,12 +41,15 @@ import org.graphiks.kffi.objc.NSButton
 import org.graphiks.kffi.objc.NSEdgeInsets
 import org.graphiks.kffi.objc.NSEvent
 import org.graphiks.kffi.objc.NSEventModifierFlags
+import org.graphiks.kffi.objc.NSEventPhase
 import org.graphiks.kffi.objc.NSEventType
 import org.graphiks.kffi.objc.NSNotificationCenter
 import org.graphiks.kffi.objc.NSPoint
 import org.graphiks.kffi.objc.NSRect
 import org.graphiks.kffi.objc.NSSize
 import org.graphiks.kffi.objc.NSThread
+import org.graphiks.kffi.objc.NSTouchTypeMask
+import org.graphiks.kffi.objc.NSTouchPhase
 import org.graphiks.kffi.objc.NSView
 import org.graphiks.kffi.objc.NSWindow
 import org.graphiks.kffi.objc.NSWindowButton
@@ -52,6 +57,7 @@ import org.graphiks.kffi.objc.NSWindowCollectionBehavior
 import org.graphiks.kffi.objc.NSWindowStyleMask
 import org.graphiks.kffi.objc.ObjCRuntime
 import org.graphiks.kffi.objc.effectiveAppearance
+import org.graphiks.kffi.objc.allowedTouchTypes
 import org.graphiks.kffi.objc.performSelectorOnMainThread_withObject_waitUntilDone
 import org.graphiks.kffi.objc.setAppearance
 import org.graphiks.kffi.objc.managed.ObjCManagedClass
@@ -113,6 +119,238 @@ class KffiAppKitWindowPortMacOsTest {
         assertTrue(AppKitTextInputAvailability("10.6.0").isAvailable)
         assertFalse(AppKitTextInputAvailability("10.6.8").supportsRectToScreen)
         assertTrue(AppKitTextInputAvailability("10.7.0").supportsRectToScreen)
+    }
+
+    @Test
+    fun touchAndGestureAvailabilityPublishesOnlyTheVersionSupportedKinds() {
+        assertEquals(
+            AppKitTouchGestureAvailability(touchInstalled = false, gestureKinds = emptySet()),
+            AppKitTouchGestureAvailability.forSystemVersion("10.5.8"),
+        )
+        assertEquals(
+            AppKitTouchGestureAvailability(touchInstalled = true, gestureKinds = emptySet()),
+            AppKitTouchGestureAvailability.forSystemVersion("10.6.0"),
+        )
+        assertEquals(
+            setOf(GestureKind.Pan, GestureKind.Pinch, GestureKind.Rotation),
+            AppKitTouchGestureAvailability.forSystemVersion("10.7.0").gestureKinds,
+        )
+        assertEquals(
+            setOf(GestureKind.Pan, GestureKind.Pinch, GestureKind.Rotation),
+            AppKitTouchGestureAvailability.forSystemVersion("10.10.2").gestureKinds,
+        )
+        assertEquals(
+            setOf(
+                GestureKind.Pan,
+                GestureKind.Pinch,
+                GestureKind.Rotation,
+                GestureKind.TouchpadPressure,
+            ),
+            AppKitTouchGestureAvailability.forSystemVersion("10.10.3").gestureKinds,
+        )
+        assertFalse(AppKitTouchGestureAvailability.forSystemVersion("10.12.1").usesAllowedTouchTypes)
+        assertTrue(AppKitTouchGestureAvailability.forSystemVersion("10.12.2").usesAllowedTouchTypes)
+        assertEquals(
+            AppKitTouchGestureAvailability(touchInstalled = false, gestureKinds = emptySet()),
+            AppKitTouchGestureAvailability.forSystemVersion("unknown"),
+        )
+    }
+
+    @Test
+    fun normalizedTrackpadCoordinatesProjectIntoCurrentLogicalContentBounds() {
+        assertEquals(
+            LogicalPoint(80.0, 45.0),
+            projectNormalizedTouchPosition(
+                NSEventObservation.Position(0.25, 0.75),
+                LogicalSize(320.0, 180.0),
+            ),
+        )
+        assertEquals(
+            null,
+            projectNormalizedTouchPosition(
+                NSEventObservation.Position(Double.NaN, 0.5),
+                LogicalSize(320.0, 180.0),
+            ),
+        )
+        assertEquals(
+            null,
+            projectNormalizedTouchPosition(
+                NSEventObservation.Position(1.1, 0.5),
+                LogicalSize(320.0, 180.0),
+            ),
+        )
+    }
+
+    @Test
+    fun appKitTouchPhasesMapOnlyObservableContactTransitions() {
+        assertEquals(TouchPhase.Started, NSTouchPhase.NSTouchPhaseBegan.toKadreTouchPhaseOrNull())
+        assertEquals(TouchPhase.Moved, NSTouchPhase.NSTouchPhaseMoved.toKadreTouchPhaseOrNull())
+        assertEquals(TouchPhase.Ended, NSTouchPhase.NSTouchPhaseEnded.toKadreTouchPhaseOrNull())
+        assertEquals(TouchPhase.Cancelled, NSTouchPhase.NSTouchPhaseCancelled.toKadreTouchPhaseOrNull())
+        assertEquals(null, NSTouchPhase.NSTouchPhaseStationary.toKadreTouchPhaseOrNull())
+        assertEquals(null, NSTouchPhase.NSTouchPhaseTouching.toKadreTouchPhaseOrNull())
+    }
+
+    @Test
+    fun managedGestureScalarsMapToPortableValuesWithoutInventingDoubleTap() {
+        val none = NSEventModifierFlags(0L)
+        fun observation(type: NSEventType, details: NSEventObservation.Details) = NSEventObservation(
+            type = type,
+            modifierFlags = none,
+            position = NSEventObservation.Position(0.0, 0.0),
+            details = details,
+        )
+
+        assertEquals(
+            AppKitInput.Gesture(
+                kind = GestureKind.Pinch,
+                phase = TouchPhase.Started,
+                scale = 1.25,
+            ),
+            observation(
+                NSEventType.NSEventTypeMagnify,
+                NSEventObservation.Details.Magnification(0.25, NSEventPhase.NSEventPhaseBegan),
+            ).toAppKitInputs(LogicalSize(1.0, 1.0)).single(),
+        )
+        assertEquals(
+            AppKitInput.Gesture(
+                kind = GestureKind.Rotation,
+                phase = TouchPhase.Moved,
+                rotationRadians = Math.PI / 2.0,
+            ),
+            observation(
+                NSEventType.NSEventTypeRotate,
+                NSEventObservation.Details.Rotation(90.0f, NSEventPhase.NSEventPhaseChanged),
+            ).toAppKitInputs(LogicalSize(1.0, 1.0)).single(),
+        )
+        assertEquals(
+            AppKitInput.Gesture(
+                kind = GestureKind.Pan,
+                phase = TouchPhase.Ended,
+                delta = LogicalDelta(-2.0, 3.0),
+            ),
+            observation(
+                NSEventType.NSEventTypeSwipe,
+                NSEventObservation.Details.Swipe(-2.0, 3.0, NSEventPhase.NSEventPhaseEnded),
+            ).toAppKitInputs(LogicalSize(1.0, 1.0)).single(),
+        )
+        assertEquals(
+            AppKitInput.Gesture(
+                kind = GestureKind.TouchpadPressure,
+                phase = TouchPhase.Cancelled,
+                pressure = 0.75,
+            ),
+            observation(
+                NSEventType.NSEventTypePressure,
+                NSEventObservation.Details.Pressure(
+                    pressure = 0.75f,
+                    stage = 1L,
+                    stageTransition = 0.0,
+                    phase = NSEventPhase.NSEventPhaseCancelled,
+                ),
+            ).toAppKitInputs(LogicalSize(1.0, 1.0)).single(),
+        )
+
+        assertEquals(
+            emptyList(),
+            observation(
+                NSEventType.NSEventTypeMagnify,
+                NSEventObservation.Details.Magnification(-1.0, NSEventPhase.NSEventPhaseChanged),
+            ).toAppKitInputs(LogicalSize(1.0, 1.0)),
+        )
+        assertEquals(
+            emptyList(),
+            observation(
+                NSEventType.NSEventTypeSwipe,
+                NSEventObservation.Details.Swipe(1.0, 1.0, NSEventPhase.NSEventPhaseNone),
+            ).toAppKitInputs(LogicalSize(1.0, 1.0)),
+        )
+        assertTrue(
+            listOf(
+                NSEventObservation.Details.Magnification(0.1, NSEventPhase.NSEventPhaseChanged),
+                NSEventObservation.Details.Rotation(1.0f, NSEventPhase.NSEventPhaseChanged),
+                NSEventObservation.Details.Swipe(1.0, 1.0, NSEventPhase.NSEventPhaseChanged),
+                NSEventObservation.Details.Pressure(0.5f, 1L, 0.0, NSEventPhase.NSEventPhaseChanged),
+            ).flatMap { details ->
+                val type = when (details) {
+                    is NSEventObservation.Details.Magnification -> NSEventType.NSEventTypeMagnify
+                    is NSEventObservation.Details.Rotation -> NSEventType.NSEventTypeRotate
+                    is NSEventObservation.Details.Swipe -> NSEventType.NSEventTypeSwipe
+                    is NSEventObservation.Details.Pressure -> NSEventType.NSEventTypePressure
+                    else -> error("unexpected detail")
+                }
+                observation(type, details).toAppKitInputs(LogicalSize(1.0, 1.0))
+            }.none { input -> input is AppKitInput.Gesture && input.kind == GestureKind.DoubleTap },
+        )
+    }
+
+    @Test
+    fun invalidTouchSamplesDoNotMutateIdentityAndTerminalizeActiveContactsDeterministically() {
+        val adapter = AppKitTouchAdapter<String>()
+        val bounds = LogicalSize(320.0, 180.0)
+
+        assertEquals(
+            emptyList(),
+            adapter.convert(
+                listOf(AppKitTouchSample("same", TouchPhase.Started, Double.NaN, 0.5)),
+                bounds,
+            ),
+        )
+        val started = adapter.convert(
+            listOf(AppKitTouchSample("same", TouchPhase.Started, 0.25, 0.75)),
+            bounds,
+        ).single()
+        assertEquals(TouchPhase.Started, started.phase)
+        assertEquals(LogicalPoint(80.0, 45.0), started.position)
+
+        assertEquals(
+            emptyList(),
+            adapter.convert(
+                listOf(AppKitTouchSample("same", TouchPhase.Moved, 1.1, 0.5)),
+                bounds,
+            ),
+        )
+        val moved = adapter.convert(
+            listOf(AppKitTouchSample("same", TouchPhase.Moved, 0.5, 0.5)),
+            bounds,
+        ).single()
+        assertSame(started.nativeIdentity, moved.nativeIdentity)
+        assertEquals(LogicalPoint(160.0, 90.0), moved.position)
+
+        val invalidEnd = adapter.convert(
+            listOf(AppKitTouchSample("same", TouchPhase.Ended, Double.POSITIVE_INFINITY, 0.5)),
+            bounds,
+        ).single()
+        assertSame(started.nativeIdentity, invalidEnd.nativeIdentity)
+        assertEquals(TouchPhase.Cancelled, invalidEnd.phase)
+        assertEquals(moved.position, invalidEnd.position)
+        assertEquals(
+            emptyList(),
+            adapter.convert(
+                listOf(AppKitTouchSample("same", TouchPhase.Moved, 0.75, 0.25)),
+                bounds,
+            ),
+        )
+
+        val restarted = adapter.convert(
+            listOf(AppKitTouchSample("same", TouchPhase.Started, 0.75, 0.25)),
+            bounds,
+        ).single()
+        assertTrue(restarted.nativeIdentity !== started.nativeIdentity)
+        val invalidCancel = adapter.convert(
+            listOf(AppKitTouchSample("same", TouchPhase.Cancelled, -0.1, 0.25)),
+            bounds,
+        ).single()
+        assertSame(restarted.nativeIdentity, invalidCancel.nativeIdentity)
+        assertEquals(TouchPhase.Cancelled, invalidCancel.phase)
+        assertEquals(restarted.position, invalidCancel.position)
+        assertEquals(
+            emptyList(),
+            adapter.convert(
+                listOf(AppKitTouchSample("same", TouchPhase.Cancelled, 0.5, 0.5)),
+                bounds,
+            ),
+        )
     }
 
     @Test
@@ -1150,7 +1388,18 @@ class KffiAppKitWindowPortMacOsTest {
             )
             assertEquals(
                 listOf(
-                    AppKitSurfaceStimulus.InputObservationChanged(peerId, keyboardInstalled = true, pointerInstalled = true),
+                    AppKitSurfaceStimulus.InputObservationChanged(
+                        peerId,
+                        keyboardInstalled = true,
+                        pointerInstalled = true,
+                        touchInstalled = true,
+                        gestureKinds = setOf(
+                            GestureKind.Pan,
+                            GestureKind.Pinch,
+                            GestureKind.Rotation,
+                            GestureKind.TouchpadPressure,
+                        ),
+                    ),
                     AppKitSurfaceStimulus.KeyChanged(
                         peerId,
                         AppKitInput.KeyChanged(
@@ -1263,6 +1512,13 @@ class KffiAppKitWindowPortMacOsTest {
                         peerId,
                         keyboardInstalled = true,
                         pointerInstalled = true,
+                        touchInstalled = true,
+                        gestureKinds = setOf(
+                            GestureKind.Pan,
+                            GestureKind.Pinch,
+                            GestureKind.Rotation,
+                            GestureKind.TouchpadPressure,
+                        ),
                     ),
                 ),
                 stimuli.filterIsInstance<AppKitSurfaceStimulus.InputObservationChanged>(),
@@ -1287,7 +1543,7 @@ class KffiAppKitWindowPortMacOsTest {
     }
 
     @Test
-    fun nativeInputObserverRevocationStopsKeyboardAndPointerCallbacksWhileTheManagedViewRemainsAliveOnMacOs() {
+    fun nativeInputObserverRevocationStopsInputCallbacksAndRestoresTouchAdmissionOnMacOs() {
         if (!isMacOsHost()) return
 
         val port = KffiAppKitWindowPort()
@@ -1302,13 +1558,15 @@ class KffiAppKitWindowPortMacOsTest {
                 view = port.createContentView(WindowSpec(contentSize = LogicalSize(240.0, 135.0)))
                 port.attachContentView(checkNotNull(window), checkNotNull(view))
                 port.present(checkNotNull(window))
+                val handle = port.desktopHandle(checkNotNull(window), checkNotNull(view))
+                val nativeView = NSView(MemorySegment.ofAddress(handle.nsViewAddress.toLong()))
+                val previousTouchTypes = nativeView.allowedTouchTypes()
                 observer = port.observeInput(
                     checkNotNull(window),
                     checkNotNull(view),
                     AppKitInputCallbacks(received::add),
                 )
-                val handle = port.desktopHandle(checkNotNull(window), checkNotNull(view))
-                val nativeView = NSView(MemorySegment.ofAddress(handle.nsViewAddress.toLong()))
+                assertTrue(NSTouchTypeMask.NSTouchTypeMaskIndirect in nativeView.allowedTouchTypes())
 
                 nativeView.keyDown(testKeyEvent())
                 assertEquals(1, received.size)
@@ -1317,6 +1575,7 @@ class KffiAppKitWindowPortMacOsTest {
                 assertEquals(2, received.size)
 
                 checkNotNull(observer).revokeCallbacks()
+                assertEquals(previousTouchTypes, nativeView.allowedTouchTypes())
                 nativeView.keyDown(testKeyEvent())
                 nativeView.mouseDown(testPointerEvent())
                 assertEquals(2, received.size)
@@ -1432,7 +1691,10 @@ class KffiAppKitWindowPortMacOsTest {
                 }
             }
 
-            assertEquals(emptyList(), stimuli)
+            assertEquals<List<AppKitSurfaceStimulus>>(
+                listOf(AppKitSurfaceStimulus.InputObservationRevoked(peerId)),
+                stimuli,
+            )
         } finally {
             peer.close()
             retainedView?.let { view -> port.onMainThread { releaseKffiAppKitTestObject(view) } }

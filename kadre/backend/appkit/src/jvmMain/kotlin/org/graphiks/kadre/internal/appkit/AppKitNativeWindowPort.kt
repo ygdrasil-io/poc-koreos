@@ -14,12 +14,14 @@ import org.graphiks.kadre.internal.runtime.DropTransferSource
 import org.graphiks.kadre.input.KeyLocation
 import org.graphiks.kadre.input.KeyState
 import org.graphiks.kadre.input.KeyboardModifiers
+import org.graphiks.kadre.input.GestureKind
 import org.graphiks.kadre.input.LogicalKey
 import org.graphiks.kadre.input.PhysicalKey
 import org.graphiks.kadre.input.PointerButton
 import org.graphiks.kadre.input.PointerButtonState
 import org.graphiks.kadre.input.PointerKind
 import org.graphiks.kadre.input.TextInputConfig
+import org.graphiks.kadre.input.TouchPhase
 import org.graphiks.kadre.surface.LogicalDelta
 import org.graphiks.kadre.surface.LogicalPoint
 import org.graphiks.kadre.surface.LogicalSize
@@ -405,6 +407,22 @@ internal sealed interface AppKitInput {
     ) : AppKitInput
 
     data object PointerLeft : AppKitInput
+
+    data class TouchChanged(
+        val nativeIdentity: Any,
+        val phase: TouchPhase,
+        val position: LogicalPoint,
+        val pressure: Double? = null,
+    ) : AppKitInput
+
+    data class Gesture(
+        val kind: GestureKind,
+        val phase: TouchPhase,
+        val delta: LogicalDelta? = null,
+        val scale: Double? = null,
+        val rotationRadians: Double? = null,
+        val pressure: Double? = null,
+    ) : AppKitInput
 }
 
 /** Callback boundary that admits only immutable input values, never a borrowed native event. */
@@ -420,6 +438,10 @@ internal class AppKitInputCallbacks(
 internal interface AppKitNativeInputObserverOwner : AutoCloseable {
     val keyboardInstalled: Boolean
     val pointerInstalled: Boolean
+    val touchInstalled: Boolean
+        get() = false
+    val gestureKinds: Set<GestureKind>
+        get() = emptySet()
 
     fun revokeCallbacks()
 

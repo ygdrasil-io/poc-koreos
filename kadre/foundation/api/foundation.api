@@ -1611,6 +1611,7 @@ public final class org/graphiks/kadre/diagnostics/KadreOperation : java/lang/Enu
 	public static final field CloseWindow Lorg/graphiks/kadre/diagnostics/KadreOperation;
 	public static final field DisplayAccess Lorg/graphiks/kadre/diagnostics/KadreOperation;
 	public static final field GamepadEffect Lorg/graphiks/kadre/diagnostics/KadreOperation;
+	public static final field GestureInput Lorg/graphiks/kadre/diagnostics/KadreOperation;
 	public static final field HostAttach Lorg/graphiks/kadre/diagnostics/KadreOperation;
 	public static final field InstallInteractionHandler Lorg/graphiks/kadre/diagnostics/KadreOperation;
 	public static final field Interaction Lorg/graphiks/kadre/diagnostics/KadreOperation;
@@ -2829,19 +2830,19 @@ public final class org/graphiks/kadre/input/GestureKind : java/lang/Enum {
 }
 
 public final class org/graphiks/kadre/input/InputCapabilities {
-	public fun <init> (Lorg/graphiks/kadre/diagnostics/FeatureAvailability;Lorg/graphiks/kadre/diagnostics/FeatureAvailability;Lorg/graphiks/kadre/diagnostics/FeatureAvailability;Lorg/graphiks/kadre/diagnostics/FeatureAvailability;Lorg/graphiks/kadre/diagnostics/FeatureAvailability;Lorg/graphiks/kadre/diagnostics/Capability;Lorg/graphiks/kadre/diagnostics/Capability;)V
+	public fun <init> (Lorg/graphiks/kadre/diagnostics/FeatureAvailability;Lorg/graphiks/kadre/diagnostics/FeatureAvailability;Lorg/graphiks/kadre/diagnostics/FeatureAvailability;Lorg/graphiks/kadre/diagnostics/Capability;Lorg/graphiks/kadre/diagnostics/FeatureAvailability;Lorg/graphiks/kadre/diagnostics/Capability;Lorg/graphiks/kadre/diagnostics/Capability;)V
 	public final fun component1 ()Lorg/graphiks/kadre/diagnostics/FeatureAvailability;
 	public final fun component2 ()Lorg/graphiks/kadre/diagnostics/FeatureAvailability;
 	public final fun component3 ()Lorg/graphiks/kadre/diagnostics/FeatureAvailability;
-	public final fun component4 ()Lorg/graphiks/kadre/diagnostics/FeatureAvailability;
+	public final fun component4 ()Lorg/graphiks/kadre/diagnostics/Capability;
 	public final fun component5 ()Lorg/graphiks/kadre/diagnostics/FeatureAvailability;
 	public final fun component6 ()Lorg/graphiks/kadre/diagnostics/Capability;
 	public final fun component7 ()Lorg/graphiks/kadre/diagnostics/Capability;
-	public final fun copy (Lorg/graphiks/kadre/diagnostics/FeatureAvailability;Lorg/graphiks/kadre/diagnostics/FeatureAvailability;Lorg/graphiks/kadre/diagnostics/FeatureAvailability;Lorg/graphiks/kadre/diagnostics/FeatureAvailability;Lorg/graphiks/kadre/diagnostics/FeatureAvailability;Lorg/graphiks/kadre/diagnostics/Capability;Lorg/graphiks/kadre/diagnostics/Capability;)Lorg/graphiks/kadre/input/InputCapabilities;
-	public static synthetic fun copy$default (Lorg/graphiks/kadre/input/InputCapabilities;Lorg/graphiks/kadre/diagnostics/FeatureAvailability;Lorg/graphiks/kadre/diagnostics/FeatureAvailability;Lorg/graphiks/kadre/diagnostics/FeatureAvailability;Lorg/graphiks/kadre/diagnostics/FeatureAvailability;Lorg/graphiks/kadre/diagnostics/FeatureAvailability;Lorg/graphiks/kadre/diagnostics/Capability;Lorg/graphiks/kadre/diagnostics/Capability;ILjava/lang/Object;)Lorg/graphiks/kadre/input/InputCapabilities;
+	public final fun copy (Lorg/graphiks/kadre/diagnostics/FeatureAvailability;Lorg/graphiks/kadre/diagnostics/FeatureAvailability;Lorg/graphiks/kadre/diagnostics/FeatureAvailability;Lorg/graphiks/kadre/diagnostics/Capability;Lorg/graphiks/kadre/diagnostics/FeatureAvailability;Lorg/graphiks/kadre/diagnostics/Capability;Lorg/graphiks/kadre/diagnostics/Capability;)Lorg/graphiks/kadre/input/InputCapabilities;
+	public static synthetic fun copy$default (Lorg/graphiks/kadre/input/InputCapabilities;Lorg/graphiks/kadre/diagnostics/FeatureAvailability;Lorg/graphiks/kadre/diagnostics/FeatureAvailability;Lorg/graphiks/kadre/diagnostics/FeatureAvailability;Lorg/graphiks/kadre/diagnostics/Capability;Lorg/graphiks/kadre/diagnostics/FeatureAvailability;Lorg/graphiks/kadre/diagnostics/Capability;Lorg/graphiks/kadre/diagnostics/Capability;ILjava/lang/Object;)Lorg/graphiks/kadre/input/InputCapabilities;
 	public fun equals (Ljava/lang/Object;)Z
 	public final fun getDragAndDrop ()Lorg/graphiks/kadre/diagnostics/FeatureAvailability;
-	public final fun getGestures ()Lorg/graphiks/kadre/diagnostics/FeatureAvailability;
+	public final fun getGestures ()Lorg/graphiks/kadre/diagnostics/Capability;
 	public final fun getKeyboard ()Lorg/graphiks/kadre/diagnostics/FeatureAvailability;
 	public final fun getPointer ()Lorg/graphiks/kadre/diagnostics/FeatureAvailability;
 	public final fun getRawInput ()Lorg/graphiks/kadre/diagnostics/Capability;

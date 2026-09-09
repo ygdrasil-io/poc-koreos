@@ -31,8 +31,13 @@ internal fun interface AppKitStopRequest {
 internal interface AppKitNativeApplication {
     fun isMainThread(): Boolean
 
-    // Use AppKit's own state when synchronizing with run(); Kadre assigning the application
-    // reference only proves setup has started, not that the native loop is pumping events.
+    /**
+     * Returns whether the AppKit event loop is available to Kadre.
+     *
+     * On the AppKit main thread the implementation may query native state for an embedded host.
+     * Off the main thread it must use state published by [run], never initialize or message
+     * [NSApplication].
+     */
     fun isRunning(): Boolean
 
     /** Starts one independently closeable lifecycle observation owner for an embedded session. */
@@ -53,6 +58,8 @@ internal interface AppKitNativeApplication {
 internal class KffiAppKitNativeApplication : AppKitNativeApplication {
     private val lock = Any()
     private var application: NSApplication? = null
+    @Volatile
+    private var eventLoopAdmitted = false
     private var stopRequested = false
     private var stopScheduled = false
     private var stopCompletion: CompletableFuture<AppKitStopResult>? = null
@@ -60,10 +67,14 @@ internal class KffiAppKitNativeApplication : AppKitNativeApplication {
 
     override fun isMainThread(): Boolean = NSThread.isMainThread()
 
-    override fun isRunning(): Boolean = synchronized(lock) { application }?.isRunning()
-        ?: ObjCRuntime.autoreleasePool {
+    override fun isRunning(): Boolean {
+        if (eventLoopAdmitted) return true
+        if (!isMainThread()) return false
+
+        return ObjCRuntime.autoreleasePool {
             NSApplication(NSApplication.sharedApplication()).isRunning()
         }
+    }
 
     override fun startLifecycleObservation(listener: (AppKitLifecycleSignal) -> Unit): AutoCloseable =
         lifecycleSource.start(listener)
@@ -97,6 +108,9 @@ internal class KffiAppKitNativeApplication : AppKitNativeApplication {
             application = current
             takeStopTarget()
         }
+        // Publish admission before entering the blocking native loop. Application coroutines
+        // run on Dispatchers.Default and may poll isRunning() while the main thread enters run.
+        eventLoopAdmitted = true
 
         val pendingStopThread = pendingStop?.let { target ->
             Thread.ofPlatform()
@@ -105,8 +119,10 @@ internal class KffiAppKitNativeApplication : AppKitNativeApplication {
         }
         try {
             current.run()
+            eventLoopAdmitted = false
             pendingStopThread?.join()
         } finally {
+            eventLoopAdmitted = false
             synchronized(lock) {
                 if (application === current) {
                     application = null

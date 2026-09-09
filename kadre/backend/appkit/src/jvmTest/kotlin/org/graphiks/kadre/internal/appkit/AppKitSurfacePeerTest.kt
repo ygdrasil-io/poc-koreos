@@ -4,10 +4,12 @@ import org.graphiks.kadre.internal.runtime.RuntimeDesktopNativeWindowHandle
 import org.graphiks.kadre.internal.runtime.SurfaceMetrics
 import org.graphiks.kadre.input.KeyLocation
 import org.graphiks.kadre.input.KeyState
+import org.graphiks.kadre.input.GestureKind
 import org.graphiks.kadre.input.KeyboardModifiers
 import org.graphiks.kadre.input.LogicalKey
 import org.graphiks.kadre.input.PhysicalKey
 import org.graphiks.kadre.input.PointerKind
+import org.graphiks.kadre.input.TouchPhase
 import org.graphiks.kadre.surface.LogicalDelta
 import org.graphiks.kadre.surface.LogicalPoint
 import org.graphiks.kadre.surface.LogicalInsets
@@ -259,7 +261,68 @@ class AppKitSurfacePeerTest {
 
         assertEquals("revoke:input", port.trace.first())
         assertTrue(port.trace.indexOf("revoke:input") < port.trace.indexOf("release:view"))
-        assertEquals(emptyList(), stimuli)
+        assertEquals<List<AppKitSurfaceStimulus>>(
+            listOf(AppKitSurfaceStimulus.InputObservationRevoked(PEER_ID)),
+            stimuli,
+        )
+    }
+
+    @Test
+    fun touchAndGestureCallbacksUseDedicatedStimuliAndWithdrawCapabilityAfterRevocation() {
+        val supportedGestures = setOf(GestureKind.Pan, GestureKind.Pinch)
+        val port = RecordingSurfacePort(
+            installInput = true,
+            touchInstalled = true,
+            gestureKinds = supportedGestures,
+        )
+        val stimuli = mutableListOf<AppKitSurfaceStimulus>()
+        val peer = AppKitWindowPeer.prepare(
+            PEER_ID,
+            WindowSpec(),
+            port,
+            acceptSurfaceStimulus = { stimulus ->
+                stimuli += stimulus
+                if (stimulus is AppKitSurfaceStimulus.InputObservationRevoked) {
+                    port.trace += "capability:input-unavailable"
+                }
+            },
+        )
+        val nativeIdentity = Any()
+
+        port.emitTouch(AppKitInput.TouchChanged(nativeIdentity, TouchPhase.Started, LogicalPoint(20.0, 40.0)))
+        port.emitGesture(
+            AppKitInput.Gesture(
+                kind = GestureKind.Pinch,
+                phase = TouchPhase.Moved,
+                scale = 1.2,
+            ),
+        )
+        peer.close()
+
+        assertEquals(
+            listOf(
+                AppKitSurfaceStimulus.InputObservationChanged(
+                    PEER_ID,
+                    keyboardInstalled = true,
+                    pointerInstalled = true,
+                    touchInstalled = true,
+                    gestureKinds = supportedGestures,
+                ),
+                AppKitSurfaceStimulus.TouchInput(
+                    PEER_ID,
+                    AppKitInput.TouchChanged(nativeIdentity, TouchPhase.Started, LogicalPoint(20.0, 40.0)),
+                ),
+                AppKitSurfaceStimulus.GestureInput(
+                    PEER_ID,
+                    AppKitInput.Gesture(GestureKind.Pinch, TouchPhase.Moved, scale = 1.2),
+                ),
+                AppKitSurfaceStimulus.InputObservationRevoked(PEER_ID),
+            ),
+            stimuli,
+        )
+        assertEquals(emptyList(), stimuli.filterIsInstance<AppKitSurfaceStimulus.PointerInput>())
+        assertTrue(port.trace.indexOf("revoke:input") < port.trace.indexOf("capability:input-unavailable"))
+        assertTrue(port.trace.indexOf("capability:input-unavailable") < port.trace.indexOf("release:view"))
     }
 
     private companion object {
@@ -269,6 +332,8 @@ class AppKitSurfacePeerTest {
 
 private class RecordingSurfacePort(
     private val installInput: Boolean = false,
+    private val touchInstalled: Boolean = false,
+    private val gestureKinds: Set<GestureKind> = emptySet(),
 ) : AppKitNativeWindowPort {
     val trace = mutableListOf<String>()
     lateinit var surface: RecordingSurfaceOwner
@@ -328,7 +393,7 @@ private class RecordingSurfacePort(
         view: AppKitNativeViewOwner,
         callbacks: AppKitInputCallbacks,
     ): AppKitNativeInputObserverOwner? = if (installInput) {
-        RecordingInputOwner(trace, callbacks).also { input = it }
+        RecordingInputOwner(trace, callbacks, touchInstalled, gestureKinds).also { input = it }
     } else {
         null
     }
@@ -372,12 +437,18 @@ private class RecordingSurfacePort(
 
     fun emitPointerMoved(value: AppKitInput.PointerMoved) = onMainThread { checkNotNull(input).emit(value) }
 
+    fun emitTouch(value: AppKitInput.TouchChanged) = onMainThread { checkNotNull(input).emit(value) }
+
+    fun emitGesture(value: AppKitInput.Gesture) = onMainThread { checkNotNull(input).emit(value) }
+
     fun forceLateInputObservation() = checkNotNull(input).forceObservation()
 }
 
 private class RecordingInputOwner(
     private val trace: MutableList<String>,
     private val callbacks: AppKitInputCallbacks,
+    override val touchInstalled: Boolean = false,
+    override val gestureKinds: Set<GestureKind> = emptySet(),
 ) : AppKitNativeInputObserverOwner {
     private var accepting = true
     override val keyboardInstalled: Boolean = true

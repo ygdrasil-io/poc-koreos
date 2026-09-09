@@ -41,6 +41,7 @@ import org.graphiks.kadre.input.DropOfferTerminationReason
 import org.graphiks.kadre.input.DropTransfer
 import org.graphiks.kadre.input.InputEvent
 import org.graphiks.kadre.input.InputStateResetReason
+import org.graphiks.kadre.input.GestureKind
 import org.graphiks.kadre.input.KeyLocation
 import org.graphiks.kadre.input.KeyState
 import org.graphiks.kadre.input.KeyboardModifiers
@@ -56,6 +57,7 @@ import org.graphiks.kadre.input.TextInputConfig
 import org.graphiks.kadre.input.TextInputEvent
 import org.graphiks.kadre.input.TextInputState
 import org.graphiks.kadre.input.TextRange
+import org.graphiks.kadre.input.TouchPhase
 import org.graphiks.kadre.interaction.InteractionHandler
 import org.graphiks.kadre.interaction.InteractionAction
 import org.graphiks.kadre.interaction.InteractionActionOutcome
@@ -786,6 +788,342 @@ class RuntimeWindowSurfaceTest {
     }
 
     @Test
+    fun touchIdentityIsRuntimeOwnedStableForOneContactAndNeverAliasesAReusedNativeToken() = runTest {
+        val surface = surface()
+        val nativeToken = Any()
+        val observedTouches = mutableListOf<List<org.graphiks.kadre.input.TouchState>>()
+        val events = async(UnconfinedTestDispatcher(testScheduler), start = CoroutineStart.UNDISPATCHED) {
+            surface.input.events
+                .onEach { observedTouches += surface.input.state.value.touches }
+                .take(4)
+                .toList()
+        }
+
+        assertTrue(surface.accept(SurfaceStimulus.TouchChanged(surface.id, nativeToken, TouchPhase.Started, LogicalPoint(2.0, 3.0), 0.25)))
+        assertTrue(surface.accept(SurfaceStimulus.TouchChanged(surface.id, nativeToken, TouchPhase.Moved, LogicalPoint(5.0, 7.0), 0.5)))
+        assertTrue(surface.accept(SurfaceStimulus.TouchChanged(surface.id, nativeToken, TouchPhase.Ended, LogicalPoint(11.0, 13.0), null)))
+        assertFalse(surface.accept(SurfaceStimulus.TouchChanged(surface.id, Any(), TouchPhase.Moved, LogicalPoint(17.0, 19.0), null)))
+        assertTrue(surface.accept(SurfaceStimulus.TouchChanged(surface.id, nativeToken, TouchPhase.Started, LogicalPoint(23.0, 29.0), null)))
+
+        val received = events.await().map { assertIs<InputEvent.TouchChanged>(it) }
+        assertEquals(received[0].touchId, received[1].touchId)
+        assertEquals(received[0].touchId, received[2].touchId)
+        assertTrue(received[3].touchId != received[0].touchId)
+        assertEquals(listOf(TouchPhase.Started, TouchPhase.Moved, TouchPhase.Ended, TouchPhase.Started), received.map { it.phase })
+        assertEquals(listOf(1L, 2L, 3L, 5L), received.map { it.stateRevision.value })
+        assertEquals(LogicalPoint(2.0, 3.0), observedTouches[0].single().position)
+        assertEquals(LogicalPoint(5.0, 7.0), observedTouches[1].single().position)
+        assertEquals(LogicalPoint(11.0, 13.0), observedTouches[2].single().position)
+        assertEquals(received[3].touchId, observedTouches[3].single().id)
+        assertEquals(received[3].touchId, surface.input.state.value.touches.single().id)
+    }
+
+    @Test
+    fun terminalTouchRejectsReentrantPacketsBeforeDeliveryRetiresItsNativeToken() = runTest {
+        val surface = surface()
+        val nativeToken = Any()
+        var reentrantMoveAccepted: Boolean? = null
+        var duplicateTerminalAccepted: Boolean? = null
+        val events = async(UnconfinedTestDispatcher(testScheduler), start = CoroutineStart.UNDISPATCHED) {
+            surface.input.events
+                .onEach { event ->
+                    if (event is InputEvent.TouchChanged && event.phase == TouchPhase.Ended) {
+                        reentrantMoveAccepted = surface.accept(
+                            SurfaceStimulus.TouchChanged(
+                                surface.id,
+                                nativeToken,
+                                TouchPhase.Moved,
+                                LogicalPoint(17.0, 19.0),
+                                null,
+                            ),
+                        )
+                        duplicateTerminalAccepted = surface.accept(
+                            SurfaceStimulus.TouchChanged(
+                                surface.id,
+                                nativeToken,
+                                TouchPhase.Ended,
+                                LogicalPoint(23.0, 29.0),
+                                null,
+                            ),
+                        )
+                    }
+                }
+                .take(2)
+                .toList()
+        }
+
+        assertTrue(
+            surface.accept(
+                SurfaceStimulus.TouchChanged(
+                    surface.id,
+                    nativeToken,
+                    TouchPhase.Started,
+                    LogicalPoint(2.0, 3.0),
+                    null,
+                ),
+            ),
+        )
+        assertTrue(
+            surface.accept(
+                SurfaceStimulus.TouchChanged(
+                    surface.id,
+                    nativeToken,
+                    TouchPhase.Ended,
+                    LogicalPoint(5.0, 7.0),
+                    null,
+                ),
+            ),
+        )
+
+        val ended = assertIs<InputEvent.TouchChanged>(events.await().last())
+        assertFalse(checkNotNull(reentrantMoveAccepted))
+        assertFalse(checkNotNull(duplicateTerminalAccepted))
+        assertEquals(emptyList(), surface.input.state.value.touches)
+        assertTrue(
+            surface.accept(
+                SurfaceStimulus.TouchChanged(
+                    surface.id,
+                    nativeToken,
+                    TouchPhase.Started,
+                    LogicalPoint(31.0, 37.0),
+                    null,
+                ),
+            ),
+        )
+        assertTrue(surface.input.state.value.touches.single().id != ended.touchId)
+    }
+
+    @Test
+    fun distinctNativeTouchTokensDoNotAliasEvenWhenTheirValueEqualityMatches() = runTest {
+        data class NativeToken(val value: Int)
+
+        val surface = surface()
+        val events = async(UnconfinedTestDispatcher(testScheduler), start = CoroutineStart.UNDISPATCHED) {
+            surface.input.events.take(2).toList().map { assertIs<InputEvent.TouchChanged>(it) }
+        }
+
+        assertTrue(
+            surface.accept(
+                SurfaceStimulus.TouchChanged(
+                    surface.id,
+                    NativeToken(7),
+                    TouchPhase.Started,
+                    LogicalPoint(1.0, 1.0),
+                    null,
+                ),
+            ),
+        )
+        assertTrue(
+            surface.accept(
+                SurfaceStimulus.TouchChanged(
+                    surface.id,
+                    NativeToken(7),
+                    TouchPhase.Started,
+                    LogicalPoint(2.0, 2.0),
+                    null,
+                ),
+            ),
+        )
+
+        val received = events.await()
+        assertTrue(received[0].touchId != received[1].touchId)
+        assertEquals(2, surface.input.state.value.touches.size)
+    }
+
+    @Test
+    fun focusLossClearsActiveNativeTouchesBeforeResetAndMakesLateContactPacketsStale() = runTest {
+        val surface = surface()
+        val nativeToken = Any()
+        val observedTouches = mutableListOf<List<org.graphiks.kadre.input.TouchState>>()
+        val events = async(UnconfinedTestDispatcher(testScheduler), start = CoroutineStart.UNDISPATCHED) {
+            surface.input.events
+                .onEach { observedTouches += surface.input.state.value.touches }
+                .take(2)
+                .toList()
+        }
+
+        assertTrue(surface.accept(SurfaceStimulus.FocusChanged(surface.id, SurfaceFocus.Focused)))
+        assertTrue(surface.accept(SurfaceStimulus.TouchChanged(surface.id, nativeToken, TouchPhase.Started, LogicalPoint(3.0, 4.0), null)))
+        assertTrue(surface.accept(SurfaceStimulus.FocusChanged(surface.id, SurfaceFocus.Unfocused)))
+        assertFalse(surface.accept(SurfaceStimulus.TouchChanged(surface.id, nativeToken, TouchPhase.Ended, LogicalPoint(5.0, 6.0), null)))
+
+        val received = events.await()
+        assertIs<InputEvent.TouchChanged>(received[0])
+        val reset = assertIs<InputEvent.StateReset>(received[1])
+        assertEquals(InputStateResetReason.FocusLost, reset.reason)
+        assertEquals(listOf(1, 0), observedTouches.map(List<*>::size))
+        assertEquals(emptyList(), surface.input.state.value.touches)
+    }
+
+    @Test
+    fun gestureChangesUseTheirDedicatedContinuousDeliveryPolicyWithoutRevisingInputState() = runTest {
+        val surface = surface()
+        var injected = false
+        val events = async(UnconfinedTestDispatcher(testScheduler), start = CoroutineStart.UNDISPATCHED) {
+            surface.input.events
+                .onEach { event ->
+                    if (!injected && event is InputEvent.Key) {
+                        injected = true
+                        surface.accept(SurfaceStimulus.Gesture(surface.id, GestureKind.Pan, TouchPhase.Moved, delta = LogicalDelta(1.0, 2.0)))
+                        surface.accept(SurfaceStimulus.Gesture(surface.id, GestureKind.Pan, TouchPhase.Moved, delta = LogicalDelta(3.0, 5.0)))
+                    }
+                }
+                .take(2)
+                .toList()
+        }
+
+        assertTrue(surface.accept(keyStimulus(surface, "gesture-barrier")))
+
+        val received = events.await()
+        val gesture = assertIs<InputEvent.Gesture>(received[1])
+        assertEquals(GestureKind.Pan, gesture.kind)
+        assertEquals(TouchPhase.Moved, gesture.phase)
+        assertEquals(LogicalDelta(4.0, 7.0), gesture.delta)
+        assertEquals(EventDeliverySpan(SessionSequence(1), SessionSequence(2), 2), gesture.stamp.deliverySpan)
+        assertEquals(1L, gesture.stateRevision.value)
+        assertEquals(1L, surface.input.state.value.revision.value)
+    }
+
+    @Test
+    fun latestGestureDeliveryReplacesThePendingPayloadAtIngress() = runTest {
+        val inputPolicy = KadrePolicies.Default.input.copy(gestureChanges = ContinuousDelivery.Latest)
+        val surface = surface(inputDeliveryPolicy = inputPolicy)
+        var injected = false
+        val events = async(UnconfinedTestDispatcher(testScheduler), start = CoroutineStart.UNDISPATCHED) {
+            surface.input.events
+                .onEach { event ->
+                    if (!injected && event is InputEvent.Key) {
+                        injected = true
+                        surface.accept(
+                            SurfaceStimulus.Gesture(
+                                surface.id,
+                                GestureKind.Pan,
+                                TouchPhase.Moved,
+                                delta = LogicalDelta(1.0, 2.0),
+                            ),
+                        )
+                        surface.accept(
+                            SurfaceStimulus.Gesture(
+                                surface.id,
+                                GestureKind.Pan,
+                                TouchPhase.Moved,
+                                delta = LogicalDelta(3.0, 5.0),
+                            ),
+                        )
+                    }
+                }
+                .take(2)
+                .toList()
+        }
+
+        assertTrue(surface.accept(keyStimulus(surface, "gesture-latest-ingress-barrier")))
+
+        val gesture = assertIs<InputEvent.Gesture>(events.await()[1])
+        assertEquals(LogicalDelta(3.0, 5.0), gesture.delta)
+        assertEquals(EventDeliverySpan(SessionSequence(1), SessionSequence(2), 2), gesture.stamp.deliverySpan)
+    }
+
+    @Test
+    fun eachCollectorAppliesItsConfiguredLatestOrCoalescedGestureSemantics() = runTest {
+        val cases = listOf(
+            ContinuousDelivery.Latest to LogicalDelta(3.0, 5.0),
+            ContinuousDelivery.Coalesced to LogicalDelta(4.0, 7.0),
+        )
+
+        for ((delivery, expectedDelta) in cases) {
+            val inputPolicy = KadrePolicies.Default.input.copy(gestureChanges = delivery)
+            val surface = surface(inputDeliveryPolicy = inputPolicy)
+            val collectorBlocked = CompletableDeferred<Unit>()
+            val releaseCollector = CompletableDeferred<Unit>()
+            val events = async(UnconfinedTestDispatcher(testScheduler), start = CoroutineStart.UNDISPATCHED) {
+                surface.input.events
+                    .onEach { event ->
+                        if (event is InputEvent.Key) {
+                            collectorBlocked.complete(Unit)
+                            releaseCollector.await()
+                        }
+                    }
+                    .take(2)
+                    .toList()
+            }
+
+            assertTrue(surface.accept(keyStimulus(surface, "gesture-collector-${delivery::class.simpleName}")))
+            collectorBlocked.await()
+            assertTrue(
+                surface.accept(
+                    SurfaceStimulus.Gesture(
+                        surface.id,
+                        GestureKind.Pan,
+                        TouchPhase.Moved,
+                        delta = LogicalDelta(1.0, 2.0),
+                    ),
+                ),
+            )
+            assertTrue(
+                surface.accept(
+                    SurfaceStimulus.Gesture(
+                        surface.id,
+                        GestureKind.Pan,
+                        TouchPhase.Moved,
+                        delta = LogicalDelta(3.0, 5.0),
+                    ),
+                ),
+            )
+            releaseCollector.complete(Unit)
+
+            val gesture = assertIs<InputEvent.Gesture>(events.await()[1])
+            assertEquals(expectedDelta, gesture.delta)
+            assertEquals(
+                EventDeliverySpan(SessionSequence(1), SessionSequence(2), 2),
+                gesture.stamp.deliverySpan,
+            )
+        }
+    }
+
+    @Test
+    fun ordinaryCloseReleasesOpaqueTouchTokensWithoutChangingTheRetainedPublicSnapshot() {
+        val surface = surface()
+        val nativeToken = Any()
+        assertTrue(
+            surface.accept(
+                SurfaceStimulus.TouchChanged(
+                    surface.id,
+                    nativeToken,
+                    TouchPhase.Started,
+                    LogicalPoint(7.0, 11.0),
+                    null,
+                ),
+            ),
+        )
+        val identitiesField = surface.input.javaClass.getDeclaredField("touchIdsByNativeIdentity")
+            .apply { isAccessible = true }
+        assertEquals(1, (identitiesField.get(surface.input) as Map<*, *>).size)
+
+        assertTrue(surface.detach())
+
+        assertEquals(0, (identitiesField.get(surface.input) as Map<*, *>).size)
+        assertEquals(LogicalPoint(7.0, 11.0), surface.input.state.value.touches.single().position)
+    }
+
+    @Test
+    fun malformedGesturePayloadIsRejectedBeforeItCanReachPublicInput() {
+        val surface = surface()
+
+        assertFalse(
+            surface.accept(
+                SurfaceStimulus.Gesture(
+                    surfaceId = surface.id,
+                    kind = GestureKind.Pinch,
+                    phase = TouchPhase.Moved,
+                    delta = LogicalDelta(1.0, 2.0),
+                    scale = null,
+                ),
+            ),
+        )
+        assertEquals(0L, surface.input.state.value.revision.value)
+    }
+
+    @Test
     fun mousePointerKeepsOneRuntimeIdentityAndRemovesItOnlyAfterTheExitEventCarriesItsLastPosition() = runTest {
         val surface = surface()
         val observedPointers = mutableListOf<List<org.graphiks.kadre.input.PointerState>>()
@@ -1018,12 +1356,18 @@ class RuntimeWindowSurfaceTest {
                     surface.id,
                     keyboardInstalled = true,
                     pointerInstalled = true,
+                    touchInstalled = true,
+                    gestureKinds = setOf(GestureKind.Pinch, GestureKind.Rotation),
                 ),
             ),
         )
         assertEquals(FeatureAvailability.Available, surface.input.state.value.capabilities.keyboard)
         assertEquals(FeatureAvailability.Available, surface.input.state.value.capabilities.pointer)
-        assertAllOtherInputCapabilitiesUnsupported(surface)
+        assertEquals(FeatureAvailability.Available, surface.input.state.value.capabilities.touch)
+        val gestures = assertIs<Capability.Supported<Set<GestureKind>>>(
+            surface.input.state.value.capabilities.gestures,
+        )
+        assertEquals(setOf(GestureKind.Pinch, GestureKind.Rotation), gestures.constraints)
         assertEquals(2L, surface.input.state.value.revision.value)
 
         assertTrue(
@@ -2496,7 +2840,10 @@ class RuntimeWindowSurfaceTest {
     private fun assertAllOtherInputCapabilitiesUnsupported(surface: RuntimeWindowSurface) {
         val capabilities = surface.input.state.value.capabilities
         assertEquals(FeatureAvailability.Unsupported, capabilities.touch)
-        assertEquals(FeatureAvailability.Unsupported, capabilities.gestures)
+        assertEquals(
+            KadreFailure.Unsupported(KadreOperation.GestureInput),
+            assertIs<Capability.Unsupported>(capabilities.gestures).failure,
+        )
         assertEquals(FeatureAvailability.Unsupported, capabilities.dragAndDrop)
         assertIs<Capability.Unsupported>(capabilities.textInput)
         assertIs<Capability.Unsupported>(capabilities.rawInput)

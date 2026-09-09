@@ -872,7 +872,10 @@ class AppKitBackendProviderTest {
                 assertEquals(FeatureAvailability.Unsupported, inputCapabilities.keyboard)
                 assertEquals(FeatureAvailability.Unsupported, inputCapabilities.pointer)
                 assertEquals(FeatureAvailability.Unsupported, inputCapabilities.touch)
-                assertEquals(FeatureAvailability.Unsupported, inputCapabilities.gestures)
+                assertEquals(
+                    KadreFailure.Unsupported(KadreOperation.GestureInput),
+                    assertIs<Capability.Unsupported>(inputCapabilities.gestures).failure,
+                )
                 assertEquals(FeatureAvailability.Available, inputCapabilities.dragAndDrop)
                 assertIs<Capability.Unsupported>(inputCapabilities.textInput)
                 assertIs<Capability.Unsupported>(inputCapabilities.rawInput)
@@ -3056,7 +3059,14 @@ class AppKitBackendProviderTest {
             val report = Files.readString(record)
             assertTrue(report.contains("RUN_METADATA\t"), report)
             assertTrue(report.contains("INPUT_CAPABILITIES\tkeyboard=Available\tpointer=Available"), report)
-            assertTrue(report.contains("\ttouch=Unsupported\tgestures=Unsupported\tdragAndDrop=Available"), report)
+            assertTrue(
+                report.contains(
+                    "\ttouch=Available" +
+                        "\tgestures=Supported(constraints=[Pan, Pinch, Rotation, TouchpadPressure], availability=Available)" +
+                        "\tdragAndDrop=Available",
+                ),
+                report,
+            )
             assertTrue(
                 report.contains(
                     "\ttextInput=Supported" +

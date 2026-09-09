@@ -10,8 +10,9 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import java.util.concurrent.locks.ReentrantLock
+import java.util.IdentityHashMap
 import java.util.concurrent.atomic.AtomicReference
+import java.util.concurrent.locks.ReentrantLock
 import org.graphiks.kadre.application.EventDeliverySpan
 import org.graphiks.kadre.application.EventStamp
 import org.graphiks.kadre.diagnostics.Capability
@@ -26,6 +27,7 @@ import org.graphiks.kadre.diagnostics.KadreResourceKind
 import org.graphiks.kadre.diagnostics.KadreResult
 import org.graphiks.kadre.input.DropOfferId
 import org.graphiks.kadre.input.DropOfferTerminationReason
+import org.graphiks.kadre.input.GestureKind
 import org.graphiks.kadre.input.InputCapabilities
 import org.graphiks.kadre.input.InputEvent
 import org.graphiks.kadre.input.InputStateResetReason
@@ -50,6 +52,7 @@ import org.graphiks.kadre.input.TextInputEvent
 import org.graphiks.kadre.input.TextInputSession
 import org.graphiks.kadre.input.TextInputState
 import org.graphiks.kadre.input.TextRange
+import org.graphiks.kadre.input.TouchId
 import org.graphiks.kadre.input.TouchPhase
 import org.graphiks.kadre.input.TouchState
 import org.graphiks.kadre.interaction.InteractionAction
@@ -360,6 +363,8 @@ internal class RuntimeWindowSurface(
                 is SurfaceStimulus.PointerButtonChanged,
                 is SurfaceStimulus.PointerLeft,
                 is SurfaceStimulus.Scroll,
+                is SurfaceStimulus.TouchChanged,
+                is SurfaceStimulus.Gesture,
                 is SurfaceStimulus.DropMoved,
                 is SurfaceStimulus.DropExited,
                 is SurfaceStimulus.DropPerformed,
@@ -1326,6 +1331,9 @@ private class RuntimeSurfaceInput(
         rawInput = rawInputCapability,
     )
     private var nextPointerIdentity = 0L
+    private var nextTouchIdentity = 0L
+    private val touchIdsByNativeIdentity = IdentityHashMap<Any, TouchId>()
+    private val retiringTouchIdsByNativeIdentity = IdentityHashMap<Any, TouchId>()
     private var nextDropOfferIdentity = 0L
     private var mousePointerId: PointerId? = null
     private var activeDrop: RuntimeDropOffer? = null
@@ -1333,7 +1341,9 @@ private class RuntimeSurfaceInput(
     private val publications = BoundedInputScheduler(
         discreteCapacity = deliveryPolicy.discreteEvents.ingressCapacity,
         pointerDelivery = deliveryPolicy.pointerMotion,
+        touchDelivery = deliveryPolicy.touchMotion,
         scrollDelivery = deliveryPolicy.scroll,
+        gestureDelivery = deliveryPolicy.gestureChanges,
     )
     private var publicationDrainActive = false
     private var terminal: FlowTerminal? = null
@@ -1653,6 +1663,8 @@ private class RuntimeSurfaceInput(
                 modifiers = KeyboardModifiers(emptySet()),
                 revision = currentState.revision.next(),
             )
+            touchIdsByNativeIdentity.clear()
+            retiringTouchIdsByNativeIdentity.clear()
             setStateLocked(neutral)
             admission = enqueuePublicationLocked(
                 InputPublication(
@@ -1694,6 +1706,8 @@ private class RuntimeSurfaceInput(
             activeDrop = null
             transfersToClose = activeDropTransfers.toList()
             activeDropTransfers.clear()
+            touchIdsByNativeIdentity.clear()
+            retiringTouchIdsByNativeIdentity.clear()
             InputPublicationAdmission(ensurePublicationDrainLocked())
         }
         activeTextInput?.close()
@@ -1847,6 +1861,26 @@ private class RuntimeSurfaceInput(
             scrollBoundary = stimulus.coalescingBoundary,
         )
 
+        is SurfaceStimulus.TouchChanged -> reduceTouchLocked(stimulus, stamp)
+
+        is SurfaceStimulus.Gesture -> try {
+            InputPublication(
+                InputEvent.Gesture(
+                    kind = stimulus.kind,
+                    phase = stimulus.phase,
+                    delta = stimulus.delta,
+                    scale = stimulus.scale,
+                    rotationRadians = stimulus.rotationRadians,
+                    pressure = stimulus.pressure,
+                    stamp = stamp,
+                    deviceId = stimulus.deviceId,
+                    stateRevision = currentState.revision,
+                ),
+            )
+        } catch (_: IllegalArgumentException) {
+            null
+        }
+
         is SurfaceStimulus.DropMoved -> {
             val offer = activeDrop?.takeIf { it.id == stimulus.offerId } ?: return null
             InputPublication(
@@ -1902,6 +1936,57 @@ private class RuntimeSurfaceInput(
         -> error("surface observations cannot enter the input reducer")
     }
 
+    private fun reduceTouchLocked(
+        stimulus: SurfaceStimulus.TouchChanged,
+        stamp: EventStamp,
+    ): InputPublication? {
+        if (retiringTouchIdsByNativeIdentity.containsKey(stimulus.nativeIdentity)) return null
+        val existingId = touchIdsByNativeIdentity[stimulus.nativeIdentity]
+        val touchId = when (stimulus.phase) {
+            TouchPhase.Started -> {
+                if (existingId != null) return null
+                check(nextTouchIdentity < Long.MAX_VALUE) { "touch identity space exhausted" }
+                TouchId(nextTouchIdentity)
+            }
+
+            TouchPhase.Moved,
+            TouchPhase.Ended,
+            TouchPhase.Cancelled,
+            -> existingId ?: return null
+        }
+        val touch = try {
+            TouchState(touchId, stimulus.position, stimulus.pressure)
+        } catch (_: IllegalArgumentException) {
+            return null
+        }
+        if (stimulus.phase == TouchPhase.Started) {
+            nextTouchIdentity += 1L
+            touchIdsByNativeIdentity[stimulus.nativeIdentity] = touchId
+        }
+        updateStateLocked(touches = replaceTouch(currentState.touches, touch))
+        val terminal = stimulus.phase == TouchPhase.Ended || stimulus.phase == TouchPhase.Cancelled
+        if (terminal) {
+            touchIdsByNativeIdentity.remove(stimulus.nativeIdentity)
+            retiringTouchIdsByNativeIdentity[stimulus.nativeIdentity] = touchId
+        }
+        return InputPublication(
+            event = InputEvent.TouchChanged(
+                touchId = touchId,
+                phase = stimulus.phase,
+                position = stimulus.position,
+                pressure = stimulus.pressure,
+                stamp = stamp,
+                deviceId = stimulus.deviceId,
+                stateRevision = currentState.revision,
+            ),
+            afterDelivery = if (terminal) {
+                InputStateAfterDelivery.RemoveTouch(stimulus.nativeIdentity, touchId, touch)
+            } else {
+                null
+            },
+        )
+    }
+
     private fun updateObservationCapabilitiesLocked(
         stimulus: SurfaceStimulus.InputObservationChanged,
     ): Boolean {
@@ -1915,6 +2000,16 @@ private class RuntimeSurfaceInput(
                 FeatureAvailability.Available
             } else {
                 FeatureAvailability.Unsupported
+            },
+            touch = if (stimulus.touchInstalled) {
+                FeatureAvailability.Available
+            } else {
+                FeatureAvailability.Unsupported
+            },
+            gestures = if (stimulus.gestureKinds.isEmpty()) {
+                unsupported(KadreOperation.GestureInput)
+            } else {
+                Capability.Supported(stimulus.gestureKinds.toSet(), FeatureAvailability.Available)
             },
         )
         if (capabilities == currentState.capabilities) return false
@@ -2024,9 +2119,11 @@ private class RuntimeSurfaceInput(
             pointers = emptyList(),
             touches = emptyList(),
             modifiers = KeyboardModifiers(emptySet()),
-            capabilities = unavailableInputCapabilities(failure),
+            capabilities = unavailableInputCapabilities(currentState.capabilities, failure),
             revision = currentState.revision.next(),
         )
+        touchIdsByNativeIdentity.clear()
+        retiringTouchIdsByNativeIdentity.clear()
         setStateLocked(neutral)
         terminal = FlowTerminal.Failed(failure)
         terminalNotificationPending = true
@@ -2099,6 +2196,17 @@ private class RuntimeSurfaceInput(
                     val currentPointer = currentState.pointers.firstOrNull { it.id == effect.id }
                     if (currentPointer == effect.expected) {
                         updateStateLocked(pointers = currentState.pointers.filterNot { it.id == effect.id })
+                    }
+                }
+
+                is InputStateAfterDelivery.RemoveTouch -> {
+                    val currentId = retiringTouchIdsByNativeIdentity[effect.nativeIdentity]
+                    val currentTouch = currentState.touches.firstOrNull { it.id == effect.id }
+                    if (currentId == effect.id) {
+                        retiringTouchIdsByNativeIdentity.remove(effect.nativeIdentity)
+                        if (currentTouch == effect.expected) {
+                            updateStateLocked(touches = currentState.touches.filterNot { it.id == effect.id })
+                        }
                     }
                 }
             }
@@ -2502,6 +2610,12 @@ private sealed interface InputStateAfterDelivery {
         val id: PointerId,
         val expected: PointerState,
     ) : InputStateAfterDelivery
+
+    data class RemoveTouch(
+        val nativeIdentity: Any,
+        val id: TouchId,
+        val expected: TouchState,
+    ) : InputStateAfterDelivery
 }
 
 private data class InputPublicationAdmission(
@@ -2514,12 +2628,14 @@ private data class InputPublicationAdmission(
     val dropTransfersToClose: List<RuntimeDropTransfer> = emptyList(),
 )
 
-private enum class InputEventLane { Discrete, PointerMotion, Scroll }
+private enum class InputEventLane { Discrete, PointerMotion, TouchMotion, Scroll, GestureChanges }
 
 private class BoundedInputScheduler(
     private val discreteCapacity: Int,
     private val pointerDelivery: ContinuousDelivery,
+    private val touchDelivery: ContinuousDelivery,
     private val scrollDelivery: ContinuousDelivery,
+    private val gestureDelivery: ContinuousDelivery,
 ) {
     private val entries = mutableListOf<InputPublication>()
 
@@ -2534,8 +2650,20 @@ private class BoundedInputScheduler(
         }
 
         InputEventLane.PointerMotion,
+        InputEventLane.TouchMotion,
         InputEventLane.Scroll,
-        -> offerContinuous(value, lane, if (lane == InputEventLane.PointerMotion) pointerDelivery else scrollDelivery)
+        InputEventLane.GestureChanges,
+        -> offerContinuous(
+            value,
+            lane,
+            when (lane) {
+                InputEventLane.PointerMotion -> pointerDelivery
+                InputEventLane.TouchMotion -> touchDelivery
+                InputEventLane.Scroll -> scrollDelivery
+                InputEventLane.GestureChanges -> gestureDelivery
+                InputEventLane.Discrete -> error("discrete input cannot use continuous delivery")
+            },
+        )
     }
 
     fun poll(): InputPublication? {
@@ -2566,7 +2694,11 @@ private class BoundedInputScheduler(
                 .filter { entries[it].lane() == lane && entries[it].event.stamp.sequence.value > lastBarrier }
                 .lastOrNull()
             if (existingIndex != null && entries[existingIndex].canCoalesceWith(value)) {
-                entries[existingIndex] = coalesceInputPublication(entries[existingIndex], value)
+                entries[existingIndex] = when (delivery) {
+                    ContinuousDelivery.Latest -> replaceInputPublication(entries[existingIndex], value)
+                    ContinuousDelivery.Coalesced -> coalesceInputPublication(entries[existingIndex], value)
+                    is ContinuousDelivery.Buffered -> error("buffered delivery cannot replace a pending event")
+                }
             } else {
                 entries += value
             }
@@ -2616,7 +2748,9 @@ private class InputEventSubscriber(
     private val scheduler = BoundedInputScheduler(
         discreteCapacity = policy.discreteEvents.collectorCapacity,
         pointerDelivery = policy.pointerMotion,
+        touchDelivery = policy.touchMotion,
         scrollDelivery = policy.scroll,
+        gestureDelivery = policy.gestureChanges,
     )
     private val discreteOverflow = policy.discreteEvents.collectorOverflow
     private var terminal: InputSubscriberTerminal? = null
@@ -2685,7 +2819,17 @@ private class InputEventSubscriber(
 
 private fun InputPublication.lane(): InputEventLane = when (event) {
     is InputEvent.PointerMoved -> InputEventLane.PointerMotion
+    is InputEvent.TouchChanged -> if (event.phase == TouchPhase.Moved) {
+        InputEventLane.TouchMotion
+    } else {
+        InputEventLane.Discrete
+    }
     is InputEvent.Scrolled -> InputEventLane.Scroll
+    is InputEvent.Gesture -> if (event.phase == TouchPhase.Moved) {
+        InputEventLane.GestureChanges
+    } else {
+        InputEventLane.Discrete
+    }
     else -> InputEventLane.Discrete
 }
 
@@ -2693,12 +2837,22 @@ private fun InputPublication.canCoalesceWith(latest: InputPublication): Boolean 
     lane() == latest.lane() &&
         when (lane()) {
             InputEventLane.PointerMotion -> true
+            InputEventLane.TouchMotion -> {
+                val previousEvent = event as InputEvent.TouchChanged
+                val latestEvent = latest.event as InputEvent.TouchChanged
+                previousEvent.touchId == latestEvent.touchId && previousEvent.deviceId == latestEvent.deviceId
+            }
             InputEventLane.Scroll -> {
                 val previousEvent = event as InputEvent.Scrolled
                 val latestEvent = latest.event as InputEvent.Scrolled
                 scrollBoundary == latest.scrollBoundary &&
                     previousEvent.deviceId == latestEvent.deviceId &&
                     previousEvent.delta.hasSameUnitAs(latestEvent.delta)
+            }
+            InputEventLane.GestureChanges -> {
+                val previousEvent = event as InputEvent.Gesture
+                val latestEvent = latest.event as InputEvent.Gesture
+                previousEvent.kind == latestEvent.kind && previousEvent.deviceId == latestEvent.deviceId
             }
             InputEventLane.Discrete -> false
         }
@@ -2726,8 +2880,29 @@ private fun coalesceInputPublication(previous: InputPublication, latest: InputPu
             latest.copy(event = latestEvent.copy(delta = delta, stamp = stamp))
         }
 
+        is InputEvent.TouchChanged -> latest.copy(event = latestEvent.copy(stamp = stamp))
+
+        is InputEvent.Gesture -> {
+            val previousEvent = previous.event as InputEvent.Gesture
+            latest.copy(event = latestEvent.coalescedWith(previousEvent, stamp))
+        }
+
         else -> error("only continuous input events can coalesce")
     }
+}
+
+private fun replaceInputPublication(previous: InputPublication, latest: InputPublication): InputPublication {
+    check(previous.canCoalesceWith(latest))
+    val stamp = coalescedStamp(previous.event.stamp, latest.event.stamp)
+    return latest.copy(
+        event = when (val latestEvent = latest.event) {
+            is InputEvent.PointerMoved -> latestEvent.copy(stamp = stamp)
+            is InputEvent.Scrolled -> latestEvent.copy(stamp = stamp)
+            is InputEvent.TouchChanged -> latestEvent.copy(stamp = stamp)
+            is InputEvent.Gesture -> latestEvent.copy(stamp = stamp)
+            else -> error("only continuous input events can replace a pending value")
+        },
+    )
 }
 
 private fun InputPublication.copyForDelivery(): InputPublication = copy(event = event.copyInputEvent())
@@ -2739,12 +2914,13 @@ private fun InputEvent.copyInputEvent(): InputEvent = when (this) {
     is InputEvent.PointerMoved -> copy(stamp = stamp.copy())
     is InputEvent.PointerButtonChanged -> copy(stamp = stamp.copy())
     is InputEvent.Scrolled -> copy(stamp = stamp.copy())
+    is InputEvent.TouchChanged -> copy(stamp = stamp.copy())
+    is InputEvent.Gesture -> copy(stamp = stamp.copy())
     is InputEvent.DropEntered -> copy(stamp = stamp.copy())
     is InputEvent.DropMoved -> copy(stamp = stamp.copy())
     is InputEvent.DropExited -> copy(stamp = stamp.copy())
     is InputEvent.Dropped -> copy(stamp = stamp.copy())
     is InputEvent.StateReset -> copy(stamp = stamp.copy())
-    else -> error("inactive input event entered the essential input runtime")
 }
 
 private fun ScrollDelta.hasSameUnitAs(other: ScrollDelta): Boolean =
@@ -2763,8 +2939,47 @@ private fun ScrollDelta.plusSameUnit(other: ScrollDelta): ScrollDelta? = when (t
     }
 }
 
+private fun InputEvent.Gesture.coalescedWith(
+    previous: InputEvent.Gesture,
+    stamp: EventStamp,
+): InputEvent.Gesture = when (kind) {
+    GestureKind.Pan -> {
+        val previousDelta = checkNotNull(previous.delta)
+        val latestDelta = checkNotNull(delta)
+        val combinedX = previousDelta.x + latestDelta.x
+        val combinedY = previousDelta.y + latestDelta.y
+        copy(
+            delta = if (combinedX.isFinite() && combinedY.isFinite()) {
+                LogicalDelta(combinedX, combinedY)
+            } else {
+                latestDelta
+            },
+            stamp = stamp,
+        )
+    }
+
+    GestureKind.Pinch -> {
+        val latestScale = checkNotNull(scale)
+        val combined = checkNotNull(previous.scale) * latestScale
+        copy(scale = combined.takeIf { it.isFinite() && it > 0.0 } ?: latestScale, stamp = stamp)
+    }
+
+    GestureKind.Rotation -> {
+        val latestRotation = checkNotNull(rotationRadians)
+        val combined = checkNotNull(previous.rotationRadians) + latestRotation
+        copy(rotationRadians = combined.takeIf(Double::isFinite) ?: latestRotation, stamp = stamp)
+    }
+
+    GestureKind.DoubleTap,
+    GestureKind.TouchpadPressure,
+    -> copy(stamp = stamp)
+}
+
 private fun replacePointer(existing: List<PointerState>, pointer: PointerState): List<PointerState> =
     existing.filterNot { it.id == pointer.id } + pointer
+
+private fun replaceTouch(existing: List<TouchState>, touch: TouchState): List<TouchState> =
+    existing.filterNot { it.id == touch.id } + touch
 
 private fun unsupportedInputState(
     textInput: Capability<Unit> = unsupported(KadreOperation.TextInput),
@@ -2787,17 +3002,23 @@ private fun unsupportedInputCapabilities(
     keyboard = FeatureAvailability.Unsupported,
     pointer = FeatureAvailability.Unsupported,
     touch = FeatureAvailability.Unsupported,
-    gestures = FeatureAvailability.Unsupported,
+    gestures = unsupported(KadreOperation.GestureInput),
     dragAndDrop = dragAndDrop,
     textInput = textInput,
     rawInput = rawInput,
 )
 
-private fun unavailableInputCapabilities(failure: KadreFailure): InputCapabilities = InputCapabilities(
+private fun unavailableInputCapabilities(
+    current: InputCapabilities,
+    failure: KadreFailure,
+): InputCapabilities = InputCapabilities(
     keyboard = FeatureAvailability.Unavailable(failure),
     pointer = FeatureAvailability.Unavailable(failure),
     touch = FeatureAvailability.Unavailable(failure),
-    gestures = FeatureAvailability.Unavailable(failure),
+    gestures = when (val gestures = current.gestures) {
+        is Capability.Supported -> gestures.copy(availability = FeatureAvailability.Unavailable(failure))
+        is Capability.Unsupported -> gestures
+    },
     dragAndDrop = FeatureAvailability.Unavailable(failure),
     textInput = unsupported(KadreOperation.TextInput),
     rawInput = unsupported(KadreOperation.RawInputAccess),
@@ -2874,6 +3095,8 @@ private fun SurfaceStimulus.isInputStimulus(): Boolean = when (this) {
     is SurfaceStimulus.PointerButtonChanged,
     is SurfaceStimulus.PointerLeft,
     is SurfaceStimulus.Scroll,
+    is SurfaceStimulus.TouchChanged,
+    is SurfaceStimulus.Gesture,
     is SurfaceStimulus.DropMoved,
     is SurfaceStimulus.DropExited,
     is SurfaceStimulus.DropPerformed,

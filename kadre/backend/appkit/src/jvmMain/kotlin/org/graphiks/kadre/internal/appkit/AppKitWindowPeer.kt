@@ -111,6 +111,13 @@ internal sealed interface AppKitSurfaceStimulus {
         override val peerId: AppKitWindowPeerId,
         val keyboardInstalled: Boolean,
         val pointerInstalled: Boolean,
+        val touchInstalled: Boolean = false,
+        val gestureKinds: Set<org.graphiks.kadre.input.GestureKind> = emptySet(),
+    ) : AppKitSurfaceStimulus
+
+    /** Structural withdrawal emitted once after native input callback admission has stopped. */
+    data class InputObservationRevoked(
+        override val peerId: AppKitWindowPeerId,
     ) : AppKitSurfaceStimulus
 
     data class KeyChanged(
@@ -121,6 +128,16 @@ internal sealed interface AppKitSurfaceStimulus {
     data class PointerInput(
         override val peerId: AppKitWindowPeerId,
         val input: AppKitInput,
+    ) : AppKitSurfaceStimulus
+
+    data class TouchInput(
+        override val peerId: AppKitWindowPeerId,
+        val input: AppKitInput.TouchChanged,
+    ) : AppKitSurfaceStimulus
+
+    data class GestureInput(
+        override val peerId: AppKitWindowPeerId,
+        val input: AppKitInput.Gesture,
     ) : AppKitSurfaceStimulus
 
     data class DropMoved(
@@ -162,6 +179,7 @@ internal class AppKitWindowPeer private constructor(
     @Suppress("PLATFORM_CLASS_MAPPED_TO_KOTLIN")
     private val lifetimeLock = Object()
     private val closed = AtomicBoolean(false)
+    private val inputObservationCleanupStarted = AtomicBoolean(inputObserver == null)
     private val textInputPort = AppKitPeerTextInputPort(
         nativePort = nativeTextInputPort,
         appKitPort = port,
@@ -184,7 +202,7 @@ internal class AppKitWindowPeer private constructor(
                 failure = closeSuppressing(failure, observer)
             }
             inputObserver?.let { observer ->
-                failure = runSuppressing(failure, observer::revokeCallbacks)
+                failure = runSuppressing(failure, ::revokeInputObservationForCleanup)
                 failure = closeSuppressing(failure, observer)
             }
             surfaceObserver?.let { observer ->
@@ -206,6 +224,18 @@ internal class AppKitWindowPeer private constructor(
             failure = closeSuppressing(failure, window)
             failure?.let { throw it }
         }
+    }
+
+    /** Stops native input admission and publishes its structural withdrawal exactly once. */
+    internal fun revokeInputObservationForCleanup() {
+        val observer = inputObserver ?: return
+        if (!inputObservationCleanupStarted.compareAndSet(false, true)) return
+        var failure: Throwable? = null
+        port.onMainThread {
+            failure = runSuppressing(failure, observer::revokeCallbacks)
+        }
+        callbackGate.inputObservationRevoked()
+        failure?.let { throw it }
     }
 
     internal fun commitNativeClose() {
@@ -514,6 +544,8 @@ internal class AppKitWindowPeer private constructor(
                         callbackGate.inputObservationChanged(
                             keyboardInstalled = observer.keyboardInstalled,
                             pointerInstalled = observer.pointerInstalled,
+                            touchInstalled = observer.touchInstalled,
+                            gestureKinds = observer.gestureKinds,
                         )
                     }
                     dropObserver = port.observeDrop(
@@ -782,6 +814,8 @@ private class AppKitWindowCallbackGate(
                 null
             } else when (input) {
                 is AppKitInput.KeyChanged -> AppKitSurfaceStimulus.KeyChanged(peerId, input)
+                is AppKitInput.TouchChanged -> AppKitSurfaceStimulus.TouchInput(peerId, input)
+                is AppKitInput.Gesture -> AppKitSurfaceStimulus.GestureInput(peerId, input)
                 else -> AppKitSurfaceStimulus.PointerInput(peerId, input)
             }
         }
@@ -829,15 +863,31 @@ private class AppKitWindowCallbackGate(
         }
     }
 
-    fun inputObservationChanged(keyboardInstalled: Boolean, pointerInstalled: Boolean) {
+    fun inputObservationChanged(
+        keyboardInstalled: Boolean,
+        pointerInstalled: Boolean,
+        touchInstalled: Boolean = false,
+        gestureKinds: Set<org.graphiks.kadre.input.GestureKind> = emptySet(),
+    ) {
         val stimulus = synchronized(lock) {
             if (surfaceAccepting) {
-                AppKitSurfaceStimulus.InputObservationChanged(peerId, keyboardInstalled, pointerInstalled)
+                AppKitSurfaceStimulus.InputObservationChanged(
+                    peerId,
+                    keyboardInstalled,
+                    pointerInstalled,
+                    touchInstalled,
+                    gestureKinds,
+                )
             } else {
                 null
             }
         }
         stimulus?.let(::publishSurface)
+    }
+
+    /** Publishes structural capability withdrawal only after native callback admission stopped. */
+    fun inputObservationRevoked() {
+        publishSurface(AppKitSurfaceStimulus.InputObservationRevoked(peerId))
     }
 
     fun dropEntered(source: DropTransferSource, position: LogicalPoint): Boolean {

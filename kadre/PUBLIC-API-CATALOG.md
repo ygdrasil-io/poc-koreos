@@ -570,7 +570,7 @@ public data class InputCapabilities(
     public val keyboard: FeatureAvailability,
     public val pointer: FeatureAvailability,
     public val touch: FeatureAvailability,
-    public val gestures: FeatureAvailability,
+    public val gestures: Capability<Set<GestureKind>>,
     public val dragAndDrop: FeatureAvailability,
     public val textInput: Capability<Unit>,
     public val rawInput: Capability<Unit>,
@@ -601,6 +601,11 @@ public sealed interface ScrollDelta {
 `DeviceInventory.devices` exclut les gamepads, lesquels apparaissent uniquement dans `gamepads`. Une source physique combinée peut produire plusieurs handles typés, mais leurs IDs restent indépendants et aucune relation persistante n’est exposée.
 
 Pour `Gesture`, `phase` utilise `TouchPhase`; les champs non pertinents pour le `kind` sont `null`. Les combinaisons valides sont fermées : `Pan` utilise `delta`, `Pinch` utilise `scale > 0`, `Rotation` utilise `rotationRadians`, `TouchpadPressure` utilise `pressure` dans `[0,1]`, `DoubleTap` n’utilise aucun de ces quatre champs. Le constructeur public rejette une combinaison différente par `IllegalArgumentException`, et un backend n’en publie jamais.
+
+`InputCapabilities.gestures` publie exactement les `GestureKind` reconnus par le
+host. Un set partiel est un support partiel explicite ; un set vide n'est jamais
+emballé dans `Capability.Supported` et devient
+`Capability.Unsupported(KadreFailure.Unsupported(KadreOperation.GestureInput))`.
 
 ### 6.3 Gamepad
 
