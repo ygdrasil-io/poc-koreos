@@ -63,9 +63,6 @@ if (System.getProperty("os.name", "").let { name ->
             "org.graphiks.kadre.internal.appkit.AppKitBackendProviderTest.realKffiStandaloneLoopStartsAndStopsOnMacOs",
         )
         reports.junitXml.outputLocation.set(layout.buildDirectory.dir("test-results/appKitStandaloneLoopTest"))
-        if (System.getenv("KADRE_APPKIT_INITIALIZATION_TRACE") == "true") {
-            testLogging.showStandardStreams = true
-        }
     }
     val appKitNativeTests = tasks.register("appKitNativeTests") {
         group = "verification"

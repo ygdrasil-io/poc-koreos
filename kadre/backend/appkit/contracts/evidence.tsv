@@ -46,7 +46,7 @@ APK-004	jvm	sentinel	appkit-surface-redraw-not-coalesced	org.graphiks.kadre.inte
 APK-004	jvm	sentinel	appkit-surface-post-close-callback	org.graphiks.kadre.internal.appkit.AppKitBackendProviderTest	publicAppKitSurfaceIgnoresLateNativeValuesAfterTerminalClose[jvm]
 APK-004	jvm	sentinel	appkit-surface-unsupported-capability-activation	org.graphiks.kadre.internal.appkit.AppKitBackendProviderTest	publicAppKitWindowStateCommitsSupportedTransparencyAndLeavesUnsupportedPropertiesUnavailable[jvm]
 APK-005	jvm	scenario	appkit-input-public-activation	org.graphiks.kadre.internal.appkit.AppKitBackendProviderTest	phase4InputHarnessWritesAnHonestNoninteractiveRecordOnMacOs[jvm]
-APK-005	jvm	scenario	appkit-input-native-key-pointer	org.graphiks.kadre.internal.appkit.KffiAppKitWindowPortMacOsTest	nativeInputObserverRevocationStopsKeyboardAndPointerCallbacksWhileTheManagedViewRemainsAliveOnMacOs[jvm]
+APK-005	jvm	scenario	appkit-input-native-key-pointer	org.graphiks.kadre.internal.appkit.KffiAppKitWindowPortMacOsTest	nativeInputObserverRevocationStopsInputCallbacksAndRestoresTouchAdmissionOnMacOs[jvm]
 APK-005	jvm	scenario	appkit-input-native-scroll	org.graphiks.kadre.internal.appkit.AppKitBackendProviderTest	publishedKffiScrollPostingAcceptsDiscreteAndPreciseCoreGraphicsEventsOnMacOs[jvm]
 APK-005	jvm	scenario	appkit-input-terminal	org.graphiks.kadre.internal.appkit.KffiAppKitWindowPortMacOsTest	nativeContentViewRevokesPublishedKffiKeyboardRouteBeforePeerCloseReleasesTheViewOnMacOs[jvm]
 APK-005	jvm	scenario	appkit-input-manual-harness	org.graphiks.kadre.internal.appkit.AppKitBackendProviderTest	phase4InputHarnessWritesAnHonestNoninteractiveRecordOnMacOs[jvm]

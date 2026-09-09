@@ -33,8 +33,6 @@ jobs:
         run: bash scripts/collect-appkit-diagnostics.sh kadre/backend/appkit/build/ci-diagnostics
 
       - name: Run AppKit contract gate
-        env:
-          KADRE_APPKIT_INITIALIZATION_TRACE: "true"
         run: scripts/test-kadre-appkit-contracts.sh
 
       - name: Collect native crash reports

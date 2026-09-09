@@ -16,7 +16,6 @@ import org.graphiks.kffi.objc.postEvent_atStart
 import java.lang.foreign.Arena
 import java.lang.foreign.MemorySegment
 import java.util.concurrent.CompletableFuture
-import java.util.concurrent.atomic.AtomicLong
 import org.graphiks.kadre.window.WindowAttention
 
 internal sealed interface AppKitStopResult {
@@ -32,8 +31,13 @@ internal fun interface AppKitStopRequest {
 internal interface AppKitNativeApplication {
     fun isMainThread(): Boolean
 
-    // Use AppKit's own state when synchronizing with run(); Kadre assigning the application
-    // reference only proves setup has started, not that the native loop is pumping events.
+    /**
+     * Returns whether the AppKit event loop is available to Kadre.
+     *
+     * On the AppKit main thread the implementation may query native state for an embedded host.
+     * Off the main thread it must use state published by [run], never initialize or message
+     * [NSApplication].
+     */
     fun isRunning(): Boolean
 
     /** Starts one independently closeable lifecycle observation owner for an embedded session. */
@@ -53,8 +57,9 @@ internal interface AppKitNativeApplication {
 
 internal class KffiAppKitNativeApplication : AppKitNativeApplication {
     private val lock = Any()
-    private val initializationTraceSequence = AtomicLong()
     private var application: NSApplication? = null
+    @Volatile
+    private var eventLoopAdmitted = false
     private var stopRequested = false
     private var stopScheduled = false
     private var stopCompletion: CompletableFuture<AppKitStopResult>? = null
@@ -63,15 +68,11 @@ internal class KffiAppKitNativeApplication : AppKitNativeApplication {
     override fun isMainThread(): Boolean = NSThread.isMainThread()
 
     override fun isRunning(): Boolean {
-        val current = synchronized(lock) { application }
-        return current?.isRunning() ?: run {
-            traceInitialization(
-                stage = "is-running-before-shared-application",
-                applicationInstalled = false,
-            )
-            ObjCRuntime.autoreleasePool {
-                NSApplication(NSApplication.sharedApplication()).isRunning()
-            }
+        if (eventLoopAdmitted) return true
+        if (!isMainThread()) return false
+
+        return ObjCRuntime.autoreleasePool {
+            NSApplication(NSApplication.sharedApplication()).isRunning()
         }
     }
 
@@ -99,26 +100,17 @@ internal class KffiAppKitNativeApplication : AppKitNativeApplication {
 
     override fun run() {
         check(isMainThread()) { "the AppKit event loop must run on the process main thread" }
-        traceInitialization(
-            stage = "run-before-shared-application",
-            applicationInstalled = false,
-        )
         val current = ObjCRuntime.autoreleasePool {
             NSApplication(NSApplication.sharedApplication())
         }
-        traceInitialization(
-            stage = "run-after-shared-application",
-            applicationInstalled = false,
-        )
         val pendingStop = synchronized(lock) {
             check(application == null) { "the AppKit event loop is already running" }
             application = current
             takeStopTarget()
         }
-        traceInitialization(
-            stage = "run-after-application-installed",
-            applicationInstalled = true,
-        )
+        // Publish admission before entering the blocking native loop. Application coroutines
+        // run on Dispatchers.Default and may poll isRunning() while the main thread enters run.
+        eventLoopAdmitted = true
 
         val pendingStopThread = pendingStop?.let { target ->
             Thread.ofPlatform()
@@ -129,6 +121,7 @@ internal class KffiAppKitNativeApplication : AppKitNativeApplication {
             current.run()
             pendingStopThread?.join()
         } finally {
+            eventLoopAdmitted = false
             synchronized(lock) {
                 if (application === current) {
                     application = null
@@ -172,25 +165,6 @@ internal class KffiAppKitNativeApplication : AppKitNativeApplication {
         } else {
             null
         }
-    }
-
-    /**
-     * Temporary CI-only causal trace for the standalone [NSApplication] crash investigation.
-     *
-     * This deliberately observes only the Java thread and [NSThread], never accesses
-     * [NSApplication], so enabling it cannot initialize or otherwise perturb AppKit.
-     */
-    private fun traceInitialization(stage: String, applicationInstalled: Boolean) {
-        if (System.getenv("KADRE_APPKIT_INITIALIZATION_TRACE") != "true") return
-
-        val thread = Thread.currentThread()
-        System.err.println(
-            "KADRE_APPKIT_INIT_TRACE sequence=${initializationTraceSequence.incrementAndGet()} " +
-                "stage=$stage applicationInstalled=$applicationInstalled " +
-                "javaThread=${thread.name} javaThreadId=${thread.threadId()} " +
-                "nativeMain=${NSThread.isMainThread()}",
-        )
-        System.err.flush()
     }
 
     private fun sharedApplicationOnMainThread(): NSApplication = synchronized(lock) { application }
