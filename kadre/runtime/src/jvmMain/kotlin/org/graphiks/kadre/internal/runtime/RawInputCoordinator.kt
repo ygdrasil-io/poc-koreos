@@ -108,6 +108,7 @@ internal class RawInputCoordinator(
                 policy = rawPolicy,
                 eventCollectorGate = collectorAllocator.newGate(maxCollectorsPerFlow),
                 diagnostics = ::report,
+                eventStampSource = diagnosticStampSource,
                 onAvailability = ::publishAvailability,
                 onClosed = ::release,
             )
@@ -202,6 +203,7 @@ private class RuntimeRawInputAccess(
     private val policy: RawInputDeliveryPolicy,
     private val eventCollectorGate: RuntimeEventCollectorGate,
     private val diagnostics: (KadreDiagnostic) -> Unit,
+    private val eventStampSource: () -> EventStamp,
     private val onAvailability: (FeatureAvailability) -> Unit,
     private val onClosed: (RuntimeRawInputAccess) -> Unit,
 ) : RawInputAccess {
@@ -242,7 +244,15 @@ private class RuntimeRawInputAccess(
 
     private fun accept(event: RawInputPortLeaseEvent) {
         when (event) {
-            is RawInputPortLeaseEvent.Input -> publish(event.event)
+            is RawInputPortLeaseEvent.Input -> publish(
+                RawInputEvent(
+                    deltaX = event.input.deltaX,
+                    deltaY = event.input.deltaY,
+                    unit = event.input.unit,
+                    deviceId = event.input.deviceId,
+                    stamp = eventStampSource(),
+                ),
+            )
             is RawInputPortLeaseEvent.Availability -> acceptAvailability(event.availability)
             is RawInputPortLeaseEvent.Terminal -> terminate(event.failure)
         }

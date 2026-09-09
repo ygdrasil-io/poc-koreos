@@ -4,7 +4,18 @@ import kotlinx.coroutines.flow.Flow
 import org.graphiks.kadre.diagnostics.FeatureAvailability
 import org.graphiks.kadre.diagnostics.KadreFailure
 import org.graphiks.kadre.diagnostics.KadreResult
-import org.graphiks.kadre.input.RawInputEvent
+import org.graphiks.kadre.input.DeviceId
+import org.graphiks.kadre.input.RawInputUnit
+import org.graphiks.kadre.diagnostics.Capability
+import org.graphiks.kadre.diagnostics.KadreOperation
+
+/** Immutable native-boundary raw motion observation before one session assigns its event stamp. */
+public data class RawInputPortInput(
+    public val deltaX: Double,
+    public val deltaY: Double,
+    public val unit: RawInputUnit,
+    public val deviceId: DeviceId?,
+)
 
 /**
  * Unstable backend SPI for one session's registrations with a raw-input source.
@@ -13,6 +24,14 @@ import org.graphiks.kadre.input.RawInputEvent
  * Kadre's supported public API and may change without compatibility guarantees.
  */
 public interface RawInputPort : AutoCloseable {
+    /** Current backend capability before a public raw-input access is admitted. */
+    public val rawInputCapability: Capability<Unit>
+        get() = Capability.Unsupported(KadreFailure.Unsupported(KadreOperation.RawInputAccess))
+
+    /** Installs the one session-runtime observer for dynamic raw-input capability changes. */
+    public fun installRawInputCapabilityObserver(observer: (Capability<Unit>) -> Unit): AutoCloseable =
+        AutoCloseable { }
+
     /** Creates one independent backend registration for one public raw-input access. */
     public suspend fun requestAccess(): KadreResult<RawInputPortLease>
 
@@ -22,7 +41,7 @@ public interface RawInputPort : AutoCloseable {
 
 /** Immutable observation emitted only for the registration that owns this lease. */
 public sealed interface RawInputPortLeaseEvent {
-    public data class Input(public val event: RawInputEvent) : RawInputPortLeaseEvent
+    public data class Input(public val input: RawInputPortInput) : RawInputPortLeaseEvent
     public data class Availability(public val availability: FeatureAvailability) : RawInputPortLeaseEvent
     public data class Terminal(public val failure: KadreFailure) : RawInputPortLeaseEvent
 }

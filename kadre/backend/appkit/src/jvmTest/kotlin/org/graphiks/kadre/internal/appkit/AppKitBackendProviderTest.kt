@@ -2985,7 +2985,7 @@ class AppKitBackendProviderTest {
             assertTrue(
                 report.contains(
                     "\ttextInput=Supported" +
-                        "\trawInput=Unsupported(operation=RawInputAccess)",
+                        "\trawInput=Supported",
                 ),
                 report,
             )

@@ -134,6 +134,8 @@ public class RuntimeWindowManager public constructor(
     private val eventClockOrigin = System.nanoTime()
     private var sessionEventStampSource: (() -> EventStamp)? = null
     private var rawInputCoordinator: RawInputCoordinator? = null
+    private var rawInputCapability: Capability<Unit> = unsupported(KadreOperation.RawInputAccess)
+    private var rawInputCapabilityObservation: AutoCloseable? = null
     private var windowDeliveryPolicy: WindowDeliveryPolicy = KadrePolicies.Default.window
     private var surfaceDeliveryPolicy: WindowDeliveryPolicy = KadrePolicies.Default.window
     private var surfaceInputDeliveryPolicy: InputDeliveryPolicy = KadrePolicies.Default.input
@@ -256,7 +258,9 @@ public class RuntimeWindowManager public constructor(
             sessionMaxCollectorsPerFlow = maxCollectorsPerFlow
             this.dropTransferScope = dropTransferScope
             rawInputCoordinator = coordinator
+            rawInputCapability = rawInputPort?.rawInputCapability ?: unsupported(KadreOperation.RawInputAccess)
         }
+        rawInputCapabilityObservation = rawInputPort?.installRawInputCapabilityObserver(::updateRawInputCapability)
     }
 
     internal fun installSessionConfiguration(
@@ -463,8 +467,18 @@ public class RuntimeWindowManager public constructor(
             attentionPort
         }
         drainAttentionReleases()
+        rawInputCapabilityObservation?.close()
         synchronized(lock) { rawInputCoordinator }?.close()
         portToClose?.let(::safeCloseAttentionPort)
+    }
+
+    private fun updateRawInputCapability(capability: Capability<Unit>) {
+        val targets = synchronized(lock) {
+            if (rawInputCapability == capability) return
+            rawInputCapability = capability
+            surfaces.values.toList()
+        }
+        targets.forEach { surface -> surface.updateRawInputCapability(capability) }
     }
 
     internal suspend fun cancelRequest(request: RuntimeWindowRequest): WindowCancellationOutcome = synchronized(lock) {
@@ -1229,6 +1243,7 @@ public class RuntimeWindowManager public constructor(
             commandPort = surfaceCommandPort,
             textInputPort = textInputPortFactory.create(record.surfaceId),
             rawInputCoordinator = rawInputCoordinator,
+            rawInputCapability = rawInputCapability,
             commandsEnabled = publicSurfaceCapabilities,
             enabledCapabilities = enabledSurfaceCapabilities,
             eventStampSource = ::nextEventStamp,

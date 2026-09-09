@@ -45,6 +45,15 @@ internal class AppKitProcessBroker {
     private var standaloneOwned = false
     private var terminated = false
     private var lifecycleState: LifecycleState = EMBEDDED_INITIAL_LIFECYCLE
+    private val rawInputBroker = lazy {
+        AppKitRawInputBroker(
+            permission = AppKitPermissionBroker(KffiAppKitRawInputNative),
+            native = KffiAppKitRawInputNative,
+            bridgeAvailable = AppKitRawInputAvailability().isAvailable,
+        )
+    }
+
+    fun openRawInputPort(): AppKitRawInputPort = rawInputBroker.value.openPort()
 
     fun tryAcquireStandalone(
         attentionOwner: AppKitUserAttentionOwner? = null,
@@ -181,6 +190,7 @@ internal class AppKitProcessBroker {
                         owner?.close()
                     }
                 }
+                if (rawInputBroker.isInitialized()) rawInputBroker.value.close()
                 return@delivery
             }
 
@@ -199,6 +209,9 @@ internal class AppKitProcessBroker {
             }
             if (delivery == null) return@delivery
             delivery.second.forEach { host -> host.updateLifecycle(delivery.first) }
+            if (signal == AppKitLifecycleSignal.BecameActive && rawInputBroker.isInitialized()) {
+                rawInputBroker.value.reprobeForHostActivation()
+            }
         }
     }
 

@@ -59,12 +59,12 @@ class RawInputCoordinatorTest {
         runCurrent()
 
         val event = rawEvent(1.0)
-        port.leaseAt(0).emit(RawInputPortLeaseEvent.Input(event))
-        port.leaseAt(1).emit(RawInputPortLeaseEvent.Input(event))
+        port.leaseAt(0).emit(RawInputPortLeaseEvent.Input(portInput(1.0)))
+        port.leaseAt(1).emit(RawInputPortLeaseEvent.Input(portInput(1.0)))
         runCurrent()
 
         first.close()
-        port.leaseAt(1).emit(RawInputPortLeaseEvent.Input(rawEvent(2.0)))
+        port.leaseAt(1).emit(RawInputPortLeaseEvent.Input(portInput(2.0)))
         runCurrent()
 
         assertEquals(listOf(event), firstEvents.await())
@@ -128,10 +128,10 @@ class RawInputCoordinatorTest {
         val second = rawEvent(2.0)
         val third = rawEvent(3.0)
 
-        port.leaseAt(0).emit(RawInputPortLeaseEvent.Input(first))
+        port.leaseAt(0).emit(RawInputPortLeaseEvent.Input(portInput(1.0)))
         runCurrent()
-        port.leaseAt(0).emit(RawInputPortLeaseEvent.Input(second))
-        port.leaseAt(0).emit(RawInputPortLeaseEvent.Input(third))
+        port.leaseAt(0).emit(RawInputPortLeaseEvent.Input(portInput(2.0)))
+        port.leaseAt(0).emit(RawInputPortLeaseEvent.Input(portInput(3.0)))
         runCurrent()
         releaseCollector.complete(Unit)
         runCurrent()
@@ -160,10 +160,10 @@ class RawInputCoordinatorTest {
         }
         runCurrent()
 
-        port.leaseAt(0).emit(RawInputPortLeaseEvent.Input(rawEvent(1.0)))
+        port.leaseAt(0).emit(RawInputPortLeaseEvent.Input(portInput(1.0)))
         runCurrent()
-        port.leaseAt(0).emit(RawInputPortLeaseEvent.Input(rawEvent(2.0)))
-        port.leaseAt(0).emit(RawInputPortLeaseEvent.Input(rawEvent(3.0)))
+        port.leaseAt(0).emit(RawInputPortLeaseEvent.Input(portInput(2.0)))
+        port.leaseAt(0).emit(RawInputPortLeaseEvent.Input(portInput(3.0)))
         runCurrent()
 
         assertEquals(RawInputState.Closed, closing.state.value)
@@ -273,7 +273,7 @@ class RawInputCoordinatorTest {
         val second = coordinator.requestAccess(SurfaceId(2)).requireValue()
 
         coordinator.closeOwner(SurfaceId(1))
-        port.leaseAt(0).emit(RawInputPortLeaseEvent.Input(rawEvent(7.0)))
+        port.leaseAt(0).emit(RawInputPortLeaseEvent.Input(portInput(7.0)))
         runCurrent()
 
         assertEquals(RawInputState.Closed, first.state.value)
@@ -321,7 +321,7 @@ class RawInputCoordinatorTest {
         val ordinaryState = surface.input.state.value
         val access = surface.input.requestRawInput().requireValue()
 
-        port.leaseAt(0).emit(RawInputPortLeaseEvent.Input(rawEvent(5.0)))
+        port.leaseAt(0).emit(RawInputPortLeaseEvent.Input(portInput(5.0)))
         runCurrent()
 
         assertEquals(ordinaryState, surface.input.state.value)
@@ -352,12 +352,19 @@ class RawInputCoordinatorTest {
         maxCollectorsPerFlow = 8,
     )
 
+    private fun portInput(delta: Double): RawInputPortInput = RawInputPortInput(
+        deltaX = delta,
+        deltaY = -delta,
+        unit = RawInputUnit.DeviceCount,
+        deviceId = null,
+    )
+
     private fun rawEvent(delta: Double): RawInputEvent = RawInputEvent(
         deltaX = delta,
         deltaY = -delta,
         unit = RawInputUnit.DeviceCount,
         deviceId = null,
-        stamp = EventStamp(SessionSequence(delta.toLong()), SessionInstant(delta.toLong().nanoseconds), null),
+        stamp = EventStamp(SessionSequence(0L), SessionInstant(0L.nanoseconds), null),
     )
 
     private class FakeRawInputPort(
