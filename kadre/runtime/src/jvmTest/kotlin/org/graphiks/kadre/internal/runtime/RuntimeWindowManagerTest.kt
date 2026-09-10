@@ -4880,6 +4880,26 @@ class RuntimeWindowManagerTest {
     }
 
     @Test
+    fun acceptingCloseRequestKeepsClosingWhenNativeCloseArrivesDuringAdmittedDispatch() = runTest {
+        val port = DeterministicWindowCommandPort()
+        val manager = manager(port)
+        val window = commit(manager.requestWindow(WindowSpec()).successValue(), port.openCommands.single())
+        val command = port.openCommands.single()
+        val closeRequested = async(start = CoroutineStart.UNDISPATCHED) {
+            window.events.filterIsInstance<WindowEvent.CloseRequested>().first()
+        }
+        command.closeRequested()
+        val request = closeRequested.await()
+        port.onOpenedClose = { command.nativeClosed() }
+
+        assertIs<WindowCloseResponseOutcome.Closing>(
+            window.respondToCloseRequest(request.requestId, WindowCloseDecision.Accept).successValue(),
+        )
+        assertEquals(WindowPhase.Closed, window.state.value.phase)
+        assertEquals(1, port.openedCloseCommands.size)
+    }
+
+    @Test
     fun sessionStopDuringDispatchDefersOwnerReleaseAndNeverDispatchesTwice() = runTest {
         val port = DeterministicWindowCommandPort()
         val manager = manager(port)

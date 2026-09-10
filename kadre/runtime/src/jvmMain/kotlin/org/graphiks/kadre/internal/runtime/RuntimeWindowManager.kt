@@ -1296,9 +1296,18 @@ public class RuntimeWindowManager public constructor(
                 record.window.currentState().phase != WindowPhase.Closed &&
                 record.closeAttempt === attempt
             val result = if (!current) {
+                val acceptedBeforeNativeClose =
+                    portOutcome is GuardedCall.Success &&
+                        portOutcome.value == OpenedWindowCloseOutcome.Accepted
                 CloseResult(
                     KadreResult.Success(WindowCloseOutcome.Closed),
-                    KadreResult.Success(WindowCloseResponseOutcome.TooLate),
+                    KadreResult.Success(
+                        if (acceptedBeforeNativeClose) {
+                            WindowCloseResponseOutcome.Closing(attempt.operationId)
+                        } else {
+                            WindowCloseResponseOutcome.TooLate
+                        },
+                    ),
                 )
             } else {
                 when (portOutcome) {
