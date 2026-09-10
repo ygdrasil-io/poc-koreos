@@ -43,19 +43,16 @@ class ContractRegistryTest {
     }
 
     @Test
-    fun realRegistryDeclaresEveryPlannedPhaseEightAndNineContract() {
+    fun realRegistryActivatesTheExactPhaseEightRawInputContracts() {
         val recordsById = ContractRegistry.parse(repositoryFile("kadre/contracts/registry/contracts.tsv").readText())
             .associateBy(ContractRecord::contractId)
 
         assertEquals(
-            PHASE_EIGHT_AND_NINE_CONTRACT_IDS,
-            recordsById.keys.intersect(PHASE_EIGHT_AND_NINE_CONTRACT_IDS),
+            PHASE_EIGHT_CONTRACT_IDS,
+            recordsById.keys.intersect(PHASE_EIGHT_CONTRACT_IDS),
         )
-        assertTrue(
-            PHASE_EIGHT_AND_NINE_CONTRACT_IDS.all { recordsById.getValue(it).status == ContractStatus.Planned },
-        )
-        assertEquals(
-            listOf(
+        val expectedScenarios = mapOf(
+            "INP-002" to listOf(
                 "runtime-raw-admission",
                 "runtime-raw-fanout",
                 "runtime-raw-overflow",
@@ -63,8 +60,39 @@ class ContractRegistryTest {
                 "runtime-raw-recovery",
                 "runtime-raw-owner-close",
             ),
-            recordsById.getValue("INP-002").scenarios,
+            "APK-013" to listOf(
+                "appkit-raw-generated-listen-only",
+                "appkit-raw-permission-readback",
+                "appkit-raw-public-activation",
+                "appkit-raw-tap-recovery",
+                "appkit-raw-owner-revocation",
+            ),
         )
+        expectedScenarios.forEach { (contractId, scenarios) ->
+            val record = recordsById.getValue(contractId)
+            assertEquals(ContractStatus.Active, record.status)
+            assertEquals(listOf("jvm"), record.requiredTargets)
+            assertEquals("APPKIT-IMPLEMENTATION-ROADMAP.md#Phase 8 — Raw input et permissions", record.source)
+            assertEquals(scenarios, record.scenarios)
+        }
+        assertEquals(ContractOracle.O2, recordsById.getValue("INP-002").oracle)
+        assertEquals(ContractOracle.O3, recordsById.getValue("APK-013").oracle)
+        assertEquals(
+            listOf("SurfaceInput.requestRawInput"),
+            recordsById.getValue("APK-013").conditionalCapabilities,
+        )
+    }
+
+    @Test
+    fun realRegistryDeclaresEveryPlannedPhaseNineContract() {
+        val recordsById = ContractRegistry.parse(repositoryFile("kadre/contracts/registry/contracts.tsv").readText())
+            .associateBy(ContractRecord::contractId)
+
+        assertEquals(
+            PHASE_NINE_CONTRACT_IDS,
+            recordsById.keys.intersect(PHASE_NINE_CONTRACT_IDS),
+        )
+        assertTrue(PHASE_NINE_CONTRACT_IDS.all { recordsById.getValue(it).status == ContractStatus.Planned })
     }
 
     @Test
@@ -516,8 +544,9 @@ class ContractRegistryTest {
     private companion object {
         const val COMMIT = "0123456789abcdef0123456789abcdef01234567"
         val WEB_CONTRACT_IDS = setOf("BCK-001", "INT-002", "INT-003", "INT-004")
-        val PHASE_EIGHT_AND_NINE_CONTRACT_IDS = setOf(
-            "INP-002", "APK-013", "DSP-001", "APK-014", "WIN-007", "APK-015",
+        val PHASE_EIGHT_CONTRACT_IDS = setOf("INP-002", "APK-013")
+        val PHASE_NINE_CONTRACT_IDS = setOf(
+            "DSP-001", "APK-014", "WIN-007", "APK-015",
             "WIN-008", "APK-016", "RUN-007", "APK-017", "RUN-008", "APK-018",
         )
         const val HEADER =
