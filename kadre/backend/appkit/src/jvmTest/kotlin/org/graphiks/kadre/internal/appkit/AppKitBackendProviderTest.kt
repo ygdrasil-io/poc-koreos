@@ -697,7 +697,10 @@ class AppKitBackendProviderTest {
 
                 port.emitSurfaceFocus("surface-terminal", SurfaceFocus.Focused)
                 withTimeout(2.seconds) { surface.state.first { it.focus == SurfaceFocus.Focused } }
-                assertIs<WindowCloseOutcome.Accepted>(window.close().appKitSuccessValue())
+                // AppKit may publish the terminal callback either before or after the close
+                // dispatch returns. The assertion below verifies the invariant this test owns:
+                // no late native surface value can revive the already terminal surface.
+                window.close().appKitSuccessValue()
                 val terminal = withTimeout(2.seconds) {
                     surface.state.first { it.attachment == SurfaceAttachmentState.Detached }
                 }

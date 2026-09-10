@@ -4599,6 +4599,410 @@ class RuntimeWindowManagerTest {
     }
 
     @Test
+    fun closeWindowDoesNotHoldManagerLockWhilePortWaitsForConcurrentStimulus() = runTest {
+        assertCloseDispatchAllowsConcurrentStimulus { _, window, _ -> window.close() }
+    }
+
+    @Test
+    fun acceptingCloseRequestDoesNotHoldManagerLockWhilePortWaitsForConcurrentStimulus() = runTest {
+        assertCloseDispatchAllowsConcurrentStimulus { _, window, requestId ->
+            window.respondToCloseRequest(requestId, WindowCloseDecision.Accept)
+        }
+    }
+
+    @Test
+    fun managerCloseDoesNotHoldManagerLockWhilePortWaitsForConcurrentStimulus() = runTest {
+        assertCloseDispatchAllowsConcurrentStimulus { manager, _, _ -> manager.close() }
+    }
+
+    @Test
+    fun managerCloseDrainsALargeCloseBatchWithoutRecursiveStackGrowth() = runTest {
+        val windowCount = 10_000
+        val port = DeterministicWindowCommandPort()
+        val manager = manager(port, maxWindows = windowCount, maxPending = 1)
+        val owners = List(windowCount) { CountingWindowPeerOwner() }
+
+        owners.forEach { owner ->
+            val request = manager.requestWindow(WindowSpec()).successValue()
+            commit(request, port.openCommands.last(), owner)
+        }
+
+        manager.close()
+
+        assertEquals(windowCount, port.openedCloseCommands.size)
+        assertTrue(owners.all { it.closeCount == 1 })
+    }
+
+    @Test
+    fun forcedWindowEventTerminationDoesNotHoldManagerLockWhileClosingTheOwner() = runTest {
+        val port = DeterministicWindowCommandPort()
+        val manager = manager(port)
+        val request = manager.requestWindow(WindowSpec()).successValue()
+        val command = port.openCommands.single()
+        var callbackCompletedBeforeOwnerReturn = false
+        val callbacks = mutableListOf<Thread>()
+        val owner = WindowPeerOwner {
+            val completed = CountDownLatch(1)
+            callbacks += Thread {
+                manager.acceptSurfaceStimulus(inputKey(command.surfaceId, "owner-close"))
+                completed.countDown()
+            }.apply { start() }
+            callbackCompletedBeforeOwnerReturn = completed.await(2, TimeUnit.SECONDS)
+        }
+        val window = commit(request, command, owner)
+
+        try {
+            manager.terminaliseWindowEventDelivery(window as RuntimeWindow)
+        } finally {
+            callbacks.forEach { it.join(3_000) }
+        }
+
+        assertTrue(callbackCompletedBeforeOwnerReturn, "owner.close waited on the manager monitor")
+        assertEquals(WindowPhase.Closed, window.state.value.phase)
+        assertEquals(1, port.openedCloseCommands.size)
+    }
+
+    @Test
+    fun concurrentCloseCallersJoinTheSameNativeAttempt() = runTest {
+        val port = DeterministicWindowCommandPort()
+        val manager = manager(port)
+        val window = commit(manager.requestWindow(WindowSpec()).successValue(), port.openCommands.single())
+        val entered = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        var releasedBeforeReturn = false
+        port.onOpenedClose = {
+            entered.countDown()
+            releasedBeforeReturn = release.await(2, TimeUnit.SECONDS)
+        }
+        val first = async(Dispatchers.Default) { window.close() }
+        try {
+            assertTrue(entered.await(2, TimeUnit.SECONDS))
+            val second = async(start = CoroutineStart.UNDISPATCHED) { window.close() }
+            assertFalse(second.isCompleted, "a joining caller must await native admission")
+            release.countDown()
+            val accepted = assertIs<WindowCloseOutcome.Accepted>(first.await().successValue())
+            assertEquals(KadreResult.Success(accepted), second.await())
+            assertTrue(releasedBeforeReturn)
+            assertEquals(1, port.openedCloseCommands.size)
+        } finally {
+            release.countDown()
+            first.join()
+            manager.close()
+        }
+    }
+
+    @Test
+    fun closeWaiterContinuationCanReenterTheManagerBeforeItReturns() = runTest {
+        val port = DeterministicWindowCommandPort()
+        val manager = manager(port)
+        val window = commit(manager.requestWindow(WindowSpec()).successValue(), port.openCommands.single())
+        val entered = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        val callbacks = mutableListOf<Thread>()
+        var callbackFinishedBeforeContinuationReturned = false
+        port.onOpenedClose = {
+            entered.countDown()
+            release.await(2, TimeUnit.SECONDS)
+        }
+        val first = async(Dispatchers.Default) { window.close() }
+        try {
+            assertTrue(entered.await(2, TimeUnit.SECONDS))
+            val joined = async(context = Dispatchers.Unconfined, start = CoroutineStart.UNDISPATCHED) {
+                window.close()
+                val callbackFinished = CountDownLatch(1)
+                callbacks += Thread {
+                    manager.acceptSurfaceStimulus(inputKey(window.surface.id, "close-resume"))
+                    callbackFinished.countDown()
+                }.apply { start() }
+                callbackFinishedBeforeContinuationReturned = callbackFinished.await(2, TimeUnit.SECONDS)
+            }
+            assertFalse(joined.isCompleted)
+
+            release.countDown()
+
+            first.await()
+            joined.await()
+            assertTrue(
+                callbackFinishedBeforeContinuationReturned,
+                "a close waiter resumed while the manager monitor was held",
+            )
+        } finally {
+            release.countDown()
+            callbacks.forEach { it.join(3_000) }
+            first.join()
+            manager.close()
+        }
+    }
+
+    @Test
+    fun joinedCloseWaiterResumesAfterTheDeferredOwnerRelease() = runTest {
+        val port = DeterministicWindowCommandPort()
+        val manager = manager(port)
+        val owner = CountingWindowPeerOwner()
+        val window = commit(manager.requestWindow(WindowSpec()).successValue(), port.openCommands.single(), owner)
+        val command = port.openCommands.single()
+        val entered = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        port.onOpenedClose = {
+            entered.countDown()
+            release.await(2, TimeUnit.SECONDS)
+            command.nativeClosed()
+        }
+        val first = async(Dispatchers.Default) { window.close() }
+        try {
+            assertTrue(entered.await(2, TimeUnit.SECONDS))
+            val joined = async(context = Dispatchers.Unconfined, start = CoroutineStart.UNDISPATCHED) {
+                window.close()
+                owner.closeCount
+            }
+            assertFalse(joined.isCompleted)
+
+            release.countDown()
+
+            assertEquals(1, joined.await(), "the native owner must be released before waiter resumption")
+            assertEquals(KadreResult.Success(WindowCloseOutcome.Closed), first.await())
+        } finally {
+            release.countDown()
+            first.join()
+            manager.close()
+        }
+    }
+
+    @Test
+    fun acceptingARequestJoinsConcurrentCloseAndRejectIsTooLateDuringDispatch() = runTest {
+        val port = DeterministicWindowCommandPort()
+        val manager = manager(port)
+        val window = commit(manager.requestWindow(WindowSpec()).successValue(), port.openCommands.single())
+        val event = async(start = CoroutineStart.UNDISPATCHED) {
+            window.events.filterIsInstance<WindowEvent.CloseRequested>().first()
+        }
+        port.openCommands.single().closeRequested()
+        val requestId = event.await().requestId
+        val entered = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        var releasedBeforeReturn = false
+        port.onOpenedClose = {
+            entered.countDown()
+            releasedBeforeReturn = release.await(2, TimeUnit.SECONDS)
+        }
+        val first = async(Dispatchers.Default) { window.close() }
+        try {
+            assertTrue(entered.await(2, TimeUnit.SECONDS))
+            val accepting = async(start = CoroutineStart.UNDISPATCHED) {
+                window.respondToCloseRequest(requestId, WindowCloseDecision.Accept)
+            }
+            assertFalse(accepting.isCompleted)
+            assertEquals(
+                KadreResult.Success(WindowCloseResponseOutcome.TooLate),
+                window.respondToCloseRequest(requestId, WindowCloseDecision.Reject),
+            )
+            release.countDown()
+            val accepted = assertIs<WindowCloseOutcome.Accepted>(first.await().successValue())
+            assertEquals(
+                KadreResult.Success(WindowCloseResponseOutcome.Closing(accepted.operationId)),
+                accepting.await(),
+            )
+            assertTrue(releasedBeforeReturn)
+            assertEquals(1, port.openedCloseCommands.size)
+        } finally {
+            release.countDown()
+            first.join()
+            manager.close()
+        }
+    }
+
+    @Test
+    fun nativeCommittedCloseResponsesRemainTooLateBeforeAndAfterNativeClosed() = runTest {
+        val port = DeterministicWindowCommandPort()
+        val manager = manager(port)
+        val owner = CountingWindowPeerOwner()
+        val window = commit(manager.requestWindow(WindowSpec()).successValue(), port.openCommands.single(), owner)
+        val command = port.openCommands.single()
+        val requested = async(start = CoroutineStart.UNDISPATCHED) {
+            window.events.filterIsInstance<WindowEvent.CloseRequested>().first()
+        }
+        command.closeRequested()
+        val requestId = requested.await().requestId
+        port.openedCloseOutcome = OpenedWindowCloseOutcome.NativeCloseAlreadyCommitted
+
+        assertEquals(
+            KadreResult.Success(WindowCloseResponseOutcome.TooLate),
+            window.respondToCloseRequest(requestId, WindowCloseDecision.Accept),
+        )
+        assertEquals(WindowPhase.Closing, window.state.value.phase)
+        listOf(WindowCloseDecision.Accept, WindowCloseDecision.Reject).forEach { decision ->
+            assertEquals(
+                KadreResult.Success(WindowCloseResponseOutcome.TooLate),
+                window.respondToCloseRequest(requestId, decision),
+                "native commitment must dominate $decision while Closing",
+            )
+        }
+        assertEquals(1, port.openedCloseCommands.size)
+        assertEquals(0, owner.closeCount)
+
+        command.nativeClosed()
+
+        assertEquals(WindowPhase.Closed, window.state.value.phase)
+        listOf(WindowCloseDecision.Accept, WindowCloseDecision.Reject).forEach { decision ->
+            assertEquals(
+                KadreResult.Success(WindowCloseResponseOutcome.TooLate),
+                window.respondToCloseRequest(requestId, decision),
+            )
+        }
+        assertEquals(1, port.openedCloseCommands.size)
+        assertEquals(1, owner.closeCount)
+    }
+
+    @Test
+    fun nativeCloseDuringDispatchWinsOverRetryAndDefersOwnerReleaseUntilPortReturns() = runTest {
+        val port = DeterministicWindowCommandPort()
+        val manager = manager(port)
+        val owner = CountingWindowPeerOwner()
+        val window = commit(manager.requestWindow(WindowSpec()).successValue(), port.openCommands.single(), owner)
+        val command = port.openCommands.single()
+        var ownerCountInsidePort = -1
+        port.openedCloseOutcome = OpenedWindowCloseOutcome.TemporarilyUnavailable(true)
+        port.onOpenedClose = {
+            command.nativeClosed()
+            command.nativeClosed()
+            command.commit(owner)
+            ownerCountInsidePort = owner.closeCount
+        }
+
+        assertEquals(KadreResult.Success(WindowCloseOutcome.Closed), window.close())
+        assertEquals(0, ownerCountInsidePort)
+        assertEquals(1, owner.closeCount)
+        assertEquals(WindowPhase.Closed, window.state.value.phase)
+        assertEquals(emptyList(), manager.state.value.windows)
+        manager.close()
+        assertEquals(1, port.openedCloseCommands.size)
+        assertEquals(1, owner.closeCount)
+    }
+
+    @Test
+    fun acceptingCloseRequestKeepsClosingWhenNativeCloseArrivesDuringAdmittedDispatch() = runTest {
+        val port = DeterministicWindowCommandPort()
+        val manager = manager(port)
+        val window = commit(manager.requestWindow(WindowSpec()).successValue(), port.openCommands.single())
+        val command = port.openCommands.single()
+        val closeRequested = async(start = CoroutineStart.UNDISPATCHED) {
+            window.events.filterIsInstance<WindowEvent.CloseRequested>().first()
+        }
+        command.closeRequested()
+        val request = closeRequested.await()
+        port.onOpenedClose = { command.nativeClosed() }
+
+        assertIs<WindowCloseResponseOutcome.Closing>(
+            window.respondToCloseRequest(request.requestId, WindowCloseDecision.Accept).successValue(),
+        )
+        assertEquals(WindowPhase.Closed, window.state.value.phase)
+        assertEquals(1, port.openedCloseCommands.size)
+    }
+
+    @Test
+    fun sessionStopDuringDispatchDefersOwnerReleaseAndNeverDispatchesTwice() = runTest {
+        val port = DeterministicWindowCommandPort()
+        val manager = manager(port)
+        val owner = CountingWindowPeerOwner()
+        val window = commit(manager.requestWindow(WindowSpec()).successValue(), port.openCommands.single(), owner)
+        val entered = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        var releasedBeforeReturn = false
+        port.onOpenedClose = {
+            entered.countDown()
+            releasedBeforeReturn = release.await(2, TimeUnit.SECONDS)
+        }
+        val first = async(Dispatchers.Default) { window.close() }
+        try {
+            assertTrue(entered.await(2, TimeUnit.SECONDS))
+            manager.close()
+            assertEquals(WindowPhase.Closed, window.state.value.phase)
+            assertEquals(0, owner.closeCount)
+            release.countDown()
+            assertEquals(KadreResult.Success(WindowCloseOutcome.Closed), first.await())
+            assertTrue(releasedBeforeReturn)
+            assertEquals(1, owner.closeCount)
+            assertEquals(1, port.openedCloseCommands.size)
+        } finally {
+            release.countDown()
+            first.join()
+        }
+    }
+
+    @Test
+    fun failedCloseAdmissionsRemainRetryableWithoutReleasingTheirOwner() = runTest {
+        val failure = KadreFailure.PlatformFailure(KadrePlatform.Fake, "fixture", "close-denied")
+        listOf(
+            OpenedWindowCloseOutcome.TemporarilyUnavailable(true) to KadreFailure.TemporarilyUnavailable(true),
+            OpenedWindowCloseOutcome.PlatformFailure(failure) to failure,
+        ).forEach { (outcome, expected) ->
+            val port = DeterministicWindowCommandPort()
+            val manager = manager(port)
+            val owner = CountingWindowPeerOwner()
+            val window = commit(manager.requestWindow(WindowSpec()).successValue(), port.openCommands.single(), owner)
+            port.openedCloseOutcome = outcome
+            assertEquals(KadreResult.Failure(expected), window.close())
+            assertEquals(WindowPhase.Open, window.state.value.phase)
+            assertEquals(0, owner.closeCount)
+            port.openedCloseOutcome = OpenedWindowCloseOutcome.Accepted
+            assertIs<WindowCloseOutcome.Accepted>(window.close().successValue())
+            assertEquals(2, port.openedCloseCommands.size)
+            port.openCommands.single().nativeClosed()
+            manager.close()
+            assertEquals(1, owner.closeCount)
+        }
+    }
+
+    private suspend fun assertCloseDispatchAllowsConcurrentStimulus(
+        close: suspend (RuntimeWindowManager, Window, WindowCloseRequestId) -> Unit,
+    ) = kotlinx.coroutines.coroutineScope {
+        val port = DeterministicWindowCommandPort()
+        val manager = manager(port)
+        val window = commit(manager.requestWindow(WindowSpec()).successValue(), port.openCommands.single())
+        val event = async(start = CoroutineStart.UNDISPATCHED) {
+            window.events.filterIsInstance<WindowEvent.CloseRequested>().first()
+        }
+        port.openCommands.single().closeRequested()
+        val requestId = event.await().requestId
+        val callbacks = mutableListOf<Thread>()
+        var callbackCompletedBeforePortReturn = false
+        port.onOpenedClose = {
+            val completed = CountDownLatch(1)
+            callbacks += Thread {
+                manager.acceptSurfaceStimulus(inputKey(window.surface.id, "concurrent-close"))
+                completed.countDown()
+            }.apply { start() }
+            callbackCompletedBeforePortReturn = completed.await(2, TimeUnit.SECONDS)
+        }
+        try {
+            close(manager, window, requestId)
+        } finally {
+            callbacks.forEach { it.join(3_000) }
+            manager.close()
+        }
+        assertTrue(callbackCompletedBeforePortReturn, "requestOpenedClose waited on the manager monitor")
+        assertEquals(1, port.openedCloseCommands.size)
+    }
+
+    @Test
+    fun surfaceReadyCallbackFailureClosesItsOwnerExactlyOnce() = runTest {
+        val port = DeterministicWindowCommandPort()
+        val cause = IllegalStateException("surface-ready")
+        val reported = mutableListOf<Throwable>()
+        val manager = manager(port, reported = reported)
+        val request = manager.requestWindow(WindowSpec()).successValue()
+        val owner = CountingWindowPeerOwner()
+
+        port.openCommands.single().commit(owner, onSurfaceReady = { throw cause })
+
+        val window = assertIs<WindowRequestOutcome.OpenedHere>(request.await()).window
+        assertEquals(WindowPhase.Closed, window.state.value.phase)
+        assertEquals(1, port.openedCloseCommands.size)
+        assertEquals(1, owner.closeCount)
+        assertEquals(listOf<Throwable>(cause), reported)
+    }
+
+    @Test
     fun openedCloseExceptionLogicallyRevokesTheWindowAndReturnsPlatformFailure() = runTest {
         val cause = IllegalStateException("opened-close")
         val port = DeterministicWindowCommandPort().apply { onOpenedClose = { throw cause } }
