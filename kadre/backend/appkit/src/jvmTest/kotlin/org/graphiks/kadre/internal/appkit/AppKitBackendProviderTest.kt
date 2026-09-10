@@ -2022,54 +2022,97 @@ class AppKitBackendProviderTest {
         org.graphiks.kadre.diagnostics.KadrePlatformApi::class,
     )
     @Test
-    fun publicAppKitFullscreenCompletesWithOneCorrelatedEffectiveStateOnMacOs() =
-        runPublicAppKitGeometrySession {
-            val window = openPublicGeometryWindow(
-                WindowSpec(
-                    title = "public-fullscreen",
-                    level = WindowLevel.Floating,
-                ),
-            )
-            assertEquals(
-                Capability.Supported(
-                    setOf(FullscreenKind.Borderless),
-                    FeatureAvailability.Available,
-                ),
-                window.capabilities.value.fullscreen,
-            )
-            val events = Channel<WindowEvent>(Channel.UNLIMITED)
-            val collector = launch(start = CoroutineStart.UNDISPATCHED) {
-                window.events.collect(events::send)
-            }
-            try {
-                val outcome = assertIs<WindowUpdateOutcome.Applied>(
-                    window.apply(
-                        WindowUpdate(
-                            fullscreen = PropertyChange.Set(FullscreenMode.Borderless),
-                        ),
-                    ).appKitSuccessValue(),
-                )
+    fun embeddedPublicAppKitFullscreenWaitsForOneCorrelatedEffectiveState() =
+        kotlinx.coroutines.runBlocking {
+            val port = DeterministicAppKitNativeWindowPort("public-fullscreen")
+            val provider = AppKitBackendProvider.forTesting(
+                EmbeddedNativeApplication(),
+                AppKitProcessBroker(),
+                windowDriverFactory = AppKitWindowRuntimeDriverFactory { port },
+                fullscreenAvailability = AppKitFullscreenAvailability("10.7.0"),
+            ) { true }
+            val parentScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob())
+            val observedWindows = CompletableDeferred<WindowManager>()
+            val session = provider.attach(publicWindowRequest(parentScope, observedWindows)).requireSession()
+            val events = Channel<WindowEvent.PropertiesChanged>(Channel.UNLIMITED)
 
-                assertEquals(FullscreenMode.Borderless, outcome.state.fullscreen)
-                assertEquals(WindowLevel.Floating, outcome.state.level)
-                assertEquals(outcome.state, window.state.value)
-                var properties: WindowEvent.PropertiesChanged? = null
-                withTimeout(5.seconds) {
-                    while (properties == null) {
-                        when (val event = events.receive()) {
-                            is WindowEvent.GeometryChanged -> assertNull(event.operationId)
-                            is WindowEvent.PropertiesChanged -> properties = event
-                            else -> error("unexpected fullscreen event: $event")
-                        }
-                    }
+            try {
+                val windows = withTimeout(2.seconds) { observedWindows.await() }
+                val window = assertIs<WindowRequestOutcome.OpenedHere>(
+                    windows.requestWindow(
+                        WindowSpec(
+                            title = "public-fullscreen",
+                            level = WindowLevel.Floating,
+                        ),
+                    )
+                        .appKitSuccessValue()
+                        .await(),
+                ).window
+                assertEquals(
+                    Capability.Supported(
+                        setOf(FullscreenKind.Borderless),
+                        FeatureAvailability.Available,
+                    ),
+                    window.capabilities.value.fullscreen,
+                )
+                val collector = launch(start = CoroutineStart.UNDISPATCHED) {
+                    window.events.filterIsInstance<WindowEvent.PropertiesChanged>().collect(events::send)
                 }
-                val terminal = checkNotNull(properties)
-                assertEquals(outcome.operationId, terminal.operationId)
-                assertEquals(outcome.state, terminal.state)
-                assertEquals(setOf(WindowProperty.Fullscreen), terminal.changed)
+                try {
+                    val update = async(start = CoroutineStart.UNDISPATCHED) {
+                        window.apply(
+                            WindowUpdate(
+                                fullscreen = PropertyChange.Set(FullscreenMode.Borderless),
+                            ),
+                        )
+                    }
+                    withTimeout(2.seconds) {
+                        while (port.fullscreenToggleTargets != listOf(FullscreenMode.Borderless)) yield()
+                    }
+                    assertFalse(update.isCompleted)
+                    assertEquals(FullscreenMode.Windowed, window.state.value.fullscreen)
+
+                    port.emitWillEnter("public-fullscreen")
+                    assertIs<WindowRequestOutcome.OpenedHere>(
+                        windows.requestWindow(WindowSpec(title = "public-fullscreen-will-barrier"))
+                            .appKitSuccessValue()
+                            .await(),
+                    )
+                    assertFalse(update.isCompleted)
+                    assertEquals(FullscreenMode.Windowed, window.state.value.fullscreen)
+                    port.emitDidEnter("public-fullscreen")
+
+                    val outcome = assertIs<WindowUpdateOutcome.Applied>(
+                        withTimeout(2.seconds) { update.await() }.appKitSuccessValue(),
+                    )
+                    assertEquals(FullscreenMode.Borderless, outcome.state.fullscreen)
+                    assertEquals(WindowLevel.Floating, outcome.state.level)
+                    assertEquals(outcome.state, window.state.value)
+                    assertEquals(WindowLevel.Floating, port.level("public-fullscreen"))
+                    val terminal = withTimeout(2.seconds) { events.receive() }
+                    assertEquals(outcome.operationId, terminal.operationId)
+                    assertEquals(outcome.state, terminal.state)
+                    assertEquals(setOf(WindowProperty.Fullscreen), terminal.changed)
+
+                    port.emitDidEnter("public-fullscreen")
+                    val title = assertIs<WindowUpdateOutcome.Applied>(
+                        window.apply(
+                            WindowUpdate(title = PropertyChange.Set("public-fullscreen-after-duplicate")),
+                        ).appKitSuccessValue(),
+                    )
+                    val afterDuplicate = withTimeout(2.seconds) { events.receive() }
+                    assertEquals(title.operationId, afterDuplicate.operationId)
+                    assertEquals(title.state, afterDuplicate.state)
+                    assertEquals(setOf(WindowProperty.Title), afterDuplicate.changed)
+                    assertEquals("public-fullscreen-after-duplicate", window.state.value.title)
+                } finally {
+                    collector.cancel()
+                }
             } finally {
-                collector.cancel()
                 events.close()
+                session.close()
+                session.awaitTermination()
+                parentScope.cancel()
             }
         }
 
