@@ -7,9 +7,9 @@ DRIVER="$SCRIPT_DIR/test-kadre-appkit-contracts.sh"
 FAKE_GRADLE="$SCRIPT_DIR/fixtures/fake-gradlew.sh"
 TEMP_DIR="$(mktemp -d /tmp/kadre-appkit-driver.XXXXXX)"
 EVIDENCE_DIRECTORY="$REPO_ROOT/kadre/backend/appkit/build/contract-evidence"
-EVIDENCE_FILES=("APK-001.json" "APK-002.json" "APK-003.json" "APK-004.json" "APK-005.json" "APK-006.json" "APK-007.json" "APK-008.json" "APK-009.json" "APK-010.json" "APK-011.json" "APK-012.json" "APK-013.json" "APK-014.json")
+EVIDENCE_FILES=("APK-001.json" "APK-002.json" "APK-003.json" "APK-004.json" "APK-005.json" "APK-006.json" "APK-007.json" "APK-008.json" "APK-009.json" "APK-010.json" "APK-011.json" "APK-012.json" "APK-013.json" "APK-014.json" "APK-017.json")
 RUNTIME_EVIDENCE_DIRECTORY="$REPO_ROOT/kadre/runtime/build/contract-evidence"
-RUNTIME_EVIDENCE_FILES=("INP-002.json" "WIN-005.json" "WIN-006.json" "INT-001.json" "DSP-001.json")
+RUNTIME_EVIDENCE_FILES=("INP-002.json" "WIN-005.json" "WIN-006.json" "INT-001.json" "DSP-001.json" "RUN-007.json")
 
 cleanup() {
     local status="$?"
@@ -120,6 +120,20 @@ capture_status observed_status env \
 [[ "$(wc -l < "$TRACE" | tr -d ' ')" == "2" ]] || fail "missing APK-014 evidence did not run both Gradle phases"
 
 rm -rf "$EVIDENCE_DIRECTORY"
+TRACE="$TEMP_DIR/missing-apk017.trace"
+capture_status observed_status env \
+    KADRE_GRADLEW="$FAKE_GRADLE" \
+    KADRE_FAKE_GRADLE_TRACE="$TRACE" \
+    KADRE_FAKE_EVIDENCE_DIRECTORY="$EVIDENCE_DIRECTORY" \
+    KADRE_FAKE_RUNTIME_EVIDENCE_DIRECTORY="$RUNTIME_EVIDENCE_DIRECTORY" \
+    KADRE_FAKE_MISSING_EVIDENCE=APK-017 \
+    GITHUB_SHA="0123456789abcdef" \
+    bash "$DRIVER"
+
+[[ "$observed_status" != "0" ]] || fail "missing APK-017 evidence passed the AppKit contract gate"
+[[ "$(wc -l < "$TRACE" | tr -d ' ')" == "2" ]] || fail "missing APK-017 evidence did not run both Gradle phases"
+
+rm -rf "$EVIDENCE_DIRECTORY"
 rm -rf "$RUNTIME_EVIDENCE_DIRECTORY"
 TRACE="$TEMP_DIR/missing-win005.trace"
 capture_status observed_status env \
@@ -178,6 +192,21 @@ capture_status observed_status env \
 
 [[ "$observed_status" != "0" ]] || fail "missing DSP-001 evidence passed the AppKit contract gate"
 [[ "$(wc -l < "$TRACE" | tr -d ' ')" == "2" ]] || fail "missing DSP-001 evidence did not run both Gradle phases"
+
+rm -rf "$EVIDENCE_DIRECTORY"
+rm -rf "$RUNTIME_EVIDENCE_DIRECTORY"
+TRACE="$TEMP_DIR/missing-run007.trace"
+capture_status observed_status env \
+    KADRE_GRADLEW="$FAKE_GRADLE" \
+    KADRE_FAKE_GRADLE_TRACE="$TRACE" \
+    KADRE_FAKE_EVIDENCE_DIRECTORY="$EVIDENCE_DIRECTORY" \
+    KADRE_FAKE_RUNTIME_EVIDENCE_DIRECTORY="$RUNTIME_EVIDENCE_DIRECTORY" \
+    KADRE_FAKE_MISSING_EVIDENCE=RUN-007 \
+    GITHUB_SHA="0123456789abcdef" \
+    bash "$DRIVER"
+
+[[ "$observed_status" != "0" ]] || fail "missing RUN-007 evidence passed the AppKit contract gate"
+[[ "$(wc -l < "$TRACE" | tr -d ' ')" == "2" ]] || fail "missing RUN-007 evidence did not run both Gradle phases"
 
 rm -rf "$EVIDENCE_DIRECTORY"
 rm -rf "$RUNTIME_EVIDENCE_DIRECTORY"
