@@ -22,9 +22,10 @@ val appKitContractIds = listOf(
     "APK-001", "APK-002", "APK-003", "APK-004", "APK-005", "APK-006",
     "APK-007", "APK-008", "APK-009", "APK-010", "APK-011", "APK-012",
     "APK-013", "APK-014", "APK-015", "APK-016", "APK-017", "APK-018",
+    "APK-019",
 )
 val runtimeContractIds = listOf(
-    "INP-001", "INP-002",
+    "INP-001", "INP-002", "INP-003",
     "WIN-001", "WIN-002", "WIN-003", "WIN-004", "WIN-005", "WIN-006", "WIN-007", "WIN-008",
     "DSP-001", "RUN-007", "RUN-008", "INT-001",
 )

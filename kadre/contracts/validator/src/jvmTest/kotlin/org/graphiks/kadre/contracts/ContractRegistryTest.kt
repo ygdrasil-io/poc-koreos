@@ -12,6 +12,37 @@ import kotlin.test.assertTrue
 
 class ContractRegistryTest {
     @Test
+    fun realRegistryActivatesTheExactPhaseSevenDropContracts() {
+        val recordsById = ContractRegistry.parse(repositoryFile("kadre/contracts/registry/contracts.tsv").readText())
+            .associateBy(ContractRecord::contractId)
+
+        val expectedScenarios = mapOf(
+            "INP-003" to listOf(
+                "runtime-drop-single-winner",
+                "runtime-drop-cancelled-waiter",
+                "runtime-drop-read-exclusivity",
+                "runtime-drop-replay-single-use",
+                "runtime-drop-unknown-length-budget",
+            ),
+            "APK-019" to listOf(
+                "appkit-drop-registered-types",
+                "appkit-drop-native-accepted",
+                "appkit-drop-native-rejected",
+                "appkit-drop-native-teardown",
+            ),
+        )
+        expectedScenarios.forEach { (contractId, scenarios) ->
+            val record = recordsById.getValue(contractId)
+            assertEquals(ContractStatus.Active, record.status)
+            assertEquals(listOf("jvm"), record.requiredTargets)
+            assertEquals("APPKIT-IMPLEMENTATION-ROADMAP.md#Phase 7 — Drag-and-drop", record.source)
+            assertEquals(scenarios, record.scenarios)
+        }
+        assertEquals(ContractOracle.O2, recordsById.getValue("INP-003").oracle)
+        assertEquals(ContractOracle.O3, recordsById.getValue("APK-019").oracle)
+    }
+
+    @Test
     fun realRegistryDeclaresEveryPlannedPhaseEightAndNineContract() {
         val recordsById = ContractRegistry.parse(repositoryFile("kadre/contracts/registry/contracts.tsv").readText())
             .associateBy(ContractRecord::contractId)
