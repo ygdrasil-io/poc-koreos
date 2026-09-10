@@ -1,10 +1,12 @@
 # Cahier manuel AppKit — Phase 8 raw input
 
 La CI prouve l’admission avant l’appel natif, le partage du prompt, le fan-out
-par accès, la révocation, les budgets et le teardown. Ce cahier couvre seulement
-les observations qui exigent un périphérique réel et le réglage macOS **Input
-Monitoring**. Il ne consigne que les deltas et états publics : ni touches, ni
-coordonnées, ni pointeurs natifs, ni contenu saisi.
+par accès, la révocation, les budgets, le teardown, le câblage public et le
+preflight KFFI typé. Elle ne demande jamais Input Monitoring et n’installe
+jamais de tap global réel. Ce cahier couvre seulement les observations qui
+exigent un périphérique réel et le réglage macOS **Input Monitoring**. Il ne
+consigne que les deltas et états publics : ni touches, ni coordonnées, ni
+pointeurs natifs, ni contenu saisi.
 
 Lancer le harness visible :
 

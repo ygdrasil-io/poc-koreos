@@ -10,6 +10,7 @@ import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.filterIsInstance
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
@@ -71,6 +72,10 @@ import org.graphiks.kadre.diagnostics.KadreResult
 import org.graphiks.kadre.display.DisplayManager
 import org.graphiks.kadre.internal.runtime.DisplayPort
 import org.graphiks.kadre.internal.runtime.DisplayPortSnapshot
+import org.graphiks.kadre.internal.runtime.RawInputPort
+import org.graphiks.kadre.internal.runtime.RawInputPortInput
+import org.graphiks.kadre.internal.runtime.RawInputPortLease
+import org.graphiks.kadre.internal.runtime.RawInputPortLeaseEvent
 import org.graphiks.kadre.internal.runtime.desktop.DesktopBackendKind
 import org.graphiks.kadre.internal.runtime.desktop.DesktopBackendProvider
 import org.graphiks.kadre.internal.runtime.desktop.DesktopEmbeddedRequest
@@ -79,6 +84,8 @@ import org.graphiks.kadre.internal.runtime.desktop.DesktopStandaloneRequest
 import org.graphiks.kadre.input.InputEvent
 import org.graphiks.kadre.input.DropOfferState
 import org.graphiks.kadre.input.DropOfferTerminationReason
+import org.graphiks.kadre.input.RawInputAccess
+import org.graphiks.kadre.input.RawInputUnit
 import org.graphiks.kadre.interaction.InteractionAction
 import org.graphiks.kadre.interaction.InteractionEvent
 import org.graphiks.kadre.interaction.InteractionHandler
@@ -396,6 +403,74 @@ class AppKitBackendProviderTest {
             session.awaitTermination()
             assertEquals(1, port.closeCount)
         } finally {
+            parentScope.cancel()
+        }
+    }
+
+    @OptIn(org.graphiks.kadre.diagnostics.DelicateKadreApi::class)
+    @Test
+    fun embeddedPublicRawInputRoutesAControlledAppKitPortWithoutOrdinaryInputInjection() = kotlinx.coroutines.runBlocking {
+        val native = EmbeddedNativeApplication()
+        val rawInputPort = ProviderRawInputPort()
+        val provider = AppKitBackendProvider.forTesting(
+            nativeApplication = native,
+            broker = AppKitProcessBroker(),
+            windowDriverFactory = AppKitWindowRuntimeDriverFactory {
+                DeterministicAppKitNativeWindowPort("public-raw-input")
+            },
+            rawInputPortFactory = { rawInputPort },
+            availability = { true },
+        )
+        val parentScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob())
+        val observedWindows = CompletableDeferred<WindowManager>()
+        val ordinaryEvents = Channel<InputEvent>(Channel.UNLIMITED)
+
+        try {
+            val session = provider.attach(publicWindowRequest(parentScope, observedWindows)).requireSession()
+            val window = assertIs<WindowRequestOutcome.OpenedHere>(
+                observedWindows.await().requestWindow(WindowSpec(title = "public-raw-input"))
+                    .appKitSuccessValue()
+                    .await(),
+            ).window
+            assertEquals(
+                Capability.Supported(Unit, FeatureAvailability.Available),
+                window.surface.input.state.value.capabilities.rawInput,
+            )
+            val ordinaryCollector = launch(start = CoroutineStart.UNDISPATCHED) {
+                window.surface.input.events.collect(ordinaryEvents::send)
+            }
+            try {
+                val access = assertIs<KadreResult.Success<RawInputAccess>>(
+                    window.surface.input.requestRawInput(),
+                ).value
+                val rawEvent = async(start = CoroutineStart.UNDISPATCHED) { access.events.first() }
+
+                rawInputPort.leaseAt(0).emit(
+                    RawInputPortLeaseEvent.Input(
+                        RawInputPortInput(
+                            deltaX = 17.0,
+                            deltaY = -3.0,
+                            unit = RawInputUnit.DeviceCount,
+                            deviceId = null,
+                        ),
+                    ),
+                )
+
+                val received = withTimeout(2.seconds) { rawEvent.await() }
+                assertEquals(17.0, received.deltaX)
+                assertEquals(-3.0, received.deltaY)
+                assertEquals(RawInputUnit.DeviceCount, received.unit)
+                assertNull(received.deviceId)
+                assertNull(withTimeoutOrNull(100.milliseconds) { ordinaryEvents.receive() })
+                access.close()
+            } finally {
+                ordinaryCollector.cancel()
+            }
+            session.close()
+            session.awaitTermination()
+            assertTrue(rawInputPort.closed)
+        } finally {
+            ordinaryEvents.close()
             parentScope.cancel()
         }
     }
@@ -1947,54 +2022,97 @@ class AppKitBackendProviderTest {
         org.graphiks.kadre.diagnostics.KadrePlatformApi::class,
     )
     @Test
-    fun publicAppKitFullscreenCompletesWithOneCorrelatedEffectiveStateOnMacOs() =
-        runPublicAppKitGeometrySession {
-            val window = openPublicGeometryWindow(
-                WindowSpec(
-                    title = "public-fullscreen",
-                    level = WindowLevel.Floating,
-                ),
-            )
-            assertEquals(
-                Capability.Supported(
-                    setOf(FullscreenKind.Borderless),
-                    FeatureAvailability.Available,
-                ),
-                window.capabilities.value.fullscreen,
-            )
-            val events = Channel<WindowEvent>(Channel.UNLIMITED)
-            val collector = launch(start = CoroutineStart.UNDISPATCHED) {
-                window.events.collect(events::send)
-            }
-            try {
-                val outcome = assertIs<WindowUpdateOutcome.Applied>(
-                    window.apply(
-                        WindowUpdate(
-                            fullscreen = PropertyChange.Set(FullscreenMode.Borderless),
-                        ),
-                    ).appKitSuccessValue(),
-                )
+    fun embeddedPublicAppKitFullscreenWaitsForOneCorrelatedEffectiveState() =
+        kotlinx.coroutines.runBlocking {
+            val port = DeterministicAppKitNativeWindowPort("public-fullscreen")
+            val provider = AppKitBackendProvider.forTesting(
+                EmbeddedNativeApplication(),
+                AppKitProcessBroker(),
+                windowDriverFactory = AppKitWindowRuntimeDriverFactory { port },
+                fullscreenAvailability = AppKitFullscreenAvailability("10.7.0"),
+            ) { true }
+            val parentScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob())
+            val observedWindows = CompletableDeferred<WindowManager>()
+            val session = provider.attach(publicWindowRequest(parentScope, observedWindows)).requireSession()
+            val events = Channel<WindowEvent.PropertiesChanged>(Channel.UNLIMITED)
 
-                assertEquals(FullscreenMode.Borderless, outcome.state.fullscreen)
-                assertEquals(WindowLevel.Floating, outcome.state.level)
-                assertEquals(outcome.state, window.state.value)
-                var properties: WindowEvent.PropertiesChanged? = null
-                withTimeout(5.seconds) {
-                    while (properties == null) {
-                        when (val event = events.receive()) {
-                            is WindowEvent.GeometryChanged -> assertNull(event.operationId)
-                            is WindowEvent.PropertiesChanged -> properties = event
-                            else -> error("unexpected fullscreen event: $event")
-                        }
-                    }
+            try {
+                val windows = withTimeout(2.seconds) { observedWindows.await() }
+                val window = assertIs<WindowRequestOutcome.OpenedHere>(
+                    windows.requestWindow(
+                        WindowSpec(
+                            title = "public-fullscreen",
+                            level = WindowLevel.Floating,
+                        ),
+                    )
+                        .appKitSuccessValue()
+                        .await(),
+                ).window
+                assertEquals(
+                    Capability.Supported(
+                        setOf(FullscreenKind.Borderless),
+                        FeatureAvailability.Available,
+                    ),
+                    window.capabilities.value.fullscreen,
+                )
+                val collector = launch(start = CoroutineStart.UNDISPATCHED) {
+                    window.events.filterIsInstance<WindowEvent.PropertiesChanged>().collect(events::send)
                 }
-                val terminal = checkNotNull(properties)
-                assertEquals(outcome.operationId, terminal.operationId)
-                assertEquals(outcome.state, terminal.state)
-                assertEquals(setOf(WindowProperty.Fullscreen), terminal.changed)
+                try {
+                    val update = async(start = CoroutineStart.UNDISPATCHED) {
+                        window.apply(
+                            WindowUpdate(
+                                fullscreen = PropertyChange.Set(FullscreenMode.Borderless),
+                            ),
+                        )
+                    }
+                    withTimeout(2.seconds) {
+                        while (port.fullscreenToggleTargets != listOf(FullscreenMode.Borderless)) yield()
+                    }
+                    assertFalse(update.isCompleted)
+                    assertEquals(FullscreenMode.Windowed, window.state.value.fullscreen)
+
+                    port.emitWillEnter("public-fullscreen")
+                    assertIs<WindowRequestOutcome.OpenedHere>(
+                        windows.requestWindow(WindowSpec(title = "public-fullscreen-will-barrier"))
+                            .appKitSuccessValue()
+                            .await(),
+                    )
+                    assertFalse(update.isCompleted)
+                    assertEquals(FullscreenMode.Windowed, window.state.value.fullscreen)
+                    port.emitDidEnter("public-fullscreen")
+
+                    val outcome = assertIs<WindowUpdateOutcome.Applied>(
+                        withTimeout(2.seconds) { update.await() }.appKitSuccessValue(),
+                    )
+                    assertEquals(FullscreenMode.Borderless, outcome.state.fullscreen)
+                    assertEquals(WindowLevel.Floating, outcome.state.level)
+                    assertEquals(outcome.state, window.state.value)
+                    assertEquals(WindowLevel.Floating, port.level("public-fullscreen"))
+                    val terminal = withTimeout(2.seconds) { events.receive() }
+                    assertEquals(outcome.operationId, terminal.operationId)
+                    assertEquals(outcome.state, terminal.state)
+                    assertEquals(setOf(WindowProperty.Fullscreen), terminal.changed)
+
+                    port.emitDidEnter("public-fullscreen")
+                    val title = assertIs<WindowUpdateOutcome.Applied>(
+                        window.apply(
+                            WindowUpdate(title = PropertyChange.Set("public-fullscreen-after-duplicate")),
+                        ).appKitSuccessValue(),
+                    )
+                    val afterDuplicate = withTimeout(2.seconds) { events.receive() }
+                    assertEquals(title.operationId, afterDuplicate.operationId)
+                    assertEquals(title.state, afterDuplicate.state)
+                    assertEquals(setOf(WindowProperty.Title), afterDuplicate.changed)
+                    assertEquals("public-fullscreen-after-duplicate", window.state.value.title)
+                } finally {
+                    collector.cancel()
+                }
             } finally {
-                collector.cancel()
                 events.close()
+                session.close()
+                session.awaitTermination()
+                parentScope.cancel()
             }
         }
 
@@ -3716,6 +3834,41 @@ private class ProviderDisplayPort : DisplayPort {
 
     override fun close() {
         closeCount += 1
+    }
+}
+
+private class ProviderRawInputPort : RawInputPort {
+    private val leases = mutableListOf<ProviderRawInputLease>()
+    var closed: Boolean = false
+        private set
+
+    override val rawInputCapability: Capability<Unit> =
+        Capability.Supported(Unit, FeatureAvailability.Available)
+
+    override suspend fun requestAccess(): KadreResult<RawInputPortLease> =
+        KadreResult.Success(ProviderRawInputLease().also(leases::add))
+
+    fun leaseAt(index: Int): ProviderRawInputLease = leases[index]
+
+    override fun close() {
+        if (!closed) {
+            closed = true
+            leases.forEach(ProviderRawInputLease::close)
+        }
+    }
+}
+
+private class ProviderRawInputLease : RawInputPortLease {
+    private val eventsChannel = Channel<RawInputPortLeaseEvent>(Channel.UNLIMITED)
+
+    override val events = eventsChannel.receiveAsFlow()
+
+    fun emit(event: RawInputPortLeaseEvent) {
+        check(eventsChannel.trySend(event).isSuccess)
+    }
+
+    override fun close() {
+        eventsChannel.close()
     }
 }
 

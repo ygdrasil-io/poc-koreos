@@ -369,8 +369,11 @@ et le non-contournement de policy.
 - isolation entre peers ; la policy discrète appartient à `WIN-005`.
 
 Les tests déterministes prouvent la machine à états, les stimuli internes et
-les callbacks tardifs. Les tests macOS réels prouvent selector, notifications,
-completion, readback effectif du level et guard de disponibilité. Le cahier
+les callbacks tardifs. La preuve d'activation publique est une session embedded
+déterministe : elle vérifie l'attente de `Window.apply`, la corrélation et
+l'unicité du terminal sans dépendre de l'état visuel du processus. Les tests
+macOS réels prouvent selector, notifications, completion, readback effectif du
+level et guard de disponibilité. Le cahier
 `backend/appkit/manual/phase-5-fullscreen.md` relève séparément l'animation
 visible et le comportement de Space plein écran : il ne bloque pas la CI et ne
 remplace aucune preuve O2/O3.

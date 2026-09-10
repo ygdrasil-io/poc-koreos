@@ -25,7 +25,7 @@ internal object KffiAppKitRawInputNative : AppKitRawInputNative {
         listener: (AppKitRawInputNativeEvent) -> Unit,
     ): AppKitRawInputNativeTap = KffiAppKitMainThread.call {
         KffiAppKitRawInputTap(
-            CGListenOnlyEventTap.install(MOUSE_MOTION_MASK) { type, event ->
+            CGListenOnlyEventTap.install(APPKIT_RAW_INPUT_EVENT_MASK) { type, event ->
                 listener(type.toRawInputEvent(event))
             },
         )
@@ -55,7 +55,8 @@ private class KffiAppKitRawInputTap(
     override fun close() = KffiAppKitMainThread.call(tap::close)
 }
 
-private val MOUSE_MOTION_MASK: Long = listOf(
+/** The global source is deliberately restricted to pointer motion; keyboard input remains local. */
+internal val APPKIT_RAW_INPUT_EVENT_MASK: Long = listOf(
     CGEventType.kCGEventMouseMoved,
     CGEventType.kCGEventLeftMouseDragged,
     CGEventType.kCGEventRightMouseDragged,

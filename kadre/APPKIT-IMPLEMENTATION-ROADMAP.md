@@ -532,12 +532,15 @@ Respecter la décision synchrone de `NSDraggingDestination` tout en exposant un 
 
 #### Livraison actuelle
 
-Le coordinator runtime et le bridge AppKit process-wide sont fusionnés :
-permission Input Monitoring, source listen-only, fan-out explicite et budgets
-isolés par `RawInputAccess`. `INP-002` et `APK-013` sont néanmoins `planned`;
-aucune evidence n'est encore enregistrée. La phase 8 reste ouverte jusqu'à
-l'activation conjointe de ces deux contrats, jamais par simple existence du
-code ou par une exécution locale non tracée.
+Le coordinator runtime et le bridge AppKit process-wide sont livrés :
+permission Input Monitoring, source KFFI listen-only, fan-out explicite et
+budgets isolés par `RawInputAccess`. `INP-002` (O2) et `APK-013` (O3) sont
+actifs avec evidence générée : admission, fan-out, isolation, budget,
+annulation, révocation, récupération de tap et teardown sont exécutés en CI.
+La preuve O3 macOS ne fait qu’un preflight KFFI typé; elle ne demande jamais
+Input Monitoring et n’installe aucun tap global. Le matériel réel et la
+permission système sont donc conservés dans le cahier manuel, sans faux succès
+automatisé.
 
 #### Objectif
 
