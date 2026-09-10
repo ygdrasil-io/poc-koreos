@@ -18,6 +18,16 @@ import kotlinx.coroutines.yield
 import org.graphiks.kffi.objc.NSApplication
 import org.graphiks.kffi.objc.NSApplicationActivationPolicy
 import org.graphiks.kffi.objc.NSButton
+import org.graphiks.kffi.objc.NSArray
+import org.graphiks.kffi.objc.NSArray_arrayWithObject
+import org.graphiks.kffi.objc.NSDragOperation
+import org.graphiks.kffi.objc.NSPasteboard
+import org.graphiks.kffi.objc.asNSDraggingDestination
+import org.graphiks.kffi.objc.registeredDraggedTypes
+import org.graphiks.kffi.objc.managed.ObjCManagedClass
+import org.graphiks.kffi.objc.managed.ObjCMethodSignatures
+import org.graphiks.kffi.objc.managed.ObjCStrongRef
+import org.graphiks.kffi.objc.managed.retainStrong
 import org.graphiks.kffi.objc.NSDefaultRunLoopMode
 import org.graphiks.kffi.objc.NSDate_distantFuture
 import org.graphiks.kffi.objc.NSDate_date
@@ -67,6 +77,11 @@ import org.graphiks.kadre.internal.runtime.desktop.DesktopEmbeddedRequest
 import org.graphiks.kadre.internal.runtime.desktop.DesktopIntegrationKind
 import org.graphiks.kadre.internal.runtime.desktop.DesktopStandaloneRequest
 import org.graphiks.kadre.input.InputEvent
+import org.graphiks.kadre.input.DropOfferState
+import org.graphiks.kadre.input.DropOfferTerminationReason
+import org.graphiks.kadre.interaction.InteractionAction
+import org.graphiks.kadre.interaction.InteractionEvent
+import org.graphiks.kadre.interaction.InteractionHandler
 import org.graphiks.kadre.input.InputStateResetReason
 import org.graphiks.kadre.input.KeyState
 import org.graphiks.kadre.input.PhysicalKey
@@ -137,6 +152,186 @@ import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
 class AppKitBackendProviderTest {
+    @OptIn(
+        org.graphiks.kadre.diagnostics.DelicateKadreApi::class,
+        org.graphiks.kadre.diagnostics.KadrePlatformApi::class,
+        org.graphiks.kffi.objc.PlatformAvailability::class,
+    )
+    @Test
+    fun managedViewRegistersDraggedTypesAndRoutesAcceptedDropToPublicKadreTransferOnMacOs() =
+        runPublicAppKitGeometrySession {
+            val window = openPublicGeometryWindow("native-drop-accepted")
+            val registration = window.surface.installInteractionHandler(
+                InteractionHandler { context, event ->
+                    if (event is InteractionEvent.DropEntered) {
+                        context.request(InteractionAction.AcceptDrop(event.offer.id)).appKitSuccessValue()
+                    }
+                },
+            ).appKitSuccessValue()
+            val events = Channel<InputEvent>(Channel.UNLIMITED)
+            val collector = launch(start = CoroutineStart.UNDISPATCHED) {
+                window.surface.input.events.collect { event ->
+                    if (event is InputEvent.DropEntered || event is InputEvent.DropMoved ||
+                        event is InputEvent.Dropped) events.send(event)
+                }
+            }
+            try {
+                window.withDesktopHandle { handle ->
+                    ObjCRuntime.autoreleasePool {
+                        val appKit = assertIs<DesktopNativeWindowHandle.AppKit>(handle)
+                        val view = NSView(MemorySegment.ofAddress(appKit.nsViewAddress.toLong()))
+                        val registered = NSArray(view.registeredDraggedTypes())
+                        val types = (0L until registered.count()).map {
+                            ObjCRuntime.toJavaString(registered.objectAtIndex(it))
+                        }
+                        assertTrue(types.containsAll(listOf(
+                            "public.file-url", "public.url", "public.utf8-plain-text", "public.text",
+                            "public.data", "public.html", "public.rtf", "public.png", "public.jpeg", "public.tiff",
+                        )), types.toString())
+                        NativePublicDropSender("Kadre native drop — snapshot").use { sender ->
+                            val destination = view.ptr.asNSDraggingDestination()
+                            assertEquals(NSDragOperation.NSDragOperationCopy, destination.draggingEntered(sender.pointer))
+                            sender.invalidatePasteboard()
+                            assertEquals(NSDragOperation.NSDragOperationCopy, destination.draggingUpdated(sender.pointer))
+                            assertTrue(destination.performDragOperation(sender.pointer))
+                            destination.concludeDragOperation(sender.pointer)
+                        }
+                    }
+                }.appKitSuccessValue()
+
+                val entered = withTimeout(5.seconds) { assertIs<InputEvent.DropEntered>(events.receive()) }
+                val moved = withTimeout(5.seconds) { assertIs<InputEvent.DropMoved>(events.receive()) }
+                val dropped = withTimeout(5.seconds) { assertIs<InputEvent.Dropped>(events.receive()) }
+                assertEquals(org.graphiks.kadre.surface.LogicalPoint(12.5, 24.0), entered.position)
+                assertEquals(entered.offer.id, moved.offerId)
+                assertSame(entered.offer, dropped.offer)
+                assertEquals(DropOfferState.TransferAvailable, dropped.offer.state.value)
+                val transfer = dropped.offer.claimTransfer().appKitSuccessValue()
+                try {
+                    val bytes = mutableListOf<Byte>()
+                    transfer.items.single().collectBytes(256) { bytes.addAll(it.toList()) }.appKitSuccessValue()
+                    assertEquals("Kadre native drop — snapshot", bytes.toByteArray().decodeToString())
+                    assertEquals(DropOfferState.Claimed, dropped.offer.state.value)
+                } finally {
+                    transfer.close()
+                }
+            } finally {
+                registration.close()
+                collector.cancel()
+                events.close()
+            }
+        }
+
+    @OptIn(
+        org.graphiks.kadre.diagnostics.DelicateKadreApi::class,
+        org.graphiks.kadre.diagnostics.KadrePlatformApi::class,
+        org.graphiks.kffi.objc.PlatformAvailability::class,
+    )
+    @Test
+    fun managedViewReturnsNoneForRejectedDropAndLeavesNoPublicOfferOnMacOs() =
+        runPublicAppKitGeometrySession {
+            val window = openPublicGeometryWindow("native-drop-rejected")
+            val entered = async(start = CoroutineStart.UNDISPATCHED) {
+                window.surface.input.events.filterIsInstance<InputEvent.DropEntered>().first()
+            }
+            try {
+                window.withDesktopHandle { handle ->
+                    ObjCRuntime.autoreleasePool {
+                        val appKit = assertIs<DesktopNativeWindowHandle.AppKit>(handle)
+                        val destination = MemorySegment.ofAddress(appKit.nsViewAddress.toLong()).asNSDraggingDestination()
+                        NativePublicDropSender("rejected").use { sender ->
+                            assertEquals(NSDragOperation.NSDragOperationNone, destination.draggingEntered(sender.pointer))
+                            assertEquals(NSDragOperation.NSDragOperationNone, destination.draggingUpdated(sender.pointer))
+                            assertFalse(destination.performDragOperation(sender.pointer))
+                            destination.concludeDragOperation(sender.pointer)
+                        }
+                    }
+                }.appKitSuccessValue()
+                val offer = withTimeout(5.seconds) { entered.await() }.offer
+                assertEquals(DropOfferState.Terminated(DropOfferTerminationReason.Rejected), offer.state.value)
+                assertEquals(
+                    KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.DropTransfer)),
+                    offer.claimTransfer(),
+                )
+            } finally {
+                entered.cancel()
+            }
+        }
+
+    @OptIn(
+        org.graphiks.kadre.diagnostics.DelicateKadreApi::class,
+        org.graphiks.kadre.diagnostics.KadrePlatformApi::class,
+        org.graphiks.kffi.objc.PlatformAvailability::class,
+    )
+    @Test
+    fun managedViewExitAndWindowTeardownRevokeTheDropSelectorsOnMacOs() =
+        runPublicAppKitGeometrySession {
+            val window = openPublicGeometryWindow("native-drop-teardown")
+            // A second public lease keeps cleanup and post-close selector calls on the AppKit owner thread.
+            val ownerWindow = openPublicGeometryWindow("native-drop-owner-lease")
+            val handlerCalls = AtomicInteger()
+            val registration = window.surface.installInteractionHandler(
+                InteractionHandler { context, event ->
+                    if (event is InteractionEvent.DropEntered) {
+                        handlerCalls.incrementAndGet()
+                        context.request(InteractionAction.AcceptDrop(event.offer.id)).appKitSuccessValue()
+                    }
+                },
+            ).appKitSuccessValue()
+            val events = Channel<InputEvent>(Channel.UNLIMITED)
+            val collector = launch(start = CoroutineStart.UNDISPATCHED) {
+                window.surface.input.events.collect { event ->
+                    if (event is InputEvent.DropEntered || event is InputEvent.DropExited ||
+                        event is InputEvent.DropMoved || event is InputEvent.Dropped) events.send(event)
+                }
+            }
+            val retainedView = window.withDesktopHandle { handle ->
+                val appKit = assertIs<DesktopNativeWindowHandle.AppKit>(handle)
+                NSView(MemorySegment.ofAddress(appKit.nsViewAddress.toLong())).retainStrong()
+            }.appKitSuccessValue()
+            try {
+                window.withDesktopHandle {
+                    ObjCRuntime.autoreleasePool {
+                        NativePublicDropSender("exit").use { sender ->
+                            val destination = retainedView.value.ptr.asNSDraggingDestination()
+                            assertEquals(NSDragOperation.NSDragOperationCopy, destination.draggingEntered(sender.pointer))
+                            destination.draggingExited(sender.pointer)
+                        }
+                    }
+                }.appKitSuccessValue()
+                val entered = withTimeout(5.seconds) { assertIs<InputEvent.DropEntered>(events.receive()) }
+                val exited = withTimeout(5.seconds) { assertIs<InputEvent.DropExited>(events.receive()) }
+                assertEquals(entered.offer.id, exited.offerId)
+                assertEquals(DropOfferState.Terminated(DropOfferTerminationReason.LeftSurface), entered.offer.state.value)
+                assertEquals(
+                    KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.DropTransfer)),
+                    entered.offer.claimTransfer(),
+                )
+                assertEquals(1, handlerCalls.get())
+
+                window.close().appKitSuccessValue()
+                withTimeout(5.seconds) { window.state.first { it.phase == WindowPhase.Closed } }
+                ownerWindow.withDesktopHandle {
+                    ObjCRuntime.autoreleasePool {
+                        NativePublicDropSender("after-close").use { sender ->
+                            val destination = retainedView.value.ptr.asNSDraggingDestination()
+                            assertEquals(NSDragOperation.NSDragOperationNone, destination.draggingEntered(sender.pointer))
+                            assertEquals(NSDragOperation.NSDragOperationNone, destination.draggingUpdated(sender.pointer))
+                            assertFalse(destination.performDragOperation(sender.pointer))
+                        }
+                    }
+                }.appKitSuccessValue()
+                withTimeout(5.seconds) { collector.join() }
+                assertEquals(1, handlerCalls.get())
+                assertTrue(events.tryReceive().isFailure)
+            } finally {
+                ownerWindow.withDesktopHandle { retainedView.close() }.appKitSuccessValue()
+                registration.close()
+                collector.cancel()
+                events.close()
+            }
+        }
+
     @Test
     fun embeddedSessionPublishesAvailableMemoryPressureAndReceivesNativeSignals() = kotlinx.coroutines.runBlocking {
         val nativeApplication = EmbeddedNativeApplication()
@@ -3400,6 +3595,66 @@ private class FailingStopNativeApplication : AppKitNativeApplication {
     override fun emergencyStop() {
         emergencyStopCount += 1
         stop.countDown()
+    }
+}
+
+/** Native sender only: the destination remains the real Kadre-owned NSView. */
+private class NativePublicDropSender(text: String) : AutoCloseable {
+    private var pasteboardOwner: ObjCStrongRef<NSPasteboard>? = NSPasteboard.pasteboardWithUniqueName().let {
+        check(it != MemorySegment.NULL) { "AppKit did not create a private pasteboard" }
+        NSPasteboard(it).retainStrong()
+    }
+    private val instance = try {
+        Arena.ofConfined().use { arena ->
+            val pasteboard = checkNotNull(pasteboardOwner).value
+            val type = ObjCRuntime.newNSString(arena, "public.utf8-plain-text")
+            pasteboard.declareTypes_owner(NSArray_arrayWithObject(type), MemorySegment.NULL)
+            check(pasteboard.setString_forType(ObjCRuntime.newNSString(arena, text), type))
+        }
+        ObjCManagedClass.registerOnce(
+            superclassName = "NSObject",
+            protocols = setOf("NSDraggingInfo"),
+            methods = mapOf(
+                "draggingLocation" to ObjCMethodSignatures.Point,
+                "draggingPasteboard" to ObjCMethodSignatures.Object,
+            ),
+        ).createInstance {
+            onPoint("draggingLocation", fallback = NSPoint(0.0, 0.0)) { NSPoint(12.5, 24.0) }
+            onObject("draggingPasteboard", fallback = null) { pasteboardOwner?.value }
+        }
+    } catch (failure: Throwable) {
+        invalidatePasteboard()
+        throw failure
+    }
+
+    val pointer: MemorySegment get() = instance.receiver.ptr
+
+    fun invalidatePasteboard() {
+        val owner = pasteboardOwner ?: return
+        pasteboardOwner = null
+        try {
+            owner.value.clearContents()
+            Arena.ofConfined().use { arena ->
+                assertEquals(
+                    MemorySegment.NULL,
+                    owner.value.stringForType(ObjCRuntime.newNSString(arena, "public.utf8-plain-text")),
+                )
+            }
+        } finally {
+            try {
+                owner.value.releaseGlobally()
+            } finally {
+                owner.close()
+            }
+        }
+    }
+
+    override fun close() {
+        try {
+            instance.close()
+        } finally {
+            invalidatePasteboard()
+        }
     }
 }
 
