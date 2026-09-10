@@ -395,7 +395,11 @@ refusé, ou une failure corrélée après commit ; jamais un `Accepted`
 intermédiaire. L'initialisation `Borderless` non corrélable reste refusée.
 `Exclusive` est désormais traité par la sous-tranche display dédiée
 `APPKIT-PHASE-9-EXCLUSIVE-FULLSCREEN-DESIGN.md` : son implémentation existe,
-mais `WIN-008` et `APK-016` restent `planned` jusqu'à leur evidence O2/O3.
+ainsi qu'une preuve publique non disruptive et le cahier
+`backend/appkit/manual/phase-9-exclusive-fullscreen.md`. `WIN-008` et
+`APK-016` restent néanmoins `planned` jusqu'à l'activation conjointe de leurs
+evidence O2/O3 et d'une exécution matérielle tracée sur un display de test
+distinct.
 Avant cette activation, l'absence de support runtime d'`Exclusive` produit le
 refus de champ explicite ; elle ne réduit jamais la capability `Borderless`.
 Les contrats `WIN-005` et `APK-010` sont actifs ; le cahier manuel
@@ -576,10 +580,11 @@ public et non heuristique.
 
 L'observation d'appearance, la source de pression mémoire et le broker de
 fullscreen exclusif sont fusionnés mais restent `planned` jusqu'à leur evidence
-O2/O3. `outerPosition` reste explicitement `Unsupported` en attente d'une
-preuve matérielle multi-écran à échelles mixtes ; `WIN-007`, `APK-015`,
-`WIN-008`, `APK-016`, `RUN-007`, `APK-017`, `RUN-008` et `APK-018` ne sont donc
-pas encore livrés contractuellement.
+O2/O3. Pour le fullscreen exclusif, cette activation attend également la trace
+du cahier matériel sur display dédié. `outerPosition` reste explicitement
+`Unsupported` en attente d'une preuve matérielle multi-écran à échelles mixtes ;
+`WIN-007`, `APK-015`, `WIN-008`, `APK-016`, `RUN-007`, `APK-017`, `RUN-008` et
+`APK-018` ne sont donc pas encore livrés contractuellement.
 
 #### Objectif
 

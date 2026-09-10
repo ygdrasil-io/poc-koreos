@@ -72,6 +72,8 @@ import org.graphiks.kadre.diagnostics.KadreResult
 import org.graphiks.kadre.display.DisplayInventory
 import org.graphiks.kadre.display.DisplayManager
 import org.graphiks.kadre.internal.runtime.DisplayPort
+import org.graphiks.kadre.internal.runtime.DisplayPortDisplay
+import org.graphiks.kadre.internal.runtime.DisplayPortMode
 import org.graphiks.kadre.internal.runtime.DisplayPortSnapshot
 import org.graphiks.kadre.internal.runtime.RawInputPort
 import org.graphiks.kadre.internal.runtime.RawInputPortInput
@@ -105,6 +107,9 @@ import org.graphiks.kadre.surface.CursorStyle
 import org.graphiks.kadre.surface.HitTestingMode
 import org.graphiks.kadre.surface.InputDefaultBehavior
 import org.graphiks.kadre.surface.LogicalSize
+import org.graphiks.kadre.surface.PhysicalPoint
+import org.graphiks.kadre.surface.PhysicalRect
+import org.graphiks.kadre.surface.PhysicalSize
 import org.graphiks.kadre.surface.PropertyChange
 import org.graphiks.kadre.surface.SurfaceAttachmentState
 import org.graphiks.kadre.surface.SurfaceAppearance
@@ -407,6 +412,64 @@ class AppKitBackendProviderTest {
             parentScope.cancel()
         }
     }
+
+    @Test
+    fun embeddedPublicSessionPublishesExclusiveFullscreenAfterDisplayEnumerationWithoutCapture() =
+        kotlinx.coroutines.runBlocking {
+            val displayNative = ProviderExclusiveDisplayNative()
+            var captureAttempts = 0
+            val broker = AppKitProcessBroker(
+                displayBrokerFactory = { AppKitDisplayBroker(displayNative) },
+                exclusiveDisplayBridge = object : AppKitExclusiveDisplayBridge {
+                    override val availability: AppKitExclusiveBridgeAvailability = AppKitExclusiveBridgeAvailability.Available
+
+                    override fun open(displayKey: Long, modeKey: Long): AppKitExclusiveDisplayOpenResult {
+                        captureAttempts += 1
+                        error("the capability proof must not capture a display")
+                    }
+                },
+            )
+            val provider = AppKitBackendProvider.forTesting(
+                nativeApplication = EmbeddedNativeApplication(),
+                broker = broker,
+                windowDriverFactory = AppKitWindowRuntimeDriverFactory {
+                    DeterministicAppKitNativeWindowPort("public-exclusive-capability")
+                },
+                displayPortFactory = broker::openDisplayPort,
+                availability = { true },
+            )
+            val parentScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob())
+            val observedWindows = CompletableDeferred<WindowManager>()
+            val observedDisplays = CompletableDeferred<DisplayManager>()
+            val session = provider.attach(
+                publicWindowAndDisplayRequest(parentScope, observedWindows, observedDisplays),
+            ).requireSession()
+
+            try {
+                val displays = withTimeout(2.seconds) { observedDisplays.await() }
+                assertIs<DisplayInventory.Enumerated>(displays.requestAccess().appKitSuccessValue().inventory)
+
+                val window = assertIs<WindowRequestOutcome.OpenedHere>(
+                    withTimeout(2.seconds) {
+                        observedWindows.await().requestWindow(WindowSpec(title = "public-exclusive-capability"))
+                            .appKitSuccessValue()
+                            .await()
+                    },
+                ).window
+                assertEquals(
+                    Capability.Supported(
+                        setOf(FullscreenKind.Borderless, FullscreenKind.Exclusive),
+                        FeatureAvailability.Available,
+                    ),
+                    window.capabilities.value.fullscreen,
+                )
+                assertEquals(0, captureAttempts)
+            } finally {
+                session.close()
+                session.awaitTermination()
+                parentScope.cancel()
+            }
+        }
 
     @OptIn(org.graphiks.kadre.diagnostics.DelicateKadreApi::class)
     @Test
@@ -3840,6 +3903,23 @@ private fun publicWindowRequest(
     allowUserAttention,
 )
 
+private fun publicWindowAndDisplayRequest(
+    parentScope: kotlinx.coroutines.CoroutineScope,
+    captureWindows: CompletableDeferred<WindowManager>,
+    captureDisplays: CompletableDeferred<DisplayManager>,
+): DesktopEmbeddedRequest = DesktopEmbeddedRequest(
+    parentScope,
+    KadreApplicationFactory {
+        KadreApplication {
+            captureWindows.complete(windows)
+            captureDisplays.complete(displays)
+            kotlinx.coroutines.awaitCancellation()
+        }
+    },
+    DesktopIntegrationKind.AppKitMainLoop,
+    KadrePolicies.Default,
+)
+
 private class ProviderDisplayPort : DisplayPort {
     var closeCount: Int = 0
         private set
@@ -3856,6 +3936,30 @@ private class ProviderDisplayPort : DisplayPort {
     override fun close() {
         closeCount += 1
     }
+}
+
+private class ProviderExclusiveDisplayNative : AppKitDisplayNative {
+    override val enumerationCapability: Capability<Unit> = Capability.Supported(Unit, FeatureAvailability.Available)
+
+    override fun snapshot(): DisplayPortSnapshot = DisplayPortSnapshot(
+        primaryKey = 17L,
+        displays = listOf(
+            DisplayPortDisplay(
+                key = 17L,
+                type = org.graphiks.kadre.display.DisplayType.Physical,
+                name = "Exclusive capability display",
+                bounds = PhysicalRect(PhysicalPoint(0, 0), PhysicalSize(1920, 1080)),
+                workArea = PhysicalRect(PhysicalPoint(0, 0), PhysicalSize(1920, 1040)),
+                scaleFactor = 2.0,
+                currentModeKey = 701L,
+                modes = listOf(DisplayPortMode(701L, PhysicalSize(1920, 1080), 60.0, 24)),
+            ),
+        ),
+    )
+
+    override fun observeReconfiguration(listener: () -> Unit): AutoCloseable = AutoCloseable {}
+
+    override fun close() = Unit
 }
 
 private class ProviderRawInputPort : RawInputPort {

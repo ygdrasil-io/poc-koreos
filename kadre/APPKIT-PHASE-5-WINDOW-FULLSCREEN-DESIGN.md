@@ -15,14 +15,19 @@ Le périmètre public est fermé :
 | --- | --- | --- |
 | `FullscreenMode.Windowed` | sortie du fullscreen natif | supportée |
 | `FullscreenMode.Borderless` | `NSWindow.toggleFullScreen` | supportée |
-| `FullscreenMode.Exclusive` | display et mode exclusifs | update : `PartiallyApplied(Fullscreen = Unsupported(UpdateWindow))` ; création : `Rejected(Unsupported(RequestWindow))` |
+| `FullscreenMode.Exclusive` | display et mode exclusifs | création : `Rejected(Unsupported(RequestWindow))` ; update : contrat conditionnel de phase 9, sinon `PartiallyApplied(Fullscreen = Unsupported(UpdateWindow))` |
 
 `Borderless` désigne le fullscreen géré par l'espace macOS. Kadre ajoute
 `NSWindowCollectionBehaviorFullScreenPrimary` en préservant les autres bits de
 `collectionBehavior` ; il ne choisit pas d'écran, ne personnalise pas
 l'animation et ne touche pas aux presentation options process-wide.
-`Exclusive` reste hors scope jusqu'à la phase 9, qui fournira l'inventaire de
-displays, les modes et la restauration nécessaires.
+`Exclusive` est traité par la sous-tranche phase 9
+[`APPKIT-PHASE-9-EXCLUSIVE-FULLSCREEN-DESIGN.md`](APPKIT-PHASE-9-EXCLUSIVE-FULLSCREEN-DESIGN.md).
+Le présent document conserve uniquement la règle de création rejetée et le
+fullscreen `Borderless` géré par les espaces macOS. Les règles historiques de
+ce document qui décrivent l'update `Exclusive` comme systématiquement refusé
+sont remplacées par le contrat de phase 9 lorsque `Exclusive` est annoncé dans
+`WindowCapabilities.fullscreen`.
 
 `WindowSpec(fullscreen = Borderless)` échoue immédiatement avec
 `KadreFailure.InvalidRequest("fullscreen")`, avant la création du peer. Une
