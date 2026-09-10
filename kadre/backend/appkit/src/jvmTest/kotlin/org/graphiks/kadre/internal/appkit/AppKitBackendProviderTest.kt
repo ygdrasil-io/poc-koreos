@@ -758,10 +758,13 @@ class AppKitBackendProviderTest {
                 assertIs<Capability.Unsupported>(first.surface.capabilities.value.platformAccess)
 
                 first.close()
-                withTimeout(2.seconds) { first.state.first { it.phase == WindowPhase.Closed } }
+                val afterClose = withTimeout(2.seconds) {
+                    windows.state.first { it.windows == listOf(second) }
+                }
 
-                assertEquals(listOf(second), windows.state.value.windows)
-                assertSame(second, windows.state.value.primary)
+                assertEquals(WindowPhase.Closed, first.state.value.phase)
+                assertEquals(listOf(second), afterClose.windows)
+                assertSame(second, afterClose.primary)
             } finally {
                 session.close()
                 session.awaitTermination()
