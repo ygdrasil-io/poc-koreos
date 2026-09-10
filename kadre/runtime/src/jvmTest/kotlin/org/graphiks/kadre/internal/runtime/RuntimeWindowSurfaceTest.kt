@@ -204,6 +204,128 @@ class RuntimeWindowSurfaceTest {
     }
 
     @Test
+    fun concurrentClaimWaitersReceiveExactlyOneTransferWhenPerformArrives() = runTest {
+        val surface = dropCapableSurface()
+        lateinit var offer: DropOffer
+        assertIs<KadreResult.Success<*>>(
+            surface.installInteractionHandler(
+                InteractionHandler { context, event ->
+                    offer = assertIs<InteractionEvent.DropEntered>(event).offer
+                    context.request(InteractionAction.AcceptDrop(offer.id))
+                },
+            ),
+        )
+        val offerId = assertIs<DropOfferId>(
+            surface.dispatchSynchronousDrop(RecordingDropTransferSource(), LogicalPoint(1.0, 1.0)) {
+                KadreResult.Success(Unit)
+            },
+        )
+
+        val first = async(start = CoroutineStart.UNDISPATCHED) { offer.claimTransfer() }
+        val second = async(start = CoroutineStart.UNDISPATCHED) { offer.claimTransfer() }
+
+        assertTrue(surface.accept(SurfaceStimulus.DropPerformed(surface.id, offerId, LogicalPoint(1.0, 1.0))))
+
+        val claims = listOf(first.await(), second.await())
+        assertEquals(1, claims.count { it is KadreResult.Success<DropTransfer> })
+        assertEquals(
+            1,
+            claims.count {
+                it == KadreResult.Failure(KadreFailure.AlreadyInUse(KadreResourceKind.DropTransfer))
+            },
+        )
+        assertEquals(DropOfferState.Claimed, offer.state.value)
+    }
+
+    @Test
+    fun cancelledClaimWaiterDoesNotConsumeTheLaterTransfer() = runTest {
+        val surface = dropCapableSurface()
+        lateinit var offer: DropOffer
+        assertIs<KadreResult.Success<*>>(
+            surface.installInteractionHandler(
+                InteractionHandler { context, event ->
+                    offer = assertIs<InteractionEvent.DropEntered>(event).offer
+                    context.request(InteractionAction.AcceptDrop(offer.id))
+                },
+            ),
+        )
+        val offerId = assertIs<DropOfferId>(
+            surface.dispatchSynchronousDrop(RecordingDropTransferSource(), LogicalPoint(1.0, 1.0)) {
+                KadreResult.Success(Unit)
+            },
+        )
+        val cancelled = async(start = CoroutineStart.UNDISPATCHED) { offer.claimTransfer() }
+
+        cancelled.cancelAndJoin()
+        val survivor = async(start = CoroutineStart.UNDISPATCHED) { offer.claimTransfer() }
+        assertTrue(surface.accept(SurfaceStimulus.DropPerformed(surface.id, offerId, LogicalPoint(1.0, 1.0))))
+
+        assertIs<KadreResult.Success<DropTransfer>>(survivor.await())
+        assertEquals(DropOfferState.Claimed, offer.state.value)
+    }
+
+    @Test
+    fun concurrentDropReadsRejectTheSecondReaderWhileTheFirstIsBlocked() = runTest {
+        val source = BlockingDropTransferSource()
+        val item = dropCapableSurface().claimPerformedTransfer(source).items.single()
+        val first = async(start = CoroutineStart.UNDISPATCHED) { item.collectBytes(10) { } }
+
+        source.callbackReturned.await()
+
+        assertEquals(
+            KadreResult.Failure(KadreFailure.AlreadyInUse(KadreResourceKind.DropTransfer)),
+            item.collectBytes(10) { },
+        )
+        source.finish.complete(Unit)
+        assertEquals(KadreResult.Success(Unit), first.await())
+    }
+
+    @Test
+    fun collectorFailureKeepsAReplayableItemReadableAndConsumesASingleUseItem() = runTest {
+        val replayable = dropCapableSurface().claimPerformedTransfer(
+            RecordingDropTransferSource(chunks = listOf(byteArrayOf(1)), sizeBytes = 1),
+        ).items.single()
+        assertFailsWith<IllegalStateException> {
+            replayable.collectBytes(1) { throw IllegalStateException("collector failure") }
+        }
+        assertEquals(KadreResult.Success(Unit), replayable.collectBytes(1) { })
+
+        val singleUse = dropCapableSurface().claimPerformedTransfer(
+            RecordingDropTransferSource(
+                chunks = listOf(byteArrayOf(1)),
+                sizeBytes = 1,
+                readMode = DropItemReadMode.SingleUse,
+            ),
+        ).items.single()
+        assertFailsWith<IllegalStateException> {
+            singleUse.collectBytes(1) { throw IllegalStateException("collector failure") }
+        }
+        assertEquals(
+            KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.DropItem)),
+            singleUse.collectBytes(1) { },
+        )
+    }
+
+    @Test
+    fun unknownLengthDropReadEnforcesItsTotalMaxBytesIndependentlyOfChunkBudget() = runTest {
+        val resources = KadrePolicies.Default.resources.copy(maxDropChunkBytes = 2)
+        val item = dropCapableSurface(resources).claimPerformedTransfer(
+            RecordingDropTransferSource(
+                chunks = listOf(byteArrayOf(1, 2), byteArrayOf(3, 4)),
+                sizeBytes = null,
+            ),
+        ).items.single()
+        val delivered = mutableListOf<ByteArray>()
+
+        assertEquals(
+            KadreResult.Failure(KadreFailure.ResourceLimitExceeded(KadreResourceKind.DropItem, 3)),
+            item.collectBytes(3) { delivered += it },
+        )
+        assertEquals(1, delivered.size)
+        assertTrue(delivered.single().contentEquals(byteArrayOf(1, 2)))
+    }
+
+    @Test
     fun unacceptedDropIsTerminalAndAReplacementClosesThePreviousSource() = runTest {
         val rejectedSource = RecordingDropTransferSource()
         val surface = surface(
