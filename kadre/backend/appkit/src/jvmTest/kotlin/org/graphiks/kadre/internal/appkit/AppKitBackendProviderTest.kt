@@ -1149,7 +1149,10 @@ class AppKitBackendProviderTest {
                 withTimeout(2.seconds) { window.state.first { it.phase == WindowPhase.Closed } }
                 assertEquals(listOf("intercepted"), port.closedWindowTitles)
                 assertEquals(listOf("intercepted"), port.windowWillCloseTitles)
-                assertEquals(emptyList(), windows.state.value.windows)
+                val afterClose = withTimeout(2.seconds) {
+                    windows.state.first { it.windows.isEmpty() }
+                }
+                assertEquals(emptyList(), afterClose.windows)
             } finally {
                 allowNativeClose.countDown()
                 session.close()
