@@ -490,10 +490,20 @@ Couvrir les entrées enrichies liées à la vue AppKit et à son focus.
 #### Livraison actuelle
 
 Le bridge `NSDraggingDestination`, les transferts bornés et le cahier manuel
-phase 7 sont fusionnés. La fermeture de phase reste à matérialiser dans le
-registre : elle nécessite des contrats dédiés et leur evidence O2/O3 pour les
-claims, budgets, cancellation et teardown. Cette sous-tranche ne doit pas être
-confondue avec une phase contractuellement close.
+phase 7 sont livrés. Les contrats `INP-003` (O2 runtime) et `APK-019` (O3 AppKit)
+sont actifs dans le registre et leurs preuves JUnit sont requises par les gates
+Gradle. O2 couvre le claim unique, l'annulation d'un waiter, l'exclusivité des
+lectures, replay/single-use et le budget total d'une source de taille inconnue.
+O3 appelle les selectors générés sur la vraie vue Kadre via la lease publique :
+types enregistrés, acceptation et rejet, lecture après invalidation du
+pasteboard source, puis révocation après sortie ou fermeture de fenêtre.
+
+Ces preuves natives requièrent les bindings de KFFI #73 ; tant que leur snapshot
+n'est pas publié, elles sont validées avec la publication Maven locale de cette
+branche et la CI distante reste dépendante de cette livraison. Le
+[cahier manuel phase 7](backend/appkit/manual/phase-7-drop.md) reste nécessaire
+pour le drag physique et inter-applications, les permissions, le sandbox et le
+matériel réel ; ces vérifications ne sont pas comptées comme evidence automatisée.
 
 #### Objectif
 
