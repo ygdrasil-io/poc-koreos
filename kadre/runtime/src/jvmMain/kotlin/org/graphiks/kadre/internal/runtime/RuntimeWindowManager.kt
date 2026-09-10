@@ -119,8 +119,10 @@ public class RuntimeWindowManager public constructor(
     }
 
     private val lock = Any()
+    private val pendingCloseWork = ThreadLocal.withInitial { ArrayDeque<() -> Unit>() }
     private val pending = linkedMapOf<WindowRequestId, PendingWindow>()
     private val committed = linkedMapOf<WindowRequestId, CommittedWindow>()
+    private val dispatchedWindowCloses = linkedMapOf<WindowRequestId, CommittedWindow>()
     private val dispatchedWindowUpdates = linkedMapOf<WindowOperationId, RuntimeWindow>()
     private val pendingAttentionReleases = mutableListOf<WindowId>()
     internal var beforeWindowUpdateRegistration: (RuntimeWindow, PendingWindowUpdate) -> Unit = { _, _ -> }
@@ -471,7 +473,7 @@ public class RuntimeWindowManager public constructor(
             }
         }
         lateinit var request: RuntimeWindowRequest
-        val admissionFailure = synchronized(lock) {
+        val admissionFailure = withManagerLock {
             when {
                 closed -> KadreFailure.Closed(KadreResourceKind.Host)
                 pending.size >= resources.maxPendingWindowRequests -> KadreFailure.ResourceLimitExceeded(
@@ -522,7 +524,7 @@ public class RuntimeWindowManager public constructor(
                 continuation.resume(KadreResult.Success(request)) { _, _, _ ->
                     abandonBeforeHandoff(request)
                 }
-                synchronized(lock) {
+                withManagerLock {
                     pending[request.id]?.let(::finishOpenDispatchLocked)
                 }
             }
@@ -532,7 +534,7 @@ public class RuntimeWindowManager public constructor(
     }
 
     override fun close() {
-        val portToClose = synchronized(lock) {
+        val portToClose = withManagerLock {
             if (closed) return
             closed = true
 
@@ -591,14 +593,14 @@ public class RuntimeWindowManager public constructor(
         targets.forEach { surface -> surface.updateRawInputCapability(capability) }
     }
 
-    internal suspend fun cancelRequest(request: RuntimeWindowRequest): WindowCancellationOutcome = synchronized(lock) {
-        request.terminalOutcome()?.let { return@synchronized WindowCancellationOutcome.AlreadyTerminated(it) }
+    internal suspend fun cancelRequest(request: RuntimeWindowRequest): WindowCancellationOutcome = withManagerLock {
+        request.terminalOutcome()?.let { return@withManagerLock WindowCancellationOutcome.AlreadyTerminated(it) }
         val record = pending[request.id]
-            ?: return@synchronized WindowCancellationOutcome.AlreadyTerminated(
+            ?: return@withManagerLock WindowCancellationOutcome.AlreadyTerminated(
                 checkNotNull(request.terminalOutcome()),
             )
-        record.cancellationOutcome?.let { return@synchronized it }
-        if (record.pendingCancellationIssued) return@synchronized WindowCancellationOutcome.CancellationRequested
+        record.cancellationOutcome?.let { return@withManagerLock it }
+        if (record.pendingCancellationIssued) return@withManagerLock WindowCancellationOutcome.CancellationRequested
 
         record.pendingCancellationIssued = true
         val portOutcome = guardPort("pending-close-exception") {
@@ -609,9 +611,9 @@ public class RuntimeWindowManager public constructor(
                 ),
             )
         }
-        request.terminalOutcome()?.let { return@synchronized WindowCancellationOutcome.AlreadyTerminated(it) }
+        request.terminalOutcome()?.let { return@withManagerLock WindowCancellationOutcome.AlreadyTerminated(it) }
         if (pending[request.id] !== record) {
-            return@synchronized WindowCancellationOutcome.AlreadyTerminated(
+            return@withManagerLock WindowCancellationOutcome.AlreadyTerminated(
                 checkNotNull(request.terminalOutcome()),
             )
         }
@@ -646,7 +648,7 @@ public class RuntimeWindowManager public constructor(
     }
 
     internal fun detachRequest(request: RuntimeWindowRequest) {
-        synchronized(lock) {
+        withManagerLock {
             if (request.terminalOutcome() != null) return
             val record = pending[request.id] ?: return
             val issueCancellation =
@@ -683,7 +685,7 @@ public class RuntimeWindowManager public constructor(
     ): KadreResult<WindowUpdateOutcome> = window.applyUpdate(update)
 
     internal fun terminaliseWindowEventDelivery(window: RuntimeWindow) {
-        synchronized(lock) {
+        withManagerLock {
             committed[window.requestId]?.let(::forceCloseLocked)
         }
         drainAttentionReleases()
@@ -705,7 +707,7 @@ public class RuntimeWindowManager public constructor(
             stimulusSink = updateStimulusSink,
             fullscreenObservationSink = fullscreenObservationSink,
         )
-        val dispatch = synchronized(lock) {
+        val dispatch = withManagerLock {
             if (!window.beginNativeUpdateDispatch(pending.operationId)) return
             dispatchedWindowUpdates[pending.operationId] = window
             guardPort("window-update-exception") { commandPort.requestUpdate(command) }
@@ -821,7 +823,7 @@ public class RuntimeWindowManager public constructor(
     }
 
     internal fun withdrawWindowUpdate(window: RuntimeWindow, operationId: WindowOperationId) {
-        val outcome = synchronized(lock) {
+        val outcome = withManagerLock {
             guardPort("window-update-cancellation-exception") {
                 commandPort.requestUpdateCancellation(WindowUpdateCancellationCommand(operationId))
             }.also { guarded ->
@@ -1005,18 +1007,26 @@ public class RuntimeWindowManager public constructor(
         requestId: WindowCloseRequestId,
         decision: WindowCloseDecision,
     ): KadreResult<WindowCloseResponseOutcome> {
-        val result = synchronized(lock) {
+        var attempt: CloseAttempt? = null
+        val immediate = withManagerLock {
             window.closeResponseFor(requestId, decision)?.let { known ->
-                return@synchronized KadreResult.Success(known)
+                return@withManagerLock KadreResult.Success(known)
             }
             if (window.currentState().phase == WindowPhase.Closed) {
-                return@synchronized KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.Window))
+                return@withManagerLock KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.Window))
             }
             val record = committed[window.requestId]
-                ?: return@synchronized KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.Window))
+                ?: return@withManagerLock KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.Window))
             val closeRequest = window.activeCloseRequest
             if (closeRequest == null || closeRequest.id != requestId) {
-                return@synchronized KadreResult.Failure(KadreFailure.InvalidRequest("requestId"))
+                return@withManagerLock KadreResult.Failure(KadreFailure.InvalidRequest("requestId"))
+            }
+            record.closeAttempt?.let { current ->
+                if (decision == WindowCloseDecision.Reject) {
+                    return@withManagerLock KadreResult.Success(WindowCloseResponseOutcome.TooLate)
+                }
+                attempt = current
+                return@withManagerLock null
             }
             when (decision) {
                 WindowCloseDecision.Reject -> {
@@ -1043,16 +1053,21 @@ public class RuntimeWindowManager public constructor(
                     }
                 }
 
-                WindowCloseDecision.Accept -> acceptCloseResponseLocked(record, closeRequest)
+                WindowCloseDecision.Accept -> {
+                    attempt = reserveCloseLocked(record)
+                    null
+                }
             }
         }
+        val result = immediate ?: checkNotNull(attempt).result.await().response
         drainAttentionReleases()
         drainLastWindowStopProposal()
         return result
     }
 
     internal suspend fun closeWindow(window: RuntimeWindow): KadreResult<WindowCloseOutcome> {
-        val result = synchronized(lock) {
+        var attempt: CloseAttempt? = null
+        val immediate = withManagerLock {
             when (window.currentState().phase) {
                 WindowPhase.Closed -> KadreResult.Success(WindowCloseOutcome.Closed)
                 WindowPhase.Closing -> KadreResult.Success(
@@ -1061,69 +1076,13 @@ public class RuntimeWindowManager public constructor(
 
                 WindowPhase.Open -> {
                     val record = committed[window.requestId]
-                        ?: return@synchronized KadreResult.Success(WindowCloseOutcome.Closed)
-                    val operationId = RuntimeProcessIds.nextWindowOperationId()
-                    window.prepareClose(operationId)
-                    record.closeCommandSent = true
-                    val portOutcome = guardPort("opened-close-exception") {
-                        commandPort.requestOpenedClose(record.closeCommand())
-                    }
-                    if (committed[window.requestId] !== record || window.currentState().phase == WindowPhase.Closed) {
-                        return@synchronized KadreResult.Success(WindowCloseOutcome.Closed)
-                    }
-                    when (portOutcome) {
-                        is GuardedCall.Failure -> {
-                            forceCloseLocked(record)
-                            KadreResult.Failure(portOutcome.failure)
-                        }
-
-                        is GuardedCall.Success -> when (val outcome = portOutcome.value) {
-                            OpenedWindowCloseOutcome.Accepted -> {
-                                val reason = if (window.activeCloseRequest != null) {
-                                    WindowCloseReason.User
-                                } else {
-                                    WindowCloseReason.System
-                                }
-                                window.activeCloseRequest?.let { closeRequest ->
-                                    window.resolveCloseRequest(
-                                        closeRequest,
-                                        WindowCloseDecision.Accept,
-                                        WindowCloseResponseOutcome.Closing(operationId),
-                                        committed = true,
-                                    )
-                                }
-                                window.beginClosing(operationId, reason, nextEventStamp())
-                                    ?.let(dispatchedWindowUpdates::remove)
-                                KadreResult.Success(WindowCloseOutcome.Accepted(operationId))
-                            }
-
-                            OpenedWindowCloseOutcome.NativeCloseAlreadyCommitted -> {
-                                val reason = if (window.activeCloseRequest != null) {
-                                    WindowCloseReason.User
-                                } else {
-                                    WindowCloseReason.System
-                                }
-                                window.beginClosing(operationId, reason, nextEventStamp())
-                                    ?.let(dispatchedWindowUpdates::remove)
-                                KadreResult.Success(WindowCloseOutcome.Accepted(operationId))
-                            }
-
-                            is OpenedWindowCloseOutcome.TemporarilyUnavailable -> {
-                                record.closeCommandSent = false
-                                window.cancelPreparedClose(operationId)
-                                KadreResult.Failure(KadreFailure.TemporarilyUnavailable(outcome.retryable))
-                            }
-
-                            is OpenedWindowCloseOutcome.PlatformFailure -> {
-                                record.closeCommandSent = false
-                                window.cancelPreparedClose(operationId)
-                                KadreResult.Failure(outcome.failure)
-                            }
-                        }
-                    }
+                        ?: return@withManagerLock KadreResult.Success(WindowCloseOutcome.Closed)
+                    attempt = record.closeAttempt ?: reserveCloseLocked(record)
+                    null
                 }
             }
         }
+        val result = immediate ?: checkNotNull(attempt).result.await().close
         drainAttentionReleases()
         drainLastWindowStopProposal()
         return result
@@ -1145,7 +1104,7 @@ public class RuntimeWindowManager public constructor(
 
     private fun abandonBeforeHandoff(request: RuntimeWindowRequest) {
         if (!request.claimPreHandoffCancellation()) return
-        synchronized(lock) {
+        withManagerLock {
             val pendingRecord = pending[request.id]
             if (pendingRecord != null) {
                 val issueCancellation =
@@ -1173,7 +1132,7 @@ public class RuntimeWindowManager public constructor(
                         portOutcome.value == PendingWindowCancellationOutcome.CancelledBeforeCommit
                     ) WindowRequestOutcome.Cancelled else WindowRequestOutcome.RequesterDetached,
                 )
-                return@synchronized
+                return@withManagerLock
             }
             committed[request.id]?.let { record ->
                 forceCloseLocked(record)
@@ -1194,11 +1153,12 @@ public class RuntimeWindowManager public constructor(
     ) {
         try {
             var closeOwner: WindowPeerOwner? = null
-            synchronized(lock) {
+            withManagerLock {
                 val record = pending[requestId]
                 if (record == null) {
-                    if (committed[requestId]?.owner !== owner) closeOwner = owner
-                    return@synchronized
+                    val owned = committed[requestId] ?: dispatchedWindowCloses[requestId]
+                    if (owned?.owner !== owner) closeOwner = owner
+                    return@withManagerLock
                 }
                 if (record.openDispatching) {
                     if (record.preparedOwner == null) {
@@ -1209,7 +1169,7 @@ public class RuntimeWindowManager public constructor(
                     } else if (record.preparedOwner !== owner) {
                         closeOwner = owner
                     }
-                    return@synchronized
+                    return@withManagerLock
                 }
                 commitPendingLocked(
                     record,
@@ -1231,7 +1191,7 @@ public class RuntimeWindowManager public constructor(
     private fun acceptFailure(requestId: WindowRequestId, failure: KadreFailure) {
         try {
             val normalised = normaliseRejection(failure)
-            synchronized(lock) {
+            withManagerLock {
                 val record = pending[requestId] ?: return
                 removePendingLocked(record)
                 record.preparedOwner?.let(::safeCloseOwner)
@@ -1253,9 +1213,9 @@ public class RuntimeWindowManager public constructor(
 
     private fun acceptCloseRequest(requestId: WindowRequestId) {
         try {
-            synchronized(lock) {
-                val record = committed[requestId] ?: return@synchronized null
-                if (record.window.currentState().phase != WindowPhase.Open) return@synchronized null
+            withManagerLock {
+                val record = committed[requestId] ?: return@withManagerLock null
+                if (record.window.currentState().phase != WindowPhase.Open) return@withManagerLock null
                 record.window.createCloseRequest(nextEventStamp())?.let { (_, event) ->
                     record.window.publish(event)
                 }
@@ -1270,7 +1230,7 @@ public class RuntimeWindowManager public constructor(
     private fun acceptNativeClose(requestId: WindowRequestId) {
         try {
             var owner: WindowPeerOwner? = null
-            synchronized(lock) {
+            withManagerLock {
                 val record = committed.remove(requestId)
                 if (record != null) {
                     if (record.window.currentState().phase == WindowPhase.Open) {
@@ -1290,8 +1250,8 @@ public class RuntimeWindowManager public constructor(
                     releaseWindowSlotsLocked(1)
                     pendingAttentionReleases += record.window.id
                     publishMembershipLocked()
-                    owner = record.owner
-                    return@synchronized
+                    releaseOwnerLocked(record)
+                    return@withManagerLock
                 }
                 val pendingRecord = pending[requestId] ?: return
                 removePendingLocked(pendingRecord)
@@ -1312,85 +1272,108 @@ public class RuntimeWindowManager public constructor(
         }
     }
 
-    private fun acceptCloseResponseLocked(
-        record: CommittedWindow,
-        closeRequest: RuntimeCloseRequest,
-    ): KadreResult<WindowCloseResponseOutcome> {
-        val operationId = RuntimeProcessIds.nextWindowOperationId()
-        record.window.prepareClose(operationId)
+    private fun reserveCloseLocked(record: CommittedWindow, forced: Boolean = false): CloseAttempt {
+        check(record.closeAttempt == null)
+        val attempt = CloseAttempt(RuntimeProcessIds.nextWindowOperationId())
+        record.closeAttempt = attempt
         record.closeCommandSent = true
+        dispatchedWindowCloses[record.request.id] = record
+        record.window.prepareClose(attempt.operationId)
+        pendingCloseWork.get().addLast { dispatchClose(record, attempt, forced) }
+        return attempt
+    }
+
+    private fun dispatchClose(record: CommittedWindow, attempt: CloseAttempt, forced: Boolean) {
+        check(!Thread.holdsLock(lock)) { "native close must run outside the manager lock" }
         val portOutcome = guardPort("opened-close-exception") {
             commandPort.requestOpenedClose(record.closeCommand())
         }
-        if (committed[record.request.id] !== record || record.window.currentState().phase == WindowPhase.Closed) {
-            return KadreResult.Success(WindowCloseResponseOutcome.TooLate)
-        }
-        return when (portOutcome) {
-            is GuardedCall.Failure -> {
-                forceCloseLocked(record)
-                KadreResult.Failure(portOutcome.failure)
+        withManagerLock {
+            attempt.dispatching = false
+            dispatchedWindowCloses.remove(record.request.id)
+            val current = committed[record.request.id] === record &&
+                record.window.currentState().phase != WindowPhase.Closed &&
+                record.closeAttempt === attempt
+            val result = if (!current) {
+                CloseResult(
+                    KadreResult.Success(WindowCloseOutcome.Closed),
+                    KadreResult.Success(WindowCloseResponseOutcome.TooLate),
+                )
+            } else {
+                when (portOutcome) {
+                    is GuardedCall.Failure -> {
+                        forceCloseLocked(record)
+                        CloseResult(KadreResult.Failure(portOutcome.failure), KadreResult.Failure(portOutcome.failure))
+                    }
+                    is GuardedCall.Success -> when (val outcome = portOutcome.value) {
+                        OpenedWindowCloseOutcome.Accepted,
+                        OpenedWindowCloseOutcome.NativeCloseAlreadyCommitted,
+                        -> {
+                            val window = record.window
+                            val reason = if (window.activeCloseRequest != null) {
+                                WindowCloseReason.User
+                            } else {
+                                WindowCloseReason.System
+                            }
+                            val response = if (outcome == OpenedWindowCloseOutcome.Accepted) {
+                                WindowCloseResponseOutcome.Closing(attempt.operationId).also { accepted ->
+                                    window.activeCloseRequest?.let { closeRequest ->
+                                        window.resolveCloseRequest(
+                                            closeRequest,
+                                            WindowCloseDecision.Accept,
+                                            accepted,
+                                            committed = true,
+                                        )
+                                    }
+                                }
+                            } else {
+                                window.markNativeCloseCommitted()
+                                WindowCloseResponseOutcome.TooLate
+                            }
+                            window.beginClosing(attempt.operationId, reason, nextEventStamp())
+                                ?.let(dispatchedWindowUpdates::remove)
+                            CloseResult(
+                                KadreResult.Success(WindowCloseOutcome.Accepted(attempt.operationId)),
+                                KadreResult.Success(response),
+                            )
+                        }
+                        is OpenedWindowCloseOutcome.TemporarilyUnavailable -> {
+                            cancelCloseReservationLocked(record, attempt)
+                            val failure = KadreFailure.TemporarilyUnavailable(outcome.retryable)
+                            CloseResult(KadreResult.Failure(failure), KadreResult.Failure(failure))
+                        }
+                        is OpenedWindowCloseOutcome.PlatformFailure -> {
+                            cancelCloseReservationLocked(record, attempt)
+                            CloseResult(KadreResult.Failure(outcome.failure), KadreResult.Failure(outcome.failure))
+                        }
+                    }
+                }
             }
-
-            is GuardedCall.Success -> when (val outcome = portOutcome.value) {
-                OpenedWindowCloseOutcome.Accepted -> {
-                    val response = WindowCloseResponseOutcome.Closing(operationId)
-                    record.window.resolveCloseRequest(
-                        closeRequest,
-                        WindowCloseDecision.Accept,
-                        response,
-                        committed = true,
-                    )
-                    record.window.beginClosing(operationId, WindowCloseReason.User, nextEventStamp())
-                        ?.let(dispatchedWindowUpdates::remove)
-                    KadreResult.Success(response)
-                }
-
-                OpenedWindowCloseOutcome.NativeCloseAlreadyCommitted ->
-                    KadreResult.Success(WindowCloseResponseOutcome.TooLate)
-
-                is OpenedWindowCloseOutcome.TemporarilyUnavailable -> {
-                    record.closeCommandSent = false
-                    record.window.cancelPreparedClose(operationId)
-                    KadreResult.Failure(KadreFailure.TemporarilyUnavailable(outcome.retryable))
-                }
-
-                is OpenedWindowCloseOutcome.PlatformFailure -> {
-                    record.closeCommandSent = false
-                    record.window.cancelPreparedClose(operationId)
-                    KadreResult.Failure(outcome.failure)
-                }
-            }
+            if (forced) reportForcedCloseOutcome(portOutcome)
+            if (record.ownerReleasePending) releaseOwnerLocked(record)
+            attempt.result.complete(result)
         }
     }
 
+    private fun cancelCloseReservationLocked(record: CommittedWindow, attempt: CloseAttempt) {
+        record.closeAttempt = null
+        record.closeCommandSent = false
+        record.window.cancelPreparedClose(attempt.operationId)
+    }
+
+    /** Removes logical ownership now; native work runs after the outer manager critical section. */
     private fun forceCloseLocked(record: CommittedWindow) {
-        if (committed.remove(record.request.id) == null) return
+        if (committed[record.request.id] !== record) return
+        committed.remove(record.request.id)
         if (record.window.currentState().phase == WindowPhase.Open) {
             record.window.beginClosing(
-                RuntimeProcessIds.nextWindowOperationId(),
+                record.closeAttempt?.operationId ?: RuntimeProcessIds.nextWindowOperationId(),
                 if (closed) WindowCloseReason.SessionStopping else WindowCloseReason.System,
                 nextEventStamp(),
             )?.let(dispatchedWindowUpdates::remove)
         }
         if (!record.closeCommandSent) {
-            record.closeCommandSent = true
-            val close = guardPort("opened-close-exception") {
-                commandPort.requestOpenedClose(record.closeCommand())
-            }
-            when (close) {
-                is GuardedCall.Success -> when (val outcome = close.value) {
-                    OpenedWindowCloseOutcome.Accepted,
-                    OpenedWindowCloseOutcome.NativeCloseAlreadyCommitted,
-                    -> Unit
-                    is OpenedWindowCloseOutcome.TemporarilyUnavailable -> safeReport(
-                        KadreException(KadreFailure.TemporarilyUnavailable(outcome.retryable)),
-                    )
-
-                    is OpenedWindowCloseOutcome.PlatformFailure -> safeReport(KadreException(outcome.failure))
-                }
-
-                is GuardedCall.Failure -> Unit
-            }
+            reserveCloseLocked(record, forced = true)
         }
         record.window.markNativeCloseCommitted()
         record.window.finishClosing()
@@ -1398,7 +1381,27 @@ public class RuntimeWindowManager public constructor(
         releaseWindowSlotsLocked(1)
         pendingAttentionReleases += record.window.id
         publishMembershipLocked()
-        safeCloseOwner(record.owner)
+        releaseOwnerLocked(record)
+    }
+
+    private fun releaseOwnerLocked(record: CommittedWindow) {
+        record.ownerReleasePending = true
+        if (record.closeAttempt?.dispatching == true || record.ownerReleased) return
+        record.ownerReleased = true
+        pendingCloseWork.get().addLast { safeCloseOwner(record.owner) }
+    }
+
+    private fun reportForcedCloseOutcome(close: GuardedCall<OpenedWindowCloseOutcome>) {
+        if (close !is GuardedCall.Success) return
+        when (val outcome = close.value) {
+            OpenedWindowCloseOutcome.Accepted,
+            OpenedWindowCloseOutcome.NativeCloseAlreadyCommitted,
+            -> Unit
+            is OpenedWindowCloseOutcome.TemporarilyUnavailable -> safeReport(
+                KadreException(KadreFailure.TemporarilyUnavailable(outcome.retryable)),
+            )
+            is OpenedWindowCloseOutcome.PlatformFailure -> safeReport(KadreException(outcome.failure))
+        }
     }
 
     private fun finishOpenDispatchLocked(record: PendingWindow) {
@@ -1513,7 +1516,7 @@ public class RuntimeWindowManager public constructor(
     ) {
         safeReport(cause)
         try {
-            synchronized(lock) {
+            withManagerLock {
                 val pendingRecord = pending[requestId]
                 if (pendingRecord != null) {
                     removePendingLocked(pendingRecord)
@@ -1563,12 +1566,35 @@ public class RuntimeWindowManager public constructor(
     }
 
     private fun safeCloseOwner(owner: WindowPeerOwner) {
+        if (Thread.holdsLock(lock)) {
+            pendingCloseWork.get().addLast { safeCloseOwner(owner) }
+            return
+        }
         try {
             owner.close()
         } catch (cause: Exception) {
             safeReport(cause)
         } catch (cause: LinkageError) {
             safeReport(cause)
+        }
+    }
+
+    // Native callbacks may re-enter any manager operation. The thread which prepared
+    // cleanup runs it after its outermost manager critical section. A concurrent reader
+    // must never steal backend work, as it may hold an unrelated callback/native lock.
+    private inline fun <T> withManagerLock(block: () -> T): T = try {
+        synchronized(lock) { block() }
+    } finally {
+        drainCloseWork()
+    }
+
+    private fun drainCloseWork() {
+        if (Thread.holdsLock(lock)) return
+        val work = pendingCloseWork.get()
+        try {
+            while (work.isNotEmpty()) work.removeFirst().invoke()
+        } finally {
+            if (work.isEmpty()) pendingCloseWork.remove()
         }
     }
 
@@ -1728,10 +1754,23 @@ public class RuntimeWindowManager public constructor(
         val owner: WindowPeerOwner,
         val admissionOrder: Long,
         var closeCommandSent: Boolean = false,
+        var closeAttempt: CloseAttempt? = null,
+        var ownerReleasePending: Boolean = false,
+        var ownerReleased: Boolean = false,
     ) {
         fun closeCommand(): OpenedWindowCloseCommand =
             OpenedWindowCloseCommand(request.id, window.id, owner)
     }
+
+    private class CloseAttempt(val operationId: WindowOperationId) {
+        var dispatching = true
+        val result = CompletableDeferred<CloseResult>()
+    }
+
+    private data class CloseResult(
+        val close: KadreResult<WindowCloseOutcome>,
+        val response: KadreResult<WindowCloseResponseOutcome>,
+    )
 
     private sealed interface GuardedCall<out T> {
         data class Success<T>(val value: T) : GuardedCall<T>
@@ -2962,6 +3001,7 @@ internal class RuntimeWindow(
         if (activeCloseRequest?.id == requestId) return null
         val resolved = resolvedCloseRequest?.takeIf { it.requestId == requestId } ?: return null
         if (
+            (resolved.committed && resolved.outcome == WindowCloseResponseOutcome.TooLate) ||
             mutableState.value.phase == WindowPhase.Closed ||
             (!resolved.committed && mutableState.value.phase != WindowPhase.Open)
         ) {
