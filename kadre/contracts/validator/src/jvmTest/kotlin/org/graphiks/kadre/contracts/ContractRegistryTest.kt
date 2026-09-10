@@ -84,7 +84,7 @@ class ContractRegistryTest {
     }
 
     @Test
-    fun realRegistryDeclaresEveryPlannedPhaseNineContract() {
+    fun realRegistryDeclaresTheDisplayContractsActiveAndTheRemainingPhaseNineContractsPlanned() {
         val recordsById = ContractRegistry.parse(repositoryFile("kadre/contracts/registry/contracts.tsv").readText())
             .associateBy(ContractRecord::contractId)
 
@@ -92,7 +92,12 @@ class ContractRegistryTest {
             PHASE_NINE_CONTRACT_IDS,
             recordsById.keys.intersect(PHASE_NINE_CONTRACT_IDS),
         )
-        assertTrue(PHASE_NINE_CONTRACT_IDS.all { recordsById.getValue(it).status == ContractStatus.Planned })
+        assertTrue(PHASE_NINE_ACTIVE_CONTRACT_IDS.all { recordsById.getValue(it).status == ContractStatus.Active })
+        assertTrue(
+            (PHASE_NINE_CONTRACT_IDS - PHASE_NINE_ACTIVE_CONTRACT_IDS).all {
+                recordsById.getValue(it).status == ContractStatus.Planned
+            },
+        )
     }
 
     @Test
@@ -549,6 +554,7 @@ class ContractRegistryTest {
             "DSP-001", "APK-014", "WIN-007", "APK-015",
             "WIN-008", "APK-016", "RUN-007", "APK-017", "RUN-008", "APK-018",
         )
+        val PHASE_NINE_ACTIVE_CONTRACT_IDS = setOf("DSP-001", "APK-014")
         const val HEADER =
             "contractId\tstatus\tsource\tsubject\trisk\toracle\tscenarios\trequiredTargets\tconditionalCapabilities\tsentinels\tretirementRef"
         const val MAPPING_HEADER = "contractId\ttarget\tkind\tevidenceId\ttestClass\ttestName"

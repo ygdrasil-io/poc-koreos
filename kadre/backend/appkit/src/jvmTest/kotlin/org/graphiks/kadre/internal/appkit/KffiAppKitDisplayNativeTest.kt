@@ -295,6 +295,39 @@ class KffiAppKitDisplayNativeTest {
     }
 
     @Test
+    fun snapshotRefusesDuplicateCoreGraphicsModeIdentitiesBeforePublishing() {
+        val native = KffiAppKitDisplayNative(
+            RecordingKffiAppKitDisplayServices(
+                displays = listOf(
+                    KffiAppKitNativeDisplay(
+                        id = 17,
+                        pixelWidth = 1920,
+                        pixelHeight = 1080,
+                        bounds = CGDisplayBoundsSnapshot(0.0, 0.0, 1920.0, 1080.0),
+                        modes = listOf(
+                            KffiAppKitNativeDisplayMode(701L, 1920, 1080, 60.0, 0),
+                            KffiAppKitNativeDisplayMode(701L, 1280, 720, 60.0, 0),
+                        ),
+                        currentMode = KffiAppKitNativeCurrentMode(701L, 1920, 1080, 60.0, 0),
+                    ),
+                ),
+                screens = listOf(
+                    KffiAppKitNativeScreen(
+                        displayId = 17,
+                        isPrimary = true,
+                        frame = CGDisplayBoundsSnapshot(0.0, 0.0, 1920.0, 1080.0),
+                        visibleFrame = CGDisplayBoundsSnapshot(0.0, 0.0, 1920.0, 1080.0),
+                        backingScaleFactor = 1.0,
+                        name = "Display",
+                    ),
+                ),
+            ),
+        )
+
+        assertFailsWith<IllegalStateException> { native.snapshot() }
+    }
+
+    @Test
     fun snapshotKeepsStableModeIdentityWhenEnumerationOrderChanges() {
         val native = KffiAppKitDisplayNative(
             RecordingKffiAppKitDisplayServices(

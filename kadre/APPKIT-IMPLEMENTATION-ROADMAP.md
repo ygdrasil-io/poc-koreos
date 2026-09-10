@@ -567,13 +567,19 @@ Exposer l’input global uniquement lorsque la capability et la permission macOS
 
 #### Livraison actuelle
 
-L'inventaire AppKit conditionné par version, l'observation d'appearance, la
-source de pression mémoire et le broker de fullscreen exclusif sont fusionnés.
-`outerPosition` reste explicitement `Unsupported` en attente d'une preuve
-matérielle multi-écran à échelles mixtes. Les contrats `DSP-001`, `WIN-007`,
-`WIN-008`, `RUN-007`, `RUN-008` et `APK-014` à `APK-018` sont tous `planned`
-et sans evidence : la phase 9 n'est pas encore fermée, même lorsque le backend
-dispose d'une implémentation conditionnelle.
+L'inventaire AppKit conditionné par version est livré et contractuellement
+actif : `DSP-001` (O2) et `APK-014` (O3) prouvent l'inventaire complet, les
+identités opaques de modes, le retrait/rebranchement, les changements de scale,
+le bridge KFFI généré et sa capability publique. Le gate AppKit utilise
+`macos-26`, la première version où `NSScreen.CGDirectDisplayID` rend ce bridge
+public et non heuristique.
+
+L'observation d'appearance, la source de pression mémoire et le broker de
+fullscreen exclusif sont fusionnés mais restent `planned` jusqu'à leur evidence
+O2/O3. `outerPosition` reste explicitement `Unsupported` en attente d'une
+preuve matérielle multi-écran à échelles mixtes ; `WIN-007`, `APK-015`,
+`WIN-008`, `APK-016`, `RUN-007`, `APK-017`, `RUN-008` et `APK-018` ne sont donc
+pas encore livrés contractuellement.
 
 #### Objectif
 
@@ -594,6 +600,7 @@ Remplacer les managers et signaux `Unsupported` correspondants par des observati
 - retrait ordonné : handle terminal, nouvel inventaire, événement ;
 - reconnexion avec un nouvel ID ;
 - changement de scale coordonné avec les surfaces concernées ;
+- une exécution native unique sur `macos-26`, sans skip ni retry automatique ;
 - aucun signal de pression mémoire synthétique.
 
 ### Phase 10 — Devices, gamepads et effets
