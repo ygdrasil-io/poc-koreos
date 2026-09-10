@@ -120,6 +120,7 @@ public class RuntimeWindowManager public constructor(
 
     private val lock = Any()
     private val pendingCloseWork = ThreadLocal.withInitial { ArrayDeque<() -> Unit>() }
+    private val drainingCloseWork = ThreadLocal.withInitial { false }
     private val pending = linkedMapOf<WindowRequestId, PendingWindow>()
     private val committed = linkedMapOf<WindowRequestId, CommittedWindow>()
     private val dispatchedWindowCloses = linkedMapOf<WindowRequestId, CommittedWindow>()
@@ -1351,7 +1352,7 @@ public class RuntimeWindowManager public constructor(
             }
             if (forced) reportForcedCloseOutcome(portOutcome)
             if (record.ownerReleasePending) releaseOwnerLocked(record)
-            attempt.result.complete(result)
+            pendingCloseWork.get().addLast { attempt.result.complete(result) }
         }
     }
 
@@ -1589,11 +1590,13 @@ public class RuntimeWindowManager public constructor(
     }
 
     private fun drainCloseWork() {
-        if (Thread.holdsLock(lock)) return
+        if (Thread.holdsLock(lock) || drainingCloseWork.get()) return
         val work = pendingCloseWork.get()
+        drainingCloseWork.set(true)
         try {
             while (work.isNotEmpty()) work.removeFirst().invoke()
         } finally {
+            drainingCloseWork.remove()
             if (work.isEmpty()) pendingCloseWork.remove()
         }
     }

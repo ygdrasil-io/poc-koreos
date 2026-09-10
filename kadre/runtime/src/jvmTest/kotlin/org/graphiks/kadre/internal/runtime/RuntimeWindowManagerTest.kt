@@ -4616,6 +4616,24 @@ class RuntimeWindowManagerTest {
     }
 
     @Test
+    fun managerCloseDrainsALargeCloseBatchWithoutRecursiveStackGrowth() = runTest {
+        val windowCount = 10_000
+        val port = DeterministicWindowCommandPort()
+        val manager = manager(port, maxWindows = windowCount, maxPending = 1)
+        val owners = List(windowCount) { CountingWindowPeerOwner() }
+
+        owners.forEach { owner ->
+            val request = manager.requestWindow(WindowSpec()).successValue()
+            commit(request, port.openCommands.last(), owner)
+        }
+
+        manager.close()
+
+        assertEquals(windowCount, port.openedCloseCommands.size)
+        assertTrue(owners.all { it.closeCount == 1 })
+    }
+
+    @Test
     fun forcedWindowEventTerminationDoesNotHoldManagerLockWhileClosingTheOwner() = runTest {
         val port = DeterministicWindowCommandPort()
         val manager = manager(port)
@@ -4666,6 +4684,83 @@ class RuntimeWindowManagerTest {
             assertEquals(KadreResult.Success(accepted), second.await())
             assertTrue(releasedBeforeReturn)
             assertEquals(1, port.openedCloseCommands.size)
+        } finally {
+            release.countDown()
+            first.join()
+            manager.close()
+        }
+    }
+
+    @Test
+    fun closeWaiterContinuationCanReenterTheManagerBeforeItReturns() = runTest {
+        val port = DeterministicWindowCommandPort()
+        val manager = manager(port)
+        val window = commit(manager.requestWindow(WindowSpec()).successValue(), port.openCommands.single())
+        val entered = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        val callbacks = mutableListOf<Thread>()
+        var callbackFinishedBeforeContinuationReturned = false
+        port.onOpenedClose = {
+            entered.countDown()
+            release.await(2, TimeUnit.SECONDS)
+        }
+        val first = async(Dispatchers.Default) { window.close() }
+        try {
+            assertTrue(entered.await(2, TimeUnit.SECONDS))
+            val joined = async(context = Dispatchers.Unconfined, start = CoroutineStart.UNDISPATCHED) {
+                window.close()
+                val callbackFinished = CountDownLatch(1)
+                callbacks += Thread {
+                    manager.acceptSurfaceStimulus(inputKey(window.surface.id, "close-resume"))
+                    callbackFinished.countDown()
+                }.apply { start() }
+                callbackFinishedBeforeContinuationReturned = callbackFinished.await(2, TimeUnit.SECONDS)
+            }
+            assertFalse(joined.isCompleted)
+
+            release.countDown()
+
+            first.await()
+            joined.await()
+            assertTrue(
+                callbackFinishedBeforeContinuationReturned,
+                "a close waiter resumed while the manager monitor was held",
+            )
+        } finally {
+            release.countDown()
+            callbacks.forEach { it.join(3_000) }
+            first.join()
+            manager.close()
+        }
+    }
+
+    @Test
+    fun joinedCloseWaiterResumesAfterTheDeferredOwnerRelease() = runTest {
+        val port = DeterministicWindowCommandPort()
+        val manager = manager(port)
+        val owner = CountingWindowPeerOwner()
+        val window = commit(manager.requestWindow(WindowSpec()).successValue(), port.openCommands.single(), owner)
+        val command = port.openCommands.single()
+        val entered = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        port.onOpenedClose = {
+            entered.countDown()
+            release.await(2, TimeUnit.SECONDS)
+            command.nativeClosed()
+        }
+        val first = async(Dispatchers.Default) { window.close() }
+        try {
+            assertTrue(entered.await(2, TimeUnit.SECONDS))
+            val joined = async(context = Dispatchers.Unconfined, start = CoroutineStart.UNDISPATCHED) {
+                window.close()
+                owner.closeCount
+            }
+            assertFalse(joined.isCompleted)
+
+            release.countDown()
+
+            assertEquals(1, joined.await(), "the native owner must be released before waiter resumption")
+            assertEquals(KadreResult.Success(WindowCloseOutcome.Closed), first.await())
         } finally {
             release.countDown()
             first.join()
