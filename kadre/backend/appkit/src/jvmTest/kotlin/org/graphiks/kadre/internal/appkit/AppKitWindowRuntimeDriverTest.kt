@@ -4662,7 +4662,9 @@ class AppKitWindowRuntimeDriverTest {
             driver.manager.requestWindow(WindowSpec(title = "pending"))
         }
 
-        assertFalse(pending.isCompleted)
+        withTimeout(2.seconds) {
+            while ("pending" !in port.createdWindowTitles) yield()
+        }
         assertEquals(listOf("first", "second", "pending"), port.createdWindowTitles)
 
         driver.close()
@@ -4773,11 +4775,17 @@ class AppKitWindowRuntimeDriverTest {
 
         try {
             val window = openedWindow(driver, WindowSpec(title = "input-withdrawal-cleanup"))
-            assertEquals(FeatureAvailability.Available, window.surface.input.state.value.capabilities.touch)
+            val openedInput = withTimeout(2.seconds) {
+                window.surface.input.state.first { input ->
+                    input.capabilities.touch == FeatureAvailability.Available &&
+                        input.capabilities.gestures is Capability.Supported<*>
+                }
+            }
+            assertEquals(FeatureAvailability.Available, openedInput.capabilities.touch)
             assertEquals(
                 gestures,
                 assertIs<Capability.Supported<Set<GestureKind>>>(
-                    window.surface.input.state.value.capabilities.gestures,
+                    openedInput.capabilities.gestures,
                 ).constraints,
             )
 

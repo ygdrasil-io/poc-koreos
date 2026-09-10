@@ -69,6 +69,7 @@ import org.graphiks.kadre.diagnostics.KadreOperation
 import org.graphiks.kadre.diagnostics.KadrePlatform
 import org.graphiks.kadre.diagnostics.KadreResourceKind
 import org.graphiks.kadre.diagnostics.KadreResult
+import org.graphiks.kadre.display.DisplayInventory
 import org.graphiks.kadre.display.DisplayManager
 import org.graphiks.kadre.internal.runtime.DisplayPort
 import org.graphiks.kadre.internal.runtime.DisplayPortSnapshot
@@ -2646,11 +2647,18 @@ class AppKitBackendProviderTest {
             assertFalse(AppKitBackendProvider().isAvailable())
             return
         }
+        assertTrue(
+            AppKitDisplayAvailability().isAvailable,
+            "the isolated display contract proof requires macOS 26 or newer",
+        )
         val native = KffiAppKitNativeApplication()
+        val broker = AppKitProcessBroker()
         val provider = AppKitBackendProvider.forTesting(
-            native,
-            AppKitProcessBroker(),
-        ) { true }
+            nativeApplication = native,
+            broker = broker,
+            displayPortFactory = broker::openDisplayPort,
+            availability = ::isMacOs,
+        )
         val stopRequestedOffMainThread = AtomicBoolean(false)
         val publicHandleObserved = AtomicBoolean(false)
         val nativeRejectObserved = AtomicBoolean(false)
@@ -2663,6 +2671,7 @@ class AppKitBackendProviderTest {
         val nativeInputEventStateObserved = AtomicBoolean(false)
         val nativeInputFocusResetObserved = AtomicBoolean(false)
         val nativeInputIsolationObserved = AtomicBoolean(false)
+        val displayCapabilityObserved = AtomicBoolean(false)
         val proofStage = AtomicReference("not-started")
         val proofFailure = AtomicReference<Throwable?>(null)
 
@@ -2675,6 +2684,17 @@ class AppKitBackendProviderTest {
                         withTimeout(5.seconds) {
                             while (!native.isRunning()) yield()
                         }
+                        proofStage.set("display-inventory")
+                        assertEquals(
+                            Capability.Supported(Unit, FeatureAvailability.Available),
+                            displays.state.value.capabilities.enumeration,
+                        )
+                        val displayState = displays.requestAccess().appKitSuccessValue()
+                        val inventory = assertIs<DisplayInventory.Enumerated>(displayState.inventory)
+                        assertTrue(inventory.displays.isNotEmpty())
+                        assertTrue(inventory.primary in inventory.displays)
+                        displayCapabilityObserved.set(true)
+
                         val window = assertIs<WindowRequestOutcome.OpenedHere>(
                             windows.requestWindow(WindowSpec(title = "Kadre O3 public window proof"))
                                 .appKitSuccessValue()
@@ -3063,6 +3083,7 @@ class AppKitBackendProviderTest {
         assertTrue(nativeInputEventStateObserved.get())
         assertTrue(nativeInputFocusResetObserved.get())
         assertTrue(nativeInputIsolationObserved.get())
+        assertTrue(displayCapabilityObserved.get())
     }
 
     @Test

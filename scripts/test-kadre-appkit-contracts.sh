@@ -15,9 +15,9 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 GRADLEW="${KADRE_GRADLEW:-$REPO_ROOT/gradlew}"
 EVIDENCE_DIRECTORY="$REPO_ROOT/kadre/backend/appkit/build/contract-evidence"
-EVIDENCE_FILES=("APK-001.json" "APK-002.json" "APK-003.json" "APK-004.json" "APK-005.json" "APK-006.json" "APK-007.json" "APK-008.json" "APK-009.json" "APK-010.json" "APK-011.json" "APK-012.json" "APK-013.json")
+EVIDENCE_FILES=("APK-001.json" "APK-002.json" "APK-003.json" "APK-004.json" "APK-005.json" "APK-006.json" "APK-007.json" "APK-008.json" "APK-009.json" "APK-010.json" "APK-011.json" "APK-012.json" "APK-013.json" "APK-014.json")
 RUNTIME_EVIDENCE_DIRECTORY="$REPO_ROOT/kadre/runtime/build/contract-evidence"
-RUNTIME_EVIDENCE_FILES=("INP-002.json" "WIN-005.json" "WIN-006.json" "INT-001.json")
+RUNTIME_EVIDENCE_FILES=("INP-002.json" "WIN-005.json" "WIN-006.json" "INT-001.json" "DSP-001.json")
 DIAGNOSTICS_DIRECTORY="$REPO_ROOT/kadre/backend/appkit/build/ci-diagnostics"
 source "$SCRIPT_DIR/lib/process-watchdog.sh"
 
@@ -34,50 +34,33 @@ fi
 run_phase() {
     local phase="$1"
     shift
-    local attempt=1
-    local maximum_attempts=1
     local statuses
     local status
     local tee_status
     local log_file
 
-    # The isolated NSApplication proof occasionally receives SIGTRAP from the managed macOS
-    # runner even though the same commit succeeds in a fresh process. Retry only that native
-    # process failure once; Kotlin test failures, timeouts, and every other Gradle failure stay
-    # immediately blocking.
-    if [[ "$phase" == "tests" || "$phase" == "evidence" ]]; then
-        maximum_attempts=2
-    fi
     mkdir -p "$DIAGNOSTICS_DIRECTORY"
+    log_file="$DIAGNOSTICS_DIRECTORY/${phase}.log"
+    echo "Kadre AppKit $phase: started"
 
-    while (( attempt <= maximum_attempts )); do
-        log_file="$DIAGNOSTICS_DIRECTORY/${phase}-attempt-${attempt}.log"
-        echo "Kadre AppKit $phase: started (attempt $attempt/$maximum_attempts)"
+    set +e
+    run_with_timeout 600 "$@" 2>&1 | tee "$log_file"
+    statuses=("${PIPESTATUS[@]}")
+    set -e
+    status="${statuses[0]}"
+    tee_status="${statuses[1]}"
 
-        set +e
-        run_with_timeout 600 "$@" 2>&1 | tee "$log_file"
-        statuses=("${PIPESTATUS[@]}")
-        set -e
-        status="${statuses[0]}"
-        tee_status="${statuses[1]}"
+    if (( tee_status != 0 )); then
+        echo "Kadre AppKit $phase: could not write diagnostics (status $tee_status)" >&2
+        return "$tee_status"
+    fi
+    if (( status == 0 )); then
+        echo "Kadre AppKit $phase: passed"
+        return 0
+    fi
 
-        if (( tee_status != 0 )); then
-            echo "Kadre AppKit $phase: could not write diagnostics (status $tee_status)" >&2
-            return "$tee_status"
-        fi
-        if (( status == 0 )); then
-            echo "Kadre AppKit $phase: passed (attempt $attempt/$maximum_attempts)"
-            return 0
-        fi
-        if (( attempt < maximum_attempts )) && grep -Fq "finished with non-zero exit value 133" "$log_file"; then
-            echo "Kadre AppKit $phase: retrying once after native SIGTRAP; first log: $log_file" >&2
-            ((attempt += 1))
-            continue
-        fi
-
-        echo "Kadre AppKit $phase: failed (status $status; log: $log_file)" >&2
-        return "$status"
-    done
+    echo "Kadre AppKit $phase: failed (status $status; log: $log_file)" >&2
+    return "$status"
 }
 
 rm -rf "$EVIDENCE_DIRECTORY"

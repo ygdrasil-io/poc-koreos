@@ -3,6 +3,7 @@ package org.graphiks.kadre.internal.runtime
 import kotlinx.coroutines.async
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
 import org.graphiks.kadre.application.EventStamp
 import org.graphiks.kadre.application.SessionInstant
@@ -153,11 +154,21 @@ class RuntimeDisplayManagerTest {
         )
     }
 
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
     @Test
     fun requestAccessPublishesTheCompleteSnapshotBeforeTheAddedEvent() = runTest {
         val port = FakeDisplayPort(snapshot = snapshot(displayKeys = listOf(11L)))
         val manager = manager(port)
-        val added = async(start = CoroutineStart.UNDISPATCHED) { manager.events.first() }
+        val added = async(UnconfinedTestDispatcher(testScheduler), start = CoroutineStart.UNDISPATCHED) {
+            manager.events.first { candidate ->
+                if (candidate !is DisplayEvent.Added) return@first false
+                val published = assertIs<DisplayInventory.Enumerated>(manager.state.value.inventory)
+                assertEquals(candidate.display, published.displays.single())
+                assertEquals(candidate.state, candidate.display.state.value)
+                assertEquals(candidate.managerRevision, manager.state.value.revision)
+                true
+            }
+        }
 
         val result = assertIs<KadreResult.Success<DisplayManagerState>>(manager.requestAccess())
         val inventory = assertIs<DisplayInventory.Enumerated>(result.value.inventory)
@@ -166,6 +177,72 @@ class RuntimeDisplayManagerTest {
         assertEquals(inventory.displays.single(), event.display)
         assertEquals(event.managerRevision, manager.state.value.revision)
         assertEquals(event.state, event.display.state.value)
+    }
+
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+    @Test
+    fun nativeModeReorderingPreservesThePublicModeIdentity() = runTest {
+        val firstMode = mode(key = 1L, refreshRateHz = 60.0)
+        val secondMode = mode(key = 2L, refreshRateHz = 120.0)
+        val port = FakeDisplayPort(
+            snapshot = snapshotOf(
+                displays = listOf(display(key = 11L, modes = listOf(firstMode, secondMode), currentModeKey = 2L)),
+            ),
+        )
+        val manager = manager(port)
+        manager.requestAccess()
+        val display = enumerated(manager).single()
+        val originalCurrentMode = checkNotNull(display.state.value.currentMode)
+        val originalFirstMode = display.state.value.modes.single { it.refreshRateHz == 60.0 }
+        val changed = async(UnconfinedTestDispatcher(testScheduler), start = CoroutineStart.UNDISPATCHED) {
+            manager.events.first { it is DisplayEvent.Changed }
+        }
+
+        port.publish(
+            snapshotOf(
+                displays = listOf(display(key = 11L, modes = listOf(secondMode, firstMode), currentModeKey = 2L)),
+            ),
+        )
+
+        val event = assertIs<DisplayEvent.Changed>(changed.await())
+        val current = enumerated(manager).single()
+        assertSame(display, current)
+        assertEquals(originalCurrentMode.id, current.state.value.currentMode?.id)
+        assertEquals(
+            originalFirstMode.id,
+            current.state.value.modes.single { it.refreshRateHz == 60.0 }.id,
+        )
+        assertEquals(120.0, current.state.value.currentMode?.refreshRateHz)
+        assertEquals(current.state.value, event.state)
+        assertEquals(manager.state.value.revision, event.managerRevision)
+    }
+
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+    @Test
+    fun nativeScaleChangePublishesTheUpdatedDisplayStateBeforeTheChangedEvent() = runTest {
+        val port = FakeDisplayPort(snapshot = snapshot(displayKeys = listOf(11L)))
+        val manager = manager(port)
+        manager.requestAccess()
+        val display = enumerated(manager).single()
+        val changed = async(UnconfinedTestDispatcher(testScheduler), start = CoroutineStart.UNDISPATCHED) {
+            manager.events.first { candidate ->
+                if (candidate !is DisplayEvent.Changed) return@first false
+                val published = assertIs<DisplayInventory.Enumerated>(manager.state.value.inventory)
+                assertSame(candidate.display, published.displays.single())
+                assertEquals(candidate.state, candidate.display.state.value)
+                assertEquals(candidate.managerRevision, manager.state.value.revision)
+                true
+            }
+        }
+
+        port.publish(snapshotOf(displays = listOf(display(key = 11L, scaleFactor = 1.0))))
+
+        val event = assertIs<DisplayEvent.Changed>(changed.await())
+        val current = enumerated(manager).single()
+        assertSame(display, current)
+        assertEquals(1.0, current.state.value.scaleFactor)
+        assertEquals(current.state.value, event.state)
+        assertEquals(manager.state.value.revision, event.managerRevision)
     }
 
     @Test
@@ -235,21 +312,25 @@ class RuntimeDisplayManagerTest {
         key: Long,
         modes: List<DisplayPortMode> = listOf(mode()),
         currentModeKey: Long? = modes.firstOrNull()?.key,
+        scaleFactor: Double = 2.0,
     ): DisplayPortDisplay = DisplayPortDisplay(
         key = key,
         type = DisplayType.Physical,
         name = "Display $key",
         bounds = PhysicalRect(PhysicalPoint(0, 0), PhysicalSize(1920, 1080)),
         workArea = PhysicalRect(PhysicalPoint(0, 0), PhysicalSize(1920, 1040)),
-        scaleFactor = 2.0,
+        scaleFactor = scaleFactor,
         currentModeKey = currentModeKey,
         modes = modes,
     )
 
-    private fun mode(): DisplayPortMode = DisplayPortMode(
-        key = 1,
+    private fun mode(
+        key: Long = 1L,
+        refreshRateHz: Double = 60.0,
+    ): DisplayPortMode = DisplayPortMode(
+        key = key,
         physicalSize = PhysicalSize(1920, 1080),
-        refreshRateHz = 60.0,
+        refreshRateHz = refreshRateHz,
         bitDepth = 24,
     )
 }
