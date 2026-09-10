@@ -210,6 +210,7 @@ test('a signal after the diagnostic commit retains the complete durable quaranti
 
   await waitForFileWhileRunning(fixture.diagnosticCommitStarted, execution, 10_000);
   execution.child.kill('SIGTERM');
+  await waitForFileWhileRunning(fixture.diagnosticCommitSignalObserved, execution, 10_000);
   await writeFile(fixture.diagnosticCommitRelease, 'release');
   const result = await execution.completion;
 
@@ -260,6 +261,7 @@ async function createFixture(scenario, junit = validJunit) {
   const diagnosticPreservationRelease = join(root, 'diagnostic-preservation-release');
   const diagnosticCommitStarted = join(root, 'diagnostic-commit-started');
   const diagnosticCommitRelease = join(root, 'diagnostic-commit-release');
+  const diagnosticCommitSignalObserved = join(root, 'diagnostic-commit-signal-observed');
   const queryResponse = join(root, 'query-response.html');
   const diagnostics = join(evidence, 'diagnostics', 'playwright');
   const diagnosticsParent = dirname(diagnostics);
@@ -310,6 +312,7 @@ async function createFixture(scenario, junit = validJunit) {
     diagnosticPreservationRelease,
     diagnosticCommitStarted,
     diagnosticCommitRelease,
+    diagnosticCommitSignalObserved,
     root,
     async dispose() {
       try {
@@ -350,6 +353,7 @@ async function createFixture(scenario, junit = validJunit) {
       KADRE_RUNNER_TEST_DIAGNOSTIC_PRESERVATION_RELEASE: diagnosticPreservationRelease,
       KADRE_RUNNER_TEST_DIAGNOSTIC_COMMIT_STARTED: diagnosticCommitStarted,
       KADRE_RUNNER_TEST_DIAGNOSTIC_COMMIT_RELEASE: diagnosticCommitRelease,
+      KADRE_RUNNER_TEST_DIAGNOSTIC_COMMIT_SIGNAL_OBSERVED: diagnosticCommitSignalObserved,
       KADRE_RUNNER_TEST_SCENARIO: scenario,
       ...([
         'partial-quarantine-failure',
@@ -589,6 +593,11 @@ const { basename, join } = require('node:path');
 
 const rename = fileSystem.rename.bind(fileSystem);
 const rm = fileSystem.rm.bind(fileSystem);
+if (process.env.KADRE_RUNNER_TEST_DIAGNOSTIC_COMMIT_SIGNAL_OBSERVED) {
+  process.on('SIGTERM', () => {
+    writeFileSync(process.env.KADRE_RUNNER_TEST_DIAGNOSTIC_COMMIT_SIGNAL_OBSERVED, 'observed');
+  });
+}
 fileSystem.rename = async (source, destination) => {
   const result = await rename(source, destination);
   if (process.env.KADRE_RUNNER_TEST_SCENARIO === 'signal-before-diagnostic-commit'
