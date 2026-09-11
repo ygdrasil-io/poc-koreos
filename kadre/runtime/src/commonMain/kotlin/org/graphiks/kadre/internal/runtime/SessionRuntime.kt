@@ -136,6 +136,8 @@ internal class SessionRuntime(
             eventStampSource = ::nextStamp,
             collectorAllocator = eventCollectorAllocator,
             maxCollectorsPerFlow = policy.resources.maxEventCollectorsPerFlow,
+            effectScope = rootScope,
+            maxConcurrentEffects = policy.resources.maxConcurrentGamepadEffects,
         )
     }
     private val runtimeDevices: DeviceManager = runtimeGamepadManager ?: UnsupportedDeviceManager(

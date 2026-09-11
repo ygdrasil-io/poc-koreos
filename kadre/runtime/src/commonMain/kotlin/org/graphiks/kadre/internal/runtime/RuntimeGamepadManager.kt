@@ -1,12 +1,19 @@
 package org.graphiks.kadre.internal.runtime
 
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
 import org.graphiks.kadre.application.EventStamp
+import org.graphiks.kadre.diagnostics.Capability
+import org.graphiks.kadre.diagnostics.FeatureAvailability
 import org.graphiks.kadre.diagnostics.KadreFailure
 import org.graphiks.kadre.diagnostics.KadreOperation
 import org.graphiks.kadre.diagnostics.KadreResourceKind
@@ -23,7 +30,11 @@ import org.graphiks.kadre.input.GamepadAxisValue
 import org.graphiks.kadre.input.GamepadButtonValue
 import org.graphiks.kadre.input.GamepadDescriptor
 import org.graphiks.kadre.input.GamepadEffect
+import org.graphiks.kadre.input.GamepadEffectKind
+import org.graphiks.kadre.input.GamepadEffectOutcome
 import org.graphiks.kadre.input.GamepadEffectSession
+import org.graphiks.kadre.input.GamepadEffectState
+import org.graphiks.kadre.input.GamepadEffectStopReason
 import org.graphiks.kadre.input.GamepadEvent
 import org.graphiks.kadre.input.GamepadId
 import org.graphiks.kadre.input.GamepadRevision
@@ -37,11 +48,15 @@ internal class RuntimeGamepadManager(
     private val eventStampSource: () -> EventStamp,
     private val collectorAllocator: RuntimeEventCollectorAllocator,
     private val maxCollectorsPerFlow: Int,
+    private val effectScope: CoroutineScope,
+    private val maxConcurrentEffects: Int,
 ) : DeviceManager, AutoCloseable {
     private val lock = RuntimeLock()
     private val gamepadsByKey = linkedMapOf<Long, RuntimeGamepad>()
     private var closed = false
     private var observation: AutoCloseable? = null
+    private var pendingEffects = 0
+    private val activeEffects = linkedSetOf<RuntimeGamepadEffectSession>()
     private val eventGate = collectorAllocator.newGate(maxCollectorsPerFlow)
     private val mutableState = MutableStateFlow(
         DeviceManagerState(
@@ -55,6 +70,7 @@ internal class RuntimeGamepadManager(
     override val events: Flow<DeviceLifecycleEvent> = mutableEvents.asSharedFlow().withEventCollectorAdmission(eventGate)
 
     init {
+        require(maxConcurrentEffects > 0) { "maxConcurrentEffects must be positive" }
         observation = port.installObserver(::accept)
         lock.withLock {
             if (!closed) {
@@ -71,34 +87,41 @@ internal class RuntimeGamepadManager(
     }
 
     override fun close() {
-        val toClose = lock.withLock {
+        val release = lock.withLock {
             if (closed) return
             closed = true
-            observation.also { observation = null }
-        }
-        toClose?.close()
-        lock.withLock {
+            val observation = observation.also { observation = null }
+            val effects = activeEffects.toList()
+            activeEffects.clear()
             gamepadsByKey.values.forEach(RuntimeGamepad::disconnect)
             gamepadsByKey.clear()
+            Release(observation, effects)
         }
+        release.observation?.close()
+        release.effects.forEach { effect -> effect.terminate(GamepadEffectOutcome.Stopped(GamepadEffectStopReason.ParentSessionStopping)) }
     }
 
     private fun accept(event: GamepadPortEvent) {
-        val publications = lock.withLock {
+        val accepted = lock.withLock {
             if (closed) return
             when (event) {
-                is GamepadPortEvent.Connected -> connectLocked(event.gamepad)
+                is GamepadPortEvent.Connected -> AcceptedPortEvent(connectLocked(event.gamepad))
                 is GamepadPortEvent.Disconnected -> disconnectLocked(event.key)
-                is GamepadPortEvent.StateChanged -> gamepadsByKey[event.key]
-                    ?.stateChanged(event.state, eventStampSource)
-                    .orEmpty()
+                is GamepadPortEvent.StateChanged -> AcceptedPortEvent(
+                    gamepadsByKey[event.key]?.stateChanged(event.state, eventStampSource).orEmpty(),
+                )
 
-                is GamepadPortEvent.RoutingChanged -> gamepadsByKey[event.key]
-                    ?.routingChanged(event.routing, event.state, eventStampSource)
-                    .orEmpty()
+                is GamepadPortEvent.RoutingChanged -> AcceptedPortEvent(
+                    gamepadsByKey[event.key]
+                        ?.routingChanged(event.routing, event.state, eventStampSource)
+                        .orEmpty(),
+                )
             }
         }
-        publications.forEach { publication ->
+        accepted.effects.forEach { effect ->
+            effect.terminate(GamepadEffectOutcome.Stopped(GamepadEffectStopReason.DeviceDisconnected))
+        }
+        accepted.publications.forEach { publication ->
             when (publication) {
                 is DevicePublication -> mutableEvents.tryEmit(publication.event)
                 is GamepadPublication -> publication.gamepad.publish(publication.event)
@@ -123,14 +146,18 @@ internal class RuntimeGamepadManager(
         )
     }
 
-    private fun disconnectLocked(key: Long): List<Publication> {
-        val gamepad = gamepadsByKey.remove(key) ?: return emptyList()
+    private fun disconnectLocked(key: Long): AcceptedPortEvent {
+        val gamepad = gamepadsByKey.remove(key) ?: return AcceptedPortEvent(emptyList())
+        val effects = detachEffectsLocked(gamepad)
         gamepad.disconnect()
         val next = publishInventoryLocked(incrementRevision = true)
-        return listOf(
-            DevicePublication(
-                DeviceLifecycleEvent.GamepadRemoved(gamepad.id, next.revision, eventStampSource()),
+        return AcceptedPortEvent(
+            publications = listOf(
+                DevicePublication(
+                    DeviceLifecycleEvent.GamepadRemoved(gamepad.id, next.revision, eventStampSource()),
+                ),
             ),
+            effects = effects,
         )
     }
 
@@ -166,6 +193,80 @@ internal class RuntimeGamepadManager(
         }
     }
 
+    private fun startEffect(
+        gamepad: RuntimeGamepad,
+        effect: GamepadEffect,
+    ): KadreResult<GamepadEffectSession> {
+        val admission = lock.withLock {
+            if (closed || !gamepad.isConnected()) {
+                return@withLock KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.Gamepad))
+            }
+            gamepad.effectAdmissionFailure(effect)?.let { failure ->
+                return@withLock KadreResult.Failure(failure)
+            }
+            if (activeEffects.size + pendingEffects >= maxConcurrentEffects) {
+                return@withLock KadreResult.Failure(
+                    KadreFailure.ResourceLimitExceeded(
+                        KadreResourceKind.GamepadEffect,
+                        maxConcurrentEffects.toLong(),
+                    ),
+                )
+            }
+            pendingEffects += 1
+            KadreResult.Success(Unit)
+        }
+        if (admission is KadreResult.Failure) return admission
+
+        val started = port.startEffect(gamepad.key, effect)
+        val owner = when (started) {
+            is KadreResult.Failure -> {
+                lock.withLock { pendingEffects -= 1 }
+                return started
+            }
+
+            is KadreResult.Success -> started.value
+        }
+        val session = lock.withLock {
+            pendingEffects -= 1
+            if (closed || !gamepad.isConnected()) {
+                null
+            } else {
+                RuntimeGamepadEffectSession(
+                    owner = owner,
+                    effect = effect,
+                    scope = effectScope,
+                    gamepadKey = gamepad.key,
+                    onTerminated = ::effectTerminated,
+                ).also(activeEffects::add)
+            }
+        }
+        if (session == null) {
+            runCatching(owner::close)
+            return KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.Gamepad))
+        }
+        session.start()
+        return KadreResult.Success(session)
+    }
+
+    private fun stopEffects(gamepad: RuntimeGamepad): KadreResult<Unit> {
+        val sessions = lock.withLock {
+            if (closed || !gamepad.isConnected()) {
+                return@withLock null
+            }
+            activeEffects.filter { it.gamepadKey == gamepad.key }
+        } ?: return KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.Gamepad))
+        sessions.forEach(RuntimeGamepadEffectSession::requestStop)
+        return KadreResult.Success(Unit)
+    }
+
+    private fun detachEffectsLocked(gamepad: RuntimeGamepad): List<RuntimeGamepadEffectSession> =
+        activeEffects.filter { effect -> effect.gamepadKey == gamepad.key }
+            .also(activeEffects::removeAll)
+
+    private fun effectTerminated(session: RuntimeGamepadEffectSession) {
+        lock.withLock { activeEffects.remove(session) }
+    }
+
     private fun nextRevision(current: DeviceManagerRevision): DeviceManagerRevision {
         check(current.value < Long.MAX_VALUE) { "device manager revision space exhausted" }
         return DeviceManagerRevision(current.value + 1L)
@@ -177,12 +278,89 @@ internal class RuntimeGamepadManager(
         val gamepad: RuntimeGamepad,
         val event: GamepadEvent,
     ) : Publication
+    private data class AcceptedPortEvent(
+        val publications: List<Publication>,
+        val effects: List<RuntimeGamepadEffectSession> = emptyList(),
+    )
+    private data class Release(
+        val observation: AutoCloseable?,
+        val effects: List<RuntimeGamepadEffectSession>,
+    )
+
+    private class RuntimeGamepadEffectSession(
+        private val owner: GamepadPortEffect,
+        private val effect: GamepadEffect,
+        private val scope: CoroutineScope,
+        val gamepadKey: Long,
+        private val onTerminated: (RuntimeGamepadEffectSession) -> Unit,
+    ) : GamepadEffectSession {
+        private val lock = RuntimeLock()
+        private val terminal = CompletableDeferred<GamepadEffectOutcome>()
+        private val mutableState = MutableStateFlow<GamepadEffectState>(GamepadEffectState.Playing)
+        private var completion: Job? = null
+        private var finished = false
+
+        override val state: StateFlow<GamepadEffectState> = mutableState.asStateFlow()
+
+        fun start() {
+            val shouldStart = lock.withLock {
+                if (finished || completion != null) false else true
+            }
+            if (!shouldStart) return
+            val job = scope.launch {
+                delay(effect.duration)
+                terminate(GamepadEffectOutcome.Completed)
+            }
+            lock.withLock {
+                if (finished) job.cancel() else completion = job
+            }
+        }
+
+        override fun requestStop() {
+            terminate(GamepadEffectOutcome.Stopped(GamepadEffectStopReason.Requested))
+        }
+
+        override fun close() = requestStop()
+
+        override suspend fun awaitTermination(): GamepadEffectOutcome = terminal.await()
+
+        fun terminate(outcome: GamepadEffectOutcome) {
+            val shouldTerminate = lock.withLock {
+                if (finished) {
+                    false
+                } else {
+                    finished = true
+                    completion?.cancel()
+                    if (outcome != GamepadEffectOutcome.Completed) {
+                        mutableState.value = GamepadEffectState.Stopping
+                    }
+                    true
+                }
+            }
+            if (!shouldTerminate) return
+            val terminalOutcome = if (outcome == GamepadEffectOutcome.Completed) {
+                outcome
+            } else {
+                when (val stopped = owner.requestStop()) {
+                    is KadreResult.Success -> outcome
+                    is KadreResult.Failure -> GamepadEffectOutcome.Failed(stopped.reason)
+                }
+            }
+            lock.withLock {
+                mutableState.value = GamepadEffectState.Terminated(terminalOutcome)
+                check(terminal.complete(terminalOutcome)) { "gamepad effect terminal outcome was already completed" }
+            }
+            runCatching(owner::close)
+            onTerminated(this)
+        }
+    }
 
     private inner class RuntimeGamepad(
         override val id: GamepadId,
         source: GamepadPortGamepad,
         eventGate: RuntimeEventCollectorGate,
     ) : Gamepad {
+        val key: Long = source.key
         private val mutableState = MutableStateFlow(
             GamepadSnapshot(
                 descriptor = source.descriptor,
@@ -203,9 +381,36 @@ internal class RuntimeGamepadManager(
         override val events: Flow<GamepadEvent> = mutableEvents.asSharedFlow().withEventCollectorAdmission(eventGate)
 
         override suspend fun playEffect(effect: GamepadEffect): KadreResult<GamepadEffectSession> =
-            KadreResult.Failure(KadreFailure.Unsupported(KadreOperation.GamepadEffect))
+            this@RuntimeGamepadManager.startEffect(this, effect)
 
-        override suspend fun stopEffects(): KadreResult<Unit> = KadreResult.Success(Unit)
+        override suspend fun stopEffects(): KadreResult<Unit> = this@RuntimeGamepadManager.stopEffects(this)
+
+        fun isConnected(): Boolean = mutableState.value.connection == DeviceConnectionState.Connected
+
+        fun effectAdmissionFailure(effect: GamepadEffect): KadreFailure? {
+            val capability = mutableState.value.capabilities.effects
+            val constraints = when (capability) {
+                is Capability.Unsupported -> return capability.failure
+                is Capability.Supported -> when (val availability = capability.availability) {
+                    FeatureAvailability.Available -> capability.constraints
+                    is FeatureAvailability.Unavailable -> return availability.failure
+                    else -> return KadreFailure.TemporarilyUnavailable(retryable = true)
+                }
+            }
+            val kind = when (effect) {
+                is GamepadEffect.DualRumble -> GamepadEffectKind.DualRumble
+                is GamepadEffect.TriggerRumble -> GamepadEffectKind.TriggerRumble
+                is GamepadEffect.LocalizedHaptic -> GamepadEffectKind.LocalizedHaptic
+            }
+            if (kind !in constraints.kinds) return KadreFailure.InvalidRequest("effect")
+            if (constraints.maximumDuration?.let { maximum -> effect.duration > maximum } == true) {
+                return KadreFailure.InvalidRequest("effect.duration")
+            }
+            if (effect is GamepadEffect.LocalizedHaptic && effect.locality !in checkNotNull(constraints.localizedHaptics).localities) {
+                return KadreFailure.InvalidRequest("effect")
+            }
+            return null
+        }
 
         fun stateChanged(nextControls: GamepadState, stampSource: () -> EventStamp): List<Publication> {
             val previous = mutableState.value
