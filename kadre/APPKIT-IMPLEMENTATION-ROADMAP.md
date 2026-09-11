@@ -591,11 +591,17 @@ le fan-out public et qu'une session fermée n'est plus ciblée. Le cahier manuel
 `manual/phase-9-memory-pressure.md` conserve le stress matériel des niveaux
 `Moderate` et `Critical`, sans synthétiser d'événement en CI.
 
+La géométrie externe est livrée et contractuellement active : `WIN-007` (O2)
+et `APK-015` (O3) prouvent les coordonnées physiques globales sans réduction
+par scale, le readback inconnu sans bounds fabriqués, l'ordre état-avant-
+événement, le bridge KFFI généré, la mutation corrélée, l'observation externe
+et le rejet des callbacks tardifs. Le cahier
+`manual/phase-9-window-geometry.md` conserve la validation humaine à écrans
+physiques d'échelles mixtes ; il ne la remplace pas par une topologie simulée.
+
 Le broker de fullscreen exclusif reste `planned` : son activation attend la
-trace du cahier matériel sur display dédié. `outerPosition` reste explicitement
-`Unsupported` en attente d'une preuve matérielle multi-écran à échelles mixtes ;
-`WIN-007`, `APK-015`, `WIN-008` et `APK-016` ne sont donc pas encore livrés
-contractuellement.
+trace du cahier matériel sur display dédié. Seuls `WIN-008` et `APK-016`
+restent donc non livrés contractuellement dans cette phase.
 
 #### Objectif
 

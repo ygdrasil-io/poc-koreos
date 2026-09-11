@@ -3128,6 +3128,7 @@ internal class RuntimeWindow(
         val before = publication.before
         val effective = publication.effective
         if (
+            before.outerBounds != effective.outerBounds ||
             before.contentSize != effective.contentSize ||
             before.minimumSize != effective.minimumSize ||
             before.maximumSize != effective.maximumSize

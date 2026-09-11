@@ -2122,7 +2122,18 @@ class AppKitBackendProviderTest {
                     readNativeWindowChrome(window),
                 )
                 val systemProperties = withTimeout(5.seconds) {
-                    assertIs<WindowEvent.PropertiesChanged>(events.receive())
+                    var properties: WindowEvent.PropertiesChanged? = null
+                    while (properties == null) {
+                        when (val event = events.receive()) {
+                            is WindowEvent.GeometryChanged -> {
+                                assertEquals(systemOutcome.operationId, event.operationId)
+                                assertEquals(systemOutcome.state, event.state)
+                            }
+                            is WindowEvent.PropertiesChanged -> properties = event
+                            else -> error("expected correlated geometry or properties event, got $event")
+                        }
+                    }
+                    checkNotNull(properties)
                 }
                 assertEquals(systemOutcome.operationId, systemProperties.operationId)
                 assertEquals(systemOutcome.state, systemProperties.state)
