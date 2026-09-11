@@ -132,18 +132,74 @@ public data class GamepadState(
 }
 
 public data class GamepadCapabilities(public val effects: Capability<GamepadEffectConstraints>)
-public enum class GamepadEffectKind { DualRumble, TriggerRumble }
+public enum class GamepadEffectKind { DualRumble, TriggerRumble, LocalizedHaptic }
 
-public data class GamepadEffectConstraints(
-    public val kinds: Set<GamepadEffectKind>,
+public enum class GamepadHapticLocality {
+    Default,
+    All,
+    Handles,
+    LeftHandle,
+    RightHandle,
+    Triggers,
+    LeftTrigger,
+    RightTrigger,
+}
+
+public class GamepadLocalizedHapticConstraints(localities: Set<GamepadHapticLocality>) {
+    public val localities: Set<GamepadHapticLocality> = localities.toSet()
+
+    init {
+        require(this.localities.isNotEmpty()) { "localities must not be empty" }
+    }
+
+    public operator fun component1(): Set<GamepadHapticLocality> = localities
+    public fun copy(localities: Set<GamepadHapticLocality> = this.localities): GamepadLocalizedHapticConstraints =
+        GamepadLocalizedHapticConstraints(localities)
+
+    override fun equals(other: Any?): Boolean =
+        other is GamepadLocalizedHapticConstraints && localities == other.localities
+
+    override fun hashCode(): Int = localities.hashCode()
+    override fun toString(): String = "GamepadLocalizedHapticConstraints(localities=$localities)"
+}
+
+public class GamepadEffectConstraints(
+    kinds: Set<GamepadEffectKind>,
+    public val localizedHaptics: GamepadLocalizedHapticConstraints?,
     public val maximumDuration: Duration?,
 ) {
+    public val kinds: Set<GamepadEffectKind> = kinds.toSet()
+
     init {
-        require(kinds.isNotEmpty()) { "kinds must not be empty" }
+        require(this.kinds.isNotEmpty()) { "kinds must not be empty" }
         require(maximumDuration == null || maximumDuration.isFinite() && maximumDuration.isPositive()) {
             "maximumDuration must be finite and positive"
         }
+        require((GamepadEffectKind.LocalizedHaptic in this.kinds) == (localizedHaptics != null)) {
+            "localizedHaptics must be present if and only if LocalizedHaptic is supported"
+        }
     }
+
+    public operator fun component1(): Set<GamepadEffectKind> = kinds
+    public operator fun component2(): GamepadLocalizedHapticConstraints? = localizedHaptics
+    public operator fun component3(): Duration? = maximumDuration
+    public fun copy(
+        kinds: Set<GamepadEffectKind> = this.kinds,
+        localizedHaptics: GamepadLocalizedHapticConstraints? = this.localizedHaptics,
+        maximumDuration: Duration? = this.maximumDuration,
+    ): GamepadEffectConstraints = GamepadEffectConstraints(kinds, localizedHaptics, maximumDuration)
+
+    override fun equals(other: Any?): Boolean =
+        other is GamepadEffectConstraints &&
+            kinds == other.kinds &&
+            localizedHaptics == other.localizedHaptics &&
+            maximumDuration == other.maximumDuration
+
+    override fun hashCode(): Int = 31 * (31 * kinds.hashCode() + (localizedHaptics?.hashCode() ?: 0)) +
+        (maximumDuration?.hashCode() ?: 0)
+
+    override fun toString(): String =
+        "GamepadEffectConstraints(kinds=$kinds, localizedHaptics=$localizedHaptics, maximumDuration=$maximumDuration)"
 }
 
 public sealed interface GamepadEvent {
@@ -199,25 +255,61 @@ public sealed interface GamepadEffect {
     }
 
     public data class TriggerRumble private constructor(
-        public val left: Double,
-        public val right: Double,
+        public val strong: Double,
+        public val weak: Double,
+        public val leftTrigger: Double,
+        public val rightTrigger: Double,
         override val duration: Duration,
         private val canonicalized: Unit,
     ) : GamepadEffect {
-        public constructor(left: Double, right: Double, duration: Duration) : this(
-            canonicalEffectValue(left, "left"),
-            canonicalEffectValue(right, "right"),
+        public constructor(
+            strong: Double,
+            weak: Double,
+            leftTrigger: Double,
+            rightTrigger: Double,
+            duration: Duration,
+        ) : this(
+            canonicalEffectValue(strong, "strong"),
+            canonicalEffectValue(weak, "weak"),
+            canonicalEffectValue(leftTrigger, "leftTrigger"),
+            canonicalEffectValue(rightTrigger, "rightTrigger"),
             duration.also(::validateEffectDuration),
             Unit,
         )
 
         public fun copy(
-            left: Double = this.left,
-            right: Double = this.right,
+            strong: Double = this.strong,
+            weak: Double = this.weak,
+            leftTrigger: Double = this.leftTrigger,
+            rightTrigger: Double = this.rightTrigger,
             duration: Duration = this.duration,
-        ): TriggerRumble = TriggerRumble(left, right, duration)
+        ): TriggerRumble = TriggerRumble(strong, weak, leftTrigger, rightTrigger, duration)
 
-        override fun toString(): String = "TriggerRumble(left=$left, right=$right, duration=$duration)"
+        override fun toString(): String =
+            "TriggerRumble(strong=$strong, weak=$weak, leftTrigger=$leftTrigger, rightTrigger=$rightTrigger, duration=$duration)"
+    }
+
+    public data class LocalizedHaptic private constructor(
+        public val locality: GamepadHapticLocality,
+        public val intensity: Double,
+        override val duration: Duration,
+        private val canonicalized: Unit,
+    ) : GamepadEffect {
+        public constructor(locality: GamepadHapticLocality, intensity: Double, duration: Duration) : this(
+            locality,
+            canonicalEffectValue(intensity, "intensity"),
+            duration.also(::validateEffectDuration),
+            Unit,
+        )
+
+        public fun copy(
+            locality: GamepadHapticLocality = this.locality,
+            intensity: Double = this.intensity,
+            duration: Duration = this.duration,
+        ): LocalizedHaptic = LocalizedHaptic(locality, intensity, duration)
+
+        override fun toString(): String =
+            "LocalizedHaptic(locality=$locality, intensity=$intensity, duration=$duration)"
     }
 }
 

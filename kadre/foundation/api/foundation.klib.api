@@ -462,6 +462,7 @@ final enum class org.graphiks.kadre.input/DropItemReadMode : kotlin/Enum<org.gra
 
 final enum class org.graphiks.kadre.input/GamepadEffectKind : kotlin/Enum<org.graphiks.kadre.input/GamepadEffectKind> { // org.graphiks.kadre.input/GamepadEffectKind|null[0]
     enum entry DualRumble // org.graphiks.kadre.input/GamepadEffectKind.DualRumble|null[0]
+    enum entry LocalizedHaptic // org.graphiks.kadre.input/GamepadEffectKind.LocalizedHaptic|null[0]
     enum entry TriggerRumble // org.graphiks.kadre.input/GamepadEffectKind.TriggerRumble|null[0]
 
     final val entries // org.graphiks.kadre.input/GamepadEffectKind.entries|#static{}entries[0]
@@ -482,6 +483,23 @@ final enum class org.graphiks.kadre.input/GamepadEffectStopReason : kotlin/Enum<
 
     final fun valueOf(kotlin/String): org.graphiks.kadre.input/GamepadEffectStopReason // org.graphiks.kadre.input/GamepadEffectStopReason.valueOf|valueOf#static(kotlin.String){}[0]
     final fun values(): kotlin/Array<org.graphiks.kadre.input/GamepadEffectStopReason> // org.graphiks.kadre.input/GamepadEffectStopReason.values|values#static(){}[0]
+}
+
+final enum class org.graphiks.kadre.input/GamepadHapticLocality : kotlin/Enum<org.graphiks.kadre.input/GamepadHapticLocality> { // org.graphiks.kadre.input/GamepadHapticLocality|null[0]
+    enum entry All // org.graphiks.kadre.input/GamepadHapticLocality.All|null[0]
+    enum entry Default // org.graphiks.kadre.input/GamepadHapticLocality.Default|null[0]
+    enum entry Handles // org.graphiks.kadre.input/GamepadHapticLocality.Handles|null[0]
+    enum entry LeftHandle // org.graphiks.kadre.input/GamepadHapticLocality.LeftHandle|null[0]
+    enum entry LeftTrigger // org.graphiks.kadre.input/GamepadHapticLocality.LeftTrigger|null[0]
+    enum entry RightHandle // org.graphiks.kadre.input/GamepadHapticLocality.RightHandle|null[0]
+    enum entry RightTrigger // org.graphiks.kadre.input/GamepadHapticLocality.RightTrigger|null[0]
+    enum entry Triggers // org.graphiks.kadre.input/GamepadHapticLocality.Triggers|null[0]
+
+    final val entries // org.graphiks.kadre.input/GamepadHapticLocality.entries|#static{}entries[0]
+        final fun <get-entries>(): kotlin.enums/EnumEntries<org.graphiks.kadre.input/GamepadHapticLocality> // org.graphiks.kadre.input/GamepadHapticLocality.entries.<get-entries>|<get-entries>#static(){}[0]
+
+    final fun valueOf(kotlin/String): org.graphiks.kadre.input/GamepadHapticLocality // org.graphiks.kadre.input/GamepadHapticLocality.valueOf|valueOf#static(kotlin.String){}[0]
+    final fun values(): kotlin/Array<org.graphiks.kadre.input/GamepadHapticLocality> // org.graphiks.kadre.input/GamepadHapticLocality.values|values#static(){}[0]
 }
 
 final enum class org.graphiks.kadre.input/GamepadMapping : kotlin/Enum<org.graphiks.kadre.input/GamepadMapping> { // org.graphiks.kadre.input/GamepadMapping|null[0]
@@ -3118,20 +3136,45 @@ sealed interface org.graphiks.kadre.input/GamepadEffect { // org.graphiks.kadre.
         final fun toString(): kotlin/String // org.graphiks.kadre.input/GamepadEffect.DualRumble.toString|toString(){}[0]
     }
 
+    final class LocalizedHaptic : org.graphiks.kadre.input/GamepadEffect { // org.graphiks.kadre.input/GamepadEffect.LocalizedHaptic|null[0]
+        constructor <init>(org.graphiks.kadre.input/GamepadHapticLocality, kotlin/Double, kotlin.time/Duration) // org.graphiks.kadre.input/GamepadEffect.LocalizedHaptic.<init>|<init>(org.graphiks.kadre.input.GamepadHapticLocality;kotlin.Double;kotlin.time.Duration){}[0]
+
+        final val duration // org.graphiks.kadre.input/GamepadEffect.LocalizedHaptic.duration|{}duration[0]
+            final fun <get-duration>(): kotlin.time/Duration // org.graphiks.kadre.input/GamepadEffect.LocalizedHaptic.duration.<get-duration>|<get-duration>(){}[0]
+        final val intensity // org.graphiks.kadre.input/GamepadEffect.LocalizedHaptic.intensity|{}intensity[0]
+            final fun <get-intensity>(): kotlin/Double // org.graphiks.kadre.input/GamepadEffect.LocalizedHaptic.intensity.<get-intensity>|<get-intensity>(){}[0]
+        final val locality // org.graphiks.kadre.input/GamepadEffect.LocalizedHaptic.locality|{}locality[0]
+            final fun <get-locality>(): org.graphiks.kadre.input/GamepadHapticLocality // org.graphiks.kadre.input/GamepadEffect.LocalizedHaptic.locality.<get-locality>|<get-locality>(){}[0]
+
+        final fun component1(): org.graphiks.kadre.input/GamepadHapticLocality // org.graphiks.kadre.input/GamepadEffect.LocalizedHaptic.component1|component1(){}[0]
+        final fun component2(): kotlin/Double // org.graphiks.kadre.input/GamepadEffect.LocalizedHaptic.component2|component2(){}[0]
+        final fun component3(): kotlin.time/Duration // org.graphiks.kadre.input/GamepadEffect.LocalizedHaptic.component3|component3(){}[0]
+        final fun copy(org.graphiks.kadre.input/GamepadHapticLocality = ..., kotlin/Double = ..., kotlin.time/Duration = ...): org.graphiks.kadre.input/GamepadEffect.LocalizedHaptic // org.graphiks.kadre.input/GamepadEffect.LocalizedHaptic.copy|copy(org.graphiks.kadre.input.GamepadHapticLocality;kotlin.Double;kotlin.time.Duration){}[0]
+        final fun equals(kotlin/Any?): kotlin/Boolean // org.graphiks.kadre.input/GamepadEffect.LocalizedHaptic.equals|equals(kotlin.Any?){}[0]
+        final fun hashCode(): kotlin/Int // org.graphiks.kadre.input/GamepadEffect.LocalizedHaptic.hashCode|hashCode(){}[0]
+        final fun toString(): kotlin/String // org.graphiks.kadre.input/GamepadEffect.LocalizedHaptic.toString|toString(){}[0]
+    }
+
     final class TriggerRumble : org.graphiks.kadre.input/GamepadEffect { // org.graphiks.kadre.input/GamepadEffect.TriggerRumble|null[0]
-        constructor <init>(kotlin/Double, kotlin/Double, kotlin.time/Duration) // org.graphiks.kadre.input/GamepadEffect.TriggerRumble.<init>|<init>(kotlin.Double;kotlin.Double;kotlin.time.Duration){}[0]
+        constructor <init>(kotlin/Double, kotlin/Double, kotlin/Double, kotlin/Double, kotlin.time/Duration) // org.graphiks.kadre.input/GamepadEffect.TriggerRumble.<init>|<init>(kotlin.Double;kotlin.Double;kotlin.Double;kotlin.Double;kotlin.time.Duration){}[0]
 
         final val duration // org.graphiks.kadre.input/GamepadEffect.TriggerRumble.duration|{}duration[0]
             final fun <get-duration>(): kotlin.time/Duration // org.graphiks.kadre.input/GamepadEffect.TriggerRumble.duration.<get-duration>|<get-duration>(){}[0]
-        final val left // org.graphiks.kadre.input/GamepadEffect.TriggerRumble.left|{}left[0]
-            final fun <get-left>(): kotlin/Double // org.graphiks.kadre.input/GamepadEffect.TriggerRumble.left.<get-left>|<get-left>(){}[0]
-        final val right // org.graphiks.kadre.input/GamepadEffect.TriggerRumble.right|{}right[0]
-            final fun <get-right>(): kotlin/Double // org.graphiks.kadre.input/GamepadEffect.TriggerRumble.right.<get-right>|<get-right>(){}[0]
+        final val leftTrigger // org.graphiks.kadre.input/GamepadEffect.TriggerRumble.leftTrigger|{}leftTrigger[0]
+            final fun <get-leftTrigger>(): kotlin/Double // org.graphiks.kadre.input/GamepadEffect.TriggerRumble.leftTrigger.<get-leftTrigger>|<get-leftTrigger>(){}[0]
+        final val rightTrigger // org.graphiks.kadre.input/GamepadEffect.TriggerRumble.rightTrigger|{}rightTrigger[0]
+            final fun <get-rightTrigger>(): kotlin/Double // org.graphiks.kadre.input/GamepadEffect.TriggerRumble.rightTrigger.<get-rightTrigger>|<get-rightTrigger>(){}[0]
+        final val strong // org.graphiks.kadre.input/GamepadEffect.TriggerRumble.strong|{}strong[0]
+            final fun <get-strong>(): kotlin/Double // org.graphiks.kadre.input/GamepadEffect.TriggerRumble.strong.<get-strong>|<get-strong>(){}[0]
+        final val weak // org.graphiks.kadre.input/GamepadEffect.TriggerRumble.weak|{}weak[0]
+            final fun <get-weak>(): kotlin/Double // org.graphiks.kadre.input/GamepadEffect.TriggerRumble.weak.<get-weak>|<get-weak>(){}[0]
 
         final fun component1(): kotlin/Double // org.graphiks.kadre.input/GamepadEffect.TriggerRumble.component1|component1(){}[0]
         final fun component2(): kotlin/Double // org.graphiks.kadre.input/GamepadEffect.TriggerRumble.component2|component2(){}[0]
-        final fun component3(): kotlin.time/Duration // org.graphiks.kadre.input/GamepadEffect.TriggerRumble.component3|component3(){}[0]
-        final fun copy(kotlin/Double = ..., kotlin/Double = ..., kotlin.time/Duration = ...): org.graphiks.kadre.input/GamepadEffect.TriggerRumble // org.graphiks.kadre.input/GamepadEffect.TriggerRumble.copy|copy(kotlin.Double;kotlin.Double;kotlin.time.Duration){}[0]
+        final fun component3(): kotlin/Double // org.graphiks.kadre.input/GamepadEffect.TriggerRumble.component3|component3(){}[0]
+        final fun component4(): kotlin/Double // org.graphiks.kadre.input/GamepadEffect.TriggerRumble.component4|component4(){}[0]
+        final fun component5(): kotlin.time/Duration // org.graphiks.kadre.input/GamepadEffect.TriggerRumble.component5|component5(){}[0]
+        final fun copy(kotlin/Double = ..., kotlin/Double = ..., kotlin/Double = ..., kotlin/Double = ..., kotlin.time/Duration = ...): org.graphiks.kadre.input/GamepadEffect.TriggerRumble // org.graphiks.kadre.input/GamepadEffect.TriggerRumble.copy|copy(kotlin.Double;kotlin.Double;kotlin.Double;kotlin.Double;kotlin.time.Duration){}[0]
         final fun equals(kotlin/Any?): kotlin/Boolean // org.graphiks.kadre.input/GamepadEffect.TriggerRumble.equals|equals(kotlin.Any?){}[0]
         final fun hashCode(): kotlin/Int // org.graphiks.kadre.input/GamepadEffect.TriggerRumble.hashCode|hashCode(){}[0]
         final fun toString(): kotlin/String // org.graphiks.kadre.input/GamepadEffect.TriggerRumble.toString|toString(){}[0]
@@ -5603,16 +5646,19 @@ final class org.graphiks.kadre.input/GamepadDescriptor { // org.graphiks.kadre.i
 }
 
 final class org.graphiks.kadre.input/GamepadEffectConstraints { // org.graphiks.kadre.input/GamepadEffectConstraints|null[0]
-    constructor <init>(kotlin.collections/Set<org.graphiks.kadre.input/GamepadEffectKind>, kotlin.time/Duration?) // org.graphiks.kadre.input/GamepadEffectConstraints.<init>|<init>(kotlin.collections.Set<org.graphiks.kadre.input.GamepadEffectKind>;kotlin.time.Duration?){}[0]
+    constructor <init>(kotlin.collections/Set<org.graphiks.kadre.input/GamepadEffectKind>, org.graphiks.kadre.input/GamepadLocalizedHapticConstraints?, kotlin.time/Duration?) // org.graphiks.kadre.input/GamepadEffectConstraints.<init>|<init>(kotlin.collections.Set<org.graphiks.kadre.input.GamepadEffectKind>;org.graphiks.kadre.input.GamepadLocalizedHapticConstraints?;kotlin.time.Duration?){}[0]
 
     final val kinds // org.graphiks.kadre.input/GamepadEffectConstraints.kinds|{}kinds[0]
         final fun <get-kinds>(): kotlin.collections/Set<org.graphiks.kadre.input/GamepadEffectKind> // org.graphiks.kadre.input/GamepadEffectConstraints.kinds.<get-kinds>|<get-kinds>(){}[0]
+    final val localizedHaptics // org.graphiks.kadre.input/GamepadEffectConstraints.localizedHaptics|{}localizedHaptics[0]
+        final fun <get-localizedHaptics>(): org.graphiks.kadre.input/GamepadLocalizedHapticConstraints? // org.graphiks.kadre.input/GamepadEffectConstraints.localizedHaptics.<get-localizedHaptics>|<get-localizedHaptics>(){}[0]
     final val maximumDuration // org.graphiks.kadre.input/GamepadEffectConstraints.maximumDuration|{}maximumDuration[0]
         final fun <get-maximumDuration>(): kotlin.time/Duration? // org.graphiks.kadre.input/GamepadEffectConstraints.maximumDuration.<get-maximumDuration>|<get-maximumDuration>(){}[0]
 
     final fun component1(): kotlin.collections/Set<org.graphiks.kadre.input/GamepadEffectKind> // org.graphiks.kadre.input/GamepadEffectConstraints.component1|component1(){}[0]
-    final fun component2(): kotlin.time/Duration? // org.graphiks.kadre.input/GamepadEffectConstraints.component2|component2(){}[0]
-    final fun copy(kotlin.collections/Set<org.graphiks.kadre.input/GamepadEffectKind> = ..., kotlin.time/Duration? = ...): org.graphiks.kadre.input/GamepadEffectConstraints // org.graphiks.kadre.input/GamepadEffectConstraints.copy|copy(kotlin.collections.Set<org.graphiks.kadre.input.GamepadEffectKind>;kotlin.time.Duration?){}[0]
+    final fun component2(): org.graphiks.kadre.input/GamepadLocalizedHapticConstraints? // org.graphiks.kadre.input/GamepadEffectConstraints.component2|component2(){}[0]
+    final fun component3(): kotlin.time/Duration? // org.graphiks.kadre.input/GamepadEffectConstraints.component3|component3(){}[0]
+    final fun copy(kotlin.collections/Set<org.graphiks.kadre.input/GamepadEffectKind> = ..., org.graphiks.kadre.input/GamepadLocalizedHapticConstraints? = ..., kotlin.time/Duration? = ...): org.graphiks.kadre.input/GamepadEffectConstraints // org.graphiks.kadre.input/GamepadEffectConstraints.copy|copy(kotlin.collections.Set<org.graphiks.kadre.input.GamepadEffectKind>;org.graphiks.kadre.input.GamepadLocalizedHapticConstraints?;kotlin.time.Duration?){}[0]
     final fun equals(kotlin/Any?): kotlin/Boolean // org.graphiks.kadre.input/GamepadEffectConstraints.equals|equals(kotlin.Any?){}[0]
     final fun hashCode(): kotlin/Int // org.graphiks.kadre.input/GamepadEffectConstraints.hashCode|hashCode(){}[0]
     final fun toString(): kotlin/String // org.graphiks.kadre.input/GamepadEffectConstraints.toString|toString(){}[0]
@@ -5622,6 +5668,19 @@ final class org.graphiks.kadre.input/GamepadId { // org.graphiks.kadre.input/Gam
     final fun equals(kotlin/Any?): kotlin/Boolean // org.graphiks.kadre.input/GamepadId.equals|equals(kotlin.Any?){}[0]
     final fun hashCode(): kotlin/Int // org.graphiks.kadre.input/GamepadId.hashCode|hashCode(){}[0]
     final fun toString(): kotlin/String // org.graphiks.kadre.input/GamepadId.toString|toString(){}[0]
+}
+
+final class org.graphiks.kadre.input/GamepadLocalizedHapticConstraints { // org.graphiks.kadre.input/GamepadLocalizedHapticConstraints|null[0]
+    constructor <init>(kotlin.collections/Set<org.graphiks.kadre.input/GamepadHapticLocality>) // org.graphiks.kadre.input/GamepadLocalizedHapticConstraints.<init>|<init>(kotlin.collections.Set<org.graphiks.kadre.input.GamepadHapticLocality>){}[0]
+
+    final val localities // org.graphiks.kadre.input/GamepadLocalizedHapticConstraints.localities|{}localities[0]
+        final fun <get-localities>(): kotlin.collections/Set<org.graphiks.kadre.input/GamepadHapticLocality> // org.graphiks.kadre.input/GamepadLocalizedHapticConstraints.localities.<get-localities>|<get-localities>(){}[0]
+
+    final fun component1(): kotlin.collections/Set<org.graphiks.kadre.input/GamepadHapticLocality> // org.graphiks.kadre.input/GamepadLocalizedHapticConstraints.component1|component1(){}[0]
+    final fun copy(kotlin.collections/Set<org.graphiks.kadre.input/GamepadHapticLocality> = ...): org.graphiks.kadre.input/GamepadLocalizedHapticConstraints // org.graphiks.kadre.input/GamepadLocalizedHapticConstraints.copy|copy(kotlin.collections.Set<org.graphiks.kadre.input.GamepadHapticLocality>){}[0]
+    final fun equals(kotlin/Any?): kotlin/Boolean // org.graphiks.kadre.input/GamepadLocalizedHapticConstraints.equals|equals(kotlin.Any?){}[0]
+    final fun hashCode(): kotlin/Int // org.graphiks.kadre.input/GamepadLocalizedHapticConstraints.hashCode|hashCode(){}[0]
+    final fun toString(): kotlin/String // org.graphiks.kadre.input/GamepadLocalizedHapticConstraints.toString|toString(){}[0]
 }
 
 final class org.graphiks.kadre.input/GamepadSnapshot { // org.graphiks.kadre.input/GamepadSnapshot|null[0]
