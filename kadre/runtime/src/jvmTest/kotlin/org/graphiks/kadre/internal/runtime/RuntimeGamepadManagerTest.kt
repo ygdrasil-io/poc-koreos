@@ -37,6 +37,7 @@ import org.graphiks.kadre.input.GamepadMapping
 import org.graphiks.kadre.input.GamepadRoutingState
 import org.graphiks.kadre.input.GamepadState
 import org.graphiks.kadre.policy.GamepadRouting
+import org.graphiks.kadre.policy.DeviceEffectOwnership
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
@@ -63,8 +64,16 @@ class RuntimeGamepadManagerTest {
 
         assertEquals(
             listOf(
-                GamepadPortRouting(GamepadRouting.AllForegroundSessions, foregroundActive = false),
-                GamepadPortRouting(GamepadRouting.AllForegroundSessions, foregroundActive = true),
+                GamepadPortRouting(
+                    GamepadRouting.AllForegroundSessions,
+                    foregroundActive = false,
+                    effectOwnership = DeviceEffectOwnership.ExclusivePerPhysicalDevice,
+                ),
+                GamepadPortRouting(
+                    GamepadRouting.AllForegroundSessions,
+                    foregroundActive = true,
+                    effectOwnership = DeviceEffectOwnership.ExclusivePerPhysicalDevice,
+                ),
             ),
             port.routingUpdates,
         )

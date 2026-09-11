@@ -140,6 +140,7 @@ internal class SessionRuntime(
             maxConcurrentEffects = policy.resources.maxConcurrentGamepadEffects,
             gamepadRouting = policy.devices.gamepadRouting,
             initialLifecycleState = initialLifecycleState,
+            effectOwnership = policy.devices.effectOwnership,
         )
     }
     private val runtimeDevices: DeviceManager = runtimeGamepadManager ?: UnsupportedDeviceManager(

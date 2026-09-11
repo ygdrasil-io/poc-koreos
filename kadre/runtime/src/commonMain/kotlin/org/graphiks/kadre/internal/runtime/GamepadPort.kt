@@ -6,6 +6,7 @@ import org.graphiks.kadre.input.GamepadDescriptor
 import org.graphiks.kadre.input.GamepadEffect
 import org.graphiks.kadre.input.GamepadRoutingState
 import org.graphiks.kadre.input.GamepadState
+import org.graphiks.kadre.policy.DeviceEffectOwnership
 import org.graphiks.kadre.policy.GamepadRouting
 
 /** One detached native gamepad projection before the runtime allocates its public identity. */
@@ -54,6 +55,7 @@ public sealed interface GamepadPortEvent {
 public data class GamepadPortRouting(
     public val policy: GamepadRouting,
     public val foregroundActive: Boolean,
+    public val effectOwnership: DeviceEffectOwnership,
 )
 
 /**

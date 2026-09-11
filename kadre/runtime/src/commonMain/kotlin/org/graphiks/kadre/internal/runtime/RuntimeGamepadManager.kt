@@ -45,6 +45,7 @@ import org.graphiks.kadre.input.GamepadRoutingState
 import org.graphiks.kadre.input.GamepadSnapshot
 import org.graphiks.kadre.input.GamepadState
 import org.graphiks.kadre.policy.GamepadRouting
+import org.graphiks.kadre.policy.DeviceEffectOwnership
 
 /** Session-owned public gamepad projection backed by one [GamepadPort]. */
 internal class RuntimeGamepadManager(
@@ -56,6 +57,7 @@ internal class RuntimeGamepadManager(
     private val maxConcurrentEffects: Int,
     private val gamepadRouting: GamepadRouting,
     initialLifecycleState: LifecycleState,
+    private val effectOwnership: DeviceEffectOwnership = DeviceEffectOwnership.ExclusivePerPhysicalDevice,
 ) : DeviceManager, AutoCloseable {
     private val lock = RuntimeLock()
     private val gamepadsByKey = linkedMapOf<Long, RuntimeGamepad>()
@@ -208,6 +210,7 @@ internal class RuntimeGamepadManager(
     private fun routingFor(state: LifecycleState): GamepadPortRouting = GamepadPortRouting(
         policy = gamepadRouting,
         foregroundActive = state.visibility == VisibilityState.Foreground && state.activation == ActivationState.Active,
+        effectOwnership = effectOwnership,
     )
 
     private fun updateRouting(next: GamepadPortRouting) {
