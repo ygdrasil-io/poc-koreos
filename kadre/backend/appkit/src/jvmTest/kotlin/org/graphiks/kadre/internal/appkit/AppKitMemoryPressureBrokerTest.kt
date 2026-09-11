@@ -50,6 +50,25 @@ class AppKitMemoryPressureBrokerTest {
         assertEquals(listOf(MemoryPressureLevel.Critical), delivered)
         assertEquals(1, native.closeCount)
     }
+
+    @Test
+    fun signalDeliveredDuringNativeSourceOpeningIsRelayedAfterCapabilityAdmission() {
+        val dispatcher = QueuedMemoryPressureDispatcher()
+        val delivered = mutableListOf<MemoryPressureLevel>()
+        val broker = AppKitMemoryPressureBroker(
+            native = ImmediateMemoryPressureNative(MemoryPressureLevel.Moderate),
+            deliver = delivered::add,
+            dispatcher = dispatcher,
+        )
+
+        assertEquals(FeatureAvailability.Available, broker.activate())
+        assertEquals(1, dispatcher.pendingTaskCount)
+        assertEquals(emptyList(), delivered)
+
+        dispatcher.runNext()
+        assertEquals(listOf(MemoryPressureLevel.Moderate), delivered)
+        broker.close()
+    }
 }
 
 private class RecordingMemoryPressureNative : AppKitMemoryPressureNative {
@@ -67,6 +86,15 @@ private class RecordingMemoryPressureNative : AppKitMemoryPressureNative {
     }
 
     fun emit(level: MemoryPressureLevel) = listener?.invoke(level)
+}
+
+private class ImmediateMemoryPressureNative(
+    private val initialLevel: MemoryPressureLevel,
+) : AppKitMemoryPressureNative {
+    override fun open(listener: (MemoryPressureLevel) -> Unit): AutoCloseable {
+        listener(initialLevel)
+        return AutoCloseable { }
+    }
 }
 
 private class QueuedMemoryPressureDispatcher : AppKitMemoryPressureDispatcher {

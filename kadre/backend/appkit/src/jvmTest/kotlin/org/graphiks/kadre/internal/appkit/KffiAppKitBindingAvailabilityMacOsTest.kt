@@ -6,6 +6,7 @@ import org.graphiks.kffi.objc.NSRequestUserAttentionType
 import org.graphiks.kffi.objc.NSWindow
 import org.graphiks.kffi.objc.NSWindowSharingType
 import org.graphiks.kffi.objc.NSWindowStyleMask
+import org.graphiks.kffi.objc.appkit.DispatchMemoryPressureSource
 import org.graphiks.kffi.objc.NSPoint
 import org.graphiks.kffi.objc.NSRect
 import org.graphiks.kffi.objc.NSSize
@@ -23,6 +24,13 @@ import kotlin.test.assertNotEquals
  * fail at compilation or native linkage, before production code relies on it.
  */
 class KffiAppKitBindingAvailabilityMacOsTest {
+    @Test
+    fun generatedDispatchMemoryPressureSourceOpensAndClosesWithoutSynthesizingPressureOnMacOs() {
+        if (!isMacOsHost()) return
+
+        DispatchMemoryPressureSource { }.close()
+    }
+
     @Test
     fun generatedWindowChromeBindingsCompileAndExecuteSafeReadSetReadChecksOnMacOs() {
         if (!isMacOsHost()) return

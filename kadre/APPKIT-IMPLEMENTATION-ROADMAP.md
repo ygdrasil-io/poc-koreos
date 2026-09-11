@@ -581,13 +581,20 @@ public et non heuristique.
 L'observation d'appearance est livrée et contractuellement active : `RUN-007`
 (O2) prouve la paire thème/contraste atomique, l'ordre de publication et la
 déduplication ; `APK-017` (O3) relie le readback effectif, le selector AppKit,
-la notification d'accessibilité, la publication publique et le teardown. La
-source de pression mémoire et le broker de fullscreen exclusif restent
-`planned` jusqu'à leur evidence O2/O3. Pour le fullscreen exclusif, cette
-activation attend également la trace du cahier matériel sur display dédié.
-`outerPosition` reste explicitement `Unsupported` en attente d'une preuve
-matérielle multi-écran à échelles mixtes ; `WIN-007`, `APK-015`, `WIN-008`,
-`APK-016`, `RUN-008` et `APK-018` ne sont donc pas encore livrés
+la notification d'accessibilité, la publication publique et le teardown.
+
+La pression mémoire est également livrée et active : `RUN-008` (O2) interdit
+un signal sans capability admise et après detach ; `APK-018` (O3) prouve que le
+source `Dispatch` généré par KFFI s'ouvre réellement, que le premier signal
+émis pendant son ouverture n'est pas perdu, que les sessions vivantes reçoivent
+le fan-out public et qu'une session fermée n'est plus ciblée. Le cahier manuel
+`manual/phase-9-memory-pressure.md` conserve le stress matériel des niveaux
+`Moderate` et `Critical`, sans synthétiser d'événement en CI.
+
+Le broker de fullscreen exclusif reste `planned` : son activation attend la
+trace du cahier matériel sur display dédié. `outerPosition` reste explicitement
+`Unsupported` en attente d'une preuve matérielle multi-écran à échelles mixtes ;
+`WIN-007`, `APK-015`, `WIN-008` et `APK-016` ne sont donc pas encore livrés
 contractuellement.
 
 #### Objectif
@@ -611,6 +618,8 @@ Remplacer les managers et signaux `Unsupported` correspondants par des observati
 - changement de scale coordonné avec les surfaces concernées ;
 - une exécution native unique sur `macos-26`, sans skip ni retry automatique ;
 - aucun signal de pression mémoire synthétique.
+- le stress mémoire manuel conserve la trace brute des deux sessions, sans
+  convertir l'absence de notification système en succès.
 
 ### Phase 10 — Devices, gamepads et effets
 

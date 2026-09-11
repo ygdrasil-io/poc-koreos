@@ -378,6 +378,61 @@ class AppKitBackendProviderTest {
     }
 
     @Test
+    fun embeddedMemoryPressureFansOutToLiveSessionsAndExcludesAClosedSession() = kotlinx.coroutines.runBlocking {
+        val memoryPressureNative = ProviderMemoryPressureNative()
+        val provider = AppKitBackendProvider.forTesting(
+            nativeApplication = EmbeddedNativeApplication(),
+            broker = AppKitProcessBroker(memoryPressureNative = memoryPressureNative),
+            availability = { true },
+        )
+        val parentScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob())
+        val firstLifecycle = CompletableDeferred<KadreLifecycle>()
+        val secondLifecycle = CompletableDeferred<KadreLifecycle>()
+
+        try {
+            val firstSession = provider.attach(embeddedRequest(parentScope, firstLifecycle)).requireSession()
+            val secondSession = provider.attach(embeddedRequest(parentScope, secondLifecycle)).requireSession()
+            val first = firstLifecycle.await()
+            val second = secondLifecycle.await()
+            val firstCritical = async(start = CoroutineStart.UNDISPATCHED) {
+                first.signals.filterIsInstance<HostSignal.MemoryPressure>().first()
+            }
+            val secondCritical = async(start = CoroutineStart.UNDISPATCHED) {
+                second.signals.filterIsInstance<HostSignal.MemoryPressure>().first()
+            }
+
+            memoryPressureNative.emit(MemoryPressureLevel.Critical)
+            assertEquals(MemoryPressureLevel.Critical, withTimeout(2.seconds) { firstCritical.await() }.level)
+            assertEquals(MemoryPressureLevel.Critical, withTimeout(2.seconds) { secondCritical.await() }.level)
+
+            val closedSessionLateSignal = async(start = CoroutineStart.UNDISPATCHED) {
+                withTimeoutOrNull(200.milliseconds) {
+                    first.signals.filterIsInstance<HostSignal.MemoryPressure>().first { signal ->
+                        signal.level == MemoryPressureLevel.Moderate
+                    }
+                }
+            }
+            val liveSessionModerate = async(start = CoroutineStart.UNDISPATCHED) {
+                second.signals.filterIsInstance<HostSignal.MemoryPressure>().first { signal ->
+                    signal.level == MemoryPressureLevel.Moderate
+                }
+            }
+            firstSession.close()
+            firstSession.awaitTermination()
+
+            memoryPressureNative.emit(MemoryPressureLevel.Moderate)
+            assertEquals(MemoryPressureLevel.Moderate, withTimeout(2.seconds) { liveSessionModerate.await() }.level)
+            assertNull(closedSessionLateSignal.await())
+
+            secondSession.close()
+            secondSession.awaitTermination()
+        } finally {
+            parentScope.cancel()
+        }
+        Unit
+    }
+
+    @Test
     fun embeddedSessionProjectsTheConfiguredDisplayPortAndClosesItWithTheSession() = kotlinx.coroutines.runBlocking {
         val native = EmbeddedNativeApplication()
         val port = ProviderDisplayPort()
@@ -3353,6 +3408,71 @@ class AppKitBackendProviderTest {
                     report.contains(
                         "SCENARIO\tM$scenario\tnot-applicable\t" +
                             "automated proof does not satisfy manual M$scenario",
+                    ),
+                    report,
+                )
+            }
+            assertFalse(report.lineSequence().any { it.startsWith("SCENARIO\t") && "\tpass\t" in it }, report)
+        } finally {
+            Files.deleteIfExists(record)
+            Files.deleteIfExists(output)
+        }
+    }
+
+    @Test
+    fun phase9MemoryPressureHarnessWritesAnHonestNoninteractiveRecordOnMacOs() {
+        if (!isMacOs()) return
+        val record = Files.createTempFile("kadre-phase9-memory-pressure-harness", ".tsv")
+        val output = Files.createTempFile("kadre-phase9-memory-pressure-harness", ".log")
+        try {
+            val process = ProcessBuilder(
+                Path.of(System.getProperty("java.home"), "bin", "java").toString(),
+                "--enable-native-access=ALL-UNNAMED",
+                "-cp",
+                System.getProperty("java.class.path"),
+                "org.graphiks.kadre.internal.appkit.manual.Phase9MemoryPressureHarnessKt",
+                "--record=$record",
+                "--build-id=automated-memory-pressure-harness-proof",
+            ).redirectErrorStream(true)
+                .redirectOutput(output.toFile())
+                .start()
+
+            process.outputStream.bufferedWriter().use { commands ->
+                commands.appendLine("status")
+                commands.appendLine("result M1 not-applicable automated proof does not create native memory pressure")
+                commands.appendLine("result M2 not-applicable automated proof does not create native memory pressure")
+                commands.appendLine("result M3 not-applicable automated proof does not create native memory pressure")
+                commands.appendLine("close-session 1")
+                commands.appendLine("status")
+                commands.appendLine("result M4 not-applicable automated proof does not create native memory pressure")
+                commands.appendLine("close")
+                commands.appendLine("result M5 not-applicable automated proof does not create native memory pressure")
+                commands.appendLine("finish")
+            }
+            val completed = process.waitFor(30, TimeUnit.SECONDS)
+            if (!completed) process.destroyForcibly()
+            val processOutput = Files.readString(output)
+            assertTrue(completed, processOutput)
+            assertEquals(0, process.exitValue(), processOutput)
+
+            val report = Files.readString(record)
+            assertTrue(report.contains("RUN_METADATA\t"), report)
+            listOf(
+                "macOS=",
+                "architecture=",
+                "hardware=",
+                "buildId=automated-memory-pressure-harness-proof",
+                "sessionCount=2",
+            ).forEach { field -> assertTrue(report.contains(field), "$field missing from:\n$report") }
+            assertTrue(report.contains("CAPABILITY\tinitial\t"), report)
+            assertTrue(report.contains("COMMAND\tclose-session\tindex=1"), report)
+            assertTrue(report.contains("TERMINAL_STABILITY\tnoLateMemoryPressure=true"), report)
+            assertTrue(report.contains("SOURCE_TERMINATED\trequested"), report)
+            (1..5).forEach { scenario ->
+                assertTrue(
+                    report.contains(
+                        "SCENARIO\tM$scenario\tnot-applicable\t" +
+                            "automated proof does not create native memory pressure",
                     ),
                     report,
                 )
