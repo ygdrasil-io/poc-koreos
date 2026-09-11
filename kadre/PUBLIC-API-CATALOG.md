@@ -656,9 +656,23 @@ public data class GamepadState(public val buttons: List<GamepadButtonValue>, pub
 public data class GamepadCapabilities(
     public val effects: Capability<GamepadEffectConstraints>,
 )
-public enum class GamepadEffectKind { DualRumble, TriggerRumble }
+public enum class GamepadEffectKind { DualRumble, TriggerRumble, LocalizedHaptic }
+public enum class GamepadHapticLocality {
+    Default,
+    All,
+    Handles,
+    LeftHandle,
+    RightHandle,
+    Triggers,
+    LeftTrigger,
+    RightTrigger,
+}
+public data class GamepadLocalizedHapticConstraints(
+    public val localities: Set<GamepadHapticLocality>,
+)
 public data class GamepadEffectConstraints(
     public val kinds: Set<GamepadEffectKind>,
+    public val localizedHaptics: GamepadLocalizedHapticConstraints?,
     public val maximumDuration: Duration?,
 )
 
@@ -674,7 +688,18 @@ public sealed interface GamepadEvent {
 public sealed interface GamepadEffect {
     public val duration: Duration
     public data class DualRumble(public val strong: Double, public val weak: Double, override val duration: Duration) : GamepadEffect
-    public data class TriggerRumble(public val left: Double, public val right: Double, override val duration: Duration) : GamepadEffect
+    public data class TriggerRumble(
+        public val strong: Double,
+        public val weak: Double,
+        public val leftTrigger: Double,
+        public val rightTrigger: Double,
+        override val duration: Duration,
+    ) : GamepadEffect
+    public data class LocalizedHaptic(
+        public val locality: GamepadHapticLocality,
+        public val intensity: Double,
+        override val duration: Duration,
+    ) : GamepadEffect
 }
 
 public sealed interface GamepadEffectState {
@@ -691,7 +716,7 @@ public sealed interface GamepadEffectOutcome {
 public enum class GamepadEffectStopReason { Requested, DeviceDisconnected, OwnershipLost, ParentSessionStopping }
 ```
 
-Les intensités et axes sont dans `[-1,1]` pour les axes et `[0,1]` pour les boutons/effets. Les listes `GamepadDescriptor.buttons/axes` ne contiennent aucun doublon, respectent `maxCollectionElementsPerValue` et déterminent l’ordre canonique des listes de `GamepadState`; chaque snapshot contient exactement une valeur par contrôle du descriptor, dans cet ordre, sans entrée supplémentaire. Un contrôle `Other` conserve un `nativeCode` ASCII non vide borné par `maxMetadataCodeUnitsPerValue`; deux codes différents restent deux contrôles distincts. `GamepadDescriptor.name` suit le même budget et devient `null`, jamais tronqué, lorsqu’il est purement décoratif et hors budget. Toute `GamepadEffect.duration` est finie et strictement positive. `GamepadEffectConstraints.kinds` est non vide et `maximumDuration`, si présent, est fini et strictement positif ; un kind absent retourne `InvalidRequest("effect")` et une durée demandée supérieure retourne `InvalidRequest("effect.duration")`, sans clamp. `GamepadSnapshot`, `Gamepad`, `GamepadEffectSession` et `GamepadRoutingState` restent ceux de `DESIGN.md`.
+Les intensités et axes sont dans `[-1,1]` pour les axes et `[0,1]` pour les boutons/effets. Les listes `GamepadDescriptor.buttons/axes` ne contiennent aucun doublon, respectent `maxCollectionElementsPerValue` et déterminent l’ordre canonique des listes de `GamepadState`; chaque snapshot contient exactement une valeur par contrôle du descriptor, dans cet ordre, sans entrée supplémentaire. Un contrôle `Other` conserve un `nativeCode` ASCII non vide borné par `maxMetadataCodeUnitsPerValue`; deux codes différents restent deux contrôles distincts. `GamepadDescriptor.name` suit le même budget et devient `null`, jamais tronqué, lorsqu’il est purement décoratif et hors budget. Toute `GamepadEffect.duration` est finie et strictement positive. `GamepadEffectConstraints.kinds` est non vide et `maximumDuration`, si présent, est fini et strictement positif. `localizedHaptics` est non nul si et seulement si `kinds` contient `LocalizedHaptic`; ses `localities` sont alors non vides. Un kind absent, ou une `LocalizedHaptic.locality` non annoncée, retourne `InvalidRequest("effect")` ; une durée demandée supérieure retourne `InvalidRequest("effect.duration")`, sans clamp. Le backend ne traduit jamais une famille d’effet vers une autre : il annonce seulement les variants dont il peut respecter la sémantique. `GamepadSnapshot`, `Gamepad`, `GamepadEffectSession` et `GamepadRoutingState` restent ceux de `DESIGN.md`.
 
 ### 6.4 IME
 

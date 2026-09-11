@@ -657,9 +657,19 @@ Cette sous-tranche couvre les gamepads que macOS expose par GameController :
   mapping fermé `Standard` ou `Native` et les valeurs `Other(nativeCode)` déjà
   prévues par l'API publique ;
 - les effets GameController passent par un lease propriétaire. Les capacités,
-  durées et kinds effectifs sont relus avant admission ; le broker arbitre
-  `DeviceEffectOwnership` et arrête les effets à la déconnexion ou au teardown
-  de la session.
+  durées, kinds et localities effectifs sont relus avant admission ; le broker
+  arbitre `DeviceEffectOwnership` et arrête les effets à la déconnexion ou au
+  teardown de la session. AppKit annonce uniquement `LocalizedHaptic` avec les
+  `GCHapticsLocality` réellement supportées : il ne prétend pas convertir des
+  moteurs localisés en `DualRumble` ou `TriggerRumble`.
+
+Le contrat commun d’effets reste additif et capability-driven : `DualRumble`
+et `TriggerRumble` conservent leur sémantique Web, tandis que
+`LocalizedHaptic` représente les actuateurs adressables d’AppKit. Android ou
+un autre backend n’annonce une locality que lorsque le système la garantit ;
+un simple vibrator par périphérique reste `Default`. Aucune adaptation ne
+fabrique une correspondance gauche/droite, forte/faible ou poignée/trigger
+sans garantie native explicite.
 
 Kextract déclare d'abord les APIs GameController nécessaires ; KFFI régénère
 ensuite un bridge managed, pointer-free et closeable. Kadre ne déclare ni
