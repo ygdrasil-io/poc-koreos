@@ -61,6 +61,9 @@ internal class AppKitProcessBroker(
         task()
         true
     },
+    private val gameControllerBrokerFactory: () -> AppKitGameControllerBroker = {
+        AppKitGameControllerBroker(KffiAppKitGameControllerNativeFactory)
+    },
 ) {
     private val lock = Any()
     private val deliveryLock = Any()
@@ -86,6 +89,7 @@ internal class AppKitProcessBroker(
             recoveryExecutor = exclusiveRecoveryExecutor,
         )
     }
+    private val gameControllerBroker = lazy(gameControllerBrokerFactory)
     private val memoryPressureBroker = lazy {
         AppKitMemoryPressureBroker(checkNotNull(memoryPressureNative), ::deliverMemoryPressure)
     }
@@ -93,6 +97,14 @@ internal class AppKitProcessBroker(
     fun openRawInputPort(): AppKitRawInputPort = rawInputBroker.value.openPort()
 
     fun openDisplayPort(): AppKitDisplayPort = displayBroker.value.openPort()
+
+    fun openGameControllerPort(): AppKitGameControllerPort? = try {
+        gameControllerBroker.value.openPort()
+    } catch (_: Exception) {
+        null
+    } catch (_: LinkageError) {
+        null
+    }
 
     fun openExclusiveFullscreenPort(
         executor: AppKitExclusiveExecutor,
@@ -243,6 +255,7 @@ internal class AppKitProcessBroker(
                     }
                 }
                 if (rawInputBroker.isInitialized()) rawInputBroker.value.close()
+                if (gameControllerBroker.isInitialized()) gameControllerBroker.value.close()
                 if (exclusiveDisplayBroker.isInitialized()) exclusiveDisplayBroker.value.close()
                 if (displayBroker.isInitialized()) displayBroker.value.close()
                 if (memoryPressureBroker.isInitialized()) memoryPressureBroker.value.close()
