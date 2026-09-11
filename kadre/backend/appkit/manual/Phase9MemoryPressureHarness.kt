@@ -19,6 +19,7 @@ import org.graphiks.kadre.application.KadreLifecycle
 import org.graphiks.kadre.application.KadreSession
 import org.graphiks.kadre.application.HostSignal
 import org.graphiks.kadre.application.LifecycleCapabilities
+import org.graphiks.kadre.application.MemoryPressureLevel
 import org.graphiks.kadre.diagnostics.FeatureAvailability
 import org.graphiks.kadre.diagnostics.KadrePlatform
 import org.graphiks.kadre.diagnostics.KadreResult
@@ -32,6 +33,7 @@ import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.StandardOpenOption
 import java.time.Instant
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.time.Duration.Companion.milliseconds
@@ -56,6 +58,8 @@ public fun main(args: Array<String>): Unit = runBlocking {
     val broker = AppKitProcessBroker(memoryPressureNative = KffiAppKitMemoryPressureNative)
     val sessions = linkedMapOf<Int, Phase9MemoryPressureSession>()
     var terminalObserved = false
+    var sourceTerminationRequested = false
+    var sessionOneCloseSnapshot: Phase9MemoryPressureCounts? = null
 
     suspend fun closeSession(index: Int) {
         val entry = sessions[index]
@@ -71,6 +75,12 @@ public fun main(args: Array<String>): Unit = runBlocking {
         entry.session.awaitTermination()
         entry.registration.close()
         entry.closed = true
+        if (index == 1) {
+            sessionOneCloseSnapshot = Phase9MemoryPressureCounts(
+                sessionOne = entry.memoryEventCount.get(),
+                sessionTwo = sessions[2]?.memoryEventCount?.get() ?: 0,
+            )
+        }
         recorder.line("COMMAND\tclose-session\tindex=$index\tclosed")
     }
 
@@ -91,6 +101,7 @@ public fun main(args: Array<String>): Unit = runBlocking {
             closeSession(index)
         }
         broker.accept(AppKitLifecycleSignal.HostTerminated)
+        sourceTerminationRequested = true
         val eventCountAtTermination = sessions.values.sumOf { it.memoryEventCount.get() }
         delay(250.milliseconds)
         val noLateMemoryPressure = sessions.values.sumOf { it.memoryEventCount.get() } == eventCountAtTermination
@@ -118,6 +129,36 @@ public fun main(args: Array<String>): Unit = runBlocking {
         }
         printPhase9MemoryPressureHelp(recorder)
 
+        fun rejectedPassReason(scenario: String): String? = when (scenario) {
+            "M1" -> if (availability == FeatureAvailability.Available) null else {
+                "M1 requires an Available memory-pressure capability"
+            }
+            "M2" -> if (sessions.values.all { MemoryPressureLevel.Moderate in it.observedLevels }) null else {
+                "M2 requires Moderate observed by both sessions"
+            }
+            "M3" -> if (sessions.values.all { MemoryPressureLevel.Critical in it.observedLevels }) null else {
+                "M3 requires Critical observed by both sessions"
+            }
+            "M4" -> when (val snapshot = sessionOneCloseSnapshot) {
+                null -> "M4 requires session 1 to be closed after observed pressure"
+                else -> when {
+                snapshot.sessionOne == 0 || snapshot.sessionTwo == 0 -> {
+                    "M4 requires pressure observed by both sessions before session 1 closes"
+                }
+                !checkNotNull(sessions[1]).closed -> "M4 requires session 1 to be closed"
+                checkNotNull(sessions[1]).memoryEventCount.get() != snapshot.sessionOne -> {
+                    "M4 rejects late pressure delivered to closed session 1"
+                }
+                checkNotNull(sessions[2]).memoryEventCount.get() <= snapshot.sessionTwo -> {
+                    "M4 requires new pressure observed by session 2 after session 1 closed"
+                }
+                else -> null
+            }
+            }
+            "M5" -> if (terminalObserved) null else "M5 requires terminal observation before recording"
+            else -> null
+        }
+
         for (line in commands) {
             val command = line.trim()
             when {
@@ -128,9 +169,17 @@ public fun main(args: Array<String>): Unit = runBlocking {
                     closeSession(command.substringAfter(' ').toIntOrNull() ?: -1)
                 }
                 command.startsWith("result ") -> {
-                    val scenario = command.split(' ', limit = 3).getOrNull(1)
-                    if (scenario == "M5" && !terminalObserved) {
+                    val fields = command.split(' ', limit = 4)
+                    val scenario = fields.getOrNull(1).orEmpty()
+                    val status = fields.getOrNull(2).orEmpty()
+                    if (options.automated && status == "pass") {
+                        recorder.line("COMMAND\tresult-rejected\tautomated runs cannot record pass")
+                    } else if (scenario == "M5" && !terminalObserved) {
                         recorder.line("COMMAND\tresult-rejected\tM5 requires terminal observation before recording")
+                    } else if (status == "pass") {
+                        rejectedPassReason(scenario)?.let { reason ->
+                            recorder.line("COMMAND\tresult-rejected\t$reason")
+                        } ?: recorder.scenario(command)
                     } else {
                         recorder.scenario(command)
                     }
@@ -146,6 +195,16 @@ public fun main(args: Array<String>): Unit = runBlocking {
         }
         closeAndObserveTerminal()
     } finally {
+        sessions.values.forEach { entry ->
+            if (!entry.closed) runCatching { entry.session.close() }
+            runCatching { entry.registration.close() }
+        }
+        if (!sourceTerminationRequested) {
+            runCatching {
+                broker.accept(AppKitLifecycleSignal.HostTerminated)
+                sourceTerminationRequested = true
+            }
+        }
         sessions.values.forEach { entry -> entry.collector.cancel() }
         parentScope.cancel()
         recorder.close()
@@ -183,13 +242,22 @@ private suspend fun createPhase9MemoryPressureSession(
     ).phase9MemoryPressureSession()
     val observedLifecycle = lifecycle.await()
     val memoryEventCount = AtomicInteger()
+    val observedLevels = ConcurrentHashMap.newKeySet<MemoryPressureLevel>()
     val collector = parentScope.launch(start = CoroutineStart.UNDISPATCHED) {
         observedLifecycle.signals.filterIsInstance<HostSignal.MemoryPressure>().collect { signal ->
             memoryEventCount.incrementAndGet()
+            observedLevels += signal.level
             recorder.line("MEMORY_PRESSURE\tindex=$index\tlevel=${signal.level}\tstamp=${signal.stamp}")
         }
     }
-    return Phase9MemoryPressureSession(registration, session, observedLifecycle, collector, memoryEventCount)
+    return Phase9MemoryPressureSession(
+        registration = registration,
+        session = session,
+        lifecycle = observedLifecycle,
+        collector = collector,
+        memoryEventCount = memoryEventCount,
+        observedLevels = observedLevels,
+    )
 }
 
 private fun KadreResult<KadreSession>.phase9MemoryPressureSession(): KadreSession =
@@ -205,12 +273,19 @@ private data class Phase9MemoryPressureSession(
     val lifecycle: KadreLifecycle,
     val collector: kotlinx.coroutines.Job,
     val memoryEventCount: AtomicInteger,
+    val observedLevels: Set<MemoryPressureLevel>,
     var closed: Boolean = false,
+)
+
+private data class Phase9MemoryPressureCounts(
+    val sessionOne: Int,
+    val sessionTwo: Int,
 )
 
 private data class Phase9MemoryPressureHarnessOptions(
     val recordPath: Path,
     val buildId: String,
+    val automated: Boolean,
 ) {
     companion object {
         fun parse(args: Array<String>): Phase9MemoryPressureHarnessOptions {
@@ -222,6 +297,7 @@ private data class Phase9MemoryPressureHarnessOptions(
                 buildId = value("--build-id=") ?: phase9MemoryPressureCommandOutput("git", "rev-parse", "HEAD").ifBlank {
                     "unknown"
                 },
+                automated = "--automated" in args,
             )
         }
     }
@@ -238,6 +314,8 @@ private class Phase9MemoryPressureHarnessRecorder(private val path: Path) : Auto
         line(
             listOf(
                 "RUN_METADATA",
+                "schemaVersion=1",
+                "executionMode=${if (options.automated) "automated" else "manual"}",
                 "startedAt=${Instant.now()}",
                 "macOS=${System.getProperty("os.version", "unknown")}",
                 "architecture=${System.getProperty("os.arch", "unknown")}",

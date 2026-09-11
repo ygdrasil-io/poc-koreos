@@ -29,9 +29,20 @@ observation terminale n'a pas eu lieu. Le record contient macOS, architecture,
 modèle matériel, build id, capability initiale, état des deux sessions et les
 signaux publics `MEMORY_PRESSURE` réellement reçus.
 
+Un `pass` n'est pas une annotation libre : le harness l'accepte seulement si
+sa trace brute contient la preuve correspondante. M1 exige une capability
+`Available`; M2 et M3 exigent le niveau indiqué pour les deux sessions; M4
+exige un nouveau signal pour la session 2 après la fermeture de la session 1,
+sans changement du compteur de cette dernière; M5 exige l'observation
+terminale réussie. `fail` et `not-applicable` restent toujours disponibles
+afin que le compte rendu reflète la réalité du run.
+
 Un run sans primitive disponible, sans autorisation de stress, ou sans niveau
 reproductible est `not-applicable`, jamais `pass`. Ne jamais cocher un succès
 à partir de l'ouverture du source, d'un test unitaire ou de l'absence de crash.
+Le flag interne `--automated`, employé par le test d'intégrité du harness,
+interdit tous les `pass`. Il atteste uniquement que l'automatisation ne peut
+pas se faire passer pour le stress test manuel.
 
 | ID | Manipulation opérateur | Attendu à consigner |
 | --- | --- | --- |

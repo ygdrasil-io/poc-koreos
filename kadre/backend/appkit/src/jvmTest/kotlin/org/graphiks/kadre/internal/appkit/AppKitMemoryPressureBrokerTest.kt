@@ -52,6 +52,24 @@ class AppKitMemoryPressureBrokerTest {
     }
 
     @Test
+    fun queuedNativePressureIsDiscardedWhenBrokerClosesBeforeDispatch() {
+        val native = RecordingMemoryPressureNative()
+        val dispatcher = QueuedMemoryPressureDispatcher(retainTasksAfterClose = true)
+        val delivered = mutableListOf<MemoryPressureLevel>()
+        val broker = AppKitMemoryPressureBroker(native, delivered::add, dispatcher)
+
+        assertEquals(FeatureAvailability.Available, broker.activate())
+        native.emit(MemoryPressureLevel.Critical)
+        assertEquals(1, dispatcher.pendingTaskCount)
+
+        broker.close()
+        dispatcher.runNext()
+
+        assertEquals(emptyList(), delivered)
+        assertEquals(1, native.closeCount)
+    }
+
+    @Test
     fun signalDeliveredDuringNativeSourceOpeningIsRelayedAfterCapabilityAdmission() {
         val dispatcher = QueuedMemoryPressureDispatcher()
         val delivered = mutableListOf<MemoryPressureLevel>()
@@ -67,6 +85,32 @@ class AppKitMemoryPressureBrokerTest {
 
         dispatcher.runNext()
         assertEquals(listOf(MemoryPressureLevel.Moderate), delivered)
+        broker.close()
+    }
+
+    @Test
+    fun openingFailureDropsCallbackRaisedBeforeSourceAdmission() {
+        val dispatcher = QueuedMemoryPressureDispatcher()
+        val delivered = mutableListOf<MemoryPressureLevel>()
+        val broker = AppKitMemoryPressureBroker(
+            native = object : AppKitMemoryPressureNative {
+                override fun open(listener: (MemoryPressureLevel) -> Unit): AutoCloseable {
+                    listener(MemoryPressureLevel.Critical)
+                    error("source unavailable")
+                }
+            },
+            deliver = delivered::add,
+            dispatcher = dispatcher,
+        )
+
+        assertEquals(
+            FeatureAvailability.Unavailable(
+                KadreFailure.PlatformFailure(KadrePlatform.AppKit, "memory-pressure", "source-exception"),
+            ),
+            broker.activate(),
+        )
+        assertEquals(0, dispatcher.pendingTaskCount)
+        assertEquals(emptyList(), delivered)
         broker.close()
     }
 }
@@ -97,7 +141,9 @@ private class ImmediateMemoryPressureNative(
     }
 }
 
-private class QueuedMemoryPressureDispatcher : AppKitMemoryPressureDispatcher {
+private class QueuedMemoryPressureDispatcher(
+    private val retainTasksAfterClose: Boolean = false,
+) : AppKitMemoryPressureDispatcher {
     private val tasks = ArrayDeque<() -> Unit>()
 
     val pendingTaskCount: Int
@@ -110,6 +156,6 @@ private class QueuedMemoryPressureDispatcher : AppKitMemoryPressureDispatcher {
     fun runNext() = tasks.removeFirst().invoke()
 
     override fun close() {
-        tasks.clear()
+        if (!retainTasksAfterClose) tasks.clear()
     }
 }

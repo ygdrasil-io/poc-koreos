@@ -3433,19 +3433,25 @@ class AppKitBackendProviderTest {
                 "org.graphiks.kadre.internal.appkit.manual.Phase9MemoryPressureHarnessKt",
                 "--record=$record",
                 "--build-id=automated-memory-pressure-harness-proof",
+                "--automated",
             ).redirectErrorStream(true)
                 .redirectOutput(output.toFile())
                 .start()
 
             process.outputStream.bufferedWriter().use { commands ->
                 commands.appendLine("status")
+                commands.appendLine("result M1 pass automated proof must not claim a manual result")
                 commands.appendLine("result M1 not-applicable automated proof does not create native memory pressure")
+                commands.appendLine("result M2 pass automated proof must not claim unobserved pressure")
                 commands.appendLine("result M2 not-applicable automated proof does not create native memory pressure")
+                commands.appendLine("result M3 pass automated proof must not claim a manual result")
                 commands.appendLine("result M3 not-applicable automated proof does not create native memory pressure")
                 commands.appendLine("close-session 1")
                 commands.appendLine("status")
+                commands.appendLine("result M4 pass automated proof must not claim unobserved post-close pressure")
                 commands.appendLine("result M4 not-applicable automated proof does not create native memory pressure")
                 commands.appendLine("close")
+                commands.appendLine("result M5 pass automated proof must not claim a manual result")
                 commands.appendLine("result M5 not-applicable automated proof does not create native memory pressure")
                 commands.appendLine("finish")
             }
@@ -3461,10 +3467,19 @@ class AppKitBackendProviderTest {
                 "macOS=",
                 "architecture=",
                 "hardware=",
+                "schemaVersion=1",
+                "executionMode=automated",
                 "buildId=automated-memory-pressure-harness-proof",
                 "sessionCount=2",
             ).forEach { field -> assertTrue(report.contains(field), "$field missing from:\n$report") }
             assertTrue(report.contains("CAPABILITY\tinitial\t"), report)
+            assertEquals(
+                5,
+                report.lineSequence().count {
+                    it == "COMMAND\tresult-rejected\tautomated runs cannot record pass"
+                },
+                report,
+            )
             assertTrue(report.contains("COMMAND\tclose-session\tindex=1"), report)
             assertTrue(report.contains("TERMINAL_STABILITY\tnoLateMemoryPressure=true"), report)
             assertTrue(report.contains("SOURCE_TERMINATED\trequested"), report)

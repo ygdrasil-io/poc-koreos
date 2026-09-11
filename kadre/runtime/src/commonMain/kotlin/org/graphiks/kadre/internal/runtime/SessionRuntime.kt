@@ -222,7 +222,10 @@ internal class SessionRuntime(
     }
 
     fun emitMemoryPressure(level: MemoryPressureLevel) {
-        if (!isFinished()) runtimeLifecycle.emitMemoryPressure(level)
+        lock.withLock {
+            if (finished || selectedOutcome != null) return
+            runtimeLifecycle.emitMemoryPressure(level)
+        }
     }
 
     fun hostDetached() {
