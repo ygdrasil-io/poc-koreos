@@ -23,6 +23,7 @@ import org.graphiks.kadre.diagnostics.KadrePlatform
 import org.graphiks.kadre.diagnostics.KadreResult
 import org.graphiks.kadre.display.DisplayInventory
 import org.graphiks.kadre.display.DisplayType
+import org.graphiks.kadre.input.DeviceInventory
 import org.graphiks.kadre.policy.InputDeliveryPolicy
 import org.graphiks.kadre.policy.WindowDeliveryPolicy
 import org.graphiks.kadre.surface.HostSurface
@@ -91,6 +92,31 @@ class RuntimeSessionComponentsTest {
 
         observed.displays.requestAccess()
         assertIs<DisplayInventory.Enumerated>(observed.displays.state.value.inventory)
+
+        session.close()
+        testScheduler.runCurrent()
+
+        assertEquals(1, port.closeCount)
+    }
+
+    @Test
+    fun injectedGamepadPortIsProjectedThroughItsSessionScopeAndClosedWithTheSession() = runTest {
+        val port = RecordingGamepadPort()
+        val host = RuntimeHostController.withComponents(
+            platform = KadrePlatform.Fake,
+            componentsFactory = RuntimeSessionComponentsFactory { _, _ ->
+                RuntimeSessionComponents(RecordingWindowManager(), gamepadPort = port)
+            },
+        )
+        lateinit var observed: KadreScope
+
+        val session = attach(host) {
+            observed = this
+            awaitCancellation()
+        }
+        testScheduler.runCurrent()
+
+        assertIs<DeviceInventory.Enumerated>(observed.devices.state.value.inventory)
 
         session.close()
         testScheduler.runCurrent()
@@ -436,6 +462,19 @@ class RuntimeSessionComponentsTest {
 
         override fun installSnapshotObserver(observer: (KadreResult<DisplayPortSnapshot>) -> Unit): AutoCloseable =
             AutoCloseable { }
+
+        override fun close() {
+            closeCount += 1
+        }
+    }
+
+    private class RecordingGamepadPort : GamepadPort {
+        var closeCount = 0
+            private set
+
+        override val gamepads: List<GamepadPortGamepad> = emptyList()
+
+        override fun installObserver(observer: (GamepadPortEvent) -> Unit): AutoCloseable = AutoCloseable { }
 
         override fun close() {
             closeCount += 1
