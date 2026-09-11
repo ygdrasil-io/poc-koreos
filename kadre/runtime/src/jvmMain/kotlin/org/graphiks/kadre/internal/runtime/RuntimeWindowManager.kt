@@ -1663,7 +1663,11 @@ public class RuntimeWindowManager public constructor(
 
     private fun unsupportedInitialWindowProperty(spec: WindowSpec): WindowProperty? {
         when {
-            spec.outerPosition != null -> return WindowProperty.OuterPosition
+            spec.outerPosition != null && (
+                !publicWindowCapabilities || WindowProperty.OuterPosition !in enabledWindowUpdateCapabilities
+                ) -> {
+                return WindowProperty.OuterPosition
+            }
             spec.blurBehind -> return WindowProperty.Blur
             spec.icon != null -> return WindowProperty.Icon
         }
@@ -2167,7 +2171,7 @@ internal class RuntimeWindow(
             val rejected = changedProperties(update)
                 .filterNot(supportedWindowUpdateProperties::contains)
                 .map { RejectedWindowField(it, KadreFailure.Unsupported(KadreOperation.UpdateWindow)) }
-            val mutationChanged = mutationChanged(current, candidate)
+            val mutationChanged = mutationChanged(current, candidate) || requiresNativeMutation(canonicalUpdate)
             val requestedLevel = (canonicalUpdate.level as? PropertyChange.Set)?.value
             val deferBehindFullscreenBarrier = fullscreenBarrier != null
             if (!mutationChanged && !deferBehindFullscreenBarrier) {
@@ -2759,6 +2763,11 @@ internal class RuntimeWindow(
             if (lifecycle.phase != WindowPhase.Open) return@synchronized null
             val candidate = try {
                 lifecycle.copy(
+                    outerBounds = if (WindowProperty.OuterPosition in supportedWindowUpdateProperties) {
+                        state.outerBounds
+                    } else {
+                        lifecycle.outerBounds
+                    },
                     contentSize = state.contentSize,
                     minimumSize = state.minimumSize,
                     maximumSize = state.maximumSize,
@@ -2863,7 +2872,7 @@ internal class RuntimeWindow(
                     )
                     continue
                 }
-                if (!mutationChanged(current, effectiveCandidate)) {
+                if (!mutationChanged(current, effectiveCandidate) && !requiresNativeMutation(candidate.update)) {
                     val requestedLevel = (candidate.update.level as? PropertyChange.Set)?.value
                     if (requestedLevel != null && requestedLevel != desiredLevel) desiredLevel = requestedLevel
                     candidate.result.complete(KadreResult.Success(updateOutcome(candidate.operationId, current, candidate.rejected)))
@@ -3283,7 +3292,7 @@ private fun windowCapabilities(
     } else {
         unsupported(KadreOperation.UpdateWindow)
     },
-    outerPosition = unsupported(KadreOperation.UpdateWindow),
+    outerPosition = enabledWindowUpdateCapabilities.capability(WindowProperty.OuterPosition, Unit),
     contentSize = enabledWindowUpdateCapabilities.capability(
         WindowProperty.ContentSize,
         LogicalSizeRange(null, null, null),
@@ -3503,6 +3512,7 @@ private fun invalidRequiredClearField(
     supportedProperties: Set<WindowProperty>,
 ): String? = when {
     WindowProperty.Title in supportedProperties && update.title is PropertyChange.Clear -> "title"
+    WindowProperty.OuterPosition in supportedProperties && update.outerPosition is PropertyChange.Clear -> "outerPosition"
     WindowProperty.ContentSize in supportedProperties && update.contentSize is PropertyChange.Clear -> "contentSize"
     WindowProperty.Resizable in supportedProperties && update.resizable is PropertyChange.Clear -> "resizable"
     WindowProperty.Fullscreen in supportedProperties && update.fullscreen is PropertyChange.Clear -> "fullscreen"
@@ -3564,6 +3574,7 @@ private fun canonicalMutationUpdate(
 
 private fun mutationChanged(current: WindowState, candidate: WindowState): Boolean =
     current.title != candidate.title ||
+        current.outerBounds != candidate.outerBounds ||
         current.contentSize != candidate.contentSize ||
         current.minimumSize != candidate.minimumSize ||
         current.maximumSize != candidate.maximumSize ||
@@ -3575,11 +3586,20 @@ private fun mutationChanged(current: WindowState, candidate: WindowState): Boole
         current.transparent != candidate.transparent ||
         current.contentProtection != candidate.contentProtection
 
+/**
+ * A native outer-position request cannot be predicted from portable state: the Window Server
+ * alone certifies the resulting physical bounds. It must therefore reach the backend even when
+ * the last readback was unavailable.
+ */
+private fun requiresNativeMutation(update: WindowUpdate): Boolean =
+    update.outerPosition is PropertyChange.Set
+
 private fun supportedMutationOnly(
     update: WindowUpdate,
     supportedProperties: Set<WindowProperty>,
 ): WindowUpdate = WindowUpdate(
     title = update.title.whenSupported(WindowProperty.Title, supportedProperties),
+    outerPosition = update.outerPosition.whenSupported(WindowProperty.OuterPosition, supportedProperties),
     contentSize = update.contentSize.whenSupported(WindowProperty.ContentSize, supportedProperties),
     minimumSize = update.minimumSize.whenSupported(WindowProperty.MinimumSize, supportedProperties),
     maximumSize = update.maximumSize.whenSupported(WindowProperty.MaximumSize, supportedProperties),
