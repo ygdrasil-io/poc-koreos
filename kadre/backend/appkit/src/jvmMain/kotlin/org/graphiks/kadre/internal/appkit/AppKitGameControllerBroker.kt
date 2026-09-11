@@ -31,7 +31,7 @@ import kotlin.time.Duration
 
 /** Opens one pointer-free GameController bridge for the process-wide AppKit broker. */
 internal fun interface AppKitGameControllerNativeFactory {
-    /** Implementations must not invoke [listener] until this function has returned. */
+    /** The broker folds lifecycle callbacks emitted while this function runs into its initial snapshot. */
     fun open(listener: (AppKitGameControllerNativeEvent) -> Unit): AppKitGameControllerNative
 }
 
@@ -128,7 +128,9 @@ internal class AppKitGameControllerBroker(
     private val controllers = linkedMapOf<Long, PhysicalController>()
     private val activeEffects = linkedMapOf<Long, LinkedHashSet<AppKitGameControllerPortEffect>>()
     private val pendingEffects = linkedMapOf<Long, Int>()
+    private val openingEvents = mutableListOf<AppKitGameControllerNativeEvent>()
     private var native: AppKitGameControllerNative? = null
+    private var openingNative = false
     private var closed = false
 
     fun openPort(): AppKitGameControllerPort {
@@ -255,7 +257,12 @@ internal class AppKitGameControllerBroker(
 
     private fun acceptNativeEvent(event: AppKitGameControllerNativeEvent) {
         val release = synchronized(lock) {
-            if (closed || native == null) return
+            if (closed) return
+            if (openingNative) {
+                openingEvents += event
+                return
+            }
+            if (native == null) return
             when (event) {
                 is AppKitGameControllerNativeEvent.Connected -> NativeAcceptance(
                     deliveries = connectLocked(event.controller),
@@ -283,9 +290,22 @@ internal class AppKitGameControllerBroker(
 
     private fun ensureNativeLocked() {
         if (native != null) return
-        val opened = nativeFactory.open(::acceptNativeEvent)
-        native = opened
-        opened.controllers.forEach(::connectInitialLocked)
+        check(!openingNative) { "AppKit GameController native monitor is already opening" }
+        openingNative = true
+        try {
+            val opened = nativeFactory.open(::acceptNativeEvent)
+            native = opened
+            opened.controllers.forEach(::connectInitialLocked)
+            openingEvents.forEach { event ->
+                when (event) {
+                    is AppKitGameControllerNativeEvent.Connected -> connectInitialLocked(event.controller)
+                    is AppKitGameControllerNativeEvent.Disconnected -> disconnectLocked(event.key)
+                }
+            }
+        } finally {
+            openingEvents.clear()
+            openingNative = false
+        }
     }
 
     private fun connectInitialLocked(controller: AppKitGameControllerNativeController) {

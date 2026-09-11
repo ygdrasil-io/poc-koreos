@@ -21,6 +21,28 @@ import kotlin.time.Duration.Companion.seconds
 
 class AppKitGameControllerBrokerTest {
     @Test
+    fun lifecyclePublishedWhileTheNativeMonitorOpensIsIncludedInTheInitialProjection() {
+        val connected = controller(
+            key = 1L,
+            inputs = listOf(AppKitGameControllerPhysicalInput.Button(setOf("Button A"), 1.0, true)),
+        )
+        val native = RecordingGameControllerNative(controllers = emptyList())
+        val broker = AppKitGameControllerBroker(
+            AppKitGameControllerNativeFactory { listener ->
+                listener(AppKitGameControllerNativeEvent.Connected(connected))
+                native.open(listener)
+            },
+        )
+
+        val port = broker.openPort()
+
+        assertEquals(
+            listOf(GamepadButtonValue(GamepadButton.South, 1.0, true)),
+            port.gamepads.single().state.buttons,
+        )
+    }
+
+    @Test
     fun activeSessionRoutingPreservesPhysicalLifecycleAndResumesWithTheCurrentSnapshot() {
         val native = RecordingGameControllerNative(
             controllers = listOf(
