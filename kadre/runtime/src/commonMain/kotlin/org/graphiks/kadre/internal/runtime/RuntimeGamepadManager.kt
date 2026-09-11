@@ -12,6 +12,9 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import org.graphiks.kadre.application.EventStamp
+import org.graphiks.kadre.application.LifecycleState
+import org.graphiks.kadre.application.ActivationState
+import org.graphiks.kadre.application.VisibilityState
 import org.graphiks.kadre.diagnostics.Capability
 import org.graphiks.kadre.diagnostics.FeatureAvailability
 import org.graphiks.kadre.diagnostics.KadreFailure
@@ -41,6 +44,7 @@ import org.graphiks.kadre.input.GamepadRevision
 import org.graphiks.kadre.input.GamepadRoutingState
 import org.graphiks.kadre.input.GamepadSnapshot
 import org.graphiks.kadre.input.GamepadState
+import org.graphiks.kadre.policy.GamepadRouting
 
 /** Session-owned public gamepad projection backed by one [GamepadPort]. */
 internal class RuntimeGamepadManager(
@@ -50,11 +54,14 @@ internal class RuntimeGamepadManager(
     private val maxCollectorsPerFlow: Int,
     private val effectScope: CoroutineScope,
     private val maxConcurrentEffects: Int,
+    private val gamepadRouting: GamepadRouting,
+    initialLifecycleState: LifecycleState,
 ) : DeviceManager, AutoCloseable {
     private val lock = RuntimeLock()
     private val gamepadsByKey = linkedMapOf<Long, RuntimeGamepad>()
     private var closed = false
     private var observation: AutoCloseable? = null
+    private var routing: GamepadPortRouting? = null
     private var pendingEffects = 0
     private val activeEffects = linkedSetOf<RuntimeGamepadEffectSession>()
     private val eventGate = collectorAllocator.newGate(maxCollectorsPerFlow)
@@ -72,6 +79,7 @@ internal class RuntimeGamepadManager(
     init {
         require(maxConcurrentEffects > 0) { "maxConcurrentEffects must be positive" }
         observation = port.installObserver(::accept)
+        updateRouting(routingFor(initialLifecycleState))
         lock.withLock {
             if (!closed) {
                 port.gamepads.forEach(::connectInitialLocked)
@@ -84,6 +92,10 @@ internal class RuntimeGamepadManager(
 
     override fun gamepad(id: GamepadId): Gamepad? = lock.withLock {
         gamepadsByKey.values.firstOrNull { it.id == id }
+    }
+
+    fun updateLifecycle(state: LifecycleState) {
+        updateRouting(routingFor(state))
     }
 
     override fun close() {
@@ -191,6 +203,23 @@ internal class RuntimeGamepadManager(
         require(controls.axes.map(GamepadAxisValue::axis) == descriptor.axes) {
             "gamepad axis state must exactly match its descriptor"
         }
+    }
+
+    private fun routingFor(state: LifecycleState): GamepadPortRouting = GamepadPortRouting(
+        policy = gamepadRouting,
+        foregroundActive = state.visibility == VisibilityState.Foreground && state.activation == ActivationState.Active,
+    )
+
+    private fun updateRouting(next: GamepadPortRouting) {
+        val shouldUpdate = lock.withLock {
+            if (closed || routing == next) {
+                false
+            } else {
+                routing = next
+                true
+            }
+        }
+        if (shouldUpdate) port.updateRouting(next)
     }
 
     private fun startEffect(

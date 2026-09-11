@@ -6,6 +6,7 @@ import org.graphiks.kadre.input.GamepadDescriptor
 import org.graphiks.kadre.input.GamepadEffect
 import org.graphiks.kadre.input.GamepadRoutingState
 import org.graphiks.kadre.input.GamepadState
+import org.graphiks.kadre.policy.GamepadRouting
 
 /** One detached native gamepad projection before the runtime allocates its public identity. */
 public data class GamepadPortGamepad(
@@ -49,6 +50,12 @@ public sealed interface GamepadPortEvent {
     }
 }
 
+/** Session routing context consumed by a process-wide gamepad backend. */
+public data class GamepadPortRouting(
+    public val policy: GamepadRouting,
+    public val foregroundActive: Boolean,
+)
+
 /**
  * Unstable backend SPI for one session's detached gamepad projection.
  *
@@ -67,6 +74,9 @@ public interface GamepadPort : AutoCloseable {
 
     /** Installs a listener for changes that occur after installation begins. */
     public fun installObserver(observer: (GamepadPortEvent) -> Unit): AutoCloseable
+
+    /** Updates this session's policy and normalized foreground/activation eligibility. */
+    public fun updateRouting(routing: GamepadPortRouting)
 
     /**
      * Starts one already-admitted effect for the gamepad identified by [key].

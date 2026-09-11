@@ -138,6 +138,8 @@ internal class SessionRuntime(
             maxCollectorsPerFlow = policy.resources.maxEventCollectorsPerFlow,
             effectScope = rootScope,
             maxConcurrentEffects = policy.resources.maxConcurrentGamepadEffects,
+            gamepadRouting = policy.devices.gamepadRouting,
+            initialLifecycleState = initialLifecycleState,
         )
     }
     private val runtimeDevices: DeviceManager = runtimeGamepadManager ?: UnsupportedDeviceManager(
@@ -224,7 +226,10 @@ internal class SessionRuntime(
     }
 
     fun updateLifecycle(state: LifecycleState) {
-        if (!isFinished()) runtimeLifecycle.updateState(state)
+        if (!isFinished()) {
+            runtimeLifecycle.updateState(state)
+            runtimeGamepadManager?.updateLifecycle(state)
+        }
     }
 
     fun updateLifecycleCapabilities(capabilities: LifecycleCapabilities) {
