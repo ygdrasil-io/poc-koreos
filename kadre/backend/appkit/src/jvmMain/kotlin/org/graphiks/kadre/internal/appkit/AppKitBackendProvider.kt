@@ -24,6 +24,7 @@ import org.graphiks.kadre.internal.runtime.RuntimeSessionObserver
 import org.graphiks.kadre.internal.runtime.RuntimeSessionStopHandler
 import org.graphiks.kadre.internal.runtime.DisplayPort
 import org.graphiks.kadre.internal.runtime.GamepadPort
+import org.graphiks.kadre.internal.runtime.InputDevicePort
 import org.graphiks.kadre.internal.runtime.RawInputPort
 import org.graphiks.kadre.internal.runtime.desktop.DesktopBackendKind
 import org.graphiks.kadre.internal.runtime.desktop.DesktopBackendProvider
@@ -43,6 +44,7 @@ public class AppKitBackendProvider private constructor(
     private val rawInputPortFactory: () -> RawInputPort?,
     private val displayPortFactory: () -> DisplayPort?,
     private val gamepadPortFactory: () -> GamepadPort?,
+    private val inputDevicePortFactory: () -> InputDevicePort?,
     private val availability: () -> Boolean,
 ) : DesktopBackendProvider {
     public constructor() : this(
@@ -60,6 +62,7 @@ public class AppKitBackendProvider private constructor(
             }
         },
         { if (isMacOs()) ProcessAppKitProcessBroker.value.openGameControllerPort() else null },
+        { if (isMacOs()) ProcessAppKitProcessBroker.value.openHidPort() else null },
         ::isMacOs,
     )
 
@@ -249,6 +252,7 @@ public class AppKitBackendProvider private constructor(
             rawInputPortFactory: () -> RawInputPort? = { null },
             displayPortFactory: () -> DisplayPort? = { null },
             gamepadPortFactory: () -> GamepadPort? = { null },
+            inputDevicePortFactory: () -> InputDevicePort? = { null },
             availability: () -> Boolean,
         ): AppKitBackendProvider = AppKitBackendProvider(
             nativeApplication,
@@ -259,6 +263,7 @@ public class AppKitBackendProvider private constructor(
             rawInputPortFactory,
             displayPortFactory,
             gamepadPortFactory,
+            inputDevicePortFactory,
             availability,
         )
 
@@ -317,6 +322,7 @@ public class AppKitBackendProvider private constructor(
             rawInputPort = rawInputPortFactory(),
             displayPort = displayPortFactory(),
             gamepadPort = gamepadPortFactory(),
+            inputDevicePort = inputDevicePortFactory(),
             closeAction = driver::close,
         )
     }

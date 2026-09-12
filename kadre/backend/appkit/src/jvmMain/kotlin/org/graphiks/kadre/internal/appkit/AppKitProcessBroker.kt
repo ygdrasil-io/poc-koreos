@@ -64,6 +64,9 @@ internal class AppKitProcessBroker(
     private val gameControllerBrokerFactory: () -> AppKitGameControllerBroker = {
         AppKitGameControllerBroker(KffiAppKitGameControllerNativeFactory)
     },
+    private val hidBrokerFactory: () -> AppKitHidBroker = {
+        AppKitHidBroker(KffiAppKitHidNativeFactory)
+    },
 ) {
     private val lock = Any()
     private val deliveryLock = Any()
@@ -90,6 +93,7 @@ internal class AppKitProcessBroker(
         )
     }
     private val gameControllerBroker = lazy(gameControllerBrokerFactory)
+    private val hidBroker = lazy(hidBrokerFactory)
     private val memoryPressureBroker = lazy {
         AppKitMemoryPressureBroker(checkNotNull(memoryPressureNative), ::deliverMemoryPressure)
     }
@@ -100,6 +104,14 @@ internal class AppKitProcessBroker(
 
     fun openGameControllerPort(): AppKitGameControllerPort? = try {
         gameControllerBroker.value.openPort()
+    } catch (_: Exception) {
+        null
+    } catch (_: LinkageError) {
+        null
+    }
+
+    fun openHidPort(): AppKitHidPort? = try {
+        hidBroker.value.openPort()
     } catch (_: Exception) {
         null
     } catch (_: LinkageError) {

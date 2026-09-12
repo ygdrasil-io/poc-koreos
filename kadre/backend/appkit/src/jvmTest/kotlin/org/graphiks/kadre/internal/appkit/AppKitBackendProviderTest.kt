@@ -73,6 +73,8 @@ import org.graphiks.kadre.display.DisplayInventory
 import org.graphiks.kadre.display.DisplayManager
 import org.graphiks.kadre.input.DeviceInventory
 import org.graphiks.kadre.input.GamepadEffect
+import org.graphiks.kadre.input.InputDeviceDescriptor
+import org.graphiks.kadre.input.InputDeviceKind
 import org.graphiks.kadre.internal.runtime.DisplayPort
 import org.graphiks.kadre.internal.runtime.DisplayPortDisplay
 import org.graphiks.kadre.internal.runtime.DisplayPortMode
@@ -82,6 +84,9 @@ import org.graphiks.kadre.internal.runtime.GamepadPortEffect
 import org.graphiks.kadre.internal.runtime.GamepadPortEvent
 import org.graphiks.kadre.internal.runtime.GamepadPortGamepad
 import org.graphiks.kadre.internal.runtime.GamepadPortRouting
+import org.graphiks.kadre.internal.runtime.InputDevicePort
+import org.graphiks.kadre.internal.runtime.InputDevicePortDevice
+import org.graphiks.kadre.internal.runtime.InputDevicePortEvent
 import org.graphiks.kadre.internal.runtime.RawInputPort
 import org.graphiks.kadre.internal.runtime.RawInputPortInput
 import org.graphiks.kadre.internal.runtime.RawInputPortLease
@@ -505,6 +510,51 @@ class AppKitBackendProviderTest {
             ).requireSession()
 
             assertIs<DeviceInventory.Enumerated>(observedInventory.await())
+            session.close()
+            session.awaitTermination()
+            assertTrue(port.closed)
+        } finally {
+            parentScope.cancel()
+        }
+    }
+
+    @Test
+    fun embeddedSessionProjectsTheConfiguredHidPortAndClosesItWithTheSession() = kotlinx.coroutines.runBlocking {
+        val native = EmbeddedNativeApplication()
+        val port = ProviderInputDevicePort(
+            listOf(
+                InputDevicePortDevice(
+                    42L,
+                    InputDeviceDescriptor("Provider keyboard", InputDeviceKind.Keyboard),
+                ),
+            ),
+        )
+        val provider = AppKitBackendProvider.forTesting(
+            nativeApplication = native,
+            broker = AppKitProcessBroker(),
+            inputDevicePortFactory = { port },
+            availability = { true },
+        )
+        val parentScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob())
+        val observedInventory = CompletableDeferred<DeviceInventory>()
+
+        try {
+            val session = provider.attach(
+                DesktopEmbeddedRequest(
+                    parentScope,
+                    KadreApplicationFactory {
+                        KadreApplication {
+                            observedInventory.complete(devices.state.value.inventory)
+                            kotlinx.coroutines.awaitCancellation()
+                        }
+                    },
+                    DesktopIntegrationKind.AppKitMainLoop,
+                    KadrePolicies.Default,
+                ),
+            ).requireSession()
+
+            val inventory = assertIs<DeviceInventory.Enumerated>(observedInventory.await())
+            assertEquals(listOf("Provider keyboard"), inventory.devices.map { it.descriptor.name })
             session.close()
             session.awaitTermination()
             assertTrue(port.closed)
@@ -4273,6 +4323,19 @@ private class ProviderGamepadPort : GamepadPort {
 
     override fun startEffect(key: Long, effect: GamepadEffect): KadreResult<GamepadPortEffect> =
         KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.Gamepad))
+
+    override fun close() {
+        closed = true
+    }
+}
+
+private class ProviderInputDevicePort(
+    override val devices: List<InputDevicePortDevice>,
+) : InputDevicePort {
+    var closed: Boolean = false
+        private set
+
+    override fun installObserver(observer: (InputDevicePortEvent) -> Unit): AutoCloseable = AutoCloseable { }
 
     override fun close() {
         closed = true
