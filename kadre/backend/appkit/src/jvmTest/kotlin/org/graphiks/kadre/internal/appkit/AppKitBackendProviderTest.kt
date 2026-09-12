@@ -62,6 +62,15 @@ import org.graphiks.kadre.application.HostSignal
 import org.graphiks.kadre.application.MemoryPressureLevel
 import org.graphiks.kadre.application.SessionOutcome
 import org.graphiks.kadre.application.SessionStopReason
+import org.graphiks.kadre.capture.CaptureCapabilities
+import org.graphiks.kadre.capture.CaptureCursorMode
+import org.graphiks.kadre.capture.CaptureManager
+import org.graphiks.kadre.capture.CapturePermissionScope
+import org.graphiks.kadre.capture.CapturePermissionState
+import org.graphiks.kadre.capture.CaptureRequest
+import org.graphiks.kadre.capture.CaptureSources
+import org.graphiks.kadre.capture.CaptureTargetConstraints
+import org.graphiks.kadre.capture.PixelFormat
 import org.graphiks.kadre.diagnostics.Capability
 import org.graphiks.kadre.diagnostics.FeatureAvailability
 import org.graphiks.kadre.diagnostics.KadreFailure
@@ -73,6 +82,10 @@ import org.graphiks.kadre.display.DisplayInventory
 import org.graphiks.kadre.display.DisplayManager
 import org.graphiks.kadre.internal.runtime.DisplayPort
 import org.graphiks.kadre.internal.runtime.DisplayPortSnapshot
+import org.graphiks.kadre.internal.runtime.CapturePort
+import org.graphiks.kadre.internal.runtime.CapturePortReservation
+import org.graphiks.kadre.internal.runtime.CapturePortSnapshot
+import org.graphiks.kadre.internal.runtime.CapturePortTarget
 import org.graphiks.kadre.internal.runtime.RawInputPort
 import org.graphiks.kadre.internal.runtime.RawInputPortInput
 import org.graphiks.kadre.internal.runtime.RawInputPortLease
@@ -400,6 +413,43 @@ class AppKitBackendProviderTest {
             ).requireSession()
 
             assertIs<KadreResult.Success<*>>(observedDisplays.await().requestAccess())
+            session.close()
+            session.awaitTermination()
+            assertEquals(1, port.closeCount)
+        } finally {
+            parentScope.cancel()
+        }
+    }
+
+    @Test
+    fun embeddedSessionProjectsTheConfiguredCapturePortAndClosesItWithTheSession() = kotlinx.coroutines.runBlocking {
+        val native = EmbeddedNativeApplication()
+        val port = ProviderCapturePort()
+        val provider = AppKitBackendProvider.forTesting(
+            nativeApplication = native,
+            broker = AppKitProcessBroker(),
+            capturePortFactory = { port },
+            availability = { true },
+        )
+        val parentScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob())
+        val observedCapture = CompletableDeferred<CaptureManager>()
+
+        try {
+            val session = provider.attach(
+                DesktopEmbeddedRequest(
+                    parentScope,
+                    KadreApplicationFactory {
+                        KadreApplication {
+                            observedCapture.complete(capture)
+                            kotlinx.coroutines.awaitCancellation()
+                        }
+                    },
+                    DesktopIntegrationKind.AppKitMainLoop,
+                    KadrePolicies.Default,
+                ),
+            ).requireSession()
+
+            assertIs<CaptureSources.HostPickerOnly>(observedCapture.await().state.value.sources)
             session.close()
             session.awaitTermination()
             assertEquals(1, port.closeCount)
@@ -3838,6 +3888,51 @@ private fun publicWindowRequest(
     DesktopIntegrationKind.AppKitMainLoop,
     KadrePolicies.Default,
     allowUserAttention,
+)
+
+private class ProviderCapturePort : CapturePort {
+    var closeCount: Int = 0
+        private set
+
+    override val initialSnapshot: CapturePortSnapshot = CapturePortSnapshot(
+        permissions = CapturePermissionState(
+            org.graphiks.kadre.input.PermissionState.Granted,
+            org.graphiks.kadre.input.PermissionState.Granted,
+        ),
+        capabilities = CaptureCapabilities(
+            screen = supportedCaptureConstraints(),
+            window = supportedCaptureConstraints(),
+            surface = supportedCaptureConstraints(),
+            sourceEnumeration = Capability.Supported(Unit, FeatureAvailability.Available),
+            hostPicker = FeatureAvailability.Available,
+        ),
+        sources = org.graphiks.kadre.internal.runtime.CapturePortSources.HostPickerOnly,
+    )
+
+    override suspend fun requestPermission(scope: CapturePermissionScope): KadreResult<CapturePortSnapshot> =
+        KadreResult.Success(initialSnapshot)
+
+    override suspend fun refreshSources(): KadreResult<CapturePortSnapshot> = KadreResult.Success(initialSnapshot)
+
+    override suspend fun reserve(
+        target: CapturePortTarget,
+        request: CaptureRequest,
+    ): KadreResult<CapturePortReservation> = KadreResult.Failure(KadreFailure.Unsupported(KadreOperation.CaptureOpen))
+
+    override fun installObserver(observer: (KadreResult<CapturePortSnapshot>) -> Unit): AutoCloseable = AutoCloseable { }
+
+    override fun close() {
+        closeCount += 1
+    }
+}
+
+private fun supportedCaptureConstraints(): Capability<CaptureTargetConstraints> = Capability.Supported(
+    CaptureTargetConstraints(
+        formats = setOf(PixelFormat.Bgra8),
+        cursorModes = setOf(CaptureCursorMode.EmbeddedWhenAvailable),
+        region = FeatureAvailability.Available,
+    ),
+    FeatureAvailability.Available,
 )
 
 private class ProviderDisplayPort : DisplayPort {

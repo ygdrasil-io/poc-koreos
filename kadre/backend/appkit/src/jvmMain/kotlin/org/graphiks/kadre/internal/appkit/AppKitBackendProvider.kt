@@ -23,6 +23,7 @@ import org.graphiks.kadre.internal.runtime.RuntimeSessionComponentsFactory
 import org.graphiks.kadre.internal.runtime.RuntimeSessionObserver
 import org.graphiks.kadre.internal.runtime.RuntimeSessionStopHandler
 import org.graphiks.kadre.internal.runtime.DisplayPort
+import org.graphiks.kadre.internal.runtime.CapturePort
 import org.graphiks.kadre.internal.runtime.RawInputPort
 import org.graphiks.kadre.internal.runtime.desktop.DesktopBackendKind
 import org.graphiks.kadre.internal.runtime.desktop.DesktopBackendProvider
@@ -40,6 +41,7 @@ public class AppKitBackendProvider private constructor(
     private val fullscreenAvailability: AppKitFullscreenAvailability,
     private val rawInputPortFactory: () -> RawInputPort?,
     private val displayPortFactory: () -> DisplayPort?,
+    private val capturePortFactory: () -> CapturePort?,
     private val availability: () -> Boolean,
 ) : DesktopBackendProvider {
     public constructor() : this(
@@ -55,6 +57,7 @@ public class AppKitBackendProvider private constructor(
                 null
             }
         },
+        { if (isMacOs()) AppKitCapturePort() else null },
         ::isMacOs,
     )
 
@@ -242,6 +245,7 @@ public class AppKitBackendProvider private constructor(
             fullscreenAvailability: AppKitFullscreenAvailability = AppKitFullscreenAvailability(),
             rawInputPortFactory: () -> RawInputPort? = { null },
             displayPortFactory: () -> DisplayPort? = { null },
+            capturePortFactory: () -> CapturePort? = { null },
             availability: () -> Boolean,
         ): AppKitBackendProvider = AppKitBackendProvider(
             nativeApplication,
@@ -250,6 +254,7 @@ public class AppKitBackendProvider private constructor(
             fullscreenAvailability,
             rawInputPortFactory,
             displayPortFactory,
+            capturePortFactory,
             availability,
         )
 
@@ -306,6 +311,7 @@ public class AppKitBackendProvider private constructor(
             windows = driver.manager,
             rawInputPort = rawInputPortFactory(),
             displayPort = displayPortFactory(),
+            capturePort = capturePortFactory(),
             closeAction = driver::close,
         )
     }

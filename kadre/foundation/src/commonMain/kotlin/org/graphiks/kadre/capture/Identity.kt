@@ -14,7 +14,7 @@ public class CaptureSourceId internal constructor(private val value: Long) {
     init { require(value >= 0) }
 }
 
-@JvmInline public value class CaptureConfigurationRevision internal constructor(public val value: Long) {
+@JvmInline public value class CaptureConfigurationRevision(public val value: Long) {
     init { require(value >= 0) }
 }
 
