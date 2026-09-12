@@ -4,7 +4,9 @@ import org.graphiks.kadre.input.DeviceId
 import org.graphiks.kadre.input.DeviceInventory
 import org.graphiks.kadre.input.DeviceLifecycleEvent
 import org.graphiks.kadre.input.Gamepad
+import org.graphiks.kadre.input.GamepadEvent
 import org.graphiks.kadre.input.GamepadId
+import org.graphiks.kadre.input.GamepadSnapshot
 import org.graphiks.kadre.input.InputDevice
 
 /** Formats Phase 10 public inventory without relying on implementation `toString()` or exposing IDs. */
@@ -43,11 +45,35 @@ internal class Phase10ManualInventoryFormatter {
         "${deviceToken(id)}{name=${quoted(descriptor.name)},kind=${descriptor.kind},connection=${connection.value}}"
     }
 
-    private fun formatGamepad(gamepad: Gamepad): String = with(gamepad) {
-        val state = state.value
+    @Synchronized
+    fun formatGamepadSnapshot(gamepad: Gamepad, state: GamepadSnapshot): String = with(gamepad) {
         "${gamepadToken(id)}{name=${quoted(state.descriptor.name)},mapping=${state.descriptor.mapping}," +
-            "connection=${state.connection},routing=${state.routing}}"
+            "connection=${state.connection},routing=${state.routing},controls=${formatControls(state)}}"
     }
+
+    @Synchronized
+    fun formatGamepadEvent(gamepad: Gamepad, event: GamepadEvent): String = when (event) {
+        is GamepadEvent.ButtonChanged ->
+            "ButtonChanged ${gamepadToken(gamepad.id)} button=${event.value.button} value=${event.value.value} " +
+                "pressed=${event.value.pressed} revision=${event.revision.value} sequence=${event.stamp.sequence.value}"
+
+        is GamepadEvent.AxisChanged ->
+            "AxisChanged ${gamepadToken(gamepad.id)} axis=${event.value.axis} value=${event.value.value} " +
+                "revision=${event.revision.value} sequence=${event.stamp.sequence.value}"
+
+        is GamepadEvent.RoutingSuspended ->
+            "RoutingSuspended ${gamepadToken(gamepad.id)} revision=${event.revision.value} sequence=${event.stamp.sequence.value}"
+
+        is GamepadEvent.RoutingResumed ->
+            "RoutingResumed ${gamepadToken(gamepad.id)} revision=${event.revision.value} sequence=${event.stamp.sequence.value}"
+    }
+
+    private fun formatGamepad(gamepad: Gamepad): String = formatGamepadSnapshot(gamepad, gamepad.state.value)
+
+    private fun formatControls(state: GamepadSnapshot): String =
+        "buttons=[${state.controls.buttons.joinToString { value ->
+            "${value.button}(value=${value.value},pressed=${value.pressed})"
+        }}] axes=[${state.controls.axes.joinToString { value -> "${value.axis}(value=${value.value})" }}]"
 
     private fun deviceToken(id: DeviceId): String = deviceTokens.getOrPut(id) { "d${deviceTokens.size + 1}" }
 

@@ -18,6 +18,10 @@ Commandes : `snapshot`, `effect <index> <locality>`,
 `effect` est volontairement opt-in et joue une pulsation d’une seconde seulement
 si le gamepad sélectionné annonce la locality demandée.
 
+Les modifications de contrôles sont consignées automatiquement dans
+`GAMEPAD_SNAPSHOT` et `GAMEPAD_EVENT` ; il n'est pas nécessaire de synthétiser
+une entrée ni de relancer un `snapshot` pour les voir.
+
 Le TSV remplace les `DeviceId` et `GamepadId` redacted par des tokens opaques
 locaux au run (`d1`, `g1`, …). Ils ne sont ni des handles ni des IDs natifs ;
 ils permettent seulement de suivre une identité publique pendant l'essai.

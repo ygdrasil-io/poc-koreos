@@ -75,6 +75,14 @@ import org.graphiks.kadre.input.DeviceInventory
 import org.graphiks.kadre.input.DeviceLifecycleEvent
 import org.graphiks.kadre.input.DeviceManager
 import org.graphiks.kadre.input.GamepadEffect
+import org.graphiks.kadre.input.GamepadButton
+import org.graphiks.kadre.input.GamepadButtonValue
+import org.graphiks.kadre.input.GamepadCapabilities
+import org.graphiks.kadre.input.GamepadDescriptor
+import org.graphiks.kadre.input.GamepadEvent
+import org.graphiks.kadre.input.GamepadMapping
+import org.graphiks.kadre.input.GamepadRoutingState
+import org.graphiks.kadre.input.GamepadState
 import org.graphiks.kadre.input.InputDeviceDescriptor
 import org.graphiks.kadre.input.InputDeviceKind
 import org.graphiks.kadre.internal.runtime.DisplayPort
@@ -99,6 +107,7 @@ import org.graphiks.kadre.internal.runtime.desktop.DesktopEmbeddedRequest
 import org.graphiks.kadre.internal.runtime.desktop.DesktopIntegrationKind
 import org.graphiks.kadre.internal.runtime.desktop.DesktopStandaloneRequest
 import org.graphiks.kadre.internal.appkit.manual.Phase10ManualInventoryFormatter
+import org.graphiks.kadre.internal.appkit.manual.Phase10GamepadObservationSet
 import org.graphiks.kadre.input.InputEvent
 import org.graphiks.kadre.input.DropOfferState
 import org.graphiks.kadre.input.DropOfferTerminationReason
@@ -487,7 +496,27 @@ class AppKitBackendProviderTest {
     @Test
     fun embeddedSessionProjectsTheConfiguredGamepadPortAndClosesItWithTheSession() = kotlinx.coroutines.runBlocking {
         val native = EmbeddedNativeApplication()
-        val port = ProviderGamepadPort()
+        val port = ProviderGamepadPort(
+            initialGamepads = listOf(
+                GamepadPortGamepad(
+                    key = 9L,
+                    descriptor = GamepadDescriptor(
+                        name = "Provider controller",
+                        mapping = GamepadMapping.Standard,
+                        buttons = listOf(GamepadButton.South),
+                        axes = emptyList(),
+                    ),
+                    state = GamepadState(
+                        buttons = listOf(GamepadButtonValue(GamepadButton.South, 0.0, false)),
+                        axes = emptyList(),
+                    ),
+                    routing = GamepadRoutingState.Routed,
+                    capabilities = GamepadCapabilities(
+                        effects = Capability.Unsupported(KadreFailure.Unsupported(KadreOperation.GamepadEffect)),
+                    ),
+                ),
+            ),
+        )
         val provider = AppKitBackendProvider.forTesting(
             nativeApplication = native,
             broker = AppKitProcessBroker(),
@@ -513,6 +542,40 @@ class AppKitBackendProviderTest {
             ).requireSession()
 
             assertIs<DeviceInventory.Enumerated>(observedInventory.await())
+            val gamepad = (observedInventory.await() as DeviceInventory.Enumerated).gamepads.single()
+            val formatter = Phase10ManualInventoryFormatter()
+            assertEquals(
+                "g1{name=\"Provider controller\",mapping=Standard,connection=Connected,routing=Routed," +
+                    "controls=buttons=[South(value=0.0,pressed=false)] axes=[]}",
+                formatter.formatGamepadSnapshot(gamepad, gamepad.state.value),
+            )
+            val controlEvent = async(start = CoroutineStart.UNDISPATCHED) {
+                gamepad.events.filterIsInstance<GamepadEvent.ButtonChanged>().first()
+            }
+            val observedSnapshots = mutableListOf<org.graphiks.kadre.input.GamepadSnapshot>()
+            val observedControlEvent = CompletableDeferred<GamepadEvent.ButtonChanged>()
+            val observations = Phase10GamepadObservationSet(
+                scope = this,
+                onSnapshot = { _, snapshot -> observedSnapshots += snapshot },
+                onEvent = { _, event ->
+                    if (event is GamepadEvent.ButtonChanged) observedControlEvent.complete(event)
+                },
+            )
+            observations.observe(gamepad)
+            assertEquals(0.0, observedSnapshots.single().controls.buttons.single().value)
+            port.changeState(
+                9L,
+                GamepadState(
+                    buttons = listOf(GamepadButtonValue(GamepadButton.South, 1.0, true)),
+                    axes = emptyList(),
+                ),
+            )
+            assertTrue(
+                formatter.formatGamepadEvent(gamepad, controlEvent.await())
+                    .startsWith("ButtonChanged g1 button=South value=1.0 pressed=true revision=1 sequence="),
+            )
+            assertEquals(1.0, observedControlEvent.await().value.value)
+            observations.remove(gamepad.id)
             session.close()
             session.awaitTermination()
             assertTrue(port.closed)
@@ -4327,21 +4390,35 @@ private class ProviderRawInputLease : RawInputPortLease {
     }
 }
 
-private class ProviderGamepadPort : GamepadPort {
+private class ProviderGamepadPort(
+    initialGamepads: List<GamepadPortGamepad> = emptyList(),
+) : GamepadPort {
+    private var observer: ((GamepadPortEvent) -> Unit)? = null
     var closed: Boolean = false
         private set
 
-    override val gamepads: List<GamepadPortGamepad> = emptyList()
+    override val gamepads: List<GamepadPortGamepad> = initialGamepads
 
-    override fun installObserver(observer: (GamepadPortEvent) -> Unit): AutoCloseable = AutoCloseable { }
+    override fun installObserver(observer: (GamepadPortEvent) -> Unit): AutoCloseable {
+        check(this.observer == null) { "gamepad observer is already installed" }
+        this.observer = observer
+        return AutoCloseable {
+            if (this.observer === observer) this.observer = null
+        }
+    }
 
     override fun updateRouting(routing: GamepadPortRouting) = Unit
 
     override fun startEffect(key: Long, effect: GamepadEffect): KadreResult<GamepadPortEffect> =
         KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.Gamepad))
 
+    fun changeState(key: Long, state: GamepadState) {
+        checkNotNull(observer)(GamepadPortEvent.StateChanged(key, state))
+    }
+
     override fun close() {
         closed = true
+        observer = null
     }
 }
 
