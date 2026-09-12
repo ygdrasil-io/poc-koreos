@@ -44,12 +44,14 @@ import org.graphiks.kadre.input.GamepadRevision
 import org.graphiks.kadre.input.GamepadRoutingState
 import org.graphiks.kadre.input.GamepadSnapshot
 import org.graphiks.kadre.input.GamepadState
+import org.graphiks.kadre.input.InputDevice
 import org.graphiks.kadre.policy.GamepadRouting
 import org.graphiks.kadre.policy.DeviceEffectOwnership
 
 /** Session-owned public gamepad projection backed by one [GamepadPort]. */
 internal class RuntimeGamepadManager(
     private val port: GamepadPort,
+    private val inputPort: InputDevicePort? = null,
     private val eventStampSource: () -> EventStamp,
     private val collectorAllocator: RuntimeEventCollectorAllocator,
     private val maxCollectorsPerFlow: Int,
@@ -61,8 +63,10 @@ internal class RuntimeGamepadManager(
 ) : DeviceManager, AutoCloseable {
     private val lock = RuntimeLock()
     private val gamepadsByKey = linkedMapOf<Long, RuntimeGamepad>()
+    private val inputDevicesByKey = linkedMapOf<Long, RuntimeInputDevice>()
     private var closed = false
     private var observation: AutoCloseable? = null
+    private var inputObservation: AutoCloseable? = null
     private var routing: GamepadPortRouting? = null
     private var pendingEffects = 0
     private val activeEffects = linkedSetOf<RuntimeGamepadEffectSession>()
@@ -81,16 +85,20 @@ internal class RuntimeGamepadManager(
     init {
         require(maxConcurrentEffects > 0) { "maxConcurrentEffects must be positive" }
         observation = port.installObserver(::accept)
+        inputObservation = inputPort?.installObserver(::acceptInputDevice)
         updateRouting(routingFor(initialLifecycleState))
         lock.withLock {
             if (!closed) {
                 port.gamepads.forEach(::connectInitialLocked)
+                inputPort?.devices?.forEach(::connectInitialInputDeviceLocked)
                 publishInventoryLocked(incrementRevision = false)
             }
         }
     }
 
-    override fun device(id: DeviceId) = null
+    override fun device(id: DeviceId): InputDevice? = lock.withLock {
+        inputDevicesByKey.values.firstOrNull { it.id == id }
+    }
 
     override fun gamepad(id: GamepadId): Gamepad? = lock.withLock {
         gamepadsByKey.values.firstOrNull { it.id == id }
@@ -105,13 +113,17 @@ internal class RuntimeGamepadManager(
             if (closed) return
             closed = true
             val observation = observation.also { observation = null }
+            val inputObservation = inputObservation.also { inputObservation = null }
             val effects = activeEffects.toList()
             activeEffects.clear()
             gamepadsByKey.values.forEach(RuntimeGamepad::disconnect)
             gamepadsByKey.clear()
-            Release(observation, effects)
+            inputDevicesByKey.values.forEach(RuntimeInputDevice::disconnect)
+            inputDevicesByKey.clear()
+            Release(observation, inputObservation, effects)
         }
         release.observation?.close()
+        release.inputObservation?.close()
         release.effects.forEach { effect -> effect.terminate(GamepadEffectOutcome.Stopped(GamepadEffectStopReason.ParentSessionStopping)) }
     }
 
@@ -132,6 +144,21 @@ internal class RuntimeGamepadManager(
                 )
             }
         }
+        publish(accepted)
+    }
+
+    private fun acceptInputDevice(event: InputDevicePortEvent) {
+        val accepted = lock.withLock {
+            if (closed) return
+            when (event) {
+                is InputDevicePortEvent.Connected -> AcceptedPortEvent(connectInputDeviceLocked(event.device))
+                is InputDevicePortEvent.Disconnected -> disconnectInputDeviceLocked(event.key)
+            }
+        }
+        publish(accepted)
+    }
+
+    private fun publish(accepted: AcceptedPortEvent) {
         accepted.effects.forEach { effect ->
             effect.terminate(GamepadEffectOutcome.Stopped(GamepadEffectStopReason.DeviceDisconnected))
         }
@@ -148,6 +175,11 @@ internal class RuntimeGamepadManager(
         gamepadsByKey[source.key] = newGamepad(source)
     }
 
+    private fun connectInitialInputDeviceLocked(source: InputDevicePortDevice) {
+        if (inputDevicesByKey.containsKey(source.key)) return
+        inputDevicesByKey[source.key] = newInputDevice(source)
+    }
+
     private fun connectLocked(source: GamepadPortGamepad): List<Publication> {
         if (gamepadsByKey.containsKey(source.key)) return emptyList()
         val gamepad = newGamepad(source)
@@ -156,6 +188,18 @@ internal class RuntimeGamepadManager(
         return listOf(
             DevicePublication(
                 DeviceLifecycleEvent.GamepadAdded(gamepad, next.revision, eventStampSource()),
+            ),
+        )
+    }
+
+    private fun connectInputDeviceLocked(source: InputDevicePortDevice): List<Publication> {
+        if (inputDevicesByKey.containsKey(source.key)) return emptyList()
+        val device = newInputDevice(source)
+        inputDevicesByKey[source.key] = device
+        val next = publishInventoryLocked(incrementRevision = true)
+        return listOf(
+            DevicePublication(
+                DeviceLifecycleEvent.DeviceAdded(device, next.revision, eventStampSource()),
             ),
         )
     }
@@ -175,6 +219,19 @@ internal class RuntimeGamepadManager(
         )
     }
 
+    private fun disconnectInputDeviceLocked(key: Long): AcceptedPortEvent {
+        val device = inputDevicesByKey.remove(key) ?: return AcceptedPortEvent(emptyList())
+        device.disconnect()
+        val next = publishInventoryLocked(incrementRevision = true)
+        return AcceptedPortEvent(
+            publications = listOf(
+                DevicePublication(
+                    DeviceLifecycleEvent.DeviceRemoved(device.id, next.revision, eventStampSource()),
+                ),
+            ),
+        )
+    }
+
     private fun newGamepad(source: GamepadPortGamepad): RuntimeGamepad {
         validate(source)
         return RuntimeGamepad(
@@ -184,12 +241,17 @@ internal class RuntimeGamepadManager(
         )
     }
 
+    private fun newInputDevice(source: InputDevicePortDevice): RuntimeInputDevice = RuntimeInputDevice(
+        id = RuntimeProcessIds.nextDeviceId(),
+        descriptor = source.descriptor,
+    )
+
     private fun publishInventoryLocked(incrementRevision: Boolean): DeviceManagerState {
         val previous = mutableState.value
         val revision = if (incrementRevision) nextRevision(previous.revision) else previous.revision
         return DeviceManagerState(
             inventory = DeviceInventory.Enumerated(
-                devices = emptyList(),
+                devices = inputDevicesByKey.values.toList(),
                 gamepads = gamepadsByKey.values.toList(),
             ),
             revision = revision,
@@ -316,8 +378,22 @@ internal class RuntimeGamepadManager(
     )
     private data class Release(
         val observation: AutoCloseable?,
+        val inputObservation: AutoCloseable?,
         val effects: List<RuntimeGamepadEffectSession>,
     )
+
+    private class RuntimeInputDevice(
+        override val id: DeviceId,
+        override val descriptor: org.graphiks.kadre.input.InputDeviceDescriptor,
+    ) : InputDevice {
+        private val mutableConnection = MutableStateFlow(DeviceConnectionState.Connected)
+
+        override val connection: StateFlow<DeviceConnectionState> = mutableConnection.asStateFlow()
+
+        fun disconnect() {
+            mutableConnection.value = DeviceConnectionState.Disconnected
+        }
+    }
 
     private class RuntimeGamepadEffectSession(
         private val owner: GamepadPortEffect,
@@ -526,4 +602,18 @@ internal class RuntimeGamepadManager(
     private companion object {
         const val EVENT_BUFFER_CAPACITY = 32
     }
+}
+
+/** No-op gamepad source used when a session exposes only generic input devices. */
+internal object EmptyGamepadPort : GamepadPort {
+    override val gamepads: List<GamepadPortGamepad> = emptyList()
+
+    override fun installObserver(observer: (GamepadPortEvent) -> Unit): AutoCloseable = AutoCloseable { }
+
+    override fun updateRouting(routing: GamepadPortRouting) = Unit
+
+    override fun startEffect(key: Long, effect: GamepadEffect): KadreResult<GamepadPortEffect> =
+        KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.Gamepad))
+
+    override fun close() = Unit
 }

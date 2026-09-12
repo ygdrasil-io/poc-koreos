@@ -130,9 +130,12 @@ internal class SessionRuntime(
     private val runtimeWindows = runtimeComponents.windows.also {
         runtimeDisplayManager?.let(runtimeComponents::installExclusiveDisplayTargetResolver)
     }
-    private val runtimeGamepadManager = runtimeComponents.gamepadPort?.let { port ->
+    private val runtimeGamepadManager = (
+        runtimeComponents.gamepadPort ?: runtimeComponents.inputDevicePort?.let { EmptyGamepadPort }
+    )?.let { port ->
         RuntimeGamepadManager(
             port = port,
+            inputPort = runtimeComponents.inputDevicePort,
             eventStampSource = ::nextStamp,
             collectorAllocator = eventCollectorAllocator,
             maxCollectorsPerFlow = policy.resources.maxEventCollectorsPerFlow,

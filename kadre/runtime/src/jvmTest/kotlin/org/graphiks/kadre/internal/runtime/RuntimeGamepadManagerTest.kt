@@ -20,6 +20,8 @@ import org.graphiks.kadre.diagnostics.KadreResult
 import org.graphiks.kadre.input.DeviceConnectionState
 import org.graphiks.kadre.input.DeviceInventory
 import org.graphiks.kadre.input.DeviceLifecycleEvent
+import org.graphiks.kadre.input.InputDeviceDescriptor
+import org.graphiks.kadre.input.InputDeviceKind
 import org.graphiks.kadre.input.GamepadButton
 import org.graphiks.kadre.input.GamepadButtonValue
 import org.graphiks.kadre.input.GamepadCapabilities
@@ -46,6 +48,94 @@ import kotlin.time.Duration.Companion.nanoseconds
 import kotlin.time.Duration.Companion.hours
 
 class RuntimeGamepadManagerTest {
+    @Test
+    fun initialInputDevicesShareTheAtomicDeviceInventoryWithGamepads() = runTest {
+        val inputPort = FakeInputDevicePort(
+            devices = listOf(inputDevice(key = 3L, name = "Keyboard", kind = InputDeviceKind.Keyboard)),
+        )
+        val manager = RuntimeGamepadManager(
+            port = FakeGamepadPort(initialGamepads = listOf(gamepad(key = 11L))),
+            inputPort = inputPort,
+            eventStampSource = { EventStamp(SessionSequence(0), SessionInstant(0.nanoseconds), null) },
+            collectorAllocator = RuntimeEventCollectorAllocator(4),
+            maxCollectorsPerFlow = 1,
+            effectScope = this,
+            maxConcurrentEffects = 4,
+            gamepadRouting = GamepadRouting.AllForegroundSessions,
+            initialLifecycleState = lifecycle(VisibilityState.Foreground, ActivationState.Active),
+        )
+
+        val inventory = assertIs<DeviceInventory.Enumerated>(manager.state.value.inventory)
+
+        assertEquals(listOf("Keyboard"), inventory.devices.map { it.descriptor.name })
+        assertEquals(listOf("Controller 11"), inventory.gamepads.map { it.state.value.descriptor.name })
+    }
+
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+    @Test
+    fun inputConnectionPublishesTheSnapshotBeforeItsLifecycleEvent() = runTest {
+        val inputPort = FakeInputDevicePort()
+        val manager = RuntimeGamepadManager(
+            port = FakeGamepadPort(),
+            inputPort = inputPort,
+            eventStampSource = { EventStamp(SessionSequence(0), SessionInstant(0.nanoseconds), null) },
+            collectorAllocator = RuntimeEventCollectorAllocator(8),
+            maxCollectorsPerFlow = 4,
+            effectScope = this,
+            maxConcurrentEffects = 4,
+            gamepadRouting = GamepadRouting.AllForegroundSessions,
+            initialLifecycleState = lifecycle(VisibilityState.Foreground, ActivationState.Active),
+        )
+        val added = async(UnconfinedTestDispatcher(testScheduler), start = CoroutineStart.UNDISPATCHED) {
+            manager.events.first { candidate ->
+                if (candidate !is DeviceLifecycleEvent.DeviceAdded) return@first false
+                val inventory = assertIs<DeviceInventory.Enumerated>(manager.state.value.inventory)
+                assertSame(candidate.device, inventory.devices.single())
+                assertEquals(candidate.managerRevision, manager.state.value.revision)
+                assertEquals(DeviceConnectionState.Connected, candidate.device.connection.value)
+                true
+            }
+        }
+
+        inputPort.connect(inputDevice(key = 13L, name = "Trackpad", kind = InputDeviceKind.Touchpad))
+
+        val event = assertIs<DeviceLifecycleEvent.DeviceAdded>(added.await())
+        assertSame(event.device, manager.device(event.device.id))
+    }
+
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+    @Test
+    fun inputDisconnectionPublishesTheTerminalHandleBeforeItsRemovalEvent() = runTest {
+        val inputPort = FakeInputDevicePort()
+        val manager = RuntimeGamepadManager(
+            port = FakeGamepadPort(),
+            inputPort = inputPort,
+            eventStampSource = { EventStamp(SessionSequence(0), SessionInstant(0.nanoseconds), null) },
+            collectorAllocator = RuntimeEventCollectorAllocator(8),
+            maxCollectorsPerFlow = 4,
+            effectScope = this,
+            maxConcurrentEffects = 4,
+            gamepadRouting = GamepadRouting.AllForegroundSessions,
+            initialLifecycleState = lifecycle(VisibilityState.Foreground, ActivationState.Active),
+        )
+        inputPort.connect(inputDevice(key = 17L, name = "Pen", kind = InputDeviceKind.Pen))
+        val device = assertIs<DeviceInventory.Enumerated>(manager.state.value.inventory).devices.single()
+        val removed = async(UnconfinedTestDispatcher(testScheduler), start = CoroutineStart.UNDISPATCHED) {
+            manager.events.first { candidate ->
+                if (candidate !is DeviceLifecycleEvent.DeviceRemoved) return@first false
+                assertEquals(DeviceConnectionState.Disconnected, device.connection.value)
+                assertEquals(candidate.managerRevision, manager.state.value.revision)
+                true
+            }
+        }
+
+        inputPort.disconnect(17L)
+
+        val event = assertIs<DeviceLifecycleEvent.DeviceRemoved>(removed.await())
+        assertEquals(device.id, event.deviceId)
+        assertEquals(null, manager.device(device.id))
+    }
+
     @Test
     fun lifecycleUpdatesThePortWithTheNormalizedRoutingEligibility() = runTest {
         val port = FakeGamepadPort()
@@ -495,6 +585,15 @@ class RuntimeGamepadManagerTest {
         capabilities = capabilities,
     )
 
+    private fun inputDevice(
+        key: Long,
+        name: String,
+        kind: InputDeviceKind,
+    ): InputDevicePortDevice = InputDevicePortDevice(
+        key = key,
+        descriptor = InputDeviceDescriptor(name = name, kind = kind),
+    )
+
     private fun localizedHapticCapabilities(
         maximumDuration: kotlin.time.Duration? = null,
     ): GamepadCapabilities = GamepadCapabilities(
@@ -555,6 +654,28 @@ private class FakeGamepadPort(
 
     fun disconnect(key: Long) {
         checkNotNull(observer)(GamepadPortEvent.Disconnected(key))
+    }
+
+    override fun close() = Unit
+}
+
+private class FakeInputDevicePort(
+    override val devices: List<InputDevicePortDevice> = emptyList(),
+) : InputDevicePort {
+    private var observer: ((InputDevicePortEvent) -> Unit)? = null
+
+    override fun installObserver(observer: (InputDevicePortEvent) -> Unit): AutoCloseable {
+        check(this.observer == null) { "observer already installed" }
+        this.observer = observer
+        return AutoCloseable { this.observer = null }
+    }
+
+    fun connect(device: InputDevicePortDevice) {
+        checkNotNull(observer)(InputDevicePortEvent.Connected(device))
+    }
+
+    fun disconnect(key: Long) {
+        checkNotNull(observer)(InputDevicePortEvent.Disconnected(key))
     }
 
     override fun close() = Unit
