@@ -21,6 +21,7 @@ import org.graphiks.kadre.internal.runtime.CapturePortReservation
 import org.graphiks.kadre.internal.runtime.CapturePortSourceKey
 import org.graphiks.kadre.internal.runtime.CapturePortSources
 import org.graphiks.kadre.internal.runtime.CapturePortStreamListener
+import org.graphiks.kadre.internal.runtime.CapturePortTermination
 import org.graphiks.kadre.internal.runtime.CapturePortTarget
 import org.graphiks.kadre.surface.PhysicalSize
 import kotlin.test.Test
@@ -186,7 +187,7 @@ private class RecordingStreamListener : CapturePortStreamListener {
 
     override fun onReconfigured(configuration: org.graphiks.kadre.capture.CaptureConfiguration) = Unit
 
-    override fun onTerminated(outcome: org.graphiks.kadre.capture.CaptureOutcome) = Unit
+    override fun onTerminated(termination: CapturePortTermination) = Unit
 }
 
 private fun <T> successValue(result: KadreResult<T>): T = when (result) {

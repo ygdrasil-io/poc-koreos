@@ -182,8 +182,8 @@ internal class RuntimeCaptureSession(
             }
         }
 
-        override fun onTerminated(outcome: CaptureOutcome) {
-            finish(outcome)
+        override fun onTerminated(termination: CapturePortTermination) {
+            finish(termination.toCaptureOutcome(source))
         }
 
         override fun onReconfigured(configuration: org.graphiks.kadre.capture.CaptureConfiguration) {
@@ -291,6 +291,11 @@ internal class RuntimeCaptureSession(
         mutableDiagnostics.tryEmit(diagnostic)
     }
 
+}
+
+private fun CapturePortTermination.toCaptureOutcome(source: CaptureSource): CaptureOutcome = when (this) {
+    is CapturePortTermination.Outcome -> outcome
+    CapturePortTermination.SourceLost -> CaptureOutcome.Failed(KadreFailure.SourceLost(source.id))
 }
 
 private fun CaptureSource.capturePermission(): KadrePermission = when (kind) {
