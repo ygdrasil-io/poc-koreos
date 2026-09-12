@@ -138,7 +138,9 @@ internal class SessionRuntime(
         RuntimeCaptureManager(
             port = port,
             maxConcurrentSessions = policy.resources.maxConcurrentCaptureSessions,
+            capturePolicy = policy.capture,
             eventStampSource = ::nextStamp,
+            onCaptureFailure = ::eventDeliveryFailed,
         )
     }
     private val runtimeCapture: CaptureManager = runtimeCaptureManager ?: UnsupportedCaptureManager()
