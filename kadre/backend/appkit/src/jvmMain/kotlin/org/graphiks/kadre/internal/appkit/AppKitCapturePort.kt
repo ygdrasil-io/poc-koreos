@@ -66,6 +66,8 @@ import org.graphiks.kffi.objc.appkit.ScreenCaptureStreamSession
 import org.graphiks.kffi.objc.appkit.ScreenCaptureTarget
 import org.graphiks.kffi.objc.appkit.ScreenCaptureControlPlanes
 import org.graphiks.kffi.objc.SCStreamErrorCode
+import org.graphiks.kffi.objc.SCStreamErrorDomain
+import org.graphiks.kffi.objc.ObjCRuntime
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.coroutines.resume
 import kotlin.math.min
@@ -883,20 +885,36 @@ private fun ScreenCaptureOpenResult.toNativeResult(): AppKitCaptureNativeOpenRes
 
 private fun ScreenCaptureStopResult.toNativeResult(): AppKitCaptureNativeStopResult = when (this) {
     ScreenCaptureStopResult.Stopped -> AppKitCaptureNativeStopResult.Stopped
-    is ScreenCaptureStopResult.Failed -> when {
-        cause.isScreenCaptureSourceLoss() -> AppKitCaptureNativeStopResult.SourceLost
-        cause.isScreenCapturePermissionRevocation() -> AppKitCaptureNativeStopResult.PermissionRevoked
-        else -> AppKitCaptureNativeStopResult.Failed(cause)
-    }
+    is ScreenCaptureStopResult.Failed -> cause.toNativeTerminationResult()
 }
 
-private fun Throwable.isScreenCaptureSourceLoss(): Boolean =
-    this is ScreenCaptureKitFailure && code == SCStreamErrorCode.SCStreamErrorNoCaptureSource.value
+private fun Throwable.toNativeTerminationResult(): AppKitCaptureNativeStopResult =
+    (this as? ScreenCaptureKitFailure)?.let { failure ->
+        classifyScreenCaptureKitTermination(
+            domain = failure.domain,
+            code = failure.code,
+            preflightScreenCaptureAccess = runCatching {
+                ScreenCaptureControlPlanes.capability().preflightScreenCaptureAccess
+            }.getOrNull(),
+            streamErrorDomain = runCatching {
+                ObjCRuntime.toJavaString(SCStreamErrorDomain)
+            }.getOrNull(),
+        )
+    } ?: AppKitCaptureNativeStopResult.Failed(this)
 
-private fun Throwable.isScreenCapturePermissionRevocation(): Boolean =
-    this is ScreenCaptureKitFailure && runCatching {
-        !ScreenCaptureControlPlanes.capability().preflightScreenCaptureAccess
-    }.getOrDefault(false)
+internal fun classifyScreenCaptureKitTermination(
+    domain: String?,
+    code: Long?,
+    preflightScreenCaptureAccess: Boolean?,
+    streamErrorDomain: String?,
+): AppKitCaptureNativeStopResult? = when {
+    preflightScreenCaptureAccess == false -> AppKitCaptureNativeStopResult.PermissionRevoked
+    domain == streamErrorDomain && code == SCStreamErrorCode.SCStreamErrorNoCaptureSource.value -> {
+        AppKitCaptureNativeStopResult.SourceLost
+    }
+
+    else -> null
+}
 
 private class KffiAppKitCaptureStream(
     private val stream: ScreenCaptureStreamSession,

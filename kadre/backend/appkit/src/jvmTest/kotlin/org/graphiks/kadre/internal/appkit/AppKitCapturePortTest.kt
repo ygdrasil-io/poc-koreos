@@ -30,6 +30,37 @@ import kotlin.test.assertIs
 
 class AppKitCapturePortTest {
     @Test
+    fun nativeTerminationClassificationPrioritizesPermissionAndRequiresTheScreenCaptureDomain() {
+        assertEquals(
+            AppKitCaptureNativeStopResult.PermissionRevoked,
+            classifyScreenCaptureKitTermination(
+                domain = "com.apple.ScreenCaptureKit.SCStreamErrorDomain",
+                code = -3815L,
+                preflightScreenCaptureAccess = false,
+                streamErrorDomain = "com.apple.ScreenCaptureKit.SCStreamErrorDomain",
+            ),
+        )
+        assertEquals(
+            AppKitCaptureNativeStopResult.SourceLost,
+            classifyScreenCaptureKitTermination(
+                domain = "com.apple.ScreenCaptureKit.SCStreamErrorDomain",
+                code = -3815L,
+                preflightScreenCaptureAccess = true,
+                streamErrorDomain = "com.apple.ScreenCaptureKit.SCStreamErrorDomain",
+            ),
+        )
+        assertEquals(
+            null,
+            classifyScreenCaptureKitTermination(
+                domain = "com.example.unrelated",
+                code = -3815L,
+                preflightScreenCaptureAccess = true,
+                streamErrorDomain = "com.apple.ScreenCaptureKit.SCStreamErrorDomain",
+            ),
+        )
+    }
+
+    @Test
     fun displayCaptureStartsAsBgraAndCopiesTheCallbackLeaseWithinItsBudget() = runBlocking {
         val native = RecordingCaptureNative(
             catalog = AppKitCaptureNativeSourceCatalog(
