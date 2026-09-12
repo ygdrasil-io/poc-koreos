@@ -51,6 +51,7 @@ import org.graphiks.kadre.surface.PhysicalSize
 import org.graphiks.kffi.objc.appkit.ScreenCaptureCapability
 import org.graphiks.kffi.objc.appkit.ScreenCaptureFrameLease
 import org.graphiks.kffi.objc.appkit.ScreenCaptureKitCaptures
+import org.graphiks.kffi.objc.appkit.ScreenCaptureKitFailure
 import org.graphiks.kffi.objc.appkit.ScreenCaptureOpenResult
 import org.graphiks.kffi.objc.appkit.ScreenCapturePermissionRequestResult
 import org.graphiks.kffi.objc.appkit.ScreenCapturePlane
@@ -64,6 +65,7 @@ import org.graphiks.kffi.objc.appkit.ScreenCaptureStreamConfiguration
 import org.graphiks.kffi.objc.appkit.ScreenCaptureStreamSession
 import org.graphiks.kffi.objc.appkit.ScreenCaptureTarget
 import org.graphiks.kffi.objc.appkit.ScreenCaptureControlPlanes
+import org.graphiks.kffi.objc.SCStreamErrorCode
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.coroutines.resume
 import kotlin.math.min
@@ -385,6 +387,8 @@ internal sealed interface AppKitCaptureNativeOpenResult {
 
 internal sealed interface AppKitCaptureNativeStopResult {
     data object Stopped : AppKitCaptureNativeStopResult
+    data object PermissionRevoked : AppKitCaptureNativeStopResult
+    data object SourceLost : AppKitCaptureNativeStopResult
     data class Failed(val cause: Throwable) : AppKitCaptureNativeStopResult
 }
 
@@ -440,10 +444,11 @@ private class AppKitCaptureReservation(
             val owner = DeferredNativeOwner()
             val terminal = AtomicBoolean(false)
             continuation.invokeOnCancellation { owner.close() }
+            fun terminate(termination: CapturePortTermination) {
+                if (terminal.compareAndSet(false, true)) listener.onTerminated(termination)
+            }
             fun terminate(outcome: CaptureOutcome) {
-                if (terminal.compareAndSet(false, true)) {
-                    listener.onTerminated(CapturePortTermination.Outcome(outcome))
-                }
+                terminate(CapturePortTermination.Outcome(outcome))
             }
             try {
                 owner.install(native.start(
@@ -487,6 +492,14 @@ private class AppKitCaptureReservation(
                             when (stopped) {
                                 AppKitCaptureNativeStopResult.Stopped ->
                                     CaptureOutcome.Stopped(CaptureStopReason.Requested)
+
+                                AppKitCaptureNativeStopResult.PermissionRevoked ->
+                                    CaptureOutcome.Stopped(CaptureStopReason.PermissionRevoked)
+
+                                AppKitCaptureNativeStopResult.SourceLost -> {
+                                    terminate(CapturePortTermination.SourceLost)
+                                    return@start
+                                }
 
                                 is AppKitCaptureNativeStopResult.Failed ->
                                     CaptureOutcome.Failed(platformFailure("stream-stop-failed"))
@@ -870,8 +883,20 @@ private fun ScreenCaptureOpenResult.toNativeResult(): AppKitCaptureNativeOpenRes
 
 private fun ScreenCaptureStopResult.toNativeResult(): AppKitCaptureNativeStopResult = when (this) {
     ScreenCaptureStopResult.Stopped -> AppKitCaptureNativeStopResult.Stopped
-    is ScreenCaptureStopResult.Failed -> AppKitCaptureNativeStopResult.Failed(cause)
+    is ScreenCaptureStopResult.Failed -> when {
+        cause.isScreenCaptureSourceLoss() -> AppKitCaptureNativeStopResult.SourceLost
+        cause.isScreenCapturePermissionRevocation() -> AppKitCaptureNativeStopResult.PermissionRevoked
+        else -> AppKitCaptureNativeStopResult.Failed(cause)
+    }
 }
+
+private fun Throwable.isScreenCaptureSourceLoss(): Boolean =
+    this is ScreenCaptureKitFailure && code == SCStreamErrorCode.SCStreamErrorNoCaptureSource.value
+
+private fun Throwable.isScreenCapturePermissionRevocation(): Boolean =
+    this is ScreenCaptureKitFailure && runCatching {
+        !ScreenCaptureControlPlanes.capability().preflightScreenCaptureAccess
+    }.getOrDefault(false)
 
 private class KffiAppKitCaptureStream(
     private val stream: ScreenCaptureStreamSession,

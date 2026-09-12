@@ -108,6 +108,70 @@ class AppKitCapturePortTest {
         )
         assertEquals(0, native.reservation.startCalls)
     }
+
+    @Test
+    fun nativePermissionRevocationEndsTheStreamWithItsDedicatedStopReason() = runBlocking {
+        val native = RecordingCaptureNative(
+            AppKitCaptureNativeSourceCatalog(
+                displays = listOf(AppKitCaptureNativeDisplaySource(7L, 2, 1, "Primary")),
+                windows = emptyList(),
+            ),
+        )
+        val port = AppKitCapturePort(native)
+        successValue(port.refreshSources())
+        val reservation = successValue(
+            port.reserve(
+                CapturePortTarget.Source(CapturePortSourceKey("appkit-display", 7L)),
+                CaptureRequest(target = CaptureTarget.HostChoice),
+            ),
+        )
+        val listener = RecordingStreamListener()
+
+        successValue(reservation.start(listener, maxFrameBytes = 8L))
+        native.reservation.emitStop(AppKitCaptureNativeStopResult.PermissionRevoked)
+
+        assertEquals(
+            listOf<CapturePortTermination>(
+                CapturePortTermination.Outcome(
+                    org.graphiks.kadre.capture.CaptureOutcome.Stopped(
+                        org.graphiks.kadre.capture.CaptureStopReason.PermissionRevoked,
+                    ),
+                ),
+            ),
+            listener.terminations,
+        )
+    }
+
+    @Test
+    fun nativeSourceLossIsReportedWithoutInventingAPublicSourceIdentity() = runBlocking {
+        val native = RecordingCaptureNative(
+            AppKitCaptureNativeSourceCatalog(
+                displays = listOf(AppKitCaptureNativeDisplaySource(7L, 2, 1, "Primary")),
+                windows = emptyList(),
+            ),
+        )
+        val port = AppKitCapturePort(native)
+        successValue(port.refreshSources())
+        val reservation = successValue(
+            port.reserve(
+                CapturePortTarget.Source(CapturePortSourceKey("appkit-display", 7L)),
+                CaptureRequest(target = CaptureTarget.HostChoice),
+            ),
+        )
+        val listener = RecordingStreamListener()
+
+        successValue(reservation.start(listener, maxFrameBytes = 8L))
+        native.reservation.emitStop(AppKitCaptureNativeStopResult.SourceLost)
+        native.reservation.emit(
+            RecordingNativeFrame(
+                width = 2,
+                planes = listOf(AppKitCaptureNativePlane(byteArrayOf(1, 2, 3, 4, 5, 6, 7, 8), 8, 1)),
+            ),
+        )
+
+        assertEquals(listOf<CapturePortTermination>(CapturePortTermination.SourceLost), listener.terminations)
+        assertEquals(emptyList(), listener.frames)
+    }
 }
 
 private class RecordingCaptureNative(
@@ -144,6 +208,7 @@ private class RecordingNativeReservation : AppKitCaptureNativeReservation {
     var configuration: AppKitCaptureNativeStreamConfiguration? = null
     var startCalls: Int = 0
     private var onFrame: ((AppKitCaptureNativeFrame) -> Unit)? = null
+    private var onStopped: ((AppKitCaptureNativeStopResult) -> Unit)? = null
 
     override fun start(
         configuration: AppKitCaptureNativeStreamConfiguration,
@@ -153,6 +218,7 @@ private class RecordingNativeReservation : AppKitCaptureNativeReservation {
     ): AutoCloseable {
         this.configuration = configuration
         this.onFrame = onFrame
+        this.onStopped = onStopped
         startCalls += 1
         onOpened(AppKitCaptureNativeOpenResult.Opened(AppKitCaptureNativeStream { }))
         return AutoCloseable { }
@@ -160,6 +226,10 @@ private class RecordingNativeReservation : AppKitCaptureNativeReservation {
 
     fun emit(frame: AppKitCaptureNativeFrame) {
         onFrame?.invoke(frame)
+    }
+
+    fun emitStop(result: AppKitCaptureNativeStopResult) {
+        onStopped?.invoke(result)
     }
 
     override fun close() = Unit
@@ -180,6 +250,7 @@ private class RecordingNativeFrame(
 
 private class RecordingStreamListener : CapturePortStreamListener {
     val frames = mutableListOf<CapturePortFrame>()
+    val terminations = mutableListOf<CapturePortTermination>()
 
     override fun onFrame(frame: CapturePortFrame) {
         frames += frame
@@ -187,7 +258,9 @@ private class RecordingStreamListener : CapturePortStreamListener {
 
     override fun onReconfigured(configuration: org.graphiks.kadre.capture.CaptureConfiguration) = Unit
 
-    override fun onTerminated(termination: CapturePortTermination) = Unit
+    override fun onTerminated(termination: CapturePortTermination) {
+        terminations += termination
+    }
 }
 
 private fun <T> successValue(result: KadreResult<T>): T = when (result) {
