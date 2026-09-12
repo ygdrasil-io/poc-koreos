@@ -172,6 +172,9 @@ public interface CapturePortStreamListener {
     /** Transfers a detached frame. The backend must not retain or mutate its bytes afterwards. */
     public fun onFrame(frame: CapturePortFrame)
 
+    /** Publishes a complete effective configuration before the first frame using its revision. */
+    public fun onReconfigured(configuration: CaptureConfiguration)
+
     /** The running stream reached one terminal capture outcome. */
     public fun onTerminated(outcome: CaptureOutcome)
 }
