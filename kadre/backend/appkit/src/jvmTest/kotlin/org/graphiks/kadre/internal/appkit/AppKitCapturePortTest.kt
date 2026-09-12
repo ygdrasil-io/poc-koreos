@@ -58,6 +58,15 @@ class AppKitCapturePortTest {
                 streamErrorDomain = "com.apple.ScreenCaptureKit.SCStreamErrorDomain",
             ),
         )
+        assertEquals(
+            null,
+            classifyScreenCaptureKitTermination(
+                domain = null,
+                code = -3815L,
+                preflightScreenCaptureAccess = true,
+                streamErrorDomain = null,
+            ),
+        )
     }
 
     @Test

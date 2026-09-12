@@ -909,7 +909,7 @@ internal fun classifyScreenCaptureKitTermination(
     streamErrorDomain: String?,
 ): AppKitCaptureNativeStopResult? = when {
     preflightScreenCaptureAccess == false -> AppKitCaptureNativeStopResult.PermissionRevoked
-    domain == streamErrorDomain && code == SCStreamErrorCode.SCStreamErrorNoCaptureSource.value -> {
+    domain != null && domain == streamErrorDomain && code == SCStreamErrorCode.SCStreamErrorNoCaptureSource.value -> {
         AppKitCaptureNativeStopResult.SourceLost
     }
 
