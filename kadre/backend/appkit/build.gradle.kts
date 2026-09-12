@@ -172,6 +172,19 @@ if (System.getProperty("os.name", "").let { name ->
         )
         standardInput = System.`in`
     }
+    tasks.register<JavaExec>("phase10HidHarness") {
+        group = "verification"
+        description = "Runs the external interactive AppKit Phase 10 HID inventory harness."
+        dependsOn(tasks.named("jvmTestClasses"))
+        classpath = jvmTest.get().classpath
+        mainClass.set("org.graphiks.kadre.internal.appkit.manual.Phase10HidHarnessKt")
+        workingDir(rootProject.projectDir)
+        jvmArgs(
+            "-XstartOnFirstThread",
+            "--enable-native-access=ALL-UNNAMED",
+        )
+        standardInput = System.`in`
+    }
     tasks.named("check") {
         dependsOn(appKitNativeTests)
     }
