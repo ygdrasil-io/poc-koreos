@@ -205,7 +205,9 @@ internal class RuntimeCaptureManager(
         if (closed) return@withLock closedFailure()
         val replacement = when {
             failure is KadreFailure.PermissionDenied && failure.permission.isCapturePermission() -> {
-                CapturePortSources.PermissionRequired(setOf(failure.permission))
+                CapturePortSources.PermissionRequired(
+                    acceptedSnapshot.capabilities.requiredCapturePermissions(failure.permission),
+                )
             }
 
             failure.isPersistentInventoryFailure() -> CapturePortSources.Unavailable(failure)
@@ -411,6 +413,17 @@ private fun PermissionState.isResolvedPermissionResult(): Boolean = when (this) 
 
 private fun KadrePermission.isCapturePermission(): Boolean =
     this == KadrePermission.CaptureScreen || this == KadrePermission.CaptureWindow
+
+private fun org.graphiks.kadre.capture.CaptureCapabilities.requiredCapturePermissions(
+    fallback: KadrePermission,
+): Set<KadrePermission> = buildSet {
+    listOf(screen, window, sourceEnumeration).forEach { capability ->
+        val availability = (capability as? Capability.Supported<*>)?.availability
+        val permission = (availability as? FeatureAvailability.RequiresPermission)?.permission
+        if (permission?.isCapturePermission() == true) add(permission)
+    }
+    if (isEmpty()) add(fallback)
+}
 
 private fun KadreFailure.isPersistentPermissionFailure(): Boolean = when (this) {
     is KadreFailure.Unsupported -> operation == KadreOperation.CapturePermission
