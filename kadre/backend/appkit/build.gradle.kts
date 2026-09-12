@@ -147,6 +147,19 @@ if (System.getProperty("os.name", "").let { name ->
         )
         standardInput = System.`in`
     }
+    tasks.register<JavaExec>("phase11CaptureHarness") {
+        group = "verification"
+        description = "Runs the external interactive AppKit Phase 11 ScreenCaptureKit harness."
+        dependsOn(tasks.named("jvmTestClasses"))
+        classpath = jvmTest.get().classpath
+        mainClass.set("org.graphiks.kadre.internal.appkit.manual.Phase11CaptureHarnessKt")
+        workingDir(rootProject.projectDir)
+        jvmArgs(
+            "-XstartOnFirstThread",
+            "--enable-native-access=ALL-UNNAMED",
+        )
+        standardInput = System.`in`
+    }
     tasks.named("check") {
         dependsOn(appKitNativeTests)
     }
