@@ -18,6 +18,7 @@ import org.graphiks.kadre.capture.CaptureOutcome
 import org.graphiks.kadre.capture.CaptureSession
 import org.graphiks.kadre.capture.CaptureSessionState
 import org.graphiks.kadre.capture.CaptureSource
+import org.graphiks.kadre.capture.CaptureSourceKind
 import org.graphiks.kadre.capture.CaptureStopReason
 import org.graphiks.kadre.capture.CaptureSourceInstant
 import org.graphiks.kadre.capture.CopiedPixelPlane
@@ -25,6 +26,7 @@ import org.graphiks.kadre.application.EventStamp
 import org.graphiks.kadre.diagnostics.KadreFailure
 import org.graphiks.kadre.diagnostics.KadreResourceKind
 import org.graphiks.kadre.diagnostics.KadreResult
+import org.graphiks.kadre.input.KadrePermission
 import org.graphiks.kadre.policy.CaptureDeliveryPolicy
 import org.graphiks.kadre.policy.ContinuousOverflowAction
 import org.graphiks.kadre.policy.FrameDelivery
@@ -156,9 +158,13 @@ internal class RuntimeCaptureSession(
     }
 
     private fun outcomeToResult(outcome: CaptureOutcome): KadreResult<Unit> = when (outcome) {
-        CaptureOutcome.SourceCompleted,
-        is CaptureOutcome.Stopped,
-        -> KadreResult.Success(Unit)
+        CaptureOutcome.SourceCompleted -> KadreResult.Success(Unit)
+
+        is CaptureOutcome.Stopped -> if (outcome.reason == CaptureStopReason.PermissionRevoked) {
+            KadreResult.Failure(KadreFailure.PermissionDenied(source.capturePermission()))
+        } else {
+            KadreResult.Success(Unit)
+        }
 
         is CaptureOutcome.Failed -> KadreResult.Failure(outcome.failure)
     }
@@ -285,6 +291,11 @@ internal class RuntimeCaptureSession(
         mutableDiagnostics.tryEmit(diagnostic)
     }
 
+}
+
+private fun CaptureSource.capturePermission(): KadrePermission = when (kind) {
+    CaptureSourceKind.Window -> KadrePermission.CaptureWindow
+    CaptureSourceKind.Display, CaptureSourceKind.HostSurface -> KadrePermission.CaptureScreen
 }
 
 private class CaptureCollectorMarker(

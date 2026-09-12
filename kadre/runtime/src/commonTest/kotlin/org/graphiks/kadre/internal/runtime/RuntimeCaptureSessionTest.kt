@@ -144,6 +144,33 @@ class RuntimeCaptureSessionTest {
     }
 
     @Test
+    fun permissionRevocationKeepsItsTerminalOutcomeButFailsTheCollector() = runTest {
+        val port = AdmissionCapturePort(enumeratedSnapshot(name = "Primary"))
+        val manager = RuntimeCaptureManager(port, maxConcurrentSessions = 1)
+        val selected = source(manager)
+        val reservation = StreamingCaptureReservation(portSource("Primary"))
+        port.reservations.addLast(KadreResult.Success(reservation))
+        val session = successValue(
+            manager.open(CaptureRequest(CaptureTarget.Source(selected.id, selected.managerRevision))),
+        )
+        val collecting = async { session.collectFrames { } }
+        runCurrent()
+
+        reservation.complete(CaptureOutcome.Stopped(org.graphiks.kadre.capture.CaptureStopReason.PermissionRevoked))
+
+        assertEquals(
+            KadreResult.Failure(KadreFailure.PermissionDenied(org.graphiks.kadre.input.KadrePermission.CaptureScreen)),
+            collecting.await(),
+        )
+        assertEquals(
+            CaptureSessionState.Terminated(
+                CaptureOutcome.Stopped(org.graphiks.kadre.capture.CaptureStopReason.PermissionRevoked),
+            ),
+            session.state.value,
+        )
+    }
+
+    @Test
     fun secondCollectorIsRejectedWithoutRestartingTheReservedStream() = runTest {
         val port = AdmissionCapturePort(enumeratedSnapshot(name = "Primary"))
         val manager = RuntimeCaptureManager(port, maxConcurrentSessions = 1)
