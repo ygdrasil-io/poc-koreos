@@ -1,6 +1,7 @@
 package org.graphiks.kadre.internal.runtime
 
 import org.graphiks.kadre.application.SessionId
+import org.graphiks.kadre.capture.CaptureSourceId
 import org.graphiks.kadre.display.DisplayId
 import org.graphiks.kadre.display.DisplayModeId
 import org.graphiks.kadre.surface.SurfaceId
@@ -18,6 +19,7 @@ internal object RuntimeProcessIds {
     private var surfaceIds = 0L
     private var displayIds = 0L
     private var displayModeIds = 0L
+    private var captureSourceIds = 0L
 
     fun nextSessionId(): SessionId = SessionId(nextValue("session ID", { sessionIds }, { sessionIds += 1L }))
 
@@ -38,6 +40,9 @@ internal object RuntimeProcessIds {
 
     fun nextDisplayModeId(): DisplayModeId =
         DisplayModeId(nextValue("display mode ID", { displayModeIds }, { displayModeIds += 1L }))
+
+    fun nextCaptureSourceId(): CaptureSourceId =
+        CaptureSourceId(nextValue("capture source ID", { captureSourceIds }, { captureSourceIds += 1L }))
 
     private inline fun nextValue(
         name: String,

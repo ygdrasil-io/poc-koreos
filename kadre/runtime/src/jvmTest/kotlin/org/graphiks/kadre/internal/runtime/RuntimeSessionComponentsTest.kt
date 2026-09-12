@@ -15,6 +15,8 @@ import org.graphiks.kadre.application.KadreSession
 import org.graphiks.kadre.application.EventStamp
 import org.graphiks.kadre.application.SessionOutcome
 import org.graphiks.kadre.application.SessionState
+import org.graphiks.kadre.capture.CaptureManager
+import org.graphiks.kadre.capture.CapturePermissionState
 import org.graphiks.kadre.diagnostics.Capability
 import org.graphiks.kadre.diagnostics.KadreDiagnostic
 import org.graphiks.kadre.diagnostics.KadreFailure
@@ -23,6 +25,7 @@ import org.graphiks.kadre.diagnostics.KadrePlatform
 import org.graphiks.kadre.diagnostics.KadreResult
 import org.graphiks.kadre.display.DisplayInventory
 import org.graphiks.kadre.display.DisplayType
+import org.graphiks.kadre.input.PermissionState
 import org.graphiks.kadre.policy.InputDeliveryPolicy
 import org.graphiks.kadre.policy.WindowDeliveryPolicy
 import org.graphiks.kadre.surface.HostSurface
@@ -48,6 +51,36 @@ import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 
 class RuntimeSessionComponentsTest {
+    @Test
+    fun injectedCapturePortIsProjectedThroughItsSessionScopeAndClosedWithTheSession() = runTest {
+        val port = RecordingCapturePort(
+            snapshot(
+                permissions = CapturePermissionState(PermissionState.Granted, PermissionState.Granted),
+                sources = CapturePortSources.HostPickerOnly,
+            ),
+        )
+        val host = RuntimeHostController.withComponents(
+            platform = KadrePlatform.Fake,
+            componentsFactory = RuntimeSessionComponentsFactory { _, _ ->
+                RuntimeSessionComponents(RecordingWindowManager(), capturePort = port)
+            },
+        )
+        lateinit var observed: CaptureManager
+
+        val session = attach(host) {
+            observed = capture
+            awaitCancellation()
+        }
+        testScheduler.runCurrent()
+
+        assertIs<org.graphiks.kadre.capture.CaptureSources.HostPickerOnly>(observed.state.value.sources)
+
+        session.close()
+        testScheduler.runCurrent()
+
+        assertEquals(1, port.closeCount)
+    }
+
     @Test
     fun configurationFailureReturnsAnAttachFailureAndClosesCreatedComponents() = runTest {
         var componentsClosed = 0
