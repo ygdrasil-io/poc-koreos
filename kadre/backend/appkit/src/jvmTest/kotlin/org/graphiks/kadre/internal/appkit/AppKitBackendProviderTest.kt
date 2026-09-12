@@ -98,7 +98,7 @@ import org.graphiks.kadre.internal.runtime.desktop.DesktopBackendProvider
 import org.graphiks.kadre.internal.runtime.desktop.DesktopEmbeddedRequest
 import org.graphiks.kadre.internal.runtime.desktop.DesktopIntegrationKind
 import org.graphiks.kadre.internal.runtime.desktop.DesktopStandaloneRequest
-import org.graphiks.kadre.internal.appkit.manual.Phase10HidInventoryFormatter
+import org.graphiks.kadre.internal.appkit.manual.Phase10ManualInventoryFormatter
 import org.graphiks.kadre.input.InputEvent
 import org.graphiks.kadre.input.DropOfferState
 import org.graphiks.kadre.input.DropOfferTerminationReason
@@ -562,9 +562,9 @@ class AppKitBackendProviderTest {
             assertEquals(listOf("Provider keyboard"), inventory.devices.map { it.descriptor.name })
             assertEquals(
                 "enumerated devices=[d1{name=\"Provider keyboard\",kind=Keyboard,connection=Connected}] gamepads=[]",
-                Phase10HidInventoryFormatter().formatInventory(inventory),
+                Phase10ManualInventoryFormatter().formatInventory(inventory),
             )
-            val formatter = Phase10HidInventoryFormatter()
+            val formatter = Phase10ManualInventoryFormatter()
             formatter.formatInventory(inventory)
             val removal = async(start = CoroutineStart.UNDISPATCHED) {
                 observedDevices.await().events.filterIsInstance<DeviceLifecycleEvent.DeviceRemoved>().first()

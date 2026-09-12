@@ -54,7 +54,7 @@ public fun main(args: Array<String>) {
                     devices.state.collect { state -> recorder.snapshot("update", state.inventory) }
                 }
                 val eventCollector = launch(start = CoroutineStart.UNDISPATCHED) {
-                    devices.events.collect { event -> recorder.line("DEVICE_EVENT\t${event::class.simpleName}") }
+                    devices.events.collect(recorder::event)
                 }
 
                 suspend fun playEffect(index: Int, locality: GamepadHapticLocality) {
@@ -120,6 +120,7 @@ private data class Phase10GameControllerOptions(val recordPath: Path, val buildI
 }
 
 private class Phase10GameControllerRecorder(private val path: Path) : AutoCloseable {
+    private val formatter = Phase10ManualInventoryFormatter()
     private val writer = run {
         path.parent?.let(Files::createDirectories)
         Files.newBufferedWriter(path, StandardOpenOption.CREATE, StandardOpenOption.APPEND)
@@ -131,7 +132,11 @@ private class Phase10GameControllerRecorder(private val path: Path) : AutoClosea
             "\thardware=${phase10CommandOutput("sysctl", "-n", "hw.model")}\tbuildId=${options.buildId}",
     )
 
-    fun snapshot(label: String, inventory: DeviceInventory) = line("DEVICE_SNAPSHOT\t$label\t$inventory")
+    fun snapshot(label: String, inventory: DeviceInventory) =
+        line("DEVICE_SNAPSHOT\t$label\t${formatter.formatInventory(inventory)}")
+
+    fun event(event: org.graphiks.kadre.input.DeviceLifecycleEvent) =
+        line("DEVICE_EVENT\t${formatter.formatEvent(event)}")
 
     fun scenario(command: String) {
         val fields = command.split(' ', limit = 4)
@@ -141,6 +146,7 @@ private class Phase10GameControllerRecorder(private val path: Path) : AutoClosea
         line("SCENARIO\t${fields[1]}\t${fields[2]}\t${fields[3]}")
     }
 
+    @Synchronized
     fun line(value: String) {
         val safe = value.replace('\n', ' ').replace('\r', ' ')
         println(safe)
