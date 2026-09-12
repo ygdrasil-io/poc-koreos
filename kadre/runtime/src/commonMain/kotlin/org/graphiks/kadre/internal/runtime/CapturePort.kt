@@ -2,17 +2,24 @@ package org.graphiks.kadre.internal.runtime
 
 import org.graphiks.kadre.capture.CaptureCapabilities
 import org.graphiks.kadre.capture.CaptureConfiguration
+import org.graphiks.kadre.capture.CaptureDiscontinuity
 import org.graphiks.kadre.capture.CaptureOutcome
 import org.graphiks.kadre.capture.CapturePermissionScope
 import org.graphiks.kadre.capture.CapturePermissionState
 import org.graphiks.kadre.capture.CaptureRequest
 import org.graphiks.kadre.capture.CaptureSourceKind
+import org.graphiks.kadre.capture.AlphaMode
+import org.graphiks.kadre.capture.ColorEncoding
+import org.graphiks.kadre.capture.CaptureOrientation
+import org.graphiks.kadre.capture.PixelFormat
+import org.graphiks.kadre.capture.PixelPlaneLayout
 import org.graphiks.kadre.diagnostics.KadreFailure
 import org.graphiks.kadre.diagnostics.KadreOperation
 import org.graphiks.kadre.diagnostics.KadreResult
 import org.graphiks.kadre.input.KadrePermission
 import org.graphiks.kadre.surface.PhysicalSize
 import org.graphiks.kadre.surface.SurfaceId
+import kotlin.time.Duration
 
 /**
  * Opaque backend key for a capture source.
@@ -119,8 +126,52 @@ public data class CapturePortStreamStart(
     public val configuration: CaptureConfiguration,
 )
 
+/** One detached, Kotlin-owned plane transferred to the runtime by a capture backend. */
+public data class CapturePortPlane(
+    public val layout: PixelPlaneLayout,
+    public val bytes: ByteArray,
+) {
+    init {
+        require(bytes.size == layout.byteCount) { "capture plane bytes must match layout.byteCount" }
+    }
+}
+
+/**
+ * One detached frame passed from a backend callback to the runtime.
+ *
+ * The [bytes] arrays are transferred to the runtime; a backend must not retain or mutate them
+ * after [CapturePortStreamListener.onFrame] returns. In particular, AppKit adapters copy a
+ * ScreenCaptureKit callback lease before constructing this value.
+ */
+public data class CapturePortFrame(
+    public val size: PhysicalSize,
+    public val format: PixelFormat,
+    public val planes: List<CapturePortPlane>,
+    public val configurationRevision: Long,
+    public val sourceTimestamp: Duration?,
+    public val duration: Duration?,
+    public val discontinuity: CaptureDiscontinuity?,
+    public val colorEncoding: ColorEncoding,
+    public val alphaMode: AlphaMode,
+    public val orientation: CaptureOrientation,
+) {
+    init {
+        require(configurationRevision >= 0L) { "configurationRevision must be non-negative" }
+        require(planes.isNotEmpty()) { "capture frame must contain at least one plane" }
+        require(sourceTimestamp == null || sourceTimestamp.isFinite() && !sourceTimestamp.isNegative()) {
+            "sourceTimestamp must be finite and non-negative"
+        }
+        require(duration == null || duration.isFinite() && duration.isPositive()) {
+            "duration must be finite and positive"
+        }
+    }
+}
+
 /** Callback boundary for a stream owned by one [CapturePortReservation]. */
 public interface CapturePortStreamListener {
+    /** Transfers a detached frame. The backend must not retain or mutate its bytes afterwards. */
+    public fun onFrame(frame: CapturePortFrame)
+
     /** The running stream reached one terminal capture outcome. */
     public fun onTerminated(outcome: CaptureOutcome)
 }

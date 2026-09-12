@@ -2,11 +2,14 @@ package org.graphiks.kadre.internal.runtime
 
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.withContext
 import org.graphiks.kadre.capture.CaptureDiagnostic
 import org.graphiks.kadre.capture.CaptureEvent
 import org.graphiks.kadre.capture.CaptureFrame
@@ -15,9 +18,14 @@ import org.graphiks.kadre.capture.CaptureSession
 import org.graphiks.kadre.capture.CaptureSessionState
 import org.graphiks.kadre.capture.CaptureSource
 import org.graphiks.kadre.capture.CaptureStopReason
+import org.graphiks.kadre.capture.CaptureSourceInstant
+import org.graphiks.kadre.capture.CopiedPixelPlane
+import org.graphiks.kadre.application.EventStamp
 import org.graphiks.kadre.diagnostics.KadreFailure
 import org.graphiks.kadre.diagnostics.KadreResourceKind
 import org.graphiks.kadre.diagnostics.KadreResult
+import kotlin.coroutines.AbstractCoroutineContextElement
+import kotlin.coroutines.CoroutineContext
 
 /**
  * Reservation-owned capture session.
@@ -28,6 +36,7 @@ import org.graphiks.kadre.diagnostics.KadreResult
 internal class RuntimeCaptureSession(
     override val source: CaptureSource,
     private val reservation: CapturePortReservation,
+    private val eventStampSource: () -> EventStamp,
     private val onTerminated: (RuntimeCaptureSession) -> Unit,
 ) : CaptureSession {
     private val lock = RuntimeLock()
@@ -36,6 +45,7 @@ internal class RuntimeCaptureSession(
     private var stopping = false
     private var collectorClaimed = false
     private var stream: CapturePortStream? = null
+    private val frames = Channel<CapturePortFrame>(capacity = 1)
 
     override val state: StateFlow<CaptureSessionState> = mutableState.asStateFlow()
     override val events: Flow<CaptureEvent> = emptyFlow()
@@ -47,7 +57,12 @@ internal class RuntimeCaptureSession(
 
     internal fun stopFromParent() = stop(CaptureStopReason.ParentSessionStopping)
 
-    override suspend fun awaitTermination(): CaptureOutcome = termination.await()
+    override suspend fun awaitTermination(): CaptureOutcome {
+        check(currentCoroutineContext()[CaptureCollectorMarker]?.session !== this) {
+            "a capture collector cannot await its own session termination"
+        }
+        return termination.await()
+    }
 
     override suspend fun collectFrames(collector: suspend (CaptureFrame) -> Unit): KadreResult<Unit> {
         val admission = lock.withLock {
@@ -90,7 +105,9 @@ internal class RuntimeCaptureSession(
         }
 
         return try {
-            outcomeToResult(termination.await())
+            withContext(CaptureCollectorMarker(this)) {
+                collectDeliveredFrames(collector)
+            }
         } catch (cause: CancellationException) {
             stop(CaptureStopReason.CollectorCancelled)
             throw cause
@@ -113,6 +130,7 @@ internal class RuntimeCaptureSession(
         }
         runCatching { stream?.close() }
         runCatching { reservation.close() }
+        frames.close()
         lock.withLock {
             mutableState.value = CaptureSessionState.Terminated(outcome)
         }
@@ -129,9 +147,81 @@ internal class RuntimeCaptureSession(
     }
 
     private inner class StreamListener : CapturePortStreamListener {
+        override fun onFrame(frame: CapturePortFrame) {
+            lock.withLock {
+                if (stopping) {
+                    return@withLock
+                } else if (frames.trySend(frame).isSuccess) {
+                    return@withLock
+                } else {
+                    val replaced = frames.tryReceive().getOrNull()
+                    if (replaced != null) frames.trySend(frame)
+                }
+            }
+        }
+
         override fun onTerminated(outcome: CaptureOutcome) {
             finish(outcome)
         }
     }
 
+    private suspend fun collectDeliveredFrames(collector: suspend (CaptureFrame) -> Unit): KadreResult<Unit> {
+        while (true) {
+            val portFrame = frames.receiveCatching().getOrNull() ?: return outcomeToResult(termination.await())
+            val frame = RuntimeCaptureFrame(portFrame, eventStampSource())
+            try {
+                collector(frame)
+            } catch (cause: CancellationException) {
+                throw cause
+            } catch (cause: Throwable) {
+                stop(CaptureStopReason.CollectorFailed)
+                throw cause
+            } finally {
+                frame.close()
+            }
+        }
+    }
+
+}
+
+private class CaptureCollectorMarker(
+    val session: RuntimeCaptureSession,
+) : AbstractCoroutineContextElement(Key) {
+    companion object Key : CoroutineContext.Key<CaptureCollectorMarker>
+}
+
+/** Callback-scoped public view over a detached runtime-owned frame buffer. */
+private class RuntimeCaptureFrame(
+    private val portFrame: CapturePortFrame,
+    override val stamp: EventStamp,
+) : CaptureFrame {
+    private val lock = RuntimeLock()
+    private var active = true
+    private var copiedPlanes: List<CapturePortPlane>? = portFrame.planes
+
+    override val size: org.graphiks.kadre.surface.PhysicalSize = portFrame.size
+    override val format: org.graphiks.kadre.capture.PixelFormat = portFrame.format
+    override val planes: List<org.graphiks.kadre.capture.PixelPlaneLayout> = portFrame.planes.map(CapturePortPlane::layout)
+    override val configurationRevision = org.graphiks.kadre.capture.CaptureConfigurationRevision(portFrame.configurationRevision)
+    override val sourceTimestamp: CaptureSourceInstant? = portFrame.sourceTimestamp?.let(::CaptureSourceInstant)
+    override val duration = portFrame.duration
+    override val discontinuity = portFrame.discontinuity
+    override val colorEncoding = portFrame.colorEncoding
+    override val alphaMode = portFrame.alphaMode
+    override val orientation = portFrame.orientation
+
+    override fun close() {
+        lock.withLock {
+            if (!active) return
+            active = false
+            copiedPlanes = null
+        }
+    }
+
+    override fun copyPlanes(): List<CopiedPixelPlane> = lock.withLock {
+        check(active) { "capture frame lease is closed" }
+        checkNotNull(copiedPlanes).map { plane ->
+            CopiedPixelPlane(plane.layout, plane.bytes.copyOf())
+        }
+    }
 }

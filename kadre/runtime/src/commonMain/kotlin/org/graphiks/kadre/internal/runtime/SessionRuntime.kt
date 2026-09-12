@@ -135,7 +135,11 @@ internal class SessionRuntime(
         policy.resources.maxEventCollectorsPerFlow,
     )
     private val runtimeCaptureManager = runtimeComponents.capturePort?.let { port ->
-        RuntimeCaptureManager(port, policy.resources.maxConcurrentCaptureSessions)
+        RuntimeCaptureManager(
+            port = port,
+            maxConcurrentSessions = policy.resources.maxConcurrentCaptureSessions,
+            eventStampSource = ::nextStamp,
+        )
     }
     private val runtimeCapture: CaptureManager = runtimeCaptureManager ?: UnsupportedCaptureManager()
     private val mutablePrimarySurface = MutableStateFlow(runtimeComponents.primarySurface)
