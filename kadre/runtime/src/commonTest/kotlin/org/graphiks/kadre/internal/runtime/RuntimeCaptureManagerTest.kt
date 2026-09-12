@@ -15,11 +15,13 @@ import org.graphiks.kadre.diagnostics.FeatureAvailability
 import org.graphiks.kadre.diagnostics.KadreFailure
 import org.graphiks.kadre.diagnostics.KadrePlatform
 import org.graphiks.kadre.diagnostics.KadreResult
+import org.graphiks.kadre.input.KadrePermission
 import org.graphiks.kadre.input.PermissionState
 import org.graphiks.kadre.surface.PhysicalSize
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
+import kotlin.test.assertSame
 
 class RuntimeCaptureManagerTest {
     @Test
@@ -92,6 +94,80 @@ class RuntimeCaptureManagerTest {
         assertEquals(KadreResult.Failure(failure), result)
         assertEquals(failure, unavailable.failure)
         assertEquals(CaptureManagerRevision(1), manager.state.value.revision)
+    }
+
+    @Test
+    fun persistentPermissionFailureMarksOnlyTheRequestedPermissionUnavailable() = runTest {
+        val failure = KadreFailure.PlatformFailure(KadrePlatform.Fake, "capture", "permission-failed")
+        val port = RecordingCapturePort(
+            snapshot(
+                permissions = CapturePermissionState(PermissionState.NotDetermined, PermissionState.NotDetermined),
+                sources = CapturePortSources.HostPickerOnly,
+            ),
+        )
+        val manager = RuntimeCaptureManager(port)
+        port.permissionResult = KadreResult.Failure(failure)
+
+        val result = manager.requestPermission(CapturePermissionScope.Screen)
+
+        assertEquals(KadreResult.Failure(failure), result)
+        assertEquals(PermissionState.Unavailable(failure), manager.state.value.permissions.screen)
+        assertEquals(PermissionState.NotDetermined, manager.state.value.permissions.window)
+        assertIs<CaptureSources.HostPickerOnly>(manager.state.value.sources)
+    }
+
+    @Test
+    fun retryableRefreshFailurePreservesThePublishedControlPlane() = runTest {
+        val port = RecordingCapturePort(
+            snapshot(
+                permissions = CapturePermissionState(PermissionState.Granted, PermissionState.Granted),
+                sources = CapturePortSources.Enumerated(listOf(displaySource(name = "Primary"))),
+            ),
+        )
+        val manager = RuntimeCaptureManager(port)
+        val before = manager.state.value
+        val failure = KadreFailure.TemporarilyUnavailable(retryable = true)
+        port.refreshResult = KadreResult.Failure(failure)
+
+        val result = manager.refreshSources()
+
+        assertEquals(KadreResult.Failure(failure), result)
+        assertSame(before, manager.state.value)
+    }
+
+    @Test
+    fun refreshPermissionDenialPublishesTheRequiredPermissionInsteadOfUnavailable() = runTest {
+        val port = RecordingCapturePort(
+            snapshot(
+                permissions = CapturePermissionState(PermissionState.NotDetermined, PermissionState.NotDetermined),
+                sources = CapturePortSources.HostPickerOnly,
+            ),
+        )
+        val manager = RuntimeCaptureManager(port)
+        val failure = KadreFailure.PermissionDenied(KadrePermission.CaptureScreen)
+        port.refreshResult = KadreResult.Failure(failure)
+
+        val result = manager.refreshSources()
+        val required = assertIs<CaptureSources.PermissionRequired>(manager.state.value.sources)
+
+        assertEquals(KadreResult.Failure(failure), result)
+        assertEquals(setOf(KadrePermission.CaptureScreen), required.required)
+    }
+
+    @Test
+    fun closedManagerReportsTheClosedHost() = runTest {
+        val port = RecordingCapturePort(
+            snapshot(
+                permissions = CapturePermissionState(PermissionState.Granted, PermissionState.Granted),
+                sources = CapturePortSources.HostPickerOnly,
+            ),
+        )
+        val manager = RuntimeCaptureManager(port)
+
+        manager.close()
+        val result = manager.refreshSources()
+
+        assertEquals(KadreResult.Failure(KadreFailure.Closed(org.graphiks.kadre.diagnostics.KadreResourceKind.Host)), result)
     }
 }
 
