@@ -39,6 +39,8 @@ public class RuntimeSessionComponents private constructor(
     public val rawInputPort: RawInputPort?,
     /** Optional session-owned display port projected as the public [DisplayManager]. */
     public val displayPort: DisplayPort?,
+    /** Optional session-owned capture control-plane port projected as the public CaptureManager. */
+    public val capturePort: CapturePort?,
     private val closeAction: () -> Unit,
     primarySurface: RuntimePrimarySurface?,
 ) : AutoCloseable {
@@ -46,16 +48,18 @@ public class RuntimeSessionComponents private constructor(
         windows: WindowManager,
         rawInputPort: RawInputPort? = null,
         displayPort: DisplayPort? = null,
+        capturePort: CapturePort? = null,
         closeAction: () -> Unit = {},
-    ) : this(windows, rawInputPort, displayPort, closeAction, null)
+    ) : this(windows, rawInputPort, displayPort, capturePort, closeAction, null)
 
     public constructor(
         windows: WindowManager,
         primarySurface: RuntimePrimarySurface,
         rawInputPort: RawInputPort? = null,
         displayPort: DisplayPort? = null,
+        capturePort: CapturePort? = null,
         closeAction: () -> Unit = {},
-    ) : this(windows, rawInputPort, displayPort, closeAction, primarySurface)
+    ) : this(windows, rawInputPort, displayPort, capturePort, closeAction, primarySurface)
 
     private val lock = RuntimeLock()
     private var closed = false
@@ -91,6 +95,11 @@ public class RuntimeSessionComponents private constructor(
             }
             try {
                 displayPort?.close()
+            } catch (cause: Throwable) {
+                failure = failure.withSuppressed(cause)
+            }
+            try {
+                capturePort?.close()
             } catch (cause: Throwable) {
                 failure = failure.withSuppressed(cause)
             }
