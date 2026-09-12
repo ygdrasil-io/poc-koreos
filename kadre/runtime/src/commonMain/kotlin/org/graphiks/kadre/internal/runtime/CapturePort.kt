@@ -107,9 +107,15 @@ public interface CapturePortReservation : AutoCloseable {
      *
      * A successful result owns the returned stream until either the listener reports its terminal
      * outcome or the runtime closes it. Backends invoke listener callbacks only after this method
-     * has returned successfully, and must not expose native pointers through the callback.
+     * has returned successfully, and must not expose native pointers through the callback. The
+     * runtime passes [maxFrameBytes] from the session capture policy. Backends that must detach
+     * native frame memory apply this limit before allocating or copying a frame, and report a
+     * terminal [KadreFailure.ResourceLimitExceeded] when a frame cannot fit.
      */
-    public suspend fun start(listener: CapturePortStreamListener): KadreResult<CapturePortStreamStart> =
+    public suspend fun start(
+        listener: CapturePortStreamListener,
+        maxFrameBytes: Long,
+    ): KadreResult<CapturePortStreamStart> =
         KadreResult.Failure(KadreFailure.Unsupported(KadreOperation.CaptureCollectFrames))
 
     override public fun close()
