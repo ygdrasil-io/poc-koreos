@@ -6,8 +6,12 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
 import org.graphiks.kadre.application.EventStamp
+import org.graphiks.kadre.application.ActivationState
+import org.graphiks.kadre.application.AttachmentState
 import org.graphiks.kadre.application.SessionInstant
 import org.graphiks.kadre.application.SessionSequence
+import org.graphiks.kadre.application.LifecycleState
+import org.graphiks.kadre.application.VisibilityState
 import org.graphiks.kadre.diagnostics.Capability
 import org.graphiks.kadre.diagnostics.FeatureAvailability
 import org.graphiks.kadre.diagnostics.KadreFailure
@@ -32,6 +36,8 @@ import org.graphiks.kadre.input.GamepadLocalizedHapticConstraints
 import org.graphiks.kadre.input.GamepadMapping
 import org.graphiks.kadre.input.GamepadRoutingState
 import org.graphiks.kadre.input.GamepadState
+import org.graphiks.kadre.policy.GamepadRouting
+import org.graphiks.kadre.policy.DeviceEffectOwnership
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
@@ -40,6 +46,39 @@ import kotlin.time.Duration.Companion.nanoseconds
 import kotlin.time.Duration.Companion.hours
 
 class RuntimeGamepadManagerTest {
+    @Test
+    fun lifecycleUpdatesThePortWithTheNormalizedRoutingEligibility() = runTest {
+        val port = FakeGamepadPort()
+        val manager = RuntimeGamepadManager(
+            port = port,
+            eventStampSource = { EventStamp(SessionSequence(0), SessionInstant(0.nanoseconds), null) },
+            collectorAllocator = RuntimeEventCollectorAllocator(4),
+            maxCollectorsPerFlow = 1,
+            effectScope = this,
+            maxConcurrentEffects = 4,
+            gamepadRouting = GamepadRouting.AllForegroundSessions,
+            initialLifecycleState = lifecycle(VisibilityState.Foreground, ActivationState.Inactive),
+        )
+
+        manager.updateLifecycle(lifecycle(VisibilityState.Foreground, ActivationState.Active))
+
+        assertEquals(
+            listOf(
+                GamepadPortRouting(
+                    GamepadRouting.AllForegroundSessions,
+                    foregroundActive = false,
+                    effectOwnership = DeviceEffectOwnership.ExclusivePerPhysicalDevice,
+                ),
+                GamepadPortRouting(
+                    GamepadRouting.AllForegroundSessions,
+                    foregroundActive = true,
+                    effectOwnership = DeviceEffectOwnership.ExclusivePerPhysicalDevice,
+                ),
+            ),
+            port.routingUpdates,
+        )
+    }
+
     @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
     @Test
     fun portConnectionPublishesTheGamepadSnapshotBeforeItsLifecycleEvent() = runTest {
@@ -51,6 +90,8 @@ class RuntimeGamepadManagerTest {
             maxCollectorsPerFlow = 4,
             effectScope = this,
             maxConcurrentEffects = 4,
+            gamepadRouting = GamepadRouting.AllForegroundSessions,
+            initialLifecycleState = lifecycle(VisibilityState.Foreground, ActivationState.Active),
         )
         val added = async(UnconfinedTestDispatcher(testScheduler), start = CoroutineStart.UNDISPATCHED) {
             manager.events.first { candidate ->
@@ -84,6 +125,8 @@ class RuntimeGamepadManagerTest {
             maxCollectorsPerFlow = 4,
             effectScope = this,
             maxConcurrentEffects = 4,
+            gamepadRouting = GamepadRouting.AllForegroundSessions,
+            initialLifecycleState = lifecycle(VisibilityState.Foreground, ActivationState.Active),
         )
         port.connect(gamepad(key = 11L))
         val gamepad = checkNotNull(manager.state.value.inventory.let { inventory ->
@@ -128,6 +171,8 @@ class RuntimeGamepadManagerTest {
             maxCollectorsPerFlow = 4,
             effectScope = this,
             maxConcurrentEffects = 4,
+            gamepadRouting = GamepadRouting.AllForegroundSessions,
+            initialLifecycleState = lifecycle(VisibilityState.Foreground, ActivationState.Active),
         )
         port.connect(gamepad(key = 11L))
         val gamepad = (manager.state.value.inventory as DeviceInventory.Enumerated).gamepads.single()
@@ -157,6 +202,8 @@ class RuntimeGamepadManagerTest {
             maxCollectorsPerFlow = 1,
             effectScope = this,
             maxConcurrentEffects = 4,
+            gamepadRouting = GamepadRouting.AllForegroundSessions,
+            initialLifecycleState = lifecycle(VisibilityState.Foreground, ActivationState.Active),
         )
         port.connect(gamepad(key = 11L))
         port.connect(gamepad(key = 12L))
@@ -194,6 +241,8 @@ class RuntimeGamepadManagerTest {
             maxCollectorsPerFlow = 1,
             effectScope = this,
             maxConcurrentEffects = 4,
+            gamepadRouting = GamepadRouting.AllForegroundSessions,
+            initialLifecycleState = lifecycle(VisibilityState.Foreground, ActivationState.Active),
         )
 
         val gamepad = (manager.state.value.inventory as DeviceInventory.Enumerated).gamepads.single()
@@ -212,6 +261,8 @@ class RuntimeGamepadManagerTest {
             maxCollectorsPerFlow = 1,
             effectScope = this,
             maxConcurrentEffects = 4,
+            gamepadRouting = GamepadRouting.AllForegroundSessions,
+            initialLifecycleState = lifecycle(VisibilityState.Foreground, ActivationState.Active),
         )
         port.connect(gamepad(key = 11L, capabilities = localizedHapticCapabilities()))
         val gamepad = (manager.state.value.inventory as DeviceInventory.Enumerated).gamepads.single()
@@ -242,6 +293,8 @@ class RuntimeGamepadManagerTest {
             maxCollectorsPerFlow = 1,
             effectScope = this,
             maxConcurrentEffects = 4,
+            gamepadRouting = GamepadRouting.AllForegroundSessions,
+            initialLifecycleState = lifecycle(VisibilityState.Foreground, ActivationState.Active),
         )
         port.connect(gamepad(key = 11L, capabilities = localizedHapticCapabilities(maximumDuration = 1.nanoseconds)))
         val gamepad = (manager.state.value.inventory as DeviceInventory.Enumerated).gamepads.single()
@@ -270,6 +323,8 @@ class RuntimeGamepadManagerTest {
             maxCollectorsPerFlow = 1,
             effectScope = this,
             maxConcurrentEffects = 1,
+            gamepadRouting = GamepadRouting.AllForegroundSessions,
+            initialLifecycleState = lifecycle(VisibilityState.Foreground, ActivationState.Active),
         )
         port.connect(gamepad(key = 11L, capabilities = localizedHapticCapabilities()))
         val gamepad = (manager.state.value.inventory as DeviceInventory.Enumerated).gamepads.single()
@@ -296,6 +351,8 @@ class RuntimeGamepadManagerTest {
             maxCollectorsPerFlow = 1,
             effectScope = this,
             maxConcurrentEffects = 4,
+            gamepadRouting = GamepadRouting.AllForegroundSessions,
+            initialLifecycleState = lifecycle(VisibilityState.Foreground, ActivationState.Active),
         )
         port.connect(gamepad(key = 11L, capabilities = localizedHapticCapabilities()))
         val gamepad = (manager.state.value.inventory as DeviceInventory.Enumerated).gamepads.single()
@@ -325,6 +382,8 @@ class RuntimeGamepadManagerTest {
             maxCollectorsPerFlow = 1,
             effectScope = this,
             maxConcurrentEffects = 4,
+            gamepadRouting = GamepadRouting.AllForegroundSessions,
+            initialLifecycleState = lifecycle(VisibilityState.Foreground, ActivationState.Active),
         )
         port.connect(gamepad(key = 11L, capabilities = localizedHapticCapabilities()))
         port.connect(gamepad(key = 12L, capabilities = localizedHapticCapabilities()))
@@ -361,6 +420,8 @@ class RuntimeGamepadManagerTest {
             maxCollectorsPerFlow = 1,
             effectScope = this,
             maxConcurrentEffects = 4,
+            gamepadRouting = GamepadRouting.AllForegroundSessions,
+            initialLifecycleState = lifecycle(VisibilityState.Foreground, ActivationState.Active),
         )
         port.connect(gamepad(key = 11L, capabilities = localizedHapticCapabilities()))
         val gamepad = (manager.state.value.inventory as DeviceInventory.Enumerated).gamepads.single()
@@ -391,6 +452,8 @@ class RuntimeGamepadManagerTest {
             maxCollectorsPerFlow = 4,
             effectScope = this,
             maxConcurrentEffects = 4,
+            gamepadRouting = GamepadRouting.AllForegroundSessions,
+            initialLifecycleState = lifecycle(VisibilityState.Foreground, ActivationState.Active),
         )
         port.connect(gamepad(key = 11L))
         val gamepad = (manager.state.value.inventory as DeviceInventory.Enumerated).gamepads.single()
@@ -449,6 +512,11 @@ class RuntimeGamepadManagerTest {
         buttons = listOf(GamepadButtonValue(GamepadButton.South, 1.0, true)),
         axes = emptyList(),
     )
+
+    private fun lifecycle(
+        visibility: VisibilityState,
+        activation: ActivationState,
+    ): LifecycleState = LifecycleState(AttachmentState.Attached, visibility, activation)
 }
 
 private class FakeGamepadPort(
@@ -456,6 +524,7 @@ private class FakeGamepadPort(
 ) : GamepadPort {
     private var observer: ((GamepadPortEvent) -> Unit)? = null
     val effects = mutableListOf<RecordingGamepadPortEffect>()
+    val routingUpdates = mutableListOf<GamepadPortRouting>()
 
     override val gamepads: List<GamepadPortGamepad> = initialGamepads
 
@@ -463,6 +532,10 @@ private class FakeGamepadPort(
         check(this.observer == null) { "observer already installed" }
         this.observer = observer
         return AutoCloseable { this.observer = null }
+    }
+
+    override fun updateRouting(routing: GamepadPortRouting) {
+        routingUpdates += routing
     }
 
     override fun startEffect(key: Long, effect: GamepadEffect): KadreResult<GamepadPortEffect> =
