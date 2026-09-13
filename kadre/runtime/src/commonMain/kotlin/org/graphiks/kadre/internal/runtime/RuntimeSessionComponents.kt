@@ -39,6 +39,8 @@ public class RuntimeSessionComponents private constructor(
     public val rawInputPort: RawInputPort?,
     /** Optional session-owned display port projected as the public [DisplayManager]. */
     public val displayPort: DisplayPort?,
+    /** Optional session-owned gamepad port projected as the public [org.graphiks.kadre.input.DeviceManager]. */
+    public val gamepadPort: GamepadPort?,
     private val closeAction: () -> Unit,
     primarySurface: RuntimePrimarySurface?,
 ) : AutoCloseable {
@@ -46,16 +48,18 @@ public class RuntimeSessionComponents private constructor(
         windows: WindowManager,
         rawInputPort: RawInputPort? = null,
         displayPort: DisplayPort? = null,
+        gamepadPort: GamepadPort? = null,
         closeAction: () -> Unit = {},
-    ) : this(windows, rawInputPort, displayPort, closeAction, null)
+    ) : this(windows, rawInputPort, displayPort, gamepadPort, closeAction, null)
 
     public constructor(
         windows: WindowManager,
         primarySurface: RuntimePrimarySurface,
         rawInputPort: RawInputPort? = null,
         displayPort: DisplayPort? = null,
+        gamepadPort: GamepadPort? = null,
         closeAction: () -> Unit = {},
-    ) : this(windows, rawInputPort, displayPort, closeAction, primarySurface)
+    ) : this(windows, rawInputPort, displayPort, gamepadPort, closeAction, primarySurface)
 
     private val lock = RuntimeLock()
     private var closed = false
@@ -91,6 +95,11 @@ public class RuntimeSessionComponents private constructor(
             }
             try {
                 displayPort?.close()
+            } catch (cause: Throwable) {
+                failure = failure.withSuppressed(cause)
+            }
+            try {
+                gamepadPort?.close()
             } catch (cause: Throwable) {
                 failure = failure.withSuppressed(cause)
             }

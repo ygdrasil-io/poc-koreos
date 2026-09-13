@@ -130,7 +130,15 @@ internal class SessionRuntime(
     private val runtimeWindows = runtimeComponents.windows.also {
         runtimeDisplayManager?.let(runtimeComponents::installExclusiveDisplayTargetResolver)
     }
-    private val runtimeDevices = UnsupportedDeviceManager(
+    private val runtimeGamepadManager = runtimeComponents.gamepadPort?.let { port ->
+        RuntimeGamepadManager(
+            port = port,
+            eventStampSource = ::nextStamp,
+            collectorAllocator = eventCollectorAllocator,
+            maxCollectorsPerFlow = policy.resources.maxEventCollectorsPerFlow,
+        )
+    }
+    private val runtimeDevices: DeviceManager = runtimeGamepadManager ?: UnsupportedDeviceManager(
         eventCollectorAllocator,
         policy.resources.maxEventCollectorsPerFlow,
     )
@@ -397,6 +405,9 @@ internal class SessionRuntime(
 
     private fun closeRuntimeComponents() {
         runCatching { (runtimeDisplays as? AutoCloseable)?.close() }
+            .exceptionOrNull()
+            ?.let(failureReporter)
+        runCatching { runtimeGamepadManager?.close() }
             .exceptionOrNull()
             ?.let(failureReporter)
         runCatching { runtimeComponents.close() }
