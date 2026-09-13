@@ -3,11 +3,14 @@ package org.graphiks.kadre.internal.runtime
 import org.graphiks.kadre.capture.CaptureCapabilities
 import org.graphiks.kadre.capture.CapturePermissionScope
 import org.graphiks.kadre.capture.CapturePermissionState
+import org.graphiks.kadre.capture.CaptureRequest
 import org.graphiks.kadre.capture.CaptureSourceKind
 import org.graphiks.kadre.diagnostics.KadreFailure
+import org.graphiks.kadre.diagnostics.KadreOperation
 import org.graphiks.kadre.diagnostics.KadreResult
 import org.graphiks.kadre.input.KadrePermission
 import org.graphiks.kadre.surface.PhysicalSize
+import org.graphiks.kadre.surface.SurfaceId
 
 /**
  * Opaque backend key for a capture source.
@@ -69,6 +72,30 @@ public data class CapturePortSnapshot(
     public val sources: CapturePortSources,
 )
 
+/** Backend-private target resolved by the common runtime before a capture reservation begins. */
+public sealed interface CapturePortTarget {
+    public data object HostChoice : CapturePortTarget
+
+    public data class Source(public val key: CapturePortSourceKey) : CapturePortTarget
+
+    public data class Surface(public val id: SurfaceId) : CapturePortTarget
+}
+
+/**
+ * Backend-owned reservation admitted by [CapturePort.reserve].
+ *
+ * A successful reservation does not start frame production. It owns all native state required to
+ * start later, and [close] releases that state exactly once from the runtime's point of view. A
+ * backend must also release a reservation it created if its own suspending operation is cancelled
+ * before it can return it to the runtime.
+ */
+public interface CapturePortReservation : AutoCloseable {
+    /** Immutable source descriptor selected by the backend, including after a host picker. */
+    public val source: CapturePortSource
+
+    override public fun close()
+}
+
 /**
  * Unstable backend SPI for capture control-plane facts owned by one runtime session.
  *
@@ -84,6 +111,18 @@ public interface CapturePort : AutoCloseable {
 
     /** Refreshes the complete source inventory and returns a full snapshot, never a partial list. */
     public suspend fun refreshSources(): KadreResult<CapturePortSnapshot>
+
+    /**
+     * Reserves a target after common validation and session-budget admission.
+     *
+     * This must not start frame production. Backends return an operation-appropriate failure
+     * rather than exposing a native handle or callback token through this SPI.
+     */
+    public suspend fun reserve(
+        target: CapturePortTarget,
+        request: CaptureRequest,
+    ): KadreResult<CapturePortReservation> =
+        KadreResult.Failure(KadreFailure.Unsupported(KadreOperation.CaptureOpen))
 
     /** Installs later complete snapshots or a terminal control-plane failure. */
     public fun installObserver(observer: (KadreResult<CapturePortSnapshot>) -> Unit): AutoCloseable
