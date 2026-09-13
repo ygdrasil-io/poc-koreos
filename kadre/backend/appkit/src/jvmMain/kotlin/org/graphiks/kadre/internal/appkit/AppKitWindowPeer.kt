@@ -499,7 +499,7 @@ internal class AppKitWindowPeer private constructor(
                     contentAttached = true
                     delegateMayBeAttached = true
                     port.attachDelegate(window, delegate)
-                    val initialWindowSnapshot = if (readInitialWindowSnapshot) {
+                    var initialWindowSnapshot = if (readInitialWindowSnapshot) {
                         port.readWindow(window).also { snapshot ->
                             check(snapshot.level == spec.level) {
                                 "AppKit initial window level readback diverged: " +
@@ -515,6 +515,24 @@ internal class AppKitWindowPeer private constructor(
                         null
                     }
                     port.present(window)
+                    spec.outerPosition?.let { position ->
+                        initialWindowSnapshot = checkNotNull(
+                            port.updateWindow(
+                                window,
+                                AppKitWindowMutationTarget(
+                                    title = PropertyChange.Unchanged,
+                                    geometry = AppKitWindowGeometryTarget(
+                                        contentSize = PropertyChange.Unchanged,
+                                        minimumSize = PropertyChange.Unchanged,
+                                        maximumSize = PropertyChange.Unchanged,
+                                        resizable = PropertyChange.Unchanged,
+                                        outerPosition = PropertyChange.Set(position),
+                                    ),
+                                ),
+                                ImmediateWindowMutationCommit(),
+                            ),
+                        ) { "AppKit withdrew an initial outer-position mutation" }
+                    }
                     textInputPort = port.textInputPort(contentView)
                     geometryObserver = port.observeGeometry(
                         window,
