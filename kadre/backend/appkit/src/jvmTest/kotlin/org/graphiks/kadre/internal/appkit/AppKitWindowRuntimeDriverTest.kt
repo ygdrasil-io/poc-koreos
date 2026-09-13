@@ -5906,6 +5906,10 @@ internal class DeterministicAppKitNativeWindowPort(
         checkNotNull(surfaceObservers[title]).emitFocus(focus)
     }
 
+    fun emitSurfaceAppearance(title: String, appearance: SurfaceAppearance) {
+        checkNotNull(surfaceObservers[title]).emitAppearance(appearance)
+    }
+
     fun emitSurfaceRedrawConsumed(title: String, generation: Long) {
         checkNotNull(surfaceObservers[title]).emitRedrawConsumed(generation)
     }
@@ -5965,6 +5969,10 @@ internal class DeterministicAppKitNativeWindowPort(
 
     fun forceLateSurfaceMetrics(title: String, metrics: SurfaceMetrics) {
         checkNotNull(surfaceObservers[title]).forceMetrics(metrics)
+    }
+
+    fun forceLateSurfaceAppearance(title: String, appearance: SurfaceAppearance) {
+        checkNotNull(surfaceObservers[title]).forceAppearance(appearance)
     }
 
     private fun recordNativeClose(recording: RecordingNativeWindowOwner) {
@@ -6046,12 +6054,20 @@ internal class DeterministicAppKitNativeWindowPort(
             if (accepting.get()) callbacks.focusChanged(focus)
         }
 
+        fun emitAppearance(appearance: SurfaceAppearance) {
+            if (accepting.get()) callbacks.appearanceChanged(appearance)
+        }
+
         fun emitRedrawConsumed(generation: Long) {
             if (accepting.get()) callbacks.redrawConsumed(generation)
         }
 
         fun forceMetrics(metrics: SurfaceMetrics) {
             callbacks.metricsChanged(metrics)
+        }
+
+        fun forceAppearance(appearance: SurfaceAppearance) {
+            callbacks.appearanceChanged(appearance)
         }
 
         override fun requestRedraw(generation: Long) {

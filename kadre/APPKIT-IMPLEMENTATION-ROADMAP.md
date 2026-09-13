@@ -578,13 +578,17 @@ le bridge KFFI généré et sa capability publique. Le gate AppKit utilise
 `macos-26`, la première version où `NSScreen.CGDirectDisplayID` rend ce bridge
 public et non heuristique.
 
-L'observation d'appearance, la source de pression mémoire et le broker de
-fullscreen exclusif sont fusionnés mais restent `planned` jusqu'à leur evidence
-O2/O3. Pour le fullscreen exclusif, cette activation attend également la trace
-du cahier matériel sur display dédié. `outerPosition` reste explicitement
-`Unsupported` en attente d'une preuve matérielle multi-écran à échelles mixtes ;
-`WIN-007`, `APK-015`, `WIN-008`, `APK-016`, `RUN-007`, `APK-017`, `RUN-008` et
-`APK-018` ne sont donc pas encore livrés contractuellement.
+L'observation d'appearance est livrée et contractuellement active : `RUN-007`
+(O2) prouve la paire thème/contraste atomique, l'ordre de publication et la
+déduplication ; `APK-017` (O3) relie le readback effectif, le selector AppKit,
+la notification d'accessibilité, la publication publique et le teardown. La
+source de pression mémoire et le broker de fullscreen exclusif restent
+`planned` jusqu'à leur evidence O2/O3. Pour le fullscreen exclusif, cette
+activation attend également la trace du cahier matériel sur display dédié.
+`outerPosition` reste explicitement `Unsupported` en attente d'une preuve
+matérielle multi-écran à échelles mixtes ; `WIN-007`, `APK-015`, `WIN-008`,
+`APK-016`, `RUN-008` et `APK-018` ne sont donc pas encore livrés
+contractuellement.
 
 #### Objectif
 

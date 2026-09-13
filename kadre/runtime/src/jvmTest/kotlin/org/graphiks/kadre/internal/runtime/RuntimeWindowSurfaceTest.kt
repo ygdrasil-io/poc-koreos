@@ -10,6 +10,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.filterIsInstance
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.take
 import kotlinx.coroutines.flow.toList
@@ -1738,8 +1739,11 @@ class RuntimeWindowSurfaceTest {
     @Test
     fun contrastOnlyChangePublishesOneAtomicAppearanceSnapshot() = runTest {
         val surface = surface()
-        val event = async(UnconfinedTestDispatcher(testScheduler), start = CoroutineStart.UNDISPATCHED) {
-            surface.events.filterIsInstance<SurfaceEvent.AppearanceChanged>().first()
+        val publication = async(UnconfinedTestDispatcher(testScheduler), start = CoroutineStart.UNDISPATCHED) {
+            surface.events
+                .filterIsInstance<SurfaceEvent.AppearanceChanged>()
+                .map { event -> event to surface.state.value }
+                .first()
         }
 
         assertTrue(
@@ -1751,10 +1755,10 @@ class RuntimeWindowSurfaceTest {
             ),
         )
 
-        val observed = event.await()
+        val (observed, stateAtEventPublication) = publication.await()
         assertEquals(SurfaceTheme.Unknown, observed.state.appearance.theme)
         assertEquals(SurfaceContrast.High, observed.state.appearance.contrast)
-        assertEquals(observed.state, surface.state.value)
+        assertEquals(observed.state, stateAtEventPublication)
         surface.detach()
     }
 

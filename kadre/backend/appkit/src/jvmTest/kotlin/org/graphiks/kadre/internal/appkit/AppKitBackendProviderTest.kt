@@ -118,6 +118,7 @@ import org.graphiks.kadre.surface.SurfaceEvent
 import org.graphiks.kadre.surface.SurfaceFocus
 import org.graphiks.kadre.surface.SurfaceOcclusion
 import org.graphiks.kadre.surface.SurfaceProperty
+import org.graphiks.kadre.surface.SurfaceState
 import org.graphiks.kadre.surface.SurfaceTheme
 import org.graphiks.kadre.surface.SurfaceUpdate
 import org.graphiks.kadre.surface.SurfaceUpdateOutcome
@@ -993,6 +994,72 @@ class AppKitBackendProviderTest {
                     }
                     assertEquals(surface.state.value.revision, redrawEvent.stateRevision)
                     yield()
+                    assertTrue(events.tryReceive().isFailure)
+                } finally {
+                    collector.cancel()
+                }
+            } finally {
+                session.close()
+                session.awaitTermination()
+                parentScope.cancel()
+            }
+        }
+
+    @Test
+    fun publicAppKitSurfacePublishesAppearanceStateBeforeItsEventAndIgnoresLateCallbacks() =
+        kotlinx.coroutines.runBlocking {
+            val port = DeterministicAppKitNativeWindowPort(
+                name = "public-surface-appearance",
+                initialSurfaceSnapshot = deterministicSurfaceSnapshot().copy(
+                    appearance = SurfaceAppearance(SurfaceTheme.Light, SurfaceContrast.Normal),
+                ),
+            )
+            val provider = AppKitBackendProvider.forTesting(
+                EmbeddedNativeApplication(),
+                AppKitProcessBroker(),
+                windowDriverFactory = AppKitWindowRuntimeDriverFactory { port },
+            ) { true }
+            val parentScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob())
+            val observedWindows = CompletableDeferred<WindowManager>()
+            val session = provider.attach(publicWindowRequest(parentScope, observedWindows)).requireSession()
+
+            try {
+                val windows = withTimeout(2.seconds) { observedWindows.await() }
+                val window = assertIs<WindowRequestOutcome.OpenedHere>(
+                    windows.requestWindow(WindowSpec(title = "surface-appearance"))
+                        .appKitSuccessValue()
+                        .await(),
+                ).window
+                val surface = window.surface
+                val events = Channel<Pair<SurfaceEvent, SurfaceState>>(Channel.UNLIMITED)
+                val collector = launch(start = CoroutineStart.UNDISPATCHED) {
+                    surface.events.collect { event ->
+                        events.send(event to surface.state.value)
+                    }
+                }
+                try {
+                    val appearance = SurfaceAppearance(SurfaceTheme.Dark, SurfaceContrast.High)
+                    port.emitSurfaceAppearance("surface-appearance", appearance)
+
+                    val (received, stateAtEventPublication) = withTimeout(2.seconds) { events.receive() }
+                    val event = assertIs<SurfaceEvent.AppearanceChanged>(received)
+                    assertEquals(appearance, event.state.appearance)
+                    assertEquals(event.state, stateAtEventPublication)
+
+                    port.emitSurfaceAppearance("surface-appearance", appearance)
+                    yield()
+                    assertTrue(events.tryReceive().isFailure)
+
+                    window.close().appKitSuccessValue()
+                    val terminal = withTimeout(2.seconds) {
+                        surface.state.first { it.attachment == SurfaceAttachmentState.Detached }
+                    }
+                    port.forceLateSurfaceAppearance(
+                        "surface-appearance",
+                        SurfaceAppearance(SurfaceTheme.Light, SurfaceContrast.Normal),
+                    )
+                    yield()
+                    assertEquals(terminal, surface.state.value)
                     assertTrue(events.tryReceive().isFailure)
                 } finally {
                     collector.cancel()
