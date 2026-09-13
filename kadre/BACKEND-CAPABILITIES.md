@@ -97,6 +97,15 @@ physique du bureau virtuel ; `WindowCapabilities.outerPosition` reste toutefois
 `Unsupported` jusqu’à une preuve matérielle séparée sur des écrans à échelles
 mixtes.
 
+Cet espace est publié tel quel : sur un écran HiDPI, `DisplayState.bounds` et la
+work area valent la géométrie du bureau virtuel en points (`CGDisplayBounds`,
+identique à `NSScreen.frame`) et ne sont jamais multipliés par le
+`scaleFactor`. Le `physicalSize` d’un `DisplayMode` désigne au contraire la
+taille framebuffer du mode en pixels : sur un écran 2×, il vaut le double des
+bounds. La même règle vaut pour `WindowState.outerBounds`, qui égale champ à
+champ `kCGWindowBounds` sans réduction ni multiplication par le backing scale ;
+aucun espace global en pixels n’existe sur un bureau à échelles mixtes.
+
 Sur AppKit, la pression mémoire est une source `Dispatch` unique pour le
 processus. Elle est installée à la première session et rend
 `LifecycleCapabilities.memoryPressure = Available` seulement après succès de
