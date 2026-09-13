@@ -5,6 +5,8 @@ import org.graphiks.kadre.internal.runtime.DropTransferSource
 import org.graphiks.kadre.input.PointerButton
 import org.graphiks.kadre.input.PointerButtonState
 import org.graphiks.kadre.surface.LogicalPoint
+import org.graphiks.kadre.surface.PhysicalPoint
+import org.graphiks.kadre.surface.PropertyChange
 import org.graphiks.kadre.window.WindowSpec
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
@@ -60,6 +62,27 @@ class AppKitWindowPeerTest {
                 "main:end",
             ),
             port.trace,
+        )
+    }
+
+    @Test
+    fun preparationAppliesAnInitialOuterPositionOnlyAfterPresentation() {
+        val requested = PhysicalPoint(-1_280, 360)
+        lateinit var port: DeterministicAppKitNativeWindowPort
+        port = DeterministicAppKitNativeWindowPort(
+            name = "initial-outer-position",
+            onPresentWindow = { assertTrue(port.geometryTargets.isEmpty()) },
+        )
+
+        AppKitWindowPeer.prepare(
+            PEER_ID,
+            WindowSpec(outerPosition = requested),
+            port,
+        ) { }
+
+        assertEquals(
+            PropertyChange.Set(requested),
+            port.geometryTargets.single().outerPosition,
         )
     }
 
