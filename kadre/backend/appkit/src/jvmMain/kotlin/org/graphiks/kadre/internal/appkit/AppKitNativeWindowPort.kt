@@ -25,6 +25,8 @@ import org.graphiks.kadre.input.TouchPhase
 import org.graphiks.kadre.surface.LogicalDelta
 import org.graphiks.kadre.surface.LogicalPoint
 import org.graphiks.kadre.surface.LogicalSize
+import org.graphiks.kadre.surface.PhysicalPoint
+import org.graphiks.kadre.surface.PhysicalRect
 import org.graphiks.kadre.surface.PropertyChange
 import org.graphiks.kadre.surface.SurfaceFocus
 import org.graphiks.kadre.surface.SurfaceOcclusion
@@ -257,6 +259,7 @@ internal data class AppKitWindowGeometryTarget(
     val minimumSize: PropertyChange<LogicalSize>,
     val maximumSize: PropertyChange<LogicalSize>,
     val resizable: PropertyChange<Boolean>,
+    val outerPosition: PropertyChange<PhysicalPoint> = PropertyChange.Unchanged,
 )
 
 /** Private, native-address-free chrome request forwarded from the runtime command. */
@@ -308,6 +311,8 @@ internal data class AppKitWindowGeometrySnapshot(
     val minimumSize: LogicalSize?,
     val maximumSize: LogicalSize?,
     val resizable: Boolean,
+    /** Null means the Window Server could not currently certify outer bounds. */
+    val outerBounds: PhysicalRect? = null,
 )
 
 /** Native chrome values read together with the rest of an effective window mutation. */

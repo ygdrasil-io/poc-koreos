@@ -10,12 +10,12 @@ Elle couvre aussi les valeurs correspondantes de `WindowSpec` lors de la
 création. Une fenêtre ne publie donc jamais comme effectif un minimum ou un
 maximum qu'AppKit n'a pas reçu avant sa présentation.
 
-`outerPosition` est délibérément hors tranche. L'API publique l'exprime en
-coordonnées physiques et impose que les bounds externes soient observables.
-AppKit manipule des points dans un repère multi-écran qui ne peut pas être
-figé honnêtement avant l'inventaire Display de la phase 9. La capability reste
-donc `Unsupported`, `WindowState.outerBounds` reste `null`, et aucun fallback
-vers les coordonnées AppKit n'est introduit.
+`outerPosition` reste hors de cette tranche phase 5. Son activation a été
+livrée avec l'inventaire Display de la phase 9 : des coordonnées physiques
+globales et `WindowState.outerBounds` ne sont publiés que depuis le readback
+Window Server généré par KFFI, jamais depuis les points AppKit. Les détails et
+les preuves sont consignés dans
+[APPKIT-IMPLEMENTATION-ROADMAP.md](APPKIT-IMPLEMENTATION-ROADMAP.md#phase-9--displays-pression-m%C3%A9moire-et-changements-syst%C3%A8me).
 
 Restent également `Unsupported` : titre, fullscreen, décorations, boutons
 système, level, transparence, blur, icône, content protection et attention.

@@ -2568,29 +2568,50 @@ public final class org/graphiks/kadre/input/GamepadEffect$DualRumble : org/graph
 	public fun toString ()Ljava/lang/String;
 }
 
-public final class org/graphiks/kadre/input/GamepadEffect$TriggerRumble : org/graphiks/kadre/input/GamepadEffect {
-	public synthetic fun <init> (DDJLkotlin/jvm/internal/DefaultConstructorMarker;)V
-	public final fun component1 ()D
+public final class org/graphiks/kadre/input/GamepadEffect$LocalizedHaptic : org/graphiks/kadre/input/GamepadEffect {
+	public synthetic fun <init> (Lorg/graphiks/kadre/input/GamepadHapticLocality;DJLkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun component1 ()Lorg/graphiks/kadre/input/GamepadHapticLocality;
 	public final fun component2 ()D
 	public final fun component3-UwyO8pc ()J
-	public final fun copy-SxA4cEA (DDJ)Lorg/graphiks/kadre/input/GamepadEffect$TriggerRumble;
-	public static synthetic fun copy-SxA4cEA$default (Lorg/graphiks/kadre/input/GamepadEffect$TriggerRumble;DDJILjava/lang/Object;)Lorg/graphiks/kadre/input/GamepadEffect$TriggerRumble;
+	public final fun copy-SxA4cEA (Lorg/graphiks/kadre/input/GamepadHapticLocality;DJ)Lorg/graphiks/kadre/input/GamepadEffect$LocalizedHaptic;
+	public static synthetic fun copy-SxA4cEA$default (Lorg/graphiks/kadre/input/GamepadEffect$LocalizedHaptic;Lorg/graphiks/kadre/input/GamepadHapticLocality;DJILjava/lang/Object;)Lorg/graphiks/kadre/input/GamepadEffect$LocalizedHaptic;
 	public fun equals (Ljava/lang/Object;)Z
 	public fun getDuration-UwyO8pc ()J
-	public final fun getLeft ()D
-	public final fun getRight ()D
+	public final fun getIntensity ()D
+	public final fun getLocality ()Lorg/graphiks/kadre/input/GamepadHapticLocality;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class org/graphiks/kadre/input/GamepadEffect$TriggerRumble : org/graphiks/kadre/input/GamepadEffect {
+	public synthetic fun <init> (DDDDJLkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun component1 ()D
+	public final fun component2 ()D
+	public final fun component3 ()D
+	public final fun component4 ()D
+	public final fun component5-UwyO8pc ()J
+	public final fun copy-9VgGkz4 (DDDDJ)Lorg/graphiks/kadre/input/GamepadEffect$TriggerRumble;
+	public static synthetic fun copy-9VgGkz4$default (Lorg/graphiks/kadre/input/GamepadEffect$TriggerRumble;DDDDJILjava/lang/Object;)Lorg/graphiks/kadre/input/GamepadEffect$TriggerRumble;
+	public fun equals (Ljava/lang/Object;)Z
+	public fun getDuration-UwyO8pc ()J
+	public final fun getLeftTrigger ()D
+	public final fun getRightTrigger ()D
+	public final fun getStrong ()D
+	public final fun getWeak ()D
 	public fun hashCode ()I
 	public fun toString ()Ljava/lang/String;
 }
 
 public final class org/graphiks/kadre/input/GamepadEffectConstraints {
-	public synthetic fun <init> (Ljava/util/Set;Lkotlin/time/Duration;Lkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public synthetic fun <init> (Ljava/util/Set;Lorg/graphiks/kadre/input/GamepadLocalizedHapticConstraints;Lkotlin/time/Duration;Lkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public final fun component1 ()Ljava/util/Set;
-	public final fun component2-FghU774 ()Lkotlin/time/Duration;
-	public final fun copy-6Au4x4Y (Ljava/util/Set;Lkotlin/time/Duration;)Lorg/graphiks/kadre/input/GamepadEffectConstraints;
-	public static synthetic fun copy-6Au4x4Y$default (Lorg/graphiks/kadre/input/GamepadEffectConstraints;Ljava/util/Set;Lkotlin/time/Duration;ILjava/lang/Object;)Lorg/graphiks/kadre/input/GamepadEffectConstraints;
+	public final fun component2 ()Lorg/graphiks/kadre/input/GamepadLocalizedHapticConstraints;
+	public final fun component3-FghU774 ()Lkotlin/time/Duration;
+	public final fun copy-moChb0s (Ljava/util/Set;Lorg/graphiks/kadre/input/GamepadLocalizedHapticConstraints;Lkotlin/time/Duration;)Lorg/graphiks/kadre/input/GamepadEffectConstraints;
+	public static synthetic fun copy-moChb0s$default (Lorg/graphiks/kadre/input/GamepadEffectConstraints;Ljava/util/Set;Lorg/graphiks/kadre/input/GamepadLocalizedHapticConstraints;Lkotlin/time/Duration;ILjava/lang/Object;)Lorg/graphiks/kadre/input/GamepadEffectConstraints;
 	public fun equals (Ljava/lang/Object;)Z
 	public final fun getKinds ()Ljava/util/Set;
+	public final fun getLocalizedHaptics ()Lorg/graphiks/kadre/input/GamepadLocalizedHapticConstraints;
 	public final fun getMaximumDuration-FghU774 ()Lkotlin/time/Duration;
 	public fun hashCode ()I
 	public fun toString ()Ljava/lang/String;
@@ -2598,6 +2619,7 @@ public final class org/graphiks/kadre/input/GamepadEffectConstraints {
 
 public final class org/graphiks/kadre/input/GamepadEffectKind : java/lang/Enum {
 	public static final field DualRumble Lorg/graphiks/kadre/input/GamepadEffectKind;
+	public static final field LocalizedHaptic Lorg/graphiks/kadre/input/GamepadEffectKind;
 	public static final field TriggerRumble Lorg/graphiks/kadre/input/GamepadEffectKind;
 	public static fun getEntries ()Lkotlin/enums/EnumEntries;
 	public static fun valueOf (Ljava/lang/String;)Lorg/graphiks/kadre/input/GamepadEffectKind;
@@ -2749,8 +2771,33 @@ public final class org/graphiks/kadre/input/GamepadEvent$RoutingSuspended : org/
 	public fun toString ()Ljava/lang/String;
 }
 
+public final class org/graphiks/kadre/input/GamepadHapticLocality : java/lang/Enum {
+	public static final field All Lorg/graphiks/kadre/input/GamepadHapticLocality;
+	public static final field Default Lorg/graphiks/kadre/input/GamepadHapticLocality;
+	public static final field Handles Lorg/graphiks/kadre/input/GamepadHapticLocality;
+	public static final field LeftHandle Lorg/graphiks/kadre/input/GamepadHapticLocality;
+	public static final field LeftTrigger Lorg/graphiks/kadre/input/GamepadHapticLocality;
+	public static final field RightHandle Lorg/graphiks/kadre/input/GamepadHapticLocality;
+	public static final field RightTrigger Lorg/graphiks/kadre/input/GamepadHapticLocality;
+	public static final field Triggers Lorg/graphiks/kadre/input/GamepadHapticLocality;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public static fun valueOf (Ljava/lang/String;)Lorg/graphiks/kadre/input/GamepadHapticLocality;
+	public static fun values ()[Lorg/graphiks/kadre/input/GamepadHapticLocality;
+}
+
 public final class org/graphiks/kadre/input/GamepadId {
 	public fun equals (Ljava/lang/Object;)Z
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class org/graphiks/kadre/input/GamepadLocalizedHapticConstraints {
+	public fun <init> (Ljava/util/Set;)V
+	public final fun component1 ()Ljava/util/Set;
+	public final fun copy (Ljava/util/Set;)Lorg/graphiks/kadre/input/GamepadLocalizedHapticConstraints;
+	public static synthetic fun copy$default (Lorg/graphiks/kadre/input/GamepadLocalizedHapticConstraints;Ljava/util/Set;ILjava/lang/Object;)Lorg/graphiks/kadre/input/GamepadLocalizedHapticConstraints;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getLocalities ()Ljava/util/Set;
 	public fun hashCode ()I
 	public fun toString ()Ljava/lang/String;
 }
