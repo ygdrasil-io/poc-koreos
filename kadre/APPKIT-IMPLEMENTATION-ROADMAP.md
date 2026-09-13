@@ -395,7 +395,11 @@ refusé, ou une failure corrélée après commit ; jamais un `Accepted`
 intermédiaire. L'initialisation `Borderless` non corrélable reste refusée.
 `Exclusive` est désormais traité par la sous-tranche display dédiée
 `APPKIT-PHASE-9-EXCLUSIVE-FULLSCREEN-DESIGN.md` : son implémentation existe,
-mais `WIN-008` et `APK-016` restent `planned` jusqu'à leur evidence O2/O3.
+ainsi qu'une preuve publique non disruptive et le cahier
+`backend/appkit/manual/phase-9-exclusive-fullscreen.md`. `WIN-008` et
+`APK-016` restent néanmoins `planned` jusqu'à l'activation conjointe de leurs
+evidence O2/O3 et d'une exécution matérielle tracée sur un display de test
+distinct.
 Avant cette activation, l'absence de support runtime d'`Exclusive` produit le
 refus de champ explicite ; elle ne réduit jamais la capability `Borderless`.
 Les contrats `WIN-005` et `APK-010` sont actifs ; le cahier manuel
@@ -574,12 +578,30 @@ le bridge KFFI généré et sa capability publique. Le gate AppKit utilise
 `macos-26`, la première version où `NSScreen.CGDirectDisplayID` rend ce bridge
 public et non heuristique.
 
-L'observation d'appearance, la source de pression mémoire et le broker de
-fullscreen exclusif sont fusionnés mais restent `planned` jusqu'à leur evidence
-O2/O3. `outerPosition` reste explicitement `Unsupported` en attente d'une
-preuve matérielle multi-écran à échelles mixtes ; `WIN-007`, `APK-015`,
-`WIN-008`, `APK-016`, `RUN-007`, `APK-017`, `RUN-008` et `APK-018` ne sont donc
-pas encore livrés contractuellement.
+L'observation d'appearance est livrée et contractuellement active : `RUN-007`
+(O2) prouve la paire thème/contraste atomique, l'ordre de publication et la
+déduplication ; `APK-017` (O3) relie le readback effectif, le selector AppKit,
+la notification d'accessibilité, la publication publique et le teardown.
+
+La pression mémoire est également livrée et active : `RUN-008` (O2) interdit
+un signal sans capability admise et après detach ; `APK-018` (O3) prouve que le
+source `Dispatch` généré par KFFI s'ouvre réellement, que le premier signal
+émis pendant son ouverture n'est pas perdu, que les sessions vivantes reçoivent
+le fan-out public et qu'une session fermée n'est plus ciblée. Le cahier manuel
+`manual/phase-9-memory-pressure.md` conserve le stress matériel des niveaux
+`Moderate` et `Critical`, sans synthétiser d'événement en CI.
+
+La géométrie externe est livrée et contractuellement active : `WIN-007` (O2)
+et `APK-015` (O3) prouvent les coordonnées physiques globales sans réduction
+par scale, le readback inconnu sans bounds fabriqués, l'ordre état-avant-
+événement, le bridge KFFI généré, la mutation corrélée, l'observation externe
+et le rejet des callbacks tardifs. Le cahier
+`manual/phase-9-window-geometry.md` conserve la validation humaine à écrans
+physiques d'échelles mixtes ; il ne la remplace pas par une topologie simulée.
+
+Le broker de fullscreen exclusif reste `planned` : son activation attend la
+trace du cahier matériel sur display dédié. Seuls `WIN-008` et `APK-016`
+restent donc non livrés contractuellement dans cette phase.
 
 #### Objectif
 
@@ -602,31 +624,94 @@ Remplacer les managers et signaux `Unsupported` correspondants par des observati
 - changement de scale coordonné avec les surfaces concernées ;
 - une exécution native unique sur `macos-26`, sans skip ni retry automatique ;
 - aucun signal de pression mémoire synthétique.
+- le stress mémoire manuel conserve la trace brute des deux sessions, sans
+  convertir l'absence de notification système en succès.
 
 ### Phase 10 — Devices, gamepads et effets
 
-#### Objectif
+La phase est découpée en deux sous-tranches contractuellement distinctes. La
+première livre les contrôleurs reconnus par GameController ; la seconde ajoute
+un inventaire HID minimal sans transformer Kadre en API de rapports HID bruts.
+Les deux sources alimentent le même `DeviceManager` de session, mais elles ne
+se recouvrent pas : un contrôleur est soit projeté comme `Gamepad`, soit, dans
+le MVP HID, comme `InputDevice` générique. Aucun identifiant public ne franchit
+une session, une reconnexion ou une source native.
 
-Couvrir `DeviceManager`, l’observation des gamepads et les effets disponibles sur macOS.
+#### 10.1 — Contrôleurs GameController et effets
 
-#### Contenu
+Cette sous-tranche couvre les gamepads que macOS expose par GameController :
 
-- broker process-wide des périphériques ;
-- inventaire observable des devices réellement connus ;
-- framework GameController via KFFI ;
-- connexion, déconnexion et snapshots ;
-- routing conforme à `DevicePolicy` ;
-- mapping standard et contrôles vendor-specific ;
-- vibration/haptics selon capabilities ;
-- ownership et arrêt des effets.
+- un broker process-wide, reference-counted, observe les connexions, les
+  déconnexions et les changements de contrôles ;
+- chaque session reçoit une projection complète avec des `GamepadId` opaques,
+  son propre `EventStamp` et un `DeviceManagerState` publié avant chaque
+  `DeviceLifecycleEvent` ;
+- `DeviceInventory.Enumerated.devices` reste honnêtement vide tant que la
+  sous-tranche HID n'est pas livrée ; les gamepads apparaissent exclusivement
+  dans `gamepads` ;
+- le broker applique `DevicePolicy.gamepadRouting` :
+  `ActiveSessionOnly` sélectionne une session foreground active, tandis que
+  `AllForegroundSessions` duplique explicitement les observations ; aucune
+  session background ne reçoit d'input ;
+- les profiles standard et les contrôles propres au vendeur deviennent le
+  mapping fermé `Standard` ou `Native` et les valeurs `Other(nativeCode)` déjà
+  prévues par l'API publique ;
+- les effets GameController passent par un lease propriétaire. Les capacités,
+  durées, kinds et localities effectifs sont relus avant admission ; le broker
+  arbitre `DeviceEffectOwnership` et arrête les effets à la déconnexion ou au
+  teardown de la session. AppKit annonce uniquement `LocalizedHaptic` avec les
+  `GCHapticsLocality` réellement supportées : il ne prétend pas convertir des
+  moteurs localisés en `DualRumble` ou `TriggerRumble`.
 
-#### Gate de sortie
+Le contrat commun d’effets reste additif et capability-driven : `DualRumble`
+et `TriggerRumble` conservent leur sémantique Web, tandis que
+`LocalizedHaptic` représente les actuateurs adressables d’AppKit. Android ou
+un autre backend n’annonce une locality que lorsque le système la garantit ;
+un simple vibrator par périphérique reste `Default`. Aucune adaptation ne
+fabrique une correspondance gauche/droite, forte/faible ou poignée/trigger
+sans garantie native explicite.
 
-- aucun périphérique ni effet ne fuit entre sessions ;
-- reconnexion après état terminal avec nouvelle identité ;
-- effet explicitement refusé lorsqu’il n’est pas supporté ;
-- teardown et arbitration d’ownership prouvés ;
-- les scénarios matériels indisponibles sur le runner ne sont pas remplacés par un faux test O3.
+Kextract déclare d'abord les APIs GameController nécessaires ; KFFI régénère
+ensuite un bridge managed, pointer-free et closeable. Kadre ne déclare ni
+binding manuel, ni callback FFI, ni fallback par heuristique. Tant que ce
+bridge n'est pas entièrement prêt, le backend conserve
+`DeviceInventory.Unsupported` et les capabilities d'effet `Unsupported`.
+
+La gate de sortie exige l'isolation inter-session, une reconnexion avec une
+nouvelle identité, l'ordre snapshot puis événement puis completion, le routing
+des deux policies, l'arbitrage et le teardown des effets. Les tests O2 couvrent
+ces propriétés avec un fake de bridge ; les tests O3 ne font qu'ouvrir et lire
+un bridge sans perturber un périphérique. Un essai d'input ou d'effet matériel
+reste un cahier manuel : un runner CI ne remplace jamais l'absence de contrôleur
+par un faux succès.
+
+#### 10.2 — MVP HID : inventaire et lifecycle
+
+Cette sous-tranche complète le `DeviceManager` avec les périphériques HID que
+macOS connaît réellement, notamment lorsqu'un contrôleur ancien n'est pas
+admis par GameController. Le MVP se limite à :
+
+- un owner process-wide IOKit/IOHIDManager, généré par Kextract puis encapsulé
+  par KFFI, qui énumère et observe l'ajout ou le retrait ;
+- des descripteurs détachés et bornés (`name`, `InputDeviceKind`) et des
+  `DeviceId` opaques projetés par session ;
+- un inventaire atomique et des handles qui passent terminalement à
+  `Disconnected` avant l'événement de retrait ;
+- l'exclusion explicite des HID synthétiques de GameController, afin qu'un
+  même contrôleur ne soit jamais publié à la fois comme `Gamepad` et
+  `InputDevice`.
+
+Le MVP n'expose pas de raw reports, de remapping, de contrôle vendor-specific,
+d'injection, de output report ou d'effet HID. Il ne transforme donc pas un
+contrôleur HID inconnu en faux `Gamepad` : il le rend seulement observable dans
+`DeviceManager.devices`. Cette limite sera levée par une tranche ultérieure
+dotée de ses propres contrats d'input HID.
+
+La gate de sortie exige un inventaire complet ou une indisponibilité typée,
+l'absence de doublon avec GameController, des IDs ne survivant ni à la
+déconnexion ni à la session, et la révocation des callbacks avant la libération
+de l'owner. Les scénarios de branchement physique restent manuels ; la CI ne
+valide que les invariants observables sans injecter ni ouvrir de périphérique.
 
 ### Phase 11 — Capture complète
 

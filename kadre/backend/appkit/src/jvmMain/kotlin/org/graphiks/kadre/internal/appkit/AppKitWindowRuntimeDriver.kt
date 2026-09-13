@@ -625,6 +625,7 @@ private class AppKitWindowCommandPort(
 
         val effectiveSpec = appKitEffectiveSpec(entry.command.spec, enabledWindowUpdateCapabilities)
         val initialWindowReadbackRequired = setOf(
+            WindowProperty.OuterPosition,
             WindowProperty.Level,
             WindowProperty.Transparency,
         ).any(enabledWindowUpdateCapabilities::contains)
@@ -936,16 +937,18 @@ private class AppKitWindowCommandPort(
     }
 
     private fun markRuntimeGeometryReady(entry: PeerEntry) {
-        val bufferedGeometryStimuli = synchronized(lock) {
+        val readyGeometry = synchronized(lock) {
             if (entry.removed || entry.surfaceCleanupReserved || entry.closeAdmitted || closed) {
                 entry.bufferedGeometryStimuli.clear()
-                emptyList()
+                null
             } else {
                 entry.runtimeGeometryReady = true
-                entry.bufferedGeometryStimuli.toList().also { entry.bufferedGeometryStimuli.clear() }
+                entry.peer?.initialWindowSnapshot?.geometry to
+                    entry.bufferedGeometryStimuli.toList().also { entry.bufferedGeometryStimuli.clear() }
             }
-        }
-        bufferedGeometryStimuli.forEach(::acceptStimulus)
+        } ?: return
+        readyGeometry.first?.let { geometryStimulusSink(entry.command.windowId, it) }
+        readyGeometry.second.forEach(::acceptStimulus)
     }
 
     private fun markRuntimeWindowReady(entry: PeerEntry) {
@@ -2311,7 +2314,9 @@ private fun appKitEffectiveSpec(
     maximumSize = requested.maximumSize.takeIf {
         WindowProperty.MaximumSize in enabledWindowUpdateCapabilities
     },
-    outerPosition = null,
+    outerPosition = requested.outerPosition.takeIf {
+        WindowProperty.OuterPosition in enabledWindowUpdateCapabilities
+    },
     fullscreen = FullscreenMode.Windowed,
     level = requested.level.takeIf { WindowProperty.Level in enabledWindowUpdateCapabilities }
         ?: WindowLevel.Normal,
@@ -2334,6 +2339,7 @@ private fun WindowUpdateCommand.toMutationTarget(): AppKitWindowMutationTarget =
         minimumSize = update.minimumSize,
         maximumSize = update.maximumSize,
         resizable = update.resizable,
+        outerPosition = update.outerPosition,
     ),
     chrome = AppKitWindowChromeTarget(
         decorations = update.decorations,
@@ -2362,6 +2368,13 @@ private fun WindowUpdateCommand.rejectedMutationFields(
             add(RejectedWindowField(WindowProperty.ContentSize, failure))
         }
         PropertyChange.Clear -> add(RejectedWindowField(WindowProperty.ContentSize, failure))
+        PropertyChange.Unchanged -> Unit
+    }
+    when (val change = update.outerPosition) {
+        is PropertyChange.Set -> if (snapshot.geometry.outerBounds?.origin != change.value) {
+            add(RejectedWindowField(WindowProperty.OuterPosition, failure))
+        }
+        PropertyChange.Clear -> add(RejectedWindowField(WindowProperty.OuterPosition, failure))
         PropertyChange.Unchanged -> Unit
     }
     when (val change = update.minimumSize) {
@@ -2426,6 +2439,7 @@ private fun AppKitWindowMutationSnapshot.withMutationFrom(
     current: WindowState,
 ): WindowState = current.copy(
     title = title,
+    outerBounds = geometry.outerBounds,
     contentSize = geometry.contentSize,
     minimumSize = geometry.minimumSize,
     maximumSize = geometry.maximumSize,
@@ -2440,6 +2454,7 @@ private fun AppKitWindowMutationSnapshot.withMutationFrom(
 private fun AppKitWindowGeometrySnapshot.withGeometryFrom(
     current: WindowState,
 ): WindowState = current.copy(
+    outerBounds = outerBounds,
     contentSize = contentSize,
     minimumSize = minimumSize,
     maximumSize = maximumSize,
