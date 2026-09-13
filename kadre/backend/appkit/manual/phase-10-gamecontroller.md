@@ -18,6 +18,10 @@ Commandes : `snapshot`, `effect <index> <locality>`,
 `effect` est volontairement opt-in et joue une pulsation d’une seconde seulement
 si le gamepad sélectionné annonce la locality demandée.
 
+Le TSV remplace les `DeviceId` et `GamepadId` redacted par des tokens opaques
+locaux au run (`d1`, `g1`, …). Ils ne sont ni des handles ni des IDs natifs ;
+ils permettent seulement de suivre une identité publique pendant l'essai.
+
 | ID | Manipulation | Attendu |
 |---|---|---|
 | M1 | Brancher ou allumer un contrôleur GameController pris en charge, puis `snapshot`. | Un `Gamepad` apparaît ; `devices` reste vide ; les capacités ne listent que les localities réelles. |
