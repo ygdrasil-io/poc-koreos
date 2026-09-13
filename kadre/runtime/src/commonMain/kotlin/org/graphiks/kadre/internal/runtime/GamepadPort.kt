@@ -1,7 +1,9 @@
 package org.graphiks.kadre.internal.runtime
 
+import org.graphiks.kadre.diagnostics.KadreResult
 import org.graphiks.kadre.input.GamepadCapabilities
 import org.graphiks.kadre.input.GamepadDescriptor
+import org.graphiks.kadre.input.GamepadEffect
 import org.graphiks.kadre.input.GamepadRoutingState
 import org.graphiks.kadre.input.GamepadState
 
@@ -66,5 +68,27 @@ public interface GamepadPort : AutoCloseable {
     /** Installs a listener for changes that occur after installation begins. */
     public fun installObserver(observer: (GamepadPortEvent) -> Unit): AutoCloseable
 
+    /**
+     * Starts one already-admitted effect for the gamepad identified by [key].
+     *
+     * The backend owns physical-device arbitration and returns a closeable owner only after the
+     * native effect has been accepted. The runtime owns the public effect session and duration.
+     * Native failures must be mapped to [KadreResult.Failure], never thrown across this seam.
+     */
+    public fun startEffect(key: Long, effect: GamepadEffect): KadreResult<GamepadPortEffect>
+
+    override public fun close()
+}
+
+/** Private physical effect owner returned across the backend/runtime seam. */
+public interface GamepadPortEffect : AutoCloseable {
+    /** Requests the native effect stop and reports any backend failure without throwing. */
+    public fun requestStop(): KadreResult<Unit>
+
+    /**
+     * Releases the physical owner and guarantees that its effect is no longer active.
+     *
+     * Implementations must be idempotent because teardown may follow an explicit stop request.
+     */
     override public fun close()
 }

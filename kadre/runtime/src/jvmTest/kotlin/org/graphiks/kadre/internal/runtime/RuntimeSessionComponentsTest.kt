@@ -476,6 +476,13 @@ class RuntimeSessionComponentsTest {
 
         override fun installObserver(observer: (GamepadPortEvent) -> Unit): AutoCloseable = AutoCloseable { }
 
+        override fun startEffect(
+            key: Long,
+            effect: org.graphiks.kadre.input.GamepadEffect,
+        ): KadreResult<GamepadPortEffect> = KadreResult.Failure(
+            KadreFailure.Unsupported(KadreOperation.GamepadEffect),
+        )
+
         override fun close() {
             closeCount += 1
         }
