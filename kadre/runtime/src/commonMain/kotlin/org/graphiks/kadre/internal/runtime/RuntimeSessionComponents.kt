@@ -41,6 +41,10 @@ public class RuntimeSessionComponents private constructor(
     public val displayPort: DisplayPort?,
     /** Optional session-owned capture control-plane port projected as the public CaptureManager. */
     public val capturePort: CapturePort?,
+    /** Optional session-owned gamepad port projected as the public [org.graphiks.kadre.input.DeviceManager]. */
+    public val gamepadPort: GamepadPort?,
+    /** Optional session-owned generic input-device port projected as the public DeviceManager. */
+    public val inputDevicePort: InputDevicePort?,
     private val closeAction: () -> Unit,
     primarySurface: RuntimePrimarySurface?,
 ) : AutoCloseable {
@@ -49,8 +53,10 @@ public class RuntimeSessionComponents private constructor(
         rawInputPort: RawInputPort? = null,
         displayPort: DisplayPort? = null,
         capturePort: CapturePort? = null,
+        gamepadPort: GamepadPort? = null,
+        inputDevicePort: InputDevicePort? = null,
         closeAction: () -> Unit = {},
-    ) : this(windows, rawInputPort, displayPort, capturePort, closeAction, null)
+    ) : this(windows, rawInputPort, displayPort, capturePort, gamepadPort, inputDevicePort, closeAction, null)
 
     public constructor(
         windows: WindowManager,
@@ -58,8 +64,10 @@ public class RuntimeSessionComponents private constructor(
         rawInputPort: RawInputPort? = null,
         displayPort: DisplayPort? = null,
         capturePort: CapturePort? = null,
+        gamepadPort: GamepadPort? = null,
+        inputDevicePort: InputDevicePort? = null,
         closeAction: () -> Unit = {},
-    ) : this(windows, rawInputPort, displayPort, capturePort, closeAction, primarySurface)
+    ) : this(windows, rawInputPort, displayPort, capturePort, gamepadPort, inputDevicePort, closeAction, primarySurface)
 
     private val lock = RuntimeLock()
     private var closed = false
@@ -100,6 +108,16 @@ public class RuntimeSessionComponents private constructor(
             }
             try {
                 capturePort?.close()
+            } catch (cause: Throwable) {
+                failure = failure.withSuppressed(cause)
+            }
+            try {
+                gamepadPort?.close()
+            } catch (cause: Throwable) {
+                failure = failure.withSuppressed(cause)
+            }
+            try {
+                inputDevicePort?.close()
             } catch (cause: Throwable) {
                 failure = failure.withSuppressed(cause)
             }
