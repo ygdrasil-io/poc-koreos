@@ -125,6 +125,31 @@ class RuntimeSessionComponentsTest {
     }
 
     @Test
+    fun inputOnlyPortCreatesAndClosesTheSessionDeviceManager() = runTest {
+        val port = RecordingInputDevicePort()
+        val host = RuntimeHostController.withComponents(
+            platform = KadrePlatform.Fake,
+            componentsFactory = RuntimeSessionComponentsFactory { _, _ ->
+                RuntimeSessionComponents(RecordingWindowManager(), inputDevicePort = port)
+            },
+        )
+        lateinit var observed: KadreScope
+
+        val session = attach(host) {
+            observed = this
+            awaitCancellation()
+        }
+        testScheduler.runCurrent()
+
+        assertIs<DeviceInventory.Enumerated>(observed.devices.state.value.inventory)
+
+        session.close()
+        testScheduler.runCurrent()
+
+        assertEquals(1, port.closeCount)
+    }
+
+    @Test
     fun primarySurfaceTeardownCannotSkipComponentCleanup() {
         var componentsClosed = 0
         val components = RuntimeSessionComponents(
@@ -484,6 +509,19 @@ class RuntimeSessionComponentsTest {
         ): KadreResult<GamepadPortEffect> = KadreResult.Failure(
             KadreFailure.Unsupported(KadreOperation.GamepadEffect),
         )
+
+        override fun close() {
+            closeCount += 1
+        }
+    }
+
+    private class RecordingInputDevicePort : InputDevicePort {
+        var closeCount = 0
+            private set
+
+        override val devices: List<InputDevicePortDevice> = emptyList()
+
+        override fun installObserver(observer: (InputDevicePortEvent) -> Unit): AutoCloseable = AutoCloseable { }
 
         override fun close() {
             closeCount += 1
