@@ -73,6 +73,9 @@ import org.graphiks.kadre.surface.LogicalDelta
 import org.graphiks.kadre.surface.LogicalInsets
 import org.graphiks.kadre.surface.LogicalPoint
 import org.graphiks.kadre.surface.LogicalSize
+import org.graphiks.kadre.surface.PhysicalPoint
+import org.graphiks.kadre.surface.PhysicalRect
+import org.graphiks.kadre.surface.PhysicalSize
 import org.graphiks.kadre.surface.PropertyChange
 import org.graphiks.kadre.surface.SurfaceFocus
 import org.graphiks.kadre.surface.SurfaceOcclusion
@@ -3272,13 +3275,20 @@ class AppKitWindowRuntimeDriverTest {
             maximumSize = null,
             resizable = true,
         )
-        val external = managed.copy(contentSize = LogicalSize(512.0, 320.0))
+        val external = managed.copy(
+            contentSize = LogicalSize(512.0, 320.0),
+            outerBounds = PhysicalRect(PhysicalPoint(-1_312, 348), PhysicalSize(1_600, 900)),
+        )
         val port = DeterministicAppKitNativeWindowPort(
             name = "geometry-callbacks",
             effectiveGeometry = managed,
             emitGeometryDuringUpdate = true,
         )
-        val driver = AppKitWindowRuntimeDriverFactory { port }.create(KadrePolicies.Default.resources)
+        val driver = AppKitWindowRuntimeDriverFactory { port }.create(
+            resources = KadrePolicies.Default.resources,
+            publicAppKitCapabilities = true,
+            enabledWindowUpdateCapabilities = publicAppKitUpdateProperties() + WindowProperty.OuterPosition,
+        )
 
         try {
             val window = assertIs<WindowRequestOutcome.OpenedHere>(
@@ -3299,6 +3309,69 @@ class AppKitWindowRuntimeDriverTest {
 
             assertEquals(2L, observed.revision.value)
             assertEquals(external.contentSize, observed.contentSize)
+            assertEquals(external.outerBounds, observed.outerBounds)
+        } finally {
+            driver.close()
+        }
+    }
+
+    @Test
+    fun nativeCloseAdmissionRejectsLateGeometryWhileTheEventFlowIsStillOpen(): Unit = runBlocking {
+        val admitted = AppKitWindowGeometrySnapshot(
+            contentSize = LogicalSize(640.0, 360.0),
+            minimumSize = null,
+            maximumSize = null,
+            resizable = true,
+            outerBounds = PhysicalRect(PhysicalPoint(-1_920, 120), PhysicalSize(1_920, 1_080)),
+        )
+        val late = admitted.copy(
+            outerBounds = PhysicalRect(PhysicalPoint(2_048, 240), PhysicalSize(2_560, 1_440)),
+        )
+        val port = DeterministicAppKitNativeWindowPort("geometry-close-admission")
+        val driver = AppKitWindowRuntimeDriverFactory { port }.create(
+            resources = KadrePolicies.Default.resources,
+            publicAppKitCapabilities = true,
+            enabledWindowUpdateCapabilities = publicAppKitUpdateProperties() + WindowProperty.OuterPosition,
+        )
+        val workerBlocked = CountDownLatch(1)
+        val releaseWorker = CountDownLatch(1)
+
+        try {
+            val window = openedWindow(driver, WindowSpec(title = "geometry-close-admission"))
+            val events = CopyOnWriteArrayList<WindowEvent.GeometryChanged>()
+            val collector = launch(start = CoroutineStart.UNDISPATCHED) {
+                window.events.filterIsInstance<WindowEvent.GeometryChanged>().collect(events::add)
+            }
+
+            try {
+                port.emitExternalGeometry("geometry-close-admission", admitted)
+                withTimeout(2.seconds) {
+                    window.state.first { it.outerBounds == admitted.outerBounds }
+                    while (events.isEmpty()) yield()
+                }
+
+                val commandPort = driver.privateField("commandPort").get(driver)
+                val queue = commandPort.privateField("commands").get(commandPort) as AppKitWindowCommandQueue
+                assertTrue(queue.submit {
+                    workerBlocked.countDown()
+                    check(releaseWorker.await(2, TimeUnit.SECONDS))
+                })
+                assertTrue(workerBlocked.await(2, TimeUnit.SECONDS))
+
+                port.emitNativeClosed("geometry-close-admission")
+                port.forceLateGeometry("geometry-close-admission", late)
+
+                assertEquals(WindowPhase.Open, window.state.value.phase)
+                assertEquals(listOf(admitted.outerBounds), events.map { it.state.outerBounds })
+
+                releaseWorker.countDown()
+                withTimeout(2.seconds) {
+                    window.state.first { it.phase == WindowPhase.Closed }
+                }
+            } finally {
+                releaseWorker.countDown()
+                collector.cancelAndJoin()
+            }
         } finally {
             driver.close()
         }
@@ -3422,6 +3495,85 @@ class AppKitWindowRuntimeDriverTest {
             assertEquals(WindowProperty.Resizable, outcome.rejected.single().field)
             assertIs<KadreFailure.PlatformFailure>(outcome.rejected.single().failure)
             assertEquals(listOf<Throwable>(failure), reported)
+        } finally {
+            driver.close()
+        }
+    }
+
+    @Test
+    fun outerPositionPublishesTheCertifiedNativeBoundsInsteadOfTheRequestedPoint() = runBlocking {
+        val requested = PhysicalPoint(-1_280, 360)
+        val certifiedBounds = PhysicalRect(
+            origin = PhysicalPoint(-1_312, 348),
+            size = PhysicalSize(1_600, 900),
+        )
+        val port = DeterministicAppKitNativeWindowPort(
+            name = "outer-position-readback",
+            effectiveGeometry = AppKitWindowGeometrySnapshot(
+                contentSize = LogicalSize(800.0, 600.0),
+                minimumSize = null,
+                maximumSize = null,
+                resizable = true,
+                outerBounds = certifiedBounds,
+            ),
+        )
+        val driver = AppKitWindowRuntimeDriverFactory { port }.create(
+            resources = KadrePolicies.Default.resources,
+            publicAppKitCapabilities = true,
+            enabledWindowUpdateCapabilities = publicAppKitUpdateProperties() + WindowProperty.OuterPosition,
+        )
+
+        try {
+            val window = openedWindow(driver, WindowSpec(title = "outer-position-readback"))
+
+            val outcome = assertIs<WindowUpdateOutcome.Applied>(
+                window.apply(WindowUpdate(outerPosition = PropertyChange.Set(requested))).successValue(),
+            )
+
+            assertEquals(certifiedBounds, outcome.state.outerBounds)
+            assertEquals(certifiedBounds, window.state.value.outerBounds)
+            assertEquals(PropertyChange.Set(requested), port.geometryTargets.single().outerPosition)
+        } finally {
+            driver.close()
+        }
+    }
+
+    @Test
+    fun initialOuterPositionPublishesThePostPresentationCertifiedBounds() = runBlocking {
+        val requested = PhysicalPoint(-1_280, 360)
+        val certifiedBounds = PhysicalRect(
+            origin = PhysicalPoint(-1_312, 348),
+            size = PhysicalSize(1_600, 900),
+        )
+        val port = DeterministicAppKitNativeWindowPort(
+            name = "initial-outer-position-readback",
+            effectiveGeometry = AppKitWindowGeometrySnapshot(
+                contentSize = LogicalSize(800.0, 600.0),
+                minimumSize = null,
+                maximumSize = null,
+                resizable = true,
+                outerBounds = certifiedBounds,
+            ),
+        )
+        val driver = AppKitWindowRuntimeDriverFactory { port }.create(
+            resources = KadrePolicies.Default.resources,
+            publicAppKitCapabilities = true,
+            enabledWindowUpdateCapabilities = publicAppKitUpdateProperties() + WindowProperty.OuterPosition,
+        )
+
+        try {
+            val window = openedWindow(
+                driver,
+                WindowSpec(title = "initial-outer-position-readback", outerPosition = requested),
+            )
+
+            assertEquals(
+                certifiedBounds,
+                withTimeout(2.seconds) {
+                    window.state.first { it.outerBounds == certifiedBounds }
+                }.outerBounds,
+            )
+            assertEquals(PropertyChange.Set(requested), port.geometryTargets.single().outerPosition)
         } finally {
             driver.close()
         }
@@ -5858,6 +6010,10 @@ internal class DeterministicAppKitNativeWindowPort(
         checkNotNull(geometryObservers[title]).emit(snapshot)
     }
 
+    fun forceLateGeometry(title: String, snapshot: AppKitWindowGeometrySnapshot) {
+        checkNotNull(geometryObservers[title]).force(snapshot)
+    }
+
     fun emitWillEnter(title: String) {
         checkNotNull(windows[title]?.delegate).callbacks.windowWillEnterFullscreen()
     }
@@ -5904,6 +6060,10 @@ internal class DeterministicAppKitNativeWindowPort(
 
     fun emitSurfaceFocus(title: String, focus: SurfaceFocus) {
         checkNotNull(surfaceObservers[title]).emitFocus(focus)
+    }
+
+    fun emitSurfaceAppearance(title: String, appearance: SurfaceAppearance) {
+        checkNotNull(surfaceObservers[title]).emitAppearance(appearance)
     }
 
     fun emitSurfaceRedrawConsumed(title: String, generation: Long) {
@@ -5965,6 +6125,10 @@ internal class DeterministicAppKitNativeWindowPort(
 
     fun forceLateSurfaceMetrics(title: String, metrics: SurfaceMetrics) {
         checkNotNull(surfaceObservers[title]).forceMetrics(metrics)
+    }
+
+    fun forceLateSurfaceAppearance(title: String, appearance: SurfaceAppearance) {
+        checkNotNull(surfaceObservers[title]).forceAppearance(appearance)
     }
 
     private fun recordNativeClose(recording: RecordingNativeWindowOwner) {
@@ -6046,12 +6210,20 @@ internal class DeterministicAppKitNativeWindowPort(
             if (accepting.get()) callbacks.focusChanged(focus)
         }
 
+        fun emitAppearance(appearance: SurfaceAppearance) {
+            if (accepting.get()) callbacks.appearanceChanged(appearance)
+        }
+
         fun emitRedrawConsumed(generation: Long) {
             if (accepting.get()) callbacks.redrawConsumed(generation)
         }
 
         fun forceMetrics(metrics: SurfaceMetrics) {
             callbacks.metricsChanged(metrics)
+        }
+
+        fun forceAppearance(appearance: SurfaceAppearance) {
+            callbacks.appearanceChanged(appearance)
         }
 
         override fun requestRedraw(generation: Long) {
@@ -6072,6 +6244,10 @@ internal class DeterministicAppKitNativeWindowPort(
 
         fun emit(snapshot: AppKitWindowGeometrySnapshot) {
             if (accepting.get()) callbacks.geometryChanged(snapshot)
+        }
+
+        fun force(snapshot: AppKitWindowGeometrySnapshot) {
+            callbacks.geometryChanged(snapshot)
         }
 
         override fun revokeCallbacks() {
@@ -6183,6 +6359,8 @@ private data object RecordingNativeDropItemSource : DropItemSource {
 private fun AppKitWindowGeometrySnapshot.updateFor(
     target: AppKitWindowGeometryTarget,
 ): AppKitWindowGeometrySnapshot = copy(
+    outerBounds = target.outerPosition.resolve(outerBounds?.origin)
+        ?.let { origin -> outerBounds?.copy(origin = origin) },
     contentSize = target.contentSize.resolve(contentSize),
     minimumSize = target.minimumSize.resolve(minimumSize),
     maximumSize = target.maximumSize.resolve(maximumSize),
@@ -6190,7 +6368,8 @@ private fun AppKitWindowGeometrySnapshot.updateFor(
 )
 
 private fun AppKitWindowGeometryTarget.hasChange(): Boolean =
-    contentSize !is PropertyChange.Unchanged ||
+    outerPosition !is PropertyChange.Unchanged ||
+        contentSize !is PropertyChange.Unchanged ||
         minimumSize !is PropertyChange.Unchanged ||
         maximumSize !is PropertyChange.Unchanged ||
         resizable !is PropertyChange.Unchanged

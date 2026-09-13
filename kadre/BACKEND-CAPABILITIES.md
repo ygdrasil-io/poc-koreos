@@ -106,6 +106,8 @@ il ne fabrique aucun signal. `WARN` devient `Moderate` et `CRITICAL` devient
 `Critical`. Le callback natif est relayé hors de sa pile, puis diffusé aux
 sessions vivantes : fermer une session ne ferme pas la source process-wide,
 alors que la terminaison du host la ferme avant tout nouveau relayage.
+`backend/appkit/manual/phase-9-memory-pressure.md` décrit le stress matériel
+des niveaux réels ; l'absence de notification système y reste `not-applicable`.
 
 L’AppKit adapter lit l’`appearance` d’une surface comme un seul snapshot : le
 thème vient de l’`effectiveAppearance` de la `NSView` et le contraste de
