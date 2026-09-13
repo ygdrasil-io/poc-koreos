@@ -98,6 +98,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
+import kotlin.test.assertNull
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
 import java.util.concurrent.CountDownLatch
@@ -334,6 +335,80 @@ class RuntimeWindowManagerTest {
         assertEquals(before, window.state.value)
         assertEquals(emptyList(), events)
         collector.cancelAndJoin()
+    }
+
+    @Test
+    fun enabledOuterPositionPreservesGlobalPhysicalBoundsWithoutCoordinateReduction() = runTest {
+        val port = DeterministicWindowCommandPort()
+        val manager = manager(
+            port,
+            publicWindowCapabilities = true,
+            enabledWindowUpdateCapabilities = setOf(WindowProperty.OuterPosition),
+        )
+        installWindowEventPolicy(manager, KadrePolicies.Default.window)
+        val window = commit(
+            manager.requestWindow(WindowSpec()).successValue(),
+            port.openCommands.single(),
+        ) as RuntimeWindow
+        val events = mutableListOf<WindowEvent>()
+        val stateObservedAtGeometryDelivery = mutableListOf<WindowState>()
+        val collector = launch(start = CoroutineStart.UNDISPATCHED) {
+            window.events.collect { event ->
+                events += event
+                if (event is WindowEvent.GeometryChanged) {
+                    val observedState = window.state.value
+                    stateObservedAtGeometryDelivery += observedState
+                    assertEquals(event.state, observedState)
+                }
+            }
+        }
+        val globalBounds = PhysicalRect(
+            origin = PhysicalPoint(-2_048, 144),
+            size = PhysicalSize(3_200, 1_440),
+        )
+
+        assertTrue(
+            window.observeNativeUpdate(
+                window.state.value.copy(
+                    outerBounds = globalBounds,
+                    revision = WindowRevision(1_000L),
+                ),
+            ),
+        )
+        advanceUntilIdle()
+
+        assertEquals(globalBounds, window.state.value.outerBounds)
+        val event = assertIs<WindowEvent.GeometryChanged>(events.single())
+        assertEquals(globalBounds, event.state.outerBounds)
+        assertEquals(window.state.value, event.state)
+        assertEquals(listOf(event.state), stateObservedAtGeometryDelivery)
+        collector.cancelAndJoin()
+    }
+
+    @Test
+    fun outerPositionCommandPreservesAnUnknownNativeReadbackInsteadOfFabricatingBounds() = runTest {
+        val port = DeterministicWindowCommandPort()
+        val manager = manager(
+            port,
+            publicWindowCapabilities = true,
+            enabledWindowUpdateCapabilities = setOf(WindowProperty.OuterPosition),
+        )
+        val window = commit(
+            manager.requestWindow(WindowSpec()).successValue(),
+            port.openCommands.single(),
+        )
+        val requested = PhysicalPoint(1_024, 512)
+        val update = async(start = CoroutineStart.UNDISPATCHED) {
+            window.apply(WindowUpdate(outerPosition = PropertyChange.Set(requested)))
+        }
+        val command = port.updateCommands.single()
+
+        assertEquals(PropertyChange.Set(requested), command.update.outerPosition)
+        command.applied(window.state.value.copy(outerBounds = null))
+
+        val outcome = assertIs<WindowUpdateOutcome.Applied>(update.await().successValue())
+        assertNull(outcome.state.outerBounds)
+        assertNull(window.state.value.outerBounds)
     }
 
     @Test

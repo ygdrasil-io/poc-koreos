@@ -555,7 +555,7 @@ class ContractRegistryTest {
             "WIN-008", "APK-016", "RUN-007", "APK-017", "RUN-008", "APK-018",
         )
         val PHASE_NINE_ACTIVE_CONTRACT_IDS = setOf(
-            "DSP-001", "APK-014", "RUN-007", "APK-017", "RUN-008", "APK-018",
+            "DSP-001", "APK-014", "WIN-007", "APK-015", "RUN-007", "APK-017", "RUN-008", "APK-018",
         )
         const val HEADER =
             "contractId\tstatus\tsource\tsubject\trisk\toracle\tscenarios\trequiredTargets\tconditionalCapabilities\tsentinels\tretirementRef"

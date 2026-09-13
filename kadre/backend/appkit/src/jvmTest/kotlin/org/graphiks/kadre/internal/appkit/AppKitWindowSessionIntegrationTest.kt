@@ -2,7 +2,10 @@ package org.graphiks.kadre.internal.appkit
 
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.async
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.filterIsInstance
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.yield
@@ -12,9 +15,14 @@ import org.graphiks.kadre.internal.runtime.SurfaceMetrics
 import org.graphiks.kadre.internal.runtime.SurfaceRedrawGeneration
 import org.graphiks.kadre.policy.KadrePolicies
 import org.graphiks.kadre.surface.LogicalSize
+import org.graphiks.kadre.surface.PhysicalPoint
+import org.graphiks.kadre.surface.PhysicalRect
+import org.graphiks.kadre.surface.PhysicalSize
 import org.graphiks.kadre.surface.SurfaceAttachmentState
 import org.graphiks.kadre.surface.SurfaceEvent
 import org.graphiks.kadre.window.WindowPhase
+import org.graphiks.kadre.window.WindowEvent
+import org.graphiks.kadre.window.WindowProperty
 import org.graphiks.kadre.window.WindowSpec
 import org.graphiks.kadre.window.WindowRequestOutcome
 import java.util.concurrent.CountDownLatch
@@ -134,6 +142,59 @@ class AppKitWindowSessionIntegrationTest {
             yield()
 
             assertEquals(resizeBeforeClose, window.surface.state.value.metrics())
+        } finally {
+            driver.close()
+        }
+    }
+
+    @Test
+    fun closingAWindowRejectsEveryLateGeometryStimulus() = runBlocking {
+        val port = DeterministicAppKitNativeWindowPort("late-geometry")
+        val driver = AppKitWindowRuntimeDriverFactory { port }.create(
+            resources = KadrePolicies.Default.resources,
+            publicAppKitCapabilities = true,
+            enabledWindowUpdateCapabilities = setOf(WindowProperty.Title, WindowProperty.OuterPosition),
+        )
+        val beforeClose = AppKitWindowGeometrySnapshot(
+            contentSize = LogicalSize(640.0, 360.0),
+            minimumSize = null,
+            maximumSize = null,
+            resizable = true,
+            outerBounds = PhysicalRect(PhysicalPoint(-1_920, 120), PhysicalSize(1_920, 1_080)),
+        )
+        val afterClose = beforeClose.copy(
+            outerBounds = PhysicalRect(PhysicalPoint(2_048, 240), PhysicalSize(2_560, 1_440)),
+        )
+
+        try {
+            val outcome =
+                driver.manager.requestWindow(WindowSpec(title = "late-geometry"))
+                    .appKitSuccessValue()
+                    .await()
+            assertTrue(outcome is WindowRequestOutcome.OpenedHere, "unexpected window outcome: $outcome")
+            val window = outcome.window
+            val geometryEvents = mutableListOf<WindowEvent.GeometryChanged>()
+            val geometryCollector = launch(start = CoroutineStart.UNDISPATCHED) {
+                window.events.filterIsInstance<WindowEvent.GeometryChanged>().collect(geometryEvents::add)
+            }
+            port.emitExternalGeometry("late-geometry", beforeClose)
+            withTimeout(2.seconds) {
+                window.state.first { it.outerBounds == beforeClose.outerBounds }
+                while (geometryEvents.isEmpty()) yield()
+            }
+            assertEquals(beforeClose.outerBounds, geometryEvents.single().state.outerBounds)
+
+            port.emitNativeClosed("late-geometry")
+            withTimeout(2.seconds) {
+                driver.manager.state.first { it.windows.isEmpty() }
+            }
+            port.forceLateGeometry("late-geometry", afterClose)
+            yield()
+
+            assertEquals(WindowPhase.Closed, window.state.value.phase)
+            assertEquals(beforeClose.outerBounds, window.state.value.outerBounds)
+            assertEquals(listOf(beforeClose.outerBounds), geometryEvents.map { it.state.outerBounds })
+            geometryCollector.cancel()
         } finally {
             driver.close()
         }

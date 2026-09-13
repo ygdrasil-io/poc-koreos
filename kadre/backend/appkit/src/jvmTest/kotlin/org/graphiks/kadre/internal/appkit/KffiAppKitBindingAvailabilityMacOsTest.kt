@@ -6,6 +6,9 @@ import org.graphiks.kffi.objc.NSRequestUserAttentionType
 import org.graphiks.kffi.objc.NSWindow
 import org.graphiks.kffi.objc.NSWindowSharingType
 import org.graphiks.kffi.objc.NSWindowStyleMask
+import org.graphiks.kffi.objc.appkit.AppKitWindowGeometryReadResult
+import org.graphiks.kffi.objc.appkit.AppKitWindowGeometryServices
+import org.graphiks.kffi.objc.appkit.AppKitWindowGeometrySetResult
 import org.graphiks.kffi.objc.appkit.DispatchMemoryPressureSource
 import org.graphiks.kffi.objc.NSPoint
 import org.graphiks.kffi.objc.NSRect
@@ -15,7 +18,9 @@ import java.lang.foreign.MemorySegment
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertIs
 import kotlin.test.assertNotEquals
+import kotlin.test.assertTrue
 
 /**
  * Guards the generated KFFI declarations that AppKit window-chrome code consumes.
@@ -61,6 +66,53 @@ class KffiAppKitBindingAvailabilityMacOsTest {
                     val dragBinding: (MemorySegment) -> Unit = window::performWindowDragWithEvent
                 } finally {
                     application.cancelUserAttentionRequest(attentionRequest)
+                }
+            } finally {
+                try {
+                    window.close()
+                } finally {
+                    releaseKffiAppKitTestObject(window.ptr)
+                }
+            }
+        }
+    }
+
+    @Test
+    fun generatedWindowGeometryServiceReportsOnlyRealWindowServerReadbackOrUnavailabilityOnMacOs26() {
+        if (!isMacOsHost() || !AppKitDisplayAvailability().isAvailable) return
+
+        ObjCRuntime.autoreleasePool {
+            NSApplication(NSApplication.sharedApplication())
+            val window = allocateKffiAppKitTestWindow(
+                rect = NSRect(NSPoint(80.0, 80.0), NSSize(160.0, 90.0)),
+                style = NSWindowStyleMask.NSWindowStyleMaskBorderless,
+            )
+            window.setReleasedWhenClosed(false)
+
+            try {
+                window.makeKeyAndOrderFront(MemorySegment.NULL)
+                when (val initial = AppKitWindowGeometryServices.readOuterBounds(window)) {
+                    is AppKitWindowGeometryReadResult.Read -> {
+                        assertTrue(initial.bounds.width > 0.0)
+                        assertTrue(initial.bounds.height > 0.0)
+
+                        val moved = assertIs<AppKitWindowGeometrySetResult.Moved>(
+                            AppKitWindowGeometryServices.setOuterPosition(
+                                window,
+                                initial.bounds.x.toInt(),
+                                initial.bounds.y.toInt(),
+                            ),
+                        )
+                        assertEquals(
+                            moved.bounds,
+                            assertIs<AppKitWindowGeometryReadResult.Read>(
+                                AppKitWindowGeometryServices.readOuterBounds(window),
+                            ).bounds,
+                        )
+                    }
+
+                    AppKitWindowGeometryReadResult.Unavailable -> Unit
+                    else -> error("unexpected generated geometry readback result: $initial")
                 }
             } finally {
                 try {
