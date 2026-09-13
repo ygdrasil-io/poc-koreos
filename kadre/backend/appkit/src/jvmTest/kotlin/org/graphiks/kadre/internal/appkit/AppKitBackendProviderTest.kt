@@ -71,8 +71,32 @@ import org.graphiks.kadre.diagnostics.KadreResourceKind
 import org.graphiks.kadre.diagnostics.KadreResult
 import org.graphiks.kadre.display.DisplayInventory
 import org.graphiks.kadre.display.DisplayManager
+import org.graphiks.kadre.input.DeviceInventory
+import org.graphiks.kadre.input.DeviceLifecycleEvent
+import org.graphiks.kadre.input.DeviceManager
+import org.graphiks.kadre.input.GamepadEffect
+import org.graphiks.kadre.input.GamepadButton
+import org.graphiks.kadre.input.GamepadButtonValue
+import org.graphiks.kadre.input.GamepadCapabilities
+import org.graphiks.kadre.input.GamepadDescriptor
+import org.graphiks.kadre.input.GamepadEvent
+import org.graphiks.kadre.input.GamepadMapping
+import org.graphiks.kadre.input.GamepadRoutingState
+import org.graphiks.kadre.input.GamepadState
+import org.graphiks.kadre.input.InputDeviceDescriptor
+import org.graphiks.kadre.input.InputDeviceKind
 import org.graphiks.kadre.internal.runtime.DisplayPort
+import org.graphiks.kadre.internal.runtime.DisplayPortDisplay
+import org.graphiks.kadre.internal.runtime.DisplayPortMode
 import org.graphiks.kadre.internal.runtime.DisplayPortSnapshot
+import org.graphiks.kadre.internal.runtime.GamepadPort
+import org.graphiks.kadre.internal.runtime.GamepadPortEffect
+import org.graphiks.kadre.internal.runtime.GamepadPortEvent
+import org.graphiks.kadre.internal.runtime.GamepadPortGamepad
+import org.graphiks.kadre.internal.runtime.GamepadPortRouting
+import org.graphiks.kadre.internal.runtime.InputDevicePort
+import org.graphiks.kadre.internal.runtime.InputDevicePortDevice
+import org.graphiks.kadre.internal.runtime.InputDevicePortEvent
 import org.graphiks.kadre.internal.runtime.RawInputPort
 import org.graphiks.kadre.internal.runtime.RawInputPortInput
 import org.graphiks.kadre.internal.runtime.RawInputPortLease
@@ -82,6 +106,8 @@ import org.graphiks.kadre.internal.runtime.desktop.DesktopBackendProvider
 import org.graphiks.kadre.internal.runtime.desktop.DesktopEmbeddedRequest
 import org.graphiks.kadre.internal.runtime.desktop.DesktopIntegrationKind
 import org.graphiks.kadre.internal.runtime.desktop.DesktopStandaloneRequest
+import org.graphiks.kadre.internal.appkit.manual.Phase10ManualInventoryFormatter
+import org.graphiks.kadre.internal.appkit.manual.Phase10GamepadObservationSet
 import org.graphiks.kadre.input.InputEvent
 import org.graphiks.kadre.input.DropOfferState
 import org.graphiks.kadre.input.DropOfferTerminationReason
@@ -105,6 +131,9 @@ import org.graphiks.kadre.surface.CursorStyle
 import org.graphiks.kadre.surface.HitTestingMode
 import org.graphiks.kadre.surface.InputDefaultBehavior
 import org.graphiks.kadre.surface.LogicalSize
+import org.graphiks.kadre.surface.PhysicalPoint
+import org.graphiks.kadre.surface.PhysicalRect
+import org.graphiks.kadre.surface.PhysicalSize
 import org.graphiks.kadre.surface.PropertyChange
 import org.graphiks.kadre.surface.SurfaceAttachmentState
 import org.graphiks.kadre.surface.SurfaceAppearance
@@ -113,6 +142,7 @@ import org.graphiks.kadre.surface.SurfaceEvent
 import org.graphiks.kadre.surface.SurfaceFocus
 import org.graphiks.kadre.surface.SurfaceOcclusion
 import org.graphiks.kadre.surface.SurfaceProperty
+import org.graphiks.kadre.surface.SurfaceState
 import org.graphiks.kadre.surface.SurfaceTheme
 import org.graphiks.kadre.surface.SurfaceUpdate
 import org.graphiks.kadre.surface.SurfaceUpdateOutcome
@@ -372,6 +402,61 @@ class AppKitBackendProviderTest {
     }
 
     @Test
+    fun embeddedMemoryPressureFansOutToLiveSessionsAndExcludesAClosedSession() = kotlinx.coroutines.runBlocking {
+        val memoryPressureNative = ProviderMemoryPressureNative()
+        val provider = AppKitBackendProvider.forTesting(
+            nativeApplication = EmbeddedNativeApplication(),
+            broker = AppKitProcessBroker(memoryPressureNative = memoryPressureNative),
+            availability = { true },
+        )
+        val parentScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob())
+        val firstLifecycle = CompletableDeferred<KadreLifecycle>()
+        val secondLifecycle = CompletableDeferred<KadreLifecycle>()
+
+        try {
+            val firstSession = provider.attach(embeddedRequest(parentScope, firstLifecycle)).requireSession()
+            val secondSession = provider.attach(embeddedRequest(parentScope, secondLifecycle)).requireSession()
+            val first = firstLifecycle.await()
+            val second = secondLifecycle.await()
+            val firstCritical = async(start = CoroutineStart.UNDISPATCHED) {
+                first.signals.filterIsInstance<HostSignal.MemoryPressure>().first()
+            }
+            val secondCritical = async(start = CoroutineStart.UNDISPATCHED) {
+                second.signals.filterIsInstance<HostSignal.MemoryPressure>().first()
+            }
+
+            memoryPressureNative.emit(MemoryPressureLevel.Critical)
+            assertEquals(MemoryPressureLevel.Critical, withTimeout(2.seconds) { firstCritical.await() }.level)
+            assertEquals(MemoryPressureLevel.Critical, withTimeout(2.seconds) { secondCritical.await() }.level)
+
+            val closedSessionLateSignal = async(start = CoroutineStart.UNDISPATCHED) {
+                withTimeoutOrNull(200.milliseconds) {
+                    first.signals.filterIsInstance<HostSignal.MemoryPressure>().first { signal ->
+                        signal.level == MemoryPressureLevel.Moderate
+                    }
+                }
+            }
+            val liveSessionModerate = async(start = CoroutineStart.UNDISPATCHED) {
+                second.signals.filterIsInstance<HostSignal.MemoryPressure>().first { signal ->
+                    signal.level == MemoryPressureLevel.Moderate
+                }
+            }
+            firstSession.close()
+            firstSession.awaitTermination()
+
+            memoryPressureNative.emit(MemoryPressureLevel.Moderate)
+            assertEquals(MemoryPressureLevel.Moderate, withTimeout(2.seconds) { liveSessionModerate.await() }.level)
+            assertNull(closedSessionLateSignal.await())
+
+            secondSession.close()
+            secondSession.awaitTermination()
+        } finally {
+            parentScope.cancel()
+        }
+        Unit
+    }
+
+    @Test
     fun embeddedSessionProjectsTheConfiguredDisplayPortAndClosesItWithTheSession() = kotlinx.coroutines.runBlocking {
         val native = EmbeddedNativeApplication()
         val port = ProviderDisplayPort()
@@ -407,6 +492,213 @@ class AppKitBackendProviderTest {
             parentScope.cancel()
         }
     }
+
+    @Test
+    fun embeddedSessionProjectsTheConfiguredGamepadPortAndClosesItWithTheSession() = kotlinx.coroutines.runBlocking {
+        val native = EmbeddedNativeApplication()
+        val port = ProviderGamepadPort(
+            initialGamepads = listOf(
+                GamepadPortGamepad(
+                    key = 9L,
+                    descriptor = GamepadDescriptor(
+                        name = "Provider controller",
+                        mapping = GamepadMapping.Standard,
+                        buttons = listOf(GamepadButton.South),
+                        axes = emptyList(),
+                    ),
+                    state = GamepadState(
+                        buttons = listOf(GamepadButtonValue(GamepadButton.South, 0.0, false)),
+                        axes = emptyList(),
+                    ),
+                    routing = GamepadRoutingState.Routed,
+                    capabilities = GamepadCapabilities(
+                        effects = Capability.Unsupported(KadreFailure.Unsupported(KadreOperation.GamepadEffect)),
+                    ),
+                ),
+            ),
+        )
+        val provider = AppKitBackendProvider.forTesting(
+            nativeApplication = native,
+            broker = AppKitProcessBroker(),
+            gamepadPortFactory = { port },
+            availability = { true },
+        )
+        val parentScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob())
+        val observedInventory = CompletableDeferred<DeviceInventory>()
+
+        try {
+            val session = provider.attach(
+                DesktopEmbeddedRequest(
+                    parentScope,
+                    KadreApplicationFactory {
+                        KadreApplication {
+                            observedInventory.complete(devices.state.value.inventory)
+                            kotlinx.coroutines.awaitCancellation()
+                        }
+                    },
+                    DesktopIntegrationKind.AppKitMainLoop,
+                    KadrePolicies.Default,
+                ),
+            ).requireSession()
+
+            assertIs<DeviceInventory.Enumerated>(observedInventory.await())
+            val gamepad = (observedInventory.await() as DeviceInventory.Enumerated).gamepads.single()
+            val formatter = Phase10ManualInventoryFormatter()
+            assertEquals(
+                "g1{name=\"Provider controller\",mapping=Standard,connection=Connected,routing=Routed," +
+                    "controls=buttons=[South(value=0.0,pressed=false)] axes=[]}",
+                formatter.formatGamepadSnapshot(gamepad, gamepad.state.value),
+            )
+            val controlEvent = async(start = CoroutineStart.UNDISPATCHED) {
+                gamepad.events.filterIsInstance<GamepadEvent.ButtonChanged>().first()
+            }
+            val observedSnapshots = mutableListOf<org.graphiks.kadre.input.GamepadSnapshot>()
+            val observedControlEvent = CompletableDeferred<GamepadEvent.ButtonChanged>()
+            val observations = Phase10GamepadObservationSet(
+                scope = this,
+                onSnapshot = { _, snapshot -> observedSnapshots += snapshot },
+                onEvent = { _, event ->
+                    if (event is GamepadEvent.ButtonChanged) observedControlEvent.complete(event)
+                },
+            )
+            observations.observe(gamepad)
+            assertEquals(0.0, observedSnapshots.single().controls.buttons.single().value)
+            port.changeState(
+                9L,
+                GamepadState(
+                    buttons = listOf(GamepadButtonValue(GamepadButton.South, 1.0, true)),
+                    axes = emptyList(),
+                ),
+            )
+            assertTrue(
+                formatter.formatGamepadEvent(gamepad, controlEvent.await())
+                    .startsWith("ButtonChanged g1 button=South value=1.0 pressed=true revision=1 sequence="),
+            )
+            assertEquals(1.0, observedControlEvent.await().value.value)
+            observations.remove(gamepad.id)
+            session.close()
+            session.awaitTermination()
+            assertTrue(port.closed)
+        } finally {
+            parentScope.cancel()
+        }
+    }
+
+    @Test
+    fun embeddedSessionProjectsTheConfiguredHidPortAndClosesItWithTheSession() = kotlinx.coroutines.runBlocking {
+        val native = EmbeddedNativeApplication()
+        val port = ProviderInputDevicePort(
+            listOf(
+                InputDevicePortDevice(
+                    42L,
+                    InputDeviceDescriptor("Provider keyboard", InputDeviceKind.Keyboard),
+                ),
+            ),
+        )
+        val provider = AppKitBackendProvider.forTesting(
+            nativeApplication = native,
+            broker = AppKitProcessBroker(),
+            inputDevicePortFactory = { port },
+            availability = { true },
+        )
+        val parentScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob())
+        val observedInventory = CompletableDeferred<DeviceInventory>()
+        val observedDevices = CompletableDeferred<DeviceManager>()
+
+        try {
+            val session = provider.attach(
+                DesktopEmbeddedRequest(
+                    parentScope,
+                    KadreApplicationFactory {
+                        KadreApplication {
+                            observedInventory.complete(devices.state.value.inventory)
+                            observedDevices.complete(devices)
+                            kotlinx.coroutines.awaitCancellation()
+                        }
+                    },
+                    DesktopIntegrationKind.AppKitMainLoop,
+                    KadrePolicies.Default,
+                ),
+            ).requireSession()
+
+            val inventory = assertIs<DeviceInventory.Enumerated>(observedInventory.await())
+            assertEquals(listOf("Provider keyboard"), inventory.devices.map { it.descriptor.name })
+            assertEquals(
+                "enumerated devices=[d1{name=\"Provider keyboard\",kind=Keyboard,connection=Connected}] gamepads=[]",
+                Phase10ManualInventoryFormatter().formatInventory(inventory),
+            )
+            val formatter = Phase10ManualInventoryFormatter()
+            formatter.formatInventory(inventory)
+            val removal = async(start = CoroutineStart.UNDISPATCHED) {
+                observedDevices.await().events.filterIsInstance<DeviceLifecycleEvent.DeviceRemoved>().first()
+            }
+            port.emit(InputDevicePortEvent.Disconnected(42L))
+            assertTrue(formatter.formatEvent(removal.await()).startsWith("DeviceRemoved d1 revision=1 sequence="))
+            session.close()
+            session.awaitTermination()
+            assertTrue(port.closed)
+        } finally {
+            parentScope.cancel()
+        }
+    }
+
+    @Test
+    fun embeddedPublicSessionPublishesExclusiveFullscreenAfterDisplayEnumerationWithoutCapture() =
+        kotlinx.coroutines.runBlocking {
+            val displayNative = ProviderExclusiveDisplayNative()
+            var captureAttempts = 0
+            val broker = AppKitProcessBroker(
+                displayBrokerFactory = { AppKitDisplayBroker(displayNative) },
+                exclusiveDisplayBridge = object : AppKitExclusiveDisplayBridge {
+                    override val availability: AppKitExclusiveBridgeAvailability = AppKitExclusiveBridgeAvailability.Available
+
+                    override fun open(displayKey: Long, modeKey: Long): AppKitExclusiveDisplayOpenResult {
+                        captureAttempts += 1
+                        error("the capability proof must not capture a display")
+                    }
+                },
+            )
+            val provider = AppKitBackendProvider.forTesting(
+                nativeApplication = EmbeddedNativeApplication(),
+                broker = broker,
+                windowDriverFactory = AppKitWindowRuntimeDriverFactory {
+                    DeterministicAppKitNativeWindowPort("public-exclusive-capability")
+                },
+                displayPortFactory = broker::openDisplayPort,
+                availability = { true },
+            )
+            val parentScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob())
+            val observedWindows = CompletableDeferred<WindowManager>()
+            val observedDisplays = CompletableDeferred<DisplayManager>()
+            val session = provider.attach(
+                publicWindowAndDisplayRequest(parentScope, observedWindows, observedDisplays),
+            ).requireSession()
+
+            try {
+                val displays = withTimeout(2.seconds) { observedDisplays.await() }
+                assertIs<DisplayInventory.Enumerated>(displays.requestAccess().appKitSuccessValue().inventory)
+
+                val window = assertIs<WindowRequestOutcome.OpenedHere>(
+                    withTimeout(2.seconds) {
+                        observedWindows.await().requestWindow(WindowSpec(title = "public-exclusive-capability"))
+                            .appKitSuccessValue()
+                            .await()
+                    },
+                ).window
+                assertEquals(
+                    Capability.Supported(
+                        setOf(FullscreenKind.Borderless, FullscreenKind.Exclusive),
+                        FeatureAvailability.Available,
+                    ),
+                    window.capabilities.value.fullscreen,
+                )
+                assertEquals(0, captureAttempts)
+            } finally {
+                session.close()
+                session.awaitTermination()
+                parentScope.cancel()
+            }
+        }
 
     @OptIn(org.graphiks.kadre.diagnostics.DelicateKadreApi::class)
     @Test
@@ -942,6 +1234,72 @@ class AppKitBackendProviderTest {
         }
 
     @Test
+    fun publicAppKitSurfacePublishesAppearanceStateBeforeItsEventAndIgnoresLateCallbacks() =
+        kotlinx.coroutines.runBlocking {
+            val port = DeterministicAppKitNativeWindowPort(
+                name = "public-surface-appearance",
+                initialSurfaceSnapshot = deterministicSurfaceSnapshot().copy(
+                    appearance = SurfaceAppearance(SurfaceTheme.Light, SurfaceContrast.Normal),
+                ),
+            )
+            val provider = AppKitBackendProvider.forTesting(
+                EmbeddedNativeApplication(),
+                AppKitProcessBroker(),
+                windowDriverFactory = AppKitWindowRuntimeDriverFactory { port },
+            ) { true }
+            val parentScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob())
+            val observedWindows = CompletableDeferred<WindowManager>()
+            val session = provider.attach(publicWindowRequest(parentScope, observedWindows)).requireSession()
+
+            try {
+                val windows = withTimeout(2.seconds) { observedWindows.await() }
+                val window = assertIs<WindowRequestOutcome.OpenedHere>(
+                    windows.requestWindow(WindowSpec(title = "surface-appearance"))
+                        .appKitSuccessValue()
+                        .await(),
+                ).window
+                val surface = window.surface
+                val events = Channel<Pair<SurfaceEvent, SurfaceState>>(Channel.UNLIMITED)
+                val collector = launch(start = CoroutineStart.UNDISPATCHED) {
+                    surface.events.collect { event ->
+                        events.send(event to surface.state.value)
+                    }
+                }
+                try {
+                    val appearance = SurfaceAppearance(SurfaceTheme.Dark, SurfaceContrast.High)
+                    port.emitSurfaceAppearance("surface-appearance", appearance)
+
+                    val (received, stateAtEventPublication) = withTimeout(2.seconds) { events.receive() }
+                    val event = assertIs<SurfaceEvent.AppearanceChanged>(received)
+                    assertEquals(appearance, event.state.appearance)
+                    assertEquals(event.state, stateAtEventPublication)
+
+                    port.emitSurfaceAppearance("surface-appearance", appearance)
+                    yield()
+                    assertTrue(events.tryReceive().isFailure)
+
+                    window.close().appKitSuccessValue()
+                    val terminal = withTimeout(2.seconds) {
+                        surface.state.first { it.attachment == SurfaceAttachmentState.Detached }
+                    }
+                    port.forceLateSurfaceAppearance(
+                        "surface-appearance",
+                        SurfaceAppearance(SurfaceTheme.Light, SurfaceContrast.Normal),
+                    )
+                    yield()
+                    assertEquals(terminal, surface.state.value)
+                    assertTrue(events.tryReceive().isFailure)
+                } finally {
+                    collector.cancel()
+                }
+            } finally {
+                session.close()
+                session.awaitTermination()
+                parentScope.cancel()
+            }
+        }
+
+    @Test
     fun publicAppKitSurfaceIgnoresLateNativeValuesAfterTerminalClose() =
         kotlinx.coroutines.runBlocking {
             val port = DeterministicAppKitNativeWindowPort(
@@ -1010,6 +1368,7 @@ class AppKitBackendProviderTest {
                 AppKitProcessBroker(),
                 windowDriverFactory = AppKitWindowRuntimeDriverFactory { port },
                 fullscreenAvailability = AppKitFullscreenAvailability("10.7.0"),
+                displayAvailability = AppKitDisplayAvailability("26.0"),
             ) { true }
             val parentScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob())
             val observedWindows = CompletableDeferred<WindowManager>()
@@ -1083,8 +1442,11 @@ class AppKitBackendProviderTest {
                     Capability.Supported(Unit, FeatureAvailability.Available),
                     windowCapabilities.transparency,
                 )
-                listOf<Capability<*>>(
+                assertEquals(
+                    Capability.Supported(Unit, FeatureAvailability.Available),
                     windowCapabilities.outerPosition,
+                )
+                listOf<Capability<*>>(
                     windowCapabilities.blurBehind,
                     windowCapabilities.icon,
                     windowCapabilities.attention,
@@ -1761,7 +2123,7 @@ class AppKitBackendProviderTest {
         org.graphiks.kadre.diagnostics.KadrePlatformApi::class,
     )
     @Test
-    fun publicAppKitWindowActivatesTheTenProvenUpdateCapabilitiesOnMacOs() =
+    fun publicAppKitWindowActivatesTheElevenProvenUpdateCapabilitiesOnMacOs26() =
         runPublicAppKitGeometrySession {
             val window = openPublicGeometryWindow("public-geometry-capabilities")
             val range = LogicalSizeRange(null, null, null)
@@ -1823,6 +2185,10 @@ class AppKitBackendProviderTest {
                 window.capabilities.value.transparency,
             )
             assertEquals(
+                Capability.Supported(Unit, FeatureAvailability.Available),
+                window.capabilities.value.outerPosition,
+            )
+            assertEquals(
                 Capability.Supported(
                     setOf(WindowAttention.None, WindowAttention.Informational, WindowAttention.Critical),
                     FeatureAvailability.Available,
@@ -1831,7 +2197,6 @@ class AppKitBackendProviderTest {
             )
             assertNull(window.state.value.outerBounds)
             listOf<Capability<*>>(
-                window.capabilities.value.outerPosition,
                 window.capabilities.value.blurBehind,
                 window.capabilities.value.icon,
                 window.capabilities.value.contentProtection,
@@ -1930,7 +2295,18 @@ class AppKitBackendProviderTest {
                     readNativeWindowChrome(window),
                 )
                 val systemProperties = withTimeout(5.seconds) {
-                    assertIs<WindowEvent.PropertiesChanged>(events.receive())
+                    var properties: WindowEvent.PropertiesChanged? = null
+                    while (properties == null) {
+                        when (val event = events.receive()) {
+                            is WindowEvent.GeometryChanged -> {
+                                assertEquals(systemOutcome.operationId, event.operationId)
+                                assertEquals(systemOutcome.state, event.state)
+                            }
+                            is WindowEvent.PropertiesChanged -> properties = event
+                            else -> error("expected correlated geometry or properties event, got $event")
+                        }
+                    }
+                    checkNotNull(properties)
                 }
                 assertEquals(systemOutcome.operationId, systemProperties.operationId)
                 assertEquals(systemOutcome.state, systemProperties.state)
@@ -3235,6 +3611,86 @@ class AppKitBackendProviderTest {
     }
 
     @Test
+    fun phase9MemoryPressureHarnessWritesAnHonestNoninteractiveRecordOnMacOs() {
+        if (!isMacOs()) return
+        val record = Files.createTempFile("kadre-phase9-memory-pressure-harness", ".tsv")
+        val output = Files.createTempFile("kadre-phase9-memory-pressure-harness", ".log")
+        try {
+            val process = ProcessBuilder(
+                Path.of(System.getProperty("java.home"), "bin", "java").toString(),
+                "--enable-native-access=ALL-UNNAMED",
+                "-cp",
+                System.getProperty("java.class.path"),
+                "org.graphiks.kadre.internal.appkit.manual.Phase9MemoryPressureHarnessKt",
+                "--record=$record",
+                "--build-id=automated-memory-pressure-harness-proof",
+                "--automated",
+            ).redirectErrorStream(true)
+                .redirectOutput(output.toFile())
+                .start()
+
+            process.outputStream.bufferedWriter().use { commands ->
+                commands.appendLine("status")
+                commands.appendLine("result M1 pass automated proof must not claim a manual result")
+                commands.appendLine("result M1 not-applicable automated proof does not create native memory pressure")
+                commands.appendLine("result M2 pass automated proof must not claim unobserved pressure")
+                commands.appendLine("result M2 not-applicable automated proof does not create native memory pressure")
+                commands.appendLine("result M3 pass automated proof must not claim a manual result")
+                commands.appendLine("result M3 not-applicable automated proof does not create native memory pressure")
+                commands.appendLine("close-session 1")
+                commands.appendLine("status")
+                commands.appendLine("result M4 pass automated proof must not claim unobserved post-close pressure")
+                commands.appendLine("result M4 not-applicable automated proof does not create native memory pressure")
+                commands.appendLine("close")
+                commands.appendLine("result M5 pass automated proof must not claim a manual result")
+                commands.appendLine("result M5 not-applicable automated proof does not create native memory pressure")
+                commands.appendLine("finish")
+            }
+            val completed = process.waitFor(30, TimeUnit.SECONDS)
+            if (!completed) process.destroyForcibly()
+            val processOutput = Files.readString(output)
+            assertTrue(completed, processOutput)
+            assertEquals(0, process.exitValue(), processOutput)
+
+            val report = Files.readString(record)
+            assertTrue(report.contains("RUN_METADATA\t"), report)
+            listOf(
+                "macOS=",
+                "architecture=",
+                "hardware=",
+                "schemaVersion=1",
+                "executionMode=automated",
+                "buildId=automated-memory-pressure-harness-proof",
+                "sessionCount=2",
+            ).forEach { field -> assertTrue(report.contains(field), "$field missing from:\n$report") }
+            assertTrue(report.contains("CAPABILITY\tinitial\t"), report)
+            assertEquals(
+                5,
+                report.lineSequence().count {
+                    it == "COMMAND\tresult-rejected\tautomated runs cannot record pass"
+                },
+                report,
+            )
+            assertTrue(report.contains("COMMAND\tclose-session\tindex=1"), report)
+            assertTrue(report.contains("TERMINAL_STABILITY\tnoLateMemoryPressure=true"), report)
+            assertTrue(report.contains("SOURCE_TERMINATED\trequested"), report)
+            (1..5).forEach { scenario ->
+                assertTrue(
+                    report.contains(
+                        "SCENARIO\tM$scenario\tnot-applicable\t" +
+                            "automated proof does not create native memory pressure",
+                    ),
+                    report,
+                )
+            }
+            assertFalse(report.lineSequence().any { it.startsWith("SCENARIO\t") && "\tpass\t" in it }, report)
+        } finally {
+            Files.deleteIfExists(record)
+            Files.deleteIfExists(output)
+        }
+    }
+
+    @Test
     fun phase5AdvancedWindowHarnessWritesAnHonestNoninteractiveRecordOnMacOs() {
         if (!isMacOs()) return
         val record = Files.createTempFile("kadre-phase5-advanced-window-harness", ".tsv")
@@ -3840,6 +4296,23 @@ private fun publicWindowRequest(
     allowUserAttention,
 )
 
+private fun publicWindowAndDisplayRequest(
+    parentScope: kotlinx.coroutines.CoroutineScope,
+    captureWindows: CompletableDeferred<WindowManager>,
+    captureDisplays: CompletableDeferred<DisplayManager>,
+): DesktopEmbeddedRequest = DesktopEmbeddedRequest(
+    parentScope,
+    KadreApplicationFactory {
+        KadreApplication {
+            captureWindows.complete(windows)
+            captureDisplays.complete(displays)
+            kotlinx.coroutines.awaitCancellation()
+        }
+    },
+    DesktopIntegrationKind.AppKitMainLoop,
+    KadrePolicies.Default,
+)
+
 private class ProviderDisplayPort : DisplayPort {
     var closeCount: Int = 0
         private set
@@ -3856,6 +4329,30 @@ private class ProviderDisplayPort : DisplayPort {
     override fun close() {
         closeCount += 1
     }
+}
+
+private class ProviderExclusiveDisplayNative : AppKitDisplayNative {
+    override val enumerationCapability: Capability<Unit> = Capability.Supported(Unit, FeatureAvailability.Available)
+
+    override fun snapshot(): DisplayPortSnapshot = DisplayPortSnapshot(
+        primaryKey = 17L,
+        displays = listOf(
+            DisplayPortDisplay(
+                key = 17L,
+                type = org.graphiks.kadre.display.DisplayType.Physical,
+                name = "Exclusive capability display",
+                bounds = PhysicalRect(PhysicalPoint(0, 0), PhysicalSize(1920, 1080)),
+                workArea = PhysicalRect(PhysicalPoint(0, 0), PhysicalSize(1920, 1040)),
+                scaleFactor = 2.0,
+                currentModeKey = 701L,
+                modes = listOf(DisplayPortMode(701L, PhysicalSize(1920, 1080), 60.0, 24)),
+            ),
+        ),
+    )
+
+    override fun observeReconfiguration(listener: () -> Unit): AutoCloseable = AutoCloseable {}
+
+    override fun close() = Unit
 }
 
 private class ProviderRawInputPort : RawInputPort {
@@ -3890,6 +4387,63 @@ private class ProviderRawInputLease : RawInputPortLease {
 
     override fun close() {
         eventsChannel.close()
+    }
+}
+
+private class ProviderGamepadPort(
+    initialGamepads: List<GamepadPortGamepad> = emptyList(),
+) : GamepadPort {
+    private var observer: ((GamepadPortEvent) -> Unit)? = null
+    var closed: Boolean = false
+        private set
+
+    override val gamepads: List<GamepadPortGamepad> = initialGamepads
+
+    override fun installObserver(observer: (GamepadPortEvent) -> Unit): AutoCloseable {
+        check(this.observer == null) { "gamepad observer is already installed" }
+        this.observer = observer
+        return AutoCloseable {
+            if (this.observer === observer) this.observer = null
+        }
+    }
+
+    override fun updateRouting(routing: GamepadPortRouting) = Unit
+
+    override fun startEffect(key: Long, effect: GamepadEffect): KadreResult<GamepadPortEffect> =
+        KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.Gamepad))
+
+    fun changeState(key: Long, state: GamepadState) {
+        checkNotNull(observer)(GamepadPortEvent.StateChanged(key, state))
+    }
+
+    override fun close() {
+        closed = true
+        observer = null
+    }
+}
+
+private class ProviderInputDevicePort(
+    override val devices: List<InputDevicePortDevice>,
+) : InputDevicePort {
+    private var observer: ((InputDevicePortEvent) -> Unit)? = null
+    var closed: Boolean = false
+        private set
+
+    override fun installObserver(observer: (InputDevicePortEvent) -> Unit): AutoCloseable {
+        check(this.observer == null) { "input-device observer is already installed" }
+        this.observer = observer
+        return AutoCloseable {
+            if (this.observer === observer) this.observer = null
+        }
+    }
+
+    fun emit(event: InputDevicePortEvent) {
+        checkNotNull(observer)(event)
+    }
+
+    override fun close() {
+        closed = true
+        observer = null
     }
 }
 

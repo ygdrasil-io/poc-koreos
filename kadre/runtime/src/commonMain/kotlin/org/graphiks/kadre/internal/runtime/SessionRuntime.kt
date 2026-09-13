@@ -130,7 +130,23 @@ internal class SessionRuntime(
     private val runtimeWindows = runtimeComponents.windows.also {
         runtimeDisplayManager?.let(runtimeComponents::installExclusiveDisplayTargetResolver)
     }
-    private val runtimeDevices = UnsupportedDeviceManager(
+    private val runtimeGamepadManager = (
+        runtimeComponents.gamepadPort ?: runtimeComponents.inputDevicePort?.let { EmptyGamepadPort }
+    )?.let { port ->
+        RuntimeGamepadManager(
+            port = port,
+            inputPort = runtimeComponents.inputDevicePort,
+            eventStampSource = ::nextStamp,
+            collectorAllocator = eventCollectorAllocator,
+            maxCollectorsPerFlow = policy.resources.maxEventCollectorsPerFlow,
+            effectScope = rootScope,
+            maxConcurrentEffects = policy.resources.maxConcurrentGamepadEffects,
+            gamepadRouting = policy.devices.gamepadRouting,
+            initialLifecycleState = initialLifecycleState,
+            effectOwnership = policy.devices.effectOwnership,
+        )
+    }
+    private val runtimeDevices: DeviceManager = runtimeGamepadManager ?: UnsupportedDeviceManager(
         eventCollectorAllocator,
         policy.resources.maxEventCollectorsPerFlow,
     )
@@ -217,7 +233,10 @@ internal class SessionRuntime(
     }
 
     fun updateLifecycle(state: LifecycleState) {
-        if (!isFinished()) runtimeLifecycle.updateState(state)
+        if (!isFinished()) {
+            runtimeLifecycle.updateState(state)
+            runtimeGamepadManager?.updateLifecycle(state)
+        }
     }
 
     fun updateLifecycleCapabilities(capabilities: LifecycleCapabilities) {
@@ -225,7 +244,10 @@ internal class SessionRuntime(
     }
 
     fun emitMemoryPressure(level: MemoryPressureLevel) {
-        if (!isFinished()) runtimeLifecycle.emitMemoryPressure(level)
+        lock.withLock {
+            if (finished || selectedOutcome != null) return
+            runtimeLifecycle.emitMemoryPressure(level)
+        }
     }
 
     fun hostDetached() {
@@ -400,6 +422,9 @@ internal class SessionRuntime(
             .exceptionOrNull()
             ?.let(failureReporter)
         runCatching { (runtimeDisplays as? AutoCloseable)?.close() }
+            .exceptionOrNull()
+            ?.let(failureReporter)
+        runCatching { runtimeGamepadManager?.close() }
             .exceptionOrNull()
             ?.let(failureReporter)
         runCatching { runtimeComponents.close() }
