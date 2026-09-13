@@ -23,6 +23,7 @@ import org.graphiks.kadre.internal.runtime.RuntimeSessionComponentsFactory
 import org.graphiks.kadre.internal.runtime.RuntimeSessionObserver
 import org.graphiks.kadre.internal.runtime.RuntimeSessionStopHandler
 import org.graphiks.kadre.internal.runtime.DisplayPort
+import org.graphiks.kadre.internal.runtime.GamepadPort
 import org.graphiks.kadre.internal.runtime.RawInputPort
 import org.graphiks.kadre.internal.runtime.desktop.DesktopBackendKind
 import org.graphiks.kadre.internal.runtime.desktop.DesktopBackendProvider
@@ -41,6 +42,7 @@ public class AppKitBackendProvider private constructor(
     private val displayAvailability: AppKitDisplayAvailability,
     private val rawInputPortFactory: () -> RawInputPort?,
     private val displayPortFactory: () -> DisplayPort?,
+    private val gamepadPortFactory: () -> GamepadPort?,
     private val availability: () -> Boolean,
 ) : DesktopBackendProvider {
     public constructor() : this(
@@ -57,6 +59,7 @@ public class AppKitBackendProvider private constructor(
                 null
             }
         },
+        { if (isMacOs()) ProcessAppKitProcessBroker.value.openGameControllerPort() else null },
         ::isMacOs,
     )
 
@@ -245,6 +248,7 @@ public class AppKitBackendProvider private constructor(
             displayAvailability: AppKitDisplayAvailability = AppKitDisplayAvailability(),
             rawInputPortFactory: () -> RawInputPort? = { null },
             displayPortFactory: () -> DisplayPort? = { null },
+            gamepadPortFactory: () -> GamepadPort? = { null },
             availability: () -> Boolean,
         ): AppKitBackendProvider = AppKitBackendProvider(
             nativeApplication,
@@ -254,6 +258,7 @@ public class AppKitBackendProvider private constructor(
             displayAvailability,
             rawInputPortFactory,
             displayPortFactory,
+            gamepadPortFactory,
             availability,
         )
 
@@ -311,6 +316,7 @@ public class AppKitBackendProvider private constructor(
             windows = driver.manager,
             rawInputPort = rawInputPortFactory(),
             displayPort = displayPortFactory(),
+            gamepadPort = gamepadPortFactory(),
             closeAction = driver::close,
         )
     }

@@ -71,10 +71,17 @@ import org.graphiks.kadre.diagnostics.KadreResourceKind
 import org.graphiks.kadre.diagnostics.KadreResult
 import org.graphiks.kadre.display.DisplayInventory
 import org.graphiks.kadre.display.DisplayManager
+import org.graphiks.kadre.input.DeviceInventory
+import org.graphiks.kadre.input.GamepadEffect
 import org.graphiks.kadre.internal.runtime.DisplayPort
 import org.graphiks.kadre.internal.runtime.DisplayPortDisplay
 import org.graphiks.kadre.internal.runtime.DisplayPortMode
 import org.graphiks.kadre.internal.runtime.DisplayPortSnapshot
+import org.graphiks.kadre.internal.runtime.GamepadPort
+import org.graphiks.kadre.internal.runtime.GamepadPortEffect
+import org.graphiks.kadre.internal.runtime.GamepadPortEvent
+import org.graphiks.kadre.internal.runtime.GamepadPortGamepad
+import org.graphiks.kadre.internal.runtime.GamepadPortRouting
 import org.graphiks.kadre.internal.runtime.RawInputPort
 import org.graphiks.kadre.internal.runtime.RawInputPortInput
 import org.graphiks.kadre.internal.runtime.RawInputPortLease
@@ -464,6 +471,43 @@ class AppKitBackendProviderTest {
             session.close()
             session.awaitTermination()
             assertEquals(1, port.closeCount)
+        } finally {
+            parentScope.cancel()
+        }
+    }
+
+    @Test
+    fun embeddedSessionProjectsTheConfiguredGamepadPortAndClosesItWithTheSession() = kotlinx.coroutines.runBlocking {
+        val native = EmbeddedNativeApplication()
+        val port = ProviderGamepadPort()
+        val provider = AppKitBackendProvider.forTesting(
+            nativeApplication = native,
+            broker = AppKitProcessBroker(),
+            gamepadPortFactory = { port },
+            availability = { true },
+        )
+        val parentScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob())
+        val observedInventory = CompletableDeferred<DeviceInventory>()
+
+        try {
+            val session = provider.attach(
+                DesktopEmbeddedRequest(
+                    parentScope,
+                    KadreApplicationFactory {
+                        KadreApplication {
+                            observedInventory.complete(devices.state.value.inventory)
+                            kotlinx.coroutines.awaitCancellation()
+                        }
+                    },
+                    DesktopIntegrationKind.AppKitMainLoop,
+                    KadrePolicies.Default,
+                ),
+            ).requireSession()
+
+            assertIs<DeviceInventory.Enumerated>(observedInventory.await())
+            session.close()
+            session.awaitTermination()
+            assertTrue(port.closed)
         } finally {
             parentScope.cancel()
         }
@@ -4214,6 +4258,24 @@ private class ProviderRawInputLease : RawInputPortLease {
 
     override fun close() {
         eventsChannel.close()
+    }
+}
+
+private class ProviderGamepadPort : GamepadPort {
+    var closed: Boolean = false
+        private set
+
+    override val gamepads: List<GamepadPortGamepad> = emptyList()
+
+    override fun installObserver(observer: (GamepadPortEvent) -> Unit): AutoCloseable = AutoCloseable { }
+
+    override fun updateRouting(routing: GamepadPortRouting) = Unit
+
+    override fun startEffect(key: Long, effect: GamepadEffect): KadreResult<GamepadPortEffect> =
+        KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.Gamepad))
+
+    override fun close() {
+        closed = true
     }
 }
 
