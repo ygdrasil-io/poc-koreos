@@ -11,9 +11,24 @@ permissions:
 
 jobs:
   appkit-contracts:
-    name: appkit-contracts
-    runs-on: macos-26
+    name: appkit-contracts (${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
     timeout-minutes: 15
+
+    strategy:
+      # Both legs must always run so that a failure on one architecture never
+      # hides the proof produced on the other.
+      fail-fast: false
+      matrix:
+        include:
+          # arm64 never takes the x86_64-only Objective-C struct-return path
+          # (objc_msgSend_stret), so Intel needs its own leg to be exercised.
+          - arch: arm64
+            runner: macos-26
+            artifacts: appkit-contract-artifacts
+          - arch: x86_64
+            runner: macos-26-intel
+            artifacts: appkit-contract-artifacts-x86_64
 
     steps:
       - name: Checkout
@@ -51,7 +66,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: appkit-contract-artifacts
+          name: ${{ matrix.artifacts }}
           path: |
             kadre/backend/appkit/build/contract-evidence/
             kadre/backend/appkit/build/test-results/
