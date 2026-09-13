@@ -45,6 +45,7 @@ import org.graphiks.kadre.internal.runtime.CapturePortSources
 import org.graphiks.kadre.internal.runtime.CapturePortStream
 import org.graphiks.kadre.internal.runtime.CapturePortStreamListener
 import org.graphiks.kadre.internal.runtime.CapturePortStreamStart
+import org.graphiks.kadre.internal.runtime.CapturePortTermination
 import org.graphiks.kadre.internal.runtime.CapturePortTarget
 import org.graphiks.kadre.surface.PhysicalSize
 import org.graphiks.kffi.objc.appkit.ScreenCaptureCapability
@@ -440,7 +441,9 @@ private class AppKitCaptureReservation(
             val terminal = AtomicBoolean(false)
             continuation.invokeOnCancellation { owner.close() }
             fun terminate(outcome: CaptureOutcome) {
-                if (terminal.compareAndSet(false, true)) listener.onTerminated(outcome)
+                if (terminal.compareAndSet(false, true)) {
+                    listener.onTerminated(CapturePortTermination.Outcome(outcome))
+                }
             }
             try {
                 owner.install(native.start(

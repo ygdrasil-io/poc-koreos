@@ -171,6 +171,26 @@ class RuntimeCaptureSessionTest {
     }
 
     @Test
+    fun backendSourceLossIsMappedToThePublishedSourceIdentity() = runTest {
+        val port = AdmissionCapturePort(enumeratedSnapshot(name = "Primary"))
+        val manager = RuntimeCaptureManager(port, maxConcurrentSessions = 1)
+        val selected = source(manager)
+        val reservation = StreamingCaptureReservation(portSource("Primary"))
+        port.reservations.addLast(KadreResult.Success(reservation))
+        val session = successValue(
+            manager.open(CaptureRequest(CaptureTarget.Source(selected.id, selected.managerRevision))),
+        )
+        val collecting = async { session.collectFrames { } }
+        runCurrent()
+
+        reservation.complete(CapturePortTermination.SourceLost)
+
+        val expected = KadreFailure.SourceLost(selected.id)
+        assertEquals(KadreResult.Failure(expected), collecting.await())
+        assertEquals(CaptureSessionState.Terminated(CaptureOutcome.Failed(expected)), session.state.value)
+    }
+
+    @Test
     fun secondCollectorIsRejectedWithoutRestartingTheReservedStream() = runTest {
         val port = AdmissionCapturePort(enumeratedSnapshot(name = "Primary"))
         val manager = RuntimeCaptureManager(port, maxConcurrentSessions = 1)
@@ -456,7 +476,11 @@ private class StreamingCaptureReservation(
     }
 
     fun complete(outcome: CaptureOutcome) {
-        checkNotNull(listener).onTerminated(outcome)
+        complete(CapturePortTermination.Outcome(outcome))
+    }
+
+    fun complete(termination: CapturePortTermination) {
+        checkNotNull(listener).onTerminated(termination)
     }
 
     fun emit(frame: CapturePortFrame) {

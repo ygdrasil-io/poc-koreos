@@ -247,6 +247,21 @@ private fun PixelPlaneLayout.requireLayout(
 
 private fun Int.ceilHalf(): Int = this / 2 + this % 2
 
+/**
+ * Backend-private terminal fact for a capture stream.
+ *
+ * A port cannot construct a public [org.graphiks.kadre.capture.CaptureSourceId], because that
+ * identity is assigned by the runtime after source admission. [SourceLost] is therefore carried
+ * without an invented identifier and projected to the session's published source by the runtime.
+ */
+public sealed interface CapturePortTermination {
+    /** A terminal outcome that does not require the runtime to attach a source identity. */
+    public data class Outcome(public val outcome: CaptureOutcome) : CapturePortTermination
+
+    /** The backend knows that its admitted source disappeared. */
+    public data object SourceLost : CapturePortTermination
+}
+
 /** Callback boundary for a stream owned by one [CapturePortReservation]. */
 public interface CapturePortStreamListener {
     /** Transfers a detached frame. The backend must not retain or mutate its bytes afterwards. */
@@ -255,8 +270,8 @@ public interface CapturePortStreamListener {
     /** Publishes a complete effective configuration before the first frame using its revision. */
     public fun onReconfigured(configuration: CaptureConfiguration)
 
-    /** The running stream reached one terminal capture outcome. */
-    public fun onTerminated(outcome: CaptureOutcome)
+    /** The running stream reached one terminal backend fact. */
+    public fun onTerminated(termination: CapturePortTermination)
 }
 
 /**
