@@ -1195,6 +1195,7 @@ class AppKitBackendProviderTest {
                 AppKitProcessBroker(),
                 windowDriverFactory = AppKitWindowRuntimeDriverFactory { port },
                 fullscreenAvailability = AppKitFullscreenAvailability("10.7.0"),
+                displayAvailability = AppKitDisplayAvailability("26.0"),
             ) { true }
             val parentScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob())
             val observedWindows = CompletableDeferred<WindowManager>()
@@ -1268,8 +1269,11 @@ class AppKitBackendProviderTest {
                     Capability.Supported(Unit, FeatureAvailability.Available),
                     windowCapabilities.transparency,
                 )
-                listOf<Capability<*>>(
+                assertEquals(
+                    Capability.Supported(Unit, FeatureAvailability.Available),
                     windowCapabilities.outerPosition,
+                )
+                listOf<Capability<*>>(
                     windowCapabilities.blurBehind,
                     windowCapabilities.icon,
                     windowCapabilities.attention,
@@ -1946,7 +1950,7 @@ class AppKitBackendProviderTest {
         org.graphiks.kadre.diagnostics.KadrePlatformApi::class,
     )
     @Test
-    fun publicAppKitWindowActivatesTheTenProvenUpdateCapabilitiesOnMacOs() =
+    fun publicAppKitWindowActivatesTheElevenProvenUpdateCapabilitiesOnMacOs26() =
         runPublicAppKitGeometrySession {
             val window = openPublicGeometryWindow("public-geometry-capabilities")
             val range = LogicalSizeRange(null, null, null)
@@ -2008,6 +2012,10 @@ class AppKitBackendProviderTest {
                 window.capabilities.value.transparency,
             )
             assertEquals(
+                Capability.Supported(Unit, FeatureAvailability.Available),
+                window.capabilities.value.outerPosition,
+            )
+            assertEquals(
                 Capability.Supported(
                     setOf(WindowAttention.None, WindowAttention.Informational, WindowAttention.Critical),
                     FeatureAvailability.Available,
@@ -2016,7 +2024,6 @@ class AppKitBackendProviderTest {
             )
             assertNull(window.state.value.outerBounds)
             listOf<Capability<*>>(
-                window.capabilities.value.outerPosition,
                 window.capabilities.value.blurBehind,
                 window.capabilities.value.icon,
                 window.capabilities.value.contentProtection,

@@ -5510,6 +5510,28 @@ class RuntimeWindowManagerTest {
     }
 
     @Test
+    fun enabledInitialOuterPositionIsAdmittedAndPublishedAsSupported() = runTest {
+        val port = DeterministicWindowCommandPort()
+        val manager = manager(
+            port,
+            publicWindowCapabilities = true,
+            enabledWindowUpdateCapabilities = setOf(WindowProperty.OuterPosition),
+        )
+        val requested = PhysicalPoint(-240, 160)
+
+        val request = manager.requestWindow(WindowSpec(outerPosition = requested)).successValue()
+        val command = port.openCommands.single()
+        assertEquals(requested, command.spec.outerPosition)
+
+        val window = commit(request, command)
+
+        assertEquals(
+            Capability.Supported(Unit, FeatureAvailability.Available),
+            window.capabilities.value.outerPosition,
+        )
+    }
+
+    @Test
     fun structurallyUnsupportedInitialFieldsRejectEvenWhenCapabilityPublicationIsDisabled() = runTest {
         listOf(
             WindowSpec(blurBehind = true),

@@ -38,6 +38,7 @@ public class AppKitBackendProvider private constructor(
     private val broker: AppKitProcessBroker,
     private val windowDriverFactory: AppKitWindowRuntimeDriverFactory,
     private val fullscreenAvailability: AppKitFullscreenAvailability,
+    private val displayAvailability: AppKitDisplayAvailability,
     private val rawInputPortFactory: () -> RawInputPort?,
     private val displayPortFactory: () -> DisplayPort?,
     private val availability: () -> Boolean,
@@ -47,6 +48,7 @@ public class AppKitBackendProvider private constructor(
         ProcessAppKitProcessBroker.value,
         AppKitWindowRuntimeDriverFactory(),
         AppKitFullscreenAvailability(),
+        AppKitDisplayAvailability(),
         { if (isMacOs()) ProcessAppKitProcessBroker.value.openRawInputPort() else null },
         {
             if (isMacOs() && AppKitDisplayAvailability().isAvailable) {
@@ -240,6 +242,7 @@ public class AppKitBackendProvider private constructor(
             broker: AppKitProcessBroker,
             windowDriverFactory: AppKitWindowRuntimeDriverFactory = AppKitWindowRuntimeDriverFactory(),
             fullscreenAvailability: AppKitFullscreenAvailability = AppKitFullscreenAvailability(),
+            displayAvailability: AppKitDisplayAvailability = AppKitDisplayAvailability(),
             rawInputPortFactory: () -> RawInputPort? = { null },
             displayPortFactory: () -> DisplayPort? = { null },
             availability: () -> Boolean,
@@ -248,6 +251,7 @@ public class AppKitBackendProvider private constructor(
             broker,
             windowDriverFactory,
             fullscreenAvailability,
+            displayAvailability,
             rawInputPortFactory,
             displayPortFactory,
             availability,
@@ -291,7 +295,8 @@ public class AppKitBackendProvider private constructor(
         val driver = windowDriverFactory.create(
             resources = resources,
             publicAppKitCapabilities = true,
-            enabledWindowUpdateCapabilities = APPKIT_PUBLIC_WINDOW_UPDATE_CAPABILITIES,
+            enabledWindowUpdateCapabilities = APPKIT_PUBLIC_WINDOW_UPDATE_CAPABILITIES +
+                if (displayAvailability.isAvailable) setOf(WindowProperty.OuterPosition) else emptySet(),
             fullscreenAvailabilityFailure = if (fullscreenAvailability.isAvailable) {
                 null
             } else {

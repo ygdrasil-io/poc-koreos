@@ -73,6 +73,9 @@ import org.graphiks.kadre.surface.LogicalDelta
 import org.graphiks.kadre.surface.LogicalInsets
 import org.graphiks.kadre.surface.LogicalPoint
 import org.graphiks.kadre.surface.LogicalSize
+import org.graphiks.kadre.surface.PhysicalPoint
+import org.graphiks.kadre.surface.PhysicalRect
+import org.graphiks.kadre.surface.PhysicalSize
 import org.graphiks.kadre.surface.PropertyChange
 import org.graphiks.kadre.surface.SurfaceFocus
 import org.graphiks.kadre.surface.SurfaceOcclusion
@@ -3272,7 +3275,10 @@ class AppKitWindowRuntimeDriverTest {
             maximumSize = null,
             resizable = true,
         )
-        val external = managed.copy(contentSize = LogicalSize(512.0, 320.0))
+        val external = managed.copy(
+            contentSize = LogicalSize(512.0, 320.0),
+            outerBounds = PhysicalRect(PhysicalPoint(-1_312, 348), PhysicalSize(1_600, 900)),
+        )
         val port = DeterministicAppKitNativeWindowPort(
             name = "geometry-callbacks",
             effectiveGeometry = managed,
@@ -3299,6 +3305,7 @@ class AppKitWindowRuntimeDriverTest {
 
             assertEquals(2L, observed.revision.value)
             assertEquals(external.contentSize, observed.contentSize)
+            assertEquals(external.outerBounds, observed.outerBounds)
         } finally {
             driver.close()
         }
@@ -3422,6 +3429,85 @@ class AppKitWindowRuntimeDriverTest {
             assertEquals(WindowProperty.Resizable, outcome.rejected.single().field)
             assertIs<KadreFailure.PlatformFailure>(outcome.rejected.single().failure)
             assertEquals(listOf<Throwable>(failure), reported)
+        } finally {
+            driver.close()
+        }
+    }
+
+    @Test
+    fun outerPositionPublishesTheCertifiedNativeBoundsInsteadOfTheRequestedPoint() = runBlocking {
+        val requested = PhysicalPoint(-1_280, 360)
+        val certifiedBounds = PhysicalRect(
+            origin = PhysicalPoint(-1_312, 348),
+            size = PhysicalSize(1_600, 900),
+        )
+        val port = DeterministicAppKitNativeWindowPort(
+            name = "outer-position-readback",
+            effectiveGeometry = AppKitWindowGeometrySnapshot(
+                contentSize = LogicalSize(800.0, 600.0),
+                minimumSize = null,
+                maximumSize = null,
+                resizable = true,
+                outerBounds = certifiedBounds,
+            ),
+        )
+        val driver = AppKitWindowRuntimeDriverFactory { port }.create(
+            resources = KadrePolicies.Default.resources,
+            publicAppKitCapabilities = true,
+            enabledWindowUpdateCapabilities = publicAppKitUpdateProperties() + WindowProperty.OuterPosition,
+        )
+
+        try {
+            val window = openedWindow(driver, WindowSpec(title = "outer-position-readback"))
+
+            val outcome = assertIs<WindowUpdateOutcome.Applied>(
+                window.apply(WindowUpdate(outerPosition = PropertyChange.Set(requested))).successValue(),
+            )
+
+            assertEquals(certifiedBounds, outcome.state.outerBounds)
+            assertEquals(certifiedBounds, window.state.value.outerBounds)
+            assertEquals(PropertyChange.Set(requested), port.geometryTargets.single().outerPosition)
+        } finally {
+            driver.close()
+        }
+    }
+
+    @Test
+    fun initialOuterPositionPublishesThePostPresentationCertifiedBounds() = runBlocking {
+        val requested = PhysicalPoint(-1_280, 360)
+        val certifiedBounds = PhysicalRect(
+            origin = PhysicalPoint(-1_312, 348),
+            size = PhysicalSize(1_600, 900),
+        )
+        val port = DeterministicAppKitNativeWindowPort(
+            name = "initial-outer-position-readback",
+            effectiveGeometry = AppKitWindowGeometrySnapshot(
+                contentSize = LogicalSize(800.0, 600.0),
+                minimumSize = null,
+                maximumSize = null,
+                resizable = true,
+                outerBounds = certifiedBounds,
+            ),
+        )
+        val driver = AppKitWindowRuntimeDriverFactory { port }.create(
+            resources = KadrePolicies.Default.resources,
+            publicAppKitCapabilities = true,
+            enabledWindowUpdateCapabilities = publicAppKitUpdateProperties() + WindowProperty.OuterPosition,
+        )
+
+        try {
+            val window = openedWindow(
+                driver,
+                WindowSpec(title = "initial-outer-position-readback", outerPosition = requested),
+            )
+
+            assertEquals(
+                certifiedBounds,
+                withTimeout(2.seconds) {
+                    window.state.first { it.outerBounds == certifiedBounds }
+                }.outerBounds,
+            )
+            assertEquals(PropertyChange.Set(requested), port.geometryTargets.single().outerPosition)
         } finally {
             driver.close()
         }
@@ -6199,6 +6285,8 @@ private data object RecordingNativeDropItemSource : DropItemSource {
 private fun AppKitWindowGeometrySnapshot.updateFor(
     target: AppKitWindowGeometryTarget,
 ): AppKitWindowGeometrySnapshot = copy(
+    outerBounds = target.outerPosition.resolve(outerBounds?.origin)
+        ?.let { origin -> outerBounds?.copy(origin = origin) },
     contentSize = target.contentSize.resolve(contentSize),
     minimumSize = target.minimumSize.resolve(minimumSize),
     maximumSize = target.maximumSize.resolve(maximumSize),
@@ -6206,7 +6294,8 @@ private fun AppKitWindowGeometrySnapshot.updateFor(
 )
 
 private fun AppKitWindowGeometryTarget.hasChange(): Boolean =
-    contentSize !is PropertyChange.Unchanged ||
+    outerPosition !is PropertyChange.Unchanged ||
+        contentSize !is PropertyChange.Unchanged ||
         minimumSize !is PropertyChange.Unchanged ||
         maximumSize !is PropertyChange.Unchanged ||
         resizable !is PropertyChange.Unchanged

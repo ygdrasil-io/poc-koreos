@@ -32,6 +32,9 @@ import org.graphiks.kadre.surface.LogicalDelta
 import org.graphiks.kadre.surface.LogicalPoint
 import org.graphiks.kadre.surface.LogicalRect
 import org.graphiks.kadre.surface.LogicalSize
+import org.graphiks.kadre.surface.PhysicalPoint
+import org.graphiks.kadre.surface.PhysicalRect
+import org.graphiks.kadre.surface.PhysicalSize
 import org.graphiks.kadre.surface.PropertyChange
 import org.graphiks.kadre.surface.SurfaceAppearance
 import org.graphiks.kadre.surface.SurfaceContrast
@@ -85,6 +88,10 @@ import org.graphiks.kffi.objc.appkit.ExclusiveWindowPresentationRestoreResult
 import org.graphiks.kffi.objc.appkit.ExclusiveWindowPresentationReadbackResult
 import org.graphiks.kffi.objc.appkit.ExclusiveWindowPresentationServices
 import org.graphiks.kffi.objc.appkit.ExclusiveWindowPresentationTerminalRestoration
+import org.graphiks.kffi.objc.appkit.AppKitWindowGeometryReadResult
+import org.graphiks.kffi.objc.appkit.AppKitWindowGeometryServices
+import org.graphiks.kffi.objc.appkit.AppKitWindowGeometrySetResult
+import org.graphiks.kffi.objc.appkit.WindowOuterBoundsSnapshot
 import org.graphiks.kffi.objc.ObjCRuntime
 import org.graphiks.kffi.objc.accessibilityDisplayShouldIncreaseContrast
 import org.graphiks.kffi.objc.allowedTouchTypes
@@ -1168,6 +1175,23 @@ private class KffiWindowOwner(
         window.setStyleMask(window.styleMask().withResizable(resizable))
         val chrome = readChrome()
         applyChrome(chrome.decorations, chrome.systemButtons, resizable)
+        when (val outerPosition = target.outerPosition) {
+            is PropertyChange.Set -> moveToPhysicalPosition(outerPosition.value)
+            PropertyChange.Clear -> error("AppKit does not support clearing a window position")
+            PropertyChange.Unchanged -> Unit
+        }
+    }
+
+    private fun moveToPhysicalPosition(position: PhysicalPoint) {
+        when (val result = AppKitWindowGeometryServices.setOuterPosition(window, position.x, position.y)) {
+            is AppKitWindowGeometrySetResult.Moved -> checkNotNull(result.bounds.toKadrePhysicalRectOrNull()) {
+                "AppKit Window Server returned non-integral outer bounds after moving a window"
+            }
+            else -> throw AppKitWindowMutationFailure(
+                setOf(WindowProperty.OuterPosition),
+                IllegalStateException("AppKit could not move the window: $result"),
+            )
+        }
     }
 
     fun readGeometry(): AppKitWindowGeometrySnapshot =
@@ -1360,6 +1384,10 @@ private fun readGeometrySnapshot(
     requestedMinimumSize: LogicalSize?,
     requestedMaximumSize: LogicalSize?,
 ): AppKitWindowGeometrySnapshot = AppKitWindowGeometrySnapshot(
+    outerBounds = when (val result = AppKitWindowGeometryServices.readOuterBounds(window)) {
+        is AppKitWindowGeometryReadResult.Read -> result.bounds.toKadrePhysicalRectOrNull()
+        else -> null
+    },
     contentSize = readContentSize(window),
     minimumSize = requestedMinimumSize?.let { window.contentMinSize().toLogicalSize() },
     maximumSize = requestedMaximumSize?.let { window.contentMaxSize().toLogicalSize() },
@@ -1372,7 +1400,8 @@ private fun readContentSize(window: NSWindow): LogicalSize =
 private fun NSSize.toLogicalSize(): LogicalSize = LogicalSize(width, height)
 
 private fun AppKitWindowGeometryTarget.hasChange(): Boolean =
-    contentSize !is PropertyChange.Unchanged ||
+    outerPosition !is PropertyChange.Unchanged ||
+        contentSize !is PropertyChange.Unchanged ||
         minimumSize !is PropertyChange.Unchanged ||
         maximumSize !is PropertyChange.Unchanged ||
         resizable !is PropertyChange.Unchanged
@@ -1382,6 +1411,27 @@ private fun <T> PropertyChange<T>.resolveValue(current: T): T = when (this) {
     is PropertyChange.Set -> value
     PropertyChange.Clear -> current
 }
+
+/**
+ * Kadre accepts only exact physical pixels. A fractional Window Server result would otherwise
+ * force a rounding policy onto callers and could publish a coordinate the native system never
+ * certified.
+ */
+internal fun WindowOuterBoundsSnapshot.toKadrePhysicalRectOrNull(): PhysicalRect? {
+    val physicalX = x.toExactPhysicalCoordinateOrNull() ?: return null
+    val physicalY = y.toExactPhysicalCoordinateOrNull() ?: return null
+    val physicalWidth = width.toExactPhysicalCoordinateOrNull()?.takeIf { it > 0 } ?: return null
+    val physicalHeight = height.toExactPhysicalCoordinateOrNull()?.takeIf { it > 0 } ?: return null
+    return PhysicalRect(
+        origin = PhysicalPoint(physicalX, physicalY),
+        size = PhysicalSize(physicalWidth, physicalHeight),
+    )
+}
+
+private fun Double.toExactPhysicalCoordinateOrNull(): Int? =
+    takeIf { it >= Int.MIN_VALUE.toDouble() && it <= Int.MAX_VALUE.toDouble() }
+        ?.toInt()
+        ?.takeIf { it.toDouble() == this }
 
 private fun <T> PropertyChange<T>.resolveOptional(current: T?): T? = when (this) {
     PropertyChange.Unchanged -> current
@@ -2359,6 +2409,11 @@ private class KffiSurfaceObserverOwner private constructor(
                     installedOwner.emitMetrics()
                     installedOwner.emitGeometry()
                 }
+                observe(
+                    listOf("NSWindowDidMoveNotification"),
+                    window.ptr,
+                    installedOwner::emitGeometry,
+                )
                 observe(
                     listOf("NSWindowDidChangeBackingPropertiesNotification"),
                     window.ptr,
