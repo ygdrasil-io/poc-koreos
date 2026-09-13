@@ -55,6 +55,8 @@ import org.graphiks.kffi.objc.NSWindow
 import org.graphiks.kffi.objc.NSWindowButton
 import org.graphiks.kffi.objc.NSWindowCollectionBehavior
 import org.graphiks.kffi.objc.NSWindowStyleMask
+import org.graphiks.kffi.objc.NSWorkspace
+import org.graphiks.kffi.objc.NSWorkspaceAccessibilityDisplayOptionsDidChangeNotification
 import org.graphiks.kffi.objc.ObjCRuntime
 import org.graphiks.kffi.objc.effectiveAppearance
 import org.graphiks.kffi.objc.allowedTouchTypes
@@ -1283,8 +1285,7 @@ class KffiAppKitWindowPortMacOsTest {
 
         try {
             val initialAppearance = checkNotNull(peer.initialSurfaceSnapshot).appearance
-            val initialTheme = initialAppearance.theme
-            val (appearanceName, expectedTheme) = if (initialTheme == SurfaceTheme.Dark) {
+            val (appearanceName, requestedTheme) = if (initialAppearance.theme == SurfaceTheme.Dark) {
                 "NSAppearanceNameAqua" to SurfaceTheme.Light
             } else {
                 "NSAppearanceNameDarkAqua" to SurfaceTheme.Dark
@@ -1293,26 +1294,82 @@ class KffiAppKitWindowPortMacOsTest {
                 ObjCRuntime.newNSString(Arena.global(), appearanceName),
             )
 
-            assertEquals(
-                KadreResult.Success(Unit),
+            val effectiveTheme = assertIs<KadreResult.Success<SurfaceTheme>>(
                 peer.withDesktopHandle(admitCallback = { true }) { handle ->
                     val appKitHandle = assertIs<RuntimeDesktopNativeWindowHandle.AppKit>(handle)
                     val view = NSView(MemorySegment.ofAddress(appKitHandle.nsViewAddress.toLong()))
                     view.setAppearance(appearance)
+                    val effectiveName = ObjCRuntime.toJavaString(NSAppearance(view.effectiveAppearance()).name())
                     view.viewDidChangeEffectiveAppearance()
+                    when {
+                        effectiveName.contains("Dark", ignoreCase = true) -> SurfaceTheme.Dark
+                        effectiveName.isNotBlank() -> SurfaceTheme.Light
+                        else -> SurfaceTheme.Unknown
+                    }
                 },
-            )
+            ).value
+            assertEquals(requestedTheme, effectiveTheme)
             assertEquals(
                 listOf<AppKitSurfaceStimulus>(
                     AppKitSurfaceStimulus.AppearanceChanged(
                         peerId,
-                        SurfaceAppearance(expectedTheme, initialAppearance.contrast),
+                        SurfaceAppearance(effectiveTheme, initialAppearance.contrast),
                     ),
                 ),
                 stimuli.filterIsInstance<AppKitSurfaceStimulus.AppearanceChanged>(),
             )
         } finally {
             peer.close()
+        }
+    }
+
+    @Test
+    fun workspaceAccessibilityAppearanceNotificationRoutesThroughNativeSurfaceObserverOnMacOs() {
+        if (!isMacOsHost()) return
+
+        val port = KffiAppKitWindowPort()
+        val appearances = mutableListOf<SurfaceAppearance>()
+        var window: AppKitNativeWindowOwner? = null
+        var view: AppKitNativeViewOwner? = null
+        var observer: AppKitNativeSurfaceObserverOwner? = null
+
+        try {
+            port.onMainThread {
+                window = port.createWindow(WindowSpec(contentSize = LogicalSize(240.0, 135.0)))
+                view = port.createContentView(WindowSpec(contentSize = LogicalSize(240.0, 135.0)))
+                port.attachContentView(checkNotNull(window), checkNotNull(view))
+                port.present(checkNotNull(window))
+                observer = port.observeSurface(
+                    checkNotNull(window),
+                    checkNotNull(view),
+                    AppKitSurfaceCallbacks(
+                        metricsChanged = {},
+                        focusChanged = {},
+                        visibilityChanged = { _, _ -> },
+                        appearanceChanged = appearances::add,
+                        redrawConsumed = {},
+                    ),
+                )
+                val initialAppearance = checkNotNull(observer).initialSnapshot.appearance
+
+                val workspace = NSWorkspace(NSWorkspace.sharedWorkspace())
+                NSNotificationCenter(workspace.notificationCenter()).postNotificationName_object(
+                    NSWorkspaceAccessibilityDisplayOptionsDidChangeNotification,
+                    workspace.ptr,
+                )
+
+                assertEquals(listOf(initialAppearance), appearances)
+            }
+        } finally {
+            port.onMainThread {
+                observer?.close()
+                window?.let { nativeWindow ->
+                    port.detachContentView(nativeWindow)
+                    view?.close()
+                    port.closeWindow(nativeWindow)
+                    nativeWindow.close()
+                }
+            }
         }
     }
 
