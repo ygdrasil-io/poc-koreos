@@ -6,9 +6,10 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.withContext
 import org.graphiks.kadre.capture.CaptureDiagnostic
 import org.graphiks.kadre.capture.CaptureEvent
@@ -24,6 +25,9 @@ import org.graphiks.kadre.application.EventStamp
 import org.graphiks.kadre.diagnostics.KadreFailure
 import org.graphiks.kadre.diagnostics.KadreResourceKind
 import org.graphiks.kadre.diagnostics.KadreResult
+import org.graphiks.kadre.policy.CaptureDeliveryPolicy
+import org.graphiks.kadre.policy.ContinuousOverflowAction
+import org.graphiks.kadre.policy.FrameDelivery
 import kotlin.coroutines.AbstractCoroutineContextElement
 import kotlin.coroutines.CoroutineContext
 
@@ -36,7 +40,9 @@ import kotlin.coroutines.CoroutineContext
 internal class RuntimeCaptureSession(
     override val source: CaptureSource,
     private val reservation: CapturePortReservation,
+    private val capturePolicy: CaptureDeliveryPolicy,
     private val eventStampSource: () -> EventStamp,
+    private val onFatalFailure: (KadreFailure) -> Unit,
     private val onTerminated: (RuntimeCaptureSession) -> Unit,
 ) : CaptureSession {
     private val lock = RuntimeLock()
@@ -45,11 +51,17 @@ internal class RuntimeCaptureSession(
     private var stopping = false
     private var collectorClaimed = false
     private var stream: CapturePortStream? = null
-    private val frames = Channel<CapturePortFrame>(capacity = 1)
+    private var queuedFrameBytes = 0L
+    private var leasedFrameBytes = 0L
+    private val frames = Channel<CapturePortFrame>(capacity = capturePolicy.frames.channelCapacity())
+    private val mutableEvents = MutableSharedFlow<CaptureEvent>(extraBufferCapacity = capturePolicy.events.ingressCapacity)
+    private val mutableDiagnostics = MutableSharedFlow<CaptureDiagnostic>(
+        extraBufferCapacity = capturePolicy.events.ingressCapacity,
+    )
 
     override val state: StateFlow<CaptureSessionState> = mutableState.asStateFlow()
-    override val events: Flow<CaptureEvent> = emptyFlow()
-    override val diagnostics: Flow<CaptureDiagnostic> = emptyFlow()
+    override val events: Flow<CaptureEvent> = mutableEvents.asSharedFlow()
+    override val diagnostics: Flow<CaptureDiagnostic> = mutableDiagnostics.asSharedFlow()
 
     override fun close() = stop(CaptureStopReason.Requested)
 
@@ -103,6 +115,7 @@ internal class RuntimeCaptureSession(
             start.stream.close()
             return KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.CaptureSession))
         }
+        emitEvent(CaptureEvent.StreamingStarted(start.configuration, eventStampSource()))
 
         return try {
             withContext(CaptureCollectorMarker(this)) {
@@ -131,6 +144,7 @@ internal class RuntimeCaptureSession(
         runCatching { stream?.close() }
         runCatching { reservation.close() }
         frames.close()
+        if (outcome != CaptureOutcome.SourceCompleted) discardQueuedFrames()
         lock.withLock {
             mutableState.value = CaptureSessionState.Terminated(outcome)
         }
@@ -148,14 +162,13 @@ internal class RuntimeCaptureSession(
 
     private inner class StreamListener : CapturePortStreamListener {
         override fun onFrame(frame: CapturePortFrame) {
-            lock.withLock {
-                if (stopping) {
-                    return@withLock
-                } else if (frames.trySend(frame).isSuccess) {
-                    return@withLock
-                } else {
-                    val replaced = frames.tryReceive().getOrNull()
-                    if (replaced != null) frames.trySend(frame)
+            val offer = lock.withLock { offerFrameLocked(frame) }
+            when (offer) {
+                FrameOffer.Accepted -> Unit
+                is FrameOffer.Dropped -> emitDiagnostic(CaptureDiagnostic.FrameDropped(offer.count, eventStampSource()))
+                is FrameOffer.Failed -> {
+                    finish(CaptureOutcome.Failed(offer.failure))
+                    if (offer.failSession) onFatalFailure(offer.failure)
                 }
             }
         }
@@ -163,12 +176,35 @@ internal class RuntimeCaptureSession(
         override fun onTerminated(outcome: CaptureOutcome) {
             finish(outcome)
         }
+
+        override fun onReconfigured(configuration: org.graphiks.kadre.capture.CaptureConfiguration) {
+            val accepted = lock.withLock {
+                if (stopping) {
+                    false
+                } else {
+                    val current = mutableState.value as? CaptureSessionState.Streaming
+                        ?: error("capture stream reconfigured before startup")
+                    check(configuration.revision.value == current.configuration.revision.value + 1L) {
+                        "capture configuration revisions must advance one step at a time"
+                    }
+                    mutableState.value = CaptureSessionState.Streaming(configuration)
+                    true
+                }
+            }
+            if (accepted) emitEvent(CaptureEvent.Reconfigured(configuration, eventStampSource()))
+        }
     }
 
     private suspend fun collectDeliveredFrames(collector: suspend (CaptureFrame) -> Unit): KadreResult<Unit> {
         while (true) {
             val portFrame = frames.receiveCatching().getOrNull() ?: return outcomeToResult(termination.await())
-            val frame = RuntimeCaptureFrame(portFrame, eventStampSource())
+            val bytes = portFrame.byteCount()
+            lock.withLock {
+                check(queuedFrameBytes >= bytes) { "capture queued-byte accounting underflow" }
+                queuedFrameBytes -= bytes
+                leasedFrameBytes += bytes
+            }
+            val frame = RuntimeCaptureFrame(portFrame, eventStampSource()) { releaseLeasedBytes(bytes) }
             try {
                 collector(frame)
             } catch (cause: CancellationException) {
@@ -180,6 +216,70 @@ internal class RuntimeCaptureSession(
                 frame.close()
             }
         }
+    }
+
+    private fun offerFrameLocked(frame: CapturePortFrame): FrameOffer {
+        if (stopping) return FrameOffer.Dropped(1)
+        val bytes = frame.byteCount()
+        if (bytes > capturePolicy.maxBufferedBytesPerSession) {
+            return FrameOffer.Failed(
+                KadreFailure.ResourceLimitExceeded(KadreResourceKind.CaptureBuffer, capturePolicy.maxBufferedBytesPerSession),
+                failSession = false,
+            )
+        }
+        var dropped = 0L
+        while (
+            queuedFrameBytes + leasedFrameBytes + bytes > capturePolicy.maxBufferedBytesPerSession ||
+            frames.trySend(frame).isFailure
+        ) {
+            when (val overflow = capturePolicy.frames.overflowAction()) {
+                FrameOverflowAction.DropOldest -> {
+                    val removed = frames.tryReceive().getOrNull()
+                    if (removed == null) return FrameOffer.Dropped(dropped + 1L)
+                    check(queuedFrameBytes >= removed.byteCount()) { "capture queued-byte accounting underflow" }
+                    queuedFrameBytes -= removed.byteCount()
+                    dropped += 1L
+                }
+
+                FrameOverflowAction.DropLatest -> return FrameOffer.Dropped(dropped + 1L)
+                FrameOverflowAction.CloseSource -> return FrameOffer.Failed(
+                    KadreFailure.SourceOverflow(KadreResourceKind.CaptureBuffer),
+                    failSession = false,
+                )
+
+                FrameOverflowAction.FailSession -> return FrameOffer.Failed(
+                    KadreFailure.SourceOverflow(KadreResourceKind.CaptureBuffer),
+                    failSession = true,
+                )
+            }
+        }
+        queuedFrameBytes += bytes
+        return if (dropped == 0L) FrameOffer.Accepted else FrameOffer.Dropped(dropped)
+    }
+
+    private fun discardQueuedFrames() {
+        lock.withLock {
+            while (true) {
+                val frame = frames.tryReceive().getOrNull() ?: break
+                check(queuedFrameBytes >= frame.byteCount()) { "capture queued-byte accounting underflow" }
+                queuedFrameBytes -= frame.byteCount()
+            }
+        }
+    }
+
+    private fun releaseLeasedBytes(bytes: Long) {
+        lock.withLock {
+            check(leasedFrameBytes >= bytes) { "capture leased-byte accounting underflow" }
+            leasedFrameBytes -= bytes
+        }
+    }
+
+    private fun emitEvent(event: CaptureEvent) {
+        mutableEvents.tryEmit(event)
+    }
+
+    private fun emitDiagnostic(diagnostic: CaptureDiagnostic) {
+        mutableDiagnostics.tryEmit(diagnostic)
     }
 
 }
@@ -194,6 +294,7 @@ private class CaptureCollectorMarker(
 private class RuntimeCaptureFrame(
     private val portFrame: CapturePortFrame,
     override val stamp: EventStamp,
+    private val onClose: () -> Unit,
 ) : CaptureFrame {
     private val lock = RuntimeLock()
     private var active = true
@@ -215,6 +316,7 @@ private class RuntimeCaptureFrame(
             if (!active) return
             active = false
             copiedPlanes = null
+            onClose()
         }
     }
 
@@ -224,4 +326,37 @@ private class RuntimeCaptureFrame(
             CopiedPixelPlane(plane.layout, plane.bytes.copyOf())
         }
     }
+}
+
+private sealed interface FrameOffer {
+    public data object Accepted : FrameOffer
+    public data class Dropped(val count: Long) : FrameOffer
+    public data class Failed(val failure: KadreFailure, val failSession: Boolean) : FrameOffer
+}
+
+private enum class FrameOverflowAction { DropOldest, DropLatest, CloseSource, FailSession }
+
+private fun FrameDelivery.channelCapacity(): Int = when (this) {
+    FrameDelivery.Latest -> 1
+    is FrameDelivery.Buffered -> capacity
+}
+
+private fun FrameDelivery.overflowAction(): FrameOverflowAction = when (this) {
+    FrameDelivery.Latest -> FrameOverflowAction.DropOldest
+    is FrameDelivery.Buffered -> when (onOverflow) {
+        ContinuousOverflowAction.DropOldestAndReport -> FrameOverflowAction.DropOldest
+        ContinuousOverflowAction.DropLatestAndReport -> FrameOverflowAction.DropLatest
+        ContinuousOverflowAction.CloseSource -> FrameOverflowAction.CloseSource
+        ContinuousOverflowAction.FailSession -> FrameOverflowAction.FailSession
+    }
+}
+
+private fun CapturePortFrame.byteCount(): Long {
+    var total = 0L
+    planes.forEach { plane ->
+        val bytes = plane.layout.byteCount.toLong()
+        check(Long.MAX_VALUE - total >= bytes) { "capture frame byte count overflow" }
+        total += bytes
+    }
+    return total
 }

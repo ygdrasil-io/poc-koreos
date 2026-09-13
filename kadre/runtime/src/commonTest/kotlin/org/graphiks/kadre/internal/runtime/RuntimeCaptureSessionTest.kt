@@ -2,6 +2,9 @@ package org.graphiks.kadre.internal.runtime
 
 import kotlinx.coroutines.async
 import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.flow.take
+import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.graphiks.kadre.capture.CaptureManagerRevision
@@ -11,6 +14,7 @@ import org.graphiks.kadre.capture.CaptureSource
 import org.graphiks.kadre.capture.CaptureSourceKind
 import org.graphiks.kadre.capture.CaptureTarget
 import org.graphiks.kadre.capture.CaptureOutcome
+import org.graphiks.kadre.capture.CaptureDiagnostic
 import org.graphiks.kadre.capture.CaptureFrame
 import org.graphiks.kadre.capture.CaptureConfiguration
 import org.graphiks.kadre.capture.CaptureConfigurationRevision
@@ -32,6 +36,7 @@ import org.graphiks.kadre.diagnostics.KadreResourceKind
 import org.graphiks.kadre.diagnostics.KadreResult
 import org.graphiks.kadre.input.PermissionState
 import org.graphiks.kadre.surface.PhysicalSize
+import org.graphiks.kadre.policy.KadrePolicies
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
@@ -241,6 +246,101 @@ class RuntimeCaptureSessionTest {
         reservation.complete(CaptureOutcome.SourceCompleted)
         assertEquals(KadreResult.Success(Unit), collecting.await())
     }
+
+    @Test
+    fun frameLargerThanTheCaptureByteBudgetTerminatesTheSession() = runTest {
+        val port = AdmissionCapturePort(enumeratedSnapshot(name = "Primary"))
+        val manager = RuntimeCaptureManager(
+            port = port,
+            maxConcurrentSessions = 1,
+            capturePolicy = KadrePolicies.Default.capture.copy(maxBufferedBytesPerSession = 3L),
+        )
+        val selected = source(manager)
+        val reservation = StreamingCaptureReservation(portSource("Primary"))
+        port.reservations.addLast(KadreResult.Success(reservation))
+        val session = successValue(
+            manager.open(CaptureRequest(CaptureTarget.Source(selected.id, selected.managerRevision))),
+        )
+        val collecting = async { session.collectFrames { } }
+        runCurrent()
+
+        reservation.emit(frame())
+
+        assertEquals(
+            KadreResult.Failure(KadreFailure.ResourceLimitExceeded(KadreResourceKind.CaptureBuffer, 3L)),
+            collecting.await(),
+        )
+        assertEquals(
+            CaptureSessionState.Terminated(
+                CaptureOutcome.Failed(KadreFailure.ResourceLimitExceeded(KadreResourceKind.CaptureBuffer, 3L)),
+            ),
+            session.state.value,
+        )
+    }
+
+    @Test
+    fun latestDeliveryReplacesOnlyThePendingFrameAndReportsItsDrop() = runTest {
+        val port = AdmissionCapturePort(enumeratedSnapshot(name = "Primary"))
+        val manager = RuntimeCaptureManager(port, maxConcurrentSessions = 1)
+        val selected = source(manager)
+        val reservation = StreamingCaptureReservation(portSource("Primary"))
+        port.reservations.addLast(KadreResult.Success(reservation))
+        val session = successValue(
+            manager.open(CaptureRequest(CaptureTarget.Source(selected.id, selected.managerRevision))),
+        )
+        val releaseFirst = CompletableDeferred<Unit>()
+        val delivered = mutableListOf<Byte>()
+        val diagnostics = async { session.diagnostics.take(1).toList() }
+        val collecting = async {
+            session.collectFrames { frame ->
+                delivered += frame.copyPlanes().single().bytes.first()
+                if (delivered.size == 1) releaseFirst.await()
+            }
+        }
+        runCurrent()
+
+        reservation.emit(frame(1))
+        runCurrent()
+        reservation.emit(frame(2))
+        reservation.emit(frame(3))
+
+        val dropped = assertIs<CaptureDiagnostic.FrameDropped>(diagnostics.await().single())
+        assertEquals(1L, dropped.count)
+        releaseFirst.complete(Unit)
+        reservation.complete(CaptureOutcome.SourceCompleted)
+
+        assertEquals(KadreResult.Success(Unit), collecting.await())
+        assertEquals(listOf(1, 3).map(Int::toByte), delivered)
+    }
+
+    @Test
+    fun reconfigurationPublishesItsStateBeforeTheFirstFrameAtThatRevision() = runTest {
+        val port = AdmissionCapturePort(enumeratedSnapshot(name = "Primary"))
+        val manager = RuntimeCaptureManager(port, maxConcurrentSessions = 1)
+        val selected = source(manager)
+        val reservation = StreamingCaptureReservation(portSource("Primary"))
+        port.reservations.addLast(KadreResult.Success(reservation))
+        val session = successValue(
+            manager.open(CaptureRequest(CaptureTarget.Source(selected.id, selected.managerRevision))),
+        )
+        var stateDuringFrame: CaptureSessionState? = null
+        val collecting = async {
+            session.collectFrames { frame ->
+                stateDuringFrame = session.state.value
+                assertEquals(CaptureConfigurationRevision(1), frame.configurationRevision)
+            }
+        }
+        runCurrent()
+        val reconfigured = reservation.configuration.copy(revision = CaptureConfigurationRevision(1))
+
+        reservation.reconfigure(reconfigured)
+        reservation.emit(frame(configurationRevision = 1L))
+        runCurrent()
+        reservation.complete(CaptureOutcome.SourceCompleted)
+
+        assertEquals(KadreResult.Success(Unit), collecting.await())
+        assertEquals(CaptureSessionState.Streaming(reconfigured), stateDuringFrame)
+    }
 }
 
 private class AdmissionCapturePort(
@@ -328,6 +428,10 @@ private class StreamingCaptureReservation(
         checkNotNull(listener).onFrame(frame)
     }
 
+    fun reconfigure(configuration: CaptureConfiguration) {
+        checkNotNull(listener).onReconfigured(configuration)
+    }
+
     override fun close() {
         closeCalls += 1
     }
@@ -345,16 +449,19 @@ private fun portSource(name: String): CapturePortSource = CapturePortSource(
     size = PhysicalSize(1920, 1080),
 )
 
-private fun frame(): CapturePortFrame = CapturePortFrame(
+private fun frame(
+    first: Byte = 1,
+    configurationRevision: Long = 0L,
+): CapturePortFrame = CapturePortFrame(
     size = PhysicalSize(1, 1),
     format = PixelFormat.Bgra8,
     planes = listOf(
         CapturePortPlane(
             layout = PixelPlaneLayout(1, 1, 4, 4, 4, 1, 1),
-            bytes = byteArrayOf(1, 2, 3, 4),
+            bytes = byteArrayOf(first, 2, 3, 4),
         ),
     ),
-    configurationRevision = 0L,
+    configurationRevision = configurationRevision,
     sourceTimestamp = null,
     duration = null,
     discontinuity = null,
