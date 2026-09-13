@@ -43,20 +43,31 @@ internal class AppKitMemoryPressureBroker(
     private val lock = Any()
     private var availability: FeatureAvailability? = null
     private var source: AutoCloseable? = null
+    private var openingLevels: MutableList<MemoryPressureLevel>? = null
     private var closed = false
 
     /** Starts the native source once and returns its observed availability. */
-    fun activate(): FeatureAvailability = synchronized(lock) {
-        if (closed) return FeatureAvailability.Unsupported
-        availability?.let { return it }
-        try {
-            source = native.open(::acceptNativePressure)
-            FeatureAvailability.Available.also { availability = it }
-        } catch (_: Exception) {
-            unavailable().also { availability = it }
-        } catch (_: LinkageError) {
-            unavailable().also { availability = it }
+    fun activate(): FeatureAvailability {
+        val deliveredDuringOpen = mutableListOf<MemoryPressureLevel>()
+        val result = synchronized(lock) {
+            if (closed) return FeatureAvailability.Unsupported
+            availability?.let { return it }
+            openingLevels = deliveredDuringOpen
+            try {
+                source = native.open(::acceptNativePressure)
+                FeatureAvailability.Available.also { availability = it }
+            } catch (_: Exception) {
+                unavailable().also { availability = it }
+            } catch (_: LinkageError) {
+                unavailable().also { availability = it }
+            } finally {
+                openingLevels = null
+            }
         }
+        if (result == FeatureAvailability.Available) {
+            deliveredDuringOpen.forEach(::schedulePressure)
+        }
+        return result
     }
 
     override fun close() {
@@ -74,9 +85,20 @@ internal class AppKitMemoryPressureBroker(
 
     private fun acceptNativePressure(level: MemoryPressureLevel) {
         val dispatch = synchronized(lock) {
-            !closed && availability == FeatureAvailability.Available
+            when {
+                closed -> false
+                availability == FeatureAvailability.Available -> true
+                else -> {
+                    openingLevels?.add(level)
+                    false
+                }
+            }
         }
         if (!dispatch) return
+        schedulePressure(level)
+    }
+
+    private fun schedulePressure(level: MemoryPressureLevel) {
         dispatcher.dispatch {
             if (synchronized(lock) { !closed && availability == FeatureAvailability.Available }) {
                 deliver(level)

@@ -1,10 +1,14 @@
 package org.graphiks.kadre.internal.runtime
 
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.filterIsInstance
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.take
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.test.runTest
 import org.graphiks.kadre.application.ActivationState
 import org.graphiks.kadre.application.AttachmentState
@@ -22,6 +26,8 @@ import org.graphiks.kadre.application.VisibilityState
 import org.graphiks.kadre.diagnostics.FeatureAvailability
 import org.graphiks.kadre.diagnostics.KadrePlatform
 import org.graphiks.kadre.diagnostics.KadreResult
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -31,6 +37,53 @@ import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
 
 class RuntimeLifecycleTest {
+    @Test
+    fun memoryPressureDoesNotPublishAfterSessionStopHasBeenAdmitted() = runTest {
+        val stopEntered = CountDownLatch(1)
+        val releaseStop = CountDownLatch(1)
+        val host = RuntimeHostController(
+            platform = KadrePlatform.Fake,
+            initialLifecycleCapabilities = LifecycleCapabilities(FeatureAvailability.Available),
+            sessionStopHandler = RuntimeSessionStopHandler {
+                stopEntered.countDown()
+                check(releaseStop.await(2, TimeUnit.SECONDS)) { "test did not release session stop" }
+                null
+            },
+        )
+        lateinit var scope: KadreScope
+        val session = attach(host) {
+            scope = this
+            awaitCancellation()
+        }
+        testScheduler.runCurrent()
+        val signals = mutableListOf<HostSignal.MemoryPressure>()
+        val collector = backgroundScope.launch {
+            scope.lifecycle.signals.filterIsInstance<HostSignal.MemoryPressure>().collect { signal ->
+                signals += signal
+            }
+        }
+        testScheduler.runCurrent()
+        val closeReturned = CompletableDeferred<Unit>()
+        Thread.ofPlatform().start {
+            try {
+                session.close()
+            } finally {
+                closeReturned.complete(Unit)
+            }
+        }
+        assertTrue(stopEntered.await(2, TimeUnit.SECONDS))
+
+        host.emitMemoryPressure(MemoryPressureLevel.Critical)
+        testScheduler.runCurrent()
+        assertEquals(emptyList(), signals)
+
+        releaseStop.countDown()
+        withTimeout(2.seconds) { closeReturned.await() }
+        testScheduler.advanceUntilIdle()
+        assertEquals(SessionOutcome.Stopped(SessionStopReason.HostRequested), session.awaitTermination())
+        collector.cancel()
+    }
+
     @Test
     fun lifecyclePublishesSnapshotBeforeEventAndDeduplicates() = runTest {
         val host = RuntimeHostController(KadrePlatform.Fake)
