@@ -22,8 +22,10 @@ import org.graphiks.kadre.internal.runtime.RuntimeSessionComponents
 import org.graphiks.kadre.internal.runtime.RuntimeSessionComponentsFactory
 import org.graphiks.kadre.internal.runtime.RuntimeSessionObserver
 import org.graphiks.kadre.internal.runtime.RuntimeSessionStopHandler
-import org.graphiks.kadre.internal.runtime.DisplayPort
 import org.graphiks.kadre.internal.runtime.CapturePort
+import org.graphiks.kadre.internal.runtime.DisplayPort
+import org.graphiks.kadre.internal.runtime.GamepadPort
+import org.graphiks.kadre.internal.runtime.InputDevicePort
 import org.graphiks.kadre.internal.runtime.RawInputPort
 import org.graphiks.kadre.internal.runtime.desktop.DesktopBackendKind
 import org.graphiks.kadre.internal.runtime.desktop.DesktopBackendProvider
@@ -39,9 +41,12 @@ public class AppKitBackendProvider private constructor(
     private val broker: AppKitProcessBroker,
     private val windowDriverFactory: AppKitWindowRuntimeDriverFactory,
     private val fullscreenAvailability: AppKitFullscreenAvailability,
+    private val displayAvailability: AppKitDisplayAvailability,
     private val rawInputPortFactory: () -> RawInputPort?,
     private val displayPortFactory: () -> DisplayPort?,
     private val capturePortFactory: () -> CapturePort?,
+    private val gamepadPortFactory: () -> GamepadPort?,
+    private val inputDevicePortFactory: () -> InputDevicePort?,
     private val availability: () -> Boolean,
 ) : DesktopBackendProvider {
     public constructor() : this(
@@ -49,6 +54,7 @@ public class AppKitBackendProvider private constructor(
         ProcessAppKitProcessBroker.value,
         AppKitWindowRuntimeDriverFactory(),
         AppKitFullscreenAvailability(),
+        AppKitDisplayAvailability(),
         { if (isMacOs()) ProcessAppKitProcessBroker.value.openRawInputPort() else null },
         {
             if (isMacOs() && AppKitDisplayAvailability().isAvailable) {
@@ -58,6 +64,8 @@ public class AppKitBackendProvider private constructor(
             }
         },
         { if (isMacOs()) AppKitCapturePort() else null },
+        { if (isMacOs()) ProcessAppKitProcessBroker.value.openGameControllerPort() else null },
+        { if (isMacOs()) ProcessAppKitProcessBroker.value.openHidPort() else null },
         ::isMacOs,
     )
 
@@ -243,18 +251,24 @@ public class AppKitBackendProvider private constructor(
             broker: AppKitProcessBroker,
             windowDriverFactory: AppKitWindowRuntimeDriverFactory = AppKitWindowRuntimeDriverFactory(),
             fullscreenAvailability: AppKitFullscreenAvailability = AppKitFullscreenAvailability(),
+            displayAvailability: AppKitDisplayAvailability = AppKitDisplayAvailability(),
             rawInputPortFactory: () -> RawInputPort? = { null },
             displayPortFactory: () -> DisplayPort? = { null },
             capturePortFactory: () -> CapturePort? = { null },
+            gamepadPortFactory: () -> GamepadPort? = { null },
+            inputDevicePortFactory: () -> InputDevicePort? = { null },
             availability: () -> Boolean,
         ): AppKitBackendProvider = AppKitBackendProvider(
             nativeApplication,
             broker,
             windowDriverFactory,
             fullscreenAvailability,
+            displayAvailability,
             rawInputPortFactory,
             displayPortFactory,
             capturePortFactory,
+            gamepadPortFactory,
+            inputDevicePortFactory,
             availability,
         )
 
@@ -296,7 +310,8 @@ public class AppKitBackendProvider private constructor(
         val driver = windowDriverFactory.create(
             resources = resources,
             publicAppKitCapabilities = true,
-            enabledWindowUpdateCapabilities = APPKIT_PUBLIC_WINDOW_UPDATE_CAPABILITIES,
+            enabledWindowUpdateCapabilities = APPKIT_PUBLIC_WINDOW_UPDATE_CAPABILITIES +
+                if (displayAvailability.isAvailable) setOf(WindowProperty.OuterPosition) else emptySet(),
             fullscreenAvailabilityFailure = if (fullscreenAvailability.isAvailable) {
                 null
             } else {
@@ -312,6 +327,8 @@ public class AppKitBackendProvider private constructor(
             rawInputPort = rawInputPortFactory(),
             displayPort = displayPortFactory(),
             capturePort = capturePortFactory(),
+            gamepadPort = gamepadPortFactory(),
+            inputDevicePort = inputDevicePortFactory(),
             closeAction = driver::close,
         )
     }
