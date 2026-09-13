@@ -72,6 +72,8 @@ import org.graphiks.kadre.diagnostics.KadreResult
 import org.graphiks.kadre.display.DisplayInventory
 import org.graphiks.kadre.display.DisplayManager
 import org.graphiks.kadre.input.DeviceInventory
+import org.graphiks.kadre.input.DeviceLifecycleEvent
+import org.graphiks.kadre.input.DeviceManager
 import org.graphiks.kadre.input.GamepadEffect
 import org.graphiks.kadre.input.InputDeviceDescriptor
 import org.graphiks.kadre.input.InputDeviceKind
@@ -96,6 +98,7 @@ import org.graphiks.kadre.internal.runtime.desktop.DesktopBackendProvider
 import org.graphiks.kadre.internal.runtime.desktop.DesktopEmbeddedRequest
 import org.graphiks.kadre.internal.runtime.desktop.DesktopIntegrationKind
 import org.graphiks.kadre.internal.runtime.desktop.DesktopStandaloneRequest
+import org.graphiks.kadre.internal.appkit.manual.Phase10HidInventoryFormatter
 import org.graphiks.kadre.input.InputEvent
 import org.graphiks.kadre.input.DropOfferState
 import org.graphiks.kadre.input.DropOfferTerminationReason
@@ -537,6 +540,7 @@ class AppKitBackendProviderTest {
         )
         val parentScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob())
         val observedInventory = CompletableDeferred<DeviceInventory>()
+        val observedDevices = CompletableDeferred<DeviceManager>()
 
         try {
             val session = provider.attach(
@@ -545,6 +549,7 @@ class AppKitBackendProviderTest {
                     KadreApplicationFactory {
                         KadreApplication {
                             observedInventory.complete(devices.state.value.inventory)
+                            observedDevices.complete(devices)
                             kotlinx.coroutines.awaitCancellation()
                         }
                     },
@@ -555,6 +560,17 @@ class AppKitBackendProviderTest {
 
             val inventory = assertIs<DeviceInventory.Enumerated>(observedInventory.await())
             assertEquals(listOf("Provider keyboard"), inventory.devices.map { it.descriptor.name })
+            assertEquals(
+                "enumerated devices=[d1{name=\"Provider keyboard\",kind=Keyboard,connection=Connected}] gamepads=[]",
+                Phase10HidInventoryFormatter().formatInventory(inventory),
+            )
+            val formatter = Phase10HidInventoryFormatter()
+            formatter.formatInventory(inventory)
+            val removal = async(start = CoroutineStart.UNDISPATCHED) {
+                observedDevices.await().events.filterIsInstance<DeviceLifecycleEvent.DeviceRemoved>().first()
+            }
+            port.emit(InputDevicePortEvent.Disconnected(42L))
+            assertTrue(formatter.formatEvent(removal.await()).startsWith("DeviceRemoved d1 revision=1 sequence="))
             session.close()
             session.awaitTermination()
             assertTrue(port.closed)
@@ -4332,13 +4348,25 @@ private class ProviderGamepadPort : GamepadPort {
 private class ProviderInputDevicePort(
     override val devices: List<InputDevicePortDevice>,
 ) : InputDevicePort {
+    private var observer: ((InputDevicePortEvent) -> Unit)? = null
     var closed: Boolean = false
         private set
 
-    override fun installObserver(observer: (InputDevicePortEvent) -> Unit): AutoCloseable = AutoCloseable { }
+    override fun installObserver(observer: (InputDevicePortEvent) -> Unit): AutoCloseable {
+        check(this.observer == null) { "input-device observer is already installed" }
+        this.observer = observer
+        return AutoCloseable {
+            if (this.observer === observer) this.observer = null
+        }
+    }
+
+    fun emit(event: InputDevicePortEvent) {
+        checkNotNull(observer)(event)
+    }
 
     override fun close() {
         closed = true
+        observer = null
     }
 }
 
