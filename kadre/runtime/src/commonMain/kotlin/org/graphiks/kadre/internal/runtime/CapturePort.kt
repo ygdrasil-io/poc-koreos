@@ -170,8 +170,82 @@ public data class CapturePortFrame(
         require(duration == null || duration.isFinite() && duration.isPositive()) {
             "duration must be finite and positive"
         }
+        validatePortablePlaneLayouts()
+    }
+
+    private fun validatePortablePlaneLayouts() {
+        when (format) {
+            PixelFormat.Rgba8, PixelFormat.Bgra8, PixelFormat.Bgrx8 -> {
+                require(planes.size == 1) { "packed four-byte capture formats require one plane" }
+                planes.single().layout.requireLayout(
+                    width = size.width,
+                    height = size.height,
+                    pixelStride = 4,
+                    horizontalSubsampling = 1,
+                    verticalSubsampling = 1,
+                )
+            }
+
+            PixelFormat.Nv12 -> {
+                require(planes.size == 2) { "NV12 capture frames require luma and interleaved chroma planes" }
+                planes[0].layout.requireLayout(
+                    width = size.width,
+                    height = size.height,
+                    pixelStride = 1,
+                    horizontalSubsampling = 1,
+                    verticalSubsampling = 1,
+                )
+                planes[1].layout.requireLayout(
+                    width = size.width.ceilHalf(),
+                    height = size.height.ceilHalf(),
+                    pixelStride = 2,
+                    horizontalSubsampling = 2,
+                    verticalSubsampling = 2,
+                )
+            }
+
+            PixelFormat.I420 -> {
+                require(planes.size == 3) { "I420 capture frames require luma, U, and V planes" }
+                planes[0].layout.requireLayout(
+                    width = size.width,
+                    height = size.height,
+                    pixelStride = 1,
+                    horizontalSubsampling = 1,
+                    verticalSubsampling = 1,
+                )
+                planes.drop(1).forEach { plane ->
+                    plane.layout.requireLayout(
+                        width = size.width.ceilHalf(),
+                        height = size.height.ceilHalf(),
+                        pixelStride = 1,
+                        horizontalSubsampling = 2,
+                        verticalSubsampling = 2,
+                    )
+                }
+            }
+
+            is PixelFormat.Opaque -> {
+                require(planes.size == format.planeCount) { "opaque capture frame plane count differs from its format" }
+            }
+        }
     }
 }
+
+private fun PixelPlaneLayout.requireLayout(
+    width: Int,
+    height: Int,
+    pixelStride: Int,
+    horizontalSubsampling: Int,
+    verticalSubsampling: Int,
+) {
+    require(this.width == width && this.height == height) { "capture plane dimensions do not match its format" }
+    require(this.pixelStride == pixelStride) { "capture plane pixel stride does not match its format" }
+    require(
+        this.horizontalSubsampling == horizontalSubsampling && this.verticalSubsampling == verticalSubsampling,
+    ) { "capture plane subsampling does not match its format" }
+}
+
+private fun Int.ceilHalf(): Int = this / 2 + this % 2
 
 /** Callback boundary for a stream owned by one [CapturePortReservation]. */
 public interface CapturePortStreamListener {
