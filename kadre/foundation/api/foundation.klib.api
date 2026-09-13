@@ -7000,6 +7000,8 @@ final value class org.graphiks.kadre.application/SessionSequence { // org.graphi
 }
 
 final value class org.graphiks.kadre.capture/CaptureConfigurationRevision { // org.graphiks.kadre.capture/CaptureConfigurationRevision|null[0]
+    constructor <init>(kotlin/Long) // org.graphiks.kadre.capture/CaptureConfigurationRevision.<init>|<init>(kotlin.Long){}[0]
+
     final val value // org.graphiks.kadre.capture/CaptureConfigurationRevision.value|{}value[0]
         final fun <get-value>(): kotlin/Long // org.graphiks.kadre.capture/CaptureConfigurationRevision.value.<get-value>|<get-value>(){}[0]
 

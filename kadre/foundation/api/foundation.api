@@ -398,6 +398,7 @@ public final class org/graphiks/kadre/capture/CaptureConfiguration {
 
 public final class org/graphiks/kadre/capture/CaptureConfigurationRevision {
 	public static final synthetic fun box-impl (J)Lorg/graphiks/kadre/capture/CaptureConfigurationRevision;
+	public static fun constructor-impl (J)J
 	public fun equals (Ljava/lang/Object;)Z
 	public static fun equals-impl (JLjava/lang/Object;)Z
 	public static final fun equals-impl0 (JJ)Z
