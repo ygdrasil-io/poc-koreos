@@ -667,10 +667,10 @@ public enum class GamepadHapticLocality {
     LeftTrigger,
     RightTrigger,
 }
-public data class GamepadLocalizedHapticConstraints(
+public class GamepadLocalizedHapticConstraints(
     public val localities: Set<GamepadHapticLocality>,
 )
-public data class GamepadEffectConstraints(
+public class GamepadEffectConstraints(
     public val kinds: Set<GamepadEffectKind>,
     public val localizedHaptics: GamepadLocalizedHapticConstraints?,
     public val maximumDuration: Duration?,
