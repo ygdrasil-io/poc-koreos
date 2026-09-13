@@ -264,6 +264,8 @@ class RuntimeCaptureSessionTest {
         val collecting = async { session.collectFrames { } }
         runCurrent()
 
+        assertEquals(3L, reservation.maximumFrameBytes)
+
         reservation.emit(frame())
 
         assertEquals(
@@ -405,10 +407,16 @@ private class StreamingCaptureReservation(
         private set
     var closeCalls = 0
         private set
+    var maximumFrameBytes: Long? = null
+        private set
     private var listener: CapturePortStreamListener? = null
 
-    override suspend fun start(listener: CapturePortStreamListener): KadreResult<CapturePortStreamStart> {
+    override suspend fun start(
+        listener: CapturePortStreamListener,
+        maxFrameBytes: Long,
+    ): KadreResult<CapturePortStreamStart> {
         startCalls += 1
+        maximumFrameBytes = maxFrameBytes
         this.listener = listener
         return KadreResult.Success(
             CapturePortStreamStart(

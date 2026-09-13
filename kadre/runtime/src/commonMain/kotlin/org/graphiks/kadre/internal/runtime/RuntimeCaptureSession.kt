@@ -90,7 +90,10 @@ internal class RuntimeCaptureSession(
         if (admission != null) return admission
 
         val started = try {
-            reservation.start(StreamListener())
+            reservation.start(
+                listener = StreamListener(),
+                maxFrameBytes = capturePolicy.maxBufferedBytesPerSession,
+            )
         } catch (cause: CancellationException) {
             stop(CaptureStopReason.CollectorCancelled)
             throw cause
