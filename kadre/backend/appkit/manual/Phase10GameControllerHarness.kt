@@ -48,13 +48,27 @@ public fun main(args: Array<String>) {
                 }
                 check(opened is WindowRequestOutcome.OpenedHere) { "window did not open: $opened" }
                 recorder.metadata(options)
-                recorder.snapshot("initial", devices.state.value.inventory)
+                val observations = Phase10GamepadObservationSet(
+                    scope = this,
+                    onSnapshot = recorder::gamepadSnapshot,
+                    onEvent = recorder::gamepadEvent,
+                )
+                val initialInventory = devices.state.value.inventory
+                recorder.snapshot("initial", initialInventory)
+                (initialInventory as? DeviceInventory.Enumerated)?.gamepads?.forEach(observations::observe)
                 recorder.line("HELP\tsnapshot | effect <index> <locality> | result M1..M4 pass|fail|not-applicable note | close | finish")
                 val stateCollector = launch(start = CoroutineStart.UNDISPATCHED) {
                     devices.state.collect { state -> recorder.snapshot("update", state.inventory) }
                 }
                 val eventCollector = launch(start = CoroutineStart.UNDISPATCHED) {
-                    devices.events.collect(recorder::event)
+                    devices.events.collect { event ->
+                        when (event) {
+                            is org.graphiks.kadre.input.DeviceLifecycleEvent.GamepadAdded -> observations.observe(event.gamepad)
+                            is org.graphiks.kadre.input.DeviceLifecycleEvent.GamepadRemoved -> observations.remove(event.gamepadId)
+                            else -> Unit
+                        }
+                        recorder.event(event)
+                    }
                 }
 
                 suspend fun playEffect(index: Int, locality: GamepadHapticLocality) {
@@ -98,6 +112,7 @@ public fun main(args: Array<String>) {
                 }
                 stateCollector.cancel()
                 eventCollector.cancel()
+                observations.close()
                 requestStop()
             },
         )
@@ -137,6 +152,14 @@ private class Phase10GameControllerRecorder(private val path: Path) : AutoClosea
 
     fun event(event: org.graphiks.kadre.input.DeviceLifecycleEvent) =
         line("DEVICE_EVENT\t${formatter.formatEvent(event)}")
+
+    fun gamepadSnapshot(
+        gamepad: org.graphiks.kadre.input.Gamepad,
+        snapshot: org.graphiks.kadre.input.GamepadSnapshot,
+    ) = line("GAMEPAD_SNAPSHOT\t${formatter.formatGamepadSnapshot(gamepad, snapshot)}")
+
+    fun gamepadEvent(gamepad: org.graphiks.kadre.input.Gamepad, event: org.graphiks.kadre.input.GamepadEvent) =
+        line("GAMEPAD_EVENT\t${formatter.formatGamepadEvent(gamepad, event)}")
 
     fun scenario(command: String) {
         val fields = command.split(' ', limit = 4)
