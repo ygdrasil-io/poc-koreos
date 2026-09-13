@@ -194,7 +194,7 @@ private fun recordFrame(
 private fun printPhase11CaptureHelp(recorder: Phase11CaptureHarnessRecorder) {
     recorder.line(
         "HELP\tsnapshot | permission | refresh | open-picker | open-source <index> | close <session> | " +
-            "stress <session> <seconds> | result M1..M7 pass|fail|not-applicable note | finish",
+            "stress <session> <seconds> | result M1..M9 pass|fail|not-applicable note | finish",
     )
 }
 
@@ -257,7 +257,7 @@ private class Phase11CaptureHarnessRecorder(private val path: Path) : AutoClosea
         val id = fields.getOrNull(1).orEmpty()
         val status = fields.getOrNull(2).orEmpty()
         val note = fields.getOrNull(3).orEmpty()
-        require(id in (1..7).map { "M$it" }) { "scenario must be M1 through M7" }
+        require(id in (1..9).map { "M$it" }) { "scenario must be M1 through M9" }
         require(status in setOf("pass", "fail", "not-applicable")) {
             "status must be pass, fail or not-applicable"
         }

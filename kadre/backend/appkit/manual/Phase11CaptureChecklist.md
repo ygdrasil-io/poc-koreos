@@ -11,5 +11,7 @@ Run `./gradlew :kadre:backend:appkit:phase11CaptureHarness` on a physical macOS 
 | M5 | With a selected session, observe `FRAME` records. | Only metadata is recorded: BGRA format, dimensions, configuration revision and padded plane layout; no pixel data appears in the TSV. |
 | M6 | Run `close <session>`. | One `COLLECT_TERMINAL` and one terminal outcome are recorded; no later frame record is admitted for that session. |
 | M7 | Restart with `--frame-delay-ms=250`, open a source, then run `stress <session> 30`. | The record reports bounded frame progress and any drop/terminal diagnostic. Repeat while switching spaces, locking/unlocking, or changing the selected display configuration. |
+| M8 | With an active display stream, revoke Screen Recording access for the harness process through System Settings, then wait for native termination. | `COLLECT_TERMINAL` reports `PermissionDenied(CaptureScreen)` while the session keeps its terminal `PermissionRevoked` outcome; no later `FRAME` is admitted. Re-grant access before the next run. |
+| M9 | Capture a separate window through the picker or inventory, then close that window while its stream is active. | `COLLECT_TERMINAL` reports `SourceLost` for the published source identity; no later `FRAME` is admitted. |
 
 `open-source <index>` is available after `refresh` as an alternative to the macOS 14+ picker. Region and same-session `Surface` capture remain deliberately unavailable in this increment; their absence is expected evidence, not a test failure.
