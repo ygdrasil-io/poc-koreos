@@ -11,6 +11,7 @@ import org.graphiks.kadre.capture.CaptureSource
 import org.graphiks.kadre.capture.CaptureSourceKind
 import org.graphiks.kadre.capture.CaptureTarget
 import org.graphiks.kadre.capture.CaptureOutcome
+import org.graphiks.kadre.capture.CaptureFrame
 import org.graphiks.kadre.capture.CaptureConfiguration
 import org.graphiks.kadre.capture.CaptureConfigurationRevision
 import org.graphiks.kadre.capture.CaptureCadence
@@ -24,6 +25,7 @@ import org.graphiks.kadre.capture.ColorRange
 import org.graphiks.kadre.capture.HdrMetadata
 import org.graphiks.kadre.capture.MatrixCoefficients
 import org.graphiks.kadre.capture.TransferFunction
+import org.graphiks.kadre.capture.PixelPlaneLayout
 import org.graphiks.kadre.capture.CaptureSessionState
 import org.graphiks.kadre.diagnostics.KadreFailure
 import org.graphiks.kadre.diagnostics.KadreResourceKind
@@ -182,6 +184,63 @@ class RuntimeCaptureSessionTest {
         )
         assertEquals(1, reservation.closeCalls)
     }
+
+    @Test
+    fun collectorReceivesAFrameLeaseThatIsInvalidatedAfterItsCallback() = runTest {
+        val port = AdmissionCapturePort(enumeratedSnapshot(name = "Primary"))
+        val manager = RuntimeCaptureManager(port, maxConcurrentSessions = 1)
+        val selected = source(manager)
+        val reservation = StreamingCaptureReservation(portSource("Primary"))
+        port.reservations.addLast(KadreResult.Success(reservation))
+        val session = successValue(
+            manager.open(CaptureRequest(CaptureTarget.Source(selected.id, selected.managerRevision))),
+        )
+        var delivered: CaptureFrame? = null
+        val collecting = async {
+            session.collectFrames { frame ->
+                delivered = frame
+                assertEquals(byteArrayOf(1, 2, 3, 4).toList(), frame.copyPlanes().single().bytes.toList())
+            }
+        }
+        runCurrent()
+
+        reservation.emit(frame())
+        runCurrent()
+        reservation.complete(CaptureOutcome.SourceCompleted)
+
+        assertEquals(KadreResult.Success(Unit), collecting.await())
+        assertFailsWith<IllegalStateException> { checkNotNull(delivered).copyPlanes() }
+    }
+
+    @Test
+    fun collectorCannotAwaitItsOwnSessionTermination() = runTest {
+        val port = AdmissionCapturePort(enumeratedSnapshot(name = "Primary"))
+        val manager = RuntimeCaptureManager(port, maxConcurrentSessions = 1)
+        val selected = source(manager)
+        val reservation = StreamingCaptureReservation(portSource("Primary"))
+        port.reservations.addLast(KadreResult.Success(reservation))
+        val session = successValue(
+            manager.open(CaptureRequest(CaptureTarget.Source(selected.id, selected.managerRevision))),
+        )
+        var awaitFailure: Throwable? = null
+        val collecting = async {
+            session.collectFrames {
+                try {
+                    session.awaitTermination()
+                } catch (failure: Throwable) {
+                    awaitFailure = failure
+                }
+            }
+        }
+        runCurrent()
+
+        reservation.emit(frame())
+        runCurrent()
+
+        assertIs<IllegalStateException>(awaitFailure)
+        reservation.complete(CaptureOutcome.SourceCompleted)
+        assertEquals(KadreResult.Success(Unit), collecting.await())
+    }
 }
 
 private class AdmissionCapturePort(
@@ -265,6 +324,10 @@ private class StreamingCaptureReservation(
         checkNotNull(listener).onTerminated(outcome)
     }
 
+    fun emit(frame: CapturePortFrame) {
+        checkNotNull(listener).onFrame(frame)
+    }
+
     override fun close() {
         closeCalls += 1
     }
@@ -280,6 +343,30 @@ private fun portSource(name: String): CapturePortSource = CapturePortSource(
     kind = CaptureSourceKind.Display,
     name = name,
     size = PhysicalSize(1920, 1080),
+)
+
+private fun frame(): CapturePortFrame = CapturePortFrame(
+    size = PhysicalSize(1, 1),
+    format = PixelFormat.Bgra8,
+    planes = listOf(
+        CapturePortPlane(
+            layout = PixelPlaneLayout(1, 1, 4, 4, 4, 1, 1),
+            bytes = byteArrayOf(1, 2, 3, 4),
+        ),
+    ),
+    configurationRevision = 0L,
+    sourceTimestamp = null,
+    duration = null,
+    discontinuity = null,
+    colorEncoding = ColorEncoding(
+        primaries = ColorPrimaries.Bt709,
+        transfer = TransferFunction.Srgb,
+        matrix = MatrixCoefficients.Identity,
+        range = ColorRange.Full,
+        hdr = HdrMetadata.None,
+    ),
+    alphaMode = AlphaMode.Premultiplied,
+    orientation = CaptureOrientation.Upright,
 )
 
 private fun source(manager: RuntimeCaptureManager): CaptureSource =

@@ -22,13 +22,18 @@ import org.graphiks.kadre.diagnostics.KadreFailure
 import org.graphiks.kadre.diagnostics.KadreOperation
 import org.graphiks.kadre.diagnostics.KadreResourceKind
 import org.graphiks.kadre.diagnostics.KadreResult
+import org.graphiks.kadre.application.EventStamp
+import org.graphiks.kadre.application.SessionInstant
+import org.graphiks.kadre.application.SessionSequence
 import org.graphiks.kadre.input.KadrePermission
 import org.graphiks.kadre.input.PermissionState
+import kotlin.time.Duration.Companion.ZERO
 
 /** Session-owned projection of detached capture-control-plane observations. */
 internal class RuntimeCaptureManager(
     private val port: CapturePort,
     private val maxConcurrentSessions: Int = 1,
+    private val eventStampSource: () -> EventStamp = RuntimeCaptureStamps::next,
 ) : CaptureManager, AutoCloseable {
     init {
         require(maxConcurrentSessions > 0) { "maxConcurrentSessions must be positive" }
@@ -106,7 +111,7 @@ internal class RuntimeCaptureManager(
         try {
             currentCoroutineContext().ensureActive()
             val source = lock.withLock { sourceForReservation(target.source, reservation.source) }
-            val session = RuntimeCaptureSession(source, reservation, ::onSessionTerminated)
+            val session = RuntimeCaptureSession(source, reservation, eventStampSource, ::onSessionTerminated)
             val accepted = lock.withLock {
                 if (closed) {
                     false
@@ -363,6 +368,16 @@ private sealed interface CaptureAdmission {
     ) : CaptureAdmission
 
     public data class Failure(val result: KadreResult.Failure) : CaptureAdmission
+}
+
+private object RuntimeCaptureStamps {
+    private val lock = RuntimeLock()
+    private var nextSequence = 0L
+
+    fun next(): EventStamp = lock.withLock {
+        check(nextSequence < Long.MAX_VALUE) { "capture event sequence space exhausted" }
+        EventStamp(SessionSequence(nextSequence++), SessionInstant(ZERO), null)
+    }
 }
 
 private fun CapturePermissionState.forScope(scope: CapturePermissionScope): PermissionState = when (scope) {
