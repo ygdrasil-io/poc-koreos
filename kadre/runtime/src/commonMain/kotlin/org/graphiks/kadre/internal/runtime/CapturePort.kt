@@ -1,6 +1,8 @@
 package org.graphiks.kadre.internal.runtime
 
 import org.graphiks.kadre.capture.CaptureCapabilities
+import org.graphiks.kadre.capture.CaptureConfiguration
+import org.graphiks.kadre.capture.CaptureOutcome
 import org.graphiks.kadre.capture.CapturePermissionScope
 import org.graphiks.kadre.capture.CapturePermissionState
 import org.graphiks.kadre.capture.CaptureRequest
@@ -93,7 +95,34 @@ public interface CapturePortReservation : AutoCloseable {
     /** Immutable source descriptor selected by the backend, including after a host picker. */
     public val source: CapturePortSource
 
+    /**
+     * Starts this already-reserved source for the unique runtime collector.
+     *
+     * A successful result owns the returned stream until either the listener reports its terminal
+     * outcome or the runtime closes it. Backends invoke listener callbacks only after this method
+     * has returned successfully, and must not expose native pointers through the callback.
+     */
+    public suspend fun start(listener: CapturePortStreamListener): KadreResult<CapturePortStreamStart> =
+        KadreResult.Failure(KadreFailure.Unsupported(KadreOperation.CaptureCollectFrames))
+
     override public fun close()
+}
+
+/** Backend-owned running capture stream. Closing it is non-blocking and idempotent. */
+public interface CapturePortStream : AutoCloseable {
+    override public fun close()
+}
+
+/** Successful stream startup, including the complete effective configuration before any frame. */
+public data class CapturePortStreamStart(
+    public val stream: CapturePortStream,
+    public val configuration: CaptureConfiguration,
+)
+
+/** Callback boundary for a stream owned by one [CapturePortReservation]. */
+public interface CapturePortStreamListener {
+    /** The running stream reached one terminal capture outcome. */
+    public fun onTerminated(outcome: CaptureOutcome)
 }
 
 /**

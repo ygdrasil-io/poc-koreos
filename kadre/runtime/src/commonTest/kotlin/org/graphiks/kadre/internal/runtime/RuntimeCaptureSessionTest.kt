@@ -1,5 +1,8 @@
 package org.graphiks.kadre.internal.runtime
 
+import kotlinx.coroutines.async
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.graphiks.kadre.capture.CaptureManagerRevision
 import org.graphiks.kadre.capture.CapturePermissionState
@@ -8,6 +11,19 @@ import org.graphiks.kadre.capture.CaptureSource
 import org.graphiks.kadre.capture.CaptureSourceKind
 import org.graphiks.kadre.capture.CaptureTarget
 import org.graphiks.kadre.capture.CaptureOutcome
+import org.graphiks.kadre.capture.CaptureConfiguration
+import org.graphiks.kadre.capture.CaptureConfigurationRevision
+import org.graphiks.kadre.capture.CaptureCadence
+import org.graphiks.kadre.capture.CaptureCursorMode
+import org.graphiks.kadre.capture.CaptureOrientation
+import org.graphiks.kadre.capture.PixelFormat
+import org.graphiks.kadre.capture.AlphaMode
+import org.graphiks.kadre.capture.ColorEncoding
+import org.graphiks.kadre.capture.ColorPrimaries
+import org.graphiks.kadre.capture.ColorRange
+import org.graphiks.kadre.capture.HdrMetadata
+import org.graphiks.kadre.capture.MatrixCoefficients
+import org.graphiks.kadre.capture.TransferFunction
 import org.graphiks.kadre.capture.CaptureSessionState
 import org.graphiks.kadre.diagnostics.KadreFailure
 import org.graphiks.kadre.diagnostics.KadreResourceKind
@@ -18,7 +34,9 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertFailsWith
+import kotlin.test.assertTrue
 
+@OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 class RuntimeCaptureSessionTest {
     @Test
     fun sessionBudgetMustBePositive() {
@@ -91,6 +109,79 @@ class RuntimeCaptureSessionTest {
         assertIs<org.graphiks.kadre.capture.CaptureSources.Unavailable>(manager.state.value.sources)
         session.close()
     }
+
+    @Test
+    fun firstCollectorStartsTheReservedStreamAndCompletesFromItsTerminalCallback() = runTest {
+        val port = AdmissionCapturePort(enumeratedSnapshot(name = "Primary"))
+        val manager = RuntimeCaptureManager(port, maxConcurrentSessions = 1)
+        val selected = source(manager)
+        val reservation = StreamingCaptureReservation(portSource("Primary"))
+        port.reservations.addLast(KadreResult.Success(reservation))
+        val session = successValue(
+            manager.open(CaptureRequest(CaptureTarget.Source(selected.id, selected.managerRevision))),
+        )
+
+        val collecting = async { session.collectFrames { } }
+        runCurrent()
+
+        assertEquals(1, reservation.startCalls)
+        assertEquals(CaptureSessionState.Streaming(reservation.configuration), session.state.value)
+
+        reservation.complete(CaptureOutcome.SourceCompleted)
+
+        assertEquals(KadreResult.Success(Unit), collecting.await())
+        assertEquals(
+            CaptureSessionState.Terminated(CaptureOutcome.SourceCompleted),
+            session.state.value,
+        )
+    }
+
+    @Test
+    fun secondCollectorIsRejectedWithoutRestartingTheReservedStream() = runTest {
+        val port = AdmissionCapturePort(enumeratedSnapshot(name = "Primary"))
+        val manager = RuntimeCaptureManager(port, maxConcurrentSessions = 1)
+        val selected = source(manager)
+        val reservation = StreamingCaptureReservation(portSource("Primary"))
+        port.reservations.addLast(KadreResult.Success(reservation))
+        val session = successValue(
+            manager.open(CaptureRequest(CaptureTarget.Source(selected.id, selected.managerRevision))),
+        )
+        val first = async { session.collectFrames { } }
+        runCurrent()
+
+        val second = session.collectFrames { }
+
+        assertEquals(
+            KadreResult.Failure(KadreFailure.AlreadyInUse(KadreResourceKind.CaptureCollector)),
+            second,
+        )
+        assertEquals(1, reservation.startCalls)
+        session.close()
+        assertEquals(KadreResult.Success(Unit), first.await())
+    }
+
+    @Test
+    fun collectorCancellationStopsTheSessionAndReleasesItsReservation() = runTest {
+        val port = AdmissionCapturePort(enumeratedSnapshot(name = "Primary"))
+        val manager = RuntimeCaptureManager(port, maxConcurrentSessions = 1)
+        val selected = source(manager)
+        val reservation = StreamingCaptureReservation(portSource("Primary"))
+        port.reservations.addLast(KadreResult.Success(reservation))
+        val session = successValue(
+            manager.open(CaptureRequest(CaptureTarget.Source(selected.id, selected.managerRevision))),
+        )
+        val collecting = async { session.collectFrames { } }
+        runCurrent()
+
+        collecting.cancelAndJoin()
+
+        assertTrue(collecting.isCancelled)
+        assertEquals(
+            CaptureSessionState.Terminated(CaptureOutcome.Stopped(org.graphiks.kadre.capture.CaptureStopReason.CollectorCancelled)),
+            session.state.value,
+        )
+        assertEquals(1, reservation.closeCalls)
+    }
 }
 
 private class AdmissionCapturePort(
@@ -128,6 +219,54 @@ private class RecordingCaptureReservation(
 
     override fun close() {
         closeCount += 1
+    }
+}
+
+private class StreamingCaptureReservation(
+    override val source: CapturePortSource,
+) : CapturePortReservation {
+    val configuration = CaptureConfiguration(
+        revision = CaptureConfigurationRevision(0),
+        size = PhysicalSize(1920, 1080),
+        format = PixelFormat.Bgra8,
+        colorEncoding = ColorEncoding(
+            primaries = ColorPrimaries.Bt709,
+            transfer = TransferFunction.Srgb,
+            matrix = MatrixCoefficients.Identity,
+            range = ColorRange.Full,
+            hdr = HdrMetadata.None,
+        ),
+        alphaMode = AlphaMode.Premultiplied,
+        orientation = CaptureOrientation.Upright,
+        cadence = CaptureCadence.Unknown,
+        region = null,
+        cursorMode = CaptureCursorMode.EmbeddedWhenAvailable,
+    )
+    var startCalls = 0
+        private set
+    var closeCalls = 0
+        private set
+    private var listener: CapturePortStreamListener? = null
+
+    override suspend fun start(listener: CapturePortStreamListener): KadreResult<CapturePortStreamStart> {
+        startCalls += 1
+        this.listener = listener
+        return KadreResult.Success(
+            CapturePortStreamStart(
+                stream = object : CapturePortStream {
+                    override fun close() = Unit
+                },
+                configuration = configuration,
+            ),
+        )
+    }
+
+    fun complete(outcome: CaptureOutcome) {
+        checkNotNull(listener).onTerminated(outcome)
+    }
+
+    override fun close() {
+        closeCalls += 1
     }
 }
 
