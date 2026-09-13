@@ -22,6 +22,7 @@ import org.graphiks.kadre.internal.runtime.RuntimeSessionComponents
 import org.graphiks.kadre.internal.runtime.RuntimeSessionComponentsFactory
 import org.graphiks.kadre.internal.runtime.RuntimeSessionObserver
 import org.graphiks.kadre.internal.runtime.RuntimeSessionStopHandler
+import org.graphiks.kadre.internal.runtime.CapturePort
 import org.graphiks.kadre.internal.runtime.DisplayPort
 import org.graphiks.kadre.internal.runtime.GamepadPort
 import org.graphiks.kadre.internal.runtime.InputDevicePort
@@ -43,6 +44,7 @@ public class AppKitBackendProvider private constructor(
     private val displayAvailability: AppKitDisplayAvailability,
     private val rawInputPortFactory: () -> RawInputPort?,
     private val displayPortFactory: () -> DisplayPort?,
+    private val capturePortFactory: () -> CapturePort?,
     private val gamepadPortFactory: () -> GamepadPort?,
     private val inputDevicePortFactory: () -> InputDevicePort?,
     private val availability: () -> Boolean,
@@ -61,6 +63,7 @@ public class AppKitBackendProvider private constructor(
                 null
             }
         },
+        { if (isMacOs()) AppKitCapturePort() else null },
         { if (isMacOs()) ProcessAppKitProcessBroker.value.openGameControllerPort() else null },
         { if (isMacOs()) ProcessAppKitProcessBroker.value.openHidPort() else null },
         ::isMacOs,
@@ -251,6 +254,7 @@ public class AppKitBackendProvider private constructor(
             displayAvailability: AppKitDisplayAvailability = AppKitDisplayAvailability(),
             rawInputPortFactory: () -> RawInputPort? = { null },
             displayPortFactory: () -> DisplayPort? = { null },
+            capturePortFactory: () -> CapturePort? = { null },
             gamepadPortFactory: () -> GamepadPort? = { null },
             inputDevicePortFactory: () -> InputDevicePort? = { null },
             availability: () -> Boolean,
@@ -262,6 +266,7 @@ public class AppKitBackendProvider private constructor(
             displayAvailability,
             rawInputPortFactory,
             displayPortFactory,
+            capturePortFactory,
             gamepadPortFactory,
             inputDevicePortFactory,
             availability,
@@ -321,6 +326,7 @@ public class AppKitBackendProvider private constructor(
             windows = driver.manager,
             rawInputPort = rawInputPortFactory(),
             displayPort = displayPortFactory(),
+            capturePort = capturePortFactory(),
             gamepadPort = gamepadPortFactory(),
             inputDevicePort = inputDevicePortFactory(),
             closeAction = driver::close,

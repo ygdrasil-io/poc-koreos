@@ -155,6 +155,37 @@ class RuntimeCaptureManagerTest {
     }
 
     @Test
+    fun refreshPermissionDenialPreservesEveryPermissionRequiredForTheCurrentInventory() = runTest {
+        val initial = snapshot(
+            permissions = CapturePermissionState(PermissionState.NotDetermined, PermissionState.NotDetermined),
+            sources = CapturePortSources.PermissionRequired(
+                setOf(KadrePermission.CaptureScreen, KadrePermission.CaptureWindow),
+            ),
+        ).copy(
+            capabilities = CaptureCapabilities(
+                screen = supportedConstraints(FeatureAvailability.RequiresPermission(KadrePermission.CaptureScreen)),
+                window = supportedConstraints(FeatureAvailability.RequiresPermission(KadrePermission.CaptureWindow)),
+                surface = supportedConstraints(),
+                sourceEnumeration = Capability.Supported(
+                    Unit,
+                    FeatureAvailability.RequiresPermission(KadrePermission.CaptureScreen),
+                ),
+                hostPicker = FeatureAvailability.RequiresPermission(KadrePermission.CaptureScreen),
+            ),
+        )
+        val port = RecordingCapturePort(initial)
+        val manager = RuntimeCaptureManager(port)
+        port.refreshResult = KadreResult.Failure(KadreFailure.PermissionDenied(KadrePermission.CaptureScreen))
+
+        manager.refreshSources()
+
+        assertEquals(
+            setOf(KadrePermission.CaptureScreen, KadrePermission.CaptureWindow),
+            assertIs<CaptureSources.PermissionRequired>(manager.state.value.sources).required,
+        )
+    }
+
+    @Test
     fun closedManagerReportsTheClosedHost() = runTest {
         val port = RecordingCapturePort(
             snapshot(
@@ -206,13 +237,15 @@ internal fun snapshot(
     sources = sources,
 )
 
-private fun supportedConstraints(): Capability<CaptureTargetConstraints> = Capability.Supported(
+private fun supportedConstraints(
+    availability: FeatureAvailability = FeatureAvailability.Available,
+): Capability<CaptureTargetConstraints> = Capability.Supported(
     CaptureTargetConstraints(
         formats = setOf(PixelFormat.Bgra8),
         cursorModes = setOf(CaptureCursorMode.EmbeddedWhenAvailable),
         region = FeatureAvailability.Available,
     ),
-    FeatureAvailability.Available,
+    availability,
 )
 
 private fun displaySource(name: String): CapturePortSource = CapturePortSource(
