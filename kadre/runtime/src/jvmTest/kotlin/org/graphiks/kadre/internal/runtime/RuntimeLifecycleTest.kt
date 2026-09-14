@@ -1,6 +1,6 @@
 package org.graphiks.kadre.internal.runtime
 
-import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.filterIsInstance
@@ -8,7 +8,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.take
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.test.runTest
 import org.graphiks.kadre.application.ActivationState
 import org.graphiks.kadre.application.AttachmentState
@@ -63,12 +63,12 @@ class RuntimeLifecycleTest {
             }
         }
         testScheduler.runCurrent()
-        val closeReturned = CompletableDeferred<Unit>()
+        val closeReturned = CountDownLatch(1)
         Thread.ofPlatform().start {
             try {
                 session.close()
             } finally {
-                closeReturned.complete(Unit)
+                closeReturned.countDown()
             }
         }
         assertTrue(stopEntered.await(2, TimeUnit.SECONDS))
@@ -78,7 +78,10 @@ class RuntimeLifecycleTest {
         assertEquals(emptyList(), signals)
 
         releaseStop.countDown()
-        withTimeout(2.seconds) { closeReturned.await() }
+        assertTrue(
+            withContext(Dispatchers.Default) { closeReturned.await(2, TimeUnit.SECONDS) },
+            "session close did not complete after its stop handler was released",
+        )
         testScheduler.advanceUntilIdle()
         assertEquals(SessionOutcome.Stopped(SessionStopReason.HostRequested), session.awaitTermination())
         collector.cancel()
