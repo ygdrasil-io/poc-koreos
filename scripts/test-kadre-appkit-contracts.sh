@@ -21,7 +21,16 @@ RUNTIME_EVIDENCE_FILES=("INP-002.json" "WIN-005.json" "WIN-006.json" "INT-001.js
 DIAGNOSTICS_DIRECTORY="$REPO_ROOT/kadre/backend/appkit/build/ci-diagnostics"
 TEST_TIMEOUT_SECONDS="${KADRE_APPKIT_TEST_TIMEOUT_SECONDS:-900}"
 EVIDENCE_TIMEOUT_SECONDS=600
+FULLSCREEN_TERMINAL_CALLBACKS="${KADRE_APPKIT_REQUIRE_FULLSCREEN_TERMINAL_CALLBACKS:-true}"
 source "$SCRIPT_DIR/lib/process-watchdog.sh"
+
+case "$FULLSCREEN_TERMINAL_CALLBACKS" in
+    true|false) ;;
+    *)
+        echo "KADRE_APPKIT_REQUIRE_FULLSCREEN_TERMINAL_CALLBACKS must be true or false." >&2
+        exit 64
+        ;;
+esac
 
 if [[ ! -x "$GRADLEW" ]]; then
     echo "Gradle wrapper is not executable: $GRADLEW" >&2
@@ -73,6 +82,7 @@ cd "$REPO_ROOT"
 run_phase tests "$TEST_TIMEOUT_SECONDS" \
     "$GRADLEW" \
     :kadre:backend:appkit:appKitNativeTests \
+    "-Dkadre.appkit.requireFullscreenTerminalCallbacks=$FULLSCREEN_TERMINAL_CALLBACKS" \
     --refresh-dependencies \
     --rerun-tasks \
     --no-daemon \

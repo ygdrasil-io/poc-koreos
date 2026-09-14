@@ -29,9 +29,16 @@ jobs:
           - arch: arm64
             runner: macos-26
             artifacts: appkit-contract-artifacts
+            fullscreen_witness_expectation: terminal
+            require_fullscreen_terminal_callbacks: true
           - arch: x86_64
             runner: macos-26-intel
             artifacts: appkit-contract-artifacts-x86_64
+            # The managed Intel runner invokes the selector but blocks AppKit
+            # before a terminal fullscreen callback. The witness preserves
+            # this fact while ARM owns the terminal transition proof.
+            fullscreen_witness_expectation: unavailable
+            require_fullscreen_terminal_callbacks: false
 
     steps:
       - name: Checkout
@@ -53,13 +60,16 @@ jobs:
       - name: Run native AppKit fullscreen witness
         id: native_fullscreen_witness
         continue-on-error: true
-        run: |
-          KADRE_APPKIT_FULLSCREEN_WITNESS_OUTPUT="kadre/backend/appkit/build/ci-diagnostics/fullscreen-witness.json" \
-            bash scripts/test-appkit-fullscreen-witness.sh
+        env:
+          KADRE_APPKIT_FULLSCREEN_WITNESS_OUTPUT: kadre/backend/appkit/build/ci-diagnostics/fullscreen-witness.json
+          KADRE_APPKIT_FULLSCREEN_WITNESS_EXPECTATION: ${{ matrix.fullscreen_witness_expectation }}
+        run: bash scripts/test-appkit-fullscreen-witness.sh
 
       - name: Run AppKit contract gate
         id: appkit_contract_gate
         continue-on-error: true
+        env:
+          KADRE_APPKIT_REQUIRE_FULLSCREEN_TERMINAL_CALLBACKS: ${{ matrix.require_fullscreen_terminal_callbacks }}
         run: scripts/test-kadre-appkit-contracts.sh
 
       - name: Require AppKit gates

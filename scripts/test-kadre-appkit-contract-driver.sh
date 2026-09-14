@@ -64,6 +64,20 @@ for evidence_file in "${RUNTIME_EVIDENCE_FILES[@]}"; do
 done
 
 rm -rf "$EVIDENCE_DIRECTORY"
+rm -rf "$RUNTIME_EVIDENCE_DIRECTORY"
+TRACE="$TEMP_DIR/selector-only.trace"
+KADRE_GRADLEW="$FAKE_GRADLE" \
+KADRE_FAKE_GRADLE_TRACE="$TRACE" \
+KADRE_FAKE_EVIDENCE_DIRECTORY="$EVIDENCE_DIRECTORY" \
+KADRE_FAKE_RUNTIME_EVIDENCE_DIRECTORY="$RUNTIME_EVIDENCE_DIRECTORY" \
+KADRE_APPKIT_REQUIRE_FULLSCREEN_TERMINAL_CALLBACKS=false \
+GITHUB_SHA="0123456789abcdef" \
+    bash "$DRIVER"
+
+[[ "$(sed -n '1p' "$TRACE")" == *"-Dkadre.appkit.requireFullscreenTerminalCallbacks=false"* ]] ||
+    fail "selector-only CI policy did not reach the AppKit test JVM"
+
+rm -rf "$EVIDENCE_DIRECTORY"
 TRACE="$TEMP_DIR/missing-apk010.trace"
 capture_status observed_status env \
     KADRE_GRADLEW="$FAKE_GRADLE" \
