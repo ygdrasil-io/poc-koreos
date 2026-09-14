@@ -504,6 +504,7 @@ class AppKitBackendProviderTest {
         } finally {
             parentScope.cancel()
         }
+        Unit
     }
 
     @Test
@@ -541,6 +542,7 @@ class AppKitBackendProviderTest {
         } finally {
             parentScope.cancel()
         }
+        Unit
     }
 
     @Test
@@ -571,6 +573,7 @@ class AppKitBackendProviderTest {
         } finally {
             parentScope.cancel()
         }
+        Unit
     }
 
     @Test
