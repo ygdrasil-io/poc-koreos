@@ -3078,7 +3078,13 @@ class AppKitBackendProviderTest {
             "the isolated display contract proof requires macOS 26 or newer",
         )
         val native = KffiAppKitNativeApplication()
-        val broker = AppKitProcessBroker()
+        val displaySnapshotFailure = AtomicReference<Throwable?>(null)
+        val displayNative = KffiAppKitDisplayNative(
+            snapshotFailureReporter = { failure -> displaySnapshotFailure.compareAndSet(null, failure) },
+        )
+        val broker = AppKitProcessBroker(
+            displayBrokerFactory = { AppKitDisplayBroker(displayNative) },
+        )
         val provider = AppKitBackendProvider.forTesting(
             nativeApplication = native,
             broker = broker,
@@ -3480,6 +3486,7 @@ class AppKitBackendProviderTest {
                         requestStop()
                         } catch (failure: Throwable) {
                             proofFailure.set(failure)
+                            displaySnapshotFailure.get()?.let(failure::addSuppressed)
                             openedWindow?.let { window ->
                                 if (window.state.value.phase != WindowPhase.Closed) {
                                     try {
