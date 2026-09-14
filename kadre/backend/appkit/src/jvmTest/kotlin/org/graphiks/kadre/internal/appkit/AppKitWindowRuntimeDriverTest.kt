@@ -122,6 +122,7 @@ class AppKitWindowRuntimeDriverTest {
     @Test
     fun captureRegistryTracksLiveSurfacesIndependentlyAndRevokesBeforePeerRelease() = runBlocking {
         val registry = AppKitCaptureSurfaceRegistry()
+        lateinit var firstSurface: org.graphiks.kadre.surface.SurfaceId
         val port = DeterministicAppKitNativeWindowPort(
             name = "capture-registry-lifecycle",
             captureWindowNumber = { title ->
@@ -129,6 +130,11 @@ class AppKitWindowRuntimeDriverTest {
                     "capture-first" -> 501L
                     "capture-second" -> 502L
                     else -> error("unexpected capture test window $title")
+                }
+            },
+            beforeCloseWindow = { title ->
+                if (title == "capture-first") {
+                    assertEquals(AppKitCaptureSurfaceResolution.Revoked, registry.resolve(firstSurface))
                 }
             },
         )
@@ -141,6 +147,7 @@ class AppKitWindowRuntimeDriverTest {
         try {
             val first = openedWindow(driver, WindowSpec(title = "capture-first"))
             val second = openedWindow(driver, WindowSpec(title = "capture-second"))
+            firstSurface = first.surface.id
             secondSurface = second.surface.id
 
             assertEquals(501L, captureWindowNumber(registry, first.surface.id))

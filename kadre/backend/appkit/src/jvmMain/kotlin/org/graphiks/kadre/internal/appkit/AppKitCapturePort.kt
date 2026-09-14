@@ -211,15 +211,14 @@ internal class AppKitCapturePort(
         val reserved = try {
             awaitReservation(nativeTarget)
         } finally {
-            (targetResolution as? AppKitCaptureTargetResolution.Resolved)?.surfaceLease?.close()
+            targetResolution.surfaceLease?.close()
         }
         return when (reserved) {
             is AppKitCaptureNativeReservationResult.Reserved -> {
                 try {
                     val source = reserved.reservation.source.toPortSource(
                         selected = selected,
-                        expectedSurfaceWindowNumber = (targetResolution as? AppKitCaptureTargetResolution.Resolved)
-                            ?.surfaceWindowNumber,
+                        expectedSurfaceWindowNumber = targetResolution.surfaceWindowNumber,
                     ) ?: run {
                         reserved.reservation.close()
                         return KadreResult.Failure(platformFailure("surface-target-mismatch"))

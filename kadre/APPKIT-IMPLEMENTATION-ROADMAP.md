@@ -735,6 +735,12 @@ Couvrir permissions, sources, admission, streaming, frames et terminaison de cap
 - source stale rejetée avant réservation ;
 - distinctions explicites entre inventaire, host picker et targets ;
 - runtime gates pour les APIs dépendantes de la version macOS.
+- `CaptureTarget.Surface` AppKit ne résout que la surface vivante de la même session : son
+  `NSWindow.windowNumber` reste privé au backend et la source publique est `HostSurface`, sans
+  titre, ID natif ni handle ;
+- fermeture de la surface retire l’admission de nouvelles réservations avant le teardown natif ;
+- region reste `Unsupported` tant qu’une sémantique de conversion physique/logique complète n’est
+  pas prouvée.
 
 #### Gate de sortie
 
@@ -743,6 +749,8 @@ Couvrir permissions, sources, admission, streaming, frames et terminaison de cap
 - révocation, source perdue, cancellation et failure collector couvertes ;
 - zéro frame ou ressource native après terminaison ;
 - aucun format ou inventaire inventé pour masquer une absence native.
+- le cahier manuel contient M10, exécuté après accord explicite Screen Recording sur une machine
+  macOS physique ; son TSV assaini reste hors du dépôt.
 
 ### Phase 12 — Interop, hardening et fermeture contractuelle
 
