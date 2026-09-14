@@ -15,6 +15,8 @@ val foundationProject = project(":kadre:foundation")
 val foundationAllMetadataJar = foundationProject.tasks.named<Jar>("allMetadataJar")
 val foundationCommonMainMetadata = foundationProject.layout.buildDirectory.dir("classes/kotlin/metadata/commonMain")
 val runtimeProject = project(":kadre:runtime")
+val runtimeAllMetadataJar = runtimeProject.tasks.named<Jar>("allMetadataJar")
+val runtimeCommonMainMetadata = runtimeProject.layout.buildDirectory.dir("classes/kotlin/metadata/commonMain")
 val foundationJsMain = foundationProject.layout.buildDirectory.dir("classes/kotlin/js/main")
 val foundationWasmJsMain = foundationProject.layout.buildDirectory.dir("classes/kotlin/wasmJs/main")
 val runtimeJsMain = runtimeProject.layout.buildDirectory.dir("classes/kotlin/js/main")
@@ -46,6 +48,11 @@ tasks.withType<KotlinCompileCommon>().configureEach {
     if (name == "compileCommonMainKotlinMetadata" || name == "compileWebMainKotlinMetadata") {
         dependsOn(foundationAllMetadataJar)
         friendPaths.from(foundationCommonMainMetadata)
+        // webMain references internal runtime types. The js/wasm compilations already
+        // friend the runtime through -Xfriend-modules, so the shared web metadata
+        // compilation must expose the same friends or it cannot resolve them.
+        dependsOn(runtimeAllMetadataJar)
+        friendPaths.from(runtimeCommonMainMetadata)
     }
 }
 
