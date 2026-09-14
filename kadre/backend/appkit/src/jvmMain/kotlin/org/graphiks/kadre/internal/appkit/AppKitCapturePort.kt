@@ -76,9 +76,10 @@ import kotlin.math.min
  * Session-owned ScreenCaptureKit adapter.
  *
  * The port retains only detached identifiers and Kotlin-owned frame bytes across the
- * backend/runtime boundary. It deliberately advertises neither region nor same-session Surface
- * capture: ScreenCaptureKit's physical-pixel to logical-point conversion is not available yet,
- * and approximating a Surface by its enclosing window would violate the public contract.
+ * backend/runtime boundary. It does not yet advertise region or same-session Surface capture:
+ * the latter is resolved privately while its portable contract evidence is assembled. A Surface
+ * is never approximated by an arbitrary enclosing window; only its session-owned registry entry
+ * may select the exact native window identity.
  */
 internal class AppKitCapturePort(
     private val native: AppKitCaptureNative = KffiAppKitCaptureNative,
@@ -199,15 +200,30 @@ internal class AppKitCapturePort(
         if (!capability.preflightAccessGranted) {
             return KadreResult.Failure(KadreFailure.PermissionDenied(KadrePermission.CaptureScreen))
         }
-        val nativeTarget = target.toNativeTarget(capability)
-            ?: return KadreResult.Failure(KadreFailure.Unsupported(KadreOperation.CaptureOpen))
+        val targetResolution = target.resolveNativeTarget(capability, surfaceRegistry)
+        val nativeTarget = when (targetResolution) {
+            is AppKitCaptureTargetResolution.Resolved -> targetResolution.target
+            is AppKitCaptureTargetResolution.Rejected -> return KadreResult.Failure(targetResolution.failure)
+        }
         val selected = (target as? CapturePortTarget.Source)?.key?.let { key ->
             synchronized(lock) { sourcesByKey[key] }
         }
-        return when (val reserved = awaitReservation(nativeTarget)) {
+        val reserved = try {
+            awaitReservation(nativeTarget)
+        } finally {
+            (targetResolution as? AppKitCaptureTargetResolution.Resolved)?.surfaceLease?.close()
+        }
+        return when (reserved) {
             is AppKitCaptureNativeReservationResult.Reserved -> {
                 try {
-                    val source = reserved.reservation.source.toPortSource(selected)
+                    val source = reserved.reservation.source.toPortSource(
+                        selected = selected,
+                        expectedSurfaceWindowNumber = (targetResolution as? AppKitCaptureTargetResolution.Resolved)
+                            ?.surfaceWindowNumber,
+                    ) ?: run {
+                        reserved.reservation.close()
+                        return KadreResult.Failure(platformFailure("surface-target-mismatch"))
+                    }
                     KadreResult.Success(AppKitCaptureReservation(reserved.reservation, source, request))
                 } catch (_: Exception) {
                     runCatching(reserved.reservation::close)
@@ -290,7 +306,7 @@ internal class AppKitCapturePort(
         sources: CapturePortSources = capability.initialSources(),
     ): CapturePortSnapshot = CapturePortSnapshot(
         permissions = permissions,
-        capabilities = capability.toCapabilities(),
+        capabilities = capability.toCapabilities(surfaceRegistry != null),
         sources = sources,
     )
 
@@ -661,7 +677,9 @@ private fun AppKitCaptureNativeCapability.initialSources(): CapturePortSources =
     else -> CapturePortSources.Unavailable(KadreFailure.TemporarilyUnavailable(retryable = true))
 }
 
-private fun AppKitCaptureNativeCapability.toCapabilities(): CaptureCapabilities {
+private fun AppKitCaptureNativeCapability.toCapabilities(
+    supportsRegisteredSurfaceCapture: Boolean,
+): CaptureCapabilities {
     if (!supportsScreenCapture) {
         return CaptureCapabilities(
             screen = Capability.Unsupported(KadreFailure.Unsupported(KadreOperation.CaptureOpen)),
@@ -687,7 +705,11 @@ private fun AppKitCaptureNativeCapability.toCapabilities(): CaptureCapabilities 
     return CaptureCapabilities(
         screen = Capability.Supported(constraints, screenAvailability),
         window = Capability.Supported(constraints, windowAvailability),
-        surface = Capability.Unsupported(KadreFailure.Unsupported(KadreOperation.CaptureOpen)),
+        surface = if (supportsRegisteredSurfaceCapture) {
+            Capability.Supported(constraints, windowAvailability)
+        } else {
+            Capability.Unsupported(KadreFailure.Unsupported(KadreOperation.CaptureOpen))
+        },
         sourceEnumeration = Capability.Supported(Unit, screenAvailability),
         hostPicker = if (supportsHostPicker) screenAvailability else FeatureAvailability.Unsupported,
     )
@@ -716,22 +738,64 @@ private fun AppKitCaptureNativeSourceCatalog.toPortSources(): List<CapturePortSo
     }
 }
 
-private fun CapturePortTarget.toNativeTarget(
+private sealed interface AppKitCaptureTargetResolution {
+    data class Resolved(
+        val target: AppKitCaptureNativeTarget,
+        val surfaceWindowNumber: Long? = null,
+        val surfaceLease: AppKitCaptureSurfaceLease? = null,
+    ) : AppKitCaptureTargetResolution
+
+    data class Rejected(val failure: KadreFailure) : AppKitCaptureTargetResolution
+}
+
+private fun CapturePortTarget.resolveNativeTarget(
     capability: AppKitCaptureNativeCapability,
-): AppKitCaptureNativeTarget? = when (this) {
-    CapturePortTarget.HostChoice -> if (capability.supportsHostPicker) AppKitCaptureNativeTarget.HostPicker else null
-    is CapturePortTarget.Source -> when (key.namespace) {
-        "appkit-display" -> AppKitCaptureNativeTarget.Display(key.value)
-        "appkit-window" -> AppKitCaptureNativeTarget.Window(key.value)
-        else -> null
+    surfaceRegistry: AppKitCaptureSurfaceRegistry?,
+): AppKitCaptureTargetResolution = when (this) {
+    CapturePortTarget.HostChoice -> if (capability.supportsHostPicker) {
+        AppKitCaptureTargetResolution.Resolved(AppKitCaptureNativeTarget.HostPicker)
+    } else {
+        AppKitCaptureTargetResolution.Rejected(KadreFailure.Unsupported(KadreOperation.CaptureOpen))
     }
 
-    is CapturePortTarget.Surface -> null
+    is CapturePortTarget.Source -> when (key.namespace) {
+        "appkit-display" -> AppKitCaptureTargetResolution.Resolved(AppKitCaptureNativeTarget.Display(key.value))
+        "appkit-window" -> AppKitCaptureTargetResolution.Resolved(AppKitCaptureNativeTarget.Window(key.value))
+        else -> AppKitCaptureTargetResolution.Rejected(KadreFailure.Unsupported(KadreOperation.CaptureOpen))
+    }
+
+    is CapturePortTarget.Surface -> when (val surface = surfaceRegistry?.resolve(id)) {
+        is AppKitCaptureSurfaceResolution.Available -> AppKitCaptureTargetResolution.Resolved(
+            target = AppKitCaptureNativeTarget.Window(surface.lease.windowNumber),
+            surfaceWindowNumber = surface.lease.windowNumber,
+            surfaceLease = surface.lease,
+        )
+
+        AppKitCaptureSurfaceResolution.Revoked ->
+            AppKitCaptureTargetResolution.Rejected(KadreFailure.Closed(KadreResourceKind.Surface))
+
+        AppKitCaptureSurfaceResolution.Unknown ->
+            AppKitCaptureTargetResolution.Rejected(KadreFailure.InvalidRequest("request.target"))
+
+        null -> AppKitCaptureTargetResolution.Rejected(KadreFailure.Unsupported(KadreOperation.CaptureOpen))
+    }
 }
 
 private fun AppKitCaptureNativeReservationSource.toPortSource(
     selected: CapturePortSource?,
-): CapturePortSource = when (this) {
+    expectedSurfaceWindowNumber: Long?,
+): CapturePortSource? = if (expectedSurfaceWindowNumber != null) {
+    if (this is AppKitCaptureNativeReservationSource.Window && id == expectedSurfaceWindowNumber) {
+        CapturePortSource(
+            key = CapturePortSourceKey("appkit-surface", expectedSurfaceWindowNumber),
+            kind = CaptureSourceKind.HostSurface,
+            name = null,
+            size = null,
+        )
+    } else {
+        null
+    }
+} else when (this) {
     AppKitCaptureNativeReservationSource.Unknown -> CapturePortSource(
         key = CapturePortSourceKey("appkit-host-picker", 0L),
         kind = CaptureSourceKind.HostSurface,
