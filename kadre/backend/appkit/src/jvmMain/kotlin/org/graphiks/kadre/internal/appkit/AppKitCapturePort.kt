@@ -306,7 +306,7 @@ internal class AppKitCapturePort(
         sources: CapturePortSources = capability.initialSources(),
     ): CapturePortSnapshot = CapturePortSnapshot(
         permissions = permissions,
-        capabilities = capability.toCapabilities(),
+        capabilities = capability.toCapabilities(surfaceRegistry != null),
         sources = sources,
     )
 
@@ -677,7 +677,9 @@ private fun AppKitCaptureNativeCapability.initialSources(): CapturePortSources =
     else -> CapturePortSources.Unavailable(KadreFailure.TemporarilyUnavailable(retryable = true))
 }
 
-private fun AppKitCaptureNativeCapability.toCapabilities(): CaptureCapabilities {
+private fun AppKitCaptureNativeCapability.toCapabilities(
+    supportsRegisteredSurfaceCapture: Boolean,
+): CaptureCapabilities {
     if (!supportsScreenCapture) {
         return CaptureCapabilities(
             screen = Capability.Unsupported(KadreFailure.Unsupported(KadreOperation.CaptureOpen)),
@@ -703,7 +705,11 @@ private fun AppKitCaptureNativeCapability.toCapabilities(): CaptureCapabilities 
     return CaptureCapabilities(
         screen = Capability.Supported(constraints, screenAvailability),
         window = Capability.Supported(constraints, windowAvailability),
-        surface = Capability.Unsupported(KadreFailure.Unsupported(KadreOperation.CaptureOpen)),
+        surface = if (supportsRegisteredSurfaceCapture) {
+            Capability.Supported(constraints, windowAvailability)
+        } else {
+            Capability.Unsupported(KadreFailure.Unsupported(KadreOperation.CaptureOpen))
+        },
         sourceEnumeration = Capability.Supported(Unit, screenAvailability),
         hostPicker = if (supportsHostPicker) screenAvailability else FeatureAvailability.Unsupported,
     )

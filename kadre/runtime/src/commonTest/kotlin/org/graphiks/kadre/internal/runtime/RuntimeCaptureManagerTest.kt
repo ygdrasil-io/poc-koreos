@@ -6,8 +6,10 @@ import org.graphiks.kadre.capture.CaptureCursorMode
 import org.graphiks.kadre.capture.CaptureManagerRevision
 import org.graphiks.kadre.capture.CapturePermissionScope
 import org.graphiks.kadre.capture.CapturePermissionState
+import org.graphiks.kadre.capture.CaptureRequest
 import org.graphiks.kadre.capture.CaptureSourceKind
 import org.graphiks.kadre.capture.CaptureSources
+import org.graphiks.kadre.capture.CaptureTarget
 import org.graphiks.kadre.capture.CaptureTargetConstraints
 import org.graphiks.kadre.capture.PixelFormat
 import org.graphiks.kadre.diagnostics.Capability
@@ -18,12 +20,45 @@ import org.graphiks.kadre.diagnostics.KadreResult
 import org.graphiks.kadre.input.KadrePermission
 import org.graphiks.kadre.input.PermissionState
 import org.graphiks.kadre.surface.PhysicalSize
+import org.graphiks.kadre.surface.SurfaceId
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertSame
 
 class RuntimeCaptureManagerTest {
+    @Test
+    fun surfaceTargetReservesWithoutInventoryAndProjectsOnlyAnOpaqueHostSurface() = runTest {
+        val reservation = ManagerRecordingCaptureReservation(
+            CapturePortSource(
+                key = CapturePortSourceKey("appkit-surface", 501L),
+                kind = CaptureSourceKind.HostSurface,
+                name = null,
+                size = null,
+            ),
+        )
+        val port = RecordingCapturePort(
+            snapshot(
+                permissions = CapturePermissionState(PermissionState.Granted, PermissionState.Granted),
+                sources = CapturePortSources.HostPickerOnly,
+            ),
+        ).also {
+            it.reserveResult = KadreResult.Success(reservation)
+        }
+        val manager = RuntimeCaptureManager(port)
+        val surface = SurfaceId(51L)
+
+        val session = successValue(manager.open(CaptureRequest(target = CaptureTarget.Surface(surface))))
+
+        assertEquals(listOf<CapturePortTarget>(CapturePortTarget.Surface(surface)), port.reservedTargets)
+        assertEquals(CaptureSourceKind.HostSurface, session.source.kind)
+        assertEquals(null, session.source.name)
+        assertEquals(null, session.source.size)
+
+        session.close()
+        assertEquals(1, reservation.closeCount)
+    }
+
     @Test
     fun refreshPublishesOneRevisionedSnapshotAndKeepsTheOpaqueSourceIdStable() = runTest {
         val port = RecordingCapturePort(
@@ -207,14 +242,35 @@ internal class RecordingCapturePort(
 ) : CapturePort {
     lateinit var permissionResult: KadreResult<CapturePortSnapshot>
     lateinit var refreshResult: KadreResult<CapturePortSnapshot>
+    lateinit var reserveResult: KadreResult<CapturePortReservation>
+    val reservedTargets = mutableListOf<CapturePortTarget>()
 
     override suspend fun requestPermission(scope: CapturePermissionScope): KadreResult<CapturePortSnapshot> = permissionResult
 
     override suspend fun refreshSources(): KadreResult<CapturePortSnapshot> = refreshResult
 
+    override suspend fun reserve(
+        target: CapturePortTarget,
+        request: CaptureRequest,
+    ): KadreResult<CapturePortReservation> {
+        reservedTargets += target
+        return reserveResult
+    }
+
     override fun installObserver(observer: (KadreResult<CapturePortSnapshot>) -> Unit): AutoCloseable = AutoCloseable { }
 
     var closeCount = 0
+        private set
+
+    override fun close() {
+        closeCount += 1
+    }
+}
+
+private class ManagerRecordingCaptureReservation(
+    override val source: CapturePortSource,
+) : CapturePortReservation {
+    var closeCount: Int = 0
         private set
 
     override fun close() {

@@ -9,6 +9,7 @@ import org.graphiks.kadre.capture.CaptureCursorMode
 import org.graphiks.kadre.capture.CaptureRequest
 import org.graphiks.kadre.capture.CaptureSourceKind
 import org.graphiks.kadre.capture.CaptureTarget
+import org.graphiks.kadre.capture.CaptureTargetConstraints
 import org.graphiks.kadre.capture.ColorEncoding
 import org.graphiks.kadre.capture.ColorPrimaries
 import org.graphiks.kadre.capture.ColorRange
@@ -17,6 +18,8 @@ import org.graphiks.kadre.capture.MatrixCoefficients
 import org.graphiks.kadre.capture.PixelFormat
 import org.graphiks.kadre.capture.TransferFunction
 import org.graphiks.kadre.diagnostics.KadreFailure
+import org.graphiks.kadre.diagnostics.Capability
+import org.graphiks.kadre.diagnostics.FeatureAvailability
 import org.graphiks.kadre.diagnostics.KadreResourceKind
 import org.graphiks.kadre.diagnostics.KadreResult
 import org.graphiks.kadre.internal.runtime.CapturePortFrame
@@ -33,6 +36,20 @@ import kotlin.test.assertIs
 import kotlin.test.assertNull
 
 class AppKitCapturePortTest {
+    @Test
+    fun surfaceCapabilityIsAvailableOnlyForAPortBoundToASessionRegistry() {
+        val native = RecordingCaptureNative(AppKitCaptureNativeSourceCatalog(emptyList(), emptyList()))
+
+        val supported = AppKitCapturePort(native, AppKitCaptureSurfaceRegistry()).initialSnapshot.capabilities.surface
+        val unsupported = AppKitCapturePort(native).initialSnapshot.capabilities.surface
+
+        assertEquals(
+            FeatureAvailability.Available,
+            assertIs<Capability.Supported<CaptureTargetConstraints>>(supported).availability,
+        )
+        assertIs<Capability.Unsupported>(unsupported)
+    }
+
     @Test
     fun sameSessionSurfaceUsesItsRegisteredWindowIdentityWithoutLeakingNativeMetadata() = runBlocking {
         val registry = AppKitCaptureSurfaceRegistry()
