@@ -19,6 +19,8 @@ EVIDENCE_FILES=("APK-001.json" "APK-002.json" "APK-003.json" "APK-004.json" "APK
 RUNTIME_EVIDENCE_DIRECTORY="$REPO_ROOT/kadre/runtime/build/contract-evidence"
 RUNTIME_EVIDENCE_FILES=("INP-002.json" "WIN-005.json" "WIN-006.json" "INT-001.json" "DSP-001.json" "RUN-007.json" "RUN-008.json")
 DIAGNOSTICS_DIRECTORY="$REPO_ROOT/kadre/backend/appkit/build/ci-diagnostics"
+TEST_TIMEOUT_SECONDS="${KADRE_APPKIT_TEST_TIMEOUT_SECONDS:-900}"
+EVIDENCE_TIMEOUT_SECONDS=600
 source "$SCRIPT_DIR/lib/process-watchdog.sh"
 
 if [[ ! -x "$GRADLEW" ]]; then
@@ -33,7 +35,8 @@ fi
 
 run_phase() {
     local phase="$1"
-    shift
+    local timeout_seconds="$2"
+    shift 2
     local statuses
     local status
     local tee_status
@@ -44,7 +47,7 @@ run_phase() {
     echo "Kadre AppKit $phase: started"
 
     set +e
-    run_with_timeout 600 "$@" 2>&1 | tee "$log_file"
+    run_with_timeout "$timeout_seconds" "$@" 2>&1 | tee "$log_file"
     statuses=("${PIPESTATUS[@]}")
     set -e
     status="${statuses[0]}"
@@ -67,7 +70,7 @@ rm -rf "$EVIDENCE_DIRECTORY"
 rm -rf "$RUNTIME_EVIDENCE_DIRECTORY"
 cd "$REPO_ROOT"
 
-run_phase tests \
+run_phase tests "$TEST_TIMEOUT_SECONDS" \
     "$GRADLEW" \
     :kadre:backend:appkit:appKitNativeTests \
     --refresh-dependencies \
@@ -76,7 +79,7 @@ run_phase tests \
     --stacktrace \
     --console=plain
 
-run_phase evidence \
+run_phase evidence "$EVIDENCE_TIMEOUT_SECONDS" \
     "$GRADLEW" \
     :kadre:contracts:validator:generateRuntimeContractEvidence \
     :kadre:contracts:validator:generateAppKitContractEvidence \

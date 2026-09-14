@@ -13,7 +13,10 @@ jobs:
   appkit-contracts:
     name: appkit-contracts (${{ matrix.arch }})
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: 15
+    # A cold Intel Gradle build can consume most of the tests watchdog before
+    # evidence generation begins. The phase watchdogs remain the stricter
+    # protection against hung child processes.
+    timeout-minutes: 30
 
     strategy:
       # Both legs must always run so that a failure on one architecture never
