@@ -55,6 +55,11 @@ internal class AppKitCaptureSurfaceRegistry {
         else AppKitCaptureSurfaceResolution.Unknown
     }
 
+    /** Internal lifecycle diagnostic used to prove reservations do not retain a closed lease. */
+    internal fun activeLeaseCount(surface: SurfaceId): Int = synchronized(lock) {
+        entries[surface]?.leases ?: 0
+    }
+
     private class Entry(
         val windowNumber: Long,
         var leases: Int = 0,
