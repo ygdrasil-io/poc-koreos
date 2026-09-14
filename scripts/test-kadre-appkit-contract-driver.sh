@@ -64,6 +64,22 @@ for evidence_file in "${RUNTIME_EVIDENCE_FILES[@]}"; do
 done
 
 rm -rf "$EVIDENCE_DIRECTORY"
+rm -rf "$RUNTIME_EVIDENCE_DIRECTORY"
+TRACE="$TEMP_DIR/selector-only.trace"
+KADRE_GRADLEW="$FAKE_GRADLE" \
+KADRE_FAKE_GRADLE_TRACE="$TRACE" \
+KADRE_FAKE_EVIDENCE_DIRECTORY="$EVIDENCE_DIRECTORY" \
+KADRE_FAKE_RUNTIME_EVIDENCE_DIRECTORY="$RUNTIME_EVIDENCE_DIRECTORY" \
+KADRE_APPKIT_REQUIRE_FULLSCREEN_TERMINAL_CALLBACKS=false \
+GITHUB_SHA="0123456789abcdef" \
+    bash "$DRIVER"
+
+[[ "$(sed -n '1p' "$TRACE")" == *"-Dkadre.appkit.requireFullscreenTerminalCallbacks=false"* ]] ||
+    fail "selector-only CI policy did not reach the AppKit test JVM"
+[[ "$(sed -n '2p' "$TRACE")" == *"-Dkadre.appkit.requireFullscreenTerminalCallbacks=false"* ]] ||
+    fail "selector-only CI policy did not reach the evidence test JVM"
+
+rm -rf "$EVIDENCE_DIRECTORY"
 TRACE="$TEMP_DIR/missing-apk010.trace"
 capture_status observed_status env \
     KADRE_GRADLEW="$FAKE_GRADLE" \
@@ -268,5 +284,22 @@ capture_status observed_status env \
 [[ "$observed_status" == "133" ]] || fail "native SIGTRAP status 133 became $observed_status"
 [[ "$(wc -l < "$TRACE" | tr -d ' ')" == "1" ]] ||
     fail "native SIGTRAP retried the AppKit test phase"
+
+TRACE="$TEMP_DIR/test-timeout.trace"
+capture_status observed_status env \
+    KADRE_GRADLEW="$FAKE_GRADLE" \
+    KADRE_FAKE_GRADLE_TRACE="$TRACE" \
+    KADRE_FAKE_EVIDENCE_DIRECTORY="$EVIDENCE_DIRECTORY" \
+    KADRE_FAKE_RUNTIME_EVIDENCE_DIRECTORY="$RUNTIME_EVIDENCE_DIRECTORY" \
+    KADRE_FAKE_TEST_DELAY_SECONDS=2 \
+    KADRE_APPKIT_TEST_TIMEOUT_SECONDS=1 \
+    GITHUB_SHA="fedcba9876543210" \
+    bash "$DRIVER"
+
+[[ "$observed_status" == "124" ]] || fail "test watchdog timeout became $observed_status"
+[[ "$(wc -l < "$TRACE" | tr -d ' ')" == "1" ]] ||
+    fail "evidence phase ran after the test watchdog timeout"
+[[ ! -e "$EVIDENCE_DIRECTORY" ]] || fail "test watchdog timeout produced evidence"
+[[ ! -e "$RUNTIME_EVIDENCE_DIRECTORY" ]] || fail "test watchdog timeout produced runtime evidence"
 
 echo "Kadre AppKit contract driver behavior: passed"

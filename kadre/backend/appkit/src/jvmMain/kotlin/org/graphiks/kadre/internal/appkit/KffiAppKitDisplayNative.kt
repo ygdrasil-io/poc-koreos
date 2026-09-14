@@ -39,6 +39,7 @@ private val APPKIT_DISPLAY_MINIMUM_VERSION = AppKitNumericVersion(26L, 0L, 0L)
 /** KFFI-only adapter that snapshots AppKit/CoreGraphics display state into Kadre's private SPI. */
 internal class KffiAppKitDisplayNative(
     private val services: KffiAppKitDisplayServices = SystemKffiAppKitDisplayServices,
+    private val snapshotFailureReporter: (Throwable) -> Unit = {},
 ) : AppKitDisplayNative {
     private val mappingLock = Any()
     private var displayIdsByKey: Map<Long, Int> = emptyMap()
@@ -48,32 +49,40 @@ internal class KffiAppKitDisplayNative(
         Capability.Supported(Unit, FeatureAvailability.Available)
 
     override fun snapshot(): DisplayPortSnapshot {
-        synchronized(mappingLock) {
-            displayIdsByKey = emptyMap()
-            mappedSnapshot = null
-        }
-        return KffiAppKitMainThread.call {
-        val displays = services.enumerateDisplays()
-        val screensByDisplayId = services.enumerateScreens().associateBy(KffiAppKitNativeScreen::displayId)
-        check(screensByDisplayId.size == displays.size && displays.all { it.id in screensByDisplayId }) {
-            "AppKit and CoreGraphics display inventories differ"
-        }
-        check(screensByDisplayId.values.count(KffiAppKitNativeScreen::isPrimary) == 1) {
-            "AppKit must report exactly one primary screen"
-        }
+        try {
+            synchronized(mappingLock) {
+                displayIdsByKey = emptyMap()
+                mappedSnapshot = null
+            }
+            return KffiAppKitMainThread.call {
+                val displays = services.enumerateDisplays()
+                val screensByDisplayId = services.enumerateScreens().associateBy(KffiAppKitNativeScreen::displayId)
+                check(screensByDisplayId.size == displays.size && displays.all { it.id in screensByDisplayId }) {
+                    "AppKit and CoreGraphics display inventories differ"
+                }
+                check(screensByDisplayId.values.count(KffiAppKitNativeScreen::isPrimary) == 1) {
+                    "AppKit must report exactly one primary screen"
+                }
 
-        val snapshot = DisplayPortSnapshot(
-            primaryKey = screensByDisplayId.values.single(KffiAppKitNativeScreen::isPrimary).displayId.displayKey(),
-            displays = displays.map { display ->
-                val screen = checkNotNull(screensByDisplayId[display.id])
-                display.toPortDisplay(screen)
-            },
-        )
-        synchronized(mappingLock) {
-            displayIdsByKey = displays.associate { display -> display.id.displayKey() to display.id }
-            mappedSnapshot = snapshot
-        }
-        snapshot
+                val snapshot = DisplayPortSnapshot(
+                    primaryKey = screensByDisplayId.values.single(KffiAppKitNativeScreen::isPrimary).displayId.displayKey(),
+                    displays = displays.map { display ->
+                        val screen = checkNotNull(screensByDisplayId[display.id])
+                        display.toPortDisplay(screen)
+                    },
+                )
+                synchronized(mappingLock) {
+                    displayIdsByKey = displays.associate { display -> display.id.displayKey() to display.id }
+                    mappedSnapshot = snapshot
+                }
+                snapshot
+            }
+        } catch (failure: Exception) {
+            reportSnapshotFailure(failure)
+            throw failure
+        } catch (failure: LinkageError) {
+            reportSnapshotFailure(failure)
+            throw failure
         }
     }
 
@@ -85,6 +94,16 @@ internal class KffiAppKitDisplayNative(
         KffiAppKitMainThread.call { services.observeReconfiguration(listener) }
 
     override fun close() = Unit
+
+    private fun reportSnapshotFailure(failure: Throwable) {
+        try {
+            snapshotFailureReporter(failure)
+        } catch (_: Exception) {
+            // Diagnostics must not alter the snapshot failure crossing the AppKit boundary.
+        } catch (_: LinkageError) {
+            // Diagnostics must not alter the snapshot failure crossing the AppKit boundary.
+        }
+    }
 }
 
 /** Production adapter for the managed KFFI CoreGraphics lease; no Kadre FFI is involved. */

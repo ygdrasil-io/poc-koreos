@@ -5,6 +5,9 @@ set -euo pipefail
 printf '%s\n' "$*" >> "$KADRE_FAKE_GRADLE_TRACE"
 
 if [[ " $* " == *" :kadre:backend:appkit:appKitNativeTests "* ]]; then
+    if [[ -n "${KADRE_FAKE_TEST_DELAY_SECONDS:-}" ]]; then
+        sleep "$KADRE_FAKE_TEST_DELAY_SECONDS"
+    fi
     if [[ -n "${KADRE_FAKE_TEST_OUTPUT:-}" ]]; then
         printf '%s\n' "$KADRE_FAKE_TEST_OUTPUT"
     fi

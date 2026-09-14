@@ -29,6 +29,7 @@ import org.graphiks.kadre.diagnostics.FeatureAvailability
 import org.graphiks.kadre.diagnostics.KadrePlatform
 import org.graphiks.kadre.diagnostics.KadreResourceKind
 import org.graphiks.kadre.diagnostics.KadreResult
+import org.graphiks.kadre.internal.appkit.manual.awaitPhase4InputReadiness
 import org.graphiks.kadre.internal.runtime.RuntimeDesktopNativeWindowHandle
 import org.graphiks.kadre.internal.runtime.RuntimeDesktopWindowHandleAccess
 import org.graphiks.kadre.internal.runtime.RuntimeFailureReporter
@@ -4121,6 +4122,45 @@ class AppKitWindowRuntimeDriverTest {
             assertIs<InputEvent.Gesture>(events[1])
             assertEquals(2L, window.surface.input.state.value.revision.value)
             Unit
+        } finally {
+            releaseDrain.countDown()
+            driver.close()
+        }
+    }
+
+    @Test
+    fun phase4HarnessReadinessWaitsForTheDeferredInputCapabilityPublication() = runBlocking {
+        val drainPaused = CountDownLatch(1)
+        val releaseDrain = CountDownLatch(1)
+        val port = DeterministicAppKitNativeWindowPort(
+            name = "phase4-harness-readiness",
+            inputObservationInstalled = true,
+        )
+        val driver = AppKitWindowRuntimeDriverFactory { port }.create(
+            resources = KadrePolicies.Default.resources,
+            beforeRuntimeSurfaceReadyDrain = {
+                drainPaused.countDown()
+                check(releaseDrain.await(2, TimeUnit.SECONDS))
+            },
+        )
+
+        try {
+            val request = driver.manager.requestWindow(WindowSpec(title = "phase4-harness-readiness"))
+                .successValue()
+            assertTrue(drainPaused.await(2, TimeUnit.SECONDS))
+            val window = assertIs<WindowRequestOutcome.OpenedHere>(
+                withTimeout(2.seconds) { request.await() },
+            ).window
+
+            val readiness = async(start = CoroutineStart.UNDISPATCHED) {
+                awaitPhase4InputReadiness(window.surface.input)
+            }
+            assertFalse(readiness.isCompleted)
+
+            releaseDrain.countDown()
+            val input = withTimeout(2.seconds) { readiness.await() }
+            assertEquals(FeatureAvailability.Available, input.capabilities.keyboard)
+            assertEquals(FeatureAvailability.Available, input.capabilities.pointer)
         } finally {
             releaseDrain.countDown()
             driver.close()

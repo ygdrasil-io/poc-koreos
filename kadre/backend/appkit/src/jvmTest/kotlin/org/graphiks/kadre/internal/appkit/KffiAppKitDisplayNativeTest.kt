@@ -289,6 +289,24 @@ class KffiAppKitDisplayNativeTest {
     }
 
     @Test
+    fun snapshotReportsTheOriginalNativeFailureToItsDiagnosticObserver() {
+        val expected = IllegalStateException("display enumeration failed")
+        val reported = mutableListOf<Throwable>()
+        val native = KffiAppKitDisplayNative(
+            services = RecordingKffiAppKitDisplayServices(
+                displays = emptyList(),
+                screens = emptyList(),
+                displayFailure = expected,
+            ),
+            snapshotFailureReporter = { failure -> reported += failure },
+        )
+
+        val actual = assertFailsWith<IllegalStateException> { native.snapshot() }
+        assertEquals(expected, actual)
+        assertEquals(listOf<Throwable>(expected), reported)
+    }
+
+    @Test
     fun snapshotRefusesDuplicateCoreGraphicsModeIdentitiesBeforePublishing() {
         val native = KffiAppKitDisplayNative(
             RecordingKffiAppKitDisplayServices(
@@ -413,13 +431,14 @@ private fun assertPresentationCode(result: AppKitExclusivePresentationResult, ex
 private class RecordingKffiAppKitDisplayServices(
     private val displays: List<KffiAppKitNativeDisplay>,
     private val screens: List<KffiAppKitNativeScreen>,
+    private val displayFailure: Throwable? = null,
 ) : KffiAppKitDisplayServices {
     var listener: (() -> Unit)? = null
         private set
     var observationCloseCount: Int = 0
         private set
 
-    override fun enumerateDisplays(): List<KffiAppKitNativeDisplay> = displays
+    override fun enumerateDisplays(): List<KffiAppKitNativeDisplay> = displayFailure?.let { throw it } ?: displays
 
     override fun enumerateScreens(): List<KffiAppKitNativeScreen> = screens
 

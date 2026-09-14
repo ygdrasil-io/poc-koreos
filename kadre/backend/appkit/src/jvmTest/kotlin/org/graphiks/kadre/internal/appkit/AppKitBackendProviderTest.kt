@@ -3078,7 +3078,13 @@ class AppKitBackendProviderTest {
             "the isolated display contract proof requires macOS 26 or newer",
         )
         val native = KffiAppKitNativeApplication()
-        val broker = AppKitProcessBroker()
+        val displaySnapshotFailure = AtomicReference<Throwable?>(null)
+        val displayNative = KffiAppKitDisplayNative(
+            snapshotFailureReporter = { failure -> displaySnapshotFailure.compareAndSet(null, failure) },
+        )
+        val broker = AppKitProcessBroker(
+            displayBrokerFactory = { AppKitDisplayBroker(displayNative) },
+        )
         val provider = AppKitBackendProvider.forTesting(
             nativeApplication = native,
             broker = broker,
@@ -3105,29 +3111,34 @@ class AppKitBackendProviderTest {
             DesktopStandaloneRequest(
                 KadreApplicationFactory {
                     KadreApplication {
+                        var openedWindow: Window? = null
+                        try {
                         // Cross the native boundary before requesting stop so this test cannot
                         // accidentally exercise only the pre-run pending-stop handoff.
+                        proofStage.set("loop-admission")
                         withTimeout(5.seconds) {
                             while (!native.isRunning()) yield()
                         }
-                        proofStage.set("display-inventory")
+                        proofStage.set("display-capabilities")
                         assertEquals(
                             Capability.Supported(Unit, FeatureAvailability.Available),
                             displays.state.value.capabilities.enumeration,
                         )
+                        proofStage.set("display-inventory")
                         val displayState = displays.requestAccess().appKitSuccessValue()
                         val inventory = assertIs<DisplayInventory.Enumerated>(displayState.inventory)
                         assertTrue(inventory.displays.isNotEmpty())
                         assertTrue(inventory.primary in inventory.displays)
                         displayCapabilityObserved.set(true)
 
+                        proofStage.set("window-open")
                         val window = assertIs<WindowRequestOutcome.OpenedHere>(
                             windows.requestWindow(WindowSpec(title = "Kadre O3 public window proof"))
                                 .appKitSuccessValue()
                                 .await(),
                         ).window
+                        openedWindow = window
                         proofStage.set("surface-resize")
-                        try {
                         val events = Channel<WindowEvent>(Channel.UNLIMITED)
                         val collector = launch(start = CoroutineStart.UNDISPATCHED) {
                             window.events.collect(events::send)
@@ -3475,10 +3486,17 @@ class AppKitBackendProviderTest {
                         requestStop()
                         } catch (failure: Throwable) {
                             proofFailure.set(failure)
-                            if (window.state.value.phase != WindowPhase.Closed) {
-                                window.close()
-                                withTimeout(5.seconds) {
-                                    window.state.first { it.phase == WindowPhase.Closed }
+                            displaySnapshotFailure.get()?.let(failure::addSuppressed)
+                            openedWindow?.let { window ->
+                                if (window.state.value.phase != WindowPhase.Closed) {
+                                    try {
+                                        window.close()
+                                        withTimeout(5.seconds) {
+                                            window.state.first { it.phase == WindowPhase.Closed }
+                                        }
+                                    } catch (cleanupFailure: Throwable) {
+                                        failure.addSuppressed(cleanupFailure)
+                                    }
                                 }
                             }
                             throw failure

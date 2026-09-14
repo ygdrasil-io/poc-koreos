@@ -82,6 +82,16 @@ import kotlin.test.assertTrue
 
 class KffiAppKitWindowPortMacOsTest {
     @Test
+    fun fullscreenTerminalCallbackRequirementDefaultsToStrictAndRejectsInvalidValues() {
+        assertTrue(parseFullscreenTerminalCallbackRequirement(null))
+        assertTrue(parseFullscreenTerminalCallbackRequirement("true"))
+        assertFalse(parseFullscreenTerminalCallbackRequirement("false"))
+        assertFailsWith<IllegalArgumentException> {
+            parseFullscreenTerminalCallbackRequirement("sometimes")
+        }
+    }
+
+    @Test
     fun exclusivePresentationSmokeOnlyOpensAndReadsDetachedSnapshotOnMacOs26() {
         if (!isMacOsHost() || !AppKitDisplayAvailability().isAvailable) return
 
@@ -515,10 +525,11 @@ class KffiAppKitWindowPortMacOsTest {
     }
 
     @Test
-    fun generatedKffiFullscreenSelectorDeliversTerminalCallbacksAndLevelReadbackOnMacOs() {
+    fun generatedKffiFullscreenSelectorDeliversCallbacksAndTerminalLevelReadbackWhenRequiredOnMacOs() {
         if (!isMacOsHost()) return
 
         assertTrue(NSThread.isMainThread())
+        val terminalCallbacksRequired = requireFullscreenTerminalCallbacks()
         val application = NSApplication(NSApplication.sharedApplication())
         assertTrue(
             application.setActivationPolicy(
@@ -558,12 +569,17 @@ class KffiAppKitWindowPortMacOsTest {
         val callback: (AppKitWindowStimulus) -> Unit = { stimulus ->
             stimuli += stimulus
             when ((stimulus as? AppKitWindowStimulus.FullscreenCallback)?.callback) {
+                AppKitFullscreenCallback.WillEnter -> {
+                    if (!terminalCallbacksRequired) nativeApplication.requestStop()
+                }
                 AppKitFullscreenCallback.DidEnter -> {
-                    deferredExit.receiver.performSelectorOnMainThread_withObject_waitUntilDone(
-                        ObjCRuntime.sel(deferredExitSelector),
-                        MemorySegment.NULL,
-                        false,
-                    )
+                    if (terminalCallbacksRequired) {
+                        deferredExit.receiver.performSelectorOnMainThread_withObject_waitUntilDone(
+                            ObjCRuntime.sel(deferredExitSelector),
+                            MemorySegment.NULL,
+                            false,
+                        )
+                    }
                 }
                 AppKitFullscreenCallback.DidExit -> {
                     readbackLevels += checkNotNull(peer.get()).completeFullscreen(WindowLevel.Floating).snapshot.level
@@ -577,7 +593,7 @@ class KffiAppKitWindowPortMacOsTest {
         }
         val watchdog = Thread.ofPlatform().daemon().name("kadre-fullscreen-native-watchdog").start {
             try {
-                Thread.sleep(10_000L)
+                Thread.sleep(if (terminalCallbacksRequired) 10_000L else 2_000L)
                 nativeApplication.requestStop()
             } catch (_: InterruptedException) {
                 Thread.currentThread().interrupt()
@@ -618,18 +634,28 @@ class KffiAppKitWindowPortMacOsTest {
         try {
             nativeApplication.run()
             starterFailure.get()?.let { throw IllegalStateException("native fullscreen starter failed", it) }
-            assertEquals(
-                listOf(
-                    AppKitFullscreenCallback.WillEnter,
-                    AppKitFullscreenCallback.DidEnter,
-                    AppKitFullscreenCallback.WillExit,
-                    AppKitFullscreenCallback.DidExit,
-                ),
-                stimuli.filterIsInstance<AppKitWindowStimulus.FullscreenCallback>()
-                    .map(AppKitWindowStimulus.FullscreenCallback::callback),
-                "generated delegate did not deliver the fullscreen entry/exit callback sequence",
-            )
-            assertEquals(listOf(WindowLevel.Floating, WindowLevel.Floating), readbackLevels)
+            val fullscreenCallbacks = stimuli.filterIsInstance<AppKitWindowStimulus.FullscreenCallback>()
+                .map(AppKitWindowStimulus.FullscreenCallback::callback)
+            if (terminalCallbacksRequired) {
+                assertEquals(
+                    listOf(
+                        AppKitFullscreenCallback.WillEnter,
+                        AppKitFullscreenCallback.DidEnter,
+                        AppKitFullscreenCallback.WillExit,
+                        AppKitFullscreenCallback.DidExit,
+                    ),
+                    fullscreenCallbacks,
+                    "generated delegate did not deliver the fullscreen entry/exit callback sequence",
+                )
+                assertEquals(listOf(WindowLevel.Floating, WindowLevel.Floating), readbackLevels)
+            } else {
+                assertEquals(
+                    listOf(AppKitFullscreenCallback.WillEnter),
+                    fullscreenCallbacks,
+                    "generated KFFI fullscreen selector did not begin the AppKit transition",
+                )
+                assertEquals(emptyList(), readbackLevels)
+            }
         } finally {
             watchdog.interrupt()
             watchdog.join(1_000L)
@@ -2126,4 +2152,17 @@ private fun NSWindow.readGeneratedNativeGeometry(): NativeWindowGeometry {
 
 private fun isMacOsHost(): Boolean = System.getProperty("os.name", "").let { name ->
     name.contains("Mac", ignoreCase = true) || name.contains("Darwin", ignoreCase = true)
+}
+
+private fun requireFullscreenTerminalCallbacks(): Boolean =
+    parseFullscreenTerminalCallbackRequirement(
+        System.getProperty("kadre.appkit.requireFullscreenTerminalCallbacks"),
+    )
+
+private fun parseFullscreenTerminalCallbackRequirement(value: String?): Boolean {
+    val resolved = value ?: "true"
+    require(resolved == "true" || resolved == "false") {
+        "kadre.appkit.requireFullscreenTerminalCallbacks must be true or false"
+    }
+    return resolved.toBoolean()
 }

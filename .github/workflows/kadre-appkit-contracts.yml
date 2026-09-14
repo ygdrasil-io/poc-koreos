@@ -11,9 +11,34 @@ permissions:
 
 jobs:
   appkit-contracts:
-    name: appkit-contracts
-    runs-on: macos-26
-    timeout-minutes: 15
+    name: appkit-contracts (${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    # A cold Intel Gradle build can consume most of the tests watchdog before
+    # evidence generation begins. The phase watchdogs remain the stricter
+    # protection against hung child processes.
+    timeout-minutes: 30
+
+    strategy:
+      # Both legs must always run so that a failure on one architecture never
+      # hides the proof produced on the other.
+      fail-fast: false
+      matrix:
+        include:
+          # arm64 never takes the x86_64-only Objective-C struct-return path
+          # (objc_msgSend_stret), so Intel needs its own leg to be exercised.
+          - arch: arm64
+            runner: macos-26
+            artifacts: appkit-contract-artifacts
+            fullscreen_witness_expectation: terminal
+            require_fullscreen_terminal_callbacks: true
+          - arch: x86_64
+            runner: macos-26-intel
+            artifacts: appkit-contract-artifacts-x86_64
+            # The managed Intel runner invokes the selector but blocks AppKit
+            # before a terminal fullscreen callback. The witness preserves
+            # this fact while ARM owns the terminal transition proof.
+            fullscreen_witness_expectation: unavailable
+            require_fullscreen_terminal_callbacks: false
 
     steps:
       - name: Checkout
@@ -32,8 +57,32 @@ jobs:
       - name: Collect AppKit environment
         run: bash scripts/collect-appkit-diagnostics.sh kadre/backend/appkit/build/ci-diagnostics
 
+      - name: Run native AppKit fullscreen witness
+        id: native_fullscreen_witness
+        continue-on-error: true
+        env:
+          KADRE_APPKIT_FULLSCREEN_WITNESS_OUTPUT: kadre/backend/appkit/build/ci-diagnostics/fullscreen-witness.json
+          KADRE_APPKIT_FULLSCREEN_WITNESS_EXPECTATION: ${{ matrix.fullscreen_witness_expectation }}
+        run: bash scripts/test-appkit-fullscreen-witness.sh
+
       - name: Run AppKit contract gate
+        id: appkit_contract_gate
+        continue-on-error: true
+        env:
+          KADRE_APPKIT_REQUIRE_FULLSCREEN_TERMINAL_CALLBACKS: ${{ matrix.require_fullscreen_terminal_callbacks }}
         run: scripts/test-kadre-appkit-contracts.sh
+
+      - name: Require AppKit gates
+        if: always()
+        run: |
+          if [[ '${{ steps.native_fullscreen_witness.outcome }}' != 'success' ]]; then
+            echo "The native AppKit fullscreen witness failed; inspect fullscreen-witness.json." >&2
+            exit 1
+          fi
+          if [[ '${{ steps.appkit_contract_gate.outcome }}' != 'success' ]]; then
+            echo "The AppKit contract gate failed; inspect the contract diagnostics and evidence." >&2
+            exit 1
+          fi
 
       - name: Collect native crash reports
         if: always()
@@ -51,7 +100,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: appkit-contract-artifacts
+          name: ${{ matrix.artifacts }}
           path: |
             kadre/backend/appkit/build/contract-evidence/
             kadre/backend/appkit/build/test-results/
