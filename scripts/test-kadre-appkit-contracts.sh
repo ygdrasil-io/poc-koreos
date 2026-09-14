@@ -93,6 +93,7 @@ run_phase evidence "$EVIDENCE_TIMEOUT_SECONDS" \
     "$GRADLEW" \
     :kadre:contracts:validator:generateRuntimeContractEvidence \
     :kadre:contracts:validator:generateAppKitContractEvidence \
+    "-Dkadre.appkit.requireFullscreenTerminalCallbacks=$FULLSCREEN_TERMINAL_CALLBACKS" \
     "-PkadreContractCommit=$COMMIT" \
     --refresh-dependencies \
     --rerun-tasks \

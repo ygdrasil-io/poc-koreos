@@ -76,6 +76,8 @@ GITHUB_SHA="0123456789abcdef" \
 
 [[ "$(sed -n '1p' "$TRACE")" == *"-Dkadre.appkit.requireFullscreenTerminalCallbacks=false"* ]] ||
     fail "selector-only CI policy did not reach the AppKit test JVM"
+[[ "$(sed -n '2p' "$TRACE")" == *"-Dkadre.appkit.requireFullscreenTerminalCallbacks=false"* ]] ||
+    fail "selector-only CI policy did not reach the evidence test JVM"
 
 rm -rf "$EVIDENCE_DIRECTORY"
 TRACE="$TEMP_DIR/missing-apk010.trace"
