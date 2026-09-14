@@ -1,6 +1,9 @@
 package org.graphiks.kadre.internal.appkit
 
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.async
+import kotlinx.coroutines.cancelAndJoin
 import org.graphiks.kadre.capture.AlphaMode
 import org.graphiks.kadre.capture.CaptureCursorMode
 import org.graphiks.kadre.capture.CaptureRequest
@@ -27,8 +30,83 @@ import org.graphiks.kadre.surface.PhysicalSize
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
+import kotlin.test.assertNull
 
 class AppKitCapturePortTest {
+    @Test
+    fun sameSessionSurfaceUsesItsRegisteredWindowIdentityWithoutLeakingNativeMetadata() = runBlocking {
+        val registry = AppKitCaptureSurfaceRegistry()
+        val surface = captureSurfaceId(41L)
+        val registration = registry.register(surface, 501L)
+        val native = RecordingCaptureNative(
+            catalog = AppKitCaptureNativeSourceCatalog(emptyList(), emptyList()),
+            reservationSource = AppKitCaptureNativeReservationSource.Window(501L, "private title"),
+        )
+        val port = AppKitCapturePort(native, registry)
+
+        try {
+            val reservation = successValue(
+                port.reserve(CapturePortTarget.Surface(surface), CaptureRequest(target = CaptureTarget.HostChoice)),
+            )
+
+            assertEquals(listOf<AppKitCaptureNativeTarget>(AppKitCaptureNativeTarget.Window(501L)), native.reservedTargets)
+            assertEquals(CaptureSourceKind.HostSurface, reservation.source.kind)
+            assertNull(reservation.source.name)
+            assertNull(reservation.source.size)
+            reservation.close()
+        } finally {
+            registration.close()
+        }
+    }
+
+    @Test
+    fun missingAndRevokedSurfaceTargetsNeverFallBackToAnotherNativeSource() = runBlocking {
+        val registry = AppKitCaptureSurfaceRegistry()
+        val native = RecordingCaptureNative(AppKitCaptureNativeSourceCatalog(emptyList(), emptyList()))
+        val port = AppKitCapturePort(native, registry)
+        val missing = captureSurfaceId(71L)
+
+        assertEquals(
+            KadreResult.Failure(KadreFailure.InvalidRequest("request.target")),
+            port.reserve(CapturePortTarget.Surface(missing), CaptureRequest(target = CaptureTarget.HostChoice)),
+        )
+
+        val revoked = captureSurfaceId(72L)
+        registry.register(revoked, 702L).close()
+
+        assertEquals(
+            KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.Surface)),
+            port.reserve(CapturePortTarget.Surface(revoked), CaptureRequest(target = CaptureTarget.HostChoice)),
+        )
+        assertEquals(emptyList(), native.reservedTargets)
+    }
+
+    @Test
+    fun cancellingAQueuedSurfaceReservationReleasesItsRegistryLease() = runBlocking {
+        val registry = AppKitCaptureSurfaceRegistry()
+        val surface = captureSurfaceId(81L)
+        val registration = registry.register(surface, 801L)
+        val native = RecordingCaptureNative(
+            catalog = AppKitCaptureNativeSourceCatalog(emptyList(), emptyList()),
+            autoReserve = false,
+        )
+        val port = AppKitCapturePort(native, registry)
+
+        try {
+            val pending = async(start = CoroutineStart.UNDISPATCHED) {
+                port.reserve(CapturePortTarget.Surface(surface), CaptureRequest(target = CaptureTarget.HostChoice))
+            }
+
+            assertEquals(1, registry.activeLeaseCount(surface))
+            pending.cancelAndJoin()
+
+            assertEquals(0, registry.activeLeaseCount(surface))
+            assertEquals(1, native.cancelledReservationCallbacks)
+        } finally {
+            registration.close()
+        }
+    }
+
     @Test
     fun nativeTerminationClassificationPrioritizesPermissionAndRequiresTheScreenCaptureDomain() {
         assertEquals(
@@ -216,8 +294,13 @@ class AppKitCapturePortTest {
 
 private class RecordingCaptureNative(
     private val catalog: AppKitCaptureNativeSourceCatalog,
+    reservationSource: AppKitCaptureNativeReservationSource = AppKitCaptureNativeReservationSource.Display(7L),
+    private val autoReserve: Boolean = true,
 ) : AppKitCaptureNative {
-    val reservation = RecordingNativeReservation()
+    val reservation = RecordingNativeReservation(reservationSource)
+    val reservedTargets = mutableListOf<AppKitCaptureNativeTarget>()
+    var cancelledReservationCallbacks: Int = 0
+        private set
 
     override fun capability(): AppKitCaptureNativeCapability = AppKitCaptureNativeCapability(
         supportsScreenCapture = true,
@@ -238,13 +321,15 @@ private class RecordingCaptureNative(
         target: AppKitCaptureNativeTarget,
         callback: (AppKitCaptureNativeReservationResult) -> Unit,
     ): AutoCloseable {
-        callback(AppKitCaptureNativeReservationResult.Reserved(reservation))
-        return AutoCloseable { }
+        reservedTargets += target
+        if (autoReserve) callback(AppKitCaptureNativeReservationResult.Reserved(reservation))
+        return AutoCloseable { cancelledReservationCallbacks += 1 }
     }
 }
 
-private class RecordingNativeReservation : AppKitCaptureNativeReservation {
-    override val source: AppKitCaptureNativeReservationSource = AppKitCaptureNativeReservationSource.Display(7L)
+private class RecordingNativeReservation(
+    override val source: AppKitCaptureNativeReservationSource,
+) : AppKitCaptureNativeReservation {
     var configuration: AppKitCaptureNativeStreamConfiguration? = null
     var startCalls: Int = 0
     private var onFrame: ((AppKitCaptureNativeFrame) -> Unit)? = null
@@ -307,3 +392,9 @@ private fun <T> successValue(result: KadreResult<T>): T = when (result) {
     is KadreResult.Success -> result.value
     is KadreResult.Failure -> error("expected success, got ${result.reason}")
 }
+
+private fun captureSurfaceId(value: Long): org.graphiks.kadre.surface.SurfaceId =
+    org.graphiks.kadre.surface.SurfaceId::class.java
+        .getDeclaredConstructor(Long::class.javaPrimitiveType)
+        .apply { isAccessible = true }
+        .newInstance(value)
