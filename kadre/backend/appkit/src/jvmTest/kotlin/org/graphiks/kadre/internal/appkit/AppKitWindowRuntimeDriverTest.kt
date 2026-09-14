@@ -2320,7 +2320,9 @@ class AppKitWindowRuntimeDriverTest {
             }
             assertFalse(heldTitle.isCompleted)
 
-            assertIs<WindowCloseOutcome.Accepted>(closing.close().successValue())
+            val closeOutcome = closing.close().successValue()
+            // The native terminal callback may win the race after backend admission.
+            assertTrue(closeOutcome is WindowCloseOutcome.Accepted || closeOutcome == WindowCloseOutcome.Closed)
             withTimeout(2.seconds) { closing.state.first { it.phase == WindowPhase.Closed } }
 
             val closed = KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.Window))

@@ -395,7 +395,7 @@ private class AppKitWindowCommandPort(
             failures += cause
         } finally {
             issueNativeTerminal(entry)
-            scheduleCleanup(entry)
+            scheduleCleanup(entry, retryAfterExhaustion = true)
         }
         failures.forEach(::reportFailure)
     }
@@ -611,7 +611,9 @@ private class AppKitWindowCommandPort(
         val remaining = synchronized(lock) {
             byRequest.values.toList().asReversed()
         }
-        remaining.forEach(::scheduleCleanup)
+        remaining.forEach { entry ->
+            scheduleCleanup(entry, retryAfterExhaustion = true)
+        }
         when (mode) {
             CloseDrainMode.Inline -> commands.drainInline()
             CloseDrainMode.Asynchronous -> commands.finishAsynchronousDrain()
@@ -1587,7 +1589,7 @@ private class AppKitWindowCommandPort(
         }
         failures.forEach(::reportFailure)
         issueNativeTerminal(entry)
-        scheduleCleanup(entry)
+        scheduleCleanup(entry, retryAfterExhaustion = true)
     }
 
     private fun revokeInputObservationForCleanup(entry: PeerEntry) {
@@ -1714,11 +1716,20 @@ private class AppKitWindowCommandPort(
         registration?.close()
     }
 
-    private fun scheduleCleanup(entry: PeerEntry) {
+    private fun scheduleCleanup(
+        entry: PeerEntry,
+        retryAfterExhaustion: Boolean = false,
+    ) {
         val (submit, registration) = synchronized(lock) {
-            if (entry.removed || entry.cleanupScheduled || entry.cleanupFinished) {
+            if (
+                entry.removed ||
+                entry.cleanupScheduled ||
+                entry.cleanupFinished ||
+                (entry.cleanupRetryExhausted && !retryAfterExhaustion)
+            ) {
                 false to null
             } else {
+                if (retryAfterExhaustion) entry.cleanupRetryExhausted = false
                 entry.surfaceCleanupReserved = true
                 entry.cleanupScheduled = true
                 entry.cleanupRetrySubmitted = false
@@ -1757,8 +1768,12 @@ private class AppKitWindowCommandPort(
         failures.forEach(::reportFailure)
         if (retryPresentationClose) {
             val retry = synchronized(lock) {
-                if (entry.removed || entry.cleanupFinished || entry.cleanupRetrySubmitted) {
+                if (entry.removed || entry.cleanupFinished) {
                     entry.cleanupScheduled = false
+                    false
+                } else if (entry.cleanupRetrySubmitted) {
+                    entry.cleanupScheduled = false
+                    entry.cleanupRetryExhausted = true
                     false
                 } else {
                     entry.cleanupRetrySubmitted = true
@@ -1933,6 +1948,7 @@ private class AppKitWindowCommandPort(
         var fullscreenTerminalTombstone: AppKitFullscreenTerminalTombstone? = null
         var cleanupScheduled: Boolean = false
         var cleanupRetrySubmitted: Boolean = false
+        var cleanupRetryExhausted: Boolean = false
         var cleanupFinished: Boolean = false
         var cleanupCompletion: CleanupCompletion = CleanupCompletion.None
         var nativeTerminalIssued: Boolean = false
