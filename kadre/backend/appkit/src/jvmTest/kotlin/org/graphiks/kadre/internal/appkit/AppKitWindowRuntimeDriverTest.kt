@@ -399,6 +399,8 @@ class AppKitWindowRuntimeDriverTest {
             val window = withTimeout(2.seconds) {
                 openedWindow(driver, WindowSpec(title = "attention-main-thread-failure"))
             }
+            // Drain post-open owner-thread work before injecting the failure for attention itself.
+            assertIs<RuntimeDesktopWindowHandleAccess>(window).withDesktopHandle { Unit }.successValue()
             val failure = IllegalStateException("main-thread")
             port.failNextMainThreadCall(failure)
 
