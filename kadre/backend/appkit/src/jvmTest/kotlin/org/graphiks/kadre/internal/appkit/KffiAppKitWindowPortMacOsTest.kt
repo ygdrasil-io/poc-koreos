@@ -82,6 +82,29 @@ import kotlin.test.assertTrue
 
 class KffiAppKitWindowPortMacOsTest {
     @Test
+    fun generatedKffiCaptureWindowNumberReadsThePresentedNativeWindowOnMacOs() {
+        if (!isMacOsHost()) return
+
+        val port = KffiAppKitWindowPort()
+        var window: AppKitNativeWindowOwner? = null
+        try {
+            port.onMainThread {
+                window = port.createWindow(WindowSpec(contentSize = LogicalSize(240.0, 135.0)))
+                port.present(checkNotNull(window))
+
+                assertTrue(checkNotNull(port.captureWindowNumber(checkNotNull(window))) > 0L)
+            }
+        } finally {
+            port.onMainThread {
+                window?.let { nativeWindow ->
+                    port.closeWindow(nativeWindow)
+                    nativeWindow.close()
+                }
+            }
+        }
+    }
+
+    @Test
     fun fullscreenTerminalCallbackRequirementDefaultsToStrictAndRejectsInvalidValues() {
         assertTrue(parseFullscreenTerminalCallbackRequirement(null))
         assertTrue(parseFullscreenTerminalCallbackRequirement("true"))

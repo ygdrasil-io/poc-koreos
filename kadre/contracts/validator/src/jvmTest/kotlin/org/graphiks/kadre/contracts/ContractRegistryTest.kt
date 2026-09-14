@@ -12,6 +12,34 @@ import kotlin.test.assertTrue
 
 class ContractRegistryTest {
     @Test
+    fun realRegistryActivatesTheExactPhaseElevenSurfaceCaptureContracts() {
+        val recordsById = ContractRegistry.parse(repositoryFile("kadre/contracts/registry/contracts.tsv").readText())
+            .associateBy(ContractRecord::contractId)
+
+        assertEquals(
+            listOf(
+                "runtime-capture-surface-admission",
+                "runtime-capture-surface-opaque-projection",
+            ),
+            recordsById.getValue("CAP-001").scenarios,
+        )
+        assertEquals(
+            listOf(
+                "appkit-capture-surface-registry-lifecycle",
+                "appkit-capture-surface-native-target",
+                "appkit-capture-surface-public-activation",
+                "appkit-capture-surface-generated-window-number",
+            ),
+            recordsById.getValue("APK-020").scenarios,
+        )
+        assertEquals(ContractStatus.Active, recordsById.getValue("CAP-001").status)
+        assertEquals(ContractStatus.Active, recordsById.getValue("APK-020").status)
+        assertEquals(ContractOracle.O2, recordsById.getValue("CAP-001").oracle)
+        assertEquals(ContractOracle.O3, recordsById.getValue("APK-020").oracle)
+        assertEquals(listOf("CaptureCapabilities.surface"), recordsById.getValue("APK-020").conditionalCapabilities)
+    }
+
+    @Test
     fun realRegistryActivatesTheExactPhaseSevenDropContracts() {
         val recordsById = ContractRegistry.parse(repositoryFile("kadre/contracts/registry/contracts.tsv").readText())
             .associateBy(ContractRecord::contractId)

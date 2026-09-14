@@ -126,6 +126,10 @@ public fun main(args: Array<String>) {
                     }
                 }
 
+                suspend fun openSurface() {
+                    open(CaptureRequest(CaptureTarget.Surface(window.surface.id)))
+                }
+
                 for (line in commands) {
                     val command = line.trim()
                     when {
@@ -143,6 +147,7 @@ public fun main(args: Array<String>) {
                         }
                         command == "open-picker" -> open(CaptureRequest(CaptureTarget.HostChoice))
                         command.startsWith("open-source ") -> openSource(command.substringAfter(' ').toIntOrNull() ?: -1)
+                        command == "open-surface" -> openSurface()
                         command.startsWith("close ") -> closeSession(command.substringAfter(' ').toIntOrNull() ?: -1)
                         command.startsWith("stress ") -> {
                             val parts = command.split(' ')
@@ -194,7 +199,7 @@ private fun recordFrame(
 private fun printPhase11CaptureHelp(recorder: Phase11CaptureHarnessRecorder) {
     recorder.line(
         "HELP\tsnapshot | permission | refresh | open-picker | open-source <index> | close <session> | " +
-            "stress <session> <seconds> | result M1..M9 pass|fail|not-applicable note | finish",
+            "open-surface | stress <session> <seconds> | result M1..M10 pass|fail|not-applicable note | finish",
     )
 }
 
@@ -257,7 +262,7 @@ private class Phase11CaptureHarnessRecorder(private val path: Path) : AutoClosea
         val id = fields.getOrNull(1).orEmpty()
         val status = fields.getOrNull(2).orEmpty()
         val note = fields.getOrNull(3).orEmpty()
-        require(id in (1..9).map { "M$it" }) { "scenario must be M1 through M9" }
+        require(id in (1..10).map { "M$it" }) { "scenario must be M1 through M10" }
         require(status in setOf("pass", "fail", "not-applicable")) {
             "status must be pass, fail or not-applicable"
         }

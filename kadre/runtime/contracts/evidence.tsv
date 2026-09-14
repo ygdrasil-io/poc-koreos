@@ -116,3 +116,6 @@ INP-002	jvm	sentinel	runtime-raw-no-ordinary-injection	org.graphiks.kadre.intern
 INP-002	jvm	sentinel	runtime-raw-cross-access-isolation	org.graphiks.kadre.internal.runtime.RawInputCoordinatorTest	independentLeasesReceiveTheSameEventAndClosingOneDoesNotCloseTheOther[jvm]
 INP-002	jvm	sentinel	runtime-raw-revocation-order	org.graphiks.kadre.internal.runtime.RawInputCoordinatorTest	availabilityIsPublishedBeforeTheAccessObservesItsSuspension[jvm]
 INP-002	jvm	sentinel	runtime-raw-late-callback	org.graphiks.kadre.internal.runtime.RawInputCoordinatorTest	closingOneSurfaceClosesOnlyItsRawAccesses[jvm]
+CAP-001	jvm	scenario	runtime-capture-surface-admission	org.graphiks.kadre.internal.runtime.RuntimeCaptureManagerTest	surfaceTargetReservesWithoutInventoryAndProjectsOnlyAnOpaqueHostSurface[jvm]
+CAP-001	jvm	scenario	runtime-capture-surface-opaque-projection	org.graphiks.kadre.internal.runtime.RuntimeCaptureManagerTest	surfaceTargetReservesWithoutInventoryAndProjectsOnlyAnOpaqueHostSurface[jvm]
+CAP-001	jvm	sentinel	runtime-capture-surface-no-source-inventory	org.graphiks.kadre.internal.runtime.RuntimeCaptureManagerTest	surfaceTargetReservesWithoutInventoryAndProjectsOnlyAnOpaqueHostSurface[jvm]

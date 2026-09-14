@@ -122,6 +122,7 @@ class AppKitWindowRuntimeDriverTest {
     @Test
     fun captureRegistryTracksLiveSurfacesIndependentlyAndRevokesBeforePeerRelease() = runBlocking {
         val registry = AppKitCaptureSurfaceRegistry()
+        lateinit var firstSurface: org.graphiks.kadre.surface.SurfaceId
         val port = DeterministicAppKitNativeWindowPort(
             name = "capture-registry-lifecycle",
             captureWindowNumber = { title ->
@@ -129,6 +130,11 @@ class AppKitWindowRuntimeDriverTest {
                     "capture-first" -> 501L
                     "capture-second" -> 502L
                     else -> error("unexpected capture test window $title")
+                }
+            },
+            beforeCloseWindow = { title ->
+                if (title == "capture-first") {
+                    assertEquals(AppKitCaptureSurfaceResolution.Revoked, registry.resolve(firstSurface))
                 }
             },
         )
@@ -141,6 +147,7 @@ class AppKitWindowRuntimeDriverTest {
         try {
             val first = openedWindow(driver, WindowSpec(title = "capture-first"))
             val second = openedWindow(driver, WindowSpec(title = "capture-second"))
+            firstSurface = first.surface.id
             secondSurface = second.surface.id
 
             assertEquals(501L, captureWindowNumber(registry, first.surface.id))
@@ -392,6 +399,8 @@ class AppKitWindowRuntimeDriverTest {
             val window = withTimeout(2.seconds) {
                 openedWindow(driver, WindowSpec(title = "attention-main-thread-failure"))
             }
+            // Drain post-open owner-thread work before injecting the failure for attention itself.
+            assertIs<RuntimeDesktopWindowHandleAccess>(window).withDesktopHandle { Unit }.successValue()
             val failure = IllegalStateException("main-thread")
             port.failNextMainThreadCall(failure)
 
@@ -2313,7 +2322,9 @@ class AppKitWindowRuntimeDriverTest {
             }
             assertFalse(heldTitle.isCompleted)
 
-            assertIs<WindowCloseOutcome.Accepted>(closing.close().successValue())
+            val closeOutcome = closing.close().successValue()
+            // The native terminal callback may win the race after backend admission.
+            assertTrue(closeOutcome is WindowCloseOutcome.Accepted || closeOutcome == WindowCloseOutcome.Closed)
             withTimeout(2.seconds) { closing.state.first { it.phase == WindowPhase.Closed } }
 
             val closed = KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.Window))
