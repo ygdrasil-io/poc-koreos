@@ -513,6 +513,11 @@ internal class KffiAppKitWindowPort(
         window.kffiWindow().close()
     }
 
+    override fun captureWindowNumber(window: AppKitNativeWindowOwner): Long? {
+        requireMainThread()
+        return window.kffiWindow().windowNumber().takeIf { it > 0L }
+    }
+
     override fun desktopHandle(
         window: AppKitNativeWindowOwner,
         view: AppKitNativeViewOwner,

@@ -252,6 +252,14 @@ internal class AppKitWindowPeer private constructor(
         synchronized(lifetimeLock) { nativeCloseCommitted = true }
     }
 
+    /** Reads the backend-private ScreenCaptureKit identity while this peer still owns its window. */
+    internal fun captureWindowNumber(): Long? {
+        if (closed.get()) return null
+        return port.onMainThread {
+            if (closed.get()) null else port.captureWindowNumber(window)?.takeIf { it > 0L }
+        }
+    }
+
     internal fun requestRedraw(generation: Long) {
         require(generation >= 0L) { "generation must be non-negative" }
         if (closed.get()) return

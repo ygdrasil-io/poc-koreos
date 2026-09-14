@@ -20,6 +20,7 @@ internal class AppKitWindowRuntimeDriverFactory(
         beforeCommitDelivery: (org.graphiks.kadre.window.WindowSpec) -> Unit = { },
         beforeRuntimeSurfaceReadyDrain: () -> Unit = { },
         beforeFullscreenFollowUpEnqueue: (AppKitFullscreenCallback) -> Unit = { },
+        captureSurfaceRegistry: AppKitCaptureSurfaceRegistry? = null,
         broker: AppKitProcessBroker? = null,
         attentionOwner: AppKitProcessBroker.AppKitUserAttentionOwner? = null,
     ): AppKitWindowRuntimeDriver = AppKitWindowRuntimeDriver(
@@ -34,6 +35,7 @@ internal class AppKitWindowRuntimeDriverFactory(
         beforeCommitDelivery = beforeCommitDelivery,
         beforeRuntimeSurfaceReadyDrain = beforeRuntimeSurfaceReadyDrain,
         beforeFullscreenFollowUpEnqueue = beforeFullscreenFollowUpEnqueue,
+        captureSurfaceRegistry = captureSurfaceRegistry,
         broker = broker,
         attentionOwner = attentionOwner,
     )

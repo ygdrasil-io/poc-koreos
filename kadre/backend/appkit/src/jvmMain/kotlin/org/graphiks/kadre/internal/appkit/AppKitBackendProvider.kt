@@ -44,7 +44,7 @@ public class AppKitBackendProvider private constructor(
     private val displayAvailability: AppKitDisplayAvailability,
     private val rawInputPortFactory: () -> RawInputPort?,
     private val displayPortFactory: () -> DisplayPort?,
-    private val capturePortFactory: () -> CapturePort?,
+    private val capturePortFactory: (AppKitCaptureSurfaceRegistry) -> CapturePort?,
     private val gamepadPortFactory: () -> GamepadPort?,
     private val inputDevicePortFactory: () -> InputDevicePort?,
     private val availability: () -> Boolean,
@@ -63,7 +63,7 @@ public class AppKitBackendProvider private constructor(
                 null
             }
         },
-        { if (isMacOs()) AppKitCapturePort() else null },
+        { registry -> if (isMacOs()) AppKitCapturePort(surfaceRegistry = registry) else null },
         { if (isMacOs()) ProcessAppKitProcessBroker.value.openGameControllerPort() else null },
         { if (isMacOs()) ProcessAppKitProcessBroker.value.openHidPort() else null },
         ::isMacOs,
@@ -255,6 +255,7 @@ public class AppKitBackendProvider private constructor(
             rawInputPortFactory: () -> RawInputPort? = { null },
             displayPortFactory: () -> DisplayPort? = { null },
             capturePortFactory: () -> CapturePort? = { null },
+            capturePortFactoryWithRegistry: ((AppKitCaptureSurfaceRegistry) -> CapturePort?)? = null,
             gamepadPortFactory: () -> GamepadPort? = { null },
             inputDevicePortFactory: () -> InputDevicePort? = { null },
             availability: () -> Boolean,
@@ -266,7 +267,7 @@ public class AppKitBackendProvider private constructor(
             displayAvailability,
             rawInputPortFactory,
             displayPortFactory,
-            capturePortFactory,
+            capturePortFactoryWithRegistry ?: { _ -> capturePortFactory() },
             gamepadPortFactory,
             inputDevicePortFactory,
             availability,
@@ -307,6 +308,7 @@ public class AppKitBackendProvider private constructor(
         onLastWindowClosed: (() -> Unit)? = null,
         attentionOwner: AppKitProcessBroker.AppKitUserAttentionOwner? = null,
     ): RuntimeSessionComponentsFactory = RuntimeSessionComponentsFactory { _, _ ->
+        val captureSurfaceRegistry = AppKitCaptureSurfaceRegistry()
         val driver = windowDriverFactory.create(
             resources = resources,
             publicAppKitCapabilities = true,
@@ -319,6 +321,7 @@ public class AppKitBackendProvider private constructor(
             },
             publicSurfaceCapabilities = true,
             onLastWindowClosed = onLastWindowClosed,
+            captureSurfaceRegistry = captureSurfaceRegistry,
             broker = broker,
             attentionOwner = attentionOwner,
         )
@@ -326,7 +329,7 @@ public class AppKitBackendProvider private constructor(
             windows = driver.manager,
             rawInputPort = rawInputPortFactory(),
             displayPort = displayPortFactory(),
-            capturePort = capturePortFactory(),
+            capturePort = capturePortFactory(captureSurfaceRegistry),
             gamepadPort = gamepadPortFactory(),
             inputDevicePort = inputDevicePortFactory(),
             closeAction = driver::close,

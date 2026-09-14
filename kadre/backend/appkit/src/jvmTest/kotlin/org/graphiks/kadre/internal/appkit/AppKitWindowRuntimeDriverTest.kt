@@ -120,6 +120,46 @@ import kotlin.test.assertTrue
 @OptIn(DelicateKadreApi::class)
 class AppKitWindowRuntimeDriverTest {
     @Test
+    fun captureRegistryTracksLiveSurfacesIndependentlyAndRevokesBeforePeerRelease() = runBlocking {
+        val registry = AppKitCaptureSurfaceRegistry()
+        val port = DeterministicAppKitNativeWindowPort(
+            name = "capture-registry-lifecycle",
+            captureWindowNumber = { title ->
+                when (title) {
+                    "capture-first" -> 501L
+                    "capture-second" -> 502L
+                    else -> error("unexpected capture test window $title")
+                }
+            },
+        )
+        val driver = AppKitWindowRuntimeDriverFactory { port }.create(
+            resources = KadrePolicies.Default.resources,
+            captureSurfaceRegistry = registry,
+        )
+        lateinit var secondSurface: org.graphiks.kadre.surface.SurfaceId
+
+        try {
+            val first = openedWindow(driver, WindowSpec(title = "capture-first"))
+            val second = openedWindow(driver, WindowSpec(title = "capture-second"))
+            secondSurface = second.surface.id
+
+            assertEquals(501L, captureWindowNumber(registry, first.surface.id))
+            assertEquals(502L, captureWindowNumber(registry, second.surface.id))
+            assertEquals(listOf(true, true), port.captureWindowNumberCallsOnMainThread)
+
+            assertIs<WindowCloseOutcome.Accepted>(first.close().successValue())
+            withTimeout(2.seconds) { first.state.first { it.phase == WindowPhase.Closed } }
+
+            assertEquals(AppKitCaptureSurfaceResolution.Revoked, registry.resolve(first.surface.id))
+            assertEquals(502L, captureWindowNumber(registry, second.surface.id))
+        } finally {
+            driver.close()
+        }
+
+        assertEquals(AppKitCaptureSurfaceResolution.Revoked, registry.resolve(secondSurface))
+    }
+
+    @Test
     fun driverInstallsAndClosesItsProcessExclusivePort() {
         val broker = AppKitProcessBroker()
         val driver = AppKitWindowRuntimeDriverFactory {
@@ -5702,6 +5742,7 @@ internal class DeterministicAppKitNativeWindowPort(
     appearanceReadbackFailure: Throwable? = null,
     private val configuredTextInputPort: AppKitNativeTextInputPort? = null,
     private val exclusivePresentationLease: AppKitExclusivePresentationLease? = null,
+    private val captureWindowNumber: (String) -> Long? = { null },
 ) : AppKitNativeWindowPort {
     @Volatile
     private var effectiveLevelOverride: WindowLevel? = effectiveLevel
@@ -5728,6 +5769,7 @@ internal class DeterministicAppKitNativeWindowPort(
     val fullscreenRestoreLevels = CopyOnWriteArrayList<WindowLevel>()
     val fullscreenReadbackTitles = CopyOnWriteArrayList<String>()
     val inputCleanupTrace = CopyOnWriteArrayList<String>()
+    val captureWindowNumberCallsOnMainThread = CopyOnWriteArrayList<Boolean>()
     private val nativeMoveCallCounts = linkedMapOf<String, Int>()
     private val nativeMoveThreads = linkedMapOf<String, Thread>()
     private val ownerThread = Thread.currentThread()
@@ -6025,6 +6067,11 @@ internal class DeterministicAppKitNativeWindowPort(
         beforeCloseWindow(recording.identity)
         recordNativeClose(recording)
         closeFailures[recording.identity]?.let { throw it }
+    }
+
+    override fun captureWindowNumber(window: AppKitNativeWindowOwner): Long? {
+        captureWindowNumberCallsOnMainThread += isInsideMainThreadCall()
+        return captureWindowNumber(window.recordingWindow().identity)
     }
 
     override fun desktopHandle(
@@ -6659,6 +6706,17 @@ internal fun <T> KadreResult<T>.appKitSuccessValue(): T = when (this) {
 }
 
 private fun <T> KadreResult<T>.successValue(): T = appKitSuccessValue()
+
+private fun captureWindowNumber(
+    registry: AppKitCaptureSurfaceRegistry,
+    surface: org.graphiks.kadre.surface.SurfaceId,
+): Long = assertIs<AppKitCaptureSurfaceResolution.Available>(registry.resolve(surface)).lease.let { lease ->
+    try {
+        lease.windowNumber
+    } finally {
+        lease.close()
+    }
+}
 
 private suspend fun openedWindow(
     driver: AppKitWindowRuntimeDriver,
