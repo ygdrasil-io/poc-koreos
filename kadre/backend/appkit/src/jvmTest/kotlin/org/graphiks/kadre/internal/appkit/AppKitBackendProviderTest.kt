@@ -504,6 +504,7 @@ class AppKitBackendProviderTest {
         } finally {
             parentScope.cancel()
         }
+        Unit
     }
 
     @Test
@@ -541,6 +542,38 @@ class AppKitBackendProviderTest {
         } finally {
             parentScope.cancel()
         }
+        Unit
+    }
+
+    @Test
+    fun eachEmbeddedSessionReceivesItsOwnCaptureSurfaceRegistry() = kotlinx.coroutines.runBlocking {
+        val registries = mutableListOf<AppKitCaptureSurfaceRegistry>()
+        val provider = AppKitBackendProvider.forTesting(
+            nativeApplication = EmbeddedNativeApplication(),
+            broker = AppKitProcessBroker(),
+            capturePortFactoryWithRegistry = { registry ->
+                registries += registry
+                ProviderCapturePort()
+            },
+            availability = { true },
+        )
+        val parentScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob())
+
+        try {
+            val first = provider.attach(embeddedRequest(parentScope, CompletableDeferred())).requireSession()
+            val second = provider.attach(embeddedRequest(parentScope, CompletableDeferred())).requireSession()
+
+            assertEquals(2, registries.size)
+            assertNotSame(registries[0], registries[1])
+
+            first.close()
+            first.awaitTermination()
+            second.close()
+            second.awaitTermination()
+        } finally {
+            parentScope.cancel()
+        }
+        Unit
     }
 
     @Test

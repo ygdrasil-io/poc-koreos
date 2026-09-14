@@ -82,6 +82,7 @@ import kotlin.math.min
  */
 internal class AppKitCapturePort(
     private val native: AppKitCaptureNative = KffiAppKitCaptureNative,
+    private val surfaceRegistry: AppKitCaptureSurfaceRegistry? = null,
 ) : CapturePort {
     private val lock = Any()
     private val sourcesByKey = linkedMapOf<CapturePortSourceKey, CapturePortSource>()
