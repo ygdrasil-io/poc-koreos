@@ -7,9 +7,9 @@ DRIVER="$SCRIPT_DIR/test-kadre-appkit-contracts.sh"
 FAKE_GRADLE="$SCRIPT_DIR/fixtures/fake-gradlew.sh"
 TEMP_DIR="$(mktemp -d /tmp/kadre-appkit-driver.XXXXXX)"
 EVIDENCE_DIRECTORY="$REPO_ROOT/kadre/backend/appkit/build/contract-evidence"
-EVIDENCE_FILES=("APK-001.json" "APK-002.json" "APK-003.json" "APK-004.json" "APK-005.json" "APK-006.json" "APK-007.json" "APK-008.json" "APK-009.json" "APK-010.json" "APK-011.json" "APK-012.json" "APK-013.json" "APK-014.json" "APK-017.json" "APK-018.json")
+EVIDENCE_FILES=("APK-001.json" "APK-002.json" "APK-003.json" "APK-004.json" "APK-005.json" "APK-006.json" "APK-007.json" "APK-008.json" "APK-009.json" "APK-010.json" "APK-011.json" "APK-012.json" "APK-013.json" "APK-014.json" "APK-017.json" "APK-018.json" "APK-020.json")
 RUNTIME_EVIDENCE_DIRECTORY="$REPO_ROOT/kadre/runtime/build/contract-evidence"
-RUNTIME_EVIDENCE_FILES=("INP-002.json" "WIN-005.json" "WIN-006.json" "INT-001.json" "DSP-001.json" "RUN-007.json" "RUN-008.json")
+RUNTIME_EVIDENCE_FILES=("INP-002.json" "WIN-005.json" "WIN-006.json" "INT-001.json" "DSP-001.json" "RUN-007.json" "RUN-008.json" "CAP-001.json")
 
 cleanup() {
     local status="$?"
@@ -62,6 +62,22 @@ done
 for evidence_file in "${RUNTIME_EVIDENCE_FILES[@]}"; do
     [[ -s "$RUNTIME_EVIDENCE_DIRECTORY/$evidence_file" ]] || fail "success path did not produce $evidence_file"
 done
+
+rm -rf "$EVIDENCE_DIRECTORY"
+rm -rf "$RUNTIME_EVIDENCE_DIRECTORY"
+TRACE="$TEMP_DIR/selector-only.trace"
+KADRE_GRADLEW="$FAKE_GRADLE" \
+KADRE_FAKE_GRADLE_TRACE="$TRACE" \
+KADRE_FAKE_EVIDENCE_DIRECTORY="$EVIDENCE_DIRECTORY" \
+KADRE_FAKE_RUNTIME_EVIDENCE_DIRECTORY="$RUNTIME_EVIDENCE_DIRECTORY" \
+KADRE_APPKIT_REQUIRE_FULLSCREEN_TERMINAL_CALLBACKS=false \
+GITHUB_SHA="0123456789abcdef" \
+    bash "$DRIVER"
+
+[[ "$(sed -n '1p' "$TRACE")" == *"-Dkadre.appkit.requireFullscreenTerminalCallbacks=false"* ]] ||
+    fail "selector-only CI policy did not reach the AppKit test JVM"
+[[ "$(sed -n '2p' "$TRACE")" == *"-Dkadre.appkit.requireFullscreenTerminalCallbacks=false"* ]] ||
+    fail "selector-only CI policy did not reach the evidence test JVM"
 
 rm -rf "$EVIDENCE_DIRECTORY"
 TRACE="$TEMP_DIR/missing-apk010.trace"
@@ -146,6 +162,20 @@ capture_status observed_status env \
 
 [[ "$observed_status" != "0" ]] || fail "missing APK-018 evidence passed the AppKit contract gate"
 [[ "$(wc -l < "$TRACE" | tr -d ' ')" == "2" ]] || fail "missing APK-018 evidence did not run both Gradle phases"
+
+rm -rf "$EVIDENCE_DIRECTORY"
+TRACE="$TEMP_DIR/missing-apk020.trace"
+capture_status observed_status env \
+    KADRE_GRADLEW="$FAKE_GRADLE" \
+    KADRE_FAKE_GRADLE_TRACE="$TRACE" \
+    KADRE_FAKE_EVIDENCE_DIRECTORY="$EVIDENCE_DIRECTORY" \
+    KADRE_FAKE_RUNTIME_EVIDENCE_DIRECTORY="$RUNTIME_EVIDENCE_DIRECTORY" \
+    KADRE_FAKE_MISSING_EVIDENCE=APK-020 \
+    GITHUB_SHA="0123456789abcdef" \
+    bash "$DRIVER"
+
+[[ "$observed_status" != "0" ]] || fail "missing APK-020 evidence passed the AppKit contract gate"
+[[ "$(wc -l < "$TRACE" | tr -d ' ')" == "2" ]] || fail "missing APK-020 evidence did not run both Gradle phases"
 
 rm -rf "$EVIDENCE_DIRECTORY"
 rm -rf "$RUNTIME_EVIDENCE_DIRECTORY"
@@ -239,6 +269,21 @@ capture_status observed_status env \
 
 rm -rf "$EVIDENCE_DIRECTORY"
 rm -rf "$RUNTIME_EVIDENCE_DIRECTORY"
+TRACE="$TEMP_DIR/missing-cap001.trace"
+capture_status observed_status env \
+    KADRE_GRADLEW="$FAKE_GRADLE" \
+    KADRE_FAKE_GRADLE_TRACE="$TRACE" \
+    KADRE_FAKE_EVIDENCE_DIRECTORY="$EVIDENCE_DIRECTORY" \
+    KADRE_FAKE_RUNTIME_EVIDENCE_DIRECTORY="$RUNTIME_EVIDENCE_DIRECTORY" \
+    KADRE_FAKE_MISSING_EVIDENCE=CAP-001 \
+    GITHUB_SHA="0123456789abcdef" \
+    bash "$DRIVER"
+
+[[ "$observed_status" != "0" ]] || fail "missing CAP-001 evidence passed the AppKit contract gate"
+[[ "$(wc -l < "$TRACE" | tr -d ' ')" == "2" ]] || fail "missing CAP-001 evidence did not run both Gradle phases"
+
+rm -rf "$EVIDENCE_DIRECTORY"
+rm -rf "$RUNTIME_EVIDENCE_DIRECTORY"
 TRACE="$TEMP_DIR/failure.trace"
 capture_status observed_status env \
     KADRE_GRADLEW="$FAKE_GRADLE" \
@@ -268,5 +313,22 @@ capture_status observed_status env \
 [[ "$observed_status" == "133" ]] || fail "native SIGTRAP status 133 became $observed_status"
 [[ "$(wc -l < "$TRACE" | tr -d ' ')" == "1" ]] ||
     fail "native SIGTRAP retried the AppKit test phase"
+
+TRACE="$TEMP_DIR/test-timeout.trace"
+capture_status observed_status env \
+    KADRE_GRADLEW="$FAKE_GRADLE" \
+    KADRE_FAKE_GRADLE_TRACE="$TRACE" \
+    KADRE_FAKE_EVIDENCE_DIRECTORY="$EVIDENCE_DIRECTORY" \
+    KADRE_FAKE_RUNTIME_EVIDENCE_DIRECTORY="$RUNTIME_EVIDENCE_DIRECTORY" \
+    KADRE_FAKE_TEST_DELAY_SECONDS=2 \
+    KADRE_APPKIT_TEST_TIMEOUT_SECONDS=1 \
+    GITHUB_SHA="fedcba9876543210" \
+    bash "$DRIVER"
+
+[[ "$observed_status" == "124" ]] || fail "test watchdog timeout became $observed_status"
+[[ "$(wc -l < "$TRACE" | tr -d ' ')" == "1" ]] ||
+    fail "evidence phase ran after the test watchdog timeout"
+[[ ! -e "$EVIDENCE_DIRECTORY" ]] || fail "test watchdog timeout produced evidence"
+[[ ! -e "$RUNTIME_EVIDENCE_DIRECTORY" ]] || fail "test watchdog timeout produced runtime evidence"
 
 echo "Kadre AppKit contract driver behavior: passed"

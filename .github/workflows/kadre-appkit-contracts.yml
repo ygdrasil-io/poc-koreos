@@ -11,9 +11,9 @@ permissions:
 
 jobs:
   appkit-contracts:
-    name: appkit-contracts
+    name: appkit-contracts (arm64)
     runs-on: macos-26
-    timeout-minutes: 15
+    timeout-minutes: 30
 
     steps:
       - name: Checkout
@@ -32,8 +32,32 @@ jobs:
       - name: Collect AppKit environment
         run: bash scripts/collect-appkit-diagnostics.sh kadre/backend/appkit/build/ci-diagnostics
 
+      - name: Run native AppKit fullscreen witness
+        id: native_fullscreen_witness
+        continue-on-error: true
+        env:
+          KADRE_APPKIT_FULLSCREEN_WITNESS_OUTPUT: kadre/backend/appkit/build/ci-diagnostics/fullscreen-witness.json
+          KADRE_APPKIT_FULLSCREEN_WITNESS_EXPECTATION: terminal
+        run: bash scripts/test-appkit-fullscreen-witness.sh
+
       - name: Run AppKit contract gate
+        id: appkit_contract_gate
+        continue-on-error: true
+        env:
+          KADRE_APPKIT_REQUIRE_FULLSCREEN_TERMINAL_CALLBACKS: true
         run: scripts/test-kadre-appkit-contracts.sh
+
+      - name: Require AppKit gates
+        if: always()
+        run: |
+          if [[ '${{ steps.native_fullscreen_witness.outcome }}' != 'success' ]]; then
+            echo "The native AppKit fullscreen witness failed; inspect fullscreen-witness.json." >&2
+            exit 1
+          fi
+          if [[ '${{ steps.appkit_contract_gate.outcome }}' != 'success' ]]; then
+            echo "The AppKit contract gate failed; inspect the contract diagnostics and evidence." >&2
+            exit 1
+          fi
 
       - name: Collect native crash reports
         if: always()

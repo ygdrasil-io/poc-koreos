@@ -39,6 +39,8 @@ public class RuntimeSessionComponents private constructor(
     public val rawInputPort: RawInputPort?,
     /** Optional session-owned display port projected as the public [DisplayManager]. */
     public val displayPort: DisplayPort?,
+    /** Optional session-owned capture control-plane port projected as the public CaptureManager. */
+    public val capturePort: CapturePort?,
     /** Optional session-owned gamepad port projected as the public [org.graphiks.kadre.input.DeviceManager]. */
     public val gamepadPort: GamepadPort?,
     /** Optional session-owned generic input-device port projected as the public DeviceManager. */
@@ -50,20 +52,22 @@ public class RuntimeSessionComponents private constructor(
         windows: WindowManager,
         rawInputPort: RawInputPort? = null,
         displayPort: DisplayPort? = null,
+        capturePort: CapturePort? = null,
         gamepadPort: GamepadPort? = null,
         inputDevicePort: InputDevicePort? = null,
         closeAction: () -> Unit = {},
-    ) : this(windows, rawInputPort, displayPort, gamepadPort, inputDevicePort, closeAction, null)
+    ) : this(windows, rawInputPort, displayPort, capturePort, gamepadPort, inputDevicePort, closeAction, null)
 
     public constructor(
         windows: WindowManager,
         primarySurface: RuntimePrimarySurface,
         rawInputPort: RawInputPort? = null,
         displayPort: DisplayPort? = null,
+        capturePort: CapturePort? = null,
         gamepadPort: GamepadPort? = null,
         inputDevicePort: InputDevicePort? = null,
         closeAction: () -> Unit = {},
-    ) : this(windows, rawInputPort, displayPort, gamepadPort, inputDevicePort, closeAction, primarySurface)
+    ) : this(windows, rawInputPort, displayPort, capturePort, gamepadPort, inputDevicePort, closeAction, primarySurface)
 
     private val lock = RuntimeLock()
     private var closed = false
@@ -99,6 +103,11 @@ public class RuntimeSessionComponents private constructor(
             }
             try {
                 displayPort?.close()
+            } catch (cause: Throwable) {
+                failure = failure.withSuppressed(cause)
+            }
+            try {
+                capturePort?.close()
             } catch (cause: Throwable) {
                 failure = failure.withSuppressed(cause)
             }

@@ -39,6 +39,7 @@ private val APPKIT_DISPLAY_MINIMUM_VERSION = AppKitNumericVersion(26L, 0L, 0L)
 /** KFFI-only adapter that snapshots AppKit/CoreGraphics display state into Kadre's private SPI. */
 internal class KffiAppKitDisplayNative(
     private val services: KffiAppKitDisplayServices = SystemKffiAppKitDisplayServices,
+    private val snapshotFailureReporter: (Throwable) -> Unit = {},
 ) : AppKitDisplayNative {
     private val mappingLock = Any()
     private var displayIdsByKey: Map<Long, Int> = emptyMap()
@@ -48,32 +49,40 @@ internal class KffiAppKitDisplayNative(
         Capability.Supported(Unit, FeatureAvailability.Available)
 
     override fun snapshot(): DisplayPortSnapshot {
-        synchronized(mappingLock) {
-            displayIdsByKey = emptyMap()
-            mappedSnapshot = null
-        }
-        return KffiAppKitMainThread.call {
-        val displays = services.enumerateDisplays()
-        val screensByDisplayId = services.enumerateScreens().associateBy(KffiAppKitNativeScreen::displayId)
-        check(screensByDisplayId.size == displays.size && displays.all { it.id in screensByDisplayId }) {
-            "AppKit and CoreGraphics display inventories differ"
-        }
-        check(screensByDisplayId.values.count(KffiAppKitNativeScreen::isPrimary) == 1) {
-            "AppKit must report exactly one primary screen"
-        }
+        try {
+            synchronized(mappingLock) {
+                displayIdsByKey = emptyMap()
+                mappedSnapshot = null
+            }
+            return KffiAppKitMainThread.call {
+                val displays = services.enumerateDisplays()
+                val screensByDisplayId = services.enumerateScreens().associateBy(KffiAppKitNativeScreen::displayId)
+                check(screensByDisplayId.size == displays.size && displays.all { it.id in screensByDisplayId }) {
+                    "AppKit and CoreGraphics display inventories differ"
+                }
+                check(screensByDisplayId.values.count(KffiAppKitNativeScreen::isPrimary) == 1) {
+                    "AppKit must report exactly one primary screen"
+                }
 
-        val snapshot = DisplayPortSnapshot(
-            primaryKey = screensByDisplayId.values.single(KffiAppKitNativeScreen::isPrimary).displayId.displayKey(),
-            displays = displays.map { display ->
-                val screen = checkNotNull(screensByDisplayId[display.id])
-                display.toPortDisplay(screen)
-            },
-        )
-        synchronized(mappingLock) {
-            displayIdsByKey = displays.associate { display -> display.id.displayKey() to display.id }
-            mappedSnapshot = snapshot
-        }
-        snapshot
+                val snapshot = DisplayPortSnapshot(
+                    primaryKey = screensByDisplayId.values.single(KffiAppKitNativeScreen::isPrimary).displayId.displayKey(),
+                    displays = displays.map { display ->
+                        val screen = checkNotNull(screensByDisplayId[display.id])
+                        display.toPortDisplay(screen)
+                    },
+                )
+                synchronized(mappingLock) {
+                    displayIdsByKey = displays.associate { display -> display.id.displayKey() to display.id }
+                    mappedSnapshot = snapshot
+                }
+                snapshot
+            }
+        } catch (failure: Exception) {
+            reportSnapshotFailure(failure)
+            throw failure
+        } catch (failure: LinkageError) {
+            reportSnapshotFailure(failure)
+            throw failure
         }
     }
 
@@ -85,6 +94,16 @@ internal class KffiAppKitDisplayNative(
         KffiAppKitMainThread.call { services.observeReconfiguration(listener) }
 
     override fun close() = Unit
+
+    private fun reportSnapshotFailure(failure: Throwable) {
+        try {
+            snapshotFailureReporter(failure)
+        } catch (_: Exception) {
+            // Diagnostics must not alter the snapshot failure crossing the AppKit boundary.
+        } catch (_: LinkageError) {
+            // Diagnostics must not alter the snapshot failure crossing the AppKit boundary.
+        }
+    }
 }
 
 /** Production adapter for the managed KFFI CoreGraphics lease; no Kadre FFI is involved. */
@@ -173,8 +192,6 @@ internal interface KffiAppKitDisplayServices {
 
 internal data class KffiAppKitNativeDisplay(
     val id: Int,
-    val pixelWidth: Long,
-    val pixelHeight: Long,
     val bounds: CGDisplayBoundsSnapshot,
     val modes: List<KffiAppKitNativeDisplayMode>,
     val currentMode: KffiAppKitNativeCurrentMode,
@@ -219,8 +236,6 @@ private object SystemKffiAppKitDisplayServices : KffiAppKitDisplayServices {
         AppKitDisplayServices.currentMode(display.id).use { current ->
             KffiAppKitNativeDisplay(
                 id = display.id,
-                pixelWidth = display.pixelWidth,
-                pixelHeight = display.pixelHeight,
                 bounds = AppKitDisplayServices.bounds(display.id),
                 modes = modes,
                 currentMode = KffiAppKitNativeCurrentMode(
@@ -253,9 +268,6 @@ private fun KffiAppKitNativeDisplay.toPortDisplay(screen: KffiAppKitNativeScreen
     val scale = screen.backingScaleFactor
     check(scale.isFinite() && scale > 0.0) { "AppKit reported an invalid backing scale" }
     val bounds = bounds.toPhysicalRect("CoreGraphics display bounds")
-    check(bounds.size.width.toLong() == pixelWidth && bounds.size.height.toLong() == pixelHeight) {
-        "CoreGraphics display bounds do not match display pixels"
-    }
 
     val modes = modes.map { mode ->
         check(mode.modeIdentity >= 0L) { "CoreGraphics display mode identity must be non-negative" }
@@ -278,7 +290,7 @@ private fun KffiAppKitNativeDisplay.toPortDisplay(screen: KffiAppKitNativeScreen
         type = DisplayType.Physical,
         name = screen.name,
         bounds = bounds,
-        workArea = screen.toWorkArea(bounds, scale),
+        workArea = screen.toWorkArea(bounds),
         scaleFactor = scale,
         currentModeKey = matchingMode.key,
         modes = modes,
@@ -287,23 +299,27 @@ private fun KffiAppKitNativeDisplay.toPortDisplay(screen: KffiAppKitNativeScreen
 
 private fun KffiAppKitNativeScreen.toWorkArea(
     coreGraphicsBounds: PhysicalRect,
-    scale: Double,
 ): PhysicalRect {
     check(visibleFrame.x >= frame.x && visibleFrame.y >= frame.y) { "AppKit visible frame starts outside its screen" }
     check(visibleFrame.x + visibleFrame.width <= frame.x + frame.width) { "AppKit visible frame exceeds screen width" }
     check(visibleFrame.y + visibleFrame.height <= frame.y + frame.height) { "AppKit visible frame exceeds screen height" }
-    check(frame.width.toPhysicalDimension(scale, "screen width") == coreGraphicsBounds.size.width) {
+    // AppKit and CoreGraphics describe the same virtual-desktop rectangle. Global desktop
+    // coordinates are published as-is: the backing scale only converts a surface's or a
+    // display's local logical metrics, never a position in the virtual desktop. Scaling here
+    // would demand `frame × scale == CoreGraphics bounds`, which no HiDPI screen satisfies
+    // because `CGDisplayBounds` already is that point-sized rectangle.
+    check(frame.width.toPhysicalDimension("screen width") == coreGraphicsBounds.size.width) {
         "AppKit screen width does not match CoreGraphics bounds"
     }
-    check(frame.height.toPhysicalDimension(scale, "screen height") == coreGraphicsBounds.size.height) {
+    check(frame.height.toPhysicalDimension("screen height") == coreGraphicsBounds.size.height) {
         "AppKit screen height does not match CoreGraphics bounds"
     }
 
-    val localX = (visibleFrame.x - frame.x).toPhysicalCoordinate(scale, "visible frame x")
+    val localX = (visibleFrame.x - frame.x).toPhysicalCoordinate("visible frame x")
     val localTop = (frame.height - (visibleFrame.y - frame.y + visibleFrame.height))
-        .toPhysicalCoordinate(scale, "visible frame top")
-    val width = visibleFrame.width.toPhysicalDimension(scale, "visible frame width")
-    val height = visibleFrame.height.toPhysicalDimension(scale, "visible frame height")
+        .toPhysicalCoordinate("visible frame top")
+    val width = visibleFrame.width.toPhysicalDimension("visible frame width")
+    val height = visibleFrame.height.toPhysicalDimension("visible frame height")
     return PhysicalRect(
         origin = PhysicalPoint(
             Math.addExact(coreGraphicsBounds.origin.x, localX),
@@ -327,9 +343,6 @@ private fun Double.toPhysicalDimension(name: String): Int = toPhysicalCoordinate
     require(it > 0) { "$name must be positive" }
 }
 
-private fun Double.toPhysicalDimension(scale: Double, name: String): Int =
-    (this * scale).toPhysicalDimension(name)
-
 private fun Double.toPhysicalCoordinate(name: String): Int {
     require(isFinite()) { "$name must be finite" }
     val rounded = roundToLong()
@@ -337,9 +350,6 @@ private fun Double.toPhysicalCoordinate(name: String): Int {
     require(rounded in Int.MIN_VALUE.toLong()..Int.MAX_VALUE.toLong()) { "$name does not fit a physical coordinate" }
     return rounded.toInt()
 }
-
-private fun Double.toPhysicalCoordinate(scale: Double, name: String): Int =
-    (this * scale).toPhysicalCoordinate(name)
 
 private fun Int.displayKey(): Long = toUInt().toLong()
 

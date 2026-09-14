@@ -171,8 +171,6 @@ class KffiAppKitDisplayNativeTest {
                 displays = listOf(
                     KffiAppKitNativeDisplay(
                         id = 17,
-                        pixelWidth = 1920,
-                        pixelHeight = 1080,
                         bounds = CGDisplayBoundsSnapshot(0.0, 0.0, 1920.0, 1080.0),
                         modes = listOf(KffiAppKitNativeDisplayMode(701L, 1920, 1080, 60.0, 0)),
                         currentMode = KffiAppKitNativeCurrentMode(701L, 1920, 1080, 60.0, 0),
@@ -227,9 +225,7 @@ class KffiAppKitDisplayNativeTest {
                 displays = listOf(
                     KffiAppKitNativeDisplay(
                         id = 17,
-                        pixelWidth = 3000,
-                        pixelHeight = 2000,
-                        bounds = CGDisplayBoundsSnapshot(-3000.0, 0.0, 3000.0, 2000.0),
+                        bounds = CGDisplayBoundsSnapshot(-1500.0, 0.0, 1500.0, 1000.0),
                         modes = listOf(
                             KffiAppKitNativeDisplayMode(701L, 1500, 1000, 60.0, 1),
                             KffiAppKitNativeDisplayMode(409L, 3000, 2000, 120.0, 9),
@@ -258,8 +254,8 @@ class KffiAppKitDisplayNativeTest {
                         key = 17,
                         type = DisplayType.Physical,
                         name = "Studio Display",
-                        bounds = PhysicalRect(PhysicalPoint(-3000, 0), PhysicalSize(3000, 2000)),
-                        workArea = PhysicalRect(PhysicalPoint(-3000, 44), PhysicalSize(3000, 1956)),
+                        bounds = PhysicalRect(PhysicalPoint(-1500, 0), PhysicalSize(1500, 1000)),
+                        workArea = PhysicalRect(PhysicalPoint(-1500, 22), PhysicalSize(1500, 978)),
                         scaleFactor = 2.0,
                         currentModeKey = 409,
                         modes = listOf(
@@ -280,8 +276,6 @@ class KffiAppKitDisplayNativeTest {
                 displays = listOf(
                     KffiAppKitNativeDisplay(
                         id = 17,
-                        pixelWidth = 1920,
-                        pixelHeight = 1080,
                         bounds = CGDisplayBoundsSnapshot(0.0, 0.0, 1920.0, 1080.0),
                         modes = listOf(KffiAppKitNativeDisplayMode(701L, 1920, 1080, 60.0, 0)),
                         currentMode = KffiAppKitNativeCurrentMode(701L, 1920, 1080, 60.0, 0),
@@ -295,14 +289,30 @@ class KffiAppKitDisplayNativeTest {
     }
 
     @Test
+    fun snapshotReportsTheOriginalNativeFailureToItsDiagnosticObserver() {
+        val expected = IllegalStateException("display enumeration failed")
+        val reported = mutableListOf<Throwable>()
+        val native = KffiAppKitDisplayNative(
+            services = RecordingKffiAppKitDisplayServices(
+                displays = emptyList(),
+                screens = emptyList(),
+                displayFailure = expected,
+            ),
+            snapshotFailureReporter = { failure -> reported += failure },
+        )
+
+        val actual = assertFailsWith<IllegalStateException> { native.snapshot() }
+        assertEquals(expected, actual)
+        assertEquals(listOf<Throwable>(expected), reported)
+    }
+
+    @Test
     fun snapshotRefusesDuplicateCoreGraphicsModeIdentitiesBeforePublishing() {
         val native = KffiAppKitDisplayNative(
             RecordingKffiAppKitDisplayServices(
                 displays = listOf(
                     KffiAppKitNativeDisplay(
                         id = 17,
-                        pixelWidth = 1920,
-                        pixelHeight = 1080,
                         bounds = CGDisplayBoundsSnapshot(0.0, 0.0, 1920.0, 1080.0),
                         modes = listOf(
                             KffiAppKitNativeDisplayMode(701L, 1920, 1080, 60.0, 0),
@@ -334,8 +344,6 @@ class KffiAppKitDisplayNativeTest {
                 displays = listOf(
                     KffiAppKitNativeDisplay(
                         id = 17,
-                        pixelWidth = 1920,
-                        pixelHeight = 1080,
                         bounds = CGDisplayBoundsSnapshot(0.0, 0.0, 1920.0, 1080.0),
                         modes = listOf(
                             KffiAppKitNativeDisplayMode(0L, 1920, 1080, 60.0, 0),
@@ -423,13 +431,14 @@ private fun assertPresentationCode(result: AppKitExclusivePresentationResult, ex
 private class RecordingKffiAppKitDisplayServices(
     private val displays: List<KffiAppKitNativeDisplay>,
     private val screens: List<KffiAppKitNativeScreen>,
+    private val displayFailure: Throwable? = null,
 ) : KffiAppKitDisplayServices {
     var listener: (() -> Unit)? = null
         private set
     var observationCloseCount: Int = 0
         private set
 
-    override fun enumerateDisplays(): List<KffiAppKitNativeDisplay> = displays
+    override fun enumerateDisplays(): List<KffiAppKitNativeDisplay> = displayFailure?.let { throw it } ?: displays
 
     override fun enumerateScreens(): List<KffiAppKitNativeScreen> = screens
 

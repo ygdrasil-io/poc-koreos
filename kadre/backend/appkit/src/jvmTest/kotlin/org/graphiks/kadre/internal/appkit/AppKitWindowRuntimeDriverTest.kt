@@ -29,6 +29,7 @@ import org.graphiks.kadre.diagnostics.FeatureAvailability
 import org.graphiks.kadre.diagnostics.KadrePlatform
 import org.graphiks.kadre.diagnostics.KadreResourceKind
 import org.graphiks.kadre.diagnostics.KadreResult
+import org.graphiks.kadre.internal.appkit.manual.awaitPhase4InputReadiness
 import org.graphiks.kadre.internal.runtime.RuntimeDesktopNativeWindowHandle
 import org.graphiks.kadre.internal.runtime.RuntimeDesktopWindowHandleAccess
 import org.graphiks.kadre.internal.runtime.RuntimeFailureReporter
@@ -118,6 +119,53 @@ import kotlin.test.assertTrue
 
 @OptIn(DelicateKadreApi::class)
 class AppKitWindowRuntimeDriverTest {
+    @Test
+    fun captureRegistryTracksLiveSurfacesIndependentlyAndRevokesBeforePeerRelease() = runBlocking {
+        val registry = AppKitCaptureSurfaceRegistry()
+        lateinit var firstSurface: org.graphiks.kadre.surface.SurfaceId
+        val port = DeterministicAppKitNativeWindowPort(
+            name = "capture-registry-lifecycle",
+            captureWindowNumber = { title ->
+                when (title) {
+                    "capture-first" -> 501L
+                    "capture-second" -> 502L
+                    else -> error("unexpected capture test window $title")
+                }
+            },
+            beforeCloseWindow = { title ->
+                if (title == "capture-first") {
+                    assertEquals(AppKitCaptureSurfaceResolution.Revoked, registry.resolve(firstSurface))
+                }
+            },
+        )
+        val driver = AppKitWindowRuntimeDriverFactory { port }.create(
+            resources = KadrePolicies.Default.resources,
+            captureSurfaceRegistry = registry,
+        )
+        lateinit var secondSurface: org.graphiks.kadre.surface.SurfaceId
+
+        try {
+            val first = openedWindow(driver, WindowSpec(title = "capture-first"))
+            val second = openedWindow(driver, WindowSpec(title = "capture-second"))
+            firstSurface = first.surface.id
+            secondSurface = second.surface.id
+
+            assertEquals(501L, captureWindowNumber(registry, first.surface.id))
+            assertEquals(502L, captureWindowNumber(registry, second.surface.id))
+            assertEquals(listOf(true, true), port.captureWindowNumberCallsOnMainThread)
+
+            assertIs<WindowCloseOutcome.Accepted>(first.close().successValue())
+            withTimeout(2.seconds) { first.state.first { it.phase == WindowPhase.Closed } }
+
+            assertEquals(AppKitCaptureSurfaceResolution.Revoked, registry.resolve(first.surface.id))
+            assertEquals(502L, captureWindowNumber(registry, second.surface.id))
+        } finally {
+            driver.close()
+        }
+
+        assertEquals(AppKitCaptureSurfaceResolution.Revoked, registry.resolve(secondSurface))
+    }
+
     @Test
     fun driverInstallsAndClosesItsProcessExclusivePort() {
         val broker = AppKitProcessBroker()
@@ -351,6 +399,8 @@ class AppKitWindowRuntimeDriverTest {
             val window = withTimeout(2.seconds) {
                 openedWindow(driver, WindowSpec(title = "attention-main-thread-failure"))
             }
+            // Drain post-open owner-thread work before injecting the failure for attention itself.
+            assertIs<RuntimeDesktopWindowHandleAccess>(window).withDesktopHandle { Unit }.successValue()
             val failure = IllegalStateException("main-thread")
             port.failNextMainThreadCall(failure)
 
@@ -2272,7 +2322,9 @@ class AppKitWindowRuntimeDriverTest {
             }
             assertFalse(heldTitle.isCompleted)
 
-            assertIs<WindowCloseOutcome.Accepted>(closing.close().successValue())
+            val closeOutcome = closing.close().successValue()
+            // The native terminal callback may win the race after backend admission.
+            assertTrue(closeOutcome is WindowCloseOutcome.Accepted || closeOutcome == WindowCloseOutcome.Closed)
             withTimeout(2.seconds) { closing.state.first { it.phase == WindowPhase.Closed } }
 
             val closed = KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.Window))
@@ -4128,6 +4180,45 @@ class AppKitWindowRuntimeDriverTest {
     }
 
     @Test
+    fun phase4HarnessReadinessWaitsForTheDeferredInputCapabilityPublication() = runBlocking {
+        val drainPaused = CountDownLatch(1)
+        val releaseDrain = CountDownLatch(1)
+        val port = DeterministicAppKitNativeWindowPort(
+            name = "phase4-harness-readiness",
+            inputObservationInstalled = true,
+        )
+        val driver = AppKitWindowRuntimeDriverFactory { port }.create(
+            resources = KadrePolicies.Default.resources,
+            beforeRuntimeSurfaceReadyDrain = {
+                drainPaused.countDown()
+                check(releaseDrain.await(2, TimeUnit.SECONDS))
+            },
+        )
+
+        try {
+            val request = driver.manager.requestWindow(WindowSpec(title = "phase4-harness-readiness"))
+                .successValue()
+            assertTrue(drainPaused.await(2, TimeUnit.SECONDS))
+            val window = assertIs<WindowRequestOutcome.OpenedHere>(
+                withTimeout(2.seconds) { request.await() },
+            ).window
+
+            val readiness = async(start = CoroutineStart.UNDISPATCHED) {
+                awaitPhase4InputReadiness(window.surface.input)
+            }
+            assertFalse(readiness.isCompleted)
+
+            releaseDrain.countDown()
+            val input = withTimeout(2.seconds) { readiness.await() }
+            assertEquals(FeatureAvailability.Available, input.capabilities.keyboard)
+            assertEquals(FeatureAvailability.Available, input.capabilities.pointer)
+        } finally {
+            releaseDrain.countDown()
+            driver.close()
+        }
+    }
+
+    @Test
     fun readinessHandoffDrainsPreCommitObservationBeforeLivePointerDown() = runBlocking {
         data class HandlerInputSnapshot(
             val revision: Long,
@@ -5662,6 +5753,7 @@ internal class DeterministicAppKitNativeWindowPort(
     appearanceReadbackFailure: Throwable? = null,
     private val configuredTextInputPort: AppKitNativeTextInputPort? = null,
     private val exclusivePresentationLease: AppKitExclusivePresentationLease? = null,
+    private val captureWindowNumber: (String) -> Long? = { null },
 ) : AppKitNativeWindowPort {
     @Volatile
     private var effectiveLevelOverride: WindowLevel? = effectiveLevel
@@ -5688,6 +5780,7 @@ internal class DeterministicAppKitNativeWindowPort(
     val fullscreenRestoreLevels = CopyOnWriteArrayList<WindowLevel>()
     val fullscreenReadbackTitles = CopyOnWriteArrayList<String>()
     val inputCleanupTrace = CopyOnWriteArrayList<String>()
+    val captureWindowNumberCallsOnMainThread = CopyOnWriteArrayList<Boolean>()
     private val nativeMoveCallCounts = linkedMapOf<String, Int>()
     private val nativeMoveThreads = linkedMapOf<String, Thread>()
     private val ownerThread = Thread.currentThread()
@@ -5985,6 +6078,11 @@ internal class DeterministicAppKitNativeWindowPort(
         beforeCloseWindow(recording.identity)
         recordNativeClose(recording)
         closeFailures[recording.identity]?.let { throw it }
+    }
+
+    override fun captureWindowNumber(window: AppKitNativeWindowOwner): Long? {
+        captureWindowNumberCallsOnMainThread += isInsideMainThreadCall()
+        return captureWindowNumber(window.recordingWindow().identity)
     }
 
     override fun desktopHandle(
@@ -6619,6 +6717,17 @@ internal fun <T> KadreResult<T>.appKitSuccessValue(): T = when (this) {
 }
 
 private fun <T> KadreResult<T>.successValue(): T = appKitSuccessValue()
+
+private fun captureWindowNumber(
+    registry: AppKitCaptureSurfaceRegistry,
+    surface: org.graphiks.kadre.surface.SurfaceId,
+): Long = assertIs<AppKitCaptureSurfaceResolution.Available>(registry.resolve(surface)).lease.let { lease ->
+    try {
+        lease.windowNumber
+    } finally {
+        lease.close()
+    }
+}
 
 private suspend fun openedWindow(
     driver: AppKitWindowRuntimeDriver,

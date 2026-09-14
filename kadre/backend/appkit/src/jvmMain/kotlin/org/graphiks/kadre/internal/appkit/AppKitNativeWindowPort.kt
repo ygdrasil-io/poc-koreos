@@ -149,6 +149,14 @@ internal interface AppKitNativeWindowPort {
 
     fun closeWindow(window: AppKitNativeWindowOwner)
 
+    /**
+     * Returns the generated AppKit window number used by ScreenCaptureKit for this live window.
+     *
+     * The number is backend-private: it is never exposed through a Kadre surface or capture
+     * source. A port that cannot establish the identity leaves same-session capture unresolved.
+     */
+    fun captureWindowNumber(window: AppKitNativeWindowOwner): Long? = null
+
     fun desktopHandle(
         window: AppKitNativeWindowOwner,
         view: AppKitNativeViewOwner,

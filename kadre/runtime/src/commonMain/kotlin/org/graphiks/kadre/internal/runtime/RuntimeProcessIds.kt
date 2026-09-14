@@ -1,6 +1,7 @@
 package org.graphiks.kadre.internal.runtime
 
 import org.graphiks.kadre.application.SessionId
+import org.graphiks.kadre.capture.CaptureSourceId
 import org.graphiks.kadre.display.DisplayId
 import org.graphiks.kadre.display.DisplayModeId
 import org.graphiks.kadre.input.DeviceId
@@ -20,6 +21,7 @@ internal object RuntimeProcessIds {
     private var surfaceIds = 0L
     private var displayIds = 0L
     private var displayModeIds = 0L
+    private var captureSourceIds = 0L
     private var gamepadIds = 0L
     private var deviceIds = 0L
 
@@ -42,6 +44,9 @@ internal object RuntimeProcessIds {
 
     fun nextDisplayModeId(): DisplayModeId =
         DisplayModeId(nextValue("display mode ID", { displayModeIds }, { displayModeIds += 1L }))
+
+    fun nextCaptureSourceId(): CaptureSourceId =
+        CaptureSourceId(nextValue("capture source ID", { captureSourceIds }, { captureSourceIds += 1L }))
 
     fun nextGamepadId(): GamepadId = GamepadId(nextValue("gamepad ID", { gamepadIds }, { gamepadIds += 1L }))
 

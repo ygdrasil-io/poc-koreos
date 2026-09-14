@@ -15,11 +15,22 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 GRADLEW="${KADRE_GRADLEW:-$REPO_ROOT/gradlew}"
 EVIDENCE_DIRECTORY="$REPO_ROOT/kadre/backend/appkit/build/contract-evidence"
-EVIDENCE_FILES=("APK-001.json" "APK-002.json" "APK-003.json" "APK-004.json" "APK-005.json" "APK-006.json" "APK-007.json" "APK-008.json" "APK-009.json" "APK-010.json" "APK-011.json" "APK-012.json" "APK-013.json" "APK-014.json" "APK-017.json" "APK-018.json")
+EVIDENCE_FILES=("APK-001.json" "APK-002.json" "APK-003.json" "APK-004.json" "APK-005.json" "APK-006.json" "APK-007.json" "APK-008.json" "APK-009.json" "APK-010.json" "APK-011.json" "APK-012.json" "APK-013.json" "APK-014.json" "APK-017.json" "APK-018.json" "APK-020.json")
 RUNTIME_EVIDENCE_DIRECTORY="$REPO_ROOT/kadre/runtime/build/contract-evidence"
-RUNTIME_EVIDENCE_FILES=("INP-002.json" "WIN-005.json" "WIN-006.json" "INT-001.json" "DSP-001.json" "RUN-007.json" "RUN-008.json")
+RUNTIME_EVIDENCE_FILES=("INP-002.json" "WIN-005.json" "WIN-006.json" "INT-001.json" "DSP-001.json" "RUN-007.json" "RUN-008.json" "CAP-001.json")
 DIAGNOSTICS_DIRECTORY="$REPO_ROOT/kadre/backend/appkit/build/ci-diagnostics"
+TEST_TIMEOUT_SECONDS="${KADRE_APPKIT_TEST_TIMEOUT_SECONDS:-900}"
+EVIDENCE_TIMEOUT_SECONDS=600
+FULLSCREEN_TERMINAL_CALLBACKS="${KADRE_APPKIT_REQUIRE_FULLSCREEN_TERMINAL_CALLBACKS:-true}"
 source "$SCRIPT_DIR/lib/process-watchdog.sh"
+
+case "$FULLSCREEN_TERMINAL_CALLBACKS" in
+    true|false) ;;
+    *)
+        echo "KADRE_APPKIT_REQUIRE_FULLSCREEN_TERMINAL_CALLBACKS must be true or false." >&2
+        exit 64
+        ;;
+esac
 
 if [[ ! -x "$GRADLEW" ]]; then
     echo "Gradle wrapper is not executable: $GRADLEW" >&2
@@ -33,7 +44,8 @@ fi
 
 run_phase() {
     local phase="$1"
-    shift
+    local timeout_seconds="$2"
+    shift 2
     local statuses
     local status
     local tee_status
@@ -44,7 +56,7 @@ run_phase() {
     echo "Kadre AppKit $phase: started"
 
     set +e
-    run_with_timeout 600 "$@" 2>&1 | tee "$log_file"
+    run_with_timeout "$timeout_seconds" "$@" 2>&1 | tee "$log_file"
     statuses=("${PIPESTATUS[@]}")
     set -e
     status="${statuses[0]}"
@@ -67,19 +79,21 @@ rm -rf "$EVIDENCE_DIRECTORY"
 rm -rf "$RUNTIME_EVIDENCE_DIRECTORY"
 cd "$REPO_ROOT"
 
-run_phase tests \
+run_phase tests "$TEST_TIMEOUT_SECONDS" \
     "$GRADLEW" \
     :kadre:backend:appkit:appKitNativeTests \
+    "-Dkadre.appkit.requireFullscreenTerminalCallbacks=$FULLSCREEN_TERMINAL_CALLBACKS" \
     --refresh-dependencies \
     --rerun-tasks \
     --no-daemon \
     --stacktrace \
     --console=plain
 
-run_phase evidence \
+run_phase evidence "$EVIDENCE_TIMEOUT_SECONDS" \
     "$GRADLEW" \
     :kadre:contracts:validator:generateRuntimeContractEvidence \
     :kadre:contracts:validator:generateAppKitContractEvidence \
+    "-Dkadre.appkit.requireFullscreenTerminalCallbacks=$FULLSCREEN_TERMINAL_CALLBACKS" \
     "-PkadreContractCommit=$COMMIT" \
     --refresh-dependencies \
     --rerun-tasks \

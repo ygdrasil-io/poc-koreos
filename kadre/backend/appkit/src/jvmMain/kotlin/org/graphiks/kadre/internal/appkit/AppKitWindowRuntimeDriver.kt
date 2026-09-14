@@ -82,6 +82,7 @@ internal class AppKitWindowRuntimeDriver internal constructor(
     beforeCommitDelivery: (WindowSpec) -> Unit,
     beforeRuntimeSurfaceReadyDrain: () -> Unit,
     beforeFullscreenFollowUpEnqueue: (AppKitFullscreenCallback) -> Unit,
+    captureSurfaceRegistry: AppKitCaptureSurfaceRegistry?,
     broker: AppKitProcessBroker?,
     attentionOwner: AppKitProcessBroker.AppKitUserAttentionOwner?,
 ) : AutoCloseable {
@@ -89,6 +90,7 @@ internal class AppKitWindowRuntimeDriver internal constructor(
     private val fullscreenObservationSink = DeferredRuntimeFullscreenObservationSink()
     private val commandPort = AppKitWindowCommandPort(
         nativePort,
+        captureSurfaceRegistry,
         failureReporter,
         beforeCommitDelivery,
         beforeRuntimeSurfaceReadyDrain,
@@ -271,6 +273,7 @@ private class BrokeredAppKitWindowAttentionPort(
 
 private class AppKitWindowCommandPort(
     private val nativePort: AppKitNativeWindowPort,
+    private val captureSurfaceRegistry: AppKitCaptureSurfaceRegistry?,
     private val failureReporter: RuntimeFailureReporter,
     private val beforeCommitDelivery: (WindowSpec) -> Unit,
     private val beforeRuntimeSurfaceReadyDrain: () -> Unit,
@@ -392,7 +395,7 @@ private class AppKitWindowCommandPort(
             failures += cause
         } finally {
             issueNativeTerminal(entry)
-            scheduleCleanup(entry)
+            scheduleCleanup(entry, retryAfterExhaustion = true)
         }
         failures.forEach(::reportFailure)
     }
@@ -539,6 +542,7 @@ private class AppKitWindowCommandPort(
                 it.cleanupCompletion = CleanupCompletion.ProgrammaticClose
             }
         }
+        revokeCaptureSurface(entry)
         revokeInputObservationForCleanup(entry)
         scheduleNativeClose(entry)
         return OpenedWindowCloseOutcome.Accepted
@@ -607,7 +611,9 @@ private class AppKitWindowCommandPort(
         val remaining = synchronized(lock) {
             byRequest.values.toList().asReversed()
         }
-        remaining.forEach(::scheduleCleanup)
+        remaining.forEach { entry ->
+            scheduleCleanup(entry, retryAfterExhaustion = true)
+        }
         when (mode) {
             CloseDrainMode.Inline -> commands.drainInline()
             CloseDrainMode.Asynchronous -> commands.finishAsynchronousDrain()
@@ -683,6 +689,7 @@ private class AppKitWindowCommandPort(
         }
         when (action) {
             PreparationAction.Commit -> {
+                registerCaptureSurface(entry, peer)
                 beforeCommitDelivery(openingSpec)
                 entry.command.commit(
                     entry.owner,
@@ -1078,6 +1085,7 @@ private class AppKitWindowCommandPort(
 
             is AppKitWindowStimulus.NativeClosed -> {
                 synchronized(lock) { entry.surfaceCleanupReserved = true }
+                revokeCaptureSurface(entry)
                 revokeInputObservationForCleanup(entry)
                 entry.peer?.markNativeClosed()
                 issueNativeTerminal(entry)
@@ -1581,7 +1589,7 @@ private class AppKitWindowCommandPort(
         }
         failures.forEach(::reportFailure)
         issueNativeTerminal(entry)
-        scheduleCleanup(entry)
+        scheduleCleanup(entry, retryAfterExhaustion = true)
     }
 
     private fun revokeInputObservationForCleanup(entry: PeerEntry) {
@@ -1661,17 +1669,74 @@ private class AppKitWindowCommandPort(
         synchronized(lock) { removeEntryLocked(entry) }
     }
 
-    private fun scheduleCleanup(entry: PeerEntry) {
-        val submit = synchronized(lock) {
-            if (entry.removed || entry.cleanupScheduled || entry.cleanupFinished) {
+    /**
+     * Publishes an identity only after AppKit has presented the peer and immediately before the
+     * runtime can hand its surface to application code. Failure to obtain this optional capture
+     * identity never compromises ordinary window ownership.
+     */
+    private fun registerCaptureSurface(entry: PeerEntry, peer: AppKitWindowPeer) {
+        val registry = captureSurfaceRegistry ?: return
+        val windowNumber = try {
+            peer.captureWindowNumber()
+        } catch (cause: Exception) {
+            reportFailure(cause)
+            null
+        } catch (cause: LinkageError) {
+            reportFailure(cause)
+            null
+        } ?: return
+        val registration = try {
+            registry.register(entry.surfaceId, windowNumber)
+        } catch (cause: Exception) {
+            reportFailure(cause)
+            return
+        } catch (cause: LinkageError) {
+            reportFailure(cause)
+            return
+        }
+        val retained = synchronized(lock) {
+            if (closed || entry.removed || entry.surfaceCleanupReserved || entry.closeAdmitted) {
                 false
             } else {
-                entry.surfaceCleanupReserved = true
-                entry.cleanupScheduled = true
-                entry.cleanupRetrySubmitted = false
+                check(entry.captureSurfaceRegistration == null) {
+                    "AppKit capture surface registration is already installed"
+                }
+                entry.captureSurfaceRegistration = registration
                 true
             }
         }
+        if (!retained) registration.close()
+    }
+
+    /** Withdraws future surface capture admissions before native peer teardown begins. */
+    private fun revokeCaptureSurface(entry: PeerEntry) {
+        val registration = synchronized(lock) {
+            entry.captureSurfaceRegistration.also { entry.captureSurfaceRegistration = null }
+        }
+        registration?.close()
+    }
+
+    private fun scheduleCleanup(
+        entry: PeerEntry,
+        retryAfterExhaustion: Boolean = false,
+    ) {
+        val (submit, registration) = synchronized(lock) {
+            if (
+                entry.removed ||
+                entry.cleanupScheduled ||
+                entry.cleanupFinished ||
+                (entry.cleanupRetryExhausted && !retryAfterExhaustion)
+            ) {
+                false to null
+            } else {
+                if (retryAfterExhaustion) entry.cleanupRetryExhausted = false
+                entry.surfaceCleanupReserved = true
+                entry.cleanupScheduled = true
+                entry.cleanupRetrySubmitted = false
+                true to entry.captureSurfaceRegistration.also { entry.captureSurfaceRegistration = null }
+            }
+        }
+        registration?.close()
         if (submit) commands.submitFollowUp { performCleanup(entry) }
     }
 
@@ -1703,8 +1768,12 @@ private class AppKitWindowCommandPort(
         failures.forEach(::reportFailure)
         if (retryPresentationClose) {
             val retry = synchronized(lock) {
-                if (entry.removed || entry.cleanupFinished || entry.cleanupRetrySubmitted) {
+                if (entry.removed || entry.cleanupFinished) {
                     entry.cleanupScheduled = false
+                    false
+                } else if (entry.cleanupRetrySubmitted) {
+                    entry.cleanupScheduled = false
+                    entry.cleanupRetryExhausted = true
                     false
                 } else {
                     entry.cleanupRetrySubmitted = true
@@ -1808,6 +1877,8 @@ private class AppKitWindowCommandPort(
 
     private fun removeEntryLocked(entry: PeerEntry): List<PendingWindowMutationCommand> {
         entry.removed = true
+        entry.captureSurfaceRegistration?.close()
+        entry.captureSurfaceRegistration = null
         entry.surfaceReadiness = RuntimeSurfaceReadiness.Closed
         entry.surfaceDrainOwner = null
         entry.bufferedSurfaceStimuli.clear()
@@ -1877,6 +1948,7 @@ private class AppKitWindowCommandPort(
         var fullscreenTerminalTombstone: AppKitFullscreenTerminalTombstone? = null
         var cleanupScheduled: Boolean = false
         var cleanupRetrySubmitted: Boolean = false
+        var cleanupRetryExhausted: Boolean = false
         var cleanupFinished: Boolean = false
         var cleanupCompletion: CleanupCompletion = CleanupCompletion.None
         var nativeTerminalIssued: Boolean = false
@@ -1884,6 +1956,7 @@ private class AppKitWindowCommandPort(
         var closeRequestPending: Boolean = false
         var closeAdmitted: Boolean = false
         var surfaceCleanupReserved: Boolean = false
+        var captureSurfaceRegistration: AutoCloseable? = null
         var removed: Boolean = false
         val owner: WindowPeerOwner = object : WindowPeerOwner, RuntimeDesktopWindowHandleAccess {
             override fun close() {

@@ -150,7 +150,16 @@ internal class SessionRuntime(
         eventCollectorAllocator,
         policy.resources.maxEventCollectorsPerFlow,
     )
-    private val runtimeCapture = UnsupportedCaptureManager()
+    private val runtimeCaptureManager = runtimeComponents.capturePort?.let { port ->
+        RuntimeCaptureManager(
+            port = port,
+            maxConcurrentSessions = policy.resources.maxConcurrentCaptureSessions,
+            capturePolicy = policy.capture,
+            eventStampSource = ::nextStamp,
+            onCaptureFailure = ::eventDeliveryFailed,
+        )
+    }
+    private val runtimeCapture: CaptureManager = runtimeCaptureManager ?: UnsupportedCaptureManager()
     private val mutablePrimarySurface = MutableStateFlow(runtimeComponents.primarySurface)
 
     private var startupJob: Job? = null
@@ -415,6 +424,9 @@ internal class SessionRuntime(
     }
 
     private fun closeRuntimeComponents() {
+        runCatching { runtimeCaptureManager?.close() }
+            .exceptionOrNull()
+            ?.let(failureReporter)
         runCatching { (runtimeDisplays as? AutoCloseable)?.close() }
             .exceptionOrNull()
             ?.let(failureReporter)

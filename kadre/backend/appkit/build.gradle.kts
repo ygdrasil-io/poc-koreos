@@ -37,12 +37,21 @@ if (System.getProperty("os.name", "").let { name ->
         name.contains("Mac", ignoreCase = true) || name.contains("Darwin", ignoreCase = true)
     }
 ) {
+    val requireFullscreenTerminalCallbacks = System.getProperty(
+        "kadre.appkit.requireFullscreenTerminalCallbacks",
+        "true",
+    ).also { value ->
+        require(value == "true" || value == "false") {
+            "kadre.appkit.requireFullscreenTerminalCallbacks must be true or false"
+        }
+    }
     val jvmTest = tasks.named<Test>("jvmTest") {
         jvmArgs(
             "-XstartOnFirstThread",
             "--enable-native-access=ALL-UNNAMED",
             "-XX:ErrorFile=${layout.buildDirectory.file("ci-diagnostics/hs_err_pid%p.log").get().asFile.absolutePath}",
         )
+        systemProperty("kadre.appkit.requireFullscreenTerminalCallbacks", requireFullscreenTerminalCallbacks)
         // The standalone-loop proof owns NSApplication and must run in a fresh process.
         filter.excludeTestsMatching(
             "org.graphiks.kadre.internal.appkit.AppKitBackendProviderTest.realKffiStandaloneLoopStartsAndStopsOnMacOs",
@@ -140,6 +149,19 @@ if (System.getProperty("os.name", "").let { name ->
         dependsOn(tasks.named("jvmTestClasses"))
         classpath = jvmTest.get().classpath
         mainClass.set("org.graphiks.kadre.internal.appkit.manual.Phase8RawInputHarnessKt")
+        workingDir(rootProject.projectDir)
+        jvmArgs(
+            "-XstartOnFirstThread",
+            "--enable-native-access=ALL-UNNAMED",
+        )
+        standardInput = System.`in`
+    }
+    tasks.register<JavaExec>("phase11CaptureHarness") {
+        group = "verification"
+        description = "Runs the external interactive AppKit Phase 11 ScreenCaptureKit harness."
+        dependsOn(tasks.named("jvmTestClasses"))
+        classpath = jvmTest.get().classpath
+        mainClass.set("org.graphiks.kadre.internal.appkit.manual.Phase11CaptureHarnessKt")
         workingDir(rootProject.projectDir)
         jvmArgs(
             "-XstartOnFirstThread",

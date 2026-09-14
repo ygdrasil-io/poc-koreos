@@ -62,6 +62,18 @@ import org.graphiks.kadre.application.HostSignal
 import org.graphiks.kadre.application.MemoryPressureLevel
 import org.graphiks.kadre.application.SessionOutcome
 import org.graphiks.kadre.application.SessionStopReason
+import org.graphiks.kadre.capture.CaptureCapabilities
+import org.graphiks.kadre.capture.CaptureCursorMode
+import org.graphiks.kadre.capture.CaptureManager
+import org.graphiks.kadre.capture.CapturePermissionScope
+import org.graphiks.kadre.capture.CapturePermissionState
+import org.graphiks.kadre.capture.CaptureRequest
+import org.graphiks.kadre.capture.CaptureSession
+import org.graphiks.kadre.capture.CaptureSourceKind
+import org.graphiks.kadre.capture.CaptureTarget
+import org.graphiks.kadre.capture.CaptureSources
+import org.graphiks.kadre.capture.CaptureTargetConstraints
+import org.graphiks.kadre.capture.PixelFormat
 import org.graphiks.kadre.diagnostics.Capability
 import org.graphiks.kadre.diagnostics.FeatureAvailability
 import org.graphiks.kadre.diagnostics.KadreFailure
@@ -89,6 +101,12 @@ import org.graphiks.kadre.internal.runtime.DisplayPort
 import org.graphiks.kadre.internal.runtime.DisplayPortDisplay
 import org.graphiks.kadre.internal.runtime.DisplayPortMode
 import org.graphiks.kadre.internal.runtime.DisplayPortSnapshot
+import org.graphiks.kadre.internal.runtime.CapturePort
+import org.graphiks.kadre.internal.runtime.CapturePortReservation
+import org.graphiks.kadre.internal.runtime.CapturePortSource
+import org.graphiks.kadre.internal.runtime.CapturePortSourceKey
+import org.graphiks.kadre.internal.runtime.CapturePortSnapshot
+import org.graphiks.kadre.internal.runtime.CapturePortTarget
 import org.graphiks.kadre.internal.runtime.GamepadPort
 import org.graphiks.kadre.internal.runtime.GamepadPortEffect
 import org.graphiks.kadre.internal.runtime.GamepadPortEvent
@@ -491,6 +509,132 @@ class AppKitBackendProviderTest {
         } finally {
             parentScope.cancel()
         }
+        Unit
+    }
+
+    @Test
+    fun embeddedSessionProjectsTheConfiguredCapturePortAndClosesItWithTheSession() = kotlinx.coroutines.runBlocking {
+        val native = EmbeddedNativeApplication()
+        val port = ProviderCapturePort()
+        val provider = AppKitBackendProvider.forTesting(
+            nativeApplication = native,
+            broker = AppKitProcessBroker(),
+            capturePortFactory = { port },
+            availability = { true },
+        )
+        val parentScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob())
+        val observedCapture = CompletableDeferred<CaptureManager>()
+
+        try {
+            val session = provider.attach(
+                DesktopEmbeddedRequest(
+                    parentScope,
+                    KadreApplicationFactory {
+                        KadreApplication {
+                            observedCapture.complete(capture)
+                            kotlinx.coroutines.awaitCancellation()
+                        }
+                    },
+                    DesktopIntegrationKind.AppKitMainLoop,
+                    KadrePolicies.Default,
+                ),
+            ).requireSession()
+
+            assertIs<CaptureSources.HostPickerOnly>(observedCapture.await().state.value.sources)
+            session.close()
+            session.awaitTermination()
+            assertEquals(1, port.closeCount)
+        } finally {
+            parentScope.cancel()
+        }
+        Unit
+    }
+
+    @Test
+    fun eachEmbeddedSessionReceivesItsOwnCaptureSurfaceRegistry() = kotlinx.coroutines.runBlocking {
+        val registries = mutableListOf<AppKitCaptureSurfaceRegistry>()
+        val provider = AppKitBackendProvider.forTesting(
+            nativeApplication = EmbeddedNativeApplication(),
+            broker = AppKitProcessBroker(),
+            capturePortFactoryWithRegistry = { registry ->
+                registries += registry
+                ProviderCapturePort()
+            },
+            availability = { true },
+        )
+        val parentScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob())
+
+        try {
+            val first = provider.attach(embeddedRequest(parentScope, CompletableDeferred())).requireSession()
+            val second = provider.attach(embeddedRequest(parentScope, CompletableDeferred())).requireSession()
+
+            assertEquals(2, registries.size)
+            assertNotSame(registries[0], registries[1])
+
+            first.close()
+            first.awaitTermination()
+            second.close()
+            second.awaitTermination()
+        } finally {
+            parentScope.cancel()
+        }
+        Unit
+    }
+
+    @Test
+    fun embeddedSessionCapturesItsOwnWindowThroughThePublicSurfaceTarget() = kotlinx.coroutines.runBlocking {
+        val captureNative = ProviderSurfaceCaptureNative()
+        val windowPort = DeterministicAppKitNativeWindowPort(
+            name = "provider-surface-capture",
+            captureWindowNumber = { title ->
+                check(title == "provider-surface-capture")
+                901L
+            },
+        )
+        val provider = AppKitBackendProvider.forTesting(
+            nativeApplication = EmbeddedNativeApplication(),
+            broker = AppKitProcessBroker(),
+            windowDriverFactory = AppKitWindowRuntimeDriverFactory { windowPort },
+            capturePortFactoryWithRegistry = { registry -> AppKitCapturePort(captureNative, registry) },
+            availability = { true },
+        )
+        val parentScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob())
+        val captureOpened = CompletableDeferred<KadreResult<CaptureSession>>()
+
+        try {
+            val session = provider.attach(
+                DesktopEmbeddedRequest(
+                    parentScope,
+                    KadreApplicationFactory {
+                        KadreApplication {
+                            val window = assertIs<WindowRequestOutcome.OpenedHere>(
+                                windows.requestWindow(WindowSpec(title = "provider-surface-capture"))
+                                    .appKitSuccessValue()
+                                    .await(),
+                            ).window
+                            captureOpened.complete(capture.open(CaptureRequest(CaptureTarget.Surface(window.surface.id))))
+                            kotlinx.coroutines.awaitCancellation()
+                        }
+                    },
+                    DesktopIntegrationKind.AppKitMainLoop,
+                    KadrePolicies.Default,
+                ),
+            ).requireSession()
+
+            val capture = captureOpened.await().appKitSuccessValue()
+            assertEquals(CaptureSourceKind.HostSurface, capture.source.kind)
+            assertEquals(null, capture.source.name)
+            assertEquals(null, capture.source.size)
+            assertEquals(listOf<AppKitCaptureNativeTarget>(AppKitCaptureNativeTarget.Window(901L)), captureNative.targets)
+
+            capture.close()
+            session.close()
+            session.awaitTermination()
+            assertEquals(1, captureNative.reservation.closeCount)
+        } finally {
+            parentScope.cancel()
+        }
+        Unit
     }
 
     @Test
@@ -3028,7 +3172,13 @@ class AppKitBackendProviderTest {
             "the isolated display contract proof requires macOS 26 or newer",
         )
         val native = KffiAppKitNativeApplication()
-        val broker = AppKitProcessBroker()
+        val displaySnapshotFailure = AtomicReference<Throwable?>(null)
+        val displayNative = KffiAppKitDisplayNative(
+            snapshotFailureReporter = { failure -> displaySnapshotFailure.compareAndSet(null, failure) },
+        )
+        val broker = AppKitProcessBroker(
+            displayBrokerFactory = { AppKitDisplayBroker(displayNative) },
+        )
         val provider = AppKitBackendProvider.forTesting(
             nativeApplication = native,
             broker = broker,
@@ -3055,29 +3205,34 @@ class AppKitBackendProviderTest {
             DesktopStandaloneRequest(
                 KadreApplicationFactory {
                     KadreApplication {
+                        var openedWindow: Window? = null
+                        try {
                         // Cross the native boundary before requesting stop so this test cannot
                         // accidentally exercise only the pre-run pending-stop handoff.
+                        proofStage.set("loop-admission")
                         withTimeout(5.seconds) {
                             while (!native.isRunning()) yield()
                         }
-                        proofStage.set("display-inventory")
+                        proofStage.set("display-capabilities")
                         assertEquals(
                             Capability.Supported(Unit, FeatureAvailability.Available),
                             displays.state.value.capabilities.enumeration,
                         )
+                        proofStage.set("display-inventory")
                         val displayState = displays.requestAccess().appKitSuccessValue()
                         val inventory = assertIs<DisplayInventory.Enumerated>(displayState.inventory)
                         assertTrue(inventory.displays.isNotEmpty())
                         assertTrue(inventory.primary in inventory.displays)
                         displayCapabilityObserved.set(true)
 
+                        proofStage.set("window-open")
                         val window = assertIs<WindowRequestOutcome.OpenedHere>(
                             windows.requestWindow(WindowSpec(title = "Kadre O3 public window proof"))
                                 .appKitSuccessValue()
                                 .await(),
                         ).window
+                        openedWindow = window
                         proofStage.set("surface-resize")
-                        try {
                         val events = Channel<WindowEvent>(Channel.UNLIMITED)
                         val collector = launch(start = CoroutineStart.UNDISPATCHED) {
                             window.events.collect(events::send)
@@ -3425,10 +3580,17 @@ class AppKitBackendProviderTest {
                         requestStop()
                         } catch (failure: Throwable) {
                             proofFailure.set(failure)
-                            if (window.state.value.phase != WindowPhase.Closed) {
-                                window.close()
-                                withTimeout(5.seconds) {
-                                    window.state.first { it.phase == WindowPhase.Closed }
+                            displaySnapshotFailure.get()?.let(failure::addSuppressed)
+                            openedWindow?.let { window ->
+                                if (window.state.value.phase != WindowPhase.Closed) {
+                                    try {
+                                        window.close()
+                                        withTimeout(5.seconds) {
+                                            window.state.first { it.phase == WindowPhase.Closed }
+                                        }
+                                    } catch (cleanupFailure: Throwable) {
+                                        failure.addSuppressed(cleanupFailure)
+                                    }
                                 }
                             }
                             throw failure
@@ -4294,6 +4456,99 @@ private fun publicWindowRequest(
     DesktopIntegrationKind.AppKitMainLoop,
     KadrePolicies.Default,
     allowUserAttention,
+)
+
+private class ProviderCapturePort : CapturePort {
+    var closeCount: Int = 0
+        private set
+
+    override val initialSnapshot: CapturePortSnapshot = CapturePortSnapshot(
+        permissions = CapturePermissionState(
+            org.graphiks.kadre.input.PermissionState.Granted,
+            org.graphiks.kadre.input.PermissionState.Granted,
+        ),
+        capabilities = CaptureCapabilities(
+            screen = supportedCaptureConstraints(),
+            window = supportedCaptureConstraints(),
+            surface = supportedCaptureConstraints(),
+            sourceEnumeration = Capability.Supported(Unit, FeatureAvailability.Available),
+            hostPicker = FeatureAvailability.Available,
+        ),
+        sources = org.graphiks.kadre.internal.runtime.CapturePortSources.HostPickerOnly,
+    )
+
+    override suspend fun requestPermission(scope: CapturePermissionScope): KadreResult<CapturePortSnapshot> =
+        KadreResult.Success(initialSnapshot)
+
+    override suspend fun refreshSources(): KadreResult<CapturePortSnapshot> = KadreResult.Success(initialSnapshot)
+
+    override suspend fun reserve(
+        target: CapturePortTarget,
+        request: CaptureRequest,
+    ): KadreResult<CapturePortReservation> = KadreResult.Failure(KadreFailure.Unsupported(KadreOperation.CaptureOpen))
+
+    override fun installObserver(observer: (KadreResult<CapturePortSnapshot>) -> Unit): AutoCloseable = AutoCloseable { }
+
+    override fun close() {
+        closeCount += 1
+    }
+}
+
+private class ProviderSurfaceCaptureNative : AppKitCaptureNative {
+    val targets = mutableListOf<AppKitCaptureNativeTarget>()
+    val reservation = ProviderSurfaceCaptureReservation()
+
+    override fun capability(): AppKitCaptureNativeCapability = AppKitCaptureNativeCapability(
+        supportsScreenCapture = true,
+        preflightAccessGranted = true,
+        supportsHostPicker = true,
+    )
+
+    override fun requestPermission(): AppKitCaptureNativePermissionResult = AppKitCaptureNativePermissionResult.Granted
+
+    override fun enumerateSources(
+        callback: (AppKitCaptureNativeSourceEnumerationResult) -> Unit,
+    ): AutoCloseable {
+        callback(AppKitCaptureNativeSourceEnumerationResult.Enumerated(AppKitCaptureNativeSourceCatalog(emptyList(), emptyList())))
+        return AutoCloseable { }
+    }
+
+    override fun reserve(
+        target: AppKitCaptureNativeTarget,
+        callback: (AppKitCaptureNativeReservationResult) -> Unit,
+    ): AutoCloseable {
+        targets += target
+        callback(AppKitCaptureNativeReservationResult.Reserved(reservation))
+        return AutoCloseable { }
+    }
+}
+
+private class ProviderSurfaceCaptureReservation : AppKitCaptureNativeReservation {
+    override val source: AppKitCaptureNativeReservationSource =
+        AppKitCaptureNativeReservationSource.Window(901L, "private title")
+
+    var closeCount: Int = 0
+        private set
+
+    override fun start(
+        configuration: AppKitCaptureNativeStreamConfiguration,
+        onFrame: (AppKitCaptureNativeFrame) -> Unit,
+        onOpened: (AppKitCaptureNativeOpenResult) -> Unit,
+        onStopped: (AppKitCaptureNativeStopResult) -> Unit,
+    ): AutoCloseable = error("frame collection is not part of this provider wiring test")
+
+    override fun close() {
+        closeCount += 1
+    }
+}
+
+private fun supportedCaptureConstraints(): Capability<CaptureTargetConstraints> = Capability.Supported(
+    CaptureTargetConstraints(
+        formats = setOf(PixelFormat.Bgra8),
+        cursorModes = setOf(CaptureCursorMode.EmbeddedWhenAvailable),
+        region = FeatureAvailability.Available,
+    ),
+    FeatureAvailability.Available,
 )
 
 private fun publicWindowAndDisplayRequest(
