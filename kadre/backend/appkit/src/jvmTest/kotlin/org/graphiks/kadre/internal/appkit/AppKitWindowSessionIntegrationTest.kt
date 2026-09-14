@@ -368,7 +368,12 @@ class AppKitWindowSessionIntegrationTest {
         first.manager.requestWindow(WindowSpec(title = "standalone-window")).appKitSuccessValue().await()
         first.close()
 
-        assertEquals(listOf("standalone-window"), firstPort.closedWindowTitles)
+        // Driver teardown can drain asynchronously; the lease assertion belongs after the
+        // deterministic port has observed the native close, not merely after close() returns.
+        withTimeout(2.seconds) {
+            while (firstPort.closedWindowTitles.toList() != listOf("standalone-window")) yield()
+        }
+        assertEquals(listOf("standalone-window"), firstPort.closedWindowTitles.toList())
         assertNull(broker.tryAcquireStandalone())
 
         lease.close()
