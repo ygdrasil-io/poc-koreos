@@ -739,6 +739,9 @@ Couvrir permissions, sources, admission, streaming, frames et terminaison de cap
   `NSWindow.windowNumber` reste privé au backend et la source publique est `HostSurface`, sans
   titre, ID natif ni handle ;
 - fermeture de la surface retire l’admission de nouvelles réservations avant le teardown natif ;
+- pour un stream déjà actif, ScreenCaptureKit est l’autorité de disparition de la source native :
+  `SCStreamErrorNoCaptureSource` devient `SourceLost` sans réintroduire l’identité native dans
+  l’API publique ;
 - region reste `Unsupported` tant qu’une sémantique de conversion physique/logique complète n’est
   pas prouvée.
 

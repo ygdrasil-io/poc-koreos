@@ -76,10 +76,11 @@ import kotlin.math.min
  * Session-owned ScreenCaptureKit adapter.
  *
  * The port retains only detached identifiers and Kotlin-owned frame bytes across the
- * backend/runtime boundary. It does not yet advertise region or same-session Surface capture:
- * the latter is resolved privately while its portable contract evidence is assembled. A Surface
- * is never approximated by an arbitrary enclosing window; only its session-owned registry entry
- * may select the exact native window identity.
+ * backend/runtime boundary. Region is not advertised. A same-session Surface is never
+ * approximated by an arbitrary enclosing window: only its session-owned registry entry may
+ * select the exact native window identity. That entry guards native reservation admission;
+ * after a stream has started, ScreenCaptureKit remains the authority for native source loss and
+ * is mapped to [CapturePortTermination.SourceLost].
  */
 internal class AppKitCapturePort(
     private val native: AppKitCaptureNative = KffiAppKitCaptureNative,
