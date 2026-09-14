@@ -8,9 +8,12 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
 import org.graphiks.kadre.application.KadreApplication
-import org.graphiks.kadre.diagnostics.KadreResult
 import org.graphiks.kadre.diagnostics.Capability
+import org.graphiks.kadre.diagnostics.FeatureAvailability
+import org.graphiks.kadre.diagnostics.KadreResult
 import org.graphiks.kadre.input.InputEvent
+import org.graphiks.kadre.input.SurfaceInput
+import org.graphiks.kadre.input.SurfaceInputState
 import org.graphiks.kadre.platform.desktop.DesktopBackend
 import org.graphiks.kadre.platform.desktop.DesktopHostOptions
 import org.graphiks.kadre.platform.desktop.runKadreApplication
@@ -59,20 +62,21 @@ public fun main(args: Array<String>) {
                     else -> error("window did not open: $opened")
                 }
                 val input = window.surface.input
+                val initialInputState = awaitPhase4InputReadiness(input)
                 recorder.metadata(options)
-                recorder.line("SNAPSHOT\tinitial\t${input.state.value}")
+                recorder.line("SNAPSHOT\tinitial\t$initialInputState")
                 recorder.line(
-                    "INPUT_CAPABILITIES\tkeyboard=${input.state.value.capabilities.keyboard}" +
-                        "\tpointer=${input.state.value.capabilities.pointer}" +
-                        "\ttouch=${input.state.value.capabilities.touch}" +
-                        "\tgestures=${input.state.value.capabilities.gestures}" +
-                        "\tdragAndDrop=${input.state.value.capabilities.dragAndDrop}" +
-                        "\ttextInput=${phase4Capability(input.state.value.capabilities.textInput)}" +
-                        "\trawInput=${phase4Capability(input.state.value.capabilities.rawInput)}",
+                    "INPUT_CAPABILITIES\tkeyboard=${initialInputState.capabilities.keyboard}" +
+                        "\tpointer=${initialInputState.capabilities.pointer}" +
+                        "\ttouch=${initialInputState.capabilities.touch}" +
+                        "\tgestures=${initialInputState.capabilities.gestures}" +
+                        "\tdragAndDrop=${initialInputState.capabilities.dragAndDrop}" +
+                        "\ttextInput=${phase4Capability(initialInputState.capabilities.textInput)}" +
+                        "\trawInput=${phase4Capability(initialInputState.capabilities.rawInput)}",
                 )
                 printPhase4Help(recorder)
 
-                val latestRevision = AtomicLong(input.state.value.revision.value)
+                val latestRevision = AtomicLong(initialInputState.revision.value)
                 val observedEventCount = AtomicInteger()
                 val stateCollector = launch(start = CoroutineStart.UNDISPATCHED) {
                     input.state.collect { state ->
@@ -150,6 +154,13 @@ public fun main(args: Array<String>) {
 
 private fun printPhase4Help(recorder: Phase4HarnessRecorder) {
     recorder.line("HELP\tsnapshot | result M1..M8 pass|fail|not-applicable note | close | finish")
+}
+
+internal suspend fun awaitPhase4InputReadiness(input: SurfaceInput): SurfaceInputState = withTimeout(5.seconds) {
+    input.state.first {
+        it.capabilities.keyboard == FeatureAvailability.Available &&
+            it.capabilities.pointer == FeatureAvailability.Available
+    }
 }
 
 private fun phase4Capability(capability: Capability<*>): String = when (capability) {
