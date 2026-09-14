@@ -25,4 +25,27 @@ class ComposeMountStateTest {
 
         assertEquals(ComposeMountState.Failed, lifecycle.state)
     }
+
+    @Test
+    fun `a closing renderer cannot later report mounted`() {
+        val lifecycle = ComposeMountLifecycle()
+
+        lifecycle.markMounted()
+        lifecycle.beginClose()
+        lifecycle.markMounted()
+
+        assertEquals(ComposeMountState.Closing, lifecycle.state)
+    }
+
+    @Test
+    fun `a closed renderer cannot later report mounted`() {
+        val lifecycle = ComposeMountLifecycle()
+
+        lifecycle.markMounted()
+        lifecycle.beginClose()
+        lifecycle.markClosed()
+        lifecycle.markMounted()
+
+        assertEquals(ComposeMountState.Closed, lifecycle.state)
+    }
 }
