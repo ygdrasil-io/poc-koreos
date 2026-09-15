@@ -23,20 +23,25 @@ internal class AppKitWindowRuntimeDriverFactory(
         captureSurfaceRegistry: AppKitCaptureSurfaceRegistry? = null,
         broker: AppKitProcessBroker? = null,
         attentionOwner: AppKitProcessBroker.AppKitUserAttentionOwner? = null,
-    ): AppKitWindowRuntimeDriver = AppKitWindowRuntimeDriver(
-        resources = resources,
-        nativePort = nativePortFactory(),
-        failureReporter = failureReporter,
-        publicAppKitCapabilities = publicAppKitCapabilities,
-        enabledWindowUpdateCapabilities = enabledWindowUpdateCapabilities,
-        fullscreenAvailabilityFailure = fullscreenAvailabilityFailure,
-        publicSurfaceCapabilities = publicSurfaceCapabilities,
-        onLastWindowClosed = onLastWindowClosed,
-        beforeCommitDelivery = beforeCommitDelivery,
-        beforeRuntimeSurfaceReadyDrain = beforeRuntimeSurfaceReadyDrain,
-        beforeFullscreenFollowUpEnqueue = beforeFullscreenFollowUpEnqueue,
-        captureSurfaceRegistry = captureSurfaceRegistry,
-        broker = broker,
-        attentionOwner = attentionOwner,
-    )
+        activateProcessOnFirstPresentation: Boolean = false,
+    ): AppKitWindowRuntimeDriver {
+        val nativePort = nativePortFactory()
+        if (activateProcessOnFirstPresentation) nativePort.armProcessActivationOnFirstPresentation()
+        return AppKitWindowRuntimeDriver(
+            resources = resources,
+            nativePort = nativePort,
+            failureReporter = failureReporter,
+            publicAppKitCapabilities = publicAppKitCapabilities,
+            enabledWindowUpdateCapabilities = enabledWindowUpdateCapabilities,
+            fullscreenAvailabilityFailure = fullscreenAvailabilityFailure,
+            publicSurfaceCapabilities = publicSurfaceCapabilities,
+            onLastWindowClosed = onLastWindowClosed,
+            beforeCommitDelivery = beforeCommitDelivery,
+            beforeRuntimeSurfaceReadyDrain = beforeRuntimeSurfaceReadyDrain,
+            beforeFullscreenFollowUpEnqueue = beforeFullscreenFollowUpEnqueue,
+            captureSurfaceRegistry = captureSurfaceRegistry,
+            broker = broker,
+            attentionOwner = attentionOwner,
+        )
+    }
 }

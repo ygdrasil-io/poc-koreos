@@ -5,7 +5,16 @@ plugins {
     alias(libs.plugins.compose.multiplatform)
 }
 
-kotlin { jvmToolchain(25) }
+kotlin {
+    jvmToolchain(25)
+    compilerOptions {
+        freeCompilerArgs.addAll(
+            "-opt-in=androidx.compose.ui.InternalComposeUiApi",
+            "-opt-in=androidx.compose.ui.ExperimentalComposeUiApi",
+            "-opt-in=org.graphiks.kffi.objc.PlatformAvailability",
+        )
+    }
+}
 
 tasks.test { useJUnitPlatform() }
 

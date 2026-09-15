@@ -78,6 +78,9 @@ internal interface AppKitNativeWindowPort {
         delegate: AppKitNativeDelegateOwner,
     )
 
+    /** Arms process activation for the first presentation of this standalone-only port. */
+    fun armProcessActivationOnFirstPresentation() = Unit
+
     fun present(window: AppKitNativeWindowOwner)
 
     /**

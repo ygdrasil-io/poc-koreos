@@ -168,6 +168,7 @@ public class AppKitBackendProvider private constructor(
                         request.policy.resources,
                         if (request.stopWhenLastWindowClosed) lastWindowStop::request else null,
                         attentionOwner,
+                        activateProcessOnFirstPresentation = true,
                     ),
                     initialLifecycleState = LifecycleState(
                         AttachmentState.Attached,
@@ -307,6 +308,7 @@ public class AppKitBackendProvider private constructor(
         resources: org.graphiks.kadre.policy.ResourceBudgetPolicy,
         onLastWindowClosed: (() -> Unit)? = null,
         attentionOwner: AppKitProcessBroker.AppKitUserAttentionOwner? = null,
+        activateProcessOnFirstPresentation: Boolean = false,
     ): RuntimeSessionComponentsFactory = RuntimeSessionComponentsFactory { _, _ ->
         val captureSurfaceRegistry = AppKitCaptureSurfaceRegistry()
         val driver = windowDriverFactory.create(
@@ -324,6 +326,7 @@ public class AppKitBackendProvider private constructor(
             captureSurfaceRegistry = captureSurfaceRegistry,
             broker = broker,
             attentionOwner = attentionOwner,
+            activateProcessOnFirstPresentation = activateProcessOnFirstPresentation,
         )
         RuntimeSessionComponents(
             windows = driver.manager,

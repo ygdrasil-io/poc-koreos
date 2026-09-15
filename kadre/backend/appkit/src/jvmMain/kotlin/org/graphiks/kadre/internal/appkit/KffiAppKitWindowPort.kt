@@ -51,6 +51,7 @@ import org.graphiks.kadre.window.WindowSystemButtons
 import org.graphiks.kffi.objc.CGWindowLevelForKey
 import org.graphiks.kffi.objc.CGWindowLevelKey
 import org.graphiks.kffi.objc.NSApplication
+import org.graphiks.kffi.objc.NSApplicationActivationPolicy
 import org.graphiks.kffi.objc.NSAppearance
 import org.graphiks.kffi.objc.NSArray_arrayWithObjects_count
 import org.graphiks.kffi.objc.NSBackingStoreType
@@ -224,6 +225,8 @@ internal class KffiAppKitWindowPort(
     private val collectionBehaviorWindow: (AppKitNativeWindowOwner) -> NSWindow =
         AppKitNativeWindowOwner::kffiWindow,
 ) : AppKitNativeWindowPort {
+    private val activateProcessOnFirstPresentation = AtomicBoolean(false)
+
     fun prepare(
         id: AppKitWindowPeerId,
         spec: WindowSpec,
@@ -455,8 +458,26 @@ internal class KffiAppKitWindowPort(
         window.kffiWindow().setDelegate(delegate.kffiDelegate().receiver)
     }
 
+    override fun armProcessActivationOnFirstPresentation() {
+        check(activateProcessOnFirstPresentation.compareAndSet(false, true)) {
+            "AppKit process activation is already armed for this port"
+        }
+    }
+
     override fun present(window: AppKitNativeWindowOwner) {
         requireMainThread()
+        if (activateProcessOnFirstPresentation.compareAndSet(true, false)) {
+            NSApplication(NSApplication.sharedApplication()).apply {
+                val regularPolicy = NSApplicationActivationPolicy.NSApplicationActivationPolicyRegular
+                if (activationPolicy() != regularPolicy) {
+                    setActivationPolicy(regularPolicy)
+                }
+                check(activationPolicy() == regularPolicy) {
+                    "AppKit standalone host could not adopt the regular activation policy"
+                }
+                activateIgnoringOtherApps(true)
+            }
+        }
         window.kffiWindow().makeKeyAndOrderFront(MemorySegment.NULL)
     }
 
