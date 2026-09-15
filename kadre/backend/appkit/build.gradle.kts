@@ -52,15 +52,18 @@ if (System.getProperty("os.name", "").let { name ->
             "-XX:ErrorFile=${layout.buildDirectory.file("ci-diagnostics/hs_err_pid%p.log").get().asFile.absolutePath}",
         )
         systemProperty("kadre.appkit.requireFullscreenTerminalCallbacks", requireFullscreenTerminalCallbacks)
-        // The standalone-loop proof owns NSApplication and must run in a fresh process.
+        // Process-owning loop/activation proofs must each run in a fresh process.
         filter.excludeTestsMatching(
             "org.graphiks.kadre.internal.appkit.AppKitBackendProviderTest.realKffiStandaloneLoopStartsAndStopsOnMacOs",
+        )
+        filter.excludeTestsMatching(
+            "org.graphiks.kadre.internal.appkit.KffiAppKitStandaloneActivationMacOsTest",
         )
         forkEvery = 1
     }
     val appKitStandaloneLoopTest = tasks.register<Test>("appKitStandaloneLoopTest") {
         group = "verification"
-        description = "Runs the process-owning AppKit standalone-loop proof in an isolated JVM."
+        description = "Runs process-owning AppKit standalone-loop and activation proofs in isolated JVMs."
         testClassesDirs = jvmTest.get().testClassesDirs
         classpath = jvmTest.get().classpath
         jvmArgs(
@@ -71,11 +74,15 @@ if (System.getProperty("os.name", "").let { name ->
         filter.includeTestsMatching(
             "org.graphiks.kadre.internal.appkit.AppKitBackendProviderTest.realKffiStandaloneLoopStartsAndStopsOnMacOs",
         )
+        filter.includeTestsMatching(
+            "org.graphiks.kadre.internal.appkit.KffiAppKitStandaloneActivationMacOsTest",
+        )
+        forkEvery = 1
         reports.junitXml.outputLocation.set(layout.buildDirectory.dir("test-results/appKitStandaloneLoopTest"))
     }
     val appKitNativeTests = tasks.register("appKitNativeTests") {
         group = "verification"
-        description = "Runs the AppKit unit suite and its process-owning standalone-loop proof."
+        description = "Runs the AppKit unit suite and its process-owning standalone proofs."
         dependsOn(jvmTest, appKitStandaloneLoopTest)
     }
     tasks.register<JavaExec>("phase3SurfaceHarness") {

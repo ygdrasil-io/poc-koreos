@@ -82,6 +82,74 @@ import kotlin.test.assertTrue
 
 class KffiAppKitWindowPortMacOsTest {
     @Test
+    fun consecutiveStandalonePortsPresentWhenTheApplicationAlreadyHasRegularPolicyOnMacOs() {
+        if (!isMacOsHost()) return
+
+        val application = NSApplication(NSApplication.sharedApplication())
+        val initialPolicy = application.activationPolicy()
+        try {
+            repeat(2) {
+                val port = KffiAppKitWindowPort()
+                port.onMainThread {
+                    port.armProcessActivationOnFirstPresentation()
+                    val window = port.createWindow(WindowSpec(contentSize = LogicalSize(240.0, 135.0)))
+                    try {
+                        port.present(window)
+                        assertEquals(
+                            NSApplicationActivationPolicy.NSApplicationActivationPolicyRegular,
+                            application.activationPolicy(),
+                        )
+                    } finally {
+                        port.closeWindow(window)
+                        window.close()
+                    }
+                }
+            }
+        } finally {
+            application.setActivationPolicy(initialPolicy)
+        }
+    }
+
+    @Test
+    fun presentPreservesAnExistingAccessoryActivationPolicyOnMacOs() {
+        if (!isMacOsHost()) return
+
+        val port = KffiAppKitWindowPort()
+        val application = NSApplication(NSApplication.sharedApplication())
+        val initialPolicy = application.activationPolicy()
+        var window: AppKitNativeWindowOwner? = null
+        try {
+            port.onMainThread {
+                if (application.activationPolicy() != NSApplicationActivationPolicy.NSApplicationActivationPolicyAccessory) {
+                    application.setActivationPolicy(
+                        NSApplicationActivationPolicy.NSApplicationActivationPolicyAccessory,
+                    )
+                }
+                application.deactivate()
+                window = port.createWindow(WindowSpec(contentSize = LogicalSize(240.0, 135.0)))
+                port.present(checkNotNull(window))
+
+                assertEquals(
+                    NSApplicationActivationPolicy.NSApplicationActivationPolicyAccessory,
+                    application.activationPolicy(),
+                )
+                assertFalse(application.isActive())
+            }
+        } finally {
+            port.onMainThread {
+                try {
+                    window?.let { nativeWindow ->
+                        port.closeWindow(nativeWindow)
+                        nativeWindow.close()
+                    }
+                } finally {
+                    application.setActivationPolicy(initialPolicy)
+                }
+            }
+        }
+    }
+
+    @Test
     fun generatedKffiCaptureWindowNumberReadsThePresentedNativeWindowOnMacOs() {
         if (!isMacOsHost()) return
 
