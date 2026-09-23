@@ -1,0 +1,51 @@
+package org.graphiks.kadre.samples.desktour.core
+
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertNull
+import kotlin.test.assertTrue
+
+class DisplayPresentationTest {
+    @Test
+    fun `an enumerated inventory lists its screens`() {
+        val presentation = DisplayPresentation.Enumerated(
+            listOf(
+                screenEntryOf("Écran principal", 3440, 1440, 1.0, DisplayModeLabel(3440, 1440, 60.0), isPrimary = true),
+            ),
+        )
+
+        assertEquals(1, presentation.entries.size)
+        assertTrue(presentation.entries.single().isPrimary)
+        assertEquals("3440 × 1440 @ 60 Hz", presentation.entries.single().modeLabel)
+    }
+
+    @Test
+    fun `a screen without a current mode shows no mode rather than an invented one`() {
+        val entry = screenEntryOf("Écran", 1920, 1080, 1.0, mode = null, isPrimary = false)
+        assertNull(entry.modeLabel)
+    }
+
+    @Test
+    fun `a screen with no reported name is still listed`() {
+        val entry = screenEntryOf(null, 800, 600, 2.0, mode = null, isPrimary = false)
+        assertEquals("Écran sans nom", entry.name)
+    }
+
+    @Test
+    fun `a mode without a refresh rate still describes its size`() {
+        val entry = screenEntryOf("Écran", 1920, 1080, 1.0, DisplayModeLabel(1920, 1080, null), isPrimary = false)
+        assertEquals("1920 × 1080", entry.modeLabel)
+    }
+
+    @Test
+    fun `the permission-required state is its own state and never an empty list`() {
+        val presentation: DisplayPresentation = DisplayPresentation.NeedsPermission
+        assertTrue(presentation !is DisplayPresentation.Enumerated, "un inventaire vide ne remplace jamais cet état")
+    }
+
+    @Test
+    fun `a denial that cannot be retried says so`() {
+        assertEquals(false, DisplayPresentation.Denied(canRequestAgain = false).canRequestAgain)
+        assertEquals(true, DisplayPresentation.Denied(canRequestAgain = true).canRequestAgain)
+    }
+}
