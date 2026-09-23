@@ -2,6 +2,7 @@ package org.graphiks.kadre.samples.desktour.core
 
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
+import org.graphiks.kadre.surface.HostSurface
 import org.graphiks.kadre.window.Window
 
 /**
@@ -30,4 +31,17 @@ internal open class TestTourGateway : TourGateway {
     override fun displayAccessAvailability(): CapabilityPresentation =
         CapabilityPresentation(enabled = true, requestable = true)
     override suspend fun requestDisplayAccess(): DisplayPresentation = DisplayPresentation.NeedsPermission
+
+    override fun observeInput(surface: HostSurface): Flow<InputPresentation> = flowOf()
+
+    override fun observeDevices(): Flow<DevicePresentation> = flowOf(DevicePresentation.Unsupported)
+    override fun observeCapture(): Flow<CapturePresentation> =
+        flowOf(CapturePresentation("pas encore demandée", "pas encore demandée", canRequest = true))
+
+    override fun textInputAvailability(): CapabilityPresentation =
+        CapabilityPresentation(enabled = true, requestable = true)
+    override fun observeTextInput(): Flow<TextInputPresentation> =
+        flowOf(TextInputPresentation(open = false, stateLabel = "fermée", lastEvent = null))
+    override suspend fun openTextInput(): TextInputOutcome = TextInputOutcome.Opened
+    override suspend fun closeTextInput() = Unit
 }

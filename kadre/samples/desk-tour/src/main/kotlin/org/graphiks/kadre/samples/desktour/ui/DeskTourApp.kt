@@ -35,6 +35,8 @@ internal fun DeskTourApp(
     onToggleDecorations: (NoteKey) -> Unit,
     onCloseNote: (NoteKey) -> Unit,
     onRequestDisplayAccess: () -> Unit,
+    onOpenTextInput: () -> Unit,
+    onCloseTextInput: () -> Unit,
     onSelectRoute: (TourRoute) -> Unit,
     onToggleApiDetails: () -> Unit,
 ) {
@@ -73,6 +75,16 @@ internal fun DeskTourApp(
                             onClick = { onSelectRoute(TourRoute.Screens) },
                             icon = { Text("Écrans") },
                         )
+                        NavigationBarItem(
+                            selected = state.route == TourRoute.Interactions,
+                            onClick = { onSelectRoute(TourRoute.Interactions) },
+                            icon = { Text("Interactions") },
+                        )
+                        NavigationBarItem(
+                            selected = state.route == TourRoute.Devices,
+                            onClick = { onSelectRoute(TourRoute.Devices) },
+                            icon = { Text("Périphériques") },
+                        )
                     }
                 },
             ) { padding ->
@@ -87,7 +99,7 @@ internal fun DeskTourApp(
                                 state.createNote.motif?.let { Text(it) }
                             }
                             state.notes.forEach { note ->
-                                var draft by remember(note.key) { mutableStateOf(note.title) }
+                                var draft by remember(note.key, note.title) { mutableStateOf(note.title) }
                                 Text(note.title.ifBlank { "Note sans titre" })
                                 if (note.mountFailed) {
                                     Text("Cette note n'a pas pu être affichée ; l'hôte courant a refusé le rendu.")
@@ -132,6 +144,21 @@ internal fun DeskTourApp(
                                 canRequestAccess = state.displayAccess.requestable,
                                 accessMotif = state.displayAccess.motif,
                                 onRequestAccess = onRequestDisplayAccess,
+                                modifier = Modifier.weight(1f),
+                            )
+                        TourRoute.Interactions ->
+                            InteractionsView(
+                                presentation = state.input,
+                                textInput = state.textInput,
+                                textInputAvailability = state.textInputAvailability,
+                                onOpenTextInput = onOpenTextInput,
+                                onCloseTextInput = onCloseTextInput,
+                                modifier = Modifier.weight(1f),
+                            )
+                        TourRoute.Devices ->
+                            DevicesView(
+                                devices = state.devices,
+                                capture = state.capture,
                                 modifier = Modifier.weight(1f),
                             )
                     }

@@ -1,6 +1,7 @@
 package org.graphiks.kadre.samples.desktour.core
 
 import kotlinx.coroutines.flow.Flow
+import org.graphiks.kadre.surface.HostSurface
 import org.graphiks.kadre.window.Window
 
 /**
@@ -30,4 +31,20 @@ internal interface TourGateway {
     fun observeDisplays(): Flow<DisplayPresentation>
     fun displayAccessAvailability(): CapabilityPresentation
     suspend fun requestDisplayAccess(): DisplayPresentation
+
+    fun observeInput(surface: HostSurface): Flow<InputPresentation>
+
+    fun observeDevices(): Flow<DevicePresentation>
+    fun observeCapture(): Flow<CapturePresentation>
+
+    /** La saisie de texte par le contrat public de Kadre, et non par la voie manuelle du bridge. */
+    fun textInputAvailability(): CapabilityPresentation
+    fun observeTextInput(): Flow<TextInputPresentation>
+    suspend fun openTextInput(): TextInputOutcome
+    suspend fun closeTextInput()
+}
+
+internal sealed interface TextInputOutcome {
+    data object Opened : TextInputOutcome
+    data class Refused(val motif: String) : TextInputOutcome
 }

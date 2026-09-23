@@ -71,6 +71,8 @@ public fun main() {
                     onToggleDecorations = { key -> launch { dispatcher.toggleNoteDecorations(key) } },
                     onCloseNote = { key -> launch { dispatcher.closeNote(key) } },
                     onRequestDisplayAccess = { launch { dispatcher.requestDisplayAccess() } },
+                    onOpenTextInput = { launch { dispatcher.openTextInput() } },
+                    onCloseTextInput = { launch { dispatcher.closeTextInput() } },
                     onSelectRoute = { store.setRoute(it) },
                     onToggleApiDetails = { store.toggleApiDetails() },
                 )
@@ -107,6 +109,20 @@ public fun main() {
                 collectors += launch(start = CoroutineStart.UNDISPATCHED) {
                     gateway.observeDisplays().collect { store.publishDisplays(it) }
                 }
+                // L'entrée observée : la démo la montre, elle ne la synthétise jamais (§6).
+                collectors += launch(start = CoroutineStart.UNDISPATCHED) {
+                    gateway.observeInput(window.surface).collect { store.publishInput(it) }
+                }
+                collectors += launch(start = CoroutineStart.UNDISPATCHED) {
+                    gateway.observeDevices().collect { store.publishDevices(it) }
+                }
+                collectors += launch(start = CoroutineStart.UNDISPATCHED) {
+                    gateway.observeCapture().collect { store.publishCapture(it) }
+                }
+                collectors += launch(start = CoroutineStart.UNDISPATCHED) {
+                    store.publishTextInputAvailability(gateway.textInputAvailability())
+                    gateway.observeTextInput().collect { store.publishTextInput(it) }
+                }
                 // Chaque note reçoit sa propre scène Compose, montée une seule fois. L'hôte
                 // observe le store plutôt que de s'accrocher à l'ouverture : c'est le seul
                 // endroit qui connaît Compose, `core` reste renderer-agnostique.
@@ -115,9 +131,18 @@ public fun main() {
                         notes.forEach { note ->
                             if (note.key in mounted || !mountAttempted.add(note.key)) return@forEach
                             val noteWindow = gateway.noteWindow(note.key) ?: return@forEach
-                            when (val result = noteWindow.mountComposeAppKit(this, { NoteContent(note) })) {
+                            val mountResult = noteWindow.mountComposeAppKit(this) {
+                                // La note est relue du store à chaque composition : un renommage
+                                // depuis le Bureau se voit donc aussi dans sa propre fenêtre.
+                                val liveState by store.state.collectAsState()
+                                val liveNote = liveState.notes.firstOrNull { it.key == note.key } ?: note
+                                NoteContent(liveNote, onRename = { title ->
+                                    launch { dispatcher.renameNote(note.key, title) }
+                                })
+                            }
+                            when (mountResult) {
                                 is KadreResult.Success -> {
-                                    val noteMount = result.value
+                                    val noteMount = mountResult.value
                                     mounted[note.key] = noteMount
                                     // La scène d'une note a besoin des mêmes trois relais que la
                                     // fenêtre principale : sans eux, rien n'est jamais rastérisé.

@@ -3,16 +3,23 @@ package org.graphiks.kadre.samples.desktour.core
 import java.util.concurrent.atomic.AtomicLong
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.filterIsInstance
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import org.graphiks.kadre.application.KadreScope
 import org.graphiks.kadre.diagnostics.Capability
+import org.graphiks.kadre.diagnostics.FeatureAvailability
 import org.graphiks.kadre.diagnostics.KadreResult
 import org.graphiks.kadre.display.DisplayInventory
+import org.graphiks.kadre.input.DeviceConnectionState
+import org.graphiks.kadre.input.TextInputConfig
+import org.graphiks.kadre.input.TextInputSession
+import org.graphiks.kadre.surface.HostSurface
 import org.graphiks.kadre.surface.PropertyChange
 import org.graphiks.kadre.window.Window
 import org.graphiks.kadre.window.WindowAttention
@@ -30,6 +37,13 @@ internal class KadreTourGateway(private val scope: KadreScope) : TourGateway {
     private val notes = mutableMapOf<NoteKey, Window>()
     private val nextKey = AtomicLong(0L)
     private val noteCloseRequests = MutableSharedFlow<NoteKey>(extraBufferCapacity = 8)
+    /** La démo n'a qu'une surface primaire : le gateway retient celle qu'on lui fait observer. */
+    private var primarySurface: HostSurface? = null
+    private var textInputSession: TextInputSession? = null
+    private val lastTextInputEvent = MutableStateFlow<String?>(null)
+    private val textInputPresentation = MutableStateFlow(
+        TextInputPresentation(open = false, stateLabel = textInputStateLabel(TextInputSessionState.Closed), lastEvent = null),
+    )
 
     override fun lifecycleSummary(): Flow<String> =
         scope.lifecycle.state.map { state ->
@@ -147,6 +161,108 @@ internal class KadreTourGateway(private val scope: KadreScope) : TourGateway {
             is KadreResult.Failure -> displayPresentationFor(result.reason)
             is KadreResult.Success -> observeDisplays().first()
         }
+
+    override fun observeInput(surface: HostSurface): Flow<InputPresentation> {
+        primarySurface = surface
+        // Flux froid : aucun collecteur n'est lancé tant que personne ne collecte. Appeler
+        // cette fonction ne consomme donc pas de bail de collecteur chez le host, et rien ne
+        // survit à l'annulation du collecteur.
+        val events = flow<String?> {
+            emit(null)
+            surface.input.events.collect { emit(renderEventSummary(describeInputEvent(it))) }
+        }
+        return combine(surface.input.state, events) { state, event ->
+            val keyboardPublished = state.capabilities.keyboard is FeatureAvailability.Available
+            InputPresentation(
+                // Un compteur n'affirme que ce que le host a publié (spec §4.4, §8.4).
+                modifiers = if (keyboardPublished) modifierLabels(state.modifiers) else null,
+                pointers = pointerSummaries(
+                    state.pointers.map { pointer ->
+                        PointerSnapshot(
+                            kind = pointer.kind,
+                            x = pointer.position?.x,
+                            y = pointer.position?.y,
+                            buttons = pointer.pressedButtons.toList(),
+                        )
+                    },
+                ),
+                pressedKeyCount = if (keyboardPublished) state.keyboard.pressedKeys.size else null,
+                lastEvent = event,
+                features = inputFeatures(state.capabilities),
+            )
+        }
+    }
+
+    override fun observeDevices(): Flow<DevicePresentation> =
+        scope.devices.state.map { state ->
+            devicePresentationOf(state.inventory) { enumerated ->
+                enumerated.devices.map { device ->
+                    deviceEntryOf(
+                        name = device.descriptor.name,
+                        kind = device.descriptor.kind,
+                        connected = device.connection.value == DeviceConnectionState.Connected,
+                    )
+                }
+            }
+        }
+
+    override fun observeCapture(): Flow<CapturePresentation> =
+        scope.capture.state.map { state ->
+            CapturePresentation(
+                screenLabel = permissionLabel(state.permissions.screen),
+                windowLabel = permissionLabel(state.permissions.window),
+                canRequest = present(state.capabilities.screen).requestable,
+            )
+        }
+
+    override fun textInputAvailability(): CapabilityPresentation =
+        primarySurface?.let { present(it.input.state.value.capabilities.textInput) }
+            ?: CapabilityPresentation(false, "Aucune surface n'a encore été observée.")
+
+    override fun observeTextInput(): Flow<TextInputPresentation> = textInputPresentation
+
+    override suspend fun openTextInput(): TextInputOutcome {
+        val surface = primarySurface ?: return TextInputOutcome.Refused("Aucune surface n'a encore été observée.")
+        if (textInputSession != null) {
+            return TextInputOutcome.Refused("Une session de saisie est déjà ouverte.")
+        }
+        return when (val result = surface.input.openTextInput(TextInputConfig())) {
+            is KadreResult.Failure -> TextInputOutcome.Refused(result.reason.userMotif())
+            is KadreResult.Success -> {
+                val session = result.value
+                textInputSession = session
+                scope.launch {
+                    session.events.collect {
+                        lastTextInputEvent.value = renderTextInputEvent(describeTextInputEvent(it))
+                        textInputPresentation.value = textInputPresentation.value.copy(
+                            lastEvent = lastTextInputEvent.value,
+                        )
+                    }
+                }
+                scope.launch {
+                    session.state.collect { state ->
+                        val state2 = textInputSessionStateOf(state)
+                        textInputPresentation.value = TextInputPresentation(
+                            open = state2 != TextInputSessionState.Closed,
+                            stateLabel = textInputStateLabel(state2),
+                            lastEvent = lastTextInputEvent.value,
+                        )
+                    }
+                }
+                TextInputOutcome.Opened
+            }
+        }
+    }
+
+    override suspend fun closeTextInput() {
+        textInputSession?.close()
+        textInputSession = null
+        textInputPresentation.value = TextInputPresentation(
+            open = false,
+            stateLabel = textInputStateLabel(TextInputSessionState.Closed),
+            lastEvent = lastTextInputEvent.value,
+        )
+    }
 
     override suspend fun renameNote(key: NoteKey, title: String): NoteUpdateOutcome {
         val window = notes[key] ?: return NoteUpdateOutcome.Refused("Cette note n'existe plus.")
