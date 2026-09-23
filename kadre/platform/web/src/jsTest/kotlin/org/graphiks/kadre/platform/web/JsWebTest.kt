@@ -1,6 +1,7 @@
 package org.graphiks.kadre.platform.web
 
 import kotlinx.browser.document
+import kotlinx.browser.window
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.awaitCancellation
@@ -79,12 +80,63 @@ class JsWebTest {
         }
     }
 
+    @Test
+    fun theBrowsingContextDeviceScaleIsReadBackOnObservation() = runTest {
+        val host = existingHostElement()
+        val originalScale = window.devicePixelRatio
+        setDevicePixelRatio(2.0)
+        val port = JsWebDomPort(host)
+        try {
+            assertEquals(
+                2.0,
+                port.initialSnapshot.scaleFactor,
+                "attach reads the scale of the browsing context that owns the element",
+            )
+            assertEquals(LogicalSize(320.0, 180.0), port.initialSnapshot.logicalSize)
+
+            val delivered = mutableListOf<WebSurfaceMetrics>()
+            port.installMetricsObserver { delivered += it }
+
+            // A zoom or a monitor move changes the ratio without moving the CSS box, so the next
+            // observation is the only thing that can pick the new scale up.
+            setDevicePixelRatio(3.0)
+            host.style.width = "400px"
+            awaitRealFrames("the port re-reads the scale the browsing context now reports") {
+                delivered.any { it.physicalSize == PhysicalSize(1200, 540) }
+            }
+
+            val rescaled = delivered.last { it.physicalSize == PhysicalSize(1200, 540) }
+            assertEquals(3.0, rescaled.scaleFactor)
+            assertEquals(
+                LogicalSize(400.0, 180.0),
+                rescaled.logicalSize,
+                "a scale change must not move the CSS box",
+            )
+        } finally {
+            port.release()
+            setDevicePixelRatio(originalScale)
+            host.remove()
+        }
+        assertEquals(originalScale, window.devicePixelRatio, "the scale override must not outlive its test")
+    }
+
     private fun existingHostElement(): HTMLElement =
         (document.createElement("div") as HTMLElement).also {
             it.style.width = "320px"
             it.style.height = "180px"
             document.body!!.appendChild(it)
         }
+
+    /**
+     * Redefines the device pixel ratio the browsing context reports, as a zoom or a monitor move
+     * would.
+     *
+     * The definition replaces the browser's own accessor for the rest of the page, so the test
+     * writes the value it read back and asserts that the browser reports it again.
+     */
+    private fun setDevicePixelRatio(value: Double) {
+        js("Object.defineProperty(window, 'devicePixelRatio', { configurable: true, value: value })")
+    }
 
     /**
      * Waits for browser frames to deliver an observation, without the virtual clock of [runTest].
