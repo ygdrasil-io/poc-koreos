@@ -22,8 +22,19 @@ internal class ActionDispatcher(
         try {
             val id = store.admit(ApiDetailKey.CreateFloatingNote.userAction, "WindowManager.requestWindow")
             try {
-                val (status, motif) = reduceNoteOutcome(gateway.openNote())
-                store.resolve(id, status, motif)
+                when (val outcome = gateway.openNote()) {
+                    is NoteOpenOutcome.Opened -> {
+                        store.publishNote(outcome.note)
+                        store.resolve(id, ActivityStatus.Succeeded)
+                    }
+                    is NoteOpenOutcome.Refused -> store.resolve(id, ActivityStatus.Rejected, outcome.motif)
+                    NoteOpenOutcome.Cancelled -> store.resolve(id, ActivityStatus.Cancelled)
+                    NoteOpenOutcome.OpenedElsewhere -> store.resolve(
+                        id,
+                        ActivityStatus.Unavailable,
+                        "La fenêtre a été ouverte dans une autre session.",
+                    )
+                }
             } catch (cancellation: CancellationException) {
                 withContext(NonCancellable) { store.resolve(id, ActivityStatus.Cancelled) }
                 throw cancellation

@@ -23,6 +23,7 @@ import org.graphiks.kadre.platform.desktop.runKadreApplication
 import org.graphiks.kadre.samples.desktour.appkit.ComposeMount
 import org.graphiks.kadre.samples.desktour.appkit.mountComposeAppKit
 import org.graphiks.kadre.samples.desktour.core.ActionDispatcher
+import org.graphiks.kadre.samples.desktour.core.ActivityStatus
 import org.graphiks.kadre.samples.desktour.core.KadreTourGateway
 import org.graphiks.kadre.samples.desktour.core.NoteKey
 import org.graphiks.kadre.samples.desktour.core.TourStore
@@ -107,7 +108,26 @@ public fun main() {
                             if (note.key in mounted) return@forEach
                             val noteWindow = gateway.noteWindow(note.key) ?: return@forEach
                             when (val result = noteWindow.mountComposeAppKit(this, { NoteContent(note) })) {
-                                is KadreResult.Success -> mounted[note.key] = result.value
+                                is KadreResult.Success -> {
+                                    val noteMount = result.value
+                                    mounted[note.key] = noteMount
+                                    // La scène d'une note a besoin des mêmes trois relais que la
+                                    // fenêtre principale : sans eux, rien n'est jamais rastérisé.
+                                    launch(start = CoroutineStart.UNDISPATCHED) {
+                                        noteWindow.surface.state.collect { noteMount.updateSurface(it) }
+                                    }
+                                    launch(start = CoroutineStart.UNDISPATCHED) {
+                                        noteWindow.surface.events.collect { noteMount.surfaceEvent(it) }
+                                    }
+                                    launch(start = CoroutineStart.UNDISPATCHED) {
+                                        noteWindow.surface.input.events.collect { noteMount.dispatch(it) }
+                                    }
+                                    noteWindow.surface.requestRedraw()
+                                    // Le titre et les capabilities d'une note suivent sa fenêtre.
+                                    launch(start = CoroutineStart.UNDISPATCHED) {
+                                        gateway.observeNote(note.key).collect { store.publishNote(it) }
+                                    }
+                                }
                                 is KadreResult.Failure -> store.publishNote(note.withMountFailure())
                             }
                         }
@@ -117,8 +137,13 @@ public fun main() {
                 // acceptation, donc la note n'est jamais retirée avant l'outcome.
                 collectors += launch(start = CoroutineStart.UNDISPATCHED) {
                     gateway.observeNoteCloseRequests().collect { key ->
+                        // Le bouton rouge du système exprime la même intention que l'action de
+                        // la démo : elle laisse une entrée corrélée au lieu de retirer la note
+                        // en silence.
+                        val id = store.admit("Fermer une note", "Window.close")
                         mounted.remove(key)?.close()
                         store.removeNote(key)
+                        store.resolve(id, ActivityStatus.Succeeded)
                     }
                 }
                 when (val redraw = window.surface.requestRedraw()) {

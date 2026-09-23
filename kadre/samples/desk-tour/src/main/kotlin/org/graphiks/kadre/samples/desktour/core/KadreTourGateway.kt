@@ -63,10 +63,13 @@ internal class KadreTourGateway(private val scope: KadreScope) : TourGateway {
                 scope.launch {
                     opened.events.filterIsInstance<WindowEvent.CloseRequested>().collect { closeRequest ->
                         val answered = opened.respondToCloseRequest(closeRequest.requestId, WindowCloseDecision.Accept)
-                        if (answered is KadreResult.Success) noteCloseRequests.emit(key)
+                        if (answered is KadreResult.Success) {
+                            notes.remove(key)
+                            noteCloseRequests.emit(key)
+                        }
                     }
                 }
-                NoteOpenOutcome.Opened(key)
+                NoteOpenOutcome.Opened(DeskTourNote(key, opened.state.value.title, noteControls(key)))
             }
             is WindowRequestOutcome.Rejected -> noteOpenOutcomeFor(outcome.failure)
             is WindowRequestOutcome.OpenedInNewSession -> NoteOpenOutcome.OpenedElsewhere
@@ -102,9 +105,13 @@ internal class KadreTourGateway(private val scope: KadreScope) : TourGateway {
             is KadreResult.Success -> when (val outcome = result.value) {
                 is WindowUpdateOutcome.Applied, is WindowUpdateOutcome.Accepted -> NoteUpdateOutcome.Applied
                 is WindowUpdateOutcome.PartiallyApplied -> NoteUpdateOutcome.PartiallyApplied(
-                    applied = WindowProperty.entries
-                        .filterNot { property -> outcome.rejected.any { it.field == property } }
-                        .map { it.readableName() },
+                    // Un renommage n'envoie que le titre : `applied` ne doit donc jamais
+                    // annoncer les treize autres propriétés, qu'on n'a pas demandées.
+                    applied = if (outcome.rejected.any { it.field == WindowProperty.Title }) {
+                        emptyList()
+                    } else {
+                        listOf(WindowProperty.Title.readableName())
+                    },
                     rejected = outcome.rejected.map {
                         RejectedFieldPresentation(it.field.readableName(), it.failure.userMotif())
                     },

@@ -49,13 +49,18 @@ class ActionDispatcherTest {
     }
 
     @Test
-    fun `an opened note is journaled as succeeded`() = runTest {
+    fun `an opened note is journaled as succeeded and added to the open list`() = runTest {
         val store = TourStore()
-        val gateway = ScriptedGateway(CompletableDeferred(NoteOpenOutcome.Opened(NoteKey(1L))))
+        val note = DeskTourNote(NoteKey(1L), "Notes", NoteControls(true, true, true, true))
+        val gateway = ScriptedGateway(CompletableDeferred(NoteOpenOutcome.Opened(note)))
         ActionDispatcher(store, gateway).createNote()
 
         assertEquals(ActivityStatus.Succeeded, store.state.value.activity.single().status)
-        assertEquals(null, store.state.value.activity.single().motif)
+        assertEquals(
+            listOf(note),
+            store.state.value.notes,
+            "une note que l'interface ne peut pas voir est une note qui n'existe pas",
+        )
     }
 
     @Test

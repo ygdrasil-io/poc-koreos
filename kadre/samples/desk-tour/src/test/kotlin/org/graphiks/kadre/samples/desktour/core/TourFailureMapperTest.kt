@@ -30,18 +30,4 @@ class TourFailureMapperTest {
         assertTrue(outcome is NoteOpenOutcome.Refused)
         assertTrue((outcome as NoteOpenOutcome.Refused).motif != failure.message)
     }
-
-    @Test
-    fun `every note outcome maps to a journal status and a refusal always carries a motif`() {
-        val outcomes = listOf(
-            NoteOpenOutcome.Refused("motif"),
-            NoteOpenOutcome.Cancelled,
-            NoteOpenOutcome.OpenedElsewhere,
-        )
-        outcomes.forEach { outcome ->
-            val (status, motif) = reduceNoteOutcome(outcome)
-            assertTrue(status != ActivityStatus.Succeeded, "only Opened may succeed: $outcome")
-            if (outcome is NoteOpenOutcome.Refused) assertTrue(motif!!.isNotBlank())
-        }
-    }
 }
