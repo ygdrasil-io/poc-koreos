@@ -13,4 +13,7 @@ internal open class TestTourGateway : TourGateway {
     override fun observeWindow(window: Window): Flow<DeskTourWindow> = flowOf()
     override fun createNoteAvailability(): CapabilityPresentation = CapabilityPresentation(enabled = true)
     override suspend fun openNote(): NoteOpenOutcome = NoteOpenOutcome.Cancelled
+    override fun noteWindow(key: NoteKey): Window? = null
+    override fun noteControls(key: NoteKey): NoteControls = NoteControls(false, false, false, false)
+    override fun observeNote(key: NoteKey): Flow<DeskTourNote> = flowOf()
 }

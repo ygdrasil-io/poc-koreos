@@ -13,4 +13,9 @@ internal interface TourGateway {
     fun observeWindow(window: Window): Flow<DeskTourWindow>
     fun createNoteAvailability(): CapabilityPresentation
     suspend fun openNote(): NoteOpenOutcome
+
+    /** Rendu à l'hôte, seul composant autorisé à monter du Compose (spec §2.5). */
+    fun noteWindow(key: NoteKey): Window?
+    fun noteControls(key: NoteKey): NoteControls
+    fun observeNote(key: NoteKey): Flow<DeskTourNote>
 }

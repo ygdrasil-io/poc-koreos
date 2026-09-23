@@ -7,8 +7,10 @@ import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filterIsInstance
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.joinAll
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -18,11 +20,14 @@ import org.graphiks.kadre.diagnostics.KadreResult
 import org.graphiks.kadre.platform.desktop.DesktopBackend
 import org.graphiks.kadre.platform.desktop.DesktopHostOptions
 import org.graphiks.kadre.platform.desktop.runKadreApplication
+import org.graphiks.kadre.samples.desktour.appkit.ComposeMount
 import org.graphiks.kadre.samples.desktour.appkit.mountComposeAppKit
 import org.graphiks.kadre.samples.desktour.core.ActionDispatcher
 import org.graphiks.kadre.samples.desktour.core.KadreTourGateway
+import org.graphiks.kadre.samples.desktour.core.NoteKey
 import org.graphiks.kadre.samples.desktour.core.TourStore
 import org.graphiks.kadre.samples.desktour.ui.DeskTourApp
+import org.graphiks.kadre.samples.desktour.ui.NoteContent
 import org.graphiks.kadre.window.WindowCloseDecision
 import org.graphiks.kadre.window.WindowCloseResponseOutcome
 import org.graphiks.kadre.window.WindowEvent
@@ -67,6 +72,7 @@ public fun main() {
                 is KadreResult.Success -> result.value
                 is KadreResult.Failure -> error("Compose bridge unavailable: ${result.reason}")
             }
+            val mounted = mutableMapOf<NoteKey, ComposeMount>()
             val collectors = mutableListOf<Job>()
             val closeRequest = try {
                 // These observers inherit Kadre's application context (possibly Default).
@@ -88,6 +94,21 @@ public fun main() {
                 collectors += launch(start = CoroutineStart.UNDISPATCHED) {
                     gateway.observeWindow(window).collect { store.publishWindows(listOf(it)) }
                 }
+                // Chaque note reçoit sa propre scène Compose, montée une seule fois. L'hôte
+                // observe le store plutôt que de s'accrocher à l'ouverture : c'est le seul
+                // endroit qui connaît Compose, `core` reste renderer-agnostique.
+                collectors += launch(start = CoroutineStart.UNDISPATCHED) {
+                    store.state.map { state -> state.notes }.distinctUntilChanged().collect { notes ->
+                        notes.forEach { note ->
+                            if (note.key in mounted) return@forEach
+                            val noteWindow = gateway.noteWindow(note.key) ?: return@forEach
+                            when (val result = noteWindow.mountComposeAppKit(this, { NoteContent(note) })) {
+                                is KadreResult.Success -> mounted[note.key] = result.value
+                                is KadreResult.Failure -> store.publishNote(note.withMountFailure())
+                            }
+                        }
+                    }
+                }
                 when (val redraw = window.surface.requestRedraw()) {
                     is KadreResult.Success -> Unit
                     is KadreResult.Failure -> error("Initial redraw rejected: ${redraw.reason}")
@@ -98,6 +119,7 @@ public fun main() {
                     collectors.forEach(Job::cancel)
                     collectors.joinAll()
                     // Await owner cleanup, owned coroutine finalizers, and native quiescence.
+                    mounted.values.forEach { it.close() }
                     mount.close()
                 }
             }

@@ -3,8 +3,10 @@ package org.graphiks.kadre.samples.desktour.core
 import java.util.concurrent.atomic.AtomicLong
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import org.graphiks.kadre.application.KadreScope
+import org.graphiks.kadre.diagnostics.Capability
 import org.graphiks.kadre.diagnostics.KadreResult
 import org.graphiks.kadre.window.Window
 import org.graphiks.kadre.window.WindowRequestOutcome
@@ -49,4 +51,22 @@ internal class KadreTourGateway(private val scope: KadreScope) : TourGateway {
             WindowRequestOutcome.RequesterDetached -> NoteOpenOutcome.Cancelled
         }
     }
+
+    override fun noteWindow(key: NoteKey): Window? = notes[key]
+
+    override fun noteControls(key: NoteKey): NoteControls = notes[key]?.let { window ->
+        val capabilities = window.capabilities.value
+        NoteControls(
+            canRename = capabilities.title is Capability.Supported,
+            canRequestAttention = capabilities.attention is Capability.Supported,
+            canChangeDecorations = capabilities.decorations is Capability.Supported,
+            canClose = true,
+        )
+    } ?: NoteControls(false, false, false, false)
+
+    override fun observeNote(key: NoteKey): Flow<DeskTourNote> = notes[key]?.let { window ->
+        combine(window.state, window.surface.state) { state, _ ->
+            DeskTourNote(key, state.title, noteControls(key))
+        }
+    } ?: flowOf()
 }

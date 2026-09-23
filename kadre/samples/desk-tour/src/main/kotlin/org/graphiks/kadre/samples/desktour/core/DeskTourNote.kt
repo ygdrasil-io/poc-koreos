@@ -12,4 +12,7 @@ internal data class DeskTourNote(
     val key: NoteKey,
     val title: String,
     val capabilities: NoteControls,
-)
+    val mountFailed: Boolean = false,
+) {
+    fun withMountFailure(): DeskTourNote = copy(mountFailed = true)
+}
