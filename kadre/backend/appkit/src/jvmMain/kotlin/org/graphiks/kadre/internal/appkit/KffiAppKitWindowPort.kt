@@ -2209,13 +2209,34 @@ internal enum class AppKitTextInputDocumentUpdate {
     Closed,
 }
 
-private fun org.graphiks.kffi.objc.NSObject.asTextInputString(): String? = try {
-    org.graphiks.kffi.objc.NSAttributedString(ptr).stringAsString()
+/**
+ * Reads the `id` argument of an `NSTextInputClient` callback.
+ *
+ * The protocol types it as `id`, and AppKit sends a plain `NSString` for `insertText:` and
+ * `setMarkedText:` while some input sources send an attributed string. Sending `-[NSObject string]`
+ * to a string raises an Objective-C exception, which no JVM `catch` can intercept, so the class is
+ * proven before either accessor is used.
+ */
+internal fun org.graphiks.kffi.objc.NSObject.asTextInputString(): String? = try {
+    when {
+        isKindOfClassNamed("NSAttributedString") ->
+            org.graphiks.kffi.objc.NSAttributedString(ptr).stringAsString()
+
+        else -> ObjCRuntime.toJavaString(ptr)
+    }
 } catch (_: Exception) {
     null
 } catch (_: LinkageError) {
     null
 }
+
+private fun org.graphiks.kffi.objc.NSObject.isKindOfClassNamed(className: String): Boolean =
+    ObjCRuntime.msgSend(
+        ValueLayout.JAVA_BOOLEAN,
+        ptr,
+        ObjCRuntime.sel("isKindOfClass:"),
+        ObjCRuntime.getClass(className),
+    ) as Boolean
 
 private fun NSRange.toTextRangeOrNull(text: String): TextRange? {
     if (location == APPKIT_NS_NOT_FOUND || location < 0L || length < 0L) return null
