@@ -1,6 +1,6 @@
 package org.graphiks.kadre.samples.desktour.core
 
-internal enum class TourRoute { Desk, Activity }
+internal enum class TourRoute { Desk, Activity, Screens }
 
 internal data class DeskTourWindow(
     val title: String,
@@ -18,4 +18,7 @@ internal data class DeskTourState(
     val activity: List<ActivityEntry> = emptyList(),
     val apiDetailsOpen: Boolean = false,
     val createNote: CapabilityPresentation = CapabilityPresentation(enabled = true),
+    /** Nul tant qu'aucun inventaire n'a été observé : ce n'est pas un inventaire vide. */
+    val displays: DisplayPresentation? = null,
+    val displayAccess: CapabilityPresentation = CapabilityPresentation(enabled = true),
 )

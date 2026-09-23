@@ -94,6 +94,21 @@ internal class ActionDispatcher(
         }
     }
 
+    suspend fun requestDisplayAccess() {
+        if (!gateway.displayAccessAvailability().enabled) return
+        val id = store.admit("Afficher les écrans", "DisplayManager.requestAccess")
+        when (val inventory = gateway.requestDisplayAccess()) {
+            is DisplayPresentation.Unavailable -> {
+                store.publishDisplays(inventory)
+                store.resolve(id, ActivityStatus.Rejected, inventory.motif)
+            }
+            else -> {
+                store.publishDisplays(inventory)
+                store.resolve(id, ActivityStatus.Succeeded)
+            }
+        }
+    }
+
     /** Spec §5 ligne 118 : un partiel montre séparément ce qui est passé et ce qui est refusé. */
     private fun settle(id: ActionCorrelationId, outcome: NoteUpdateOutcome) {
         when (outcome) {

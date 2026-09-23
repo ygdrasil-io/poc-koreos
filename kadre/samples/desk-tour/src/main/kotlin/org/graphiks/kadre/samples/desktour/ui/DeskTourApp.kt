@@ -120,6 +120,8 @@ internal fun DeskTourApp(
                         }
                         TourRoute.Activity ->
                             ActivityView(entries = state.activity, modifier = Modifier.weight(1f))
+                        TourRoute.Screens ->
+                            Text("Les écrans observés apparaîtront ici.")
                     }
                     Button(onClick = onToggleApiDetails) { Text("Détails API") }
                 }
