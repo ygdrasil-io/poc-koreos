@@ -2,14 +2,9 @@ package org.graphiks.kadre.samples.desktour.core
 
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withTimeout
-import org.graphiks.kadre.diagnostics.KadreResult
-import org.graphiks.kadre.window.Window
-import org.graphiks.kadre.window.WindowRequest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -18,14 +13,12 @@ import kotlin.test.assertTrue
 class CapabilityWiringTest {
     private class StubGateway(
         private val availability: CapabilityPresentation,
-    ) : TourGateway {
+    ) : TestTourGateway() {
         var calls = 0
-        override fun lifecycleSummary(): Flow<String> = flowOf("Session")
-        override fun observeWindow(window: Window): Flow<DeskTourWindow> = flowOf()
         override fun createNoteAvailability(): CapabilityPresentation = availability
-        override suspend fun requestNoteWindow(): KadreResult<WindowRequest> {
+        override suspend fun openNote(): NoteOpenOutcome {
             calls++
-            return CompletableDeferred<KadreResult<WindowRequest>>().await()
+            return CompletableDeferred<NoteOpenOutcome>().await()
         }
     }
 

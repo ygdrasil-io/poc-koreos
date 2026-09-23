@@ -44,5 +44,20 @@ internal class TourStore {
     fun publishCreateNoteAvailability(availability: CapabilityPresentation) =
         mutableState.update { it.copy(createNote = availability) }
 
+    fun publishNote(note: DeskTourNote) = mutableState.update { current ->
+        val index = current.notes.indexOfFirst { it.key == note.key }
+        current.copy(
+            notes = if (index < 0) {
+                current.notes + note
+            } else {
+                current.notes.toMutableList().also { it[index] = note }
+            },
+        )
+    }
+
+    fun removeNote(key: NoteKey) = mutableState.update { current ->
+        current.copy(notes = current.notes.filterNot { it.key == key })
+    }
+
     fun toggleApiDetails() = mutableState.update { it.copy(apiDetailsOpen = !it.apiDetailsOpen) }
 }

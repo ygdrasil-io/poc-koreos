@@ -7,8 +7,10 @@ import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filterIsInstance
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.joinAll
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -18,11 +20,15 @@ import org.graphiks.kadre.diagnostics.KadreResult
 import org.graphiks.kadre.platform.desktop.DesktopBackend
 import org.graphiks.kadre.platform.desktop.DesktopHostOptions
 import org.graphiks.kadre.platform.desktop.runKadreApplication
+import org.graphiks.kadre.samples.desktour.appkit.ComposeMount
 import org.graphiks.kadre.samples.desktour.appkit.mountComposeAppKit
 import org.graphiks.kadre.samples.desktour.core.ActionDispatcher
+import org.graphiks.kadre.samples.desktour.core.ActivityStatus
 import org.graphiks.kadre.samples.desktour.core.KadreTourGateway
+import org.graphiks.kadre.samples.desktour.core.NoteKey
 import org.graphiks.kadre.samples.desktour.core.TourStore
 import org.graphiks.kadre.samples.desktour.ui.DeskTourApp
+import org.graphiks.kadre.samples.desktour.ui.NoteContent
 import org.graphiks.kadre.window.WindowCloseDecision
 import org.graphiks.kadre.window.WindowCloseResponseOutcome
 import org.graphiks.kadre.window.WindowEvent
@@ -59,6 +65,10 @@ public fun main() {
                 DeskTourApp(
                     state = state,
                     onCreateNote = { launch { dispatcher.createNote() } },
+                    onRenameNote = { key, title -> launch { dispatcher.renameNote(key, title) } },
+                    onRequestAttention = { key -> launch { dispatcher.requestNoteAttention(key) } },
+                    onToggleDecorations = { key -> launch { dispatcher.toggleNoteDecorations(key) } },
+                    onCloseNote = { key -> launch { dispatcher.closeNote(key) } },
                     onSelectRoute = { store.setRoute(it) },
                     onToggleApiDetails = { store.toggleApiDetails() },
                 )
@@ -67,6 +77,8 @@ public fun main() {
                 is KadreResult.Success -> result.value
                 is KadreResult.Failure -> error("Compose bridge unavailable: ${result.reason}")
             }
+            val mounted = mutableMapOf<NoteKey, ComposeMount>()
+            val mountAttempted = mutableSetOf<NoteKey>()
             val collectors = mutableListOf<Job>()
             val closeRequest = try {
                 // These observers inherit Kadre's application context (possibly Default).
@@ -88,6 +100,53 @@ public fun main() {
                 collectors += launch(start = CoroutineStart.UNDISPATCHED) {
                     gateway.observeWindow(window).collect { store.publishWindows(listOf(it)) }
                 }
+                // Chaque note reçoit sa propre scène Compose, montée une seule fois. L'hôte
+                // observe le store plutôt que de s'accrocher à l'ouverture : c'est le seul
+                // endroit qui connaît Compose, `core` reste renderer-agnostique.
+                collectors += launch(start = CoroutineStart.UNDISPATCHED) {
+                    store.state.map { state -> state.notes }.distinctUntilChanged().collect { notes ->
+                        notes.forEach { note ->
+                            if (note.key in mounted || !mountAttempted.add(note.key)) return@forEach
+                            val noteWindow = gateway.noteWindow(note.key) ?: return@forEach
+                            when (val result = noteWindow.mountComposeAppKit(this, { NoteContent(note) })) {
+                                is KadreResult.Success -> {
+                                    val noteMount = result.value
+                                    mounted[note.key] = noteMount
+                                    // La scène d'une note a besoin des mêmes trois relais que la
+                                    // fenêtre principale : sans eux, rien n'est jamais rastérisé.
+                                    launch(start = CoroutineStart.UNDISPATCHED) {
+                                        noteWindow.surface.state.collect { noteMount.updateSurface(it) }
+                                    }
+                                    launch(start = CoroutineStart.UNDISPATCHED) {
+                                        noteWindow.surface.events.collect { noteMount.surfaceEvent(it) }
+                                    }
+                                    launch(start = CoroutineStart.UNDISPATCHED) {
+                                        noteWindow.surface.input.events.collect { noteMount.dispatch(it) }
+                                    }
+                                    noteWindow.surface.requestRedraw()
+                                    // Le titre et les capabilities d'une note suivent sa fenêtre.
+                                    launch(start = CoroutineStart.UNDISPATCHED) {
+                                        gateway.observeNote(note.key).collect { store.publishNote(it) }
+                                    }
+                                }
+                                is KadreResult.Failure -> store.publishNote(note.withMountFailure())
+                            }
+                        }
+                    }
+                }
+                // Fermeture par le bouton rouge du système : la clé n'est publiée qu'après
+                // acceptation, donc la note n'est jamais retirée avant l'outcome.
+                collectors += launch(start = CoroutineStart.UNDISPATCHED) {
+                    gateway.observeNoteCloseRequests().collect { key ->
+                        // Le bouton rouge du système exprime la même intention que l'action de
+                        // la démo : elle laisse une entrée corrélée au lieu de retirer la note
+                        // en silence.
+                        val id = store.admit("Fermer une note", "Window.close")
+                        mounted.remove(key)?.close()
+                        store.removeNote(key)
+                        store.resolve(id, ActivityStatus.Succeeded)
+                    }
+                }
                 when (val redraw = window.surface.requestRedraw()) {
                     is KadreResult.Success -> Unit
                     is KadreResult.Failure -> error("Initial redraw rejected: ${redraw.reason}")
@@ -97,7 +156,12 @@ public fun main() {
                 withContext(NonCancellable) {
                     collectors.forEach(Job::cancel)
                     collectors.joinAll()
+                    // L'application s'arrête avec sa dernière fenêtre : sans fermer les notes
+                    // ici, fermer la fenêtre principale laisse des fenêtres sans scène et un
+                    // processus qui ne se termine pas.
+                    mounted.keys.forEach { gateway.closeNote(it) }
                     // Await owner cleanup, owned coroutine finalizers, and native quiescence.
+                    mounted.values.forEach { it.close() }
                     mount.close()
                 }
             }
