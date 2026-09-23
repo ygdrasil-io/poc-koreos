@@ -15,6 +15,7 @@ import org.graphiks.kadre.surface.PropertyChange
 import org.graphiks.kadre.window.Window
 import org.graphiks.kadre.window.WindowAttention
 import org.graphiks.kadre.window.WindowCloseDecision
+import org.graphiks.kadre.window.WindowCloseOutcome
 import org.graphiks.kadre.window.WindowDecorations
 import org.graphiks.kadre.window.WindowEvent
 import org.graphiks.kadre.window.WindowProperty
@@ -82,13 +83,23 @@ internal class KadreTourGateway(private val scope: KadreScope) : TourGateway {
 
     override fun noteControls(key: NoteKey): NoteControls = notes[key]?.let { window ->
         val capabilities = window.capabilities.value
+        val rename = present(capabilities.title)
+        val attention = present(capabilities.attention)
+        val decorations = present(capabilities.decorations)
         NoteControls(
-            canRename = capabilities.title is Capability.Supported,
-            canRequestAttention = capabilities.attention is Capability.Supported,
-            canChangeDecorations = capabilities.decorations is Capability.Supported,
+            canRename = rename.enabled,
+            canRequestAttention = attention.enabled,
+            canChangeDecorations = decorations.enabled,
+            // Aucune capability publique ne conditionne la fermeture : elle est donc toujours
+            // offerte, et c'est le refus éventuel du host qui portera le motif.
             canClose = true,
+            motifs = listOfNotNull(
+                rename.motif?.let { "Renommer — $it" },
+                attention.motif?.let { "Attention — $it" },
+                decorations.motif?.let { "Décoration — $it" },
+            ),
         )
-    } ?: NoteControls(false, false, false, false)
+    } ?: NoteControls(false, false, false, false, emptyList())
 
     override fun observeNote(key: NoteKey): Flow<DeskTourNote> = notes[key]?.let { window ->
         combine(window.state, window.surface.state) { state, _ ->
@@ -103,7 +114,8 @@ internal class KadreTourGateway(private val scope: KadreScope) : TourGateway {
         return when (val result = window.apply(WindowUpdate(title = PropertyChange.Set(title)))) {
             is KadreResult.Failure -> NoteUpdateOutcome.Refused(result.reason.userMotif())
             is KadreResult.Success -> when (val outcome = result.value) {
-                is WindowUpdateOutcome.Applied, is WindowUpdateOutcome.Accepted -> NoteUpdateOutcome.Applied
+                is WindowUpdateOutcome.Applied -> NoteUpdateOutcome.Applied
+                is WindowUpdateOutcome.Accepted -> NoteUpdateOutcome.Accepted
                 is WindowUpdateOutcome.PartiallyApplied -> NoteUpdateOutcome.PartiallyApplied(
                     // Un renommage n'envoie que le titre : `applied` ne doit donc jamais
                     // annoncer les treize autres propriétés, qu'on n'a pas demandées.
@@ -138,7 +150,8 @@ internal class KadreTourGateway(private val scope: KadreScope) : TourGateway {
         return when (val result = window.apply(WindowUpdate(decorations = PropertyChange.Set(next)))) {
             is KadreResult.Failure -> NoteUpdateOutcome.Refused(result.reason.userMotif())
             is KadreResult.Success -> when (val outcome = result.value) {
-                is WindowUpdateOutcome.Applied, is WindowUpdateOutcome.Accepted -> NoteUpdateOutcome.Applied
+                is WindowUpdateOutcome.Applied -> NoteUpdateOutcome.Applied
+                is WindowUpdateOutcome.Accepted -> NoteUpdateOutcome.Accepted
                 is WindowUpdateOutcome.PartiallyApplied -> NoteUpdateOutcome.PartiallyApplied(
                     applied = emptyList(),
                     rejected = outcome.rejected.map {
@@ -153,9 +166,12 @@ internal class KadreTourGateway(private val scope: KadreScope) : TourGateway {
         val window = notes[key] ?: return NoteUpdateOutcome.Refused("Cette note n'existe plus.")
         return when (val result = window.close()) {
             is KadreResult.Failure -> NoteUpdateOutcome.Refused(result.reason.userMotif())
-            is KadreResult.Success -> {
-                notes.remove(key)
-                NoteUpdateOutcome.Applied
+            is KadreResult.Success -> when (result.value) {
+                WindowCloseOutcome.Closed -> {
+                    notes.remove(key)
+                    NoteUpdateOutcome.Applied
+                }
+                is WindowCloseOutcome.Accepted -> NoteUpdateOutcome.Accepted
             }
         }
     }

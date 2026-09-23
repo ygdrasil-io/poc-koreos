@@ -78,6 +78,7 @@ public fun main() {
                 is KadreResult.Failure -> error("Compose bridge unavailable: ${result.reason}")
             }
             val mounted = mutableMapOf<NoteKey, ComposeMount>()
+            val mountAttempted = mutableSetOf<NoteKey>()
             val collectors = mutableListOf<Job>()
             val closeRequest = try {
                 // These observers inherit Kadre's application context (possibly Default).
@@ -105,7 +106,7 @@ public fun main() {
                 collectors += launch(start = CoroutineStart.UNDISPATCHED) {
                     store.state.map { state -> state.notes }.distinctUntilChanged().collect { notes ->
                         notes.forEach { note ->
-                            if (note.key in mounted) return@forEach
+                            if (note.key in mounted || !mountAttempted.add(note.key)) return@forEach
                             val noteWindow = gateway.noteWindow(note.key) ?: return@forEach
                             when (val result = noteWindow.mountComposeAppKit(this, { NoteContent(note) })) {
                                 is KadreResult.Success -> {
@@ -155,6 +156,10 @@ public fun main() {
                 withContext(NonCancellable) {
                     collectors.forEach(Job::cancel)
                     collectors.joinAll()
+                    // L'application s'arrête avec sa dernière fenêtre : sans fermer les notes
+                    // ici, fermer la fenêtre principale laisse des fenêtres sans scène et un
+                    // processus qui ne se termine pas.
+                    mounted.keys.forEach { gateway.closeNote(it) }
                     // Await owner cleanup, owned coroutine finalizers, and native quiescence.
                     mounted.values.forEach { it.close() }
                     mount.close()

@@ -99,6 +99,7 @@ internal fun DeskTourApp(
                                 if (!note.capabilities.canRename) {
                                     Text("Le renommage n'est pas pris en charge par cette fenêtre.")
                                 }
+                                note.capabilities.motifs.forEach { Text(it) }
                                 Button(
                                     onClick = { onRequestAttention(note.key) },
                                     enabled = note.capabilities.canRequestAttention,

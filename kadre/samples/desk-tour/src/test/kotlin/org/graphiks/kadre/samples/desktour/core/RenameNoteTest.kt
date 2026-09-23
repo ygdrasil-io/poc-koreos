@@ -56,6 +56,21 @@ class RenameNoteTest {
     }
 
     @Test
+    fun `an accepted rename is not reported as a confirmed effect`() = runTest {
+        val store = TourStore()
+        val gateway = StubGateway(NoteUpdateOutcome.Accepted)
+
+        ActionDispatcher(store, gateway).renameNote(NoteKey(1L), "Nouveau titre")
+
+        val entry = store.state.value.activity.single()
+        assertEquals(ActivityStatus.Succeeded, entry.status)
+        assertTrue(
+            entry.motif!!.contains("n'est pas encore confirmé"),
+            "une acceptation n'est pas un effet observé : le motif doit le dire",
+        )
+    }
+
+    @Test
     fun `a rename by a note whose title capability is unsupported never reaches the gateway`() = runTest {
         val store = TourStore()
         val gateway = object : StubGateway(NoteUpdateOutcome.Applied) {

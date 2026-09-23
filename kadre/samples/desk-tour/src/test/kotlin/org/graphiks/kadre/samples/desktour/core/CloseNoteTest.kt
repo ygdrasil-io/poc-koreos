@@ -1,6 +1,10 @@
 package org.graphiks.kadre.samples.desktour.core
 
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withTimeout
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -32,16 +36,36 @@ class CloseNoteTest {
     }
 
     @Test
-    fun `two close intents for the same note reach the gateway once`() = runTest {
+    fun `two concurrent close intents reach the gateway once`() = runTest {
         val store = TourStore()
         store.publishNote(DeskTourNote(NoteKey(1L), "Notes", allControls))
-        val gateway = Recorder(allControls, NoteUpdateOutcome.Applied)
+        val gateway = GatedRecorder(allControls)
         val dispatcher = ActionDispatcher(store, gateway)
 
-        dispatcher.closeNote(NoteKey(1L))
-        dispatcher.closeNote(NoteKey(1L))
+        val first = backgroundScope.launch { dispatcher.closeNote(NoteKey(1L)) }
+        withTimeout(1_000) { while (gateway.closeCalls == 0) delay(1) }
+        val second = backgroundScope.launch { dispatcher.closeNote(NoteKey(1L)) }
+        delay(50)
 
+        // Le second arrive alors que le premier n'est pas terminé : c'est le garde-fou
+        // « en cours de fermeture » qui doit le retenir, pas la disparition de la note.
         assertEquals(1, gateway.closeCalls, "a note already closing must not be closed twice")
+
+        gateway.gate.complete(Unit)
+        first.join()
+        second.join()
+        assertEquals(1, gateway.closeCalls)
+    }
+
+    private class GatedRecorder(private val controls: NoteControls) : TestTourGateway() {
+        val gate = CompletableDeferred<Unit>()
+        var closeCalls = 0
+        override fun noteControls(key: NoteKey): NoteControls = controls
+        override suspend fun closeNote(key: NoteKey): NoteUpdateOutcome {
+            closeCalls++
+            gate.await()
+            return NoteUpdateOutcome.Applied
+        }
     }
 
     @Test

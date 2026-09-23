@@ -75,10 +75,17 @@ internal class ActionDispatcher(
                     store.removeNote(key)
                     store.resolve(id, ActivityStatus.Succeeded)
                 }
+                // La note n'est pas retirée ici : la fermeture n'est pas confirmée, donc la
+                // présenter comme fermée serait exactement le faux succès du §2.3.
+                NoteUpdateOutcome.Accepted -> store.resolve(
+                    id,
+                    ActivityStatus.Succeeded,
+                    "Le host a accepté la fermeture ; elle n'est pas encore confirmée.",
+                )
                 is NoteUpdateOutcome.PartiallyApplied -> store.resolve(
                     id,
                     ActivityStatus.Succeeded,
-                    outcome.rejected.joinToString { it.fieldLabel },
+                    "Refusé : ${outcome.rejected.joinToString { it.fieldLabel }}.",
                 )
                 is NoteUpdateOutcome.Refused -> store.resolve(id, ActivityStatus.Rejected, outcome.motif)
             }
@@ -91,6 +98,11 @@ internal class ActionDispatcher(
     private fun settle(id: ActionCorrelationId, outcome: NoteUpdateOutcome) {
         when (outcome) {
             NoteUpdateOutcome.Applied -> store.resolve(id, ActivityStatus.Succeeded)
+            NoteUpdateOutcome.Accepted -> store.resolve(
+                id,
+                ActivityStatus.Succeeded,
+                "Le host a accepté la demande ; l'effet n'est pas encore confirmé.",
+            )
             is NoteUpdateOutcome.PartiallyApplied -> store.resolve(
                 id,
                 ActivityStatus.Succeeded,
