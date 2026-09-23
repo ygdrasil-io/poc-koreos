@@ -32,4 +32,5 @@ dependencies {
     implementation(libs.kffi.objc)
     implementation(compose.desktop.currentOs)
     testImplementation(kotlin("test"))
+    testImplementation(libs.kotlinx.coroutines.test)
 }
