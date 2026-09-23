@@ -39,5 +39,7 @@ internal class TourStore {
 
     fun setRoute(route: TourRoute) = mutableState.update { it.copy(route = route) }
 
+    fun publishWindows(windows: List<DeskTourWindow>) = mutableState.update { it.copy(windows = windows) }
+
     fun toggleApiDetails() = mutableState.update { it.copy(apiDetailsOpen = !it.apiDetailsOpen) }
 }
