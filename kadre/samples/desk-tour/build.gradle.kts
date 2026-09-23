@@ -11,6 +11,7 @@ kotlin {
         freeCompilerArgs.addAll(
             "-opt-in=androidx.compose.ui.InternalComposeUiApi",
             "-opt-in=androidx.compose.ui.ExperimentalComposeUiApi",
+            "-opt-in=androidx.compose.material3.ExperimentalMaterial3Api",
             "-opt-in=org.graphiks.kffi.objc.PlatformAvailability",
         )
     }
@@ -31,6 +32,7 @@ dependencies {
     implementation(libs.kotlinx.coroutines.core)
     implementation(libs.kffi.objc)
     implementation(compose.desktop.currentOs)
+    implementation(compose.material3)
     testImplementation(kotlin("test"))
     testImplementation(libs.kotlinx.coroutines.test)
 }
