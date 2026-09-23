@@ -97,7 +97,7 @@ internal fun DeskTourApp(
                                 state.createNote.motif?.let { Text(it) }
                             }
                             state.notes.forEach { note ->
-                                var draft by remember(note.key) { mutableStateOf(note.title) }
+                                var draft by remember(note.key, note.title) { mutableStateOf(note.title) }
                                 Text(note.title.ifBlank { "Note sans titre" })
                                 if (note.mountFailed) {
                                     Text("Cette note n'a pas pu être affichée ; l'hôte courant a refusé le rendu.")

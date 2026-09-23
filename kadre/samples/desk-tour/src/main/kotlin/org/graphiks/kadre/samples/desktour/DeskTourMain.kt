@@ -125,9 +125,18 @@ public fun main() {
                         notes.forEach { note ->
                             if (note.key in mounted || !mountAttempted.add(note.key)) return@forEach
                             val noteWindow = gateway.noteWindow(note.key) ?: return@forEach
-                            when (val result = noteWindow.mountComposeAppKit(this, { NoteContent(note) })) {
+                            val mountResult = noteWindow.mountComposeAppKit(this) {
+                                // La note est relue du store à chaque composition : un renommage
+                                // depuis le Bureau se voit donc aussi dans sa propre fenêtre.
+                                val liveState by store.state.collectAsState()
+                                val liveNote = liveState.notes.firstOrNull { it.key == note.key } ?: note
+                                NoteContent(liveNote, onRename = { title ->
+                                    launch { dispatcher.renameNote(note.key, title) }
+                                })
+                            }
+                            when (mountResult) {
                                 is KadreResult.Success -> {
-                                    val noteMount = result.value
+                                    val noteMount = mountResult.value
                                     mounted[note.key] = noteMount
                                     // La scène d'une note a besoin des mêmes trois relais que la
                                     // fenêtre principale : sans eux, rien n'est jamais rastérisé.
