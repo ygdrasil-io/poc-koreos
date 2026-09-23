@@ -20,6 +20,7 @@ import org.graphiks.kadre.input.DeviceConnectionState
 import org.graphiks.kadre.input.TextInputConfig
 import org.graphiks.kadre.input.TextInputSession
 import org.graphiks.kadre.surface.HostSurface
+import org.graphiks.kadre.surface.LogicalSize
 import org.graphiks.kadre.surface.PropertyChange
 import org.graphiks.kadre.window.Window
 import org.graphiks.kadre.window.WindowAttention
@@ -32,6 +33,9 @@ import org.graphiks.kadre.window.WindowRequestOutcome
 import org.graphiks.kadre.window.WindowUpdate
 import org.graphiks.kadre.window.WindowUpdateOutcome
 import org.graphiks.kadre.window.requestWindow
+
+/** Taille d'une note : assez large pour le champ et son bouton, assez petite pour rester une note. */
+private val noteContentSize = LogicalSize(420.0, 240.0)
 
 internal class KadreTourGateway(private val scope: KadreScope) : TourGateway {
     private val notes = mutableMapOf<NoteKey, Window>()
@@ -54,7 +58,7 @@ internal class KadreTourGateway(private val scope: KadreScope) : TourGateway {
         combine(window.state, window.surface.state) { windowState, surfaceState ->
             DeskTourWindow(
                 title = windowState.title,
-                focusLabel = surfaceState.focus.name,
+                focusLabel = windowFocusLabel(surfaceState.focus),
                 logicalWidth = surfaceState.logicalSize.width,
                 logicalHeight = surfaceState.logicalSize.height,
                 physicalWidth = surfaceState.physicalSize.width,
@@ -66,7 +70,12 @@ internal class KadreTourGateway(private val scope: KadreScope) : TourGateway {
         present(scope.windows.state.value.capabilities.requestWindow)
 
     override suspend fun openNote(): NoteOpenOutcome {
-        val request = when (val result = scope.windows.requestWindow { title = "Notes" }) {
+        // Une note est une petite fenêtre : avec la taille par défaut du host (800 × 600), elle
+        // recouvrait entièrement l'espace de travail et l'opérateur ne voyait plus rien d'autre.
+        val request = when (val result = scope.windows.requestWindow {
+            title = "Notes"
+            contentSize = noteContentSize
+        }) {
             is KadreResult.Success -> result.value
             is KadreResult.Failure -> return noteOpenOutcomeFor(result.reason)
         }

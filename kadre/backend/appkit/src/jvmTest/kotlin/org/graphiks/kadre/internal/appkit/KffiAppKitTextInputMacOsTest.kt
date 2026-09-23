@@ -1,14 +1,17 @@
 package org.graphiks.kadre.internal.appkit
 
+import org.graphiks.kffi.objc.NSObject
 import org.graphiks.kffi.objc.NSPoint
 import org.graphiks.kffi.objc.NSRange
 import org.graphiks.kffi.objc.NSRect
 import org.graphiks.kffi.objc.NSSize
+import org.graphiks.kffi.objc.ObjCRuntime
 import org.graphiks.kffi.objc.managed.ObjCManagedClass
 import org.graphiks.kffi.objc.managed.ObjCMethodSignatures
 import org.graphiks.kffi.objc.managed.ObjCManagedTextInputValues
 import org.graphiks.kffi.objc.managed.ObjCObjectRangeResult
 import org.graphiks.kffi.objc.managed.ObjCRectRangeResult
+import java.lang.foreign.Arena
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
@@ -70,6 +73,28 @@ class KffiAppKitTextInputMacOsTest {
             values.close()
         }
         assertEquals(11, methods.size)
+    }
+
+    /**
+     * `NSTextInputClient` declares the inserted value as `id`: AppKit sends a plain `NSString` for
+     * `insertText:replacementRange:` and `setMarkedText:selectedRange:replacementRange:`. Reading it
+     * as an `NSAttributedString` raises an Objective-C exception that terminates the process, so
+     * both shapes are proven here.
+     */
+    @Test
+    fun bothTextShapesReachTheSameManagedBridgeValueAsAString() {
+        if (!isMacOsTextInputHost()) return
+
+        val values = ObjCManagedTextInputValues()
+        try {
+            val plain = NSObject(ObjCRuntime.newNSString(Arena.global(), "bonjour"))
+            assertEquals("bonjour", plain.asTextInputString())
+
+            val attributed = requireNotNull(values.attributedString("composition"))
+            assertEquals("composition", attributed.asTextInputString())
+        } finally {
+            values.close()
+        }
     }
 }
 

@@ -20,6 +20,7 @@ import org.graphiks.kadre.input.PhysicalKey
 import org.graphiks.kadre.input.PointerButton
 import org.graphiks.kadre.input.PointerButtonState
 import org.graphiks.kadre.input.PointerKind
+import org.graphiks.kadre.input.ScrollDelta
 import org.graphiks.kadre.input.TextInputConfig
 import org.graphiks.kadre.input.TouchPhase
 import org.graphiks.kadre.surface.LogicalDelta
@@ -423,6 +424,20 @@ internal sealed interface AppKitInput {
     ) : AppKitInput
 
     data object PointerLeft : AppKitInput
+
+    /**
+     * One scroll observation. The runtime keeps [coalescingBoundary] as the native phase/momentum
+     * frontier: equal boundaries may merge, and the boundary changes exactly when the native phase
+     * or momentum phase changes.
+     */
+    data class Scrolled(
+        val delta: ScrollDelta,
+        val coalescingBoundary: Long,
+    ) : AppKitInput {
+        init {
+            require(coalescingBoundary >= 0L) { "coalescingBoundary must be non-negative" }
+        }
+    }
 
     data class TouchChanged(
         val nativeIdentity: Any,
