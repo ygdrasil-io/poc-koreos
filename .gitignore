@@ -13,6 +13,9 @@ __pycache__/
 docs/superpowers/plans/
 docs/superpowers/specs/
 
+# Local worktrees
+.worktrees/
+
 # Kotlin compiler daemon session dir
 .kotlin/
 winit/
