@@ -16,6 +16,9 @@ docs/superpowers/specs/
 # Local worktrees
 .worktrees/
 
+# Kotlin/JS + Wasm toolchain store produced by js/wasmJs builds
+kotlin-js-store/
+
 # Kotlin compiler daemon session dir
 .kotlin/
 winit/
