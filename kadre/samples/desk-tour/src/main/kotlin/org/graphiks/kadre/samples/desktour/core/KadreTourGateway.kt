@@ -5,12 +5,14 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.filterIsInstance
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import org.graphiks.kadre.application.KadreScope
 import org.graphiks.kadre.diagnostics.Capability
 import org.graphiks.kadre.diagnostics.KadreResult
+import org.graphiks.kadre.display.DisplayInventory
 import org.graphiks.kadre.surface.PropertyChange
 import org.graphiks.kadre.window.Window
 import org.graphiks.kadre.window.WindowAttention
@@ -108,6 +110,43 @@ internal class KadreTourGateway(private val scope: KadreScope) : TourGateway {
     } ?: flowOf()
 
     override fun observeNoteCloseRequests(): Flow<NoteKey> = noteCloseRequests
+
+    override fun observeDisplays(): Flow<DisplayPresentation> =
+        scope.displays.state.map { state ->
+            when (val inventory = state.inventory) {
+                is DisplayInventory.Enumerated -> DisplayPresentation.Enumerated(
+                    inventory.displays.map { display ->
+                        val displayState = display.state.value
+                        screenEntryOf(
+                            name = displayState.name,
+                            width = displayState.bounds.size.width,
+                            height = displayState.bounds.size.height,
+                            scale = displayState.scaleFactor,
+                            mode = displayState.currentMode?.let { mode ->
+                                DisplayModeLabel(
+                                    mode.physicalSize.width,
+                                    mode.physicalSize.height,
+                                    mode.refreshRateHz,
+                                )
+                            },
+                            isPrimary = display.id == inventory.primary?.id,
+                        )
+                    },
+                )
+                DisplayInventory.PermissionRequired -> DisplayPresentation.NeedsPermission
+                is DisplayInventory.PermissionDenied -> DisplayPresentation.Denied(inventory.canRequestAgain)
+                is DisplayInventory.Unavailable -> displayPresentationFor(inventory.failure)
+            }
+        }
+
+    override fun displayAccessAvailability(): CapabilityPresentation =
+        present(scope.displays.state.value.capabilities.enumeration)
+
+    override suspend fun requestDisplayAccess(): DisplayPresentation =
+        when (val result = scope.displays.requestAccess()) {
+            is KadreResult.Failure -> displayPresentationFor(result.reason)
+            is KadreResult.Success -> observeDisplays().first()
+        }
 
     override suspend fun renameNote(key: NoteKey, title: String): NoteUpdateOutcome {
         val window = notes[key] ?: return NoteUpdateOutcome.Refused("Cette note n'existe plus.")

@@ -1,5 +1,7 @@
 package org.graphiks.kadre.samples.desktour.core
 
+import org.graphiks.kadre.diagnostics.KadreFailure
+
 internal data class DisplayModeLabel(
     val widthPixels: Int,
     val heightPixels: Int,
@@ -44,3 +46,6 @@ internal fun screenEntryOf(
     },
     isPrimary = isPrimary,
 )
+
+internal fun displayPresentationFor(failure: KadreFailure): DisplayPresentation =
+    DisplayPresentation.Unavailable(failure.userMotif())

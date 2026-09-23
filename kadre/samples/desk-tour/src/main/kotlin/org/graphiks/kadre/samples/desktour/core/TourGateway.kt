@@ -26,4 +26,8 @@ internal interface TourGateway {
 
     /** Les notes dont la fenêtre a demandé à se fermer et dont la fermeture a été acceptée. */
     fun observeNoteCloseRequests(): Flow<NoteKey>
+
+    fun observeDisplays(): Flow<DisplayPresentation>
+    fun displayAccessAvailability(): CapabilityPresentation
+    suspend fun requestDisplayAccess(): DisplayPresentation
 }

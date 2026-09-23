@@ -24,4 +24,9 @@ internal open class TestTourGateway : TourGateway {
     override suspend fun toggleNoteDecorations(key: NoteKey): NoteUpdateOutcome = NoteUpdateOutcome.Applied
     override suspend fun closeNote(key: NoteKey): NoteUpdateOutcome = NoteUpdateOutcome.Applied
     override fun observeNoteCloseRequests(): Flow<NoteKey> = flowOf()
+
+    // Permissive par défaut, comme `noteControls` : un faux laisse passer l'appel.
+    override fun observeDisplays(): Flow<DisplayPresentation> = flowOf(DisplayPresentation.NeedsPermission)
+    override fun displayAccessAvailability(): CapabilityPresentation = CapabilityPresentation(enabled = true)
+    override suspend fun requestDisplayAccess(): DisplayPresentation = DisplayPresentation.NeedsPermission
 }
