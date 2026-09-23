@@ -10,6 +10,7 @@ import org.graphiks.kadre.input.KeyboardModifiers
 import org.graphiks.kadre.input.ModifierKey
 import org.graphiks.kadre.input.PointerButton
 import org.graphiks.kadre.input.PointerKind
+import org.graphiks.kadre.input.KadrePermission
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
@@ -51,14 +52,33 @@ class InputPresentationTest {
     }
 
     @Test
-    fun `partially supported gestures name the supported kinds`() {
+    fun `partially supported gestures name the supported kinds in plain language`() {
         val feature = inputFeatures(
             capabilities(gestures = Capability.Supported(setOf(GestureKind.Pan, GestureKind.Pinch), available())),
         ).single { it.label == "Gestes" }
         assertTrue(feature.presentation.enabled)
+        val motif = feature.presentation.motif!!
         assertTrue(
-            feature.presentation.motif!!.contains("Pan") && feature.presentation.motif.contains("Pinch"),
-            "les gestes supportés doivent être nommés : ${feature.presentation.motif}",
+            motif.contains("glissement") && motif.contains("pincement"),
+            "les gestes supportés doivent être nommés en français : $motif",
+        )
+        assertTrue(!motif.contains("Pan") && !motif.contains("Pinch"), "aucun nom d'énumération à l'écran : $motif")
+    }
+
+    @Test
+    fun `an enabled gesture capability never loses its reason when it carries one`() {
+        val feature = inputFeatures(
+            capabilities(
+                gestures = Capability.Supported(
+                    setOf(GestureKind.Pan),
+                    FeatureAvailability.RequiresPermission(KadrePermission.InputMonitoring),
+                ),
+            ),
+        ).single { it.label == "Gestes" }
+        assertTrue(!feature.presentation.enabled)
+        assertTrue(
+            feature.presentation.motif!!.contains("permission"),
+            "la raison d'indisponibilité ne doit pas être écrasée par la liste des gestes : ${feature.presentation.motif}",
         )
     }
 

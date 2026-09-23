@@ -76,7 +76,7 @@ internal fun DeskTourApp(
                         NavigationBarItem(
                             selected = state.route == TourRoute.Interactions,
                             onClick = { onSelectRoute(TourRoute.Interactions) },
-                            icon = { Text("Entrées") },
+                            icon = { Text("Interactions") },
                         )
                     }
                 },

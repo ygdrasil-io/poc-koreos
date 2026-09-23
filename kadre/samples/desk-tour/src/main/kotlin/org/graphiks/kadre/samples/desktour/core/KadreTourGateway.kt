@@ -3,15 +3,16 @@ package org.graphiks.kadre.samples.desktour.core
 import java.util.concurrent.atomic.AtomicLong
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
-import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.filterIsInstance
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import org.graphiks.kadre.application.KadreScope
 import org.graphiks.kadre.diagnostics.Capability
+import org.graphiks.kadre.diagnostics.FeatureAvailability
 import org.graphiks.kadre.diagnostics.KadreResult
 import org.graphiks.kadre.display.DisplayInventory
 import org.graphiks.kadre.surface.HostSurface
@@ -151,13 +152,18 @@ internal class KadreTourGateway(private val scope: KadreScope) : TourGateway {
         }
 
     override fun observeInput(surface: HostSurface): Flow<InputPresentation> {
-        val lastEvent = MutableStateFlow<String?>(null)
-        scope.launch {
-            surface.input.events.collect { lastEvent.value = renderEventSummary(describeInputEvent(it)) }
+        // Flux froid : aucun collecteur n'est lancé tant que personne ne collecte. Appeler
+        // cette fonction ne consomme donc pas de bail de collecteur chez le host, et rien ne
+        // survit à l'annulation du collecteur.
+        val events = flow<String?> {
+            emit(null)
+            surface.input.events.collect { emit(renderEventSummary(describeInputEvent(it))) }
         }
-        return combine(surface.input.state, lastEvent) { state, event ->
+        return combine(surface.input.state, events) { state, event ->
+            val keyboardPublished = state.capabilities.keyboard is FeatureAvailability.Available
             InputPresentation(
-                modifiers = modifierLabels(state.modifiers),
+                // Un compteur n'affirme que ce que le host a publié (spec §4.4, §8.4).
+                modifiers = if (keyboardPublished) modifierLabels(state.modifiers) else null,
                 pointers = pointerSummaries(
                     state.pointers.map { pointer ->
                         PointerSnapshot(
@@ -168,7 +174,7 @@ internal class KadreTourGateway(private val scope: KadreScope) : TourGateway {
                         )
                     },
                 ),
-                pressedKeyCount = state.keyboard.pressedKeys.size,
+                pressedKeyCount = if (keyboardPublished) state.keyboard.pressedKeys.size else null,
                 lastEvent = event,
                 features = inputFeatures(state.capabilities),
             )

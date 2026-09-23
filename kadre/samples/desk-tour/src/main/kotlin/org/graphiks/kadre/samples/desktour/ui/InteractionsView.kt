@@ -6,16 +6,22 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
+import kotlin.math.roundToInt
 import org.graphiks.kadre.samples.desktour.core.InputFeature
 import org.graphiks.kadre.samples.desktour.core.InputPresentation
 
 internal object InteractionsViewLabels {
+    private const val NOT_PUBLISHED = "non publié par le host"
+
     fun observed(presentation: InputPresentation?): String? = when (presentation) {
         null -> "Aucune entrée n'a encore été observée."
         else -> buildString {
+            val modifiers = presentation.modifiers
             append("Modificateurs : ")
-            append(presentation.modifiers.joinToString().ifEmpty { "aucun" })
-            append("\nTouches enfoncées : ${presentation.pressedKeyCount}")
+            append(if (modifiers == null) NOT_PUBLISHED else modifiers.joinToString().ifEmpty { "aucun" })
+            append("\nTouches enfoncées : ")
+            append(presentation.pressedKeyCount?.toString() ?: NOT_PUBLISHED)
             append("\nPointeurs : ${presentation.pointers.size}")
             append("\nDernier événement : ${presentation.lastEvent ?: "aucun"}")
         }
@@ -24,23 +30,29 @@ internal object InteractionsViewLabels {
     /** Une capacité absente porte son motif ; une capacité disponible n'a rien à expliquer. */
     fun featureDetail(feature: InputFeature): String? =
         if (feature.presentation.enabled) null else feature.presentation.motif
+
+    /** L'origine des coordonnées change d'un host à l'autre : on la nomme au lieu de la supposer. */
+    fun pointerOrigin(): String = "Coordonnées du host, dans l'origine qu'il rapporte."
+
+    /** Pixels logiques entiers : « 700.0 » suggère une précision que le host ne rapporte pas. */
+    fun pointerPosition(x: Double?, y: Double?): String = if (x == null || y == null) {
+        "position inconnue"
+    } else {
+        "${x.roundToInt()} × ${y.roundToInt()}"
+    }
 }
 
 @Composable
 internal fun InteractionsView(presentation: InputPresentation?, modifier: Modifier = Modifier) {
     Column(modifier) {
-        Text("Entrées observées")
+        Text("Interactions")
         InteractionsViewLabels.observed(presentation)?.let { Text(it) }
         if (presentation != null && presentation.pointers.isNotEmpty()) {
+            Text(InteractionsViewLabels.pointerOrigin())
             LazyColumn {
                 items(presentation.pointers) { pointer ->
-                    val position = if (pointer.x == null || pointer.y == null) {
-                        "position inconnue"
-                    } else {
-                        "${pointer.x} × ${pointer.y}"
-                    }
                     val buttons = if (pointer.buttons.isEmpty()) "" else " · ${pointer.buttons.joinToString()}"
-                    Text("${pointer.kind} — $position$buttons")
+                    Text("${pointer.kind} — ${InteractionsViewLabels.pointerPosition(pointer.x, pointer.y)}$buttons")
                 }
             }
         }
