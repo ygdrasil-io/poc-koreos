@@ -14,6 +14,7 @@ internal data class DeskTourWindow(
 internal data class DeskTourState(
     val route: TourRoute = TourRoute.Activity,
     val windows: List<DeskTourWindow> = emptyList(),
+    val notes: List<DeskTourNote> = emptyList(),
     val activity: List<ActivityEntry> = emptyList(),
     val apiDetailsOpen: Boolean = false,
     val createNote: CapabilityPresentation = CapabilityPresentation(enabled = true),
