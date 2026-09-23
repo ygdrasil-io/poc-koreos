@@ -59,6 +59,7 @@ public fun main() {
             val gateway = KadreTourGateway(this)
             val dispatcher = ActionDispatcher(store, gateway)
             store.publishCreateNoteAvailability(gateway.createNoteAvailability())
+            store.publishDisplayAccessAvailability(gateway.displayAccessAvailability())
             val uiState = store.state
             val bridgeContent: @Composable () -> Unit = {
                 val state by uiState.collectAsState()
@@ -100,6 +101,11 @@ public fun main() {
                 }
                 collectors += launch(start = CoroutineStart.UNDISPATCHED) {
                     gateway.observeWindow(window).collect { store.publishWindows(listOf(it)) }
+                }
+                // L'inventaire des écrans est reconstruit à chaque émission : un écran
+                // déconnecté, ou une permission révoquée, disparaît sans code de purge.
+                collectors += launch(start = CoroutineStart.UNDISPATCHED) {
+                    gateway.observeDisplays().collect { store.publishDisplays(it) }
                 }
                 // Chaque note reçoit sa propre scène Compose, montée une seule fois. L'hôte
                 // observe le store plutôt que de s'accrocher à l'ouverture : c'est le seul

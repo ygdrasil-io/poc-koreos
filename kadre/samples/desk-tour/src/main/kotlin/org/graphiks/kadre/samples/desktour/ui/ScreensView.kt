@@ -53,7 +53,8 @@ internal fun ScreensView(
             }
         }
         val offerAccess = inventory is DisplayPresentation.NeedsPermission ||
-            (inventory is DisplayPresentation.Denied && inventory.canRequestAgain)
+            (inventory is DisplayPresentation.Denied && inventory.canRequestAgain) ||
+            (inventory is DisplayPresentation.Unavailable && inventory.retryable)
         if (offerAccess) {
             Button(onClick = onRequestAccess, enabled = canRequestAccess) {
                 Text("Autoriser l'accès aux écrans")

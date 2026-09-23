@@ -29,5 +29,13 @@ class DisplayObservationTest {
         val translated = displayPresentationFor(KadreFailure.TemporarilyUnavailable(retryable = true))
         assertTrue(translated is DisplayPresentation.Unavailable)
         assertTrue(translated.motif.contains("réessayable"))
+        assertTrue(translated.retryable, "un échec réessayable doit offrir le réessai")
+    }
+
+    @Test
+    fun `a definitive failure is not offered for retry`() {
+        val translated = displayPresentationFor(KadreFailure.PermissionDenied(KadrePermission.DisplayEnumeration))
+        assertTrue(translated is DisplayPresentation.Unavailable)
+        assertTrue(!translated.retryable, "un refus définitif ne doit pas proposer de réessai")
     }
 }

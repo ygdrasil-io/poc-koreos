@@ -25,7 +25,7 @@ internal sealed interface DisplayPresentation {
     data class Enumerated(val entries: List<ScreenEntry>) : DisplayPresentation
     data object NeedsPermission : DisplayPresentation
     data class Denied(val canRequestAgain: Boolean) : DisplayPresentation
-    data class Unavailable(val motif: String) : DisplayPresentation
+    data class Unavailable(val motif: String, val retryable: Boolean = false) : DisplayPresentation
 }
 
 internal fun screenEntryOf(
@@ -48,4 +48,9 @@ internal fun screenEntryOf(
 )
 
 internal fun displayPresentationFor(failure: KadreFailure): DisplayPresentation =
-    DisplayPresentation.Unavailable(failure.userMotif())
+    DisplayPresentation.Unavailable(
+        motif = failure.userMotif(),
+        // Un échec temporaire est réessayable : l'interface doit donc proposer le réessai,
+        // sans quoi elle cache une action possible.
+        retryable = failure is KadreFailure.TemporarilyUnavailable && failure.retryable,
+    )
