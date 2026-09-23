@@ -129,7 +129,7 @@ internal fun DeskTourApp(
                         TourRoute.Screens ->
                             ScreensView(
                                 inventory = state.displays,
-                                canRequestAccess = state.displayAccess.enabled,
+                                canRequestAccess = state.displayAccess.requestable,
                                 accessMotif = state.displayAccess.motif,
                                 onRequestAccess = onRequestDisplayAccess,
                                 modifier = Modifier.weight(1f),

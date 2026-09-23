@@ -20,5 +20,5 @@ internal data class DeskTourState(
     val createNote: CapabilityPresentation = CapabilityPresentation(enabled = true),
     /** Nul tant qu'aucun inventaire n'a été observé : ce n'est pas un inventaire vide. */
     val displays: DisplayPresentation? = null,
-    val displayAccess: CapabilityPresentation = CapabilityPresentation(enabled = true),
+    val displayAccess: CapabilityPresentation = CapabilityPresentation(enabled = true, requestable = true),
 )

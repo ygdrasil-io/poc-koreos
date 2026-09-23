@@ -13,7 +13,7 @@ class DisplayAccessIntentTest {
     ) : TestTourGateway() {
         var accessRequested = false
         override fun displayAccessAvailability(): CapabilityPresentation =
-            CapabilityPresentation(canRequestAccess, "Non pris en charge par le host courant.")
+            CapabilityPresentation(canRequestAccess, "Non pris en charge par le host courant.", requestable = canRequestAccess)
         override suspend fun requestDisplayAccess(): DisplayPresentation {
             accessRequested = true
             return accessResult

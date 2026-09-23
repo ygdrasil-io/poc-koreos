@@ -4,7 +4,6 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
-
 class DisplayPresentationTest {
     @Test
     fun `an enumerated inventory lists its screens`() {
@@ -44,8 +43,24 @@ class DisplayPresentationTest {
     }
 
     @Test
-    fun `a denial that cannot be retried says so`() {
-        assertEquals(false, DisplayPresentation.Denied(canRequestAgain = false).canRequestAgain)
-        assertEquals(true, DisplayPresentation.Denied(canRequestAgain = true).canRequestAgain)
+    fun `only the states that can be resolved offer the access action`() {
+        assertTrue(DisplayPresentation.NeedsPermission.offersAccess())
+        assertTrue(DisplayPresentation.Denied(canRequestAgain = true).offersAccess())
+        assertTrue(!DisplayPresentation.Denied(canRequestAgain = false).offersAccess(), "un refus définitif n'offre rien")
+        assertTrue(DisplayPresentation.Unavailable("motif", retryable = true).offersAccess())
+        assertTrue(!DisplayPresentation.Unavailable("motif", retryable = false).offersAccess())
+        assertTrue(!DisplayPresentation.Enumerated(emptyList()).offersAccess(), "un inventaire n'a rien à demander")
+    }
+
+    @Test
+    fun `a fractional refresh rate is not rounded into an invented value`() {
+        val entry = screenEntryOf("Écran", 3008, 1692, 2.0, DisplayModeLabel(3008, 1692, 59.94), isPrimary = false)
+        assertEquals("3008 × 1692 @ 59.94 Hz", entry.modeLabel)
+    }
+
+    @Test
+    fun `a disconnected screen keeps its connection state`() {
+        val entry = screenEntryOf("Écran", 800, 600, 1.0, null, isPrimary = false, connected = false)
+        assertTrue(!entry.connected)
     }
 }

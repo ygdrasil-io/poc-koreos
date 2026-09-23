@@ -1,6 +1,7 @@
 package org.graphiks.kadre.samples.desktour.core
 
 import org.graphiks.kadre.diagnostics.KadreFailure
+import org.graphiks.kadre.diagnostics.KadreOperation
 import org.graphiks.kadre.diagnostics.KadrePlatform
 import org.graphiks.kadre.diagnostics.message
 import org.graphiks.kadre.input.KadrePermission
@@ -10,10 +11,10 @@ import kotlin.test.assertTrue
 
 class DisplayObservationTest {
     @Test
-    fun `a permission denial becomes an unavailable inventory with a user motif`() {
+    fun `a permission denial becomes its own denial state and keeps a retry`() {
         val translated = displayPresentationFor(KadreFailure.PermissionDenied(KadrePermission.DisplayEnumeration))
-        assertTrue(translated is DisplayPresentation.Unavailable)
-        assertTrue(translated.motif.isNotBlank())
+        assertTrue(translated is DisplayPresentation.Denied, "un refus a son propre état, pas celui d'une panne")
+        assertTrue(translated.canRequestAgain)
     }
 
     @Test
@@ -34,7 +35,7 @@ class DisplayObservationTest {
 
     @Test
     fun `a definitive failure is not offered for retry`() {
-        val translated = displayPresentationFor(KadreFailure.PermissionDenied(KadrePermission.DisplayEnumeration))
+        val translated = displayPresentationFor(KadreFailure.Unsupported(KadreOperation.DisplayAccess))
         assertTrue(translated is DisplayPresentation.Unavailable)
         assertTrue(!translated.retryable, "un refus définitif ne doit pas proposer de réessai")
     }

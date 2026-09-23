@@ -27,6 +27,7 @@ internal open class TestTourGateway : TourGateway {
 
     // Permissive par défaut, comme `noteControls` : un faux laisse passer l'appel.
     override fun observeDisplays(): Flow<DisplayPresentation> = flowOf(DisplayPresentation.NeedsPermission)
-    override fun displayAccessAvailability(): CapabilityPresentation = CapabilityPresentation(enabled = true)
+    override fun displayAccessAvailability(): CapabilityPresentation =
+        CapabilityPresentation(enabled = true, requestable = true)
     override suspend fun requestDisplayAccess(): DisplayPresentation = DisplayPresentation.NeedsPermission
 }
