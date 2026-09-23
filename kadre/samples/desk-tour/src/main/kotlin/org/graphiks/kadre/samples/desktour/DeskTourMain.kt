@@ -107,6 +107,10 @@ public fun main() {
                 collectors += launch(start = CoroutineStart.UNDISPATCHED) {
                     gateway.observeDisplays().collect { store.publishDisplays(it) }
                 }
+                // L'entrée observée : la démo la montre, elle ne la synthétise jamais (§6).
+                collectors += launch(start = CoroutineStart.UNDISPATCHED) {
+                    gateway.observeInput(window.surface).collect { store.publishInput(it) }
+                }
                 // Chaque note reçoit sa propre scène Compose, montée une seule fois. L'hôte
                 // observe le store plutôt que de s'accrocher à l'ouverture : c'est le seul
                 // endroit qui connaît Compose, `core` reste renderer-agnostique.
