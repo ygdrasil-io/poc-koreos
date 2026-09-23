@@ -14,10 +14,9 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import kotlinx.coroutines.launch
 import org.graphiks.kadre.samples.desktour.core.DeskTourState
 import org.graphiks.kadre.samples.desktour.core.TourRoute
 
@@ -29,11 +28,17 @@ internal fun DeskTourApp(
     onToggleApiDetails: () -> Unit,
 ) {
     val drawerState = rememberDrawerState(DrawerValue.Closed)
-    val scope = rememberCoroutineScope()
+    // The store holds the only truth (spec §5 : pas de source de vérité concurrente).
+    // Material's drawer state follows it, and a scrim dismissal flows back into the store.
+    LaunchedEffect(state.apiDetailsOpen) {
+        if (state.apiDetailsOpen) drawerState.open() else drawerState.close()
+    }
+    LaunchedEffect(drawerState.isOpen) {
+        if (!drawerState.isOpen && state.apiDetailsOpen) onToggleApiDetails()
+    }
     MaterialTheme {
         ModalNavigationDrawer(
             drawerState = drawerState,
-            gesturesEnabled = drawerState.isOpen,
             drawerContent = {
                 ApiDetailsDrawer(open = state.apiDetailsOpen, entries = state.activity)
             },
@@ -59,18 +64,21 @@ internal fun DeskTourApp(
                     when (state.route) {
                         TourRoute.Desk -> {
                             Text("Espace de travail")
-                            Button(onClick = onCreateNote) { Text("Créer une note flottante") }
+                            Button(onClick = onCreateNote, enabled = state.createNote.enabled) {
+                                Text("Créer une note flottante")
+                            }
+                            if (!state.createNote.enabled) {
+                                state.createNote.motif?.let { Text(it) }
+                            }
                             state.windows.forEach { window ->
                                 Text("${window.title} — ${window.logicalWidth} × ${window.logicalHeight}")
                                 Text("Focus : ${window.focusLabel}")
                             }
                         }
-                        TourRoute.Activity -> ActivityView(entries = state.activity)
+                        TourRoute.Activity ->
+                            ActivityView(entries = state.activity, modifier = Modifier.weight(1f))
                     }
-                    Button(onClick = {
-                        onToggleApiDetails()
-                        scope.launch { if (drawerState.isClosed) drawerState.open() else drawerState.close() }
-                    }) { Text("Détails API") }
+                    Button(onClick = onToggleApiDetails) { Text("Détails API") }
                 }
             }
         }

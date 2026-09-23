@@ -41,5 +41,8 @@ internal class TourStore {
 
     fun publishWindows(windows: List<DeskTourWindow>) = mutableState.update { it.copy(windows = windows) }
 
+    fun publishCreateNoteAvailability(availability: CapabilityPresentation) =
+        mutableState.update { it.copy(createNote = availability) }
+
     fun toggleApiDetails() = mutableState.update { it.copy(apiDetailsOpen = !it.apiDetailsOpen) }
 }

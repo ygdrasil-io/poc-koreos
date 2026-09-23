@@ -12,5 +12,6 @@ import org.graphiks.kadre.window.WindowRequest
 internal interface TourGateway {
     fun lifecycleSummary(): Flow<String>
     fun observeWindow(window: Window): Flow<DeskTourWindow>
+    fun createNoteAvailability(): CapabilityPresentation
     suspend fun requestNoteWindow(): KadreResult<WindowRequest>
 }

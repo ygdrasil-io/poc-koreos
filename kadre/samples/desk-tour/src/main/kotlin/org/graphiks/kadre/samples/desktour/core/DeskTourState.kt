@@ -16,4 +16,5 @@ internal data class DeskTourState(
     val windows: List<DeskTourWindow> = emptyList(),
     val activity: List<ActivityEntry> = emptyList(),
     val apiDetailsOpen: Boolean = false,
+    val createNote: CapabilityPresentation = CapabilityPresentation(enabled = true),
 )

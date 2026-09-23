@@ -21,6 +21,8 @@ internal fun ApiDetailsDrawer(open: Boolean, entries: List<ActivityEntry>) {
             Text(key.userAction)
             key.publicSurface.forEach { symbol -> Text("· $symbol") }
         }
-        entries.forEach { entry -> entry.apiDetail?.let { Text("$it — ${entry.status}") } }
+        entries.forEach { entry ->
+            entry.apiDetail?.let { Text("$it — ${entry.status.readableLabel()}") }
+        }
     }
 }

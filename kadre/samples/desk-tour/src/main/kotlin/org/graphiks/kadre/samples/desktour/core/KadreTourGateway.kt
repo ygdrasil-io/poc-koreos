@@ -27,6 +27,9 @@ internal class KadreTourGateway(private val scope: KadreScope) : TourGateway {
             )
         }
 
+    override fun createNoteAvailability(): CapabilityPresentation =
+        present(scope.windows.state.value.capabilities.requestWindow)
+
     override suspend fun requestNoteWindow(): KadreResult<WindowRequest> =
         scope.windows.requestWindow { title = "Notes" }
 }

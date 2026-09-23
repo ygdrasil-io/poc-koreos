@@ -5,16 +5,17 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Modifier
 import org.graphiks.kadre.samples.desktour.core.ActivityEntry
 import org.graphiks.kadre.samples.desktour.core.ActivityStatus
 
 @Composable
-internal fun ActivityView(entries: List<ActivityEntry>) {
+internal fun ActivityView(entries: List<ActivityEntry>, modifier: Modifier = Modifier) {
     if (entries.isEmpty()) {
-        Text("Aucune activité pour le moment.")
+        Text("Aucune activité pour le moment.", modifier = modifier)
         return
     }
-    LazyColumn {
+    LazyColumn(modifier = modifier) {
         items(entries) { entry ->
             Column {
                 Text(entry.label)

@@ -52,6 +52,7 @@ public fun main() {
             val store = TourStore()
             val gateway = KadreTourGateway(this)
             val dispatcher = ActionDispatcher(store, gateway)
+            store.publishCreateNoteAvailability(gateway.createNoteAvailability())
             val uiState = store.state
             val bridgeContent: @Composable () -> Unit = {
                 val state by uiState.collectAsState()

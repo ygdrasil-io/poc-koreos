@@ -21,10 +21,12 @@ import kotlin.test.assertTrue
 class ActionDispatcherTest {
     private class ScriptedGateway(
         private val gate: CompletableDeferred<KadreResult<WindowRequest>> = CompletableDeferred(),
+        private val availability: CapabilityPresentation = CapabilityPresentation(true),
     ) : TourGateway {
         var calls = 0
         override fun lifecycleSummary(): Flow<String> = flowOf("Session")
         override fun observeWindow(window: Window): Flow<DeskTourWindow> = flowOf()
+        override fun createNoteAvailability(): CapabilityPresentation = availability
         override suspend fun requestNoteWindow(): KadreResult<WindowRequest> {
             calls++
             return gate.await()
@@ -58,7 +60,7 @@ class ActionDispatcherTest {
     }
 
     @Test
-    fun `an in-flight action cancelled by session shutdown resolves as cancelled`() = runTest {
+    fun `an in-flight action whose coroutine is cancelled resolves as cancelled`() = runTest {
         val store = TourStore()
         val gateway = ScriptedGateway()
         val dispatcher = ActionDispatcher(store, gateway)
@@ -71,17 +73,19 @@ class ActionDispatcherTest {
     }
 
     @Test
-    fun `two rapid identical intents produce two correlated entries not one silent duplicate`() = runTest {
+    fun `a second intent while one is in flight is ignored and reaches Kadre only once`() = runTest {
         val store = TourStore()
         val gateway = ScriptedGateway()
         val dispatcher = ActionDispatcher(store, gateway)
 
         val first = launch { dispatcher.createNote() }
+        withTimeout(1_000) { while (store.state.value.activity.isEmpty()) delay(1) }
         val second = launch { dispatcher.createNote() }
-        withTimeout(1_000) { while (store.state.value.activity.size < 2) delay(1) }
+        delay(100)
 
-        assertEquals(2, store.state.value.activity.size)
-        assertEquals(2, store.state.value.activity.map { it.correlationId }.toSet().size)
+        assertEquals(1, store.state.value.activity.size, "a double click must not double the journal")
+        assertEquals(1, gateway.calls, "a double click must not open a second Kadre window")
+
         first.cancelAndJoin()
         second.cancelAndJoin()
     }

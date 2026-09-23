@@ -11,7 +11,25 @@ class WindowReductionTest {
     private fun storeWithPending() = TourStore().let { it to it.admit("Créer une note", "WindowManager.requestWindow") }
 
     @Test
-    fun `a rejected request is unavailable and never claims a window was created`() {
+    fun `every outcome other than OpenedHere keeps its own terminal status`() {
+        // OpenedInNewSession is not constructible in the sample (internal SessionId); the
+        // exhaustive `when` in WindowReduction fails to compile if that branch is dropped.
+        val expected = listOf(
+            WindowRequestOutcome.Rejected(KadreFailure.Unsupported(KadreOperation.RequestWindow))
+                to ActivityStatus.Rejected,
+            WindowRequestOutcome.Cancelled to ActivityStatus.Cancelled,
+            WindowRequestOutcome.RequesterDetached to ActivityStatus.Cancelled,
+        )
+
+        expected.forEach { (outcome, status) ->
+            val (store, id) = storeWithPending()
+            store.recordWindowRequestOutcome(id, outcome)
+            assertEquals(status, store.state.value.activity.single().status, "for $outcome")
+        }
+    }
+
+    @Test
+    fun `a rejected request carries a motif and is never reported as succeeded`() {
         val (store, id) = storeWithPending()
 
         store.recordWindowRequestOutcome(
@@ -20,29 +38,8 @@ class WindowReductionTest {
         )
 
         val entry = store.state.value.activity.single()
-        assertEquals(ActivityStatus.Unavailable, entry.status)
         assertTrue(entry.motif!!.isNotBlank())
-    }
-
-    @Test
-    fun `a cancelled request resolves as cancelled`() {
-        val (store, id) = storeWithPending()
-        store.recordWindowRequestOutcome(id, WindowRequestOutcome.Cancelled)
-        assertEquals(ActivityStatus.Cancelled, store.state.value.activity.single().status)
-    }
-
-    @Test
-    fun `a detached requester resolves as cancelled`() {
-        val (store, id) = storeWithPending()
-        store.recordWindowRequestOutcome(id, WindowRequestOutcome.RequesterDetached)
-        assertEquals(ActivityStatus.Cancelled, store.state.value.activity.single().status)
-    }
-
-    @Test
-    fun `every non-OpenedHere outcome is never reported as succeeded`() {
-        val (store, id) = storeWithPending()
-        store.recordWindowRequestOutcome(id, WindowRequestOutcome.Cancelled)
-        assertTrue(store.state.value.activity.single().status != ActivityStatus.Succeeded)
+        assertTrue(entry.status != ActivityStatus.Succeeded)
     }
 
     @Test

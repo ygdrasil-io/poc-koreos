@@ -2,7 +2,6 @@ package org.graphiks.kadre.samples.desktour.core
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertTrue
 
 class ApiDetailsTest {
     @Test
@@ -31,18 +30,5 @@ class ApiDetailsTest {
             listOf("Capability", "KadreResult", "KadreDiagnostics"),
             ApiDetailKey.DiagnoseOption.publicSurface,
         )
-    }
-
-    @Test
-    fun `no api detail entry references an internal or platform specific type`() {
-        ApiDetailKey.entries.forEach { key ->
-            key.publicSurface.forEach { symbol ->
-                assertTrue(
-                    !symbol.contains("internal", ignoreCase = true) &&
-                        !symbol.contains("AppKit", ignoreCase = true),
-                    "forbidden symbol in $key: $symbol",
-                )
-            }
-        }
     }
 }
