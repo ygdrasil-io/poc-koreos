@@ -33,6 +33,7 @@ internal fun DeskTourApp(
     onRenameNote: (NoteKey, String) -> Unit,
     onRequestAttention: (NoteKey) -> Unit,
     onToggleDecorations: (NoteKey) -> Unit,
+    onCloseNote: (NoteKey) -> Unit,
     onSelectRoute: (TourRoute) -> Unit,
     onToggleApiDetails: () -> Unit,
 ) {
@@ -106,6 +107,10 @@ internal fun DeskTourApp(
                                     onClick = { onToggleDecorations(note.key) },
                                     enabled = note.capabilities.canChangeDecorations,
                                 ) { Text("Décoration") }
+                                Button(
+                                    onClick = { onCloseNote(note.key) },
+                                    enabled = note.capabilities.canClose,
+                                ) { Text("Fermer") }
                             }
                             state.windows.forEach { window ->
                                 Text("${window.title} — ${window.logicalWidth} × ${window.logicalHeight}")

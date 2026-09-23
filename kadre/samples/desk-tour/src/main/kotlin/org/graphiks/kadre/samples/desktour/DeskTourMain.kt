@@ -67,6 +67,7 @@ public fun main() {
                     onRenameNote = { key, title -> launch { dispatcher.renameNote(key, title) } },
                     onRequestAttention = { key -> launch { dispatcher.requestNoteAttention(key) } },
                     onToggleDecorations = { key -> launch { dispatcher.toggleNoteDecorations(key) } },
+                    onCloseNote = { key -> launch { dispatcher.closeNote(key) } },
                     onSelectRoute = { store.setRoute(it) },
                     onToggleApiDetails = { store.toggleApiDetails() },
                 )
@@ -110,6 +111,14 @@ public fun main() {
                                 is KadreResult.Failure -> store.publishNote(note.withMountFailure())
                             }
                         }
+                    }
+                }
+                // Fermeture par le bouton rouge du système : la clé n'est publiée qu'après
+                // acceptation, donc la note n'est jamais retirée avant l'outcome.
+                collectors += launch(start = CoroutineStart.UNDISPATCHED) {
+                    gateway.observeNoteCloseRequests().collect { key ->
+                        mounted.remove(key)?.close()
+                        store.removeNote(key)
                     }
                 }
                 when (val redraw = window.surface.requestRedraw()) {

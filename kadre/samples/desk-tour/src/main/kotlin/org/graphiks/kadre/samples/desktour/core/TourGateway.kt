@@ -22,4 +22,8 @@ internal interface TourGateway {
     suspend fun renameNote(key: NoteKey, title: String): NoteUpdateOutcome
     suspend fun requestNoteAttention(key: NoteKey): NoteUpdateOutcome
     suspend fun toggleNoteDecorations(key: NoteKey): NoteUpdateOutcome
+    suspend fun closeNote(key: NoteKey): NoteUpdateOutcome
+
+    /** Les notes dont la fenêtre a demandé à se fermer et dont la fermeture a été acceptée. */
+    fun observeNoteCloseRequests(): Flow<NoteKey>
 }

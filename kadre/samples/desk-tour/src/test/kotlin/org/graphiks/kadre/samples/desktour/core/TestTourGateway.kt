@@ -22,4 +22,6 @@ internal open class TestTourGateway : TourGateway {
     override suspend fun renameNote(key: NoteKey, title: String): NoteUpdateOutcome = NoteUpdateOutcome.Applied
     override suspend fun requestNoteAttention(key: NoteKey): NoteUpdateOutcome = NoteUpdateOutcome.Applied
     override suspend fun toggleNoteDecorations(key: NoteKey): NoteUpdateOutcome = NoteUpdateOutcome.Applied
+    override suspend fun closeNote(key: NoteKey): NoteUpdateOutcome = NoteUpdateOutcome.Applied
+    override fun observeNoteCloseRequests(): Flow<NoteKey> = flowOf()
 }
