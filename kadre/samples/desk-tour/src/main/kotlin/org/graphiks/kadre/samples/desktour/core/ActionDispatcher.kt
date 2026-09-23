@@ -30,4 +30,19 @@ internal class ActionDispatcher(
             noteInFlight.set(false)
         }
     }
+
+    suspend fun renameNote(key: NoteKey, title: String) {
+        if (!gateway.noteControls(key).canRename) return
+        val id = store.admit(ApiDetailKey.ModifyWindow.userAction, "Window.apply")
+        when (val outcome = gateway.renameNote(key, title)) {
+            NoteUpdateOutcome.Applied -> store.resolve(id, ActivityStatus.Succeeded)
+            is NoteUpdateOutcome.PartiallyApplied -> store.resolve(
+                id,
+                ActivityStatus.Succeeded,
+                "Appliqué : ${outcome.applied.joinToString()}. " +
+                    "Refusé : ${outcome.rejected.joinToString { it.fieldLabel }}.",
+            )
+            is NoteUpdateOutcome.Refused -> store.resolve(id, ActivityStatus.Rejected, outcome.motif)
+        }
+    }
 }

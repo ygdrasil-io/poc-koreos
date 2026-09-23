@@ -64,6 +64,7 @@ public fun main() {
                 DeskTourApp(
                     state = state,
                     onCreateNote = { launch { dispatcher.createNote() } },
+                    onRenameNote = { key, title -> launch { dispatcher.renameNote(key, title) } },
                     onSelectRoute = { store.setRoute(it) },
                     onToggleApiDetails = { store.toggleApiDetails() },
                 )

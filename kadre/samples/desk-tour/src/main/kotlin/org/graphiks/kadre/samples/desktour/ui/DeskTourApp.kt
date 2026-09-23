@@ -9,21 +9,28 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import org.graphiks.kadre.samples.desktour.core.DeskTourState
+import org.graphiks.kadre.samples.desktour.core.NoteKey
 import org.graphiks.kadre.samples.desktour.core.TourRoute
 
 @Composable
 internal fun DeskTourApp(
     state: DeskTourState,
     onCreateNote: () -> Unit,
+    onRenameNote: (NoteKey, String) -> Unit,
     onSelectRoute: (TourRoute) -> Unit,
     onToggleApiDetails: () -> Unit,
 ) {
@@ -69,6 +76,26 @@ internal fun DeskTourApp(
                             }
                             if (!state.createNote.enabled) {
                                 state.createNote.motif?.let { Text(it) }
+                            }
+                            state.notes.forEach { note ->
+                                var draft by remember(note.key) { mutableStateOf(note.title) }
+                                Text(note.title.ifBlank { "Note sans titre" })
+                                if (note.mountFailed) {
+                                    Text("Cette note n'a pas pu être affichée ; l'hôte courant a refusé le rendu.")
+                                }
+                                OutlinedTextField(
+                                    value = draft,
+                                    onValueChange = { draft = it },
+                                    enabled = note.capabilities.canRename,
+                                    label = { Text("Titre de la note") },
+                                )
+                                Button(
+                                    onClick = { onRenameNote(note.key, draft) },
+                                    enabled = note.capabilities.canRename,
+                                ) { Text("Renommer") }
+                                if (!note.capabilities.canRename) {
+                                    Text("Le renommage n'est pas pris en charge par cette fenêtre.")
+                                }
                             }
                             state.windows.forEach { window ->
                                 Text("${window.title} — ${window.logicalWidth} × ${window.logicalHeight}")

@@ -8,8 +8,12 @@ import kotlinx.coroutines.flow.map
 import org.graphiks.kadre.application.KadreScope
 import org.graphiks.kadre.diagnostics.Capability
 import org.graphiks.kadre.diagnostics.KadreResult
+import org.graphiks.kadre.surface.PropertyChange
 import org.graphiks.kadre.window.Window
+import org.graphiks.kadre.window.WindowProperty
 import org.graphiks.kadre.window.WindowRequestOutcome
+import org.graphiks.kadre.window.WindowUpdate
+import org.graphiks.kadre.window.WindowUpdateOutcome
 import org.graphiks.kadre.window.requestWindow
 
 internal class KadreTourGateway(private val scope: KadreScope) : TourGateway {
@@ -69,4 +73,22 @@ internal class KadreTourGateway(private val scope: KadreScope) : TourGateway {
             DeskTourNote(key, state.title, noteControls(key))
         }
     } ?: flowOf()
+
+    override suspend fun renameNote(key: NoteKey, title: String): NoteUpdateOutcome {
+        val window = notes[key] ?: return NoteUpdateOutcome.Refused("Cette note n'existe plus.")
+        return when (val result = window.apply(WindowUpdate(title = PropertyChange.Set(title)))) {
+            is KadreResult.Failure -> NoteUpdateOutcome.Refused(result.reason.userMotif())
+            is KadreResult.Success -> when (val outcome = result.value) {
+                is WindowUpdateOutcome.Applied, is WindowUpdateOutcome.Accepted -> NoteUpdateOutcome.Applied
+                is WindowUpdateOutcome.PartiallyApplied -> NoteUpdateOutcome.PartiallyApplied(
+                    applied = WindowProperty.entries
+                        .filterNot { property -> outcome.rejected.any { it.field == property } }
+                        .map { it.readableName() },
+                    rejected = outcome.rejected.map {
+                        RejectedFieldPresentation(it.field.readableName(), it.failure.userMotif())
+                    },
+                )
+            }
+        }
+    }
 }

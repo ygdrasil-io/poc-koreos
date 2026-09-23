@@ -18,4 +18,6 @@ internal interface TourGateway {
     fun noteWindow(key: NoteKey): Window?
     fun noteControls(key: NoteKey): NoteControls
     fun observeNote(key: NoteKey): Flow<DeskTourNote>
+
+    suspend fun renameNote(key: NoteKey, title: String): NoteUpdateOutcome
 }
