@@ -34,6 +34,7 @@ internal fun DeskTourApp(
     onRequestAttention: (NoteKey) -> Unit,
     onToggleDecorations: (NoteKey) -> Unit,
     onCloseNote: (NoteKey) -> Unit,
+    onRequestDisplayAccess: () -> Unit,
     onSelectRoute: (TourRoute) -> Unit,
     onToggleApiDetails: () -> Unit,
 ) {
@@ -66,6 +67,11 @@ internal fun DeskTourApp(
                             selected = state.route == TourRoute.Activity,
                             onClick = { onSelectRoute(TourRoute.Activity) },
                             icon = { Text("Activité") },
+                        )
+                        NavigationBarItem(
+                            selected = state.route == TourRoute.Screens,
+                            onClick = { onSelectRoute(TourRoute.Screens) },
+                            icon = { Text("Écrans") },
                         )
                     }
                 },
@@ -121,7 +127,13 @@ internal fun DeskTourApp(
                         TourRoute.Activity ->
                             ActivityView(entries = state.activity, modifier = Modifier.weight(1f))
                         TourRoute.Screens ->
-                            Text("Les écrans observés apparaîtront ici.")
+                            ScreensView(
+                                inventory = state.displays,
+                                canRequestAccess = state.displayAccess.enabled,
+                                accessMotif = state.displayAccess.motif,
+                                onRequestAccess = onRequestDisplayAccess,
+                                modifier = Modifier.weight(1f),
+                            )
                     }
                     Button(onClick = onToggleApiDetails) { Text("Détails API") }
                 }

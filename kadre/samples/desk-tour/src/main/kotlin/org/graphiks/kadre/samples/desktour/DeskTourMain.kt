@@ -69,6 +69,7 @@ public fun main() {
                     onRequestAttention = { key -> launch { dispatcher.requestNoteAttention(key) } },
                     onToggleDecorations = { key -> launch { dispatcher.toggleNoteDecorations(key) } },
                     onCloseNote = { key -> launch { dispatcher.closeNote(key) } },
+                    onRequestDisplayAccess = { launch { dispatcher.requestDisplayAccess() } },
                     onSelectRoute = { store.setRoute(it) },
                     onToggleApiDetails = { store.toggleApiDetails() },
                 )
