@@ -111,6 +111,12 @@ public fun main() {
                 collectors += launch(start = CoroutineStart.UNDISPATCHED) {
                     gateway.observeInput(window.surface).collect { store.publishInput(it) }
                 }
+                collectors += launch(start = CoroutineStart.UNDISPATCHED) {
+                    gateway.observeDevices().collect { store.publishDevices(it) }
+                }
+                collectors += launch(start = CoroutineStart.UNDISPATCHED) {
+                    gateway.observeCapture().collect { store.publishCapture(it) }
+                }
                 // Chaque note reçoit sa propre scène Compose, montée une seule fois. L'hôte
                 // observe le store plutôt que de s'accrocher à l'ouverture : c'est le seul
                 // endroit qui connaît Compose, `core` reste renderer-agnostique.

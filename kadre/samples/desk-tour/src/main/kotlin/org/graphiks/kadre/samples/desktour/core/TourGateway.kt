@@ -33,4 +33,7 @@ internal interface TourGateway {
     suspend fun requestDisplayAccess(): DisplayPresentation
 
     fun observeInput(surface: HostSurface): Flow<InputPresentation>
+
+    fun observeDevices(): Flow<DevicePresentation>
+    fun observeCapture(): Flow<CapturePresentation>
 }

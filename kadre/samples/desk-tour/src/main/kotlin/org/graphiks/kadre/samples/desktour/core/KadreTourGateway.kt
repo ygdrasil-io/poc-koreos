@@ -15,6 +15,7 @@ import org.graphiks.kadre.diagnostics.Capability
 import org.graphiks.kadre.diagnostics.FeatureAvailability
 import org.graphiks.kadre.diagnostics.KadreResult
 import org.graphiks.kadre.display.DisplayInventory
+import org.graphiks.kadre.input.DeviceConnectionState
 import org.graphiks.kadre.surface.HostSurface
 import org.graphiks.kadre.surface.PropertyChange
 import org.graphiks.kadre.window.Window
@@ -180,6 +181,28 @@ internal class KadreTourGateway(private val scope: KadreScope) : TourGateway {
             )
         }
     }
+
+    override fun observeDevices(): Flow<DevicePresentation> =
+        scope.devices.state.map { state ->
+            devicePresentationOf(state.inventory) { enumerated ->
+                enumerated.devices.map { device ->
+                    deviceEntryOf(
+                        name = device.descriptor.name,
+                        kind = device.descriptor.kind,
+                        connected = device.connection.value == DeviceConnectionState.Connected,
+                    )
+                }
+            }
+        }
+
+    override fun observeCapture(): Flow<CapturePresentation> =
+        scope.capture.state.map { state ->
+            CapturePresentation(
+                screenLabel = permissionLabel(state.permissions.screen),
+                windowLabel = permissionLabel(state.permissions.window),
+                canRequest = present(state.capabilities.screen).requestable,
+            )
+        }
 
     override suspend fun renameNote(key: NoteKey, title: String): NoteUpdateOutcome {
         val window = notes[key] ?: return NoteUpdateOutcome.Refused("Cette note n'existe plus.")

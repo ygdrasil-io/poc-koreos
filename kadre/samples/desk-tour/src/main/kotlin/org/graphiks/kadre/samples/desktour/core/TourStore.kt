@@ -66,5 +66,9 @@ internal class TourStore {
 
     fun publishInput(input: InputPresentation) = mutableState.update { it.copy(input = input) }
 
+    fun publishDevices(devices: DevicePresentation) = mutableState.update { it.copy(devices = devices) }
+
+    fun publishCapture(capture: CapturePresentation) = mutableState.update { it.copy(capture = capture) }
+
     fun toggleApiDetails() = mutableState.update { it.copy(apiDetailsOpen = !it.apiDetailsOpen) }
 }

@@ -1,12 +1,11 @@
 package org.graphiks.kadre.samples.desktour.ui
 
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
 import kotlin.math.roundToInt
 import org.graphiks.kadre.samples.desktour.core.InputFeature
 import org.graphiks.kadre.samples.desktour.core.InputPresentation
@@ -43,27 +42,28 @@ internal object InteractionsViewLabels {
 }
 
 @Composable
-internal fun InteractionsView(presentation: InputPresentation?, modifier: Modifier = Modifier) {
-    Column(modifier) {
+internal fun InteractionsView(
+    presentation: InputPresentation?,
+    modifier: Modifier = Modifier,
+) {
+    // Défilant : les sections du §4.4 ne tiennent pas dans la fenêtre, et une section
+    // inatteignable n'est pas une section.
+    Column(modifier.verticalScroll(rememberScrollState())) {
         Text("Interactions")
         InteractionsViewLabels.observed(presentation)?.let { Text(it) }
         if (presentation != null && presentation.pointers.isNotEmpty()) {
             Text(InteractionsViewLabels.pointerOrigin())
-            LazyColumn {
-                items(presentation.pointers) { pointer ->
-                    val buttons = if (pointer.buttons.isEmpty()) "" else " · ${pointer.buttons.joinToString()}"
-                    Text("${pointer.kind} — ${InteractionsViewLabels.pointerPosition(pointer.x, pointer.y)}$buttons")
-                }
+            presentation.pointers.forEach { pointer ->
+                val buttons = if (pointer.buttons.isEmpty()) "" else " · ${pointer.buttons.joinToString()}"
+                Text("${pointer.kind} — ${InteractionsViewLabels.pointerPosition(pointer.x, pointer.y)}$buttons")
             }
         }
         if (presentation != null) {
             Text("Capacités d'entrée")
             presentation.features.forEach { feature ->
-                Column {
-                    val state = if (feature.presentation.enabled) "disponible" else "indisponible"
-                    Text("${feature.label} — $state")
-                    InteractionsViewLabels.featureDetail(feature)?.let { Text(it) }
-                }
+                val state = if (feature.presentation.enabled) "disponible" else "indisponible"
+                Text("${feature.label} — $state")
+                InteractionsViewLabels.featureDetail(feature)?.let { Text(it) }
             }
         }
     }

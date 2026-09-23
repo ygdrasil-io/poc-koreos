@@ -78,6 +78,11 @@ internal fun DeskTourApp(
                             onClick = { onSelectRoute(TourRoute.Interactions) },
                             icon = { Text("Interactions") },
                         )
+                        NavigationBarItem(
+                            selected = state.route == TourRoute.Devices,
+                            onClick = { onSelectRoute(TourRoute.Devices) },
+                            icon = { Text("Périphériques") },
+                        )
                     }
                 },
             ) { padding ->
@@ -141,6 +146,12 @@ internal fun DeskTourApp(
                             )
                         TourRoute.Interactions ->
                             InteractionsView(presentation = state.input, modifier = Modifier.weight(1f))
+                        TourRoute.Devices ->
+                            DevicesView(
+                                devices = state.devices,
+                                capture = state.capture,
+                                modifier = Modifier.weight(1f),
+                            )
                     }
                     Button(onClick = onToggleApiDetails) { Text("Détails API") }
                 }

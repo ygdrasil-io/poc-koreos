@@ -33,4 +33,8 @@ internal open class TestTourGateway : TourGateway {
     override suspend fun requestDisplayAccess(): DisplayPresentation = DisplayPresentation.NeedsPermission
 
     override fun observeInput(surface: HostSurface): Flow<InputPresentation> = flowOf()
+
+    override fun observeDevices(): Flow<DevicePresentation> = flowOf(DevicePresentation.Unsupported)
+    override fun observeCapture(): Flow<CapturePresentation> =
+        flowOf(CapturePresentation("pas encore demandée", "pas encore demandée", canRequest = true))
 }
