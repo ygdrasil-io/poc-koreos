@@ -1,5 +1,6 @@
 package org.graphiks.kadre.samples.desktour.ui
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -13,7 +14,8 @@ import org.graphiks.kadre.samples.desktour.core.DeskTourNote
 @Composable
 internal fun NoteContent(note: DeskTourNote) {
     MaterialTheme {
-        Column(Modifier.fillMaxSize().padding(16.dp)) {
+        // Sans fond explicite, le calque Metal de la fenêtre reste apparent.
+        Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).padding(16.dp)) {
             Text(note.title.ifBlank { "Note sans titre" })
             if (note.mountFailed) {
                 Text("Cette note n'a pas pu être affichée ; l'hôte courant a refusé le rendu.")
