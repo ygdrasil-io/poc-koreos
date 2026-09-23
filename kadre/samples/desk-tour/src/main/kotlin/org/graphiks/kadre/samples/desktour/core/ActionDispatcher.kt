@@ -3,7 +3,6 @@ package org.graphiks.kadre.samples.desktour.core
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.withContext
-import org.graphiks.kadre.diagnostics.KadreResult
 import java.util.concurrent.atomic.AtomicBoolean
 
 internal class ActionDispatcher(
@@ -21,12 +20,8 @@ internal class ActionDispatcher(
         try {
             val id = store.admit(ApiDetailKey.CreateFloatingNote.userAction, "WindowManager.requestWindow")
             try {
-                val result = gateway.requestNoteWindow()
-                when (result) {
-                    is KadreResult.Success -> store.recordWindowRequestOutcome(id, result.value.await())
-                    is KadreResult.Failure ->
-                        store.resolve(id, ActivityStatus.Unavailable, motif = result.reason.userMotif())
-                }
+                val (status, motif) = reduceNoteOutcome(gateway.openNote())
+                store.resolve(id, status, motif)
             } catch (cancellation: CancellationException) {
                 withContext(NonCancellable) { store.resolve(id, ActivityStatus.Cancelled) }
                 throw cancellation

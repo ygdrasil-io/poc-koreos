@@ -4,30 +4,21 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withTimeout
-import org.graphiks.kadre.diagnostics.KadreFailure
-import org.graphiks.kadre.diagnostics.KadreOperation
-import org.graphiks.kadre.diagnostics.KadreResult
-import org.graphiks.kadre.window.Window
-import org.graphiks.kadre.window.WindowRequest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 class ActionDispatcherTest {
     private class ScriptedGateway(
-        private val gate: CompletableDeferred<KadreResult<WindowRequest>> = CompletableDeferred(),
-        private val availability: CapabilityPresentation = CapabilityPresentation(true),
-    ) : TourGateway {
+        private val gate: CompletableDeferred<NoteOpenOutcome> = CompletableDeferred(),
+        private val availability: CapabilityPresentation = CapabilityPresentation(enabled = true),
+    ) : TestTourGateway() {
         var calls = 0
-        override fun lifecycleSummary(): Flow<String> = flowOf("Session")
-        override fun observeWindow(window: Window): Flow<DeskTourWindow> = flowOf()
         override fun createNoteAvailability(): CapabilityPresentation = availability
-        override suspend fun requestNoteWindow(): KadreResult<WindowRequest> {
+        override suspend fun openNote(): NoteOpenOutcome {
             calls++
             return gate.await()
         }
@@ -47,16 +38,24 @@ class ActionDispatcherTest {
     }
 
     @Test
-    fun `an unsupported request leaves the journal unavailable and never succeeded`() = runTest {
+    fun `a refused open leaves the journal rejected and never succeeded`() = runTest {
         val store = TourStore()
-        val gateway = ScriptedGateway(
-            CompletableDeferred(KadreResult.Failure(KadreFailure.Unsupported(KadreOperation.RequestWindow))),
-        )
+        val gateway = ScriptedGateway(CompletableDeferred(NoteOpenOutcome.Refused("Non pris en charge par le host courant.")))
         ActionDispatcher(store, gateway).createNote()
 
         val entry = store.state.value.activity.single()
-        assertEquals(ActivityStatus.Unavailable, entry.status)
+        assertEquals(ActivityStatus.Rejected, entry.status)
         assertTrue(entry.motif!!.isNotBlank())
+    }
+
+    @Test
+    fun `an opened note is journaled as succeeded`() = runTest {
+        val store = TourStore()
+        val gateway = ScriptedGateway(CompletableDeferred(NoteOpenOutcome.Opened(NoteKey(1L))))
+        ActionDispatcher(store, gateway).createNote()
+
+        assertEquals(ActivityStatus.Succeeded, store.state.value.activity.single().status)
+        assertEquals(null, store.state.value.activity.single().motif)
     }
 
     @Test
