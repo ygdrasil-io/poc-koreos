@@ -36,8 +36,8 @@ internal fun DevicesView(
         when (capture) {
             null -> Text("L'état d'accès à la capture n'a pas encore été observé.")
             else -> {
-                Text("Écran : ${capture.screenLabel}")
-                Text("Fenêtre : ${capture.windowLabel}")
+                Text("Permission d'écran : ${capture.screenLabel}")
+                Text("Permission de fenêtre : ${capture.windowLabel}")
                 if (capture.canRequest) Text("Une demande d'accès est possible depuis l'application.")
             }
         }
