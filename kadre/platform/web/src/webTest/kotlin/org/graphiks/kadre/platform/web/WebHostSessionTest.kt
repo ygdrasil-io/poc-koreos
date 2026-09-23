@@ -296,6 +296,32 @@ class WebHostSessionTest {
     }
 
     @Test
+    fun metricsInstallationFailureIsReportedAndDoesNotLeakTheReservation() = runTest {
+        val registry = WebHostRegistry()
+        val identity = Any()
+        val failingPort = RecordingPort(
+            stableIdentity = identity,
+            initialLifecycleSnapshot = snapshot(),
+            metricsInstallationFailure = IllegalStateException("metrics"),
+        )
+
+        assertEquals(
+            KadreResult.Failure(
+                KadreFailure.PlatformFailure(KadrePlatform.Web, "web-host", "metrics-install-failed"),
+            ),
+            WebHostSession(failingPort, registry).attach(this, factory(), KadrePolicies.Default),
+        )
+        assertEquals(1, failingPort.releases)
+
+        successful(WebHostSession(RecordingPort(identity, snapshot()), registry).attach(
+            this,
+            factory(),
+            KadrePolicies.Default,
+        )).requestStop()
+        testScheduler.runCurrent()
+    }
+
+    @Test
     fun manualDisconnectedSessionPublishesAttachedBackgroundInactiveLifecycle() = runTest {
         val scopeReady = CompletableDeferred<KadreScope>()
         val port = RecordingPort(Any(), snapshot(connected = false))
@@ -349,13 +375,12 @@ class WebHostSessionTest {
         override val stableIdentity: Any,
         override val initialLifecycleSnapshot: WebLifecycleSnapshot,
         private val lifecycleInstallationFailure: Throwable? = null,
+        private val metricsInstallationFailure: Throwable? = null,
         private val cleanupFailure: Throwable? = null,
     ) : WebHostPort {
-        override val initialSnapshot: WebSurfaceSnapshot = WebSurfaceSnapshot(
+        override val initialSnapshot: WebSurfaceMetrics = WebSurfaceMetrics(
             logicalWidth = 1.0,
             logicalHeight = 1.0,
-            physicalWidth = 1,
-            physicalHeight = 1,
             scaleFactor = 1.0,
         )
 
@@ -369,6 +394,10 @@ class WebHostSessionTest {
             listenerInstallations += 1
             lifecycleObserver = observer
             lifecycleInstallationFailure?.let { throw it }
+        }
+
+        override fun installMetricsObserver(observer: (WebSurfaceMetrics) -> Unit) {
+            metricsInstallationFailure?.let { throw it }
         }
 
         override fun release() {

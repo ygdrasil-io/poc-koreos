@@ -3,10 +3,13 @@ package org.graphiks.kadre.platform.web
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.emptyFlow
+import org.graphiks.kadre.application.EventStamp
 import org.graphiks.kadre.application.KadreApplicationFactory
 import org.graphiks.kadre.application.KadreSession
 import org.graphiks.kadre.application.LifecycleState
@@ -27,19 +30,20 @@ import org.graphiks.kadre.input.SurfaceInput
 import org.graphiks.kadre.input.SurfaceInputState
 import org.graphiks.kadre.input.TextInputConfig
 import org.graphiks.kadre.input.TextInputSession
+import org.graphiks.kadre.internal.runtime.RuntimeFailureReporter
 import org.graphiks.kadre.internal.runtime.RuntimeHostController
 import org.graphiks.kadre.internal.runtime.RuntimePrimarySurface
+import org.graphiks.kadre.internal.runtime.RuntimePrimarySurfaceConfiguration
 import org.graphiks.kadre.internal.runtime.RuntimeSessionRevocationHandler
 import org.graphiks.kadre.internal.runtime.RuntimeSessionObserver
 import org.graphiks.kadre.policy.KadrePolicy
+import org.graphiks.kadre.policy.WindowDeliveryPolicy
 import org.graphiks.kadre.surface.CursorIcon
 import org.graphiks.kadre.surface.CursorStyle
 import org.graphiks.kadre.surface.HostSurface
 import org.graphiks.kadre.surface.HitTestingMode
 import org.graphiks.kadre.surface.InputDefaultBehavior
 import org.graphiks.kadre.surface.LogicalInsets
-import org.graphiks.kadre.surface.LogicalSize
-import org.graphiks.kadre.surface.PhysicalSize
 import org.graphiks.kadre.surface.PointerCaptureMode
 import org.graphiks.kadre.surface.SurfaceAttachmentState
 import org.graphiks.kadre.surface.SurfaceAppearance
@@ -56,16 +60,8 @@ import org.graphiks.kadre.surface.SurfaceUpdate
 import org.graphiks.kadre.surface.SurfaceUpdateOutcome
 import org.graphiks.kadre.surface.SurfaceVisibility
 
-internal data class WebSurfaceSnapshot(
-    val logicalWidth: Double,
-    val logicalHeight: Double,
-    val physicalWidth: Int,
-    val physicalHeight: Int,
-    val scaleFactor: Double,
-)
-
 internal interface WebHostPort {
-    val initialSnapshot: WebSurfaceSnapshot
+    val initialSnapshot: WebSurfaceMetrics
 
     /**
      * Stable target-owned identity used for admission.  Target ports override this with their
@@ -89,12 +85,21 @@ internal interface WebHostPort {
      */
     fun installLifecycleObserver(observer: (WebLifecycleSnapshot) -> Unit) = Unit
 
+    /**
+     * Installs target-owned size and scale observation after ownership has been reserved.
+     *
+     * Implementations deliver at least one snapshot and may deliver duplicates; the surface
+     * deduplicates. [release] removes this observer with every other target resource.
+     */
+    fun installMetricsObserver(observer: (WebSurfaceMetrics) -> Unit) = Unit
+
     fun release()
 }
 
 internal class WebHostSession(
     private val port: WebHostPort,
     private val registry: WebHostRegistry = WebHostRegistry.shared,
+    private val failureReporter: RuntimeFailureReporter = RuntimeFailureReporter { },
 ) {
     fun attach(
         parentScope: CoroutineScope,
@@ -116,7 +121,8 @@ internal class WebHostSession(
             is KadreResult.Failure -> return result
         }
         val ownership = WebHostOwnership(port, reservation)
-        val controller = createController(initialLifecycle, ownership)
+        var surface: WebHostSurface? = null
+        val controller = createController(initialLifecycle, ownership) { created -> surface = created }
         val installed = runCatching {
             port.installLifecycleObserver { snapshot ->
                 when (val reduction = reducer.reduce(snapshot)) {
@@ -133,6 +139,15 @@ internal class WebHostSession(
                 KadreFailure.PlatformFailure(KadrePlatform.Web, "web-host", "lifecycle-install-failed"),
             )
         }
+        val metricsInstalled = runCatching {
+            port.installMetricsObserver { metrics -> surface?.applyMetrics(metrics) }
+        }
+        if (metricsInstalled.isFailure) {
+            ownership.releaseAfterAttachFailure()
+            return KadreResult.Failure(
+                KadreFailure.PlatformFailure(KadrePlatform.Web, "web-host", "metrics-install-failed"),
+            )
+        }
 
         val attached = controller.attach(parentScope, applicationFactory, policy)
         if (attached is KadreResult.Failure) ownership.releaseAfterAttachFailure()
@@ -142,13 +157,16 @@ internal class WebHostSession(
     private fun createController(
         initialLifecycle: LifecycleState,
         ownership: WebHostOwnership,
+        onSurfaceCreated: (WebHostSurface) -> Unit,
     ): RuntimeHostController = RuntimeHostController.withPrimarySurface(
         platform = KadrePlatform.Web,
         initialLifecycleState = initialLifecycle,
         sessionRevocationHandler = RuntimeSessionRevocationHandler { ownership.releasePort() },
         sessionObserver = RuntimeSessionObserver { _, _ -> ownership.releaseReservation() },
+        failureReporter = failureReporter,
         primarySurfaceFactory = { id ->
             val surface = WebHostSurface(id, port, ownership)
+            onSurfaceCreated(surface)
             RuntimePrimarySurface(surface, surface::detach)
         },
     )
@@ -183,13 +201,15 @@ private class WebHostSurface(
     override val id: SurfaceId,
     private val port: WebHostPort,
     private val ownership: WebHostOwnership,
-) : HostSurface {
+) : HostSurface, RuntimePrimarySurfaceConfiguration {
     private var detached: Boolean = false
+    private var configuration: WebSurfaceConfiguration? = null
+    private val pendingStimuli = ArrayDeque<WebSurfaceStimulus>()
     private val mutableState = MutableStateFlow(
         SurfaceState(
             attachment = SurfaceAttachmentState.Attached,
-            logicalSize = LogicalSize(port.initialSnapshot.logicalWidth, port.initialSnapshot.logicalHeight),
-            physicalSize = PhysicalSize(port.initialSnapshot.physicalWidth, port.initialSnapshot.physicalHeight),
+            logicalSize = port.initialSnapshot.logicalSize,
+            physicalSize = port.initialSnapshot.physicalSize,
             scaleFactor = port.initialSnapshot.scaleFactor,
             safeAreaInsets = LogicalInsets(0.0, 0.0, 0.0, 0.0),
             visibility = SurfaceVisibility.Visible,
@@ -203,12 +223,64 @@ private class WebHostSurface(
             revision = SurfaceRevision(0L),
         ),
     )
-    private val mutableCapabilities = MutableStateFlow(unsupportedSurfaceCapabilities())
+    private val mutableCapabilities = MutableStateFlow(webSurfaceCapabilities(platformAccessSupported = false))
+    private val mutableEvents = MutableSharedFlow<SurfaceEvent>(replay = 0, extraBufferCapacity = 16)
 
     override val state: StateFlow<SurfaceState> = mutableState.asStateFlow()
     override val capabilities: StateFlow<SurfaceCapabilities> = mutableCapabilities.asStateFlow()
-    override val events: Flow<SurfaceEvent> = emptyFlow()
+    override val events: Flow<SurfaceEvent> = mutableEvents.asSharedFlow()
     override val input: SurfaceInput = UnsupportedWebSurfaceInput
+
+    override fun installSessionConfiguration(
+        deliveryPolicy: WindowDeliveryPolicy,
+        source: () -> EventStamp,
+        sessionFailureHandler: (KadreFailure) -> Unit,
+        collectorAllocator: Any,
+        maxCollectorsPerFlow: Int,
+    ) {
+        val active = WebSurfaceConfiguration(deliveryPolicy, source, sessionFailureHandler)
+        configuration = active
+        val pending = pendingStimuli.toList()
+        pendingStimuli.clear()
+        pending.forEach { publish(it, active) }
+    }
+
+    /** Target-owned metrics observation; ignored once the surface is terminated. */
+    fun applyMetrics(metrics: WebSurfaceMetrics) {
+        if (detached) return
+        enqueue(WebSurfaceStimulus.Metrics(metrics))
+    }
+
+    private fun enqueue(stimulus: WebSurfaceStimulus) {
+        val active = configuration
+        if (active == null) pendingStimuli.addLast(stimulus) else publish(stimulus, active)
+    }
+
+    private fun publish(stimulus: WebSurfaceStimulus, active: WebSurfaceConfiguration) {
+        when (stimulus) {
+            is WebSurfaceStimulus.Metrics -> publishMetrics(stimulus.metrics, active)
+        }
+    }
+
+    private fun publishMetrics(metrics: WebSurfaceMetrics, active: WebSurfaceConfiguration) {
+        if (detached) return
+        val current = mutableState.value
+        if (
+            current.logicalSize == metrics.logicalSize &&
+            current.physicalSize == metrics.physicalSize &&
+            current.scaleFactor == metrics.scaleFactor
+        ) {
+            return
+        }
+        val next = current.copy(
+            logicalSize = metrics.logicalSize,
+            physicalSize = metrics.physicalSize,
+            scaleFactor = metrics.scaleFactor,
+            revision = SurfaceRevision(current.revision.value + 1L),
+        )
+        mutableState.value = next
+        mutableEvents.tryEmit(SurfaceEvent.MetricsChanged(next, active.stampSource()))
+    }
 
     override fun requestRedraw(): KadreResult<Unit> =
         KadreResult.Failure(
@@ -225,6 +297,9 @@ private class WebHostSurface(
     fun detach() {
         if (detached) return
         detached = true
+        pendingStimuli.clear()
+        configuration = null
+        mutableCapabilities.value = webSurfaceCapabilities(platformAccessSupported = false)
         try {
             val current = mutableState.value
             mutableState.value = current.copy(
@@ -269,7 +344,7 @@ private object UnsupportedWebSurfaceInput : SurfaceInput {
         KadreResult.Failure(KadreFailure.Unsupported(KadreOperation.RawInputAccess))
 }
 
-private fun unsupportedSurfaceCapabilities(): SurfaceCapabilities = SurfaceCapabilities(
+private fun webSurfaceCapabilities(platformAccessSupported: Boolean): SurfaceCapabilities = SurfaceCapabilities(
     cursor = unsupportedSurfaceCapability(KadreOperation.UpdateSurface),
     customCursor = unsupportedSurfaceCapability(KadreOperation.UpdateSurface),
     pointerCapture = unsupportedSurfaceCapability(KadreOperation.UpdateSurface),
@@ -277,7 +352,11 @@ private fun unsupportedSurfaceCapabilities(): SurfaceCapabilities = SurfaceCapab
     inputDefaultBehavior = unsupportedSurfaceCapability(KadreOperation.UpdateSurface),
     handlerInteractions = unsupportedSurfaceCapability(KadreOperation.InstallInteractionHandler),
     armedInteractions = unsupportedSurfaceCapability(KadreOperation.ArmInteraction),
-    platformAccess = unsupportedSurfaceCapability(KadreOperation.PlatformSurfaceAccess),
+    platformAccess = if (platformAccessSupported) {
+        Capability.Supported(Unit, FeatureAvailability.Available)
+    } else {
+        unsupportedSurfaceCapability(KadreOperation.PlatformSurfaceAccess)
+    },
 )
 
 private fun <T> unsupportedSurfaceCapability(operation: KadreOperation): Capability<T> =
