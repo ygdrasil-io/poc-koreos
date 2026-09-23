@@ -7,10 +7,8 @@ import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.awaitCancellation
-import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.filterIsInstance
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.joinAll
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -20,10 +18,11 @@ import org.graphiks.kadre.diagnostics.KadreResult
 import org.graphiks.kadre.platform.desktop.DesktopBackend
 import org.graphiks.kadre.platform.desktop.DesktopHostOptions
 import org.graphiks.kadre.platform.desktop.runKadreApplication
-import org.graphiks.kadre.samples.desktour.appkit.BridgeProbeContent
-import org.graphiks.kadre.samples.desktour.appkit.BridgeProbeState
 import org.graphiks.kadre.samples.desktour.appkit.mountComposeAppKit
-import org.graphiks.kadre.surface.SurfaceEvent
+import org.graphiks.kadre.samples.desktour.core.ActionDispatcher
+import org.graphiks.kadre.samples.desktour.core.KadreTourGateway
+import org.graphiks.kadre.samples.desktour.core.TourStore
+import org.graphiks.kadre.samples.desktour.ui.DeskTourApp
 import org.graphiks.kadre.window.WindowCloseDecision
 import org.graphiks.kadre.window.WindowCloseResponseOutcome
 import org.graphiks.kadre.window.WindowEvent
@@ -48,11 +47,21 @@ public fun main() {
                 is WindowRequestOutcome.OpenedHere -> outcome.window
                 else -> error("Desk Tour window did not open: $outcome")
             }
-            val probeState = MutableStateFlow(BridgeProbeState.from(window.surface.state.value))
-            fun updateText(text: String) { probeState.update { it.copy(text = text) } }
+            // The store, the dispatcher and the gateway know nothing about Compose or AppKit;
+            // only this host file binds them to the current renderer.
+            val store = TourStore()
+            val gateway = KadreTourGateway(this)
+            val dispatcher = ActionDispatcher(store, gateway)
+            store.publishCreateNoteAvailability(gateway.createNoteAvailability())
+            val uiState = store.state
             val bridgeContent: @Composable () -> Unit = {
-                val state by probeState.collectAsState()
-                BridgeProbeContent(state = state, onTextChanged = ::updateText)
+                val state by uiState.collectAsState()
+                DeskTourApp(
+                    state = state,
+                    onCreateNote = { launch { dispatcher.createNote() } },
+                    onSelectRoute = { store.setRoute(it) },
+                    onToggleApiDetails = { store.toggleApiDetails() },
+                )
             }
             val mount = when (val result = window.mountComposeAppKit(this, bridgeContent)) {
                 is KadreResult.Success -> result.value
@@ -63,10 +72,7 @@ public fun main() {
                 // These observers inherit Kadre's application context (possibly Default).
                 // The mount marshals every scene/native operation to its AppKit executor.
                 collectors += launch(start = CoroutineStart.UNDISPATCHED) {
-                    window.surface.state.collect { state ->
-                        mount.updateSurface(state)
-                        probeState.update { it.observing(state) }
-                    }
+                    window.surface.state.collect { state -> mount.updateSurface(state) }
                 }
                 collectors += launch(start = CoroutineStart.UNDISPATCHED) {
                     window.surface.events.collect { event ->
@@ -74,16 +80,13 @@ public fun main() {
                             is KadreResult.Success -> Unit
                             is KadreResult.Failure -> error("Compose surface event failed: ${result.reason}")
                         }
-                        if (event !is SurfaceEvent.RedrawRequested) {
-                            probeState.update { it.observing(window.surface.state.value) }
-                        }
                     }
                 }
                 collectors += launch(start = CoroutineStart.UNDISPATCHED) {
-                    window.surface.input.events.collect { event ->
-                        mount.dispatch(event)
-                        probeState.update { it.copy(activity = mount.activity) }
-                    }
+                    window.surface.input.events.collect { event -> mount.dispatch(event) }
+                }
+                collectors += launch(start = CoroutineStart.UNDISPATCHED) {
+                    gateway.observeWindow(window).collect { store.publishWindows(listOf(it)) }
                 }
                 when (val redraw = window.surface.requestRedraw()) {
                     is KadreResult.Success -> Unit
