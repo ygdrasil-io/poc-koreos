@@ -3,6 +3,7 @@ package org.graphiks.kadre.samples.desktour.core
 import java.util.concurrent.atomic.AtomicLong
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.filterIsInstance
 import kotlinx.coroutines.flow.first
@@ -16,6 +17,8 @@ import org.graphiks.kadre.diagnostics.FeatureAvailability
 import org.graphiks.kadre.diagnostics.KadreResult
 import org.graphiks.kadre.display.DisplayInventory
 import org.graphiks.kadre.input.DeviceConnectionState
+import org.graphiks.kadre.input.TextInputConfig
+import org.graphiks.kadre.input.TextInputSession
 import org.graphiks.kadre.surface.HostSurface
 import org.graphiks.kadre.surface.PropertyChange
 import org.graphiks.kadre.window.Window
@@ -34,6 +37,13 @@ internal class KadreTourGateway(private val scope: KadreScope) : TourGateway {
     private val notes = mutableMapOf<NoteKey, Window>()
     private val nextKey = AtomicLong(0L)
     private val noteCloseRequests = MutableSharedFlow<NoteKey>(extraBufferCapacity = 8)
+    /** La démo n'a qu'une surface primaire : le gateway retient celle qu'on lui fait observer. */
+    private var primarySurface: HostSurface? = null
+    private var textInputSession: TextInputSession? = null
+    private val lastTextInputEvent = MutableStateFlow<String?>(null)
+    private val textInputPresentation = MutableStateFlow(
+        TextInputPresentation(open = false, stateLabel = textInputStateLabel(TextInputSessionState.Closed), lastEvent = null),
+    )
 
     override fun lifecycleSummary(): Flow<String> =
         scope.lifecycle.state.map { state ->
@@ -153,6 +163,7 @@ internal class KadreTourGateway(private val scope: KadreScope) : TourGateway {
         }
 
     override fun observeInput(surface: HostSurface): Flow<InputPresentation> {
+        primarySurface = surface
         // Flux froid : aucun collecteur n'est lancé tant que personne ne collecte. Appeler
         // cette fonction ne consomme donc pas de bail de collecteur chez le host, et rien ne
         // survit à l'annulation du collecteur.
@@ -203,6 +214,55 @@ internal class KadreTourGateway(private val scope: KadreScope) : TourGateway {
                 canRequest = present(state.capabilities.screen).requestable,
             )
         }
+
+    override fun textInputAvailability(): CapabilityPresentation =
+        primarySurface?.let { present(it.input.state.value.capabilities.textInput) }
+            ?: CapabilityPresentation(false, "Aucune surface n'a encore été observée.")
+
+    override fun observeTextInput(): Flow<TextInputPresentation> = textInputPresentation
+
+    override suspend fun openTextInput(): TextInputOutcome {
+        val surface = primarySurface ?: return TextInputOutcome.Refused("Aucune surface n'a encore été observée.")
+        if (textInputSession != null) {
+            return TextInputOutcome.Refused("Une session de saisie est déjà ouverte.")
+        }
+        return when (val result = surface.input.openTextInput(TextInputConfig())) {
+            is KadreResult.Failure -> TextInputOutcome.Refused(result.reason.userMotif())
+            is KadreResult.Success -> {
+                val session = result.value
+                textInputSession = session
+                scope.launch {
+                    session.events.collect {
+                        lastTextInputEvent.value = renderTextInputEvent(describeTextInputEvent(it))
+                        textInputPresentation.value = textInputPresentation.value.copy(
+                            lastEvent = lastTextInputEvent.value,
+                        )
+                    }
+                }
+                scope.launch {
+                    session.state.collect { state ->
+                        val state2 = textInputSessionStateOf(state)
+                        textInputPresentation.value = TextInputPresentation(
+                            open = state2 != TextInputSessionState.Closed,
+                            stateLabel = textInputStateLabel(state2),
+                            lastEvent = lastTextInputEvent.value,
+                        )
+                    }
+                }
+                TextInputOutcome.Opened
+            }
+        }
+    }
+
+    override suspend fun closeTextInput() {
+        textInputSession?.close()
+        textInputSession = null
+        textInputPresentation.value = TextInputPresentation(
+            open = false,
+            stateLabel = textInputStateLabel(TextInputSessionState.Closed),
+            lastEvent = lastTextInputEvent.value,
+        )
+    }
 
     override suspend fun renameNote(key: NoteKey, title: String): NoteUpdateOutcome {
         val window = notes[key] ?: return NoteUpdateOutcome.Refused("Cette note n'existe plus.")

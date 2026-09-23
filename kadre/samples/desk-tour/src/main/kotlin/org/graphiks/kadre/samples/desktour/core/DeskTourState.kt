@@ -25,4 +25,7 @@ internal data class DeskTourState(
     val input: InputPresentation? = null,
     val devices: DevicePresentation? = null,
     val capture: CapturePresentation? = null,
+    val textInput: TextInputPresentation? = null,
+    val textInputAvailability: CapabilityPresentation =
+        CapabilityPresentation(enabled = false, motif = "Aucune surface observée."),
 )

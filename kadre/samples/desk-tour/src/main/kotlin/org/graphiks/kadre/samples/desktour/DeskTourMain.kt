@@ -71,6 +71,8 @@ public fun main() {
                     onToggleDecorations = { key -> launch { dispatcher.toggleNoteDecorations(key) } },
                     onCloseNote = { key -> launch { dispatcher.closeNote(key) } },
                     onRequestDisplayAccess = { launch { dispatcher.requestDisplayAccess() } },
+                    onOpenTextInput = { launch { dispatcher.openTextInput() } },
+                    onCloseTextInput = { launch { dispatcher.closeTextInput() } },
                     onSelectRoute = { store.setRoute(it) },
                     onToggleApiDetails = { store.toggleApiDetails() },
                 )
@@ -116,6 +118,10 @@ public fun main() {
                 }
                 collectors += launch(start = CoroutineStart.UNDISPATCHED) {
                     gateway.observeCapture().collect { store.publishCapture(it) }
+                }
+                collectors += launch(start = CoroutineStart.UNDISPATCHED) {
+                    store.publishTextInputAvailability(gateway.textInputAvailability())
+                    gateway.observeTextInput().collect { store.publishTextInput(it) }
                 }
                 // Chaque note reçoit sa propre scène Compose, montée une seule fois. L'hôte
                 // observe le store plutôt que de s'accrocher à l'ouverture : c'est le seul

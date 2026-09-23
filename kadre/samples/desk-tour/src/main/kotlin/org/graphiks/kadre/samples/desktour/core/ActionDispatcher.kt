@@ -121,6 +121,22 @@ internal class ActionDispatcher(
         }
     }
 
+    suspend fun openTextInput() {
+        // `requestable` : une capacité sous permission reste demandable (spec §5 ligne 116).
+        if (!gateway.textInputAvailability().requestable) return
+        val id = store.admit("Ouvrir une session de saisie", "SurfaceInput.openTextInput")
+        when (val outcome = gateway.openTextInput()) {
+            TextInputOutcome.Opened -> store.resolve(id, ActivityStatus.Succeeded)
+            is TextInputOutcome.Refused -> store.resolve(id, ActivityStatus.Rejected, outcome.motif)
+        }
+    }
+
+    suspend fun closeTextInput() {
+        val id = store.admit("Fermer la session de saisie", "TextInputSession.close")
+        gateway.closeTextInput()
+        store.resolve(id, ActivityStatus.Succeeded)
+    }
+
     /** Spec §5 ligne 118 : un partiel montre séparément ce qui est passé et ce qui est refusé. */
     private fun settle(id: ActionCorrelationId, outcome: NoteUpdateOutcome) {
         when (outcome) {

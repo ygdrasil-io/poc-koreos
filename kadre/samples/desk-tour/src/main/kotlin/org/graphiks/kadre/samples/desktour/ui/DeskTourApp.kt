@@ -35,6 +35,8 @@ internal fun DeskTourApp(
     onToggleDecorations: (NoteKey) -> Unit,
     onCloseNote: (NoteKey) -> Unit,
     onRequestDisplayAccess: () -> Unit,
+    onOpenTextInput: () -> Unit,
+    onCloseTextInput: () -> Unit,
     onSelectRoute: (TourRoute) -> Unit,
     onToggleApiDetails: () -> Unit,
 ) {
@@ -145,7 +147,14 @@ internal fun DeskTourApp(
                                 modifier = Modifier.weight(1f),
                             )
                         TourRoute.Interactions ->
-                            InteractionsView(presentation = state.input, modifier = Modifier.weight(1f))
+                            InteractionsView(
+                                presentation = state.input,
+                                textInput = state.textInput,
+                                textInputAvailability = state.textInputAvailability,
+                                onOpenTextInput = onOpenTextInput,
+                                onCloseTextInput = onCloseTextInput,
+                                modifier = Modifier.weight(1f),
+                            )
                         TourRoute.Devices ->
                             DevicesView(
                                 devices = state.devices,
