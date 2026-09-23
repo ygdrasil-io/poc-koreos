@@ -1,6 +1,7 @@
 package org.graphiks.kadre.samples.desktour.core
 
 import kotlinx.coroutines.flow.Flow
+import org.graphiks.kadre.surface.HostSurface
 import org.graphiks.kadre.window.Window
 
 /**
@@ -30,4 +31,6 @@ internal interface TourGateway {
     fun observeDisplays(): Flow<DisplayPresentation>
     fun displayAccessAvailability(): CapabilityPresentation
     suspend fun requestDisplayAccess(): DisplayPresentation
+
+    fun observeInput(surface: HostSurface): Flow<InputPresentation>
 }

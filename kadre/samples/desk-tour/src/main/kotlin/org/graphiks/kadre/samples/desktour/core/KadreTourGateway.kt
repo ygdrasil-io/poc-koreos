@@ -3,6 +3,7 @@ package org.graphiks.kadre.samples.desktour.core
 import java.util.concurrent.atomic.AtomicLong
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.filterIsInstance
 import kotlinx.coroutines.flow.first
@@ -13,6 +14,7 @@ import org.graphiks.kadre.application.KadreScope
 import org.graphiks.kadre.diagnostics.Capability
 import org.graphiks.kadre.diagnostics.KadreResult
 import org.graphiks.kadre.display.DisplayInventory
+import org.graphiks.kadre.surface.HostSurface
 import org.graphiks.kadre.surface.PropertyChange
 import org.graphiks.kadre.window.Window
 import org.graphiks.kadre.window.WindowAttention
@@ -147,6 +149,31 @@ internal class KadreTourGateway(private val scope: KadreScope) : TourGateway {
             is KadreResult.Failure -> displayPresentationFor(result.reason)
             is KadreResult.Success -> observeDisplays().first()
         }
+
+    override fun observeInput(surface: HostSurface): Flow<InputPresentation> {
+        val lastEvent = MutableStateFlow<String?>(null)
+        scope.launch {
+            surface.input.events.collect { lastEvent.value = renderEventSummary(describeInputEvent(it)) }
+        }
+        return combine(surface.input.state, lastEvent) { state, event ->
+            InputPresentation(
+                modifiers = modifierLabels(state.modifiers),
+                pointers = pointerSummaries(
+                    state.pointers.map { pointer ->
+                        PointerSnapshot(
+                            kind = pointer.kind,
+                            x = pointer.position?.x,
+                            y = pointer.position?.y,
+                            buttons = pointer.pressedButtons.toList(),
+                        )
+                    },
+                ),
+                pressedKeyCount = state.keyboard.pressedKeys.size,
+                lastEvent = event,
+                features = inputFeatures(state.capabilities),
+            )
+        }
+    }
 
     override suspend fun renameNote(key: NoteKey, title: String): NoteUpdateOutcome {
         val window = notes[key] ?: return NoteUpdateOutcome.Refused("Cette note n'existe plus.")
