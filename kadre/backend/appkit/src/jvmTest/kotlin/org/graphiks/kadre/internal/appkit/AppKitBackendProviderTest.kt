@@ -3282,10 +3282,9 @@ class AppKitBackendProviderTest {
                                 val appKit = assertIs<DesktopNativeWindowHandle.AppKit>(handle)
                                 ObjCRuntime.autoreleasePool {
                                     val application = NSApplication(NSApplication.sharedApplication())
-                                    assertTrue(
-                                        application.setActivationPolicy(
-                                            NSApplicationActivationPolicy.NSApplicationActivationPolicyRegular,
-                                        ),
+                                    assertEquals(
+                                        NSApplicationActivationPolicy.NSApplicationActivationPolicyRegular,
+                                        application.activationPolicy(),
                                     )
                                     application.activateIgnoringOtherApps(true)
                                     NSWindow(
