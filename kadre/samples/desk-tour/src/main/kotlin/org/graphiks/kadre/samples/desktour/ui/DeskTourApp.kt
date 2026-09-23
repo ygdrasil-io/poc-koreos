@@ -31,6 +31,8 @@ internal fun DeskTourApp(
     state: DeskTourState,
     onCreateNote: () -> Unit,
     onRenameNote: (NoteKey, String) -> Unit,
+    onRequestAttention: (NoteKey) -> Unit,
+    onToggleDecorations: (NoteKey) -> Unit,
     onSelectRoute: (TourRoute) -> Unit,
     onToggleApiDetails: () -> Unit,
 ) {
@@ -96,6 +98,14 @@ internal fun DeskTourApp(
                                 if (!note.capabilities.canRename) {
                                     Text("Le renommage n'est pas pris en charge par cette fenêtre.")
                                 }
+                                Button(
+                                    onClick = { onRequestAttention(note.key) },
+                                    enabled = note.capabilities.canRequestAttention,
+                                ) { Text("Demander l'attention") }
+                                Button(
+                                    onClick = { onToggleDecorations(note.key) },
+                                    enabled = note.capabilities.canChangeDecorations,
+                                ) { Text("Décoration") }
                             }
                             state.windows.forEach { window ->
                                 Text("${window.title} — ${window.logicalWidth} × ${window.logicalHeight}")

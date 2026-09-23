@@ -14,9 +14,12 @@ internal open class TestTourGateway : TourGateway {
     override fun createNoteAvailability(): CapabilityPresentation = CapabilityPresentation(enabled = true)
     override suspend fun openNote(): NoteOpenOutcome = NoteOpenOutcome.Cancelled
     override fun noteWindow(key: NoteKey): Window? = null
+
     // Permissif par défaut : un faux laisse passer l'appel pour que le test exerce le code
     // visé ; les tests qui portent sur une capability absente écrasent cette valeur.
     override fun noteControls(key: NoteKey): NoteControls = NoteControls(true, true, true, true)
     override fun observeNote(key: NoteKey): Flow<DeskTourNote> = flowOf()
     override suspend fun renameNote(key: NoteKey, title: String): NoteUpdateOutcome = NoteUpdateOutcome.Applied
+    override suspend fun requestNoteAttention(key: NoteKey): NoteUpdateOutcome = NoteUpdateOutcome.Applied
+    override suspend fun toggleNoteDecorations(key: NoteKey): NoteUpdateOutcome = NoteUpdateOutcome.Applied
 }

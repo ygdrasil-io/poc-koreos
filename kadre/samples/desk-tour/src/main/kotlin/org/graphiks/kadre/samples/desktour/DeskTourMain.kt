@@ -65,6 +65,8 @@ public fun main() {
                     state = state,
                     onCreateNote = { launch { dispatcher.createNote() } },
                     onRenameNote = { key, title -> launch { dispatcher.renameNote(key, title) } },
+                    onRequestAttention = { key -> launch { dispatcher.requestNoteAttention(key) } },
+                    onToggleDecorations = { key -> launch { dispatcher.toggleNoteDecorations(key) } },
                     onSelectRoute = { store.setRoute(it) },
                     onToggleApiDetails = { store.toggleApiDetails() },
                 )

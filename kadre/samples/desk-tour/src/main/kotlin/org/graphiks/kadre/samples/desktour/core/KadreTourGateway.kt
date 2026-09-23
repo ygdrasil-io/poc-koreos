@@ -10,6 +10,8 @@ import org.graphiks.kadre.diagnostics.Capability
 import org.graphiks.kadre.diagnostics.KadreResult
 import org.graphiks.kadre.surface.PropertyChange
 import org.graphiks.kadre.window.Window
+import org.graphiks.kadre.window.WindowAttention
+import org.graphiks.kadre.window.WindowDecorations
 import org.graphiks.kadre.window.WindowProperty
 import org.graphiks.kadre.window.WindowRequestOutcome
 import org.graphiks.kadre.window.WindowUpdate
@@ -84,6 +86,35 @@ internal class KadreTourGateway(private val scope: KadreScope) : TourGateway {
                     applied = WindowProperty.entries
                         .filterNot { property -> outcome.rejected.any { it.field == property } }
                         .map { it.readableName() },
+                    rejected = outcome.rejected.map {
+                        RejectedFieldPresentation(it.field.readableName(), it.failure.userMotif())
+                    },
+                )
+            }
+        }
+    }
+
+    override suspend fun requestNoteAttention(key: NoteKey): NoteUpdateOutcome {
+        val window = notes[key] ?: return NoteUpdateOutcome.Refused("Cette note n'existe plus.")
+        return when (val result = window.requestAttention(WindowAttention.Informational)) {
+            is KadreResult.Failure -> NoteUpdateOutcome.Refused(result.reason.userMotif())
+            is KadreResult.Success -> NoteUpdateOutcome.Applied
+        }
+    }
+
+    override suspend fun toggleNoteDecorations(key: NoteKey): NoteUpdateOutcome {
+        val window = notes[key] ?: return NoteUpdateOutcome.Refused("Cette note n'existe plus.")
+        val next = if (window.state.value.decorations == WindowDecorations.System) {
+            WindowDecorations.Borderless
+        } else {
+            WindowDecorations.System
+        }
+        return when (val result = window.apply(WindowUpdate(decorations = PropertyChange.Set(next)))) {
+            is KadreResult.Failure -> NoteUpdateOutcome.Refused(result.reason.userMotif())
+            is KadreResult.Success -> when (val outcome = result.value) {
+                is WindowUpdateOutcome.Applied, is WindowUpdateOutcome.Accepted -> NoteUpdateOutcome.Applied
+                is WindowUpdateOutcome.PartiallyApplied -> NoteUpdateOutcome.PartiallyApplied(
+                    applied = emptyList(),
                     rejected = outcome.rejected.map {
                         RejectedFieldPresentation(it.field.readableName(), it.failure.userMotif())
                     },

@@ -20,4 +20,6 @@ internal interface TourGateway {
     fun observeNote(key: NoteKey): Flow<DeskTourNote>
 
     suspend fun renameNote(key: NoteKey, title: String): NoteUpdateOutcome
+    suspend fun requestNoteAttention(key: NoteKey): NoteUpdateOutcome
+    suspend fun toggleNoteDecorations(key: NoteKey): NoteUpdateOutcome
 }

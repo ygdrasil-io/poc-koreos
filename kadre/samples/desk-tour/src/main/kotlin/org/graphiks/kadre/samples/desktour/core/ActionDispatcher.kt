@@ -34,7 +34,24 @@ internal class ActionDispatcher(
     suspend fun renameNote(key: NoteKey, title: String) {
         if (!gateway.noteControls(key).canRename) return
         val id = store.admit(ApiDetailKey.ModifyWindow.userAction, "Window.apply")
-        when (val outcome = gateway.renameNote(key, title)) {
+        settle(id, gateway.renameNote(key, title))
+    }
+
+    suspend fun requestNoteAttention(key: NoteKey) {
+        if (!gateway.noteControls(key).canRequestAttention) return
+        val id = store.admit("Demander l'attention", "Window.requestAttention")
+        settle(id, gateway.requestNoteAttention(key))
+    }
+
+    suspend fun toggleNoteDecorations(key: NoteKey) {
+        if (!gateway.noteControls(key).canChangeDecorations) return
+        val id = store.admit("Changer la décoration", "Window.apply")
+        settle(id, gateway.toggleNoteDecorations(key))
+    }
+
+    /** Spec §5 ligne 118 : un partiel montre séparément ce qui est passé et ce qui est refusé. */
+    private fun settle(id: ActionCorrelationId, outcome: NoteUpdateOutcome) {
+        when (outcome) {
             NoteUpdateOutcome.Applied -> store.resolve(id, ActivityStatus.Succeeded)
             is NoteUpdateOutcome.PartiallyApplied -> store.resolve(
                 id,
