@@ -64,5 +64,7 @@ internal class TourStore {
     fun publishDisplayAccessAvailability(availability: CapabilityPresentation) =
         mutableState.update { it.copy(displayAccess = availability) }
 
+    fun publishInput(input: InputPresentation) = mutableState.update { it.copy(input = input) }
+
     fun toggleApiDetails() = mutableState.update { it.copy(apiDetailsOpen = !it.apiDetailsOpen) }
 }

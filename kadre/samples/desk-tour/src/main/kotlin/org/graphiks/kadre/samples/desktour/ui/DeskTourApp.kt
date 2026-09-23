@@ -73,6 +73,11 @@ internal fun DeskTourApp(
                             onClick = { onSelectRoute(TourRoute.Screens) },
                             icon = { Text("Écrans") },
                         )
+                        NavigationBarItem(
+                            selected = state.route == TourRoute.Interactions,
+                            onClick = { onSelectRoute(TourRoute.Interactions) },
+                            icon = { Text("Entrées") },
+                        )
                     }
                 },
             ) { padding ->
@@ -134,6 +139,8 @@ internal fun DeskTourApp(
                                 onRequestAccess = onRequestDisplayAccess,
                                 modifier = Modifier.weight(1f),
                             )
+                        TourRoute.Interactions ->
+                            InteractionsView(presentation = state.input, modifier = Modifier.weight(1f))
                     }
                     Button(onClick = onToggleApiDetails) { Text("Détails API") }
                 }
