@@ -94,6 +94,33 @@ internal class ActionDispatcher(
         }
     }
 
+    suspend fun requestDisplayAccess() {
+        // `requestable`, pas `enabled` : une permission requise désactive l'affordance tout en
+        // restant demandable, sinon l'utilisateur serait bloqué sans recours (§5 ligne 116).
+        if (!gateway.displayAccessAvailability().requestable) return
+        val id = store.admit(ApiDetailKey.TrackDisplays.userAction, "DisplayManager.requestAccess")
+        try {
+            val inventory = gateway.requestDisplayAccess()
+            store.publishDisplays(inventory)
+            val (status, motif) = when (inventory) {
+                is DisplayPresentation.Enumerated -> ActivityStatus.Succeeded to null
+                DisplayPresentation.NeedsPermission ->
+                    ActivityStatus.Unavailable to "Demande transmise ; le host n'a pas publié de changement."
+                is DisplayPresentation.Denied -> ActivityStatus.Rejected to "L'accès aux écrans a été refusé."
+                // Un échec temporaire n'est pas un refus : il a son propre statut.
+                is DisplayPresentation.Unavailable -> if (inventory.retryable) {
+                    ActivityStatus.Unavailable to inventory.motif
+                } else {
+                    ActivityStatus.Rejected to inventory.motif
+                }
+            }
+            store.resolve(id, status, motif)
+        } catch (cancellation: CancellationException) {
+            withContext(NonCancellable) { store.resolve(id, ActivityStatus.Cancelled) }
+            throw cancellation
+        }
+    }
+
     /** Spec §5 ligne 118 : un partiel montre séparément ce qui est passé et ce qui est refusé. */
     private fun settle(id: ActionCorrelationId, outcome: NoteUpdateOutcome) {
         when (outcome) {

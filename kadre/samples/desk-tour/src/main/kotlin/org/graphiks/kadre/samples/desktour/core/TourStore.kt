@@ -59,5 +59,10 @@ internal class TourStore {
         current.copy(notes = current.notes.filterNot { it.key == key })
     }
 
+    fun publishDisplays(displays: DisplayPresentation) = mutableState.update { it.copy(displays = displays) }
+
+    fun publishDisplayAccessAvailability(availability: CapabilityPresentation) =
+        mutableState.update { it.copy(displayAccess = availability) }
+
     fun toggleApiDetails() = mutableState.update { it.copy(apiDetailsOpen = !it.apiDetailsOpen) }
 }
