@@ -2345,9 +2345,15 @@ private fun AppKitSurfaceStimulus.toRuntime(surfaceId: SurfaceId): SurfaceStimul
             org.graphiks.kadre.input.PointerKind.Mouse,
         )
         is AppKitInput.KeyChanged -> error("key input must not use a pointer stimulus")
+        is AppKitInput.Scrolled -> error("scroll input must not use a pointer stimulus")
         is AppKitInput.TouchChanged -> error("touch input must not use a pointer stimulus")
         is AppKitInput.Gesture -> error("gesture input must not use a pointer stimulus")
     }
+    is AppKitSurfaceStimulus.ScrollInput -> SurfaceStimulus.Scroll(
+        surfaceId = surfaceId,
+        delta = input.delta,
+        coalescingBoundary = input.coalescingBoundary,
+    )
     is AppKitSurfaceStimulus.TouchInput -> SurfaceStimulus.TouchChanged(
         surfaceId = surfaceId,
         nativeIdentity = input.nativeIdentity,

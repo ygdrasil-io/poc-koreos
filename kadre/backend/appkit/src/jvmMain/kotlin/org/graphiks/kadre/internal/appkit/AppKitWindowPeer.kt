@@ -130,6 +130,11 @@ internal sealed interface AppKitSurfaceStimulus {
         val input: AppKitInput,
     ) : AppKitSurfaceStimulus
 
+    data class ScrollInput(
+        override val peerId: AppKitWindowPeerId,
+        val input: AppKitInput.Scrolled,
+    ) : AppKitSurfaceStimulus
+
     data class TouchInput(
         override val peerId: AppKitWindowPeerId,
         val input: AppKitInput.TouchChanged,
@@ -840,6 +845,7 @@ private class AppKitWindowCallbackGate(
                 null
             } else when (input) {
                 is AppKitInput.KeyChanged -> AppKitSurfaceStimulus.KeyChanged(peerId, input)
+                is AppKitInput.Scrolled -> AppKitSurfaceStimulus.ScrollInput(peerId, input)
                 is AppKitInput.TouchChanged -> AppKitSurfaceStimulus.TouchInput(peerId, input)
                 is AppKitInput.Gesture -> AppKitSurfaceStimulus.GestureInput(peerId, input)
                 else -> AppKitSurfaceStimulus.PointerInput(peerId, input)

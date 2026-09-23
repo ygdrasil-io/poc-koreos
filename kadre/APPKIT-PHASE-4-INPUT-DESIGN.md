@@ -88,12 +88,16 @@ Objective-C ne bloque pas sur le runtime et n’invoque aucun collector.
   jour le snapshot. `PointerLeft` retire la souris du snapshot après avoir
   publié l’événement qui porte sa dernière position. Les boutons AppKit inconnus
   deviennent `PointerButton.Other`; aucune valeur n’est inventée.
-- Scroll : `ScrollDelta.Lines` représente la source discrète et
-  `ScrollDelta.Logical` la source précise. Phase et momentum ne sont pas
-  exposés par le catalogue public fermé ; le runtime les conserve seulement comme
-  frontières de coalescence. Il ne fusionne jamais deux phases natives distinctes
-  ni un scroll de momentum avec un scroll non-momentum. Cette règle évite de les
-  perdre silencieusement sans agrandir l’API publique dans cette phase.
+- Scroll : `scrollWheel:` est observé sur la content view ; chaque échantillon
+  (delta, précision, phase, momentum) est copié avant le retour du callback et
+  l’axe publié suit la convention portable positive vers le bas/droite.
+  `ScrollDelta.Lines` représente la source discrète et `ScrollDelta.Logical` la
+  source précise. Phase et momentum ne sont pas exposés par le catalogue public
+  fermé ; le runtime les conserve seulement comme frontières de coalescence. Il ne
+  fusionne jamais deux phases natives distinctes ni un scroll de momentum avec un
+  scroll non-momentum : la frontière avance exactement quand la phase ou le
+  momentum natif change. Cette règle évite de les perdre silencieusement sans
+  agrandir l’API publique dans cette phase.
 - `pointerCapture`, cursor, hit testing et `inputDefaultBehavior` restent hors
   scope et `Unsupported`; aucun `SurfaceCommandPort.apply` AppKit n’est activé.
 
@@ -120,7 +124,9 @@ révocation native, tout stimulus tardif est ignoré et le flow input est fermé
 ## Preuves
 
 `INP-001` couvre au niveau O2 le reducer, l’ordre état/événement, unknown keys,
-repeat, reset FocusLost, coalescing/barrières, overflow et fermeture. `APK-005`
+repeat, reset FocusLost, coalescing/barrières, overflow et fermeture. Le mapper
+de scroll et sa frontière phase/momentum sont couverts séparément au niveau O2,
+puisque la conversion ne dépend d’aucune valeur native. `APK-005`
 active la traversée O3 avec une vraie fenêtre/vie AppKit : acquisition du first
 responder, key down/up/repeat/modifiers, mouse enter/exit/move/button, et
 injection scroll discret/précis dans la file native avec conversion observée.

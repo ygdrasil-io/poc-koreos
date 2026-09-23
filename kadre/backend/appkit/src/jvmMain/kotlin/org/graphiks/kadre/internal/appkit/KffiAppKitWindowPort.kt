@@ -26,6 +26,7 @@ import org.graphiks.kadre.input.NamedKey
 import org.graphiks.kadre.input.PhysicalKey
 import org.graphiks.kadre.input.PointerButton
 import org.graphiks.kadre.input.PointerButtonState
+import org.graphiks.kadre.input.ScrollDelta
 import org.graphiks.kadre.input.TouchPhase
 import org.graphiks.kadre.surface.LogicalInsets
 import org.graphiks.kadre.surface.LogicalDelta
@@ -648,6 +649,7 @@ private val APPKIT_INPUT_EVENT_SELECTORS = listOf(
     "mouseEntered:",
     "mouseExited:",
     "mouseCancelled:",
+    "scrollWheel:",
 )
 
 private val APPKIT_TOUCH_GESTURE_EVENT_SELECTORS = listOf(
@@ -729,6 +731,72 @@ private fun NSEvent.toObservation(): NSEventObservation {
         details = eventDetails,
     )
 }
+
+/** Copies the scroll fields of one borrowed `scrollWheel:` event before the callback returns. */
+internal data class AppKitScrollSample(
+    val deltaX: Double,
+    val deltaY: Double,
+    val precise: Boolean,
+    val phase: NSEventPhase,
+    val momentumPhase: NSEventPhase,
+)
+
+/**
+ * Maps one AppKit scroll sample to the portable delta.
+ *
+ * AppKit distinguishes a discrete wheel from a precise trackpad by [AppKitScrollSample.precise];
+ * `ScrollDelta.Lines` carries the discrete source and `ScrollDelta.Logical` the precise one, so a
+ * consumer never has to guess which unit a delta is expressed in.
+ *
+ * Both axes are negated because AppKit reports the direction the content must travel while Kadre's
+ * deltas follow the rotation a host-neutral consumer already receives: one wheel event that AppKit
+ * reports as `scrollingDeltaY = -5` reaches an AWT consumer as `preciseWheelRotation = 5`, and the
+ * desktop Compose host forwards that value unchanged as its scroll delta. An event that carries no
+ * movement — AppKit sends those at a phase boundary — produces no stimulus.
+ */
+internal fun AppKitScrollSample.toScrollDeltaOrNull(): ScrollDelta? {
+    if (!deltaX.isFinite() || !deltaY.isFinite()) return null
+    val x = -deltaX
+    val y = -deltaY
+    if (x == 0.0 && y == 0.0) return null
+    return if (precise) ScrollDelta.Logical(x, y) else ScrollDelta.Lines(x, y)
+}
+
+/**
+ * Tracks AppKit's native phase and momentum frontiers for one view.
+ *
+ * The runtime merges scroll stimuli that share a coalescing boundary and never merges two native
+ * phases or a momentum scroll with a non-momentum one. The boundary therefore advances exactly when
+ * the native phase or momentum phase changes, which keeps both axes of that rule without exposing
+ * either phase value to the closed public catalog.
+ */
+internal class AppKitScrollBoundary {
+    private var phase: NSEventPhase? = null
+    private var momentumPhase: NSEventPhase? = null
+    private var boundary = 0L
+
+    fun advance(sample: AppKitScrollSample): Long {
+        if (phase != sample.phase || momentumPhase != sample.momentumPhase) {
+            phase = sample.phase
+            momentumPhase = sample.momentumPhase
+            boundary += 1
+        }
+        return boundary
+    }
+
+    fun clear() {
+        phase = null
+        momentumPhase = null
+    }
+}
+
+private fun NSEvent.toScrollSample(): AppKitScrollSample = AppKitScrollSample(
+    deltaX = scrollingDeltaX(),
+    deltaY = scrollingDeltaY(),
+    precise = hasPreciseScrollingDeltas(),
+    phase = phase(),
+    momentumPhase = momentumPhase(),
+)
 
 private fun nativeMoveFailure(): KadreFailure.PlatformFailure = KadreFailure.PlatformFailure(
     KadrePlatform.AppKit,
@@ -1607,7 +1675,7 @@ private class KffiViewInputAdmission {
     fun observe(event: NSEvent) {
         val observer = observer.get() ?: return
         observer.deliverToTextInput(event)
-        val input = event.toObservation().toAppKitInput()?.takeIf(observer::accepts) ?: return
+        val input = observer.inputFor(event) ?: return
         if (input is AppKitInput.PointerButtonChanged && input.buttonState == PointerButtonState.Pressed) {
             observer.callbacks.pointerDown(input) { observer.invokeNativeMove(event) }
         } else {
@@ -1632,16 +1700,32 @@ private class KffiViewInputObserver(
     val deliverToTextInput: (NSEvent) -> Unit,
 ) {
     private val touchAdapter = AppKitTouchAdapter<NSEventObservation.TouchId>()
+    private val scrollBoundary = AppKitScrollBoundary()
 
     fun accepts(input: AppKitInput): Boolean = when (input) {
         is AppKitInput.KeyChanged -> true
         is AppKitInput.PointerEntered,
         is AppKitInput.PointerMoved,
         is AppKitInput.PointerButtonChanged,
+        is AppKitInput.Scrolled,
         AppKitInput.PointerLeft,
         -> pointerEnabled
         is AppKitInput.TouchChanged -> touchGestureAvailability.touchInstalled
         is AppKitInput.Gesture -> input.kind in touchGestureAvailability.gestureKinds
+    }
+
+    /**
+     * Maps one borrowed event. Scroll is read from the borrowed event itself: the published KFFI
+     * snapshot has no scroll detail, and the discrete/precise and phase/momentum fields that the
+     * contract requires exist only on the native event.
+     */
+    fun inputFor(event: NSEvent): AppKitInput? {
+        if (event.type() != NSEventType.NSEventTypeScrollWheel) {
+            return event.toObservation().toAppKitInput()?.takeIf(::accepts)
+        }
+        val sample = event.toScrollSample()
+        val delta = sample.toScrollDeltaOrNull() ?: return null
+        return AppKitInput.Scrolled(delta, scrollBoundary.advance(sample)).takeIf(::accepts)
     }
 
     fun observe(observation: NSEventObservation, contentSize: LogicalSize) {
@@ -1650,7 +1734,10 @@ private class KffiViewInputObserver(
             .forEach(callbacks.input)
     }
 
-    fun revoke() = touchAdapter.clear()
+    fun revoke() {
+        touchAdapter.clear()
+        scrollBoundary.clear()
+    }
 }
 
 private class KffiViewInputObservation(
