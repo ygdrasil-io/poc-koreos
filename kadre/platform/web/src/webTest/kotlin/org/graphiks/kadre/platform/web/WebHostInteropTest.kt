@@ -9,6 +9,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withContext
+import org.graphiks.kadre.application.KadreApplication
+import org.graphiks.kadre.application.KadreApplicationFactory
 import org.graphiks.kadre.application.KadreSession
 import org.graphiks.kadre.application.SessionId
 import org.graphiks.kadre.application.SessionOutcome
@@ -261,7 +263,7 @@ class WebHostInteropTest {
     fun theHandleCallsTheObserverSynchronouslyAndThenOncePerChange() = runTest {
         val session = StubSession()
         val scope = MainScope()
-        val handle = KadreWebHandle(session, scope, "kadre-host-session-test")
+        val handle = KadreWebHandle(7, session, scope, "kadre-host-session-test")
         try {
             val observed = mutableListOf<String>()
             val subscription = handle.subscribe { observed += it }
@@ -292,7 +294,7 @@ class WebHostInteropTest {
         val session = StubSession()
         val scope = MainScope()
         val reported = mutableListOf<String>()
-        val handle = KadreWebHandle(session, scope, "kadre-host-session-test") { error ->
+        val handle = KadreWebHandle(7, session, scope, "kadre-host-session-test") { error ->
             reported += error.message.orEmpty()
         }
         try {
@@ -318,7 +320,7 @@ class WebHostInteropTest {
     fun stopAndCloseAreForwardedToTheSession() = runTest {
         val session = StubSession()
         val scope = MainScope()
-        val handle = KadreWebHandle(session, scope, "kadre-host-session-test")
+        val handle = KadreWebHandle(7, session, scope, "kadre-host-session-test")
         try {
             handle.requestStop()
             assertEquals(1, session.stopRequests)
@@ -334,7 +336,7 @@ class WebHostInteropTest {
     fun aTerminationSubscriberHearsTheOutcomeExactlyOnce() = runTest {
         val session = StubSession()
         val scope = MainScope()
-        val handle = KadreWebHandle(session, scope, "kadre-host-session-test")
+        val handle = KadreWebHandle(7, session, scope, "kadre-host-session-test")
         try {
             val delivered = mutableListOf<String>()
             handle.subscribeTermination { delivered += it }
@@ -345,6 +347,113 @@ class WebHostInteropTest {
 
             awaitReal(100.milliseconds) { false }
             assertEquals(1, delivered.size, "the registration is one-shot")
+        } finally {
+            scope.cancel()
+        }
+    }
+
+    @Test
+    fun repeatedAsHostRefCallsShareTheFactoryKey() {
+        val factory = KadreApplicationFactory { KadreApplication { } }
+
+        val first = factory.asHostRef()
+        val second = factory.asHostRef()
+
+        assertEquals(
+            first.hostKey,
+            second.hostKey,
+            "the key belongs to the factory instance: the table must not grow per wrapper",
+        )
+        assertTrue(first !== second, "each call still creates a light wrapper")
+    }
+
+    @Test
+    fun aTerminatedSessionDeliversTheTerminalSnapshotAndReleasesTheHandle() = runTest {
+        val session = StubSession()
+        val scope = MainScope()
+        val handle = KadreWebHandle(7, session, scope, "kadre-host-session-test")
+        KadreWebInterop.registerHandle(7, handle)
+        try {
+            val observed = mutableListOf<String>()
+            handle.subscribe { observed += it }
+            assertTrue(KadreWebInterop.isLiveHandle(7), "a live session is retained while it runs")
+
+            session.terminate(SessionOutcome.Stopped(SessionStopReason.HostRequested))
+            awaitReal(
+                1.seconds,
+            ) { observed.lastOrNull() == TERMINAL_STOPPED }
+
+            assertEquals(
+                TERMINAL_STOPPED,
+                observed.lastOrNull(),
+                "the observer hears the terminal snapshot",
+            )
+            assertTrue(observed.contains("{\"kind\":\"starting\"}"), "the observer heard the first snapshot")
+            assertEquals(false, KadreWebInterop.isLiveHandle(7), "the terminated handle is released")
+
+            val released = KadreWebInterop.session(7)
+            assertEquals(TERMINAL_STOPPED, released.state, "the released record still answers the state")
+            assertEquals("kadre-host-session-test", released.id)
+
+            val lateState = mutableListOf<String>()
+            released.subscribe { lateState += it }
+            assertEquals(listOf(TERMINAL_STOPPED), lateState, "a late state observer hears the terminal snapshot")
+
+            val lateTermination = mutableListOf<String>()
+            released.subscribeTermination { lateTermination += it }
+            assertEquals(
+                listOf("{\"kind\":\"stopped\",\"reason\":\"hostRequested\"}"),
+                lateTermination,
+                "a late termination observer hears the outcome immediately",
+            )
+
+            released.requestStop()
+            released.close()
+            assertEquals(0, session.stopRequests, "a released session forwards no stop request")
+            assertEquals(0, session.closeRequests, "a released session forwards no close request")
+        } finally {
+            scope.cancel()
+        }
+    }
+
+    @Test
+    fun theTerminalSnapshotIsDeliveredEvenWhenTheStateFlowDoesNotPublishIt() = runTest {
+        val session = StubSession()
+        val scope = MainScope()
+        val handle = KadreWebHandle(7, session, scope, "kadre-host-session-test")
+        try {
+            val observed = mutableListOf<String>()
+            handle.subscribe { observed += it }
+
+            // The state flow's terminal publication and the session scope's cancellation are
+            // independent tasks: this double models a collector that never got to run, so the
+            // terminal snapshot can only come from the interop layer's own termination path.
+            session.terminateWithoutPublishing(SessionOutcome.Stopped(SessionStopReason.HostRequested))
+            awaitReal(1.seconds) { observed.lastOrNull() == TERMINAL_STOPPED }
+
+            assertEquals(
+                TERMINAL_STOPPED,
+                observed.lastOrNull(),
+                "a state observer waiting for terminated must not depend on the state collector",
+            )
+        } finally {
+            scope.cancel()
+        }
+    }
+
+    @Test
+    fun aTerminationObserverHearsTheOutcomeWithoutWaitingForTheScope() = runTest {
+        val session = StubSession()
+        val scope = MainScope()
+        val handle = KadreWebHandle(7, session, scope, "kadre-host-session-test")
+        try {
+            val delivered = mutableListOf<String>()
+            handle.subscribeTermination { delivered += it }
+
+            session.terminate(SessionOutcome.Completed)
+            awaitReal(1.seconds) { delivered.isNotEmpty() }
+
+            assertEquals(listOf("{\"kind\":\"completed\"}"), delivered)
         } finally {
             scope.cancel()
         }
@@ -384,6 +493,9 @@ class WebHostInteropTest {
     }
 }
 
+/** The terminal snapshot of a session stopped by the host, as the shim receives it. */
+private const val TERMINAL_STOPPED = "{\"kind\":\"terminated\",\"outcome\":{\"kind\":\"stopped\",\"reason\":\"hostRequested\"}}"
+
 /**
  * A session the interop layer can observe without a browser.
  *
@@ -419,6 +531,11 @@ internal class StubSession : KadreSession {
 
     fun terminate(outcome: SessionOutcome): Unit {
         states.value = SessionState.Terminated(outcome)
+        termination.complete(outcome)
+    }
+
+    /** Ends the session without publishing the terminal state, as a cancelled collector would see it. */
+    fun terminateWithoutPublishing(outcome: SessionOutcome): Unit {
         termination.complete(outcome)
     }
 }

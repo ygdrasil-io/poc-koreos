@@ -202,6 +202,8 @@ La classe conserve en interne la factory, n’expose aucun membre Kotlin public 
 
 La classe ne traverse pas la frontière JavaScript : Kotlin/Wasm n’exporte que des fonctions, sur des primitives, des `String`, des types de fonction et des valeurs `JsAny`. Les bindings JavaScript du module sont donc des fonctions top-level — attachement, clé de session, identifiant de session, snapshot, abonnement et désabonnement d’état, abonnement à l’outcome terminal, demande d’arrêt, fermeture — et le paquet npm livre un shim ESM écrit à la main (`index.mjs`, `index.d.ts`) qui présente exactement la surface promise ci-dessous au-dessus de ces bindings. Les deux shims ne diffèrent que par leur chargement du module compilé ; leur corps est identique.
 
+La clé d’une référence appartient à l’instance de factory : plusieurs `asHostRef()` sur la même factory partagent la même clé, et la couche d’interop libère l’entrée d’une session dès que son outcome terminal est publié — elle ne conserve alors que l’identifiant opaque et le snapshot terminal, de sorte qu’un élément ou une scope terminés ne restent pas retenus.
+
 Le shim possède les conversions que la glue ne peut pas faire seule : les `Long` Kotlin traversent en chaînes et le shim les rend en `bigint`, et `KadreSessionHandle.id` est un identifiant opaque alloué par la couche d’interop pour ce handle — plus précisément, ce n’est pas le `SessionId` Kotlin.
 
 La déclaration TypeScript promise est exactement :

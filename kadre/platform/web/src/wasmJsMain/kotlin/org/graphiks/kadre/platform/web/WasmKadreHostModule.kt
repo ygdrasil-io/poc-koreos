@@ -37,11 +37,11 @@ public fun kadreWebAttach(
 
 /** The opaque identifier of the session behind [handleKey]. Not the Kotlin `SessionId`. */
 @JsExport
-public fun kadreWebSessionId(handleKey: Int): String = KadreWebInterop.handle(handleKey).id
+public fun kadreWebSessionId(handleKey: Int): String = KadreWebInterop.session(handleKey).id
 
 /** The current snapshot of the session behind [handleKey], as a JSON object keyed by `kind`. */
 @JsExport
-public fun kadreWebSessionState(handleKey: Int): String = KadreWebInterop.handle(handleKey).state
+public fun kadreWebSessionState(handleKey: Int): String = KadreWebInterop.session(handleKey).state
 
 /**
  * Subscribes [observer] to the state of the session behind [handleKey]; returns its subscription key.
@@ -51,7 +51,7 @@ public fun kadreWebSessionState(handleKey: Int): String = KadreWebInterop.handle
  */
 @JsExport
 public fun kadreWebSubscribeState(handleKey: Int, observer: (String) -> Unit): Int =
-    KadreWebInterop.handle(handleKey).subscribe(observer)
+    KadreWebInterop.session(handleKey).subscribe(observer)
 
 /**
  * Subscribes [observer] to the terminal outcome of the session behind [handleKey]; returns its
@@ -59,7 +59,7 @@ public fun kadreWebSubscribeState(handleKey: Int, observer: (String) -> Unit): I
  */
 @JsExport
 public fun kadreWebSubscribeTermination(handleKey: Int, observer: (String) -> Unit): Int =
-    KadreWebInterop.handle(handleKey).subscribeTermination(observer)
+    KadreWebInterop.session(handleKey).subscribeTermination(observer)
 
 /** Cancels the registration behind [subscriptionKey]. Returns whether it was still registered. */
 @JsExport
@@ -68,11 +68,11 @@ public fun kadreWebUnsubscribeState(subscriptionKey: Int): Boolean =
 
 /** Asks the session behind [handleKey] to stop. */
 @JsExport
-public fun kadreWebRequestStop(handleKey: Int): Unit = KadreWebInterop.handle(handleKey).requestStop()
+public fun kadreWebRequestStop(handleKey: Int): Unit = KadreWebInterop.session(handleKey).requestStop()
 
 /** Closes the session behind [handleKey]; its terminal outcome stays observable. */
 @JsExport
-public fun kadreWebClose(handleKey: Int): Unit = KadreWebInterop.handle(handleKey).close()
+public fun kadreWebClose(handleKey: Int): Unit = KadreWebInterop.session(handleKey).close()
 
 @Suppress("UNCHECKED_CAST_TO_EXTERNAL_INTERFACE")
 private fun attachElement(

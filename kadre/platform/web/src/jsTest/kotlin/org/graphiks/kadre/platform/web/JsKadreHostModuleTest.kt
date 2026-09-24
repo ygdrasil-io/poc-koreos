@@ -16,6 +16,10 @@ import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.TimeSource
 
+/** The terminal snapshot of a session stopped by the host, as the shim receives it. */
+private const val TERMINAL_STOPPED =
+    "{\"kind\":\"terminated\",\"outcome\":{\"kind\":\"stopped\",\"reason\":\"hostRequested\"}}"
+
 /**
  * The published JavaScript surface of `@kadre/host`, exercised through the exported functions the
  * `index.mjs` shim is built on. The Wasm target compiles the same test over its own SDK element.
@@ -46,6 +50,27 @@ class JsKadreHostModuleTest {
             kadreWebRequestStop(handleKey)
             awaitReal(1.seconds) { outcomes.size == 1 }
             assertEquals(listOf("{\"kind\":\"stopped\",\"reason\":\"hostRequested\"}"), outcomes)
+
+            // A consumer that waits for `terminated` on the state subscription must not hang.
+            awaitReal(1.seconds) { observed.lastOrNull() == TERMINAL_STOPPED }
+            assertEquals(
+                TERMINAL_STOPPED,
+                observed.lastOrNull(),
+                "the state observer hears the terminal snapshot",
+            )
+            assertTrue(observed.contains("{\"kind\":\"running\"}"), "the state observer heard the running snapshot")
+            assertEquals(
+                false,
+                KadreWebInterop.isLiveHandle(handleKey),
+                "the terminated handle is released, so the element and the session are not retained",
+            )
+            val late = mutableListOf<String>()
+            kadreWebSubscribeState(handleKey) { late += it }
+            assertEquals(
+                listOf(TERMINAL_STOPPED),
+                late,
+                "the released session still answers the terminal snapshot",
+            )
 
             assertTrue(
                 kadreWebUnsubscribeState(subscription),
