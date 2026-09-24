@@ -126,10 +126,12 @@ internal interface WebHostPort {
 /**
  * DOM-free lease core for [HostSurface.withWebElement].
  *
- * The callback runs on the host context that lends the element. A lease is not reentrant: while
- * one is held, a second lease fails with [KadreFailure.TemporarilyUnavailable] instead of
+ * The callback runs on the host context that lends the element. A lease is not reentrant: a lease
+ * started while another is in flight fails with [KadreFailure.TemporarilyUnavailable] instead of
  * waiting, because a renderer re-entering its own surface is a programming error, not back
- * pressure.
+ * pressure. Once the surface stopped admitting, every later lease reports [KadreFailure.Closed],
+ * with or without one in flight — a closed surface never becomes leasable again, so answering
+ * `TemporarilyUnavailable(retryable = true)` there would misdescribe the retry.
  *
  * The block may suspend — the facade's callback does not — and the element reference handed to
  * [lease] is valid only until the block ends, whether it returns, throws or is cancelled.
@@ -452,10 +454,13 @@ private class WebHostSurface(
      * Lends the element its port holds, for the duration of [block] and no longer.
      *
      * The element is read from the port on every lease rather than captured with the surface, so a
-     * surface whose port is gone lends nothing even while a stale reference to it survives. A
-     * second lease while one is held reports [KadreFailure.TemporarilyUnavailable] on a live
-     * surface; only a surface that stopped admitting — revoked, detached or terminated — reports
-     * [KadreFailure.Closed], which is the same predicate every other admission site uses.
+     * surface whose port is gone lends nothing even while a stale reference to it survives.
+     *
+     * A surface that stopped admitting — revoked, detached or terminated — reports
+     * [KadreFailure.Closed], the same predicate every other admission site uses, and it wins over the
+     * reentrancy guard: a lease started after the close cannot be retried, so it must not be
+     * described as [KadreFailure.TemporarilyUnavailable]. Only a live surface with a lease in flight
+     * answers that, which is the one case where retrying later is the right thing for a caller to do.
      *
      * The block starts without a suspension point between admission and its first instruction, so a
      * waiter cancelled before this call invokes nothing. Once the block has started, a cancellation
@@ -463,8 +468,8 @@ private class WebHostSurface(
      * block does.
      */
     override suspend fun <R> lease(block: suspend (Any) -> R): KadreResult<R> {
-        if (leaseHeld) return KadreResult.Failure(KadreFailure.TemporarilyUnavailable(retryable = true))
         if (admissionClosed) return KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.Surface))
+        if (leaseHeld) return KadreResult.Failure(KadreFailure.TemporarilyUnavailable(retryable = true))
         val element = port.leasedElement
             ?: return KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.Surface))
         leaseHeld = true

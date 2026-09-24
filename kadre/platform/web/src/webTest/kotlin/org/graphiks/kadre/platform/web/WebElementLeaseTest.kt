@@ -20,7 +20,10 @@ import org.graphiks.kadre.diagnostics.KadreOperation
 import org.graphiks.kadre.diagnostics.KadreResourceKind
 import org.graphiks.kadre.diagnostics.KadreResult
 import org.graphiks.kadre.input.SurfaceInput
+import org.graphiks.kadre.policy.ContinuousDelivery
+import org.graphiks.kadre.policy.ContinuousOverflowAction
 import org.graphiks.kadre.policy.KadrePolicies
+import org.graphiks.kadre.policy.KadrePolicy
 import org.graphiks.kadre.surface.HostSurface
 import org.graphiks.kadre.surface.SurfaceCapabilities
 import org.graphiks.kadre.surface.SurfaceEvent
@@ -32,6 +35,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertSame
+import kotlin.test.assertTrue
 
 /**
  * The lifetime contract of the element escape hatch, exercised on the DOM-free lease core.
@@ -112,32 +116,80 @@ class WebElementLeaseTest {
     }
 
     /**
-     * A waiter that is cancelled before its callback starts admits nothing.
+     * The holder's callback is entered exactly once, and a cancellation inside it releases the lease.
      *
-     * A lease has no suspension point between admitting and invoking the callback, so a waiter can
-     * only be cancelled before that callback while it is parked ahead of the lease — which is what
-     * this gate does. The counter it guards is the callback's own, and the live lease that follows
-     * proves the zero is the cancellation's doing and not an inert surface.
+     * A lease has no suspension point between admitting and invoking the callback, so the only
+     * cancellation the implementation can observe is the one that arrives once the callback has
+     * started — here, while the holder is parked inside it. That path runs production code: the
+     * cancellation unwinds through the `finally`, and the lease that follows proves the flag was
+     * released rather than left set by a cancelled holder.
      */
     @Test
-    fun aWaiterCancelledBeforeTheCallbackNeverInvokesIt() = runTest {
+    fun aWaiterCancelledInsideTheCallbackReleasesTheLease() = runTest {
         val harness = LeasedHarness(this)
         harness.start()
         val lease = harness.surface() as WebElementLeasePort
         var invocations = 0
-        val beforeTheLease = CompletableDeferred<Unit>()
-        val gate = launch {
-            beforeTheLease.await()
-            lease.lease { invocations += 1 }
+        val parked = CompletableDeferred<Unit>()
+        val holder = launch { lease.lease { invocations += 1; parked.await() } }
+        testScheduler.runCurrent()
+
+        holder.cancel()
+        testScheduler.runCurrent()
+
+        assertEquals(1, invocations, "the cancelled holder entered its callback exactly once")
+        assertIs<KadreResult.Success<Unit>>(
+            lease.lease { Unit },
+            "the cancellation released the lease instead of leaving it held",
+        )
+        assertTrue(holder.isCancelled)
+        harness.close()
+    }
+
+    /**
+     * A surface that stopped admitting reports `Closed` even with a lease still in flight.
+     *
+     * The redraw overflow under `CloseSource` closes the surface while the session keeps running,
+     * which is the one way to reach a closed surface that still holds a lease: the holder is parked
+     * inside its callback when the surface goes. `retryable = true` would be a lie there — the
+     * surface never becomes leasable again — so the admission guard has to answer first.
+     */
+    @Test
+    fun aClosedSurfaceReportsClosedWhileALeaseIsInFlight() = runTest {
+        val capacity = 2
+        val policy = KadrePolicies.Default.copy(
+            window = KadrePolicies.Default.window.copy(
+                redrawRequests = ContinuousDelivery.Buffered(
+                    capacity = capacity,
+                    onOverflow = ContinuousOverflowAction.CloseSource,
+                ),
+            ),
+        )
+        val harness = LeasedHarness(this, policy)
+        harness.start()
+        val surface = harness.surface()
+        val lease = surface as WebElementLeasePort
+        val parked = CompletableDeferred<Unit>()
+        var completed = 0
+        val holder = launch {
+            val result = lease.lease { parked.await() }
+            assertIs<KadreResult.Success<Unit>>(result)
+            completed += 1
         }
         testScheduler.runCurrent()
 
-        gate.cancel()
-        testScheduler.runCurrent()
+        repeat(capacity + 1) { assertEquals(KadreResult.Success(Unit), surface.requestRedraw()) }
 
-        assertEquals(0, invocations, "a waiter cancelled before the callback never invokes it")
-        assertIs<KadreResult.Success<Unit>>(lease.lease { invocations += 1 })
-        assertEquals(1, invocations, "the surface still lends to a waiter that is not cancelled")
+        assertEquals(
+            KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.Surface)),
+            lease.lease { Unit },
+            "a closed surface answers Closed, not a retryable failure, with a lease in flight",
+        )
+
+        parked.complete(Unit)
+        holder.join()
+
+        assertEquals(1, completed, "the lease admitted before the close still completes normally")
         harness.close()
     }
 
@@ -200,7 +252,10 @@ private fun <T> unsupportedSurfaceCapability(operation: KadreOperation): Capabil
  * The session runs an application that parks until it is torn down, so the surface only ends through
  * the target observation or the test's own close.
  */
-private class LeasedHarness(scope: CoroutineScope) {
+private class LeasedHarness(
+    scope: CoroutineScope,
+    policy: KadrePolicy = KadrePolicies.Default,
+) {
     val port = RecordingWebHostPort(WebSurfaceMetrics(64.0, 64.0, 1.0), element = Any())
     private val scopeReady = CompletableDeferred<KadreScope>()
     private val session: KadreSession
@@ -215,7 +270,7 @@ private class LeasedHarness(scope: CoroutineScope) {
                         awaitCancellation()
                     }
                 },
-                policy = KadrePolicies.Default,
+                policy = policy,
             ),
         ).value
     }
