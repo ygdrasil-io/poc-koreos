@@ -24,3 +24,6 @@ kotlin-js-store/
 winit/
 hs_err_*.log
 *.class
+
+# npm dependency trees of the consumer builds
+node_modules/

@@ -38,6 +38,8 @@ tasks.named("check") {
     dependsOn(":kadre:runtime:check")
     dependsOn("validateKotlinConsumer")
     dependsOn("validateJavaConsumer")
+    dependsOn("validateWebKotlinConsumer")
+    dependsOn("validateTypeScriptConsumer")
 }
 
 val contractTestRepository = rootProject.layout.buildDirectory.dir("kadre-contract-repository")
@@ -64,6 +66,26 @@ tasks.register<GradleBuild>("validateJavaConsumer") {
     dependsOn(contractPublications)
     dir = file("consumers/java")
     tasks = listOf("compileJava")
+    startParameter.projectProperties = mapOf(
+        "kadreRepository" to contractTestRepository.get().asFile.absolutePath,
+        "kadreVersion" to project.version.toString(),
+    )
+}
+
+tasks.register<GradleBuild>("validateWebKotlinConsumer") {
+    dependsOn(contractPublications)
+    dir = file("consumers/web")
+    tasks = listOf("compileKotlinJs", "compileKotlinWasmJs")
+    startParameter.projectProperties = mapOf(
+        "kadreRepository" to contractTestRepository.get().asFile.absolutePath,
+        "kadreVersion" to project.version.toString(),
+    )
+}
+
+tasks.register<GradleBuild>("validateTypeScriptConsumer") {
+    dependsOn(contractPublications)
+    dir = file("consumers/typescript")
+    tasks = listOf("check")
     startParameter.projectProperties = mapOf(
         "kadreRepository" to contractTestRepository.get().asFile.absolutePath,
         "kadreVersion" to project.version.toString(),
