@@ -1,14 +1,16 @@
 package org.graphiks.kadre.platform.web
 
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.channelFlow
 import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.launch
 import org.graphiks.kadre.application.EventStamp
 import org.graphiks.kadre.application.KadreApplicationFactory
 import org.graphiks.kadre.application.KadreSession
@@ -246,10 +248,24 @@ private class WebHostSurface(
     )
     private val mutableCapabilities = MutableStateFlow(webSurfaceCapabilities(platformAccessSupported = false))
     private val mutableEvents = MutableSharedFlow<SurfaceEvent>(replay = 0, extraBufferCapacity = 16)
+    private val terminal = CompletableDeferred<Unit>()
 
     override val state: StateFlow<SurfaceState> = mutableState.asStateFlow()
     override val capabilities: StateFlow<SurfaceCapabilities> = mutableCapabilities.asStateFlow()
-    override val events: Flow<SurfaceEvent> = mutableEvents.asSharedFlow()
+
+    /**
+     * The observation stream of this surface, which completes at [terminate].
+     *
+     * A shared flow carries no completion, so the broadcast is paired with [terminal]: a collector
+     * receives the observations the surface publishes until it closes, and a collector that arrives
+     * after that sees an already completed stream, the way a closed surface answers `Closed` to
+     * every call.
+     */
+    override val events: Flow<SurfaceEvent> = channelFlow {
+        val forwarding = launch { mutableEvents.collect { send(it) } }
+        terminal.await()
+        forwarding.cancel()
+    }
     override val input: SurfaceInput = UnsupportedWebSurfaceInput
 
     override fun installSessionConfiguration(
@@ -329,12 +345,16 @@ private class WebHostSurface(
                         ContinuousOverflowAction.DropLatestAndReport,
                         -> bufferedRedraws = delivery.capacity
 
-                        // The surface owns no independently closable redraw source, so closing the
-                        // source before recordable data is lost is the terminal treatment too.
-                        ContinuousOverflowAction.CloseSource,
-                        ContinuousOverflowAction.FailSession,
-                        -> {
-                            terminated = true
+                        // RedrawRequested is owned by the surface itself (`DESIGN.md` §15.3), so
+                        // CloseSource closes this surface and leaves the session running. FailSession
+                        // additionally reports the overflow, which terminates the session.
+                        ContinuousOverflowAction.CloseSource -> {
+                            terminate()
+                            return
+                        }
+
+                        ContinuousOverflowAction.FailSession -> {
+                            terminate()
                             active.sessionFailureHandler(
                                 KadreFailure.SourceOverflow(KadreResourceKind.Surface),
                             )
@@ -364,7 +384,9 @@ private class WebHostSurface(
     }
 
     override fun requestRedraw(): KadreResult<Unit> {
-        if (detached) return KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.Surface))
+        if (detached || terminated) {
+            return KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.Surface))
+        }
         enqueue(WebSurfaceStimulus.Redraw)
         return KadreResult.Success(Unit)
     }
@@ -375,13 +397,26 @@ private class WebHostSurface(
             else KadreFailure.Unsupported(KadreOperation.UpdateSurface),
         )
 
+    /** The runtime's teardown of this surface: it stops admitting and releases the port. */
     fun detach() {
-        if (detached) return
-        detached = true
-        // A scheduled frame can never admit after termination, so it is cancelled with the surface.
+        terminate()
+    }
+
+    /**
+     * The one terminal transition of this surface.
+     *
+     * It is reached both by the host detaching ([detach]) and by a redraw overflow under a
+     * `CloseSource` policy, so the two paths cannot drift: the surface admits nothing, owns nothing
+     * and reports itself detached whichever one led here. Only a failing overflow additionally
+     * reports the failure to the session, which is why the caller owns that call.
+     */
+    private fun terminate() {
+        if (terminated) return
         terminated = true
+        detached = true
         pendingRedraw = false
         bufferedRedraws = 0
+        // A scheduled frame must admit nothing after this, so it is cancelled with the surface.
         frameHandle?.cancel()
         frameHandle = null
         pendingStimuli.clear()
@@ -394,6 +429,7 @@ private class WebHostSurface(
                 revision = SurfaceRevision(current.revision.value + 1L),
             )
         } finally {
+            terminal.complete(Unit)
             ownership.releasePort()
         }
     }

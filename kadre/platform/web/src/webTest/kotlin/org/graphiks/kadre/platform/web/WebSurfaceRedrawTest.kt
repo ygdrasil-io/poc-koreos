@@ -20,6 +20,7 @@ import org.graphiks.kadre.policy.ContinuousOverflowAction
 import org.graphiks.kadre.policy.KadrePolicies
 import org.graphiks.kadre.policy.KadrePolicy
 import org.graphiks.kadre.surface.HostSurface
+import org.graphiks.kadre.surface.SurfaceAttachmentState
 import org.graphiks.kadre.surface.SurfaceEvent
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -155,6 +156,84 @@ class WebSurfaceRedrawTest {
 
         assertEquals(2, events.count { it is SurfaceEvent.RedrawRequested }, "coalescing continues after a drop")
         assertEquals(SessionState.Running, harness.state())
+        collector.cancel()
+        harness.close()
+    }
+
+    @Test
+    fun aCloseSourceOverflowClosesTheSurfaceAndKeepsTheSession() = runTest {
+        val policy = KadrePolicies.Default.copy(
+            window = KadrePolicies.Default.window.copy(
+                redrawRequests = ContinuousDelivery.Buffered(
+                    capacity = 2,
+                    onOverflow = ContinuousOverflowAction.CloseSource,
+                ),
+            ),
+        )
+        val harness = RedrawHarness(policy, this)
+        harness.start()
+        val surface = harness.surface()
+        val events = mutableListOf<SurfaceEvent>()
+        val collector = launch { surface.events.collect { events += it } }
+        testScheduler.runCurrent()
+
+        // The request that crosses the bound is still admitted, and then closes the surface.
+        repeat(harness.bufferedCapacity + 1) {
+            assertEquals(KadreResult.Success(Unit), surface.requestRedraw())
+        }
+        testScheduler.runCurrent()
+        harness.runFrame()
+        testScheduler.runCurrent()
+
+        assertEquals(
+            SessionState.Running,
+            harness.state(),
+            "CloseSource closes only the surface, so the session keeps running",
+        )
+        assertEquals(SurfaceAttachmentState.Detached, surface.state.value.attachment)
+        assertEquals(
+            KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.Surface)),
+            surface.requestRedraw(),
+            "a closed surface answers Closed to every operation",
+        )
+        assertTrue(events.none { it is SurfaceEvent.RedrawRequested }, "a closed surface admits nothing")
+        assertTrue(collector.isCompleted, "the events flow completes when the surface closes")
+        assertEquals(1, harness.releases, "closing the surface disarms the element's Kadre bridges")
+        harness.close()
+    }
+
+    @Test
+    fun theBufferedRedrawBudgetResetsEveryFrame() = runTest {
+        val policy = KadrePolicies.Default.copy(
+            window = KadrePolicies.Default.window.copy(
+                redrawRequests = ContinuousDelivery.Buffered(
+                    capacity = 1,
+                    onOverflow = ContinuousOverflowAction.FailSession,
+                ),
+            ),
+        )
+        val harness = RedrawHarness(policy, this)
+        harness.start()
+        val surface = harness.surface()
+        val events = mutableListOf<SurfaceEvent>()
+        val collector = launch { surface.events.collect { events += it } }
+        testScheduler.runCurrent()
+
+        repeat(harness.bufferedCapacity) { assertEquals(KadreResult.Success(Unit), surface.requestRedraw()) }
+        harness.runFrame()
+        testScheduler.runCurrent()
+        assertEquals(1, events.count { it is SurfaceEvent.RedrawRequested }, "the frame admits the request")
+
+        surface.requestRedraw()
+        harness.runFrame()
+        testScheduler.runCurrent()
+
+        assertEquals(2, events.count { it is SurfaceEvent.RedrawRequested }, "the next frame admits again")
+        assertEquals(
+            SessionState.Running,
+            harness.state(),
+            "a session-lifetime counter would have failed the session on the second frame's request",
+        )
         collector.cancel()
         harness.close()
     }
