@@ -185,6 +185,9 @@ internal class WebHostSession(
         failureReporter = failureReporter,
         primarySurfaceFactory = { id ->
             val surface = WebHostSurface(id, port, ownership)
+            // The ownership releases the target's bridges before the runtime closes the surface, so
+            // it has to be able to stop the surface from admitting anything new in between.
+            ownership.observeSurface(surface::onOwnershipRevoked)
             onSurfaceCreated(surface)
             RuntimePrimarySurface(surface, surface::detach)
         },
@@ -197,6 +200,17 @@ private class WebHostOwnership(
 ) {
     private var portReleased: Boolean = false
     private var reservationReleased: Boolean = false
+    private var revokeAdmission: (() -> Unit)? = null
+
+    /**
+     * Registers the surface this ownership closes the target's bridges for.
+     *
+     * The surface is built inside the controller's factory, after this ownership exists, so it hands
+     * its revocation entry point here instead of being a constructor dependency.
+     */
+    fun observeSurface(revokeAdmission: () -> Unit) {
+        this.revokeAdmission = revokeAdmission
+    }
 
     fun releaseAfterAttachFailure() {
         releasePort()
@@ -206,6 +220,10 @@ private class WebHostOwnership(
     fun releasePort() {
         if (portReleased) return
         portReleased = true
+        // The port is about to drop every bridge the target could call back through, so the surface
+        // stops admitting first: a cooperative stop releases the port while the runtime still has to
+        // close the surface, and a frame registered before that must not be able to fire in between.
+        runCatching { revokeAdmission?.invoke() }
         runCatching { port.release() }
     }
 
@@ -223,6 +241,12 @@ private class WebHostSurface(
 ) : HostSurface, RuntimePrimarySurfaceConfiguration {
     private var detached: Boolean = false
     private var terminated: Boolean = false
+
+    /** Set once the owner revoked this surface, which happens before the port's bridges go. */
+    private var revoked: Boolean = false
+
+    /** True while nothing new may be admitted, by the owner's revocation or by this surface. */
+    private val admissionClosed: Boolean get() = revoked || detached || terminated
     private var configuration: WebSurfaceConfiguration? = null
     private val pendingStimuli = ArrayDeque<WebSurfaceStimulus>()
     private var pendingRedraw: Boolean = false
@@ -284,7 +308,7 @@ private class WebHostSurface(
 
     /** Target-owned metrics observation; ignored once the surface is terminated. */
     fun applyMetrics(metrics: WebSurfaceMetrics) {
-        if (detached) return
+        if (admissionClosed) return
         enqueue(WebSurfaceStimulus.Metrics(metrics))
     }
 
@@ -301,7 +325,7 @@ private class WebHostSurface(
     }
 
     private fun publishMetrics(metrics: WebSurfaceMetrics, active: WebSurfaceConfiguration) {
-        if (detached) return
+        if (admissionClosed) return
         val current = mutableState.value
         if (
             current.logicalSize == metrics.logicalSize &&
@@ -329,7 +353,7 @@ private class WebHostSurface(
      * action once the bound is crossed.
      */
     private fun publishRedraw(active: WebSurfaceConfiguration) {
-        if (detached || terminated) return
+        if (admissionClosed) return
         when (val delivery = active.deliveryPolicy.redrawRequests) {
             is ContinuousDelivery.Latest, is ContinuousDelivery.Coalesced -> pendingRedraw = true
             is ContinuousDelivery.Buffered -> {
@@ -372,7 +396,7 @@ private class WebHostSurface(
         if (frameHandle != null) return
         frameHandle = port.scheduleFrame {
             frameHandle = null
-            if (detached || terminated) return@scheduleFrame
+            if (admissionClosed) return@scheduleFrame
             val admitted = pendingRedraw || bufferedRedraws > 0
             pendingRedraw = false
             bufferedRedraws = 0
@@ -384,7 +408,7 @@ private class WebHostSurface(
     }
 
     override fun requestRedraw(): KadreResult<Unit> {
-        if (detached || terminated) {
+        if (admissionClosed) {
             return KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.Surface))
         }
         enqueue(WebSurfaceStimulus.Redraw)
@@ -396,6 +420,20 @@ private class WebHostSurface(
             if (detached) KadreFailure.Closed(KadreResourceKind.Surface)
             else KadreFailure.Unsupported(KadreOperation.UpdateSurface),
         )
+
+    /**
+     * The owner's revocation of this surface, which runs before the target's bridges are released.
+     *
+     * Admission stops here — the pending request, the registered frame and the buffered stimuli are
+     * dropped — while everything already published stays as it is: the terminal state, the end of the
+     * events flow and the release of the port remain [terminate]'s work, so an observer sees the same
+     * sequence whether the owner revoked first or the surface reached its own terminal transition.
+     */
+    fun onOwnershipRevoked() {
+        if (revoked) return
+        revoked = true
+        closeAdmission()
+    }
 
     /** The runtime's teardown of this surface: it stops admitting and releases the port. */
     fun detach() {
@@ -414,13 +452,7 @@ private class WebHostSurface(
         if (terminated) return
         terminated = true
         detached = true
-        pendingRedraw = false
-        bufferedRedraws = 0
-        // A scheduled frame must admit nothing after this, so it is cancelled with the surface.
-        frameHandle?.cancel()
-        frameHandle = null
-        pendingStimuli.clear()
-        configuration = null
+        closeAdmission()
         mutableCapabilities.value = webSurfaceCapabilities(platformAccessSupported = false)
         try {
             val current = mutableState.value
@@ -432,6 +464,17 @@ private class WebHostSurface(
             terminal.complete(Unit)
             ownership.releasePort()
         }
+    }
+
+    /** Stops this surface from admitting anything new; the first step of every terminal transition. */
+    private fun closeAdmission() {
+        pendingRedraw = false
+        bufferedRedraws = 0
+        // A scheduled frame must admit nothing after this, so it is cancelled with the admission.
+        frameHandle?.cancel()
+        frameHandle = null
+        pendingStimuli.clear()
+        configuration = null
     }
 }
 

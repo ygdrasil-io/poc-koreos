@@ -173,6 +173,55 @@ class WebSurfaceTeardownTest {
     }
 
     /**
+     * A cooperative stop revokes the session's target resources first: the port is released while the
+     * runtime still has to close the surface, so the surface must stop admitting on the revocation —
+     * no new callback may start after the owner has let the element go.
+     */
+    @Test
+    fun aFrameRegisteredBeforeACooperativeStopIsNotAdmitted() = runTest {
+        val harness = TeardownHarness(this)
+        harness.start()
+        val port = harness.port
+        val surface = harness.surface()
+        val events = mutableListOf<SurfaceEvent>()
+        val collector = launch { surface.events.collect { events += it } }
+        testScheduler.runCurrent()
+
+        assertEquals(KadreResult.Success(Unit), surface.requestRedraw())
+        testScheduler.runCurrent()
+
+        // The window under test: the stop releases the port before the runtime closes the surface.
+        harness.stop()
+        assertEquals(1, port.releaseCount, "a cooperative stop releases the port itself")
+        assertEquals(
+            SurfaceAttachmentState.Attached,
+            surface.state.value.attachment,
+            "the surface is still attached when the port goes, so it has to close admission by itself",
+        )
+        assertEquals(
+            KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.Surface)),
+            surface.requestRedraw(),
+            "a revoked surface starts no new callback",
+        )
+
+        port.runFrame()
+        testScheduler.runCurrent()
+
+        assertTrue(
+            events.none { it is SurfaceEvent.RedrawRequested },
+            "no redraw may be admitted after the owner released the port",
+        )
+        assertEquals(1, port.frameCancellations, "the revocation cancels the frame the surface registered")
+        assertEquals(SurfaceAttachmentState.Detached, surface.state.value.attachment)
+        assertEquals(1L, surface.state.value.revision.value)
+        assertTrue(collector.isCompleted, "the events flow still completes at the terminal transition")
+        assertEquals(1, port.releaseCount, "the terminal transition does not release the port a second time")
+
+        collector.cancel()
+        testScheduler.runCurrent()
+    }
+
+    /**
      * The overflow that fails the session reaches termination through the runtime's delivery
      * failure, so the same order has to hold on it as on a detach: only the failing overflow reports
      * the failure, and the surface is already terminal when the session hears about it.

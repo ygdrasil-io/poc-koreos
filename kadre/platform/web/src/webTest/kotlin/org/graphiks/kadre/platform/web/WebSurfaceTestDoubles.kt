@@ -70,13 +70,24 @@ internal class RecordingWebHostPort(initial: WebSurfaceMetrics) : WebHostPort {
         }
     }
 
-    /** Runs the frame the surface has registered, as the browsing context would. */
+    /**
+     * Runs the frame the surface has registered, as the browsing context would.
+     *
+     * A [release] does not take that registration away: the browser owns the queued callback and the
+     * port only drops what it installed itself, so a frame the surface has not cancelled still fires
+     * in the window a cooperative stop leaves between the release and the runtime's close.
+     */
     fun runFrame() {
         val scheduled = frame ?: return
         frame = null
         scheduled()
     }
 
+    /**
+     * Drops the target's own bridges, as a released DOM port does: the readbacks stop here.
+     *
+     * The registered frame survives it, because only the surface cancels the frame it registered.
+     */
     override fun release() {
         releaseCount += 1
         if (released) return
@@ -84,6 +95,5 @@ internal class RecordingWebHostPort(initial: WebSurfaceMetrics) : WebHostPort {
         onRelease?.invoke()
         metricsObserver = null
         lifecycleObserver = null
-        frame = null
     }
 }
