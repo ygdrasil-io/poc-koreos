@@ -23,6 +23,7 @@ import org.graphiks.kadre.policy.KadrePolicy
 import org.graphiks.kadre.surface.HostSurface
 import org.graphiks.kadre.surface.SurfaceAttachmentState
 import org.graphiks.kadre.surface.SurfaceEvent
+import org.graphiks.kadre.surface.SurfaceUpdate
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
@@ -202,6 +203,11 @@ class WebSurfaceTeardownTest {
             KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.Surface)),
             surface.requestRedraw(),
             "a revoked surface starts no new callback",
+        )
+        assertEquals(
+            KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.Surface)),
+            surface.apply(SurfaceUpdate()),
+            "the revocation window closes every admission site, not only the redraw one",
         )
 
         port.runFrame()

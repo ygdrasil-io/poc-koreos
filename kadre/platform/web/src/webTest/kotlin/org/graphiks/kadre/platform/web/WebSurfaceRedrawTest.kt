@@ -67,6 +67,15 @@ class WebSurfaceRedrawTest {
         testScheduler.runCurrent()
 
         assertEquals(2, events.count { it is SurfaceEvent.RedrawRequested })
+
+        // Every admitted event is stamped by the session's own sequence source, which hands out the
+        // next value per call: a fabricated or reused stamp would not be increasing.
+        val sequences = events.filterIsInstance<SurfaceEvent.RedrawRequested>().map { it.stamp.sequence.value }
+        assertEquals(sequences.sorted(), sequences, "the collected events carry increasing session sequences")
+        assertTrue(
+            sequences.zipWithNext().all { (previous, next) -> next == previous + 1L },
+            "each admission draws the next value of the session's own source, in order: $sequences",
+        )
         collector.cancel()
         harness.close()
     }

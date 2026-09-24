@@ -321,6 +321,13 @@ private class WebHostSurface(
     }
     override val input: SurfaceInput = UnsupportedWebSurfaceInput
 
+    /**
+     * Installs the session-owned configuration this surface publishes through.
+     *
+     * A configuration that arrives after the surface stopped admitting is dropped with the stimuli
+     * that were waiting for it: [closeAdmission] cleared both, and assigning one here would leave a
+     * live configuration on a dead surface — the invariant every admission site relies on.
+     */
     override fun installSessionConfiguration(
         deliveryPolicy: WindowDeliveryPolicy,
         source: () -> EventStamp,
@@ -328,6 +335,7 @@ private class WebHostSurface(
         collectorAllocator: Any,
         maxCollectorsPerFlow: Int,
     ) {
+        if (admissionClosed) return
         val active = WebSurfaceConfiguration(deliveryPolicy, source, sessionFailureHandler)
         configuration = active
         val pending = pendingStimuli.toList()
@@ -436,19 +444,24 @@ private class WebHostSurface(
         }
     }
 
+    /**
+     * The one admission gate of this surface: `null` while it admits, its refusal otherwise.
+     *
+     * Every operation a caller can admit through — [apply], [requestRedraw] and [lease] — opens with
+     * this, so a surface that stopped admitting (revoked, detached or terminated) answers the same
+     * [KadreFailure.Closed] everywhere instead of drifting apart per site.
+     */
+    private fun admissionFailure(): KadreResult.Failure? =
+        if (admissionClosed) KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.Surface)) else null
+
     override fun requestRedraw(): KadreResult<Unit> {
-        if (admissionClosed) {
-            return KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.Surface))
-        }
+        admissionFailure()?.let { return it }
         enqueue(WebSurfaceStimulus.Redraw)
         return KadreResult.Success(Unit)
     }
 
     override suspend fun apply(update: SurfaceUpdate): KadreResult<SurfaceUpdateOutcome> =
-        KadreResult.Failure(
-            if (detached) KadreFailure.Closed(KadreResourceKind.Surface)
-            else KadreFailure.Unsupported(KadreOperation.UpdateSurface),
-        )
+        admissionFailure() ?: KadreResult.Failure(KadreFailure.Unsupported(KadreOperation.UpdateSurface))
 
     /**
      * Lends the element its port holds, for the duration of [block] and no longer.
@@ -456,11 +469,11 @@ private class WebHostSurface(
      * The element is read from the port on every lease rather than captured with the surface, so a
      * surface whose port is gone lends nothing even while a stale reference to it survives.
      *
-     * A surface that stopped admitting — revoked, detached or terminated — reports
-     * [KadreFailure.Closed], the same predicate every other admission site uses, and it wins over the
-     * reentrancy guard: a lease started after the close cannot be retried, so it must not be
-     * described as [KadreFailure.TemporarilyUnavailable]. Only a live surface with a lease in flight
-     * answers that, which is the one case where retrying later is the right thing for a caller to do.
+     * A surface that stopped admitting reports [KadreFailure.Closed], the same gate every other
+     * admission site uses, and it wins over the reentrancy guard: a lease started after the close
+     * cannot be retried, so it must not be described as [KadreFailure.TemporarilyUnavailable]. Only a
+     * live surface with a lease in flight answers that, which is the one case where retrying later is
+     * the right thing for a caller to do.
      *
      * The block starts without a suspension point between admission and its first instruction, so a
      * waiter cancelled before this call invokes nothing. Once the block has started, a cancellation
@@ -468,7 +481,7 @@ private class WebHostSurface(
      * block does.
      */
     override suspend fun <R> lease(block: suspend (Any) -> R): KadreResult<R> {
-        if (admissionClosed) return KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.Surface))
+        admissionFailure()?.let { return it }
         if (leaseHeld) return KadreResult.Failure(KadreFailure.TemporarilyUnavailable(retryable = true))
         val element = port.leasedElement
             ?: return KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.Surface))

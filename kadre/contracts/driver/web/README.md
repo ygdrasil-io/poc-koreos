@@ -84,6 +84,12 @@ These are the real boundaries of the delivered phase, not defects:
 - a redraw buffer whose overflow action is `DropOldestAndReport` or
   `DropLatestAndReport` only ever drops the excess request: a surface has no
   diagnostic channel in this phase that could carry the report half;
+- a buffered redraw capacity bounds *admissions per animation frame*, not a
+  queue of undelivered events: every request in one task coalesces into the one
+  pending request its frame admits, so `Latest` and `Coalesced` are
+  indistinguishable at the publisher, and a `Recording` profile's `FailSession`
+  action is reached only by an in-frame burst larger than the declared capacity.
+  The JVM reference bounds a queue of undelivered events instead;
 - the terminal `Surface.events` stream completes on Web where the JVM reference
   terminalises it with a failure, so a collector reads the session outcome to
   tell a clean close from a reported overflow;
