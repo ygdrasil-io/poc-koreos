@@ -36,6 +36,7 @@ import org.graphiks.kadre.internal.runtime.RuntimePrimarySurface
 import org.graphiks.kadre.internal.runtime.RuntimePrimarySurfaceConfiguration
 import org.graphiks.kadre.internal.runtime.RuntimeSessionRevocationHandler
 import org.graphiks.kadre.internal.runtime.RuntimeSessionObserver
+import org.graphiks.kadre.policy.ContinuousDelivery
 import org.graphiks.kadre.policy.KadrePolicy
 import org.graphiks.kadre.policy.WindowDeliveryPolicy
 import org.graphiks.kadre.surface.CursorIcon
@@ -59,6 +60,11 @@ import org.graphiks.kadre.surface.SurfaceTheme
 import org.graphiks.kadre.surface.SurfaceUpdate
 import org.graphiks.kadre.surface.SurfaceUpdateOutcome
 import org.graphiks.kadre.surface.SurfaceVisibility
+
+/** A target-owned animation-frame registration that can be cancelled by the shared surface. */
+internal fun interface WebFrameHandle {
+    fun cancel()
+}
 
 internal interface WebHostPort {
     val initialSnapshot: WebSurfaceMetrics
@@ -92,6 +98,16 @@ internal interface WebHostPort {
      * deduplicates. [release] removes this observer with every other target resource.
      */
     fun installMetricsObserver(observer: (WebSurfaceMetrics) -> Unit) = Unit
+
+    /**
+     * Registers [callback] for the next animation frame of the browsing context that owns the
+     * element.
+     *
+     * A single registration admits exactly one callback, delivered asynchronously; a registration
+     * that [WebFrameHandle.cancel] has consumed admits none. The default preserves the inert ports
+     * that never schedule a frame.
+     */
+    fun scheduleFrame(callback: () -> Unit): WebFrameHandle = WebFrameHandle { }
 
     fun release()
 }
@@ -203,8 +219,12 @@ private class WebHostSurface(
     private val ownership: WebHostOwnership,
 ) : HostSurface, RuntimePrimarySurfaceConfiguration {
     private var detached: Boolean = false
+    private var terminated: Boolean = false
     private var configuration: WebSurfaceConfiguration? = null
     private val pendingStimuli = ArrayDeque<WebSurfaceStimulus>()
+    private var pendingRedraw: Boolean = false
+    private var bufferedRedraws: Int = 0
+    private var frameHandle: WebFrameHandle? = null
     private val mutableState = MutableStateFlow(
         SurfaceState(
             attachment = SurfaceAttachmentState.Attached,
@@ -259,6 +279,7 @@ private class WebHostSurface(
     private fun publish(stimulus: WebSurfaceStimulus, active: WebSurfaceConfiguration) {
         when (stimulus) {
             is WebSurfaceStimulus.Metrics -> publishMetrics(stimulus.metrics, active)
+            WebSurfaceStimulus.Redraw -> publishRedraw(active)
         }
     }
 
@@ -282,11 +303,50 @@ private class WebHostSurface(
         mutableEvents.tryEmit(SurfaceEvent.MetricsChanged(next, active.stampSource()))
     }
 
-    override fun requestRedraw(): KadreResult<Unit> =
-        KadreResult.Failure(
-            if (detached) KadreFailure.Closed(KadreResourceKind.Surface)
-            else KadreFailure.Unsupported(KadreOperation.RequestRedraw),
-        )
+    /**
+     * Coalesces one request per scheduled frame under the session's redraw policy.
+     *
+     * `Latest` and `Coalesced` both keep at most one pending request and never reorder; they differ
+     * only in how a slow collector is served, which the runtime's event machinery owns. A buffered
+     * policy instead bounds the requests awaiting their frame and fails the session on overflow.
+     */
+    private fun publishRedraw(active: WebSurfaceConfiguration) {
+        if (detached || terminated) return
+        when (val delivery = active.deliveryPolicy.redrawRequests) {
+            is ContinuousDelivery.Latest, is ContinuousDelivery.Coalesced -> pendingRedraw = true
+            is ContinuousDelivery.Buffered -> {
+                bufferedRedraws += 1
+                if (bufferedRedraws > delivery.capacity) {
+                    terminated = true
+                    active.sessionFailureHandler(KadreFailure.SourceOverflow(KadreResourceKind.Surface))
+                    return
+                }
+            }
+        }
+        scheduleFrameIfAbsent(active)
+    }
+
+    /** Registers the one frame that admits the pending requests; later stimuli join it. */
+    private fun scheduleFrameIfAbsent(active: WebSurfaceConfiguration) {
+        if (frameHandle != null) return
+        frameHandle = port.scheduleFrame {
+            frameHandle = null
+            if (detached || terminated) return@scheduleFrame
+            val admitted = pendingRedraw || bufferedRedraws > 0
+            pendingRedraw = false
+            bufferedRedraws = 0
+            if (!admitted) return@scheduleFrame
+            mutableEvents.tryEmit(
+                SurfaceEvent.RedrawRequested(mutableState.value.revision, active.stampSource()),
+            )
+        }
+    }
+
+    override fun requestRedraw(): KadreResult<Unit> {
+        if (detached) return KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.Surface))
+        enqueue(WebSurfaceStimulus.Redraw)
+        return KadreResult.Success(Unit)
+    }
 
     override suspend fun apply(update: SurfaceUpdate): KadreResult<SurfaceUpdateOutcome> =
         KadreResult.Failure(
@@ -297,6 +357,12 @@ private class WebHostSurface(
     fun detach() {
         if (detached) return
         detached = true
+        // A scheduled frame can never admit after termination, so it is cancelled with the surface.
+        terminated = true
+        pendingRedraw = false
+        bufferedRedraws = 0
+        frameHandle?.cancel()
+        frameHandle = null
         pendingStimuli.clear()
         configuration = null
         mutableCapabilities.value = webSurfaceCapabilities(platformAccessSupported = false)

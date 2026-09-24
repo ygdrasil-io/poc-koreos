@@ -91,6 +91,12 @@ internal class WasmWebDomPort(element: HTMLElement) : WebHostPort {
         deliverMetrics()
     }
 
+    /** Frames belong to the element's browsing context, which may not carry this module's global. */
+    override fun scheduleFrame(callback: () -> Unit): WebFrameHandle {
+        val browserWindow = originWindow ?: return WebFrameHandle { }
+        return wasmScheduleFrame(browserWindow, callback)
+    }
+
     override fun release() {
         if (!active && element == null) return
         active = false

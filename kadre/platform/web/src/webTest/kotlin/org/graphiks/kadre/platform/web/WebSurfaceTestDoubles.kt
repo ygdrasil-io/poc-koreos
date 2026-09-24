@@ -12,6 +12,20 @@ internal class RecordingWebHostPort(initial: WebSurfaceMetrics) : WebHostPort {
     override val initialSnapshot: WebSurfaceMetrics = initial
     override val stableIdentity: Any = Any()
     private var metricsObserver: ((WebSurfaceMetrics) -> Unit)? = null
+    private var lifecycleObserver: ((WebLifecycleSnapshot) -> Unit)? = null
+    private var frame: (() -> Unit)? = null
+
+    /** How often the surface released this port; release is terminal and happens exactly once. */
+    var releaseCount: Int = 0
+        private set
+
+    /** How often the surface cancelled a frame it had registered; a run frame is not a cancel. */
+    var frameCancellations: Int = 0
+        private set
+
+    override fun installLifecycleObserver(observer: (WebLifecycleSnapshot) -> Unit) {
+        lifecycleObserver = observer
+    }
 
     override fun installMetricsObserver(observer: (WebSurfaceMetrics) -> Unit) {
         metricsObserver = observer
@@ -22,7 +36,30 @@ internal class RecordingWebHostPort(initial: WebSurfaceMetrics) : WebHostPort {
         metricsObserver?.invoke(metrics)
     }
 
+    /** Pushes [snapshot] as if the target had just observed the browsing context. */
+    fun deliverLifecycle(snapshot: WebLifecycleSnapshot) {
+        lifecycleObserver?.invoke(snapshot)
+    }
+
+    override fun scheduleFrame(callback: () -> Unit): WebFrameHandle {
+        frame = callback
+        return WebFrameHandle {
+            frameCancellations += 1
+            frame = null
+        }
+    }
+
+    /** Runs the frame the surface has registered, as the browsing context would. */
+    fun runFrame() {
+        val scheduled = frame ?: return
+        frame = null
+        scheduled()
+    }
+
     override fun release() {
+        releaseCount += 1
         metricsObserver = null
+        lifecycleObserver = null
+        frame = null
     }
 }

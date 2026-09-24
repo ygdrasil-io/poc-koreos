@@ -32,6 +32,9 @@ internal data class WebSurfaceMetrics(
 /** A target-owned observation of the attached element, before the session configuration exists. */
 internal sealed interface WebSurfaceStimulus {
     data class Metrics(val metrics: WebSurfaceMetrics) : WebSurfaceStimulus
+
+    /** A redraw request admitted by the shared surface, pending its animation frame. */
+    data object Redraw : WebSurfaceStimulus
 }
 
 /** The session-owned facts a surface needs to publish an event for an observed stimulus. */
