@@ -92,6 +92,16 @@ tasks.register<GradleBuild>("validateTypeScriptConsumer") {
     )
 }
 
+tasks.register<GradleBuild>("emitTypeScriptBrowserConsumer") {
+    dependsOn(contractPublications)
+    dir = file("consumers/typescript")
+    tasks = listOf("emitBrowserConsumer")
+    startParameter.projectProperties = mapOf(
+        "kadreRepository" to contractTestRepository.get().asFile.absolutePath,
+        "kadreVersion" to project.version.toString(),
+    )
+}
+
 publishing {
     repositories {
         maven {

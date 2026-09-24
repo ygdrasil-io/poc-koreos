@@ -9,7 +9,12 @@ if (!junitOutput || !outputDir) {
 
 export default defineConfig({
   testDir: '.',
-  testMatch: ['web-phase0.spec.mjs', 'web-lifecycle.spec.mjs'],
+  testMatch: [
+    'web-phase0.spec.mjs',
+    'web-lifecycle.spec.mjs',
+    'web-surface.spec.mjs',
+    'web-typescript.spec.mjs',
+  ],
   timeout: 30_000,
   retries: 0,
   workers: 1,

@@ -64,10 +64,10 @@ val browserSmokeRunnerTest by tasks.registering(Exec::class) {
     )
 }
 
-fun registerBrowserSmoke(target: String, distributionTask: String) = tasks.register<Exec>("${target}BrowserSmoke") {
+fun registerBrowserSmoke(target: String, distributionTask: String, hostPageTask: String) = tasks.register<Exec>("${target}BrowserSmoke") {
     group = "verification"
     description = "Runs the $target public Web attach smoke in Chromium."
-    dependsOn(browserSmokeRunnerTest, installPlaywright, distributionTask)
+    dependsOn(browserSmokeRunnerTest, installPlaywright, distributionTask, hostPageTask)
     workingDir(projectDir)
     commandLine(
         "node",
@@ -75,12 +75,49 @@ fun registerBrowserSmoke(target: String, distributionTask: String) = tasks.regis
         "--target=$target",
         "--distribution=${layout.buildDirectory.dir("dist/$target/productionExecutable").get().asFile.absolutePath}",
         "--evidence=${browserSmokeOutput.get().dir(target).asFile.absolutePath}",
+        "--consumer=${layout.buildDirectory.dir("dist/$target/host").get().asFile.absolutePath}",
     )
     inputs.files(playwrightPackage, playwrightLock)
     inputs.dir(layout.projectDirectory.dir("playwright"))
     inputs.dir(layout.buildDirectory.dir("dist/$target/productionExecutable"))
+    inputs.dir(layout.buildDirectory.dir("dist/$target/host"))
     outputs.dir(browserSmokeOutput.map { it.dir(target) })
 }
 
-registerBrowserSmoke(target = "js", distributionTask = "jsBrowserDistribution")
-registerBrowserSmoke(target = "wasmJs", distributionTask = "wasmJsBrowserDistribution")
+/**
+ * The `@kadre/host` root the TypeScript scenario is served from.
+ *
+ * It is the published package of this target — the same directory the packaging task of
+ * `kadre/platform/web` assembles — plus the browser entry of the TypeScript consumer compiled by
+ * `kadre/consumers/typescript` against that target's package. Both archives carry the same curated
+ * declaration, and the consumer leaves the bare specifier for the page's import map to resolve.
+ */
+fun registerHostPage(target: String, packageTask: String) = tasks.register<Sync>("${target}HostPage") {
+    group = "build"
+    description = "Assembles the served @kadre/host root with the browser consumer for $target."
+    dependsOn(packageTask, ":kadre:emitTypeScriptBrowserConsumer")
+    from(project(":kadre:platform:web").layout.buildDirectory.dir("dist/$target/host-package"))
+    from(typescriptConsumerOutput.dir(target)) { include("consumer.js") }
+    into(layout.buildDirectory.dir("dist/$target/host"))
+    doLast {
+        val directory = layout.buildDirectory.dir("dist/$target/host").get().asFile
+        listOf("index.mjs", "index.d.ts", "consumer.js").forEach { required ->
+            check(directory.resolve(required).isFile) { "the $target host root must serve $required" }
+        }
+    }
+}
+
+val typescriptConsumerOutput = rootProject.layout.projectDirectory.dir("kadre/consumers/typescript/build/browser-consumer")
+
+registerBrowserSmoke(
+    target = "js",
+    distributionTask = "jsBrowserDistribution",
+    hostPageTask = ":kadre:contracts:driver:web:jsHostPage",
+)
+registerBrowserSmoke(
+    target = "wasmJs",
+    distributionTask = "wasmJsBrowserDistribution",
+    hostPageTask = ":kadre:contracts:driver:web:wasmJsHostPage",
+)
+registerHostPage(target = "js", packageTask = ":kadre:platform:web:jsHostPackage")
+registerHostPage(target = "wasmJs", packageTask = ":kadre:platform:web:wasmJsHostPackage")

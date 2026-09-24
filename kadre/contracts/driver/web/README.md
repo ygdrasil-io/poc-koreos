@@ -13,14 +13,58 @@ rtk ./gradlew :kadre:contracts:driver:web:jsBrowserSmoke :kadre:contracts:driver
 ```
 
 The target-specific Playwright suites are
-[web-lifecycle.spec.mjs](playwright/web-lifecycle.spec.mjs). They exercise the
+[web-lifecycle.spec.mjs](playwright/web-lifecycle.spec.mjs),
+[web-surface.spec.mjs](playwright/web-surface.spec.mjs) and
+[web-typescript.spec.mjs](playwright/web-typescript.spec.mjs). They exercise the
 public `HTMLElement.attachKadre` API and emit target-specific JUnit results for
 the lifecycle scenarios that will later belong to a contract proof. Playwright
 diagnostics are removed after a successful smoke; they are preserved on a
 failure or interruption. The tests cover deterministic lifecycle behaviour:
 ownership, detach/reinsert, cross-document transfer, Shadow DOM observation,
-`Manual` reconnection, focus and visibility reduction, `pagehide`, and the
-absence of Kadre-created DOM or a primary window.
+`Manual` reconnection, focus and visibility reduction, `pagehide`, the absence
+of Kadre-created DOM or a primary window, the surface size/scale readback and
+its per-frame redraw coalescing, the element escape hatch, and the TypeScript
+consumer.
+
+Each Playwright test title is exactly the contract scenario ID it proves, so a
+JUnit `testcase/@name` maps to a scenario without interpretation.
+
+## The TypeScript scenario
+
+The `web-typescript-consumer` scenario runs the source that
+`kadre/consumers/typescript` type-checks, in the browser, against the target's
+published `@kadre/host` package. The driver assembles the served root into
+`build/dist/<target>/host/`: the published package plus the compiled
+`consumer.js` (`:kadre:emitTypeScriptBrowserConsumer`). The generated page
+resolves the bare specifier `@kadre/host` through an import map to the
+package's published `index.mjs` shim, and the page's Kotlin application
+publishes the opaque factory key the consumer passes back to `KadreWeb.attach`.
+
+The shim's relative import of its sibling Kotlin module is remapped, by the same
+import map, to a small application module that the driver serves at
+`/host/kadre-host-application.js`: it exposes the *application's* interop
+bindings to the shim and loads the published module first, publishing the binding
+names that module declares as `kadre-published-host-bindings` (asserted by the
+spec). The remap is necessary because a browser page's Kotlin application cannot
+share one interop instance with the published module:
+
+- a Kotlin/Wasm library module statically links its dependencies, so the
+  published `kadre-platform-web.wasm` is a second, isolated instance, and a
+  factory key registered by the application is unknown to it
+  (`KadreHostError: {"kind":"invalidRequest","field":"factoryKey"}`);
+- the Kotlin/JS library build publishes its `@JsExport` names nested on its
+  module object under the package path, while the published shim reads them from
+  the top level of the module-name global, so importing the shipped JS shim
+  against the shipped JS module fails on
+  `@kadre/host: the Kotlin module did not publish its bindings`. That build also
+  dead-code-eliminates `KadreApplicationFactory.asHostRef`, `hostKey` and
+  `KadreApplicationFactoryRef`, so no application can obtain a usable key from
+  the published JS module at all. Both are recorded in the Task 7 report; a
+  follow-up in `kadre/platform/web` owns them.
+
+`--consumer=<directory>` is required: the runner serves that directory at
+`/host` and fails before Playwright starts when it is absent or does not carry
+`index.mjs`.
 
 `BCK-001` remains `planned` in Phase 1. No active contract gate consumes these
 artifacts and this driver does not activate that capability.

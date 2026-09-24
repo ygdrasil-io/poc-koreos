@@ -119,7 +119,7 @@ test('a partial HTTP request is held through graceful drain and closed by forced
   );
 });
 
-test('GET /index.html with a scenario query serves the fixture HTML', {
+test('GET /index.html with a scenario query serves the fixture page and the host root', {
   timeout: 10_000,
 }, async (context) => {
   const fixture = await createFixture('query-route');
@@ -128,10 +128,46 @@ test('GET /index.html with a scenario query serves the fixture HTML', {
   const result = await runSmoke(fixture).completion;
 
   assert.equal(normalizedExitStatus(result), 0, result.stderr);
-  assert.equal(
-    await readFile(fixture.queryResponse, 'utf8'),
-    '<!doctype html><html><body><script src="/fixture.js"></script></body></html>',
+  const html = await readFile(fixture.queryResponse, 'utf8');
+  assert.match(html, /<script src="\/fixture\.js"><\/script>/);
+  assert.match(html, /"@kadre\/host":"\/host\/index\.mjs"/);
+  assert.match(html, /"\/host\/kadre-platform-web\.js":"\/host\/kadre-host-application\.js"/);
+  assert.match(html, /typescript-consumer/);
+  assert.equal(await readFile(fixture.hostResponse, 'utf8'), 'export const KadreWeb = {};\n');
+  assert.match(await readFile(fixture.applicationResponse, 'utf8'), /org\.graphiks\.kadre:web/);
+});
+
+test('the wasmJs page maps the shim to an application module that re-exports the bindings', {
+  timeout: 10_000,
+}, async (context) => {
+  const fixture = await createFixture('query-route');
+  context.after(() => fixture.dispose());
+
+  const result = await runSmoke(fixture, [], 'wasmJs').completion;
+
+  assert.equal(normalizedExitStatus(result), 0, result.stderr);
+  const html = await readFile(fixture.queryResponse, 'utf8');
+  assert.match(html, /"\/host\/kadre-platform-web\.mjs":"\/host\/kadre-host-application\.js"/);
+  assert.match(
+    await readFile(fixture.applicationResponse, 'utf8'),
+    /export const \{ kadreWebAttach, kadreWebSessionId, kadreWebSessionState, kadreWebSubscribeState, kadreWebSubscribeTermination, kadreWebUnsubscribeState, kadreWebRequestStop, kadreWebClose \} = application;/,
   );
+});
+
+test('a smoke without --consumer fails before Playwright is started', {
+  timeout: 10_000,
+}, async (context) => {
+  const fixture = await createFixture('missing-consumer');
+  context.after(() => fixture.dispose());
+
+  const result = await spawnRunner(fixture, [
+    '--target=js',
+    `--distribution=${fixture.distribution}`,
+    `--evidence=${fixture.evidence}`,
+  ]).completion;
+
+  assert.notEqual(normalizedExitStatus(result), 0, 'a smoke without --consumer was accepted');
+  assert.match(result.stderr, /--consumer=<directory>/, result.stderr);
 });
 
 test('successful cleanup atomically retains unreadable diagnostics without copying their contents', {
@@ -244,6 +280,7 @@ async function createFixture(scenario, junit = validJunit) {
   const root = await mkdtemp(join(tmpdir(), 'kadre-browser-runner-'));
   const distribution = join(root, 'distribution');
   const evidence = join(root, 'evidence');
+  const host = join(root, 'host');
   const binDirectory = join(root, 'node_modules', '.bin');
   const fakePlaywright = join(root, 'fake-playwright.cjs');
   const heldClient = join(root, 'held-client.cjs');
@@ -263,6 +300,8 @@ async function createFixture(scenario, junit = validJunit) {
   const diagnosticCommitRelease = join(root, 'diagnostic-commit-release');
   const diagnosticCommitSignalObserved = join(root, 'diagnostic-commit-signal-observed');
   const queryResponse = join(root, 'query-response.html');
+  const hostResponse = join(root, 'host-response.mjs');
+  const applicationResponse = join(root, 'application-response.js');
   const diagnostics = join(evidence, 'diagnostics', 'playwright');
   const diagnosticsParent = dirname(diagnostics);
   const diagnosticTraceDirectory = join(diagnostics, 'trace');
@@ -272,8 +311,12 @@ async function createFixture(scenario, junit = validJunit) {
   const preservedDiagnosticMarker = join(preservedDiagnosticTraceDirectory, 'trace.txt');
 
   await mkdir(distribution, { recursive: true });
+  await mkdir(host, { recursive: true });
   await mkdir(binDirectory, { recursive: true });
   await writeFile(join(distribution, 'fixture.js'), 'globalThis.kadreFixture = true;\n');
+  await writeFile(join(host, 'index.mjs'), 'export const KadreWeb = {};\n');
+  await writeFile(join(host, 'kadre-platform-web.js'), 'globalThis["org.graphiks.kadre:web"] = {};\n');
+  await writeFile(join(host, 'consumer.js'), 'void 0;\n');
   await writeFile(heldClient, heldClientSource, { mode: 0o755 });
   await writeFile(descendant, descendantSource, { mode: 0o755 });
   await writeFile(fakePlaywright, fakePlaywrightSource, { mode: 0o755 });
@@ -304,6 +347,9 @@ async function createFixture(scenario, junit = validJunit) {
     diagnosticsParent,
     distribution,
     evidence,
+    applicationResponse,
+    host,
+    hostResponse,
     preservedDiagnosticMarker,
     preservedDiagnosticTraceDirectory,
     preservedDiagnostics,
@@ -353,6 +399,8 @@ async function createFixture(scenario, junit = validJunit) {
       KADRE_RUNNER_TEST_DIAGNOSTIC_PRESERVATION_RELEASE: diagnosticPreservationRelease,
       KADRE_RUNNER_TEST_DIAGNOSTIC_COMMIT_STARTED: diagnosticCommitStarted,
       KADRE_RUNNER_TEST_DIAGNOSTIC_COMMIT_RELEASE: diagnosticCommitRelease,
+      KADRE_RUNNER_TEST_APPLICATION_RESPONSE: applicationResponse,
+      KADRE_RUNNER_TEST_HOST_RESPONSE: hostResponse,
       KADRE_RUNNER_TEST_DIAGNOSTIC_COMMIT_SIGNAL_OBSERVED: diagnosticCommitSignalObserved,
       KADRE_RUNNER_TEST_SCENARIO: scenario,
       ...([
@@ -366,13 +414,20 @@ async function createFixture(scenario, junit = validJunit) {
   };
 }
 
-function runSmoke(fixture, extraArguments = []) {
-  const child = spawn(process.execPath, [
-    runner,
-    '--target=js',
+function runSmoke(fixture, extraArguments = [], target = 'js') {
+  return spawnRunner(fixture, [
+    `--target=${target}`,
     `--distribution=${fixture.distribution}`,
     `--evidence=${fixture.evidence}`,
+    `--consumer=${fixture.host}`,
     ...extraArguments,
+  ]);
+}
+
+function spawnRunner(fixture, argumentsList) {
+  const child = spawn(process.execPath, [
+    runner,
+    ...argumentsList,
   ], {
     cwd: fixture.root,
     env: { ...process.env, ...fixture.environment },
@@ -528,6 +583,14 @@ async function requestFixtureWithQuery() {
   if (response.status !== 200) throw new Error('query fixture returned HTTP ' + response.status);
   const html = await response.text();
   writeFileSync(process.env.KADRE_RUNNER_TEST_QUERY_RESPONSE, html);
+  await recordRoute('/host/index.mjs', process.env.KADRE_RUNNER_TEST_HOST_RESPONSE);
+  await recordRoute('/host/kadre-host-application.js', process.env.KADRE_RUNNER_TEST_APPLICATION_RESPONSE);
+}
+
+async function recordRoute(path, file) {
+  const response = await fetch(new URL(path, process.env.KADRE_FIXTURE_URL));
+  if (response.status !== 200) throw new Error(path + ' returned HTTP ' + response.status);
+  writeFileSync(file, await response.text());
 }
 
 async function waitForConnection() {
