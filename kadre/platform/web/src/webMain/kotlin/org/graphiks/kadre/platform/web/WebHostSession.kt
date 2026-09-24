@@ -112,7 +112,31 @@ internal interface WebHostPort {
      */
     fun scheduleFrame(callback: () -> Unit): WebFrameHandle = WebFrameHandle { }
 
+    /**
+     * The host element as an untyped reference, or null once the port released it.
+     *
+     * The reference is valid only while [WebElementLeasePort.lease] runs its block; the target port
+     * never hands out a DOM type through this member.
+     */
+    val leasedElement: Any? get() = null
+
     fun release()
+}
+
+/**
+ * DOM-free lease core for [HostSurface.withWebElement].
+ *
+ * The callback runs on the host context that lends the element. A lease is not reentrant: while
+ * one is held, a second lease fails with [KadreFailure.TemporarilyUnavailable] instead of
+ * waiting, because a renderer re-entering its own surface is a programming error, not back
+ * pressure.
+ *
+ * The block may suspend — the facade's callback does not — and the element reference handed to
+ * [lease] is valid only until the block ends, whether it returns, throws or is cancelled.
+ */
+internal interface WebElementLeasePort {
+    /** Runs [block] with the leased element, or fails without invoking it. */
+    suspend fun <R> lease(block: suspend (Any) -> R): KadreResult<R>
 }
 
 internal class WebHostSession(
@@ -238,7 +262,7 @@ private class WebHostSurface(
     override val id: SurfaceId,
     private val port: WebHostPort,
     private val ownership: WebHostOwnership,
-) : HostSurface, RuntimePrimarySurfaceConfiguration {
+) : HostSurface, RuntimePrimarySurfaceConfiguration, WebElementLeasePort {
     private var detached: Boolean = false
     private var terminated: Boolean = false
 
@@ -247,6 +271,9 @@ private class WebHostSurface(
 
     /** True while nothing new may be admitted, by the owner's revocation or by this surface. */
     private val admissionClosed: Boolean get() = revoked || detached || terminated
+
+    /** True between the admission of a lease and the end of the callback it admitted. */
+    private var leaseHeld: Boolean = false
     private var configuration: WebSurfaceConfiguration? = null
     private val pendingStimuli = ArrayDeque<WebSurfaceStimulus>()
     private var pendingRedraw: Boolean = false
@@ -270,7 +297,7 @@ private class WebHostSurface(
             revision = SurfaceRevision(0L),
         ),
     )
-    private val mutableCapabilities = MutableStateFlow(webSurfaceCapabilities(platformAccessSupported = false))
+    private val mutableCapabilities = MutableStateFlow(webSurfaceCapabilities(platformAccessSupported = true))
     private val mutableEvents = MutableSharedFlow<SurfaceEvent>(replay = 0, extraBufferCapacity = 16)
     private val terminal = CompletableDeferred<Unit>()
 
@@ -420,6 +447,33 @@ private class WebHostSurface(
             if (detached) KadreFailure.Closed(KadreResourceKind.Surface)
             else KadreFailure.Unsupported(KadreOperation.UpdateSurface),
         )
+
+    /**
+     * Lends the element its port holds, for the duration of [block] and no longer.
+     *
+     * The element is read from the port on every lease rather than captured with the surface, so a
+     * surface whose port is gone lends nothing even while a stale reference to it survives. A
+     * second lease while one is held reports [KadreFailure.TemporarilyUnavailable] on a live
+     * surface; only a surface that stopped admitting — revoked, detached or terminated — reports
+     * [KadreFailure.Closed], which is the same predicate every other admission site uses.
+     *
+     * The block starts without a suspension point between admission and its first instruction, so a
+     * waiter cancelled before this call invokes nothing. Once the block has started, a cancellation
+     * ends it and the lease is released in the `finally`, which is also what an exception out of the
+     * block does.
+     */
+    override suspend fun <R> lease(block: suspend (Any) -> R): KadreResult<R> {
+        if (leaseHeld) return KadreResult.Failure(KadreFailure.TemporarilyUnavailable(retryable = true))
+        if (admissionClosed) return KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.Surface))
+        val element = port.leasedElement
+            ?: return KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.Surface))
+        leaseHeld = true
+        try {
+            return KadreResult.Success(block(element))
+        } finally {
+            leaseHeld = false
+        }
+    }
 
     /**
      * The owner's revocation of this surface, which runs before the target's bridges are released.

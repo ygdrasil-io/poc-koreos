@@ -62,6 +62,7 @@ internal class WasmWebDomPort(element: HTMLElement) : WebHostPort {
     }
 
     override val stableIdentity: Any get() = checkNotNull(element)
+    override val leasedElement: Any? get() = element
     override val initialSnapshot: WebSurfaceMetrics = element.surfaceMetrics(originWindow?.devicePixelRatio ?: 1.0)
     override val initialLifecycleSnapshot: WebLifecycleSnapshot = lifecycleSnapshot(element)
 

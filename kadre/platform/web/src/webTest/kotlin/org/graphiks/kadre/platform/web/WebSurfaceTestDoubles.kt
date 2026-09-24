@@ -8,13 +8,27 @@ package org.graphiks.kadre.platform.web
  * phase observe the same target-side behaviour; members are added as the surface starts consuming
  * more of the port.
  */
-internal class RecordingWebHostPort(initial: WebSurfaceMetrics) : WebHostPort {
+internal class RecordingWebHostPort(
+    initial: WebSurfaceMetrics,
+    element: Any? = null,
+) : WebHostPort {
     override val initialSnapshot: WebSurfaceMetrics = initial
     override val stableIdentity: Any = Any()
     private var metricsObserver: ((WebSurfaceMetrics) -> Unit)? = null
     private var lifecycleObserver: ((WebLifecycleSnapshot) -> Unit)? = null
     private var frame: (() -> Unit)? = null
     private var released: Boolean = false
+
+    /**
+     * The host element this port was built around, as the untyped reference the surface lends.
+     *
+     * [release] drops it, the way the target ports drop the element they hold, so a lease on a
+     * surface whose port is gone finds nothing to lend.
+     */
+    var element: Any? = element
+        private set
+
+    override val leasedElement: Any? get() = element
 
     /** How often the surface released this port; release is terminal and happens exactly once. */
     var releaseCount: Int = 0
@@ -95,5 +109,6 @@ internal class RecordingWebHostPort(initial: WebSurfaceMetrics) : WebHostPort {
         onRelease?.invoke()
         metricsObserver = null
         lifecycleObserver = null
+        element = null
     }
 }
