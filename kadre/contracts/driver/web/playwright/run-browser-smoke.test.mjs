@@ -19,6 +19,17 @@ import test from 'node:test';
 const runner = resolve(dirname(fileURLToPath(import.meta.url)), 'run-browser-smoke.mjs');
 const signalExitCodes = { SIGINT: 130, SIGTERM: 143 };
 const validJunit = '<?xml version="1.0"?><testsuites tests="1" failures="0" errors="0" skipped="0"><testsuite name="web" tests="1" failures="0" errors="0" skipped="0"><testcase name="attaches" classname="web-phase0"/></testsuite></testsuites>';
+/**
+ * A hermetic registry and mapping.
+ *
+ * These fixtures drive termination and finalization, not evidence: an empty registry declares no
+ * active browser contract, so the runner writes no canonical JSON and needs neither a provisioned
+ * browser nor the repository the real registry lives in. The evidence itself is proven by the smoke
+ * gate, which the validator inspects.
+ */
+const fixtureRegistryHeader =
+  'contractId\tstatus\tsource\tsubject\trisk\toracle\tscenarios\trequiredTargets\tconditionalCapabilities\tsentinels\tretirementRef\n';
+const fixtureMappingHeader = 'contractId\ttarget\tkind\tevidenceId\ttestClass\ttestName\n';
 
 test('launch construction uses a shell for the Windows Playwright cmd shim only', async () => {
   const { createPlaywrightLaunch } = await import('./browser-smoke-launch.mjs');
@@ -281,6 +292,8 @@ async function createFixture(scenario, junit = validJunit) {
   const distribution = join(root, 'distribution');
   const evidence = join(root, 'evidence');
   const host = join(root, 'host');
+  const contracts = join(root, 'contracts.tsv');
+  const mapping = join(root, 'evidence.tsv');
   const binDirectory = join(root, 'node_modules', '.bin');
   const fakePlaywright = join(root, 'fake-playwright.cjs');
   const heldClient = join(root, 'held-client.cjs');
@@ -313,6 +326,8 @@ async function createFixture(scenario, junit = validJunit) {
   await mkdir(distribution, { recursive: true });
   await mkdir(host, { recursive: true });
   await mkdir(binDirectory, { recursive: true });
+  await writeFile(contracts, fixtureRegistryHeader);
+  await writeFile(mapping, fixtureMappingHeader);
   await writeFile(join(distribution, 'fixture.js'), 'globalThis.kadreFixture = true;\n');
   await writeFile(join(host, 'index.mjs'), 'export const KadreWeb = {};\n');
   await writeFile(join(host, 'kadre-platform-web.js'), 'globalThis["org.graphiks.kadre:web"] = {};\n');
@@ -339,6 +354,7 @@ async function createFixture(scenario, junit = validJunit) {
     cleanupStarted,
     connectionClosed,
     connectionOpened,
+    contracts,
     descendantPid,
     descendantReady,
     descendantTerminated,
@@ -351,6 +367,7 @@ async function createFixture(scenario, junit = validJunit) {
     host,
     kotlinModuleResponse,
     hostResponse,
+    mapping,
     preservedDiagnosticMarker,
     preservedDiagnosticTraceDirectory,
     preservedDiagnostics,
@@ -421,6 +438,8 @@ function runSmoke(fixture, extraArguments = [], target = 'js') {
     `--distribution=${fixture.distribution}`,
     `--evidence=${fixture.evidence}`,
     `--consumer=${fixture.host}`,
+    `--contracts=${fixture.contracts}`,
+    `--mapping=${fixture.mapping}`,
     ...extraArguments,
   ]);
 }

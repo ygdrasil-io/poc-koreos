@@ -17,7 +17,7 @@ kotlin {
 }
 
 val jvmMain = kotlin.targets.getByName("jvm").compilations.getByName("main")
-val webContractIds = listOf("BCK-001", "INT-002", "INT-003", "INT-004")
+val webContractIds = listOf("BCK-001", "BCK-002", "INT-002", "INT-003", "INT-004")
 val appKitContractIds = listOf(
     "APK-001", "APK-002", "APK-003", "APK-004", "APK-005", "APK-006",
     "APK-007", "APK-008", "APK-009", "APK-010", "APK-011", "APK-012",

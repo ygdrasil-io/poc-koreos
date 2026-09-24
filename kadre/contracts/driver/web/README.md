@@ -4,7 +4,7 @@ This non-published project runs the public Web host-attachment proof in real
 Chromium for both Kotlin/JS IR and Kotlin/Wasm-JS. It is a browser driver, not
 an implementation API and not a renderer.
 
-## Automated lifecycle smoke
+## Automated browser smoke
 
 Run both targets from the repository root:
 
@@ -12,22 +12,73 @@ Run both targets from the repository root:
 rtk ./gradlew :kadre:contracts:driver:web:jsBrowserSmoke :kadre:contracts:driver:web:wasmJsBrowserSmoke --rerun-tasks
 ```
 
-The target-specific Playwright suites are
-[web-lifecycle.spec.mjs](playwright/web-lifecycle.spec.mjs),
-[web-surface.spec.mjs](playwright/web-surface.spec.mjs) and
-[web-typescript.spec.mjs](playwright/web-typescript.spec.mjs). They exercise the
-public `HTMLElement.attachKadre` API and emit target-specific JUnit results for
-the lifecycle scenarios that will later belong to a contract proof. Playwright
-diagnostics are removed after a successful smoke; they are preserved on a
-failure or interruption. The tests cover deterministic lifecycle behaviour:
-ownership, detach/reinsert, cross-document transfer, Shadow DOM observation,
-`Manual` reconnection, focus and visibility reduction, `pagehide`, the absence
-of Kadre-created DOM or a primary window, the surface size/scale readback and
-its per-frame redraw coalescing, the element escape hatch, and the TypeScript
-consumer.
+Three target-specific Playwright suites run in Chromium and emit target-specific
+JUnit results:
 
-Each Playwright test title is exactly the contract scenario ID it proves, so a
-JUnit `testcase/@name` maps to a scenario without interpretation.
+- [web-lifecycle.spec.mjs](playwright/web-lifecycle.spec.mjs) proves the
+  attachment lifecycle: ownership, detach/reinsert, cross-document transfer,
+  Shadow DOM observation, `Manual` reconnection, focus and visibility reduction,
+  `pagehide`, and the absence of Kadre-created DOM or a primary window;
+- [web-surface.spec.mjs](playwright/web-surface.spec.mjs) proves the host
+  surface: the size and scale readback published from the element's own layout
+  box and the browsing context's device pixel ratio, the per-animation-frame
+  redraw coalescing with its detached rejection, the element escape hatch and its
+  lease boundary, and the no-renderer sentinel;
+- [web-typescript.spec.mjs](playwright/web-typescript.spec.mjs) proves the
+  published `@kadre/host` facade, driven by the same TypeScript consumer that
+  `kadre/consumers/typescript` type-checks.
+
+Playwright diagnostics are removed after a successful smoke; they are preserved
+on a failure or interruption. Every Playwright test title is exactly the contract
+scenario ID it proves, so a JUnit `testcase/@name` maps to a scenario without
+interpretation.
+
+## Contract evidence
+
+The smoke is also the producer of the canonical browser evidence of
+`kadre/WEB-IMPLEMENTATION-ROADMAP.md` section 3.8. Right after the JUnit report
+validates, [contract-evidence.mjs](playwright/contract-evidence.mjs) writes one
+JSON per active browser contract of the target:
+
+```text
+kadre/contracts/driver/web/build/contract-evidence/<target>/
+  contract-evidence/browser/chromium/<contractId>.json
+  test-results/browser/chromium/TEST-web-phase0.xml
+```
+
+The documents are built from `kadre/contracts/registry/contracts.tsv` and
+[contracts/evidence.tsv](contracts/evidence.tsv), never from the test titles: a
+declared scenario with no mapping row, a mapped testcase missing from the report
+or a mapped testcase that did not pass fails the smoke instead of producing a
+`Passed` claim. `durationMillis` is derived exactly as the validator's
+`JUnitEvidence` derives it — the sum of the testsuite times scaled to whole
+milliseconds with `HALF_UP` — and `tests` copies the JUnit totals. The execution
+descriptor names the engine, its version read from a Playwright launch of the
+same pinned revision, and the entry module the page loads, with its SHA-256. The
+Wasm-JS entry module is the loader that instantiates the target's content-hashed
+`.wasm`, so the digest pins that module too.
+
+The two Gradle tasks `:kadre:contracts:validator:validateJsBrowserContractEvidence`
+and `...:validateWasmJsBrowserContractEvidence` read those documents against the
+same registry, the same mapping and the same JUnit report; they are part of
+`:kadre:contracts:validator:check`.
+
+## Phase 2 limits
+
+These are the real boundaries of the delivered phase, not defects:
+
+- a redraw buffer whose overflow action is `DropOldestAndReport` or
+  `DropLatestAndReport` only ever drops the excess request: a surface has no
+  diagnostic channel in this phase that could carry the report half;
+- the terminal `Surface.events` stream completes on Web where the JVM reference
+  terminalises it with a failure, so a collector reads the session outcome to
+  tell a clean close from a reported overflow;
+- `SurfaceCapabilities.platformAccess` is published once, from the terminal path:
+  inside the ownership-revocation window a lease is already refused while the
+  capability still reads `Supported`;
+- the published Wasm module is the unoptimized compiler output, because
+  `wasm-opt` empties a library distribution: the `build/dist/wasmJs` copy is never
+  shipped.
 
 ## The TypeScript scenario
 
@@ -63,7 +114,9 @@ The last publisher wins; a page that publishes nothing is reported with
 
 `--consumer=<directory>` is required: the runner serves that directory at
 `/host` and fails before Playwright starts when it is absent or does not carry
-`index.mjs`.
+`index.mjs`. `--contracts=<registry>` and `--mapping=<file>` are required too:
+they are the registry and the evidence mapping the canonical JSON documents are
+built from, and the Gradle smoke task passes the repository's own pair.
 
 ## Pinned Chromium provisioning
 
@@ -82,12 +135,19 @@ browser version is not an input to the automated smoke.
 
 ## Manual browser charter
 
-[phase-1-lifecycle.md](manual/phase-1-lifecycle.md) supplements the automated
-suite with browser behaviour that headless automation cannot claim reliably,
-including a real back-forward cache traversal, browser-level focus, and host
-owned open/closed Shadow DOM. It does not replace the JS and Wasm automated
-smokes, does not create validator evidence, and does not change contract
-status.
+Two charters supplement the automated suites with browser behaviour that
+headless automation cannot claim reliably, and neither replaces the JS and Wasm
+automated smokes:
+
+- [phase-1-lifecycle.md](manual/phase-1-lifecycle.md) covers a real back-forward
+  cache traversal, browser-level focus, and host owned open/closed Shadow DOM;
+- [phase-2-surface.md](manual/phase-2-surface.md) covers a real browser zoom, a
+  bfcache traversal with a redraw request still waiting for its frame, and a
+  host-owned element moved between browsing contexts while an element lease is
+  held.
+
+They are informative, they do not create validator evidence, and they do not
+change contract status.
 
 The lifecycle contract and the delivery roadmap remain authoritative:
 

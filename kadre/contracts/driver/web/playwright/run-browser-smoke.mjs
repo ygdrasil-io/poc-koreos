@@ -5,6 +5,7 @@ import { basename, dirname, extname, join, relative, resolve, sep } from 'node:p
 import { spawn } from 'node:child_process';
 import { XMLParser, XMLValidator } from 'fast-xml-parser';
 import { createPlaywrightLaunch } from './browser-smoke-launch.mjs';
+import { browserEvidenceLocations, generateContractEvidence } from './contract-evidence.mjs';
 
 const POSIX_TERM_GRACE_MILLISECONDS = 1_000;
 const POSIX_KILL_GRACE_MILLISECONDS = 1_000;
@@ -17,6 +18,8 @@ const SERVER_FORCED_DRAIN_TIMEOUT_MILLISECONDS = 1_000;
 const DIAGNOSTIC_OPERATION_TIMEOUT_MILLISECONDS = 5_000;
 const signalExitCodes = { SIGINT: 2, SIGTERM: 15 };
 
+/** The one engine the browser contract smoke runs today: its JUnit and evidence layouts are scoped to it. */
+const BROWSER_ENGINE = 'chromium';
 /** The published package is served under `/host`, with the consumer compiled for this target. */
 const CONSUMER_PREFIX = '/host';
 const SHIM_MODULE = `${CONSUMER_PREFIX}/index.mjs`;
@@ -43,12 +46,15 @@ async function runBrowserSmoke(argumentsList) {
   const distribution = argumentsByName.get('--distribution');
   const evidence = argumentsByName.get('--evidence');
   const consumer = argumentsByName.get('--consumer');
+  const contracts = argumentsByName.get('--contracts');
+  const mapping = argumentsByName.get('--mapping');
   const timeoutMilliseconds = parseTimeout(argumentsByName.get('--timeout-ms'));
 
-  if (!['js', 'wasmJs'].includes(target) || !distribution || !evidence || !consumer) {
+  if (!['js', 'wasmJs'].includes(target) || !distribution || !evidence || !consumer || !contracts || !mapping) {
     throw new Error(
       'expected --target=js|wasmJs, --distribution=<directory>, --evidence=<directory>, '
-        + 'and --consumer=<directory> (the served @kadre/host root holding the compiled consumer)',
+        + '--consumer=<directory> (the served @kadre/host root holding the compiled consumer), '
+        + '--contracts=<registry> and --mapping=<file>',
     );
   }
   if (!existsSync(distribution)) {
@@ -57,8 +63,15 @@ async function runBrowserSmoke(argumentsList) {
   if (!existsSync(consumer) || !existsSync(join(consumer, 'index.mjs'))) {
     throw new Error(`missing ${target} @kadre/host consumer root: ${consumer}`);
   }
+  if (!existsSync(contracts)) {
+    throw new Error(`missing contract registry: ${contracts}`);
+  }
+  if (!existsSync(mapping)) {
+    throw new Error(`missing contract evidence mapping: ${mapping}`);
+  }
 
-  const junitDirectory = join(evidence, 'test-results', 'browser', 'chromium');
+  const locations = browserEvidenceLocations(evidence, BROWSER_ENGINE);
+  const junitDirectory = locations.junitDirectory;
   const junitOutput = join(junitDirectory, 'TEST-web-phase0.xml');
   const playwrightOutput = join(evidence, 'diagnostics', 'playwright');
   const preservedPlaywrightOutput = join(evidence, 'diagnostics', 'playwright-preserved');
@@ -99,6 +112,16 @@ async function runBrowserSmoke(argumentsList) {
       } else {
         const junit = await readFile(junitOutput, 'utf8');
         validateJunitReport(junit, junitOutput);
+        const artifacts = await generateContractEvidence({
+          target,
+          engine: BROWSER_ENGINE,
+          bundlePath: join(distributionRoot, entryScript),
+          junitDirectory,
+          outputDirectory: locations.evidenceDirectory,
+          registryPath: contracts,
+          mappingPath: mapping,
+        });
+        for (const artifact of artifacts) console.log(`browser contract evidence: ${artifact}`);
         if (!coordinator.hasTerminalReason()) businessSucceeded = true;
       }
     }

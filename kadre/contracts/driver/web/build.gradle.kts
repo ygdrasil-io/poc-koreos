@@ -39,6 +39,9 @@ val npmCommand = if (System.getProperty("os.name").startsWith("Windows")) "npm.c
 val playwrightPackage = layout.projectDirectory.file("package.json")
 val playwrightLock = layout.projectDirectory.file("package-lock.json")
 val browserSmokeOutput = layout.buildDirectory.dir("contract-evidence")
+/** The registry and the mapping that decide which canonical JSON documents a smoke writes. */
+val contractRegistry = rootProject.file("kadre/contracts/registry/contracts.tsv")
+val contractMapping = layout.projectDirectory.file("contracts/evidence.tsv")
 
 val installPlaywright by tasks.registering(Exec::class) {
     group = "verification"
@@ -76,8 +79,10 @@ fun registerBrowserSmoke(target: String, distributionTask: String, hostPageTask:
         "--distribution=${layout.buildDirectory.dir("dist/$target/productionExecutable").get().asFile.absolutePath}",
         "--evidence=${browserSmokeOutput.get().dir(target).asFile.absolutePath}",
         "--consumer=${layout.buildDirectory.dir("dist/$target/host").get().asFile.absolutePath}",
+        "--contracts=${contractRegistry.absolutePath}",
+        "--mapping=${contractMapping.asFile.absolutePath}",
     )
-    inputs.files(playwrightPackage, playwrightLock)
+    inputs.files(playwrightPackage, playwrightLock, contractRegistry, contractMapping)
     inputs.dir(layout.projectDirectory.dir("playwright"))
     inputs.dir(layout.buildDirectory.dir("dist/$target/productionExecutable"))
     inputs.dir(layout.buildDirectory.dir("dist/$target/host"))

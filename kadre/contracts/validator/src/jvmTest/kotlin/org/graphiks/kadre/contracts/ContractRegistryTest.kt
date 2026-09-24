@@ -129,13 +129,13 @@ class ContractRegistryTest {
     }
 
     @Test
-    fun realRegistryDeclaresTheExactPlannedWebContracts() {
+    fun realRegistryDeclaresTheDeliveredWebContractsActiveAndTheRemainingContractsPlanned() {
         val recordsById = ContractRegistry.parse(repositoryFile("kadre/contracts/registry/contracts.tsv").readText())
             .associateBy(ContractRecord::contractId)
 
         assertEquals(
             mapOf(
-                "BCK-001" to ContractRecord(
+                "BCK-001" to webContract(
                     contractId = "BCK-001",
                     status = ContractStatus.Planned,
                     source = "DESIGN.md#15.3",
@@ -170,7 +170,6 @@ class ContractRegistryTest {
                         "web-pagehide-navigation",
                         "web-pagehide-no-resurrection",
                     ),
-                    requiredTargets = listOf("js", "wasmJs"),
                     conditionalCapabilities = listOf("WindowManagerCapabilities.requestWindow"),
                     sentinels = listOf(
                         "web-surface-never-window",
@@ -183,10 +182,30 @@ class ContractRegistryTest {
                         "web-provider-owned-element-rejected",
                         "web-active-gate-requires-js-and-wasm",
                     ),
-                    retirementRef = null,
                 ),
-                "INT-002" to plannedWebContract(
+                "BCK-002" to webContract(
+                    contractId = "BCK-002",
+                    status = ContractStatus.Active,
+                    source = "DESIGN.md#15.3",
+                    subject = "Web host surface metrics and redraw",
+                    risk = "lost, duplicated or late resize/redraw observation",
+                    oracle = ContractOracle.O3,
+                    scenarios = listOf(
+                        "web-surface-metrics-resize",
+                        "web-surface-metrics-scale",
+                        "web-surface-redraw-coalesced",
+                        "web-surface-redraw-detached-rejected",
+                    ),
+                    conditionalCapabilities = listOf("Surface.requestRedraw"),
+                    sentinels = listOf(
+                        "web-surface-resize-ordered",
+                        "web-surface-redraw-single-per-frame",
+                        "web-surface-no-renderer",
+                    ),
+                ),
+                "INT-002" to webContract(
                     contractId = "INT-002",
+                    status = ContractStatus.Active,
                     source = "INTEROP-EXPORTS.md#6",
                     subject = "JS and Wasm host facade structural exports",
                     risk = "foreign API drift or leaked coroutine types",
@@ -194,8 +213,9 @@ class ContractRegistryTest {
                     scenarios = listOf("web-typescript-consumer"),
                     sentinels = listOf("web-host-no-coroutine-leak", "web-host-common-consumer"),
                 ),
-                "INT-003" to plannedWebContract(
+                "INT-003" to webContract(
                     contractId = "INT-003",
+                    status = ContractStatus.Planned,
                     source = "INTEROP-EXPORTS.md#6",
                     subject = "JS and Wasm host facade runtime",
                     risk = "incorrect host outcome, notification ordering or ownership",
@@ -213,8 +233,9 @@ class ContractRegistryTest {
                         "web-host-outcome-rejection",
                     ),
                 ),
-                "INT-004" to plannedWebContract(
+                "INT-004" to webContract(
                     contractId = "INT-004",
+                    status = ContractStatus.Active,
                     source = "INTEROP-EXPORTS.md#7",
                     subject = "Web element escape hatch",
                     risk = "invalid retained element access or lease/teardown race",
@@ -248,7 +269,7 @@ class ContractRegistryTest {
                 expectedCommit = COMMIT,
                 target = target,
                 expectedExecutions = ExpectedContractExecutions.Browser(setOf("chromium")),
-                gateContractIds = WEB_CONTRACT_IDS,
+                gateContractIds = PLANNED_WEB_CONTRACT_IDS,
                 artifactDirectories = listOf(createTempDirectory("kadre-absent-$target-browser-evidence-").resolve("missing")),
                 junitReportRelativeDirectories = listOf("test-results/browser/{engine}"),
             )
@@ -539,6 +560,7 @@ class ContractRegistryTest {
     private fun repositoryMappingFiles(): List<Path> = listOf(
         repositoryFile("kadre/runtime/contracts/evidence.tsv"),
         repositoryFile("kadre/backend/appkit/contracts/evidence.tsv"),
+        repositoryFile("kadre/contracts/driver/web/contracts/evidence.tsv"),
     )
 
     private fun repositoryFile(relativePath: String): Path {
@@ -551,8 +573,9 @@ class ContractRegistryTest {
         error("repository file not found: $relativePath")
     }
 
-    private fun plannedWebContract(
+    private fun webContract(
         contractId: String,
+        status: ContractStatus,
         source: String,
         subject: String,
         risk: String,
@@ -562,7 +585,7 @@ class ContractRegistryTest {
         sentinels: List<String>,
     ): ContractRecord = ContractRecord(
         contractId = contractId,
-        status = ContractStatus.Planned,
+        status = status,
         source = source,
         subject = subject,
         risk = risk,
@@ -576,7 +599,8 @@ class ContractRegistryTest {
 
     private companion object {
         const val COMMIT = "0123456789abcdef0123456789abcdef01234567"
-        val WEB_CONTRACT_IDS = setOf("BCK-001", "INT-002", "INT-003", "INT-004")
+        val WEB_CONTRACT_IDS = setOf("BCK-001", "BCK-002", "INT-002", "INT-003", "INT-004")
+        val PLANNED_WEB_CONTRACT_IDS = setOf("BCK-001", "INT-003")
         val PHASE_EIGHT_CONTRACT_IDS = setOf("INP-002", "APK-013")
         val PHASE_NINE_CONTRACT_IDS = setOf(
             "DSP-001", "APK-014", "WIN-007", "APK-015",
