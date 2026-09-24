@@ -42,6 +42,15 @@ import org.graphiks.kadre.window.WindowRequestOutcome
 import org.graphiks.kadre.window.WindowSpec
 import org.w3c.dom.HTMLElement
 
+/**
+ * Runs the scenario named by the query string and then publishes the readiness flag the specs wait on.
+ *
+ * The flag means "the fixture can be driven", and it is an installation barrier: every command
+ * listener a spec can dispatch is installed by its scenario function, synchronously, before the flag
+ * is set here. A listener whose body drives the application's surface waits for the holder its
+ * application block fills, because the runtime starts that block asynchronously — after this task —
+ * while the listeners exist already.
+ */
 public fun main() {
     when (scenarioName()) {
         "initial-disconnected" -> initialDisconnectedScenario()
@@ -176,6 +185,7 @@ private fun hostOwnedScenario() {
 private fun surfaceMetricsScenario() {
     val host = createHost("surface-metrics")
     val parentScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    parentScope.installCommand("kadre-resize-surface") { host.style.width = "640px" }
     val attached = host.attachKadre(parentScope) {
         val surface = checkNotNull(primarySurface.value)
         launch {
@@ -184,7 +194,6 @@ private fun surfaceMetricsScenario() {
                 host.setAttribute("data-kadre-surface-physical", state.physicalEncoding())
             }
         }
-        document.addEventListener("kadre-resize-surface", { host.style.width = "640px" })
         awaitCancellation()
     }
     host.setAttribute("data-kadre-attach", describeAttach(attached))
@@ -194,9 +203,24 @@ private fun surfaceMetricsScenario() {
 private fun surfaceRedrawScenario() {
     val host = createHost("surface-redraw")
     val parentScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    val surfaceReady = CompletableDeferred<HostSurface>()
     var admitted = 0
+    parentScope.installCommand("kadre-request-redraw") {
+        val surface = surfaceReady.await()
+        val results = List(3) { surface.requestRedraw() }
+        host.setAttribute("data-kadre-redraw-admission", results.joinToString(",") { it.admission() })
+    }
+    parentScope.installCommand("kadre-remove-host") { host.remove() }
+    parentScope.installCommand("kadre-request-redraw-detached") {
+        // The host is gone by then, so the post-detach readback lands on the document body.
+        val surface = surfaceReady.await()
+        val body = document.body!!
+        body.setAttribute("data-kadre-surface-attachment", surface.state.value.attachment.name.lowercase())
+        body.setAttribute("data-kadre-redraw-detached", surface.requestRedraw().admission())
+    }
     val attached = host.attachKadre(parentScope) {
         val surface = checkNotNull(primarySurface.value)
+        surfaceReady.complete(surface)
         launch {
             surface.events.collect { event ->
                 if (event is SurfaceEvent.RedrawRequested) {
@@ -205,17 +229,6 @@ private fun surfaceRedrawScenario() {
                 }
             }
         }
-        document.addEventListener("kadre-request-redraw", {
-            val results = List(3) { surface.requestRedraw() }
-            host.setAttribute("data-kadre-redraw-admission", results.joinToString(",") { it.admission() })
-        })
-        document.addEventListener("kadre-remove-host", { host.remove() })
-        document.addEventListener("kadre-request-redraw-detached", {
-            // The host is gone by then, so the post-detach readback lands on the document body.
-            val body = document.body!!
-            body.setAttribute("data-kadre-surface-attachment", surface.state.value.attachment.name.lowercase())
-            body.setAttribute("data-kadre-redraw-detached", surface.requestRedraw().admission())
-        })
         awaitCancellation()
     }
     if (attached is KadreResult.Success) observeSession(attached.value, "redraw", parentScope)
@@ -233,8 +246,18 @@ private fun surfaceNoRendererScenario() {
     val body = document.body!!
     body.setAttribute("data-kadre-dom-baseline", document.getElementsByTagName("*").length.toString())
     val parentScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    val surfaceReady = CompletableDeferred<HostSurface>()
+    parentScope.installCommand("kadre-surface-activity") {
+        val surface = surfaceReady.await()
+        host.style.width = "480px"
+        // The browser delivers the resize observation in a later rendering step than the frame
+        // that this task arms, so the redraw is requested only once the observation exists.
+        surface.state.first { it.revision.value > 0L }
+        surface.requestRedraw()
+    }
     val attached = host.attachKadre(parentScope) {
         val surface = checkNotNull(primarySurface.value)
+        surfaceReady.complete(surface)
         launch {
             surface.state.collect { state ->
                 host.setAttribute("data-kadre-observed-revision", state.revision.value.toString())
@@ -254,15 +277,6 @@ private fun surfaceNoRendererScenario() {
                 }
             }
         }
-        document.addEventListener("kadre-surface-activity", {
-            launch {
-                host.style.width = "480px"
-                // The browser delivers the resize observation in a later rendering step than the frame
-                // that this task arms, so the redraw is requested only once the observation exists.
-                surface.state.first { it.revision.value > 0L }
-                surface.requestRedraw()
-            }
-        })
         awaitCancellation()
     }
     host.setAttribute("data-kadre-attach", describeAttach(attached))
@@ -272,13 +286,13 @@ private fun surfaceNoRendererScenario() {
 private fun elementLeaseScenario() {
     val host = createHost("element-lease")
     val parentScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    val surfaceReady = CompletableDeferred<HostSurface>()
+    parentScope.installCommand("kadre-lease") {
+        val surface = surfaceReady.await()
+        host.setAttribute("data-kadre-lease-result", surface.leased { it.setAttribute("data-kadre-lease", "seen") })
+    }
     val attached = host.attachKadre(parentScope) {
-        val surface = checkNotNull(primarySurface.value)
-        document.addEventListener("kadre-lease", {
-            launch {
-                host.setAttribute("data-kadre-lease-result", surface.leased { it.setAttribute("data-kadre-lease", "seen") })
-            }
-        })
+        surfaceReady.complete(checkNotNull(primarySurface.value))
         awaitCancellation()
     }
     host.setAttribute("data-kadre-attach", describeAttach(attached))
@@ -303,30 +317,29 @@ private fun elementLeaseCloseScenario() {
             ),
         ),
     )
-    val attached = host.attachKadre(parentScope, policy = policy) {
-        val surface = checkNotNull(primarySurface.value)
-        val applicationScope = this
-        document.addEventListener("kadre-lease-concurrent-close", {
-            launch {
-                val first = surface.leased { element ->
-                    element.setAttribute("data-kadre-lease", "seen")
-                    var concurrent = "unobserved"
-                    applicationScope.launch(start = CoroutineStart.UNDISPATCHED) {
-                        concurrent = surface.leased { }
-                    }
-                    host.setAttribute("data-kadre-lease-concurrent", concurrent)
-                    surface.requestRedraw()
-                    surface.requestRedraw()
-                    var afterClose = "unobserved"
-                    applicationScope.launch(start = CoroutineStart.UNDISPATCHED) {
-                        afterClose = surface.leased { }
-                    }
-                    host.setAttribute("data-kadre-lease-closed", afterClose)
-                    host.setAttribute("data-kadre-surface-attachment", surface.state.value.attachment.name.lowercase())
-                }
-                host.setAttribute("data-kadre-lease-result", first)
+    val surfaceReady = CompletableDeferred<HostSurface>()
+    parentScope.installCommand("kadre-lease-concurrent-close") {
+        val surface = surfaceReady.await()
+        val first = surface.leased { element ->
+            element.setAttribute("data-kadre-lease", "seen")
+            var concurrent = "unobserved"
+            parentScope.launch(start = CoroutineStart.UNDISPATCHED) {
+                concurrent = surface.leased { }
             }
-        })
+            host.setAttribute("data-kadre-lease-concurrent", concurrent)
+            surface.requestRedraw()
+            surface.requestRedraw()
+            var afterClose = "unobserved"
+            parentScope.launch(start = CoroutineStart.UNDISPATCHED) {
+                afterClose = surface.leased { }
+            }
+            host.setAttribute("data-kadre-lease-closed", afterClose)
+            host.setAttribute("data-kadre-surface-attachment", surface.state.value.attachment.name.lowercase())
+        }
+        host.setAttribute("data-kadre-lease-result", first)
+    }
+    val attached = host.attachKadre(parentScope, policy = policy) {
+        surfaceReady.complete(checkNotNull(primarySurface.value))
         awaitCancellation()
     }
     if (attached is KadreResult.Success) observeSession(attached.value, "lease-close", parentScope)
@@ -423,6 +436,18 @@ private fun observeSession(session: KadreSession, key: String, parentScope: Coro
             }
         }
     }
+}
+
+/**
+ * Installs one of the fixture's command listeners, synchronously, before `main` publishes readiness.
+ *
+ * The body runs in its own task of [this] scope rather than inside the DOM dispatch, so a listener
+ * that drives the surface can wait for the application block to publish it: the block runs
+ * asynchronously, but — unlike a listener registered inside it — this registration exists as soon as
+ * the scenario function returns, which is what makes the readiness flag an installation barrier.
+ */
+private fun CoroutineScope.installCommand(name: String, body: suspend () -> Unit) {
+    document.addEventListener(name, { launch { body() } })
 }
 
 private fun createHost(id: String, connected: Boolean = true): HTMLElement =
