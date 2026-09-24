@@ -14,6 +14,7 @@ internal class RecordingWebHostPort(initial: WebSurfaceMetrics) : WebHostPort {
     private var metricsObserver: ((WebSurfaceMetrics) -> Unit)? = null
     private var lifecycleObserver: ((WebLifecycleSnapshot) -> Unit)? = null
     private var frame: (() -> Unit)? = null
+    private var released: Boolean = false
 
     /** How often the surface released this port; release is terminal and happens exactly once. */
     var releaseCount: Int = 0
@@ -23,6 +24,14 @@ internal class RecordingWebHostPort(initial: WebSurfaceMetrics) : WebHostPort {
     var frameCancellations: Int = 0
         private set
 
+    /**
+     * Invoked by the first [release], before the port drops the target resources it holds.
+     *
+     * A test reads it back to observe what the surface had published at the moment Kadre let the
+     * element go — an ordering the surface's own terminal transition is otherwise silent about.
+     */
+    var onRelease: (() -> Unit)? = null
+
     override fun installLifecycleObserver(observer: (WebLifecycleSnapshot) -> Unit) {
         lifecycleObserver = observer
     }
@@ -31,8 +40,8 @@ internal class RecordingWebHostPort(initial: WebSurfaceMetrics) : WebHostPort {
         metricsObserver = observer
     }
 
-    /** Pushes [metrics] as if the target had just read the element back. */
-    fun deliver(metrics: WebSurfaceMetrics) {
+    /** Pushes [metrics] as if the target had just read the element back; inert once released. */
+    fun deliverMetrics(metrics: WebSurfaceMetrics) {
         metricsObserver?.invoke(metrics)
     }
 
@@ -40,6 +49,18 @@ internal class RecordingWebHostPort(initial: WebSurfaceMetrics) : WebHostPort {
     fun deliverLifecycle(snapshot: WebLifecycleSnapshot) {
         lifecycleObserver?.invoke(snapshot)
     }
+
+    /** The browsing context is gone, as a detached or removed document reports it. */
+    fun disconnectedSnapshot(): WebLifecycleSnapshot = WebLifecycleSnapshot(
+        connected = false,
+        inOriginDocument = true,
+        documentVisible = true,
+        browsingContextFocused = true,
+        subtreeFocused = true,
+    )
+
+    /** The document is being hidden, as `pagehide` reports it. */
+    fun pageHiddenSnapshot(): WebLifecycleSnapshot = disconnectedSnapshot().copy(pageHidden = true)
 
     override fun scheduleFrame(callback: () -> Unit): WebFrameHandle {
         frame = callback
@@ -58,6 +79,9 @@ internal class RecordingWebHostPort(initial: WebSurfaceMetrics) : WebHostPort {
 
     override fun release() {
         releaseCount += 1
+        if (released) return
+        released = true
+        onRelease?.invoke()
         metricsObserver = null
         lifecycleObserver = null
         frame = null

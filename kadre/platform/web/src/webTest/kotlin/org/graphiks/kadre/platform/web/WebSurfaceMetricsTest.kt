@@ -46,7 +46,7 @@ class WebSurfaceMetricsTest {
         testScheduler.runCurrent()
 
         val revisionBeforeResize = surface.state.value.revision.value
-        port.deliver(WebSurfaceMetrics(400.0, 200.0, 2.0))
+        port.deliverMetrics(WebSurfaceMetrics(400.0, 200.0, 2.0))
         testScheduler.runCurrent()
 
         assertEquals(LogicalSize(400.0, 200.0), surface.state.value.logicalSize)
@@ -89,7 +89,7 @@ class WebSurfaceMetricsTest {
         testScheduler.runCurrent()
 
         val revisionBeforeDuplicate = surface.state.value.revision.value
-        port.deliver(WebSurfaceMetrics(100.0, 100.0, 1.0))
+        port.deliverMetrics(WebSurfaceMetrics(100.0, 100.0, 1.0))
         testScheduler.runCurrent()
 
         assertEquals(revisionBeforeDuplicate, surface.state.value.revision.value)
