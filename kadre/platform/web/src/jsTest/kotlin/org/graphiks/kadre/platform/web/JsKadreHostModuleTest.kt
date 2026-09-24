@@ -73,14 +73,10 @@ class JsKadreHostModuleTest {
                 "the released session still answers the terminal snapshot",
             )
 
-            assertTrue(
-                kadreWebUnsubscribeState(subscription),
-                "the state subscription is still registered before it is cancelled",
-            )
             assertEquals(
                 false,
                 kadreWebUnsubscribeState(subscription),
-                "a cancelled subscription is not registered twice",
+                "the terminated session dropped the subscription with it, so cancelling it cancels nothing",
             )
             assertEquals("{\"kind\":\"terminated\",\"outcome\":{\"kind\":\"stopped\",\"reason\":\"hostRequested\"}}", kadreWebSessionState(handleKey))
         } finally {

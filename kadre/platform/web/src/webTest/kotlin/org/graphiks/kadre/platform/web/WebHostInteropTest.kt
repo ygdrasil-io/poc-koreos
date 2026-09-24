@@ -377,6 +377,11 @@ class WebHostInteropTest {
             val observed = mutableListOf<String>()
             handle.subscribe { observed += it }
             assertTrue(KadreWebInterop.isLiveHandle(7), "a live session is retained while it runs")
+            assertEquals(
+                1,
+                KadreWebInterop.registrationCount(7),
+                "an open subscription is registered against the handle it observes",
+            )
 
             session.terminate(SessionOutcome.Stopped(SessionStopReason.HostRequested))
             awaitReal(
@@ -390,6 +395,12 @@ class WebHostInteropTest {
             )
             assertTrue(observed.contains("{\"kind\":\"starting\"}"), "the observer heard the first snapshot")
             assertEquals(false, KadreWebInterop.isLiveHandle(7), "the terminated handle is released")
+            assertEquals(
+                0,
+                KadreWebInterop.registrationCount(7),
+                "the released handle keeps no subscription: one the consumer never unsubscribed must not " +
+                    "retain its observer closure, and what it captured, for the lifetime of the page",
+            )
 
             val released = KadreWebInterop.session(7)
             assertEquals(TERMINAL_STOPPED, released.state, "the released record still answers the state")
@@ -398,6 +409,11 @@ class WebHostInteropTest {
             val lateState = mutableListOf<String>()
             released.subscribe { lateState += it }
             assertEquals(listOf(TERMINAL_STOPPED), lateState, "a late state observer hears the terminal snapshot")
+            assertEquals(
+                1,
+                KadreWebInterop.registrationCount(7),
+                "a subscription opened after the release is the released record's own, not the session's",
+            )
 
             val lateTermination = mutableListOf<String>()
             released.subscribeTermination { lateTermination += it }

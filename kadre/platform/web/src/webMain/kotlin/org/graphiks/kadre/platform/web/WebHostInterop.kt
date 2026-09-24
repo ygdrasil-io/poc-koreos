@@ -98,14 +98,27 @@ internal object KadreWebInterop {
         sessions[key] ?: error("no @kadre/host session for handle key $key")
 
     /**
-     * Replaces the handle behind [key] with its released record.
+     * Replaces the handle behind [key] with its released record and forgets its subscriptions.
      *
      * The session, its scope and everything they retain (the attached element included) become
      * unreachable here; the registry keeps only what `state`, `id` and the terminal deliveries need.
+     * The terminal deliveries have already happened by the time this runs, so the registrations that
+     * were still waiting on that handle go with it: a subscription the consumer never unsubscribed
+     * would otherwise keep its observer closure — and everything the closure captured — reachable for
+     * the lifetime of the page, since the registration table is keyed by a counter that never repeats
+     * a key and nothing else would ever remove those entries.
      */
     fun releaseHandle(key: Int, released: KadreWebSession) {
         sessions[key] = released
+        val releasedRegistrations = registrations.entries
+            .filter { (_, registration) -> registration.handleKey == key }
+            .map { (registrationKey, _) -> registrationKey }
+        releasedRegistrations.forEach { registrations.remove(it) }
     }
+
+    /** How many subscriptions are still registered for [handleKey]. Internal: for the tests. */
+    internal fun registrationCount(handleKey: Int): Int =
+        registrations.values.count { it.handleKey == handleKey }
 
     /** Whether the handle behind [key] is still retained as a live session. Internal: for the tests. */
     internal fun isLiveHandle(key: Int): Boolean = sessions[key] is KadreWebHandle
