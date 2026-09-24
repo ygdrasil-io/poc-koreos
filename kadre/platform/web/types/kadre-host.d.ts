@@ -85,7 +85,12 @@ export type KadreFailure =
   | { readonly kind: "applicationFailure" }
   | { readonly kind: "platformFailure"; readonly platform: KadrePlatform; readonly domain: string; readonly code: string };
 
-/** Opaque reference produced by the application's Kotlin code. Not constructible from JavaScript. */
+/**
+ * Opaque reference produced by the application's Kotlin code. Not constructible from JavaScript.
+ *
+ * JavaScript holds the application's opaque `hostKey` string: it is passed back to `KadreWeb.attach`
+ * unchanged and never inspected, because Kotlin/Wasm cannot export the reference class itself.
+ */
 export interface KadreApplicationFactoryRef {
   readonly __kadreApplicationFactory: unique symbol;
 }
