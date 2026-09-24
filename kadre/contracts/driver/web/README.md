@@ -37,37 +37,24 @@ published `@kadre/host` package. The driver assembles the served root into
 `build/dist/<target>/host/`: the published package plus the compiled
 `consumer.js` (`:kadre:emitTypeScriptBrowserConsumer`). The generated page
 resolves the bare specifier `@kadre/host` through an import map to the
-package's published `index.mjs` shim, and the page's Kotlin application
-publishes the opaque factory key the consumer passes back to `KadreWeb.attach`.
+package's published `index.mjs` shim, served straight from that directory, and
+then runs the compiled consumer. Nothing is remapped or substituted: the shim
+under test is the shipped one.
 
-The shim's relative import of its sibling Kotlin module is remapped, by the same
-import map, to a small application module that the driver serves at
-`/host/kadre-host-application.js`: it exposes the *application's* interop
-bindings to the shim and loads the published module first, publishing the binding
-names that module declares as `kadre-published-host-bindings` (asserted by the
-spec). The remap is necessary because a browser page's Kotlin application cannot
-share one interop instance with the published module:
-
-- a Kotlin/Wasm library module statically links its dependencies, so the
-  published `kadre-platform-web.wasm` is a second, isolated instance, and a
-  factory key registered by the application is unknown to it
-  (`KadreHostError: {"kind":"invalidRequest","field":"factoryKey"}`);
-- the Kotlin/JS library build publishes its `@JsExport` names nested on its
-  module object under the package path, while the published shim reads them from
-  the top level of the module-name global, so importing the shipped JS shim
-  against the shipped JS module fails on
-  `@kadre/host: the Kotlin module did not publish its bindings`. That build also
-  dead-code-eliminates `KadreApplicationFactory.asHostRef`, `hostKey` and
-  `KadreApplicationFactoryRef`, so no application can obtain a usable key from
-  the published JS module at all. Both are recorded in the Task 7 report; a
-  follow-up in `kadre/platform/web` owns them.
+The bindings the shim drives come from the shared registry the Kotlin module
+publishes them into, `globalThis["org.graphiks.kadre:web"]`. The page's Kotlin
+application — the fixture bundle, whose `applicationFactory()` entry point
+publishes the bindings of its own instance with `publishHostBindings()` and
+returns the opaque factory key — is therefore the instance that owns the
+session the consumer drives, which is the shape `kadre/INTEROP-EXPORTS.md`
+section 6 describes. The consumer is the only thing that attaches, subscribes,
+unsubscribes, stops and awaits the outcome; the spec asserts that all eight
+binding names are present in the registry, and that the consumer reported
+`passed`.
 
 `--consumer=<directory>` is required: the runner serves that directory at
 `/host` and fails before Playwright starts when it is absent or does not carry
 `index.mjs`.
-
-`BCK-001` remains `planned` in Phase 1. No active contract gate consumes these
-artifacts and this driver does not activate that capability.
 
 ## Pinned Chromium provisioning
 

@@ -21,21 +21,8 @@ const signalExitCodes = { SIGINT: 2, SIGTERM: 15 };
 const CONSUMER_PREFIX = '/host';
 const SHIM_MODULE = `${CONSUMER_PREFIX}/index.mjs`;
 const CONSUMER_MODULE = `${CONSUMER_PREFIX}/consumer.js`;
-/**
- * The page's application module, served by this runner and standing in for the Kotlin module the
- * shim loads. A browser page's Kotlin application and the published library module cannot share an
- * interop instance — a Kotlin/Wasm library statically links its dependencies, and the JS build
- * publishes its exports nested and drops `asHostRef` — so the shim's sibling import is remapped to
- * the application's own bindings, while the published module is still loaded and probed as
- * `kadre-published-host-bindings`.
- */
-const APPLICATION_MODULE = `${CONSUMER_PREFIX}/kadre-host-application.js`;
 const TYPESCRIPT_SCENARIO = 'typescript-consumer';
-const kotlinModulePaths = {
-  js: `${CONSUMER_PREFIX}/kadre-platform-web.js`,
-  wasmJs: `${CONSUMER_PREFIX}/kadre-platform-web.mjs`,
-};
-/** The eight `@kadre/host` bindings the shim loads, from `kadre/INTEROP-EXPORTS.md` section 6. */
+/** The eight `@kadre/host` bindings of `kadre/INTEROP-EXPORTS.md` section 6, asserted by the spec. */
 const hostBindingNames = [
   'kadreWebAttach',
   'kadreWebSessionId',
@@ -81,7 +68,7 @@ async function runBrowserSmoke(argumentsList) {
   // Recursive cleanup is restricted to prior runs and must finish before
   // Playwright can create the current run's diagnostic snapshot.
   await removeOldDiagnosticQuarantines(dirname(playwrightOutput));
-  const server = await serveDistribution(distributionRoot, entryScript, consumerRoot, target);
+  const server = await serveDistribution(distributionRoot, entryScript, consumerRoot);
   const coordinator = new TerminalCoordinator();
   let businessSucceeded = false;
   let serverFinalized = false;
@@ -672,76 +659,33 @@ async function findFiles(directory, matches) {
  * The generated fixture page.
  *
  * The page always loads the target's Kotlin fixture bundle from the body, so the fixture runs while
- * the document is parsed. The import map and the module script that runs the TypeScript scenario live
- * in the head: the map is registered before the first module resolves, and every element the page
- * owns exists before the fixture records its DOM baseline. The TypeScript scenario resolves the bare
- * specifier `@kadre/host` to the published package's shim (served from the consumer root), loads the
- * application module that stands in for the Kotlin module the shim imports relatively, and then runs
- * the compiled consumer; every other scenario leaves the package unloaded.
+ * the document is parsed and publishes its bindings and factory key. The import map and the module
+ * script that runs the TypeScript scenario live in the head: the map is registered before the first
+ * module resolves, and every element the page owns exists before the fixture records its DOM
+ * baseline. `@kadre/host` resolves to the published package's shim, served straight from the consumer
+ * root, and every other scenario leaves the package unloaded.
  */
-function fixturePage(entryScript, target) {
-  const imports = {
-    '@kadre/host': SHIM_MODULE,
-    [kotlinModulePaths[target]]: APPLICATION_MODULE,
-  };
+function fixturePage(entryScript) {
+  const imports = { '@kadre/host': SHIM_MODULE };
   return '<!doctype html><html><head>'
     + `<script type="importmap">${JSON.stringify({ imports })}</script>`
     + '<script type="module">'
     + `if (new URLSearchParams(globalThis.location.search).get('scenario') === '${TYPESCRIPT_SCENARIO}') {`
-    // Only the consumer is loaded here: importing it pulls in the shim, which imports the
-    // application module in its own relative dependency order.
     + ` await import('${CONSUMER_MODULE}');`
     + ' }'
     + '</script></head>'
     + `<body><script src="/${entryScript}"></script></body></html>`;
 }
 
-/**
- * The application module: the page's Kotlin application bindings, in the shape each shim consumes.
- *
- * A browser page's Kotlin application and the published library module cannot share one interop
- * instance: a Kotlin/Wasm library statically links its dependencies into a single wasm module, and
- * the Kotlin/JS library publishes its `@JsExport` names nested on its own module object. The shim's
- * relative import is therefore served as this module, which hands the shim the *application's* own
- * bindings: the Kotlin/JS shim reads them from the module-name global, and the Kotlin/Wasm shim
- * imports them by name. Both load the published module first and expose the binding names it
- * declares as `kadre-published-host-bindings`, so the shipped artifact is exercised in the same page.
- */
-function applicationModule(target) {
-  if (target === 'js') {
-    return `import '${kotlinModulePaths.js}?published';`
-      + 'const published = globalThis["org.graphiks.kadre:web"];'
-      // The Kotlin/JS library publishes its `@JsExport` names on its module object under the package
-      // path; the module object itself is the fallback for a build that publishes them flat.
-      + 'globalThis["kadre-published-host-bindings"] = published?.org?.graphiks?.kadre?.platform?.web ?? published ?? {};'
-      // The shim reads its bindings from the module-name global, so that global now holds the
-      // application's bindings: a Kotlin/JS bundle publishes every `@JsExport` name of the Kotlin
-      // modules it links in on its export object, under the package path.
-      + 'globalThis["org.graphiks.kadre:web"] = globalThis.web?.org?.graphiks?.kadre?.platform?.web ?? {};\n';
-  }
-  return `import * as published from '${kotlinModulePaths.wasmJs}?published';`
-    + `globalThis["kadre-published-host-bindings"] = Object.fromEntries(${JSON.stringify(hostBindingNames)}`
-    + '.filter((name) => typeof published[name] === \'function\')'
-    + '.map((name) => [name, published[name]]));'
-    + 'const application = await globalThis.web;'
-    + `export const { ${hostBindingNames.join(', ')} } = application;\n`;
-}
-
-async function serveDistribution(realRoot, entryScript, consumerRoot, target) {
+async function serveDistribution(realRoot, entryScript, consumerRoot) {
   const sockets = new Set();
-  const page = fixturePage(entryScript, target);
-  const application = applicationModule(target);
+  const page = fixturePage(entryScript);
   const instance = createServer(async (request, response) => {
     try {
       const requestPathname = new URL(request.url, 'http://127.0.0.1').pathname;
       if (requestPathname === '/index.html') {
         response.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
         response.end(page);
-        return;
-      }
-      if (requestPathname === APPLICATION_MODULE) {
-        response.writeHead(200, { 'content-type': 'text/javascript; charset=utf-8' });
-        response.end(application);
         return;
       }
       const servesConsumer = requestPathname.startsWith(`${CONSUMER_PREFIX}/`);

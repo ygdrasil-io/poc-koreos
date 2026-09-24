@@ -87,3 +87,55 @@ private fun attachElement(
     policy = policy,
     attachmentPolicy = attachmentPolicy,
 )
+
+
+/**
+ * Publishes this Kotlin module instance's `@kadre/host` bindings into the shared registry.
+ *
+ * The registry is the `globalThis["org.graphiks.kadre:web"]` object the Kotlin library modules and the
+ * application bundles already populate: the JavaScript shims of `@kadre/host` resolve their bindings
+ * there at call time, so the Kotlin module that owns the factories and sessions — the application's
+ * own module, not a second copy of this library — is also the instance the shim drives. A Kotlin
+ * application calls this before it hands its opaque factory key to JavaScript
+ * (`kadre/INTEROP-EXPORTS.md` section 6), and nothing in this library has to reference it for the
+ * publication to happen.
+ *
+ * Idempotent, and it never replaces a binding another instance of this library already published.
+ */
+public fun publishHostBindings(): Unit = publishBindings(
+    ::kadreWebAttach,
+    ::kadreWebSessionId,
+    ::kadreWebSessionState,
+    ::kadreWebSubscribeState,
+    ::kadreWebSubscribeTermination,
+    ::kadreWebUnsubscribeState,
+    ::kadreWebRequestStop,
+    ::kadreWebClose,
+)
+
+/**
+ * Writes the eight bindings into the registry. The snippet sees the parameters by name and runs as a
+ * single expression, which both targets accept.
+ */
+private fun publishBindings(
+    attach: (JsAny, String, String, String) -> String,
+    sessionId: (Int) -> String,
+    sessionState: (Int) -> String,
+    subscribeState: (Int, (String) -> Unit) -> Int,
+    subscribeTermination: (Int, (String) -> Unit) -> Int,
+    unsubscribeState: (Int) -> Boolean,
+    requestStop: (Int) -> Unit,
+    close: (Int) -> Unit,
+): Unit = js(
+    """(function () {
+      var registry = globalThis["org.graphiks.kadre:web"] || (globalThis["org.graphiks.kadre:web"] = {});
+      registry.kadreWebAttach = attach;
+      registry.kadreWebSessionId = sessionId;
+      registry.kadreWebSessionState = sessionState;
+      registry.kadreWebSubscribeState = subscribeState;
+      registry.kadreWebSubscribeTermination = subscribeTermination;
+      registry.kadreWebUnsubscribeState = unsubscribeState;
+      registry.kadreWebRequestStop = requestStop;
+      registry.kadreWebClose = close;
+    }())""",
+)

@@ -15,12 +15,13 @@ const hostBindingNames = [
 ];
 
 /**
- * The published `@kadre/host` package, running the TypeScript consumer in the page.
+ * The published `@kadre/host` shim, driven by the TypeScript consumer in the page.
  *
- * The page resolves the bare specifier `@kadre/host` through its import map, so the consumer is the
- * same source that `kadre/consumers/typescript` type-checks: it attaches through the published
- * `index.mjs` shim, observes the session state, unsubscribes, stops the session and awaits the
- * terminal outcome, writing `"passed"` only when every step held.
+ * The page resolves the bare specifier `@kadre/host` through its import map to the shim served
+ * straight from the published package, and the page's Kotlin application publishes the bindings of its
+ * own module instance and the opaque factory key. The consumer is the same source that
+ * `kadre/consumers/typescript` type-checks: it attaches, observes the session state, unsubscribes,
+ * stops the session and awaits the terminal outcome, writing `"passed"` only when every step held.
  */
 test('web-typescript-consumer', async ({ page }) => {
   const pageErrors = [];
@@ -34,19 +35,18 @@ test('web-typescript-consumer', async ({ page }) => {
     { timeout: 15_000 },
   );
 
-  // The published module loaded in the same page, and it really declares the bindings the shim
-  // loads. The application's own bindings drive the shim, so this is the check that the shipped
-  // Kotlin module is present and complete in the served package.
-  // Read the binding shapes inside the page: function values do not survive serialization.
-  const published = await page.evaluate((names) => {
-    const bindings = globalThis['kadre-published-host-bindings'] ?? null;
-    return bindings === null
+  // The application published all eight bindings into the shared registry the shim resolves from,
+  // and it is the instance that owns the session the consumer just drove. Read the binding shapes
+  // inside the page: function values do not survive serialization.
+  const registry = await page.evaluate((names) => {
+    const published = globalThis['org.graphiks.kadre:web'] ?? null;
+    return published === null
       ? null
-      : Object.fromEntries(names.map((name) => [name, typeof bindings[name]]));
+      : Object.fromEntries(names.map((name) => [name, typeof published[name]]));
   }, hostBindingNames);
-  expect(published).not.toBeNull();
+  expect(registry).not.toBeNull();
   for (const name of hostBindingNames) {
-    expect(published[name]).toBe('function');
+    expect(registry[name]).toBe('function');
   }
   expect(pageErrors).toEqual([]);
 });

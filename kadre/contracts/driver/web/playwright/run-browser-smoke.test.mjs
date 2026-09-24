@@ -119,7 +119,7 @@ test('a partial HTTP request is held through graceful drain and closed by forced
   );
 });
 
-test('GET /index.html with a scenario query serves the fixture page and the host root', {
+test('GET /index.html with a scenario query serves the fixture page and the published host root', {
   timeout: 10_000,
 }, async (context) => {
   const fixture = await createFixture('query-route');
@@ -130,28 +130,28 @@ test('GET /index.html with a scenario query serves the fixture page and the host
   assert.equal(normalizedExitStatus(result), 0, result.stderr);
   const html = await readFile(fixture.queryResponse, 'utf8');
   assert.match(html, /<script src="\/fixture\.js"><\/script>/);
-  assert.match(html, /"@kadre\/host":"\/host\/index\.mjs"/);
-  assert.match(html, /"\/host\/kadre-platform-web\.js":"\/host\/kadre-host-application\.js"/);
+  // The bare specifier resolves to the published shim, and nothing else is remapped.
+  assert.equal(html.match(/"@kadre\/host":"[^"]+"/g).join(','), '"@kadre/host":"/host/index.mjs"');
   assert.match(html, /typescript-consumer/);
   assert.equal(await readFile(fixture.hostResponse, 'utf8'), 'export const KadreWeb = {};\n');
-  assert.match(await readFile(fixture.applicationResponse, 'utf8'), /org\.graphiks\.kadre:web/);
+  // The package root is served verbatim: the Kotlin module the application links is untouched.
+  assert.equal(
+    await readFile(fixture.kotlinModuleResponse, 'utf8'),
+    'export const kadreWebAttach = () => {};\n',
+  );
 });
 
-test('the wasmJs page maps the shim to an application module that re-exports the bindings', {
+test('a consumer root without the published shim fails before Playwright is started', {
   timeout: 10_000,
 }, async (context) => {
-  const fixture = await createFixture('query-route');
+  const fixture = await createFixture('missing-shim');
   context.after(() => fixture.dispose());
+  await rm(join(fixture.host, 'index.mjs'));
 
-  const result = await runSmoke(fixture, [], 'wasmJs').completion;
+  const result = await runSmoke(fixture).completion;
 
-  assert.equal(normalizedExitStatus(result), 0, result.stderr);
-  const html = await readFile(fixture.queryResponse, 'utf8');
-  assert.match(html, /"\/host\/kadre-platform-web\.mjs":"\/host\/kadre-host-application\.js"/);
-  assert.match(
-    await readFile(fixture.applicationResponse, 'utf8'),
-    /export const \{ kadreWebAttach, kadreWebSessionId, kadreWebSessionState, kadreWebSubscribeState, kadreWebSubscribeTermination, kadreWebUnsubscribeState, kadreWebRequestStop, kadreWebClose \} = application;/,
-  );
+  assert.notEqual(normalizedExitStatus(result), 0, 'a consumer root without index.mjs was accepted');
+  assert.match(result.stderr, /@kadre\/host consumer root/, result.stderr);
 });
 
 test('a smoke without --consumer fails before Playwright is started', {
@@ -301,7 +301,7 @@ async function createFixture(scenario, junit = validJunit) {
   const diagnosticCommitSignalObserved = join(root, 'diagnostic-commit-signal-observed');
   const queryResponse = join(root, 'query-response.html');
   const hostResponse = join(root, 'host-response.mjs');
-  const applicationResponse = join(root, 'application-response.js');
+  const kotlinModuleResponse = join(root, 'kotlin-module-response.mjs');
   const diagnostics = join(evidence, 'diagnostics', 'playwright');
   const diagnosticsParent = dirname(diagnostics);
   const diagnosticTraceDirectory = join(diagnostics, 'trace');
@@ -316,6 +316,7 @@ async function createFixture(scenario, junit = validJunit) {
   await writeFile(join(distribution, 'fixture.js'), 'globalThis.kadreFixture = true;\n');
   await writeFile(join(host, 'index.mjs'), 'export const KadreWeb = {};\n');
   await writeFile(join(host, 'kadre-platform-web.js'), 'globalThis["org.graphiks.kadre:web"] = {};\n');
+  await writeFile(join(host, 'kadre-platform-web.mjs'), 'export const kadreWebAttach = () => {};\n');
   await writeFile(join(host, 'consumer.js'), 'void 0;\n');
   await writeFile(heldClient, heldClientSource, { mode: 0o755 });
   await writeFile(descendant, descendantSource, { mode: 0o755 });
@@ -347,8 +348,8 @@ async function createFixture(scenario, junit = validJunit) {
     diagnosticsParent,
     distribution,
     evidence,
-    applicationResponse,
     host,
+    kotlinModuleResponse,
     hostResponse,
     preservedDiagnosticMarker,
     preservedDiagnosticTraceDirectory,
@@ -399,8 +400,8 @@ async function createFixture(scenario, junit = validJunit) {
       KADRE_RUNNER_TEST_DIAGNOSTIC_PRESERVATION_RELEASE: diagnosticPreservationRelease,
       KADRE_RUNNER_TEST_DIAGNOSTIC_COMMIT_STARTED: diagnosticCommitStarted,
       KADRE_RUNNER_TEST_DIAGNOSTIC_COMMIT_RELEASE: diagnosticCommitRelease,
-      KADRE_RUNNER_TEST_APPLICATION_RESPONSE: applicationResponse,
       KADRE_RUNNER_TEST_HOST_RESPONSE: hostResponse,
+      KADRE_RUNNER_TEST_KOTLIN_MODULE_RESPONSE: kotlinModuleResponse,
       KADRE_RUNNER_TEST_DIAGNOSTIC_COMMIT_SIGNAL_OBSERVED: diagnosticCommitSignalObserved,
       KADRE_RUNNER_TEST_SCENARIO: scenario,
       ...([
@@ -584,7 +585,7 @@ async function requestFixtureWithQuery() {
   const html = await response.text();
   writeFileSync(process.env.KADRE_RUNNER_TEST_QUERY_RESPONSE, html);
   await recordRoute('/host/index.mjs', process.env.KADRE_RUNNER_TEST_HOST_RESPONSE);
-  await recordRoute('/host/kadre-host-application.js', process.env.KADRE_RUNNER_TEST_APPLICATION_RESPONSE);
+  await recordRoute('/host/kadre-platform-web.mjs', process.env.KADRE_RUNNER_TEST_KOTLIN_MODULE_RESPONSE);
 }
 
 async function recordRoute(path, file) {

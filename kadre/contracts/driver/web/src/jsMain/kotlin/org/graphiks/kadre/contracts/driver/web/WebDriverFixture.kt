@@ -1,3 +1,5 @@
+@file:OptIn(kotlin.js.ExperimentalJsExport::class)
+
 package org.graphiks.kadre.contracts.driver.web
 
 import kotlinx.browser.document
@@ -28,6 +30,7 @@ import org.graphiks.kadre.platform.web.WebAttachmentPolicy
 import org.graphiks.kadre.platform.web.asHostRef
 import org.graphiks.kadre.platform.web.attachKadre
 import org.graphiks.kadre.platform.web.hostKey
+import org.graphiks.kadre.platform.web.publishHostBindings
 import org.graphiks.kadre.platform.web.withWebElement
 import org.graphiks.kadre.policy.ContinuousDelivery
 import org.graphiks.kadre.policy.ContinuousOverflowAction
@@ -326,15 +329,26 @@ private fun elementLeaseCloseScenario() {
 }
 
 /**
- * The TypeScript scenario's page application.
+ * The application's entry point for the `@kadre/host` scenario.
  *
- * The consumer runs `@kadre/host` in the page, so the application whose session it attaches must be
- * the one the module the shim loads can reach: the key is registered by this application's own
- * interop layer and handed to JavaScript the way `kadre/INTEROP-EXPORTS.md` section 6 prescribes.
+ * This is the Kotlin half of `kadre/INTEROP-EXPORTS.md` section 6: the application's Kotlin module
+ * owns the factories and sessions, publishes the JavaScript bindings of that instance into the shared
+ * registry, and hands JavaScript the opaque key that `KadreWeb.attach` carries back. The consumer is
+ * the only thing that attaches, subscribes, stops and awaits an outcome.
+ */
+@JsExport
+public fun applicationFactory(): String {
+    publishHostBindings()
+    val reference = KadreApplicationFactory { KadreApplication { awaitCancellation() } }.asHostRef()
+    return reference.hostKey
+}
+
+/**
+ * The TypeScript scenario: this application publishes its bindings and its factory key, and the
+ * consumer's own `KadreWeb.attach` call does everything else.
  */
 private fun typescriptConsumerScenario() {
-    val reference = KadreApplicationFactory { KadreApplication { awaitCancellation() } }.asHostRef()
-    publishApplicationFactoryKey(reference.hostKey)
+    publishApplicationFactoryKey(applicationFactory())
 }
 
 private fun phaseZeroScenario() {
