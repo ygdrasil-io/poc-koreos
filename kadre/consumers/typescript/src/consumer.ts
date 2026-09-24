@@ -10,7 +10,6 @@
 import {
   KadreHostError,
   KadreWeb,
-  type KadreApplicationFactoryRef,
   type KadreFailure,
   type KadreSessionOutcome,
   type KadreSessionSnapshot,
@@ -107,11 +106,11 @@ async function waitUntil(condition: () => boolean, timeoutMillis: number): Promi
 /**
  * Runs the scenario and returns `"passed"` or the diagnostic of the first divergence.
  *
- * The application factory reference is owned by the page's Kotlin application; the consumer only
- * passes the opaque value back to `KadreWeb.attach`.
+ * The application factory key is owned by the page's Kotlin application; the consumer only passes the
+ * opaque key back to `KadreWeb.attach`, which types that parameter as the `string` it is.
  */
 export async function runScenario(): Promise<string> {
-  const page = globalThis as typeof globalThis & { kadreApplicationFactory?: KadreApplicationFactoryRef };
+  const page = globalThis as typeof globalThis & { kadreApplicationFactory?: string };
   const applicationFactory = page.kadreApplicationFactory;
   if (applicationFactory === undefined) {
     return "missing-application-factory";

@@ -86,10 +86,13 @@ export type KadreFailure =
   | { readonly kind: "platformFailure"; readonly platform: KadrePlatform; readonly domain: string; readonly code: string };
 
 /**
- * Opaque reference produced by the application's Kotlin code. Not constructible from JavaScript.
+ * The opaque application factory reference of the Kotlin side, named here for orientation.
  *
- * JavaScript holds the application's opaque `hostKey` string: it is passed back to `KadreWeb.attach`
- * unchanged and never inspected, because Kotlin/Wasm cannot export the reference class itself.
+ * It is a Kotlin class that never crosses the boundary, so no JavaScript value ever satisfies it:
+ * the value JavaScript holds is the application's opaque `hostKey` — the `string` produced by the
+ * application's Kotlin module — and that is what `KadreWeb.attach` carries back.
+ *
+ * @see KadreWeb.attach takes the key, and refuses any other type with `invalidRequest: "factoryKey"`.
  */
 export interface KadreApplicationFactoryRef {
   readonly __kadreApplicationFactory: unique symbol;
@@ -119,9 +122,17 @@ export interface KadreSessionHandle {
 }
 
 export declare const KadreWeb: {
+  /**
+   * Attaches `element` to the application factory the Kotlin module owns.
+   *
+   * `applicationFactory` is that factory's opaque `hostKey`: the `string` the application's Kotlin
+   * module produced, passed back unchanged and never inspected — the `KadreApplicationFactoryRef`
+   * wrapper itself does not cross the boundary. Any other type is refused with
+   * `invalidRequest: "factoryKey"`.
+   */
   attach(
     element: HTMLElement,
-    applicationFactory: KadreApplicationFactoryRef,
+    applicationFactory: string,
     options?: Readonly<KadreWebOptions>,
   ): KadreSessionHandle;
 };
