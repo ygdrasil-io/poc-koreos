@@ -37,6 +37,7 @@ import org.graphiks.kadre.internal.runtime.RuntimePrimarySurfaceConfiguration
 import org.graphiks.kadre.internal.runtime.RuntimeSessionRevocationHandler
 import org.graphiks.kadre.internal.runtime.RuntimeSessionObserver
 import org.graphiks.kadre.policy.ContinuousDelivery
+import org.graphiks.kadre.policy.ContinuousOverflowAction
 import org.graphiks.kadre.policy.KadrePolicy
 import org.graphiks.kadre.policy.WindowDeliveryPolicy
 import org.graphiks.kadre.surface.CursorIcon
@@ -308,7 +309,8 @@ private class WebHostSurface(
      *
      * `Latest` and `Coalesced` both keep at most one pending request and never reorder; they differ
      * only in how a slow collector is served, which the runtime's event machinery owns. A buffered
-     * policy instead bounds the requests awaiting their frame and fails the session on overflow.
+     * policy bounds the requests awaiting their frame instead and applies its declared overflow
+     * action once the bound is crossed.
      */
     private fun publishRedraw(active: WebSurfaceConfiguration) {
         if (detached || terminated) return
@@ -317,9 +319,28 @@ private class WebHostSurface(
             is ContinuousDelivery.Buffered -> {
                 bufferedRedraws += 1
                 if (bufferedRedraws > delivery.capacity) {
-                    terminated = true
-                    active.sessionFailureHandler(KadreFailure.SourceOverflow(KadreResourceKind.Surface))
-                    return
+                    when (delivery.onOverflow) {
+                        // DropLatestAndReport degenerates to DropOldestAndReport for a coalescing
+                        // admission flag: the excess request carries no payload beyond the revision
+                        // the frame reads when it admits, so either action drops it and lets the
+                        // requests already awaiting their frame admit once, as usual. Neither action
+                        // can report: a surface has no diagnostic channel in this phase.
+                        ContinuousOverflowAction.DropOldestAndReport,
+                        ContinuousOverflowAction.DropLatestAndReport,
+                        -> bufferedRedraws = delivery.capacity
+
+                        // The surface owns no independently closable redraw source, so closing the
+                        // source before recordable data is lost is the terminal treatment too.
+                        ContinuousOverflowAction.CloseSource,
+                        ContinuousOverflowAction.FailSession,
+                        -> {
+                            terminated = true
+                            active.sessionFailureHandler(
+                                KadreFailure.SourceOverflow(KadreResourceKind.Surface),
+                            )
+                            return
+                        }
+                    }
                 }
             }
         }

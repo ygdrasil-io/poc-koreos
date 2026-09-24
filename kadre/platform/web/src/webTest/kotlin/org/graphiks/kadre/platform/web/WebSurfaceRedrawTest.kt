@@ -11,10 +11,12 @@ import org.graphiks.kadre.application.KadreApplicationFactory
 import org.graphiks.kadre.application.KadreScope
 import org.graphiks.kadre.application.KadreSession
 import org.graphiks.kadre.application.SessionOutcome
+import org.graphiks.kadre.application.SessionState
 import org.graphiks.kadre.diagnostics.KadreFailure
 import org.graphiks.kadre.diagnostics.KadreResourceKind
 import org.graphiks.kadre.diagnostics.KadreResult
 import org.graphiks.kadre.policy.ContinuousDelivery
+import org.graphiks.kadre.policy.ContinuousOverflowAction
 import org.graphiks.kadre.policy.KadrePolicies
 import org.graphiks.kadre.policy.KadrePolicy
 import org.graphiks.kadre.surface.HostSurface
@@ -121,6 +123,43 @@ class WebSurfaceRedrawTest {
     }
 
     @Test
+    fun aDropOverflowPolicyDropsTheExcessAndKeepsCoalescing() = runTest {
+        val policy = KadrePolicies.Default.copy(
+            window = KadrePolicies.Default.window.copy(
+                redrawRequests = ContinuousDelivery.Buffered(
+                    capacity = 2,
+                    onOverflow = ContinuousOverflowAction.DropOldestAndReport,
+                ),
+            ),
+        )
+        val harness = RedrawHarness(policy, this)
+        harness.start()
+        val surface = harness.surface()
+        val events = mutableListOf<SurfaceEvent>()
+        val collector = launch { surface.events.collect { events += it } }
+        testScheduler.runCurrent()
+
+        repeat(harness.bufferedCapacity + 1) {
+            assertEquals(KadreResult.Success(Unit), surface.requestRedraw())
+        }
+        testScheduler.runCurrent()
+        harness.runFrame()
+        testScheduler.runCurrent()
+
+        assertEquals(1, events.count { it is SurfaceEvent.RedrawRequested }, "one frame, one admission")
+        assertEquals(SessionState.Running, harness.state(), "a drop policy must not fail the session")
+
+        surface.requestRedraw()
+        harness.runFrame()
+        testScheduler.runCurrent()
+
+        assertEquals(2, events.count { it is SurfaceEvent.RedrawRequested }, "coalescing continues after a drop")
+        assertEquals(SessionState.Running, harness.state())
+        collector.cancel()
+        harness.close()
+    }
+
+    @Test
     fun requestRedrawFromAnEventCollectorIsCoalesced() = runTest {
         val harness = RedrawHarness(KadrePolicies.Default, this)
         harness.start()
@@ -216,6 +255,9 @@ private class RedrawHarness(private val policy: KadrePolicy, scope: CoroutineSco
 
     /** The terminal outcome the runtime published for this session. */
     suspend fun outcome(): SessionOutcome = session.awaitTermination()
+
+    /** The runtime's published session state; a dropped overflow must leave it running. */
+    fun state(): SessionState = session.state.value
 
     @OptIn(ExperimentalCoroutinesApi::class)
     fun surface(): HostSurface = scopeReady.getCompleted().primarySurface.value
