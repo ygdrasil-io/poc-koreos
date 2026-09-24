@@ -211,7 +211,7 @@ class ContractRegistryTest {
                     risk = "foreign API drift or leaked coroutine types",
                     oracle = ContractOracle.O1,
                     scenarios = listOf("web-typescript-consumer"),
-                    sentinels = listOf("web-host-no-coroutine-leak", "web-host-common-consumer"),
+                    sentinels = listOf("web-host-no-coroutine-leak", "web-host-consumer-both-targets"),
                 ),
                 "INT-003" to webContract(
                     contractId = "INT-003",
@@ -320,10 +320,10 @@ class ContractRegistryTest {
                 "$MAPPING_HEADER\n" +
                     "INT-002\tjs\tscenario\tweb-typescript-consumer\texample.WebConsumerTest\tconsumer[js]\n" +
                     "INT-002\tjs\tsentinel\tweb-host-no-coroutine-leak\texample.WebConsumerTest\tnoCoroutines[js]\n" +
-                    "INT-002\tjs\tsentinel\tweb-host-common-consumer\texample.WebConsumerTest\tcommonConsumer[js]\n" +
+                    "INT-002\tjs\tsentinel\tweb-host-consumer-both-targets\texample.WebConsumerTest\tcommonConsumer[js]\n" +
                     "INT-002\twasmJs\tscenario\tweb-typescript-consumer\texample.WebConsumerTest\tconsumer[wasmJs]\n" +
                     "INT-002\twasmJs\tsentinel\tweb-host-no-coroutine-leak\texample.WebConsumerTest\tnoCoroutines[wasmJs]\n" +
-                    "INT-002\twasmJs\tsentinel\tweb-host-common-consumer\texample.WebConsumerTest\tcommonConsumer[wasmJs]",
+                    "INT-002\twasmJs\tsentinel\tweb-host-consumer-both-targets\texample.WebConsumerTest\tcommonConsumer[wasmJs]",
             )
         }
 

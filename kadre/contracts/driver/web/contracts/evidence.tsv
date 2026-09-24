@@ -15,10 +15,10 @@ BCK-002	wasmJs	sentinel	web-surface-redraw-single-per-frame	web-surface.spec.mjs
 BCK-002	wasmJs	sentinel	web-surface-no-renderer	web-surface.spec.mjs	web-surface-no-renderer
 INT-002	js	scenario	web-typescript-consumer	web-typescript.spec.mjs	web-typescript-consumer
 INT-002	js	sentinel	web-host-no-coroutine-leak	web-typescript.spec.mjs	web-typescript-consumer
-INT-002	js	sentinel	web-host-common-consumer	web-typescript.spec.mjs	web-typescript-consumer
+INT-002	js	sentinel	web-host-consumer-both-targets	web-typescript.spec.mjs	web-typescript-consumer
 INT-002	wasmJs	scenario	web-typescript-consumer	web-typescript.spec.mjs	web-typescript-consumer
 INT-002	wasmJs	sentinel	web-host-no-coroutine-leak	web-typescript.spec.mjs	web-typescript-consumer
-INT-002	wasmJs	sentinel	web-host-common-consumer	web-typescript.spec.mjs	web-typescript-consumer
+INT-002	wasmJs	sentinel	web-host-consumer-both-targets	web-typescript.spec.mjs	web-typescript-consumer
 INT-004	js	scenario	web-element-lease	web-surface.spec.mjs	web-element-lease
 INT-004	js	scenario	web-element-lease-concurrent-close	web-surface.spec.mjs	web-element-lease-concurrent-close
 INT-004	js	sentinel	web-element-lease-boundary	web-surface.spec.mjs	web-element-lease-concurrent-close

@@ -42,6 +42,26 @@ val browserSmokeOutput = layout.buildDirectory.dir("contract-evidence")
 /** The registry and the mapping that decide which canonical JSON documents a smoke writes. */
 val contractRegistry = rootProject.file("kadre/contracts/registry/contracts.tsv")
 val contractMapping = layout.projectDirectory.file("contracts/evidence.tsv")
+/**
+ * The commit the canonical evidence of this project belongs to.
+ *
+ * `kadre/contracts/validator/build.gradle.kts` derives the value it validates with the same rule — the
+ * `kadreContractCommit` override, else the repository HEAD — so the two can only agree. It is an
+ * input of the smoke because a commit-pinned document is stale by definition once HEAD moves.
+ */
+val contractEvidenceCommit = providers.gradleProperty("kadreContractCommit")
+    .orElse(
+        providers.exec {
+            workingDir(rootProject.projectDir)
+            commandLine("git", "rev-parse", "HEAD")
+        }.standardOutput.asText.map(String::trim),
+    )
+    .map { commit ->
+        require(commit.matches(Regex("[0-9a-fA-F]{40}|[0-9a-fA-F]{64}"))) {
+            "kadreContractCommit must be a 40- or 64-character Git SHA"
+        }
+        commit
+    }
 
 val installPlaywright by tasks.registering(Exec::class) {
     group = "verification"
@@ -81,8 +101,10 @@ fun registerBrowserSmoke(target: String, distributionTask: String, hostPageTask:
         "--consumer=${layout.buildDirectory.dir("dist/$target/host").get().asFile.absolutePath}",
         "--contracts=${contractRegistry.absolutePath}",
         "--mapping=${contractMapping.asFile.absolutePath}",
+        "--commit=${contractEvidenceCommit.get()}",
     )
     inputs.files(playwrightPackage, playwrightLock, contractRegistry, contractMapping)
+    inputs.property("contractEvidenceCommit", contractEvidenceCommit)
     inputs.dir(layout.projectDirectory.dir("playwright"))
     inputs.dir(layout.buildDirectory.dir("dist/$target/productionExecutable"))
     inputs.dir(layout.buildDirectory.dir("dist/$target/host"))

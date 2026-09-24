@@ -29,9 +29,16 @@ JUnit results:
   `kadre/consumers/typescript` type-checks.
 
 Playwright diagnostics are removed after a successful smoke; they are preserved
-on a failure or interruption. Every Playwright test title is exactly the contract
-scenario ID it proves, so a JUnit `testcase/@name` maps to a scenario without
-interpretation.
+on a failure or interruption. Every identity of
+[contracts/evidence.tsv](contracts/evidence.tsv) names what it maps: the four
+surface scenarios, the two lease scenarios and the consumer test are titled with
+the evidence id they carry, so a JUnit `testcase/@name` maps to them without
+interpretation, while each sentinel is mapped to the test that would fail if the
+mutation it guards were introduced — which is why a sentinel id need not appear
+as a test title. The structural half of the interop sentinels is not JUnit
+evidence at all: `platform:web`'s packaging check verifies that the two shim
+bodies are shared and reconciles the shipped declarations against the curated
+contract at build time.
 
 ## Contract evidence
 
@@ -57,6 +64,13 @@ descriptor names the engine, its version read from a Playwright launch of the
 same pinned revision, and the entry module the page loads, with its SHA-256. The
 Wasm-JS entry module is the loader that instantiates the target's content-hashed
 `.wasm`, so the digest pins that module too.
+
+Provenance caveat: neither field pins the sources. The Kotlin/JS and Kotlin/Wasm
+production bundles are not byte-reproducible, so `bundleSha256` is a per-build
+digest of the artifact that was served for that run and must not be compared
+across builds, and `commit` is the repository HEAD at production time whatever the
+working tree held — the digest answers "which bytes ran", not "which revision
+produced them".
 
 The two Gradle tasks `:kadre:contracts:validator:validateJsBrowserContractEvidence`
 and `...:validateWasmJsBrowserContractEvidence` read those documents against the
@@ -116,7 +130,10 @@ The last publisher wins; a page that publishes nothing is reported with
 `/host` and fails before Playwright starts when it is absent or does not carry
 `index.mjs`. `--contracts=<registry>` and `--mapping=<file>` are required too:
 they are the registry and the evidence mapping the canonical JSON documents are
-built from, and the Gradle smoke task passes the repository's own pair.
+built from, and the Gradle smoke task passes the repository's own pair. That task
+also passes `--commit=<repository HEAD>` (or the `kadreContractCommit` override),
+which is what the validator compares against — a document produced at another
+commit is stale and is rejected rather than silently accepted.
 
 ## Pinned Chromium provisioning
 

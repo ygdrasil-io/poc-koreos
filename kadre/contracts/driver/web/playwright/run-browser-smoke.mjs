@@ -48,6 +48,7 @@ async function runBrowserSmoke(argumentsList) {
   const consumer = argumentsByName.get('--consumer');
   const contracts = argumentsByName.get('--contracts');
   const mapping = argumentsByName.get('--mapping');
+  const commit = argumentsByName.get('--commit');
   const timeoutMilliseconds = parseTimeout(argumentsByName.get('--timeout-ms'));
 
   if (!['js', 'wasmJs'].includes(target) || !distribution || !evidence || !consumer || !contracts || !mapping) {
@@ -118,6 +119,7 @@ async function runBrowserSmoke(argumentsList) {
           bundlePath: join(distributionRoot, entryScript),
           junitDirectory,
           outputDirectory: locations.evidenceDirectory,
+          commit,
           registryPath: contracts,
           mappingPath: mapping,
         });

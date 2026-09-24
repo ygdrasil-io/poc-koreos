@@ -123,11 +123,16 @@ requested, in one command:
   document.dispatchEvent(new Event("kadre-lease"));
   foreignDocument.body.append(foreignDocument.adoptNode(host));
   window.__kadreManualLeaseFrame = frame;
+  window.__kadreManualLeaseHost = host;   // the same element, now in the iframe document
 })();
 await new Promise(requestAnimationFrame);
-document.querySelector('[data-kadre-host="element-lease"]')?.getAttribute("data-kadre-lease");
-document.body.dataset.kadreLeaseSession;
+window.__kadreManualLeaseHost.getAttribute("data-kadre-lease");         // "seen" only if the lease ran first
+window.__kadreManualLeaseHost.getAttribute("data-kadre-lease-result");  // "granted" or a failure encoding
 ```
+
+The `element-lease` scenario observes no session on `document.body`: it publishes
+only the two element attributes read above. The session half of a lease is
+observed on `?scenario=element-lease-close` below, as `data-kadre-lease-close-session`.
 
 Then reload the scenario and run the same command with the lease dispatched
 *after* the adoption, then a third time with the adoption reverted by moving the
@@ -137,7 +142,9 @@ lease that cannot be granted is reported as a failure (`closed:surface`,
 `temporarilyUnavailable:true`), never by handing the callback an element that
 already belongs to another document. The origin session terminates with
 `Stopped(HostDetached)` because its element left the origin document, while a
-same-document move keeps it alive, as the Phase 1 charter describes.
+same-document move keeps it alive, as the Phase 1 charter describes. The origin
+session outcome is observable on the Phase 1 scenarios (`data-kadre-durable-session`,
+`data-kadre-transfer-session`), not on this one.
 
 For the concurrent and closing orders the automated suite uses, open
 `?scenario=element-lease-close` and run:
