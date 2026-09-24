@@ -5,29 +5,24 @@
  * object; this hand-written ESM module presents the surface `kadre/INTEROP-EXPORTS.md` section 6
  * promises — `KadreWeb.attach`, `KadreSessionHandle`, `KadreHostError` and the discriminated unions.
  *
- * Loading: the bindings come from the shared registry the Kotlin module publishes them into, never
- * from a sibling module of this package. A Kotlin/Wasm library module has no load hook of its own, so
- * the application whose wasm links this library publishes its bindings with `publishHostBindings()`
- * before it hands its opaque factory key to JavaScript; resolving the registry is what makes that
- * instance — the one that owns the factories and sessions — the one this shim drives.
+ * Loading: this module loads no Kotlin module of its own and holds no bindings of its own. The
+ * application must publish its bindings before it uses this package: a Kotlin/Wasm library module has
+ * no load hook, so the application whose wasm links this library calls `publishHostBindings()` — the
+ * Kotlin half of section 6, which also produces the opaque factory key this shim carries back to
+ * `KadreWeb.attach` — and `attach` resolves them from the shared registry at call time. Resolving
+ * per call is what makes publication order irrelevant, including a publication that follows the
+ * asynchronous instantiation of the application's `main`. A page that publishes nothing is reported
+ * with the explicit error below.
  *
  * Encoding: the Kotlin bindings hand over JSON whose discriminant is `kind`. Every Kotlin `Long`
  * arrives as a JSON string, because Kotlin `Long` is an object on JS and a `BigInt` on Wasm; this
  * shim converts those fields, so both targets publish the same `bigint` the declaration promises.
  */
 
-const hostBindingNames = [
-  "kadreWebAttach",
-  "kadreWebSessionId",
-  "kadreWebSessionState",
-  "kadreWebSubscribeState",
-  "kadreWebSubscribeTermination",
-  "kadreWebUnsubscribeState",
-  "kadreWebRequestStop",
-  "kadreWebClose",
-];
-
-const {
+/**
+ * Resolves this shim's bindings, per call.
+ */
+const hostBindings = ({
   kadreWebAttach,
   kadreWebSessionId,
   kadreWebSessionState,
@@ -36,34 +31,51 @@ const {
   kadreWebUnsubscribeState,
   kadreWebRequestStop,
   kadreWebClose,
-} = resolveHostBindings();
+} = resolveHostBindings()) => ({
+  kadreWebAttach,
+  kadreWebSessionId,
+  kadreWebSessionState,
+  kadreWebSubscribeState,
+  kadreWebSubscribeTermination,
+  kadreWebUnsubscribeState,
+  kadreWebRequestStop,
+  kadreWebClose,
+});
 
 /**
  * Reads the eight bindings from the shared registry the Kotlin module publishes them into.
  *
  * The registry is the `globalThis["org.graphiks.kadre:web"]` object every Kotlin module instance of
  * this library populates: the eight names directly for a Kotlin/Wasm module and for an application
- * that published them, and under the module package path for a Kotlin/JS library build. The shim
- * therefore drives whichever instance owns the factories and sessions, and reports the explicit
- * error below when no Kotlin module has published anything.
+ * that called `publishHostBindings()`, and under the module package path for a Kotlin/JS library
+ * build. Resolution happens inside `KadreWeb.attach`, never when this module evaluates, so an
+ * embedder whose bundler hoists this import still attaches once its application has published.
+ *
+ * The last publisher wins: an application publishes when it starts, after any library module it
+ * links has been loaded, so the instance that owns the factories and sessions is the one this shim
+ * drives. The explicit error below reports the case where nothing has published at all.
  */
 function resolveHostBindings() {
   const registry = globalThis["org.graphiks.kadre:web"];
   const published = registry?.org?.graphiks?.kadre?.platform?.web;
-  const bindings = hostBindingNames.every((name) => typeof registry?.[name] === "function")
-    ? registry
-    : published;
-  if (bindings === undefined || hostBindingNames.some((name) => typeof bindings[name] !== "function")) {
+  const names = [
+    "kadreWebAttach",
+    "kadreWebSessionId",
+    "kadreWebSessionState",
+    "kadreWebSubscribeState",
+    "kadreWebSubscribeTermination",
+    "kadreWebUnsubscribeState",
+    "kadreWebRequestStop",
+    "kadreWebClose",
+  ];
+  const bindings = names.every((name) => typeof registry?.[name] === "function") ? registry : published;
+  if (bindings === undefined || names.some((name) => typeof bindings[name] !== "function")) {
     throw new Error("@kadre/host: the Kotlin module did not publish its bindings");
   }
-  return Object.fromEntries(hostBindingNames.map((name) => [name, bindings[name]]));
+  return Object.fromEntries(names.map((name) => [name, bindings[name]]));
 }
 
 //<shim-body>
-
-if (typeof kadreWebAttach !== "function") {
-  throw new Error("@kadre/host: the Kotlin module did not publish its bindings");
-}
 
 /** Raised by `KadreWeb.attach` when the host refuses the attachment. */
 export class KadreHostError extends Error {
@@ -110,41 +122,51 @@ function toSnapshot(decoded) {
   return { kind: decoded.kind };
 }
 
+/**
+ * One attached session, driven through the bindings of the instance that attached it.
+ *
+ * The handle keeps the bindings resolved at attach: a session belongs to the Kotlin module instance
+ * that created it, so a later publication by another instance cannot move the session's calls.
+ */
 class SessionHandle {
   #key;
+  #bindings;
 
-  constructor(key) {
+  constructor(key, bindings) {
     this.#key = key;
+    this.#bindings = bindings;
   }
 
   get id() {
-    return kadreWebSessionId(this.#key);
+    return this.#bindings.kadreWebSessionId(this.#key);
   }
 
   get state() {
-    return toSnapshot(JSON.parse(kadreWebSessionState(this.#key)));
+    return toSnapshot(JSON.parse(this.#bindings.kadreWebSessionState(this.#key)));
   }
 
   subscribeState(observer) {
-    const subscription = kadreWebSubscribeState(this.#key, (encoded) => {
+    const bindings = this.#bindings;
+    const subscription = bindings.kadreWebSubscribeState(this.#key, (encoded) => {
       observer(toSnapshot(JSON.parse(encoded)));
     });
     return () => {
-      kadreWebUnsubscribeState(subscription);
+      bindings.kadreWebUnsubscribeState(subscription);
     };
   }
 
   requestStop() {
-    kadreWebRequestStop(this.#key);
+    this.#bindings.kadreWebRequestStop(this.#key);
   }
 
   close() {
-    kadreWebClose(this.#key);
+    this.#bindings.kadreWebClose(this.#key);
   }
 
   awaitTermination() {
+    const bindings = this.#bindings;
     return new Promise((resolve, reject) => {
-      kadreWebSubscribeTermination(this.#key, (encoded) => {
+      bindings.kadreWebSubscribeTermination(this.#key, (encoded) => {
         try {
           resolve(toOutcome(JSON.parse(encoded)));
         } catch (error) {
@@ -164,7 +186,9 @@ export const KadreWeb = {
     if (typeof applicationFactory !== "string") {
       throw new KadreHostError({ kind: "invalidRequest", field: "factoryKey" });
     }
-    const result = kadreWebAttach(
+    // Resolved here, per call: the application may publish after this module was imported.
+    const bindings = hostBindings();
+    const result = bindings.kadreWebAttach(
       element,
       applicationFactory,
       options?.policy ?? "default",
@@ -174,7 +198,7 @@ export const KadreWeb = {
     const status = result.slice(0, separator);
     const payload = result.slice(separator + 1);
     if (status === "ok") {
-      return new SessionHandle(Number(payload));
+      return new SessionHandle(Number(payload), bindings);
     }
     throw new KadreHostError(toFailure(JSON.parse(payload)));
   },

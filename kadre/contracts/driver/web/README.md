@@ -52,6 +52,15 @@ unsubscribes, stops and awaits the outcome; the spec asserts that all eight
 binding names are present in the registry, and that the consumer reported
 `passed`.
 
+Standalone use, recorded decision: the shim loads no Kotlin module and holds no
+bindings of its own, so the application must publish before it calls
+`KadreWeb.attach` — its Kotlin module calls `publishHostBindings()`, the Kotlin
+half of `INTEROP-EXPORTS.md` section 6 that also produces the opaque key the
+shim carries back. Resolution happens inside `KadreWeb.attach`, never at import,
+so import order and a publication that follows an asynchronous `main` both work.
+The last publisher wins; a page that publishes nothing is reported with
+`@kadre/host: the Kotlin module did not publish its bindings`.
+
 `--consumer=<directory>` is required: the runner serves that directory at
 `/host` and fails before Playwright starts when it is absent or does not carry
 `index.mjs`.

@@ -13,6 +13,7 @@ import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import org.graphiks.kadre.application.KadreApplication
 import org.graphiks.kadre.application.KadreApplicationFactory
@@ -242,20 +243,25 @@ private fun surfaceNoRendererScenario() {
         }
         launch {
             surface.events.collect { event ->
-                if (event is SurfaceEvent.RedrawRequested) host.setAttribute("data-kadre-observed-redraw", "true")
+                if (event is SurfaceEvent.RedrawRequested) {
+                    // The frame admitted the redraw, and the request waited for the browser-delivered
+                    // observation, so the count is read here: a node a renderer created would be in it.
+                    body.setAttribute("data-kadre-dom-count", document.getElementsByTagName("*").length.toString())
+                    body.setAttribute(
+                        "data-kadre-window-primary",
+                        if (windows.state.value.primary == null) "null" else "present",
+                    )
+                    host.setAttribute("data-kadre-observed-redraw", "true")
+                }
             }
         }
         document.addEventListener("kadre-surface-activity", {
             launch {
                 host.style.width = "480px"
-                delay(SURFACE_ACTIVITY_SETTLE_MILLIS)
+                // The browser delivers the resize observation in a later rendering step than the frame
+                // that this task arms, so the redraw is requested only once the observation exists.
+                surface.state.first { it.revision.value > 0L }
                 surface.requestRedraw()
-                delay(SURFACE_ACTIVITY_SETTLE_MILLIS)
-                body.setAttribute("data-kadre-dom-count", document.getElementsByTagName("*").length.toString())
-                body.setAttribute(
-                    "data-kadre-window-primary",
-                    if (windows.state.value.primary == null) "null" else "present",
-                )
             }
         })
         awaitCancellation()
@@ -452,9 +458,6 @@ private fun SessionOutcome.encoded(): String = when (this) {
     SessionOutcome.Completed -> "completed"
     is SessionOutcome.Failed -> "failed"
 }
-
-/** How long the sentinel lets a browser-delivered observation and one redraw frame settle. */
-private const val SURFACE_ACTIVITY_SETTLE_MILLIS: Long = 100L
 
 /** The metrics readback as the specs read it: logical size, scale and revision. */
 private fun SurfaceState.metricsEncoding(): String =

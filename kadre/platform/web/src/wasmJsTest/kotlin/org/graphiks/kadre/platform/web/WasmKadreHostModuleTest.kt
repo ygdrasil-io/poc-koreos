@@ -1,3 +1,5 @@
+@file:OptIn(kotlin.js.ExperimentalWasmJsInterop::class)
+
 package org.graphiks.kadre.platform.web
 
 import kotlinx.browser.document
@@ -11,6 +13,7 @@ import org.graphiks.kadre.application.KadreApplicationFactory
 import org.w3c.dom.HTMLElement
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
@@ -154,4 +157,38 @@ class WasmKadreHostModuleTest {
         }
         assertTrue(condition(), "the browser never reached the awaited state")
     }
+    /**
+     * The registry follows the most recent publisher, so an application that publishes after a
+     * stand-in instance takes the JavaScript host over instead of being answered by the stand-in.
+     */
+    @Test
+    fun aLaterPublisherTakesOverTheRegistry() {
+        installForeignHostRegistry()
+        assertTrue(hostRegistryBindingIsForeign(), "the stand-in instance must hold the registry first")
+
+        publishHostBindings()
+
+        assertFalse(hostRegistryBindingIsForeign(), "the application's publication must take the registry over")
+    }
+
 }
+
+/** A stand-in instance publishes the eight names first, with one shared stub function. */
+private fun installForeignHostRegistry(): Unit = js(
+    """(function () {
+      var stub = function () { return "foreign"; };
+      globalThis["kadre-test-foreign-binding"] = stub;
+      var registry = {};
+      var names = ["kadreWebAttach", "kadreWebSessionId", "kadreWebSessionState", "kadreWebSubscribeState",
+        "kadreWebSubscribeTermination", "kadreWebUnsubscribeState", "kadreWebRequestStop", "kadreWebClose"];
+      for (var index = 0; index < names.length; index += 1) {
+        registry[names[index]] = stub;
+      }
+      globalThis["org.graphiks.kadre:web"] = registry;
+    }())""",
+)
+
+/** Whether the registry still answers with the stand-in instance's binding. */
+private fun hostRegistryBindingIsForeign(): Boolean = js(
+    """globalThis["org.graphiks.kadre:web"].kadreWebAttach === globalThis["kadre-test-foreign-binding"]""",
+)

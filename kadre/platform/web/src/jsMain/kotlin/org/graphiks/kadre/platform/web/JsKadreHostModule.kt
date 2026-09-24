@@ -94,7 +94,10 @@ private fun attachElement(
  * (`kadre/INTEROP-EXPORTS.md` section 6), and nothing in this library has to reference it for the
  * publication to happen.
  *
- * Idempotent, and it never replaces a binding another instance of this library already published.
+ * The last publisher wins: every call writes all eight names, so an application that publishes as it
+ * starts takes over from any instance that published earlier — which is what makes the application's
+ * own factories the ones the JavaScript shim resolves. Two applications that publish on the same page
+ * therefore leave the most recent one answering, and the oldest publisher is never silently kept.
  */
 public fun publishHostBindings(): Unit = publishBindings(
     ::kadreWebAttach,
