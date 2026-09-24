@@ -209,7 +209,7 @@ export type KadreOperation =
   | "gamepadEffect" | "stopGamepadEffects" | "textInput" | "updateTextInput"
   | "claimDropTransfer" | "readDropItem" | "capturePermission"
   | "captureRefreshSources" | "captureOpen" | "captureCollectFrames"
-  | "rawInputAccess" | "platformSurfaceAccess" | "platformWindowAccess";
+  | "rawInputAccess" | "gestureInput" | "platformSurfaceAccess" | "platformWindowAccess";
 export type KadrePermission =
   | "displayEnumeration" | "inputMonitoring" | "rawInput" | "captureScreen" | "captureWindow";
 export type KadrePolicyComponent =
