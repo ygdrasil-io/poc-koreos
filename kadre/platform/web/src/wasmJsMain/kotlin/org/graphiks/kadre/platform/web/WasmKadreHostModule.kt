@@ -1,147 +1,89 @@
-@file:OptIn(kotlin.js.ExperimentalWasmJsInterop::class)
+@file:OptIn(kotlin.js.ExperimentalWasmJsInterop::class, kotlin.js.ExperimentalJsExport::class)
+
+// The JavaScript surface of `@kadre/host` for the Kotlin/Wasm target.
+//
+// Kotlin/Wasm exports functions only, so this target does not export classes or objects either: the
+// module's JavaScript bindings are the top-level functions below, and the promised `KadreWeb` surface
+// is presented by `types/kadre-host-wasm.mjs`, which the package ships as `index.mjs`. The shared half
+// — registries, keys, encoding, option resolution — lives in `WebHostInterop.kt`.
 
 package org.graphiks.kadre.platform.web
 
-import kotlinx.coroutines.CompletableDeferred
+import kotlin.js.JsAny
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.MainScope
-import kotlinx.coroutines.asPromise
-import kotlinx.coroutines.cancel
-import kotlinx.coroutines.launch
+import org.graphiks.kadre.application.KadreApplicationFactory
 import org.graphiks.kadre.application.KadreSession
-import org.graphiks.kadre.diagnostics.KadreFailure as KadreFailureValue
 import org.graphiks.kadre.diagnostics.KadreResult
-import org.graphiks.kadre.policy.KadrePolicies
 import org.graphiks.kadre.policy.KadrePolicy
 import org.w3c.dom.HTMLElement
-import kotlin.js.Promise
+
+// Kotlin/Wasm cannot name a non-external class in an exported signature and its DOM declarations
+// cannot be translated into the generated declarations, so the element crosses as `JsAny` and is
+// reclaimed as the SDK interface inside `attachElement`; the shim only ever passes an HTMLElement.
 
 /**
- * `@kadre/host` for the Kotlin/Wasm target: the same names as the Kotlin/JS facade over the Wasm
- * SDK `org.w3c.dom.HTMLElement`.
+ * Attaches a session to the element [element] of the browsing context.
  *
- * Kotlin/Wasm 2.4 only allows `@JsExport` on functions, and only over external, primitive, string
- * and function types, so this facade cannot annotate its classes, its `KadreWeb` object or its
- * factory reference for JavaScript, and `Deferred.asPromise` is typed `Promise<JsAny?>` there. The
- * Wasm module therefore ships the same Kotlin surface but no JavaScript surface; see
- * `kadre/platform/web/types/kadre-host.d.ts` and the task report for the toolchain evidence.
+ * [factoryKey] is the opaque key of `KadreApplicationFactoryRef.hostKey`. Returns `"ok|<handle key>"`
+ * or `"failed|<failure JSON>"`; the shim turns the latter into `KadreHostError`.
  */
+@JsExport
+public fun kadreWebAttach(
+    element: JsAny,
+    factoryKey: String,
+    policy: String,
+    attachmentPolicy: String,
+): String = attachSession(element, factoryKey, policy, attachmentPolicy, ::attachElement)
 
-/** Raised by [KadreWeb.attach] when the host refuses the attachment. */
-public class KadreHostError(public val failure: KadreFailure) : Throwable("Kadre host failure: ${failure.kind}")
+/** The opaque identifier of the session behind [handleKey]. Not the Kotlin `SessionId`. */
+@JsExport
+public fun kadreWebSessionId(handleKey: Int): String = KadreWebInterop.handle(handleKey).id
 
-/** Entry point shared by the JS and Wasm facades. */
-public object KadreWeb {
-    /**
-     * Attaches a Kadre session to [element].
-     *
-     * The session owns a fresh `MainScope`, released after an attach failure or once the session
-     * publishes its terminal outcome. A refused attachment throws [KadreHostError].
-     */
-    public fun attach(
-        element: HTMLElement,
-        applicationFactory: KadreApplicationFactoryRef,
-        options: KadreWebOptions? = null,
-    ): KadreSessionHandle {
-        val policy = options.selectedPolicy()
-        val attachmentPolicy = options.selectedAttachmentPolicy()
-        val scope = MainScope()
-        val attached = element.attachKadre(
-            parentScope = scope,
-            applicationFactory = applicationFactory.factory,
-            policy = policy,
-            attachmentPolicy = attachmentPolicy,
-        )
-        return when (attached) {
-            is KadreResult.Success -> KadreSessionHandle(attached.value, scope)
-            is KadreResult.Failure -> {
-                scope.cancel()
-                throw KadreHostError(attached.reason.toInterop())
-            }
-        }
-    }
-}
+/** The current snapshot of the session behind [handleKey], as a JSON object keyed by `kind`. */
+@JsExport
+public fun kadreWebSessionState(handleKey: Int): String = KadreWebInterop.handle(handleKey).state
 
 /**
- * Host handle over one attached session.
+ * Subscribes [observer] to the state of the session behind [handleKey]; returns its subscription key.
  *
- * The handle owns the `MainScope` of its session: the scope is cancelled once the session
- * publishes its terminal outcome, and the terminal outcome stays available afterwards.
+ * [observer] receives one snapshot JSON per notification, starting synchronously with the current
+ * snapshot.
  */
-public class KadreSessionHandle internal constructor(
-    private val session: KadreSession,
-    private val scope: CoroutineScope,
-    /**
-     * Seam for the observer-failure path: the default reports the failure out of band, and the
-     * contract tests inject a recorder so the assertion does not depend on a global error hook.
-     */
-    private val reportObserverFailure: (Throwable) -> Unit = ::observerFailure,
-) {
-    private val termination = CompletableDeferred<KadreSessionOutcome>()
+@JsExport
+public fun kadreWebSubscribeState(handleKey: Int, observer: (String) -> Unit): Int =
+    KadreWebInterop.handle(handleKey).subscribe(observer)
 
-    init {
-        scope.launch {
-            termination.complete(session.awaitTermination().toInterop())
-            // The session is over: release the scope that hosted its observers and waiters.
-            scope.cancel()
-        }
-    }
+/**
+ * Subscribes [observer] to the terminal outcome of the session behind [handleKey]; returns its
+ * subscription key. The registration is one-shot: it delivers the outcome JSON exactly once.
+ */
+@JsExport
+public fun kadreWebSubscribeTermination(handleKey: Int, observer: (String) -> Unit): Int =
+    KadreWebInterop.handle(handleKey).subscribeTermination(observer)
 
-    /** Opaque session identity. It is not parseable and not stable across processes. */
-    public val id: String get() = session.id.toString()
+/** Cancels the registration behind [subscriptionKey]. Returns whether it was still registered. */
+@JsExport
+public fun kadreWebUnsubscribeState(subscriptionKey: Int): Boolean =
+    KadreWebInterop.unsubscribe(subscriptionKey)
 
-    /** The current snapshot. */
-    public val state: KadreSessionSnapshot get() = session.state.value.toInterop()
+/** Asks the session behind [handleKey] to stop. */
+@JsExport
+public fun kadreWebRequestStop(handleKey: Int): Unit = KadreWebInterop.handle(handleKey).requestStop()
 
-    /**
-     * Calls [observer] synchronously with the current snapshot, then once per state change.
-     *
-     * A throwing observer is unsubscribed and its failure is rethrown asynchronously; it never
-     * terminates the session.
-     */
-    public fun subscribeState(observer: (KadreSessionSnapshot) -> Unit): () -> Unit {
-        var delivered = session.state.value
-        try {
-            observer(delivered.toInterop())
-        } catch (error: Throwable) {
-            reportObserverFailure(error)
-            return { }
-        }
-        val job = scope.launch {
-            session.state.collect { state ->
-                if (state == delivered) return@collect
-                delivered = state
-                observer(state.toInterop())
-            }
-        }
-        return { job.cancel() }
-    }
+/** Closes the session behind [handleKey]; its terminal outcome stays observable. */
+@JsExport
+public fun kadreWebClose(handleKey: Int): Unit = KadreWebInterop.handle(handleKey).close()
 
-    /** Asks the session to stop. */
-    public fun requestStop(): Unit = session.requestStop()
-
-    /** Closes the session. The terminal outcome remains available through [awaitTermination]. */
-    public fun close(): Unit = session.close()
-
-    /**
-     * Resolves with the terminal outcome; it resolves for every later caller as well.
-     *
-     * On Wasm `Deferred.asPromise` is typed `Promise<JsAny?>`; the resolved value is the outcome
-     * object of this facade.
-     */
-    public fun awaitTermination(): Promise<JsAny?> = termination.asPromise()
-}
-
-internal fun KadreWebOptions?.selectedPolicy(): KadrePolicy = when (this?.policy) {
-    null, "default" -> KadrePolicies.Default
-    "realtime" -> KadrePolicies.Realtime
-    "recording" -> KadrePolicies.Recording
-    // The union is closed: an unknown profile is refused instead of silently replaced.
-    else -> throw KadreHostError(KadreFailureValue.InvalidRequest("options.policy").toInterop())
-}
-
-internal fun KadreWebOptions?.selectedAttachmentPolicy(): WebAttachmentPolicy = when (this?.attachmentPolicy) {
-    null, "stopWhenDetached" -> WebAttachmentPolicy.StopWhenDetached
-    "manual" -> WebAttachmentPolicy.Manual
-    else -> throw KadreHostError(KadreFailureValue.InvalidRequest("options.attachmentPolicy").toInterop())
-}
+@Suppress("UNCHECKED_CAST_TO_EXTERNAL_INTERFACE")
+private fun attachElement(
+    element: JsAny,
+    factory: KadreApplicationFactory,
+    policy: KadrePolicy,
+    attachmentPolicy: WebAttachmentPolicy,
+    scope: CoroutineScope,
+): KadreResult<KadreSession> = (element as HTMLElement).attachKadre(
+    parentScope = scope,
+    applicationFactory = factory,
+    policy = policy,
+    attachmentPolicy = attachmentPolicy,
+)

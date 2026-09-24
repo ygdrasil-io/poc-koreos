@@ -2,52 +2,61 @@ package org.graphiks.kadre.platform.web
 
 import kotlinx.browser.document
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.await
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withContext
 import org.graphiks.kadre.application.KadreApplication
 import org.graphiks.kadre.application.KadreApplicationFactory
-import org.graphiks.kadre.policy.KadrePolicies
-import org.graphiks.kadre.policy.KadrePolicy
 import org.w3c.dom.HTMLElement
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.TimeSource
 
 /**
- * The published Kotlin/JS entry point of `@kadre/host`, exercised against a real element.
- *
- * The Wasm target has the same test over the Wasm SDK `HTMLElement`.
+ * The published JavaScript surface of `@kadre/host`, exercised through the exported functions the
+ * `index.mjs` shim is built on. The Wasm target compiles the same test over its own SDK element.
  */
 class JsKadreHostModuleTest {
     @Test
-    fun attachPublishesTheStateAndResolvesTheTerminalOutcome() = runTest {
+    fun attachPublishesTheStateAndTheTerminalOutcome() = runTest {
         val host = existingHostElement()
         try {
-            val handle = KadreWeb.attach(host, awaitingFactory().asHostRef())
-            assertTrue(handle.id.isNotEmpty(), "the session identity is an opaque non-empty string")
-            awaitReal(1.seconds) { handle.state.kind == "running" }
+            val attached = kadreWebAttach(host, factoryKey(), "default", "stopWhenDetached")
+            assertTrue(attached.startsWith("ok|"), "an accepted attachment is reported as ok: $attached")
+            val handleKey = attached.removePrefix("ok|").toInt()
+
+            assertTrue(kadreWebSessionId(handleKey).isNotEmpty(), "the session has an opaque identifier")
+            awaitReal(1.seconds) { kadreWebSessionState(handleKey) == "{\"kind\":\"running\"}" }
 
             val observed = mutableListOf<String>()
-            val unsubscribe = handle.subscribeState { observed += it.kind }
-            assertEquals(listOf("running"), observed, "the observer hears the current snapshot first")
-
-            handle.requestStop()
-            val outcome = handle.awaitTermination().await()
-            assertEquals("stopped", outcome.kind)
-            assertEquals("hostRequested", outcome.reason)
+            val subscription = kadreWebSubscribeState(handleKey) { observed += it }
             assertEquals(
-                "stopped",
-                handle.awaitTermination().await().kind,
-                "the terminal outcome stays available after the terminal state",
+                listOf("{\"kind\":\"running\"}"),
+                observed,
+                "the observer hears the current snapshot synchronously",
             )
-            unsubscribe()
+
+            val outcomes = mutableListOf<String>()
+            kadreWebSubscribeTermination(handleKey) { outcomes += it }
+
+            kadreWebRequestStop(handleKey)
+            awaitReal(1.seconds) { outcomes.size == 1 }
+            assertEquals(listOf("{\"kind\":\"stopped\",\"reason\":\"hostRequested\"}"), outcomes)
+
+            assertTrue(
+                kadreWebUnsubscribeState(subscription),
+                "the state subscription is still registered before it is cancelled",
+            )
+            assertEquals(
+                false,
+                kadreWebUnsubscribeState(subscription),
+                "a cancelled subscription is not registered twice",
+            )
+            assertEquals("{\"kind\":\"terminated\",\"outcome\":{\"kind\":\"stopped\",\"reason\":\"hostRequested\"}}", kadreWebSessionState(handleKey))
         } finally {
             host.remove()
         }
@@ -57,70 +66,48 @@ class JsKadreHostModuleTest {
     fun aDisconnectedElementIsRefusedUnderStopWhenDetached() {
         val host = document.createElement("div") as HTMLElement
 
-        val error = assertFailsWith<KadreHostError> { KadreWeb.attach(host, awaitingFactory().asHostRef()) }
+        val refused = kadreWebAttach(host, factoryKey(), "default", "stopWhenDetached")
 
-        assertEquals("invalidRequest", error.failure.kind)
-        assertEquals("element", error.failure.field)
+        assertEquals("{\"kind\":\"invalidRequest\",\"field\":\"element\"}", refused.removePrefix("failed|"))
     }
 
     @Test
     fun aManualAttachmentAcceptsADisconnectedElement() = runTest {
         val host = document.createElement("div") as HTMLElement
 
-        val handle = KadreWeb.attach(
-            host,
-            awaitingFactory().asHostRef(),
-            jsKadreOptions(policy = "realtime", attachmentPolicy = "manual"),
-        )
+        val attached = kadreWebAttach(host, factoryKey(), "realtime", "manual")
         try {
-            assertTrue(handle.state.kind != "terminated", "manual attachment accepts a disconnected element")
+            assertTrue(attached.startsWith("ok|"), "manual attachment accepts a disconnected element: $attached")
+            val handleKey = attached.removePrefix("ok|").toInt()
+            assertTrue(kadreWebSessionState(handleKey) != "{\"kind\":\"terminated\"}")
         } finally {
-            handle.close()
+            kadreWebClose(attached.removePrefix("ok|").toInt())
         }
     }
 
     @Test
-    fun anUnknownOptionMemberIsRefusedInsteadOfIgnored() {
+    fun anUnknownOptionMemberOrFactoryIsRefusedInsteadOfIgnored() {
         val host = existingHostElement()
         try {
-            val refused = assertFailsWith<KadreHostError> {
-                KadreWeb.attach(
-                    host,
-                    awaitingFactory().asHostRef(),
-                    jsKadreOptions(policy = "turbo", attachmentPolicy = "manual"),
-                )
-            }
-            assertEquals("invalidRequest", refused.failure.kind)
-            assertEquals("options.policy", refused.failure.field)
-
-            val refusedAttachment = assertFailsWith<KadreHostError> {
-                KadreWeb.attach(
-                    host,
-                    awaitingFactory().asHostRef(),
-                    jsKadreOptions(policy = "default", attachmentPolicy = "sometimes"),
-                )
-            }
-            assertEquals("options.attachmentPolicy", refusedAttachment.failure.field)
+            assertEquals(
+                "{\"kind\":\"invalidRequest\",\"field\":\"options.policy\"}",
+                kadreWebAttach(host, factoryKey(), "turbo", "manual").removePrefix("failed|"),
+            )
+            assertEquals(
+                "{\"kind\":\"invalidRequest\",\"field\":\"options.attachmentPolicy\"}",
+                kadreWebAttach(host, factoryKey(), "default", "sometimes").removePrefix("failed|"),
+            )
+            assertEquals(
+                "{\"kind\":\"invalidRequest\",\"field\":\"factoryKey\"}",
+                kadreWebAttach(host, "kadre-factory-none", "default", "manual").removePrefix("failed|"),
+            )
         } finally {
             host.remove()
         }
     }
 
-    @Test
-    fun theClosedOptionUnionsMapToTheDeclaredPolicies() {
-        assertEquals<KadrePolicy>(KadrePolicies.Default, jsKadreOptions(null, null).selectedPolicy())
-        assertEquals<KadrePolicy>(KadrePolicies.Realtime, jsKadreOptions("realtime", null).selectedPolicy())
-        assertEquals<KadrePolicy>(KadrePolicies.Recording, jsKadreOptions("recording", null).selectedPolicy())
-        assertEquals(WebAttachmentPolicy.Manual, jsKadreOptions(null, "manual").selectedAttachmentPolicy())
-        assertEquals(
-            WebAttachmentPolicy.StopWhenDetached,
-            jsKadreOptions(null, "stopWhenDetached").selectedAttachmentPolicy(),
-        )
-    }
-
-    /** The application never leaves its scope, so the session stays running until it is asked to stop. */
-    private fun awaitingFactory(): KadreApplicationFactory =
-        KadreApplicationFactory { KadreApplication { awaitCancellation() } }
+    private fun factoryKey(): String =
+        KadreApplicationFactory { KadreApplication { awaitCancellation() } }.asHostRef().hostKey
 
     private fun existingHostElement(): HTMLElement =
         (document.createElement("div") as HTMLElement).also {
@@ -129,18 +116,11 @@ class JsKadreHostModuleTest {
             document.body!!.appendChild(it)
         }
 
-    private fun jsKadreOptions(policy: String?, attachmentPolicy: String?): KadreWebOptions {
-        val options = js("({})").unsafeCast<KadreWebOptionsJs>()
-        options.policy = policy
-        options.attachmentPolicy = attachmentPolicy
-        return options
-    }
-
     /**
      * Waits for the browser's own event loop.
      *
-     * The facade owns the `MainScope` of its session, so its state transitions do not run on the
-     * virtual clock of [runTest].
+     * The interop layer owns the `MainScope` of its session, so its state transitions do not run on
+     * the virtual clock of [runTest].
      */
     private suspend fun awaitReal(timeout: Duration, condition: () -> Boolean) {
         withContext(Dispatchers.Default) {
@@ -149,10 +129,4 @@ class JsKadreHostModuleTest {
         }
         assertTrue(condition(), "the browser never reached the awaited state")
     }
-}
-
-/** Mutable view used only to build option literals from Kotlin/JS tests. */
-private external interface KadreWebOptionsJs : KadreWebOptions {
-    override var policy: String?
-    override var attachmentPolicy: String?
 }

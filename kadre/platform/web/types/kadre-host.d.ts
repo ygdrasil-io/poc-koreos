@@ -1,20 +1,21 @@
 /**
  * `@kadre/host` — the curated TypeScript contract of `kadre/INTEROP-EXPORTS.md` section 6, phase 2.
  *
- * This file is the published `index.d.ts` of the npm package; the Kotlin distributions only carry
- * the compiled module. It was reconciled against the declarations each target generates:
+ * This file is the published `index.d.ts` of the npm package; it types `index.mjs`, the ESM shim
+ * that presents `KadreWeb` over the module's exported function bindings, and it was reconciled with
+ * the declarations each target generates for those bindings:
  *
- *   Kotlin/JS   `build/dist/js/productionLibrary/kadre-platform-web.d.ts`
- *               exported symbols: `KadreHostError`, `KadreWeb`, `KadreSessionHandle`
- *   Kotlin/Wasm `build/compileSync/wasmJs/main/productionLibrary/kotlin/kadre-platform-web.d.mts`
- *               exported symbols: none — Kotlin/Wasm only exports functions and generates no
- *               JavaScript surface for a library, so this target publishes the same Kotlin API
- *               without a JavaScript binding (see the task report).
+ *   Kotlin/JS   `compileSync/js/main/productionLibrary/kotlin/kadre-platform-web.d.ts`
+ *   Kotlin/Wasm `compileSync/wasmJs/main/productionLibrary/kotlin/kadre-platform-web.d.mts`
  *
- * The generated Kotlin/JS declarations cannot name the value model: `KadreFailure`,
- * `KadreSessionOutcome`, `KadreSessionSnapshot` and the factory reference are Kotlin types that
- * appear in the generated file only as `any` comments. The shapes below are the ones the facade
- * actually produces at runtime, and are the only supported contract.
+ * Both declare exactly the eight bindings the shim loads (`kadreWebAttach`, `kadreWebSessionId`,
+ * `kadreWebSessionState`, `kadreWebSubscribeState`, `kadreWebSubscribeTermination`,
+ * `kadreWebUnsubscribeState`, `kadreWebRequestStop`, `kadreWebClose`), and the packaging task fails
+ * when a target's declarations and its shim stop agreeing in either direction.
+ *
+ * The bindings are internal glue: they hand over JSON keyed by `kind`, with `Long` payloads as
+ * strings. The shim, not the consumer, owns the conversion back to the shapes below — including
+ * `BigInt` for the fields typed `bigint`, so Kotlin/JS and Kotlin/Wasm agree at runtime.
  */
 
 export type KadrePolicyProfile = "default" | "realtime" | "recording";
@@ -100,6 +101,10 @@ export declare class KadreHostError extends Error {
 }
 
 export interface KadreSessionHandle {
+  /**
+   * An opaque identifier allocated for this handle by the interop layer: not the Kotlin `SessionId`,
+   * not parseable and not stable across processes.
+   */
   readonly id: string;
   readonly state: KadreSessionSnapshot;
   subscribeState(observer: (state: KadreSessionSnapshot) => void): () => void;

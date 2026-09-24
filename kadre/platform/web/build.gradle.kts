@@ -95,61 +95,100 @@ tasks.withType<Kotlin2JsCompile>().configureEach {
 /**
  * The `@kadre/host` npm package of one target.
  *
- * The Kotlin library distribution carries the compiled module and the declarations the compiler
- * generated for it; `types/kadre-host.d.ts` is the curated contract of
- * `kadre/INTEROP-EXPORTS.md` section 6 and becomes the package's `index.d.ts`. The task refuses to
- * package a symbol the curated file does not declare, so the two cannot drift apart silently.
+ * Sources:
+ * - the compiled Kotlin library output (`compileSync/<target>/main/productionLibrary/kotlin`), which
+ *   is where the JavaScript-bearing module lives. The post-processed `dist/<target>/productionLibrary`
+ *   copy is not used: for the Wasm target the `wasm-opt` step reduces a library module to an empty
+ *   one, so that copy ships neither code nor exports;
+ * - `types/kadre-host-<target>.mjs`, the hand-written shim presenting the promised `KadreWeb`
+ *   surface over the module's function bindings, shipped as `index.mjs`;
+ * - `types/kadre-host.d.ts`, the curated contract of `kadre/INTEROP-EXPORTS.md` section 6, shipped as
+ *   `index.d.ts`.
+ *
+ * The task proves three things before the package can be published: the generated declarations
+ * export exactly the bindings the shim imports (no binding the shim relies on is missing, and no
+ * unexpected symbol leaks), every name the shim exports is declared by the curated contract, and the
+ * Kotlin module bundle really carries the bound names.
  */
-fun registerHostPackage(target: String, distributionTask: String, moduleFile: String) =
-    tasks.register<Sync>("${target}HostPackage") {
-        group = "build"
-        description = "Assembles the @kadre/host package for the $target target."
-        dependsOn(distributionTask)
-        inputs.file(layout.projectDirectory.file("types/kadre-host.d.ts"))
-        from(layout.buildDirectory.dir("dist/$target/productionLibrary"))
-        from(layout.projectDirectory.file("types/kadre-host.d.ts")) { rename { "index.d.ts" } }
-        into(layout.buildDirectory.dir("dist/$target/host-package"))
-        doLast {
-            val directory = layout.buildDirectory.dir("dist/$target/host-package").get().asFile
-            directory.resolve("package.json").writeText(
-                """
-                {
-                  "name": "@kadre/host",
-                  "version": "${project.version}",
-                  "type": "module",
-                  "main": "$moduleFile",
-                  "module": "$moduleFile",
-                  "types": "index.d.ts",
-                  "private": false
-                }
-                """.trimIndent() + "\n",
-            )
-            check(directory.resolve(moduleFile).isFile) {
-                "the $target package must ship $moduleFile"
-            }
-            check(directory.resolve("index.d.ts").isFile) {
-                "the $target package must declare index.d.ts"
-            }
-            val curated = directory.resolve("index.d.ts").readText()
-            val generated = directory.walkTopDown()
-                .filter { it.isFile && it.name != "index.d.ts" }
-                .filter { it.name.endsWith(".d.ts") || it.name.endsWith(".d.mts") }
-                .flatMap { declarationSymbols(it.readText()).asSequence() }
-                .toSet()
-            val undeclared = generated.filterNot { symbol -> Regex("\\b${Regex.escape(symbol)}\\b").containsMatchIn(curated) }
-            check(undeclared.isEmpty()) {
-                "the $target declarations carry symbols the curated index.d.ts does not declare: $undeclared"
-            }
-            // The Wasm target's module is part of the evidence: Kotlin/Wasm empties a library
-            // module (its exports are only realized when an application is linked), so the packaged
-            // `.wasm` carries no entry point. Printing its size keeps that visible in every build.
-            val wasmModule = directory.listFiles().orEmpty().firstOrNull { it.extension == "wasm" }
-            logger.lifecycle(
-                "@kadre/host ($target): $moduleFile${wasmModule?.let { " (${it.length()} bytes of wasm)" }.orEmpty()}" +
-                    " and index.d.ts; generated declarations declare $generated",
-            )
-        }
+fun registerHostPackage(
+    target: String,
+    compileTask: String,
+    moduleFile: String,
+    shimFileName: String,
+) = tasks.register<Sync>("${target}HostPackage") {
+    group = "build"
+    description = "Assembles the @kadre/host package for the $target target."
+    dependsOn(compileTask)
+    inputs.file(layout.projectDirectory.file("types/kadre-host.d.ts"))
+    inputs.file(layout.projectDirectory.file("types/$shimFileName"))
+    // `optimized/` holds the wasm-opt output, which is empty for a library module.
+    from(layout.buildDirectory.dir("compileSync/$target/main/productionLibrary/kotlin")) {
+        exclude("optimized/**")
     }
+    from(layout.projectDirectory.file("types/$shimFileName")) { rename { "index.mjs" } }
+    from(layout.projectDirectory.file("types/kadre-host.d.ts")) { rename { "index.d.ts" } }
+    into(layout.buildDirectory.dir("dist/$target/host-package"))
+    doLast {
+        val directory = layout.buildDirectory.dir("dist/$target/host-package").get().asFile
+        directory.resolve("package.json").writeText(
+            """
+            {
+              "name": "@kadre/host",
+              "version": "${project.version}",
+              "type": "module",
+              "main": "index.mjs",
+              "module": "index.mjs",
+              "types": "index.d.ts",
+              "private": false
+            }
+            """.trimIndent() + "\n",
+        )
+        listOf("index.mjs", "index.d.ts", moduleFile).forEach { required ->
+            check(directory.resolve(required).isFile) { "the $target package must ship $required" }
+        }
+
+        val shim = directory.resolve("index.mjs").readText()
+        val bound = shimBindingNames(shim)
+        val declared = directory.walkTopDown()
+            .filter { it.isFile && it.name != "index.d.ts" }
+            .filter { it.name.endsWith(".d.ts") || it.name.endsWith(".d.mts") }
+            .flatMap { declarationSymbols(it.readText()).asSequence() }
+            .filterNot { it in shimPublicNames(shim) }
+            .toSet()
+        check(bound == declared) {
+            "the $target shim must bind exactly the generated exports: missing ${declared - bound}, unexpected ${bound - declared}"
+        }
+        val bundle = directory.resolve(moduleFile).readText()
+        val unbound = bound.filterNot { bundle.contains(it) }
+        check(unbound.isEmpty()) { "the $target module bundle does not carry: $unbound" }
+        val curated = directory.resolve("index.d.ts").readText()
+        val undeclared = shimPublicNames(shim).filterNot { name -> Regex("\\b${Regex.escape(name)}\\b").containsMatchIn(curated) }
+        check(undeclared.isEmpty()) { "the shim exports names the curated index.d.ts does not declare: $undeclared" }
+
+        val wasmModule = directory.listFiles().orEmpty().firstOrNull { it.extension == "wasm" }
+        logger.lifecycle(
+            "@kadre/host ($target): index.mjs, index.d.ts and $moduleFile" +
+                wasmModule?.let { " (${it.length()} bytes of wasm)" }.orEmpty() +
+                "; bound bindings $bound",
+        )
+    }
+}
+
+/** The Kotlin bindings the shim loads, read from its import or destructuring block. */
+fun shimBindingNames(shim: String): Set<String> {
+    val block = shim.substringBefore("//<shim-body>")
+    val braces = block.substringAfter('{').substringBefore('}')
+    return braces.split(',')
+        .map { it.trim().substringBefore(' ').trim() }
+        .filter { it.isNotEmpty() }
+        .toSet()
+}
+
+/** The names the shim publishes to its consumer. */
+fun shimPublicNames(shim: String): Set<String> = Regex("""(?m)^export\s+(?:class|const|function)\s+([A-Za-z_][A-Za-z0-9_]*)""")
+    .findAll(shim)
+    .map { it.groupValues[1] }
+    .toSet()
 
 /** The exported type names of one generated declaration file, without the compiler's own helpers. */
 fun declarationSymbols(declaration: String): Set<String> {
@@ -162,13 +201,29 @@ fun declarationSymbols(declaration: String): Set<String> {
         .toSet()
 }
 
+/** The two shims must present the same behaviour: only their loading block may differ. */
+fun verifyShimBodiesAreShared(): Unit {
+    val js = layout.projectDirectory.file("types/kadre-host-js.mjs").asFile.readText()
+    val wasm = layout.projectDirectory.file("types/kadre-host-wasm.mjs").asFile.readText()
+    val marker = "//<shim-body>"
+    check(js.substringAfter(marker) == wasm.substringAfter(marker)) {
+        "the two @kadre/host shims must share their body from $marker on"
+    }
+}
+
 val contractTestRepository = rootProject.layout.buildDirectory.dir("kadre-contract-repository")
 
-val jsHostPackage = registerHostPackage("js", "jsBrowserProductionLibraryDistribution", "kadre-platform-web.js")
+val jsHostPackage = registerHostPackage(
+    target = "js",
+    compileTask = "compileProductionLibraryKotlinJs",
+    moduleFile = "kadre-platform-web.js",
+    shimFileName = "kadre-host-js.mjs",
+)
 val wasmJsHostPackage = registerHostPackage(
-    "wasmJs",
-    "wasmJsBrowserProductionLibraryDistribution",
-    "kadre-platform-web.mjs",
+    target = "wasmJs",
+    compileTask = "compileProductionLibraryKotlinWasmJs",
+    moduleFile = "kadre-platform-web.mjs",
+    shimFileName = "kadre-host-wasm.mjs",
 )
 
 val jsHostPackageArchive by tasks.registering(Zip::class) {
@@ -191,6 +246,7 @@ val wasmJsHostPackageArchive by tasks.registering(Zip::class) {
 
 tasks.named("check") {
     dependsOn(jsHostPackage, wasmJsHostPackage)
+    doFirst { verifyShimBodiesAreShared() }
 }
 
 publishing {

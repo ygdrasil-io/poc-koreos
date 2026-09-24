@@ -190,13 +190,19 @@ Les strings `field`, `domain`, `code` et `sourceId` suivent les règles de redac
 Le module applicatif Kotlin produit la référence opaque avec la seule passerelle Kotlin target-specific suivante :
 
 ```kotlin
-@JsExport
 public class KadreApplicationFactoryRef internal constructor()
 
 public fun KadreApplicationFactory.asHostRef(): KadreApplicationFactoryRef
+
+/** Clé opaque que JavaScript détient pour cette référence ; ni la factory, ni un `SessionId`. */
+public val KadreApplicationFactoryRef.hostKey: String
 ```
 
-La classe conserve en interne la factory, n’expose aucun membre Kotlin public et ne peut être construite depuis JavaScript. Une application exporte par exemple une fonction `@JsExport fun applicationFactory(): KadreApplicationFactoryRef = factory.asHostRef()`. Chaque appel crée un wrapper léger ; plusieurs wrappers peuvent référencer la même factory thread-safe.
+La classe conserve en interne la factory, n’expose aucun membre Kotlin public et ne peut être construite depuis JavaScript. Une application exporte par exemple une fonction `@JsExport fun applicationFactoryKey(): String = factory.asHostRef().hostKey`. Chaque appel crée un wrapper léger ; plusieurs wrappers peuvent référencer la même factory thread-safe.
+
+La classe ne traverse pas la frontière JavaScript : Kotlin/Wasm n’exporte que des fonctions, sur des primitives, des `String`, des types de fonction et des valeurs `JsAny`. Les bindings JavaScript du module sont donc des fonctions top-level — attachement, clé de session, identifiant de session, snapshot, abonnement et désabonnement d’état, abonnement à l’outcome terminal, demande d’arrêt, fermeture — et le paquet npm livre un shim ESM écrit à la main (`index.mjs`, `index.d.ts`) qui présente exactement la surface promise ci-dessous au-dessus de ces bindings. Les deux shims ne diffèrent que par leur chargement du module compilé ; leur corps est identique.
+
+Le shim possède les conversions que la glue ne peut pas faire seule : les `Long` Kotlin traversent en chaînes et le shim les rend en `bigint`, et `KadreSessionHandle.id` est un identifiant opaque alloué par la couche d’interop pour ce handle — plus précisément, ce n’est pas le `SessionId` Kotlin.
 
 La déclaration TypeScript promise est exactement :
 

@@ -15,7 +15,7 @@ import org.graphiks.kadre.application.SessionOutcome
 import org.graphiks.kadre.application.SessionState
 import org.graphiks.kadre.application.SessionStopReason
 import org.graphiks.kadre.diagnostics.InteractionFailureReason
-import org.graphiks.kadre.diagnostics.KadreFailure as FoundationFailure
+import org.graphiks.kadre.diagnostics.KadreFailure
 import org.graphiks.kadre.diagnostics.KadreOperation
 import org.graphiks.kadre.diagnostics.KadrePlatform
 import org.graphiks.kadre.diagnostics.KadrePolicyComponent
@@ -23,7 +23,6 @@ import org.graphiks.kadre.diagnostics.KadreResourceKind
 import org.graphiks.kadre.input.KadrePermission
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
@@ -32,7 +31,7 @@ import kotlin.time.TimeSource
 
 /**
  * The value model of `@kadre/host` is a closed mapping: every Kotlin value of
- * `kadre/INTEROP-EXPORTS.md` section 6 has exactly one published name and one set of fields.
+ * `kadre/INTEROP-EXPORTS.md` section 6 has exactly one published name and one encoding.
  *
  * These assertions live in the shared web test source set, so the JS and the Wasm compilation prove
  * the same mapping and the same handle contract.
@@ -193,62 +192,68 @@ class WebHostInteropTest {
     @Test
     fun everyFailureVariantPublishesItsKindAndItsStableFields() {
         val mapped = listOf(
-            FoundationFailure.Unsupported(KadreOperation.PlatformSurfaceAccess),
-            FoundationFailure.PermissionDenied(KadrePermission.RawInput),
-            FoundationFailure.UserCancelled(KadreOperation.CaptureOpen),
-            FoundationFailure.TemporarilyUnavailable(retryable = true),
-            FoundationFailure.InvalidRequest(null),
-            FoundationFailure.InvalidRequest("element"),
-            FoundationFailure.AlreadyInUse(KadreResourceKind.Host),
-            FoundationFailure.Closed(KadreResourceKind.Surface),
-            FoundationFailure.ResourceLimitExceeded(KadreResourceKind.Surface, 4L),
-            FoundationFailure.SourceOverflow(KadreResourceKind.EventSequence),
-            FoundationFailure.StaleRevision(expected = 2L, received = 3L),
-            FoundationFailure.InteractionRequired(InteractionFailureReason.Expired),
-            FoundationFailure.UnsupportedPolicy(KadrePolicyComponent.WindowEvents),
-            FoundationFailure.ParentScopeCancelled,
-            FoundationFailure.ShutdownTimedOut(5.seconds),
-            FoundationFailure.ApplicationFailure,
-            FoundationFailure.PlatformFailure(KadrePlatform.Web, "WebWindowProvider", "callback-exception"),
+            KadreFailure.Unsupported(KadreOperation.PlatformSurfaceAccess) to
+                "{\"kind\":\"unsupported\",\"operation\":\"platformSurfaceAccess\"}",
+            KadreFailure.PermissionDenied(KadrePermission.RawInput) to
+                "{\"kind\":\"permissionDenied\",\"permission\":\"rawInput\"}",
+            KadreFailure.UserCancelled(KadreOperation.CaptureOpen) to
+                "{\"kind\":\"userCancelled\",\"operation\":\"captureOpen\"}",
+            KadreFailure.TemporarilyUnavailable(retryable = true) to
+                "{\"kind\":\"temporarilyUnavailable\",\"retryable\":true}",
+            KadreFailure.InvalidRequest(null) to "{\"kind\":\"invalidRequest\",\"field\":null}",
+            KadreFailure.InvalidRequest("element") to "{\"kind\":\"invalidRequest\",\"field\":\"element\"}",
+            KadreFailure.AlreadyInUse(KadreResourceKind.Host) to
+                "{\"kind\":\"alreadyInUse\",\"resource\":\"host\"}",
+            KadreFailure.Closed(KadreResourceKind.Surface) to
+                "{\"kind\":\"closed\",\"resource\":\"surface\"}",
+            KadreFailure.ResourceLimitExceeded(KadreResourceKind.Surface, 4L) to
+                "{\"kind\":\"resourceLimitExceeded\",\"resource\":\"surface\",\"limit\":\"4\"}",
+            KadreFailure.SourceOverflow(KadreResourceKind.EventSequence) to
+                "{\"kind\":\"sourceOverflow\",\"resource\":\"eventSequence\"}",
+            KadreFailure.StaleRevision(expected = 2L, received = 3L) to
+                "{\"kind\":\"staleRevision\",\"expected\":\"2\",\"received\":\"3\"}",
+            KadreFailure.InteractionRequired(InteractionFailureReason.Expired) to
+                "{\"kind\":\"interactionRequired\",\"reason\":\"expired\"}",
+            KadreFailure.UnsupportedPolicy(KadrePolicyComponent.WindowEvents) to
+                "{\"kind\":\"unsupportedPolicy\",\"component\":\"windowEvents\"}",
+            KadreFailure.ParentScopeCancelled to "{\"kind\":\"parentScopeCancelled\"}",
+            KadreFailure.ShutdownTimedOut(5.seconds) to
+                "{\"kind\":\"shutdownTimedOut\",\"timeoutNanoseconds\":\"5000000000\"}",
+            KadreFailure.ApplicationFailure to "{\"kind\":\"applicationFailure\"}",
+            KadreFailure.PlatformFailure(KadrePlatform.Web, "WebWindowProvider", "callback-exception") to
+                "{\"kind\":\"platformFailure\",\"platform\":\"web\"," +
+                "\"domain\":\"WebWindowProvider\",\"code\":\"callback-exception\"}",
         )
 
+        mapped.forEach { (failure, encoded) -> assertEquals(encoded, WebInteropJson.encode(failure)) }
+    }
+
+    @Test
+    fun snapshotAndOutcomeEncodingsCarryTheirDiscriminant() {
+        assertEquals("{\"kind\":\"starting\"}", WebInteropJson.encode(SessionState.Starting))
+        assertEquals("{\"kind\":\"running\"}", WebInteropJson.encode(SessionState.Running))
+        assertEquals("{\"kind\":\"stopping\"}", WebInteropJson.encode(SessionState.Stopping))
         assertEquals(
-            listOf(
-                "unsupported|operation=platformSurfaceAccess",
-                "permissionDenied|permission=rawInput",
-                "userCancelled|operation=captureOpen",
-                "temporarilyUnavailable|retryable=true",
-                "invalidRequest",
-                "invalidRequest|field=element",
-                "alreadyInUse|resource=host",
-                "closed|resource=surface",
-                "resourceLimitExceeded|resource=surface|limit=4",
-                "sourceOverflow|resource=eventSequence",
-                "staleRevision|expected=2|received=3",
-                "interactionRequired|reason=expired",
-                "unsupportedPolicy|component=windowEvents",
-                "parentScopeCancelled",
-                "shutdownTimedOut|timeoutNanoseconds=5000000000",
-                "applicationFailure",
-                "platformFailure|platform=web|domain=WebWindowProvider|code=callback-exception",
-            ),
-            mapped.map { it.toInterop().describe() },
+            "{\"kind\":\"terminated\",\"outcome\":{\"kind\":\"stopped\",\"reason\":\"hostDetached\"}}",
+            WebInteropJson.encode(SessionState.Terminated(SessionOutcome.Stopped(SessionStopReason.HostDetached))),
+        )
+        assertEquals("{\"kind\":\"completed\"}", WebInteropJson.encode(SessionOutcome.Completed))
+        assertEquals(
+            "{\"kind\":\"failed\",\"failure\":{\"kind\":\"parentScopeCancelled\"}}",
+            WebInteropJson.encode(SessionOutcome.Failed(KadreFailure.ParentScopeCancelled)),
         )
     }
 
     @Test
-    fun snapshotsAndOutcomesPublishTheirDiscriminant() {
-        assertEquals("starting", SessionState.Starting.toInterop().describe())
-        assertEquals("running", SessionState.Running.toInterop().describe())
-        assertEquals("stopping", SessionState.Stopping.toInterop().describe())
-        assertEquals(
-            "terminated|outcome=stopped|reason=hostDetached",
-            SessionState.Terminated(SessionOutcome.Stopped(SessionStopReason.HostDetached)).toInterop().describe(),
+    fun anEncodedFailureEscapesItsStringPayloads() {
+        val encoded = WebInteropJson.encode(
+            KadreFailure.PlatformFailure(KadrePlatform.Web, "WebWindowProvider", "quote\"and\\slash"),
         )
-        assertEquals("completed", SessionOutcome.Completed.toInterop().describe())
+
         assertEquals(
-            "failed|failure=parentScopeCancelled",
-            SessionOutcome.Failed(FoundationFailure.ParentScopeCancelled).toInterop().describe(),
+            "{\"kind\":\"platformFailure\",\"platform\":\"web\",\"domain\":\"WebWindowProvider\"," +
+                "\"code\":\"quote\\\"and\\\\slash\"}",
+            encoded,
         )
     }
 
@@ -256,23 +261,27 @@ class WebHostInteropTest {
     fun theHandleCallsTheObserverSynchronouslyAndThenOncePerChange() = runTest {
         val session = StubSession()
         val scope = MainScope()
-        val handle = KadreSessionHandle(session, scope)
+        val handle = KadreWebHandle(session, scope, "kadre-host-session-test")
         try {
             val observed = mutableListOf<String>()
-            val unsubscribe = handle.subscribeState { observed += it.kind }
+            val subscription = handle.subscribe { observed += it }
 
-            assertEquals(listOf("starting"), observed, "the first call is synchronous")
-            assertEquals("starting", handle.state.kind)
+            assertEquals(listOf("{\"kind\":\"starting\"}"), observed, "the first call is synchronous")
+            assertEquals("{\"kind\":\"starting\"}", handle.state)
 
             session.transitionTo(SessionState.Running)
             awaitReal(1.seconds) { observed.size == 2 }
-            assertEquals(listOf("starting", "running"), observed)
+            assertEquals(listOf("{\"kind\":\"starting\"}", "{\"kind\":\"running\"}"), observed)
 
-            unsubscribe()
+            KadreWebInterop.unsubscribe(subscription)
             session.transitionTo(SessionState.Stopping)
             awaitReal(100.milliseconds) { false }
-            assertEquals(listOf("starting", "running"), observed, "an unsubscribed observer hears nothing more")
-            assertEquals("stopping", handle.state.kind, "the handle keeps reading the live state")
+            assertEquals(
+                listOf("{\"kind\":\"starting\"}", "{\"kind\":\"running\"}"),
+                observed,
+                "an unsubscribed observer hears nothing more",
+            )
+            assertEquals("{\"kind\":\"stopping\"}", handle.state, "the handle keeps reading the live state")
         } finally {
             scope.cancel()
         }
@@ -283,20 +292,22 @@ class WebHostInteropTest {
         val session = StubSession()
         val scope = MainScope()
         val reported = mutableListOf<String>()
-        val handle = KadreSessionHandle(session, scope) { error -> reported += error.message.orEmpty() }
+        val handle = KadreWebHandle(session, scope, "kadre-host-session-test") { error ->
+            reported += error.message.orEmpty()
+        }
         try {
             val observed = mutableListOf<String>()
-            handle.subscribeState {
-                observed += it.kind
+            handle.subscribe {
+                observed += it
                 error("observer failure")
             }
 
-            assertEquals(listOf("starting"), observed, "the failing observer ran once, synchronously")
+            assertEquals(listOf("{\"kind\":\"starting\"}"), observed, "the failing observer ran once, synchronously")
             assertEquals(listOf("observer failure"), reported, "the failure is reported out of band")
 
             session.transitionTo(SessionState.Running)
             awaitReal(100.milliseconds) { false }
-            assertEquals(listOf("starting"), observed, "a throwing observer is unsubscribed")
+            assertEquals(listOf("{\"kind\":\"starting\"}"), observed, "a throwing observer is unsubscribed")
             assertEquals(SessionState.Running, session.state.value, "the session kept running")
         } finally {
             scope.cancel()
@@ -307,16 +318,49 @@ class WebHostInteropTest {
     fun stopAndCloseAreForwardedToTheSession() = runTest {
         val session = StubSession()
         val scope = MainScope()
-        val handle = KadreSessionHandle(session, scope)
+        val handle = KadreWebHandle(session, scope, "kadre-host-session-test")
         try {
             handle.requestStop()
             assertEquals(1, session.stopRequests)
             handle.close()
             assertEquals(1, session.closeRequests)
-            assertNull(handle.state.outcome, "a non-terminated session publishes no outcome")
+            assertEquals("{\"kind\":\"starting\"}", handle.state, "a non-terminated session has no outcome")
         } finally {
             scope.cancel()
         }
+    }
+
+    @Test
+    fun aTerminationSubscriberHearsTheOutcomeExactlyOnce() = runTest {
+        val session = StubSession()
+        val scope = MainScope()
+        val handle = KadreWebHandle(session, scope, "kadre-host-session-test")
+        try {
+            val delivered = mutableListOf<String>()
+            handle.subscribeTermination { delivered += it }
+
+            session.terminate(SessionOutcome.Stopped(SessionStopReason.HostRequested))
+            awaitReal(1.seconds) { delivered.size == 1 }
+            assertEquals(listOf("{\"kind\":\"stopped\",\"reason\":\"hostRequested\"}"), delivered)
+
+            awaitReal(100.milliseconds) { false }
+            assertEquals(1, delivered.size, "the registration is one-shot")
+        } finally {
+            scope.cancel()
+        }
+    }
+
+    @Test
+    fun everySessionGetsItsOwnOpaqueIdentifier() {
+        val first = KadreWebInterop.nextSessionIdentity()
+        val second = KadreWebInterop.nextSessionIdentity()
+
+        assertTrue(first.isNotEmpty() && second.isNotEmpty())
+        assertTrue(first != second, "two sessions must not share an opaque identifier")
+        assertTrue(
+            first.startsWith("kadre-host-session-"),
+            "the identifier is allocated by the interop layer, not taken from the Kotlin SessionId",
+        )
     }
 
     private fun <T> assertPublishedNames(entries: List<T>, expected: List<Pair<T, String>>, publishedName: (T) -> String) {
@@ -336,42 +380,12 @@ class WebHostInteropTest {
             val deadline = TimeSource.Monotonic.markNow() + timeout
             while (!condition() && deadline.hasNotPassedNow()) delay(5)
         }
-        if (timeout > 200.milliseconds) assertTrue(condition(), "the observer never received what the test waited for")
+        if (timeout > 200.milliseconds) assertTrue(condition(), "the observer never delivered what the test waited for")
     }
 }
 
-private fun KadreFailure.describe(): String = buildList {
-    add(kind)
-    operation?.let { add("operation=$it") }
-    permission?.let { add("permission=$it") }
-    retryable?.let { add("retryable=$it") }
-    field?.let { add("field=$it") }
-    resource?.let { add("resource=$it") }
-    limit?.let { add("limit=$it") }
-    expected?.let { add("expected=$it") }
-    received?.let { add("received=$it") }
-    reason?.let { add("reason=$it") }
-    component?.let { add("component=$it") }
-    timeoutNanoseconds?.let { add("timeoutNanoseconds=$it") }
-    sourceId?.let { add("sourceId=$it") }
-    platform?.let { add("platform=$it") }
-    domain?.let { add("domain=$it") }
-    code?.let { add("code=$it") }
-}.joinToString(separator = "|")
-
-private fun KadreSessionOutcome.describe(): String = buildList {
-    add(kind)
-    reason?.let { add("reason=$it") }
-    failure?.let { add("failure=${it.describe()}") }
-}.joinToString(separator = "|")
-
-private fun KadreSessionSnapshot.describe(): String = buildList {
-    add(kind)
-    outcome?.let { add("outcome=${it.describe()}") }
-}.joinToString(separator = "|")
-
 /**
- * A session the facade can observe without a browser.
+ * A session the interop layer can observe without a browser.
  *
  * The real sessions come from the runtime; this double exists so the handle contract of `@kadre/host`
  * is provable on both targets without a DOM or a rendered frame.
