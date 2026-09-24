@@ -310,8 +310,9 @@ export interface KadreSessionHandle {
 export interface KadreWebOptions {
   readonly policy?: KadrePolicyProfile;
   readonly attachmentPolicy?: "stopWhenDetached" | "manual";
-  readonly windowProvider?: KadreWebWindowProvider;
 }
+
+`windowProvider` est ajouté par la phase qui livre `WebWindowProvider` (phase 4 de la roadmap Web) ; aucune option publiée n’est ignorée silencieusement tant que ce chemin n’existe pas.
 
 export interface KadreWebWindowProvider {
   open(requestId: string, spec: Readonly<KadreWindowSpec>): KadreWebWindowOpenResult;
