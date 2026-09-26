@@ -219,13 +219,33 @@ physical key again after switching layouts mid-session without reloading and
 confirm the physical key readback is identical while the logical key follows the
 layout.
 
-Two further readings belong to this procedure: a code the HID table does not
-enumerate is not lost, it becomes `unidentified:<token>` or
-`unidentified:` with the token dropped when it is not a stable ASCII
-identifier; and `repeat` is the browser's own flag on a press only, so holding
-a key produces repeated presses and exactly one release. Neither of them
+Two further readings belong to this procedure. A code the HID table does not
+enumerate is not lost: it becomes `PhysicalKey.Unidentified` with the sanitised
+`code` as its native token, or with no token at all when the `code` is not a
+stable ASCII identifier, and the fixture renders both through
+`"unidentified:$nativeCode"` (`WebDriverFixture.kt:866`) — so the second case
+reads `unidentified:null` in `data-kadre-input-state`, not a bare
+`unidentified:`. And `repeat` is the browser's own flag on a press only, so
+holding a key produces repeated presses and exactly one release. Neither of them
 depends on the layout, and both are already covered without a browser by
 `WebInputMappingTest`.
+
+One more reading belongs here because it is the *other* half of layout
+independence: the suppressed document-scroll set is matched on the **logical**
+key, not on the physical one. `webInputCategory` requires
+`stimulus.logicalKey is LogicalKey.Named` and membership of
+`WEB_DOCUMENT_SCROLL_KEYS` (`WebInputTranslation.kt:186-197`), because the
+browser's own default is defined by the key the layout produced. To watch it,
+open `?scenario=input-default-behavior` — its page is scrollable and it installs
+both behaviour commands — switch the surface with
+`document.dispatchEvent(new Event("kadre-behavior-suppress"))`, and press the
+space bar and then an arrow key. Both are still read as their own `NamedKey` on
+the layout in hand (the payload reads `key:Space:pressed:…` and
+`key:ArrowDown:pressed:…`, since a `LogicalKey.Named` is rendered by its name),
+both keep the physical readback their `code` gives them, and the document does
+not scroll. A layout that moves the letter keys around changes neither logical
+name, which is why this is the reading to take on the same non-US layout as
+above rather than a substitute for it.
 
 ### 5. Real pen hardware
 
@@ -250,7 +270,9 @@ presence; the exact member values are read from the consumer's own
 reports `pointerType == "touch"` for its stylus is the declared boundary of this
 phase and not a failure: the port refuses the touch kind before acting, so
 nothing is published, no `TouchState` is created and `InputCapabilities.touch`
-keeps saying `unsupported`. Also compare the two `pointerType` values your
+keeps saying `unsupported` on the live surface this pass reads (the register's
+`touch` row gives its two absent states, the second being the overflow-terminal
+one this procedure does not stage). Also compare the two `pointerType` values your
 hardware actually produces (hover versus contact, eraser versus tip) against the
 kind readback; a pen-specific behaviour the automated suite cannot stage — a
 pressure ramp, an eraser end, a barrel button — is exactly what this procedure
