@@ -64,6 +64,10 @@ internal class RuntimeTextInputSession(
         rect: LogicalRect,
         documentRevision: TextDocumentRevision,
     ): KadreResult<Unit> = updateMutex.withLock {
+        // The explicit `lock@` label on `withLock` is load bearing: without it the lambda's own
+        // implicit label is what the `return@withLock` statements below target, so they would
+        // return from this lambda (yielding the block's value) instead of returning from the
+        // enclosing `updateMutex.withLock` block as they did before the lift.
         val command = lock.withLock lock@ {
             when {
                 closed -> return@withLock KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.TextInputSession))
@@ -93,6 +97,9 @@ internal class RuntimeTextInputSession(
         selection: TextRange,
         documentRevision: TextDocumentRevision,
     ): KadreResult<Unit> = updateMutex.withLock {
+        // Same load-bearing `lock@` label as `updateCursor`: it suppresses the lambda's implicit
+        // label so the `return@withLock` statements below keep returning from the enclosing
+        // `updateMutex.withLock` block rather than from this lambda.
         val admission = lock.withLock lock@ {
             when {
                 closed -> return@withLock KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.TextInputSession))

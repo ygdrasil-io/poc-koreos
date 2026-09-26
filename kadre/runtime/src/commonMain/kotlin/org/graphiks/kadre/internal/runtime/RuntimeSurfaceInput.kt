@@ -94,7 +94,6 @@ internal class RuntimeSurfaceInput(
     private var terminal: FlowTerminal? = null
     private var terminalNotificationPending = false
     private var textInputSession: RuntimeTextInputSession? = null
-    private var textInputObservationTarget: RuntimeTextInputSession? = null
     private var textInputOpening = false
     private val mutableState = MutableStateFlow(currentState)
     private val subscribers = linkedMapOf<InputEventSubscriber, RuntimeEventCollectorLease>()
@@ -142,13 +141,18 @@ internal class RuntimeSurfaceInput(
             TextInputOpenAdmission.Admitted -> Unit
         }
 
+        // The holder belongs to this call, not to the surface: the callback below can only ever
+        // reach the session this call opens, so an observation that a port delivers after that
+        // session closed is rejected by the session's own guard rather than routed into a later
+        // session that may now own the surface.
+        val observationTarget = TextInputObservationTarget()
         val owner = when (
             val opened = textInputPort.open(
                 TextInputOpenCommand(
                     surfaceId = surfaceId,
                     config = config,
                     onObservation = { observation ->
-                        lock.withLock { textInputObservationTarget }?.acceptObservation(observation) ?: false
+                        lock.withLock { observationTarget.session }?.acceptObservation(observation) ?: false
                     },
                 ),
             )
@@ -167,9 +171,9 @@ internal class RuntimeSurfaceInput(
             eventStampSource = eventStampSource,
             eventCollectorGate = textInputEventCollectorGate,
             failureReporter = failureReporter,
-            onClosed = ::clearTextInputSession,
+            onClosed = { closed -> clearTextInputSession(closed, observationTarget) },
         )
-        lock.withLock { textInputObservationTarget = session }
+        lock.withLock { observationTarget.session = session }
         val result = lock.withLock {
             textInputOpening = false
             when {
@@ -464,9 +468,12 @@ internal class RuntimeSurfaceInput(
         finishPublicationAdmission(admission)
     }
 
-    private fun clearTextInputSession(session: RuntimeTextInputSession) {
+    private fun clearTextInputSession(
+        session: RuntimeTextInputSession,
+        observationTarget: TextInputObservationTarget,
+    ) {
         lock.withLock {
-            if (textInputObservationTarget === session) textInputObservationTarget = null
+            if (observationTarget.session === session) observationTarget.session = null
             if (textInputSession === session) textInputSession = null
         }
     }
@@ -1034,6 +1041,20 @@ internal class RuntimeSurfaceInput(
             }
         }
     }
+}
+
+/**
+ * The one observation callback admitted by a single `openTextInput` call.
+ *
+ * The holder belongs to that call and is captured by that call's `onObservation` lambda, so the
+ * lambda can only ever reach its own session. A port may deliver an observation long after the
+ * session that admitted it closed (the AppKit queued port defers every observation through its
+ * queue): with a call-scoped holder such a late observation arrives at the closed session and is
+ * rejected by its `closed` guard, instead of being routed into whichever session now owns the
+ * surface. All reads and writes happen under the reducer's lock.
+ */
+private class TextInputObservationTarget {
+    var session: RuntimeTextInputSession? = null
 }
 
 private data class InputPublication(

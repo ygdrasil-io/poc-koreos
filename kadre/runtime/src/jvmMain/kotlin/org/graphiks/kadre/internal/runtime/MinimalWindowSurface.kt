@@ -972,12 +972,12 @@ internal class RuntimeWindowSurface(
     )
 
     private companion object {
-        val SURFACE_UPDATE_FIELDS = setOf(
-            "cursor",
-            "pointerCapture",
-            "hitTesting",
-            "inputDefaultBehavior",
-        )
+        // Derived from the enum so this set cannot drift from the common `SurfaceProperty.fieldName`
+        // `when`. A fifth property would break that `when` at compile time, and this derivation then
+        // picks the new field up in the same move; a hand-written literal set would not, and would
+        // disagree with the Web target about which `InvalidRequest` field names are legitimate.
+        val SURFACE_UPDATE_FIELDS: Set<String> =
+            SurfaceProperty.entries.mapTo(mutableSetOf()) { it.fieldName }
     }
 }
 
