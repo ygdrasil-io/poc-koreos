@@ -15,9 +15,11 @@ internal class JsWebDomPort(element: HTMLElement) : WebHostPort {
     private val originDocument: Document = checkNotNull(element.ownerDocument)
     private val originWindow: Window? = originDocument.defaultView
     private var lifecycleObserver: ((WebLifecycleSnapshot) -> Unit)? = null
+    private var metricsObserver: ((WebSurfaceMetrics) -> Unit)? = null
     private var documentObserver: MutationObserver? = null
     private var shadowRootObserver: MutationObserver? = null
     private var observedShadowRoot: ShadowRoot? = null
+    private var resizeObserver: ResizeObserver? = null
     private var reconnectAnimationFrame: Int? = null
     private var active: Boolean = false
     private var browsingContextFocused: Boolean = originDocument.hasFocus()
@@ -55,7 +57,9 @@ internal class JsWebDomPort(element: HTMLElement) : WebHostPort {
     }
 
     override val stableIdentity: Any get() = checkNotNull(element)
-    override val initialSnapshot: WebSurfaceSnapshot = element.surfaceSnapshot()
+    override val leasedElement: Any? get() = element
+    override val initialSnapshot: WebSurfaceMetrics =
+        element.surfaceMetrics(element.ownerDocument?.defaultView?.deviceScaleFactor() ?: 1.0)
     override val initialLifecycleSnapshot: WebLifecycleSnapshot = lifecycleSnapshot(element)
 
     override fun installLifecycleObserver(observer: (WebLifecycleSnapshot) -> Unit) {
@@ -74,6 +78,22 @@ internal class JsWebDomPort(element: HTMLElement) : WebHostPort {
         if (current.isConnected) updateShadowRootObserver(current) else scheduleReconnect()
     }
 
+    override fun installMetricsObserver(observer: (WebSurfaceMetrics) -> Unit) {
+        check(metricsObserver == null)
+        metricsObserver = observer
+        val current = element ?: return
+        val installed = ResizeObserver { _, _ -> runCatching { deliverMetrics() } }
+        resizeObserver = installed
+        installed.observe(current)
+        deliverMetrics()
+    }
+
+    /** Frames belong to the element's browsing context, which may not carry this module's global. */
+    override fun scheduleFrame(callback: () -> Unit): WebFrameHandle {
+        val browserWindow = originWindow ?: return WebFrameHandle { }
+        return jsScheduleFrame(browserWindow, callback)
+    }
+
     override fun release() {
         if (!active && element == null) return
         active = false
@@ -85,6 +105,7 @@ internal class JsWebDomPort(element: HTMLElement) : WebHostPort {
         runCatching { element?.removeEventListener("focusout", subtreeFocusOutListener) }
         runCatching { documentObserver?.disconnect() }
         runCatching { shadowRootObserver?.disconnect() }
+        runCatching { resizeObserver?.disconnect() }
         reconnectAnimationFrame?.let { animationFrame ->
             runCatching { originWindow?.cancelAnimationFrame(animationFrame) }
         }
@@ -92,7 +113,9 @@ internal class JsWebDomPort(element: HTMLElement) : WebHostPort {
         documentObserver = null
         observedShadowRoot = null
         shadowRootObserver = null
+        resizeObserver = null
         lifecycleObserver = null
+        metricsObserver = null
         element = null
     }
 
@@ -159,6 +182,13 @@ internal class JsWebDomPort(element: HTMLElement) : WebHostPort {
         lifecycleObserver?.invoke(lifecycleSnapshot(current, pageHidden))
     }
 
+    /** Reads the element back; self-guarding, so a delivery after [release] is a no-op. */
+    private fun deliverMetrics() {
+        val current = element ?: return
+        val observer = metricsObserver ?: return
+        observer(current.surfaceMetrics(current.ownerDocument?.defaultView?.deviceScaleFactor() ?: 1.0))
+    }
+
     private fun lifecycleSnapshot(
         current: HTMLElement,
         pageHidden: Boolean = false,
@@ -177,17 +207,22 @@ internal class JsWebDomPort(element: HTMLElement) : WebHostPort {
     }
 }
 
-private fun HTMLElement.surfaceSnapshot(): WebSurfaceSnapshot {
-    val logicalWidth = max(clientWidth.toDouble(), 1.0)
-    val logicalHeight = max(clientHeight.toDouble(), 1.0)
-    return WebSurfaceSnapshot(
-        logicalWidth = logicalWidth,
-        logicalHeight = logicalHeight,
-        physicalWidth = logicalWidth.toInt(),
-        physicalHeight = logicalHeight.toInt(),
-        scaleFactor = 1.0,
-    )
-}
+/**
+ * The one readback of the attached element: CSS pixels of the border box and the device pixel
+ * ratio of the browsing context that owns it.
+ *
+ * A collapsed element still publishes a positive size, and a browsing context that reports no
+ * usable ratio falls back to the unscaled one, so the result always satisfies the portable model.
+ */
+private fun HTMLElement.surfaceMetrics(scaleFactor: Double): WebSurfaceMetrics = WebSurfaceMetrics(
+    logicalWidth = max(clientWidth.toDouble(), 1.0),
+    logicalHeight = max(clientHeight.toDouble(), 1.0),
+    scaleFactor = if (scaleFactor.isFinite() && scaleFactor > 0.0) scaleFactor else 1.0,
+)
+
+/** The port's own readback, exposed to the target tests so they exercise it instead of a copy. */
+internal fun HTMLElement.readSurfaceMetricsForTest(scaleFactor: Double): WebSurfaceMetrics =
+    surfaceMetrics(scaleFactor)
 
 private external interface JsDocumentVisibility {
     val visibilityState: String

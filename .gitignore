@@ -13,8 +13,17 @@ __pycache__/
 docs/superpowers/plans/
 docs/superpowers/specs/
 
+# Local worktrees
+.worktrees/
+
+# Kotlin/JS + Wasm toolchain store produced by js/wasmJs builds
+kotlin-js-store/
+
 # Kotlin compiler daemon session dir
 .kotlin/
 winit/
 hs_err_*.log
 *.class
+
+# npm dependency trees of the consumer builds
+node_modules/

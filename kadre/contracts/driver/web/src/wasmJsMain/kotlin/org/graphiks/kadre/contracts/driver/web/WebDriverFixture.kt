@@ -1,29 +1,56 @@
+@file:OptIn(kotlin.js.ExperimentalWasmJsInterop::class, kotlin.js.ExperimentalJsExport::class)
+
 package org.graphiks.kadre.contracts.driver.web
 
 import kotlinx.browser.document
 import kotlinx.browser.window
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import org.graphiks.kadre.application.KadreApplication
+import org.graphiks.kadre.application.KadreApplicationFactory
 import org.graphiks.kadre.application.KadreSession
 import org.graphiks.kadre.application.LifecycleState
 import org.graphiks.kadre.application.SessionOutcome
 import org.graphiks.kadre.application.SessionState
+import org.graphiks.kadre.diagnostics.DelicateKadreApi
 import org.graphiks.kadre.diagnostics.KadreFailure
 import org.graphiks.kadre.diagnostics.KadreOperation
+import org.graphiks.kadre.diagnostics.KadrePlatformApi
 import org.graphiks.kadre.diagnostics.KadreResourceKind
 import org.graphiks.kadre.diagnostics.KadreResult
 import org.graphiks.kadre.platform.web.WebAttachmentPolicy
+import org.graphiks.kadre.platform.web.asHostRef
 import org.graphiks.kadre.platform.web.attachKadre
+import org.graphiks.kadre.platform.web.hostKey
+import org.graphiks.kadre.platform.web.publishHostBindings
+import org.graphiks.kadre.platform.web.withWebElement
+import org.graphiks.kadre.policy.ContinuousDelivery
+import org.graphiks.kadre.policy.ContinuousOverflowAction
+import org.graphiks.kadre.policy.KadrePolicies
+import org.graphiks.kadre.surface.HostSurface
+import org.graphiks.kadre.surface.SurfaceEvent
+import org.graphiks.kadre.surface.SurfaceState
 import org.graphiks.kadre.window.WindowRequestOutcome
 import org.graphiks.kadre.window.WindowSpec
 import org.w3c.dom.HTMLElement
 
+/**
+ * Runs the scenario named by the query string and then publishes the readiness flag the specs wait on.
+ *
+ * The flag means "the fixture can be driven", and it is an installation barrier: every command
+ * listener a spec can dispatch is installed by its scenario function, synchronously, before the flag
+ * is set here. A listener whose body drives the application's surface waits for the holder its
+ * application block fills, because the runtime starts that block asynchronously — after this task —
+ * while the listeners exist already.
+ */
 public fun main() {
     when (scenarioName()) {
         "initial-disconnected" -> initialDisconnectedScenario()
@@ -41,6 +68,12 @@ public fun main() {
         "pagehide" -> attachScenario("pagehide")
         "host-owned" -> hostOwnedScenario()
         "identity-no-expando" -> identityNoExpandoScenario()
+        "surface-metrics" -> surfaceMetricsScenario()
+        "surface-redraw" -> surfaceRedrawScenario()
+        "surface-no-renderer" -> surfaceNoRendererScenario()
+        "element-lease" -> elementLeaseScenario()
+        "element-lease-close" -> elementLeaseCloseScenario()
+        "typescript-consumer" -> typescriptConsumerScenario()
         else -> phaseZeroScenario()
     }
     document.body!!.setAttribute("data-kadre-ready", "true")
@@ -142,6 +175,200 @@ private fun hostOwnedScenario() {
     body.setAttribute("data-kadre-attach", describeAttach(attached))
 }
 
+/**
+ * The surface readback scenario: the browser's own size mutation, observed through the public state.
+ *
+ * The fixture drives the public API only: `HTMLElement.attachKadre`, `KadreScope.primarySurface` and
+ * the state flow it publishes. The spec resizes the element (or overrides the browsing context's
+ * device pixel ratio first) and reads back the encoding below.
+ */
+private fun surfaceMetricsScenario() {
+    val host = createHost("surface-metrics")
+    val parentScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    parentScope.installCommand("kadre-resize-surface") { host.style.width = "640px" }
+    val attached = host.attachKadre(parentScope) {
+        val surface = checkNotNull(primarySurface.value)
+        launch {
+            surface.state.collect { state ->
+                host.setAttribute("data-kadre-surface-metrics", state.metricsEncoding())
+                host.setAttribute("data-kadre-surface-physical", state.physicalEncoding())
+            }
+        }
+        awaitCancellation()
+    }
+    host.setAttribute("data-kadre-attach", describeAttach(attached))
+}
+
+/** Records the admission results of three requests issued in one task, and of a request after removal. */
+private fun surfaceRedrawScenario() {
+    val host = createHost("surface-redraw")
+    val parentScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    val surfaceReady = CompletableDeferred<HostSurface>()
+    var admitted = 0
+    parentScope.installCommand("kadre-request-redraw") {
+        val surface = surfaceReady.await()
+        val results = List(3) { surface.requestRedraw() }
+        host.setAttribute("data-kadre-redraw-admission", results.joinToString(",") { it.admission() })
+    }
+    parentScope.installCommand("kadre-remove-host") { host.remove() }
+    parentScope.installCommand("kadre-request-redraw-detached") {
+        // The host is gone by then, so the post-detach readback lands on the document body.
+        val surface = surfaceReady.await()
+        val body = document.body!!
+        body.setAttribute("data-kadre-surface-attachment", surface.state.value.attachment.name.lowercase())
+        body.setAttribute("data-kadre-redraw-detached", surface.requestRedraw().admission())
+    }
+    val attached = host.attachKadre(parentScope) {
+        val surface = checkNotNull(primarySurface.value)
+        surfaceReady.complete(surface)
+        launch {
+            surface.events.collect { event ->
+                if (event is SurfaceEvent.RedrawRequested) {
+                    admitted += 1
+                    host.setAttribute("data-kadre-redraw-count", admitted.toString())
+                }
+            }
+        }
+        awaitCancellation()
+    }
+    if (attached is KadreResult.Success) observeSession(attached.value, "redraw", parentScope)
+    host.setAttribute("data-kadre-attach", describeAttach(attached))
+}
+
+/**
+ * The no-renderer sentinel: attach, observe a real metrics change and admit a redraw.
+ *
+ * The DOM count is recorded after the observation was published and the redraw admitted, so any node
+ * a renderer added would appear in the count; the primary window is read from the public manager.
+ */
+private fun surfaceNoRendererScenario() {
+    val host = createHost("surface-no-renderer")
+    val body = document.body!!
+    body.setAttribute("data-kadre-dom-baseline", document.getElementsByTagName("*").length.toString())
+    val parentScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    val surfaceReady = CompletableDeferred<HostSurface>()
+    parentScope.installCommand("kadre-surface-activity") {
+        val surface = surfaceReady.await()
+        host.style.width = "480px"
+        // The browser delivers the resize observation in a later rendering step than the frame
+        // that this task arms, so the redraw is requested only once the observation exists.
+        surface.state.first { it.revision.value > 0L }
+        surface.requestRedraw()
+    }
+    val attached = host.attachKadre(parentScope) {
+        val surface = checkNotNull(primarySurface.value)
+        surfaceReady.complete(surface)
+        launch {
+            surface.state.collect { state ->
+                host.setAttribute("data-kadre-observed-revision", state.revision.value.toString())
+            }
+        }
+        launch {
+            surface.events.collect { event ->
+                if (event is SurfaceEvent.RedrawRequested) {
+                    // The frame admitted the redraw, and the request waited for the browser-delivered
+                    // observation, so the count is read here: a node a renderer created would be in it.
+                    body.setAttribute("data-kadre-dom-count", document.getElementsByTagName("*").length.toString())
+                    body.setAttribute(
+                        "data-kadre-window-primary",
+                        if (windows.state.value.primary == null) "null" else "present",
+                    )
+                    host.setAttribute("data-kadre-observed-redraw", "true")
+                }
+            }
+        }
+        awaitCancellation()
+    }
+    host.setAttribute("data-kadre-attach", describeAttach(attached))
+}
+
+/** The element escape hatch: one lease writes an attribute the spec reads straight off the element. */
+private fun elementLeaseScenario() {
+    val host = createHost("element-lease")
+    val parentScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    val surfaceReady = CompletableDeferred<HostSurface>()
+    parentScope.installCommand("kadre-lease") {
+        val surface = surfaceReady.await()
+        host.setAttribute("data-kadre-lease-result", surface.leased { it.setAttribute("data-kadre-lease", "seen") })
+    }
+    val attached = host.attachKadre(parentScope) {
+        surfaceReady.complete(checkNotNull(primarySurface.value))
+        awaitCancellation()
+    }
+    host.setAttribute("data-kadre-attach", describeAttach(attached))
+}
+
+/**
+ * A lease in flight, a refused concurrent lease, and the close through the redraw overflow path.
+ *
+ * The policy is the fixture's own: a redraw buffer of one request whose overflow closes the surface
+ * (`ContinuousOverflowAction.CloseSource`), so the surface is closed by the redraw path and not by a
+ * host detach. The concurrent attempts run undispatched inside the first lease's callback, the only
+ * way a non-suspend callback can observe the in-flight state through the public facade.
+ */
+private fun elementLeaseCloseScenario() {
+    val host = createHost("element-lease-close")
+    val parentScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    val policy = KadrePolicies.Default.copy(
+        window = KadrePolicies.Default.window.copy(
+            redrawRequests = ContinuousDelivery.Buffered(
+                capacity = 1,
+                onOverflow = ContinuousOverflowAction.CloseSource,
+            ),
+        ),
+    )
+    val surfaceReady = CompletableDeferred<HostSurface>()
+    parentScope.installCommand("kadre-lease-concurrent-close") {
+        val surface = surfaceReady.await()
+        val first = surface.leased { element ->
+            element.setAttribute("data-kadre-lease", "seen")
+            var concurrent = "unobserved"
+            parentScope.launch(start = CoroutineStart.UNDISPATCHED) {
+                concurrent = surface.leased { }
+            }
+            host.setAttribute("data-kadre-lease-concurrent", concurrent)
+            surface.requestRedraw()
+            surface.requestRedraw()
+            var afterClose = "unobserved"
+            parentScope.launch(start = CoroutineStart.UNDISPATCHED) {
+                afterClose = surface.leased { }
+            }
+            host.setAttribute("data-kadre-lease-closed", afterClose)
+            host.setAttribute("data-kadre-surface-attachment", surface.state.value.attachment.name.lowercase())
+        }
+        host.setAttribute("data-kadre-lease-result", first)
+    }
+    val attached = host.attachKadre(parentScope, policy = policy) {
+        surfaceReady.complete(checkNotNull(primarySurface.value))
+        awaitCancellation()
+    }
+    if (attached is KadreResult.Success) observeSession(attached.value, "lease-close", parentScope)
+    host.setAttribute("data-kadre-attach", describeAttach(attached))
+}
+
+/**
+ * The application's entry point for the `@kadre/host` scenario.
+ *
+ * This is the Kotlin half of `kadre/INTEROP-EXPORTS.md` section 6: the application's Kotlin module
+ * owns the factories and sessions, publishes the JavaScript bindings of that instance into the shared
+ * registry, and hands JavaScript the opaque key that `KadreWeb.attach` carries back. The consumer is
+ * the only thing that attaches, subscribes, stops and awaits an outcome.
+ */
+@JsExport
+public fun applicationFactory(): String {
+    publishHostBindings()
+    val reference = KadreApplicationFactory { KadreApplication { awaitCancellation() } }.asHostRef()
+    return reference.hostKey
+}
+
+/**
+ * The TypeScript scenario: this application publishes its bindings and its factory key, and the
+ * consumer's own `KadreWeb.attach` call does everything else.
+ */
+private fun typescriptConsumerScenario() {
+    publishApplicationFactoryKey(applicationFactory())
+}
+
 private fun phaseZeroScenario() {
     val host = createHost("phase0")
     val domBaseline = document.getElementsByTagName("*").length
@@ -211,6 +438,18 @@ private fun observeSession(session: KadreSession, key: String, parentScope: Coro
     }
 }
 
+/**
+ * Installs one of the fixture's command listeners, synchronously, before `main` publishes readiness.
+ *
+ * The body runs in its own task of [this] scope rather than inside the DOM dispatch, so a listener
+ * that drives the surface can wait for the application block to publish it: the block runs
+ * asynchronously, but — unlike a listener registered inside it — this registration exists as soon as
+ * the scenario function returns, which is what makes the readiness flag an installation barrier.
+ */
+private fun CoroutineScope.installCommand(name: String, body: suspend () -> Unit) {
+    document.addEventListener(name, { launch { body() } })
+}
+
 private fun createHost(id: String, connected: Boolean = true): HTMLElement =
     (document.createElement("div") as HTMLElement).also { host ->
         host.setAttribute("data-kadre-host", id)
@@ -243,3 +482,46 @@ private fun SessionOutcome.encoded(): String = when (this) {
     SessionOutcome.Completed -> "completed"
     is SessionOutcome.Failed -> "failed"
 }
+
+/** The metrics readback as the specs read it: logical size, scale and revision. */
+private fun SurfaceState.metricsEncoding(): String =
+    "${number(logicalSize.width)}x${number(logicalSize.height)}@${number(scaleFactor)}#${revision.value}"
+
+/** The derived physical size, so the device pixel ratio readback is observable on its own. */
+private fun SurfaceState.physicalEncoding(): String = "${physicalSize.width}x${physicalSize.height}"
+
+/** Renders a double without a trailing `.0`, so the encoding stays stable across targets. */
+private fun number(value: Double): String = if (value % 1.0 == 0.0) value.toInt().toString() else value.toString()
+
+/** Renders an admission result; the specs assert these strings. */
+private fun KadreResult<*>.admission(): String = when (this) {
+    is KadreResult.Success -> "success"
+    is KadreResult.Failure -> reason.encoding()
+}
+
+/** Runs one lease through the public escape hatch and renders its outcome. */
+@OptIn(KadrePlatformApi::class, DelicateKadreApi::class)
+private suspend fun HostSurface.leased(block: (HTMLElement) -> Unit): String =
+    when (val result = withWebElement { element -> block(element); "ok" }) {
+        is KadreResult.Success -> "granted"
+        is KadreResult.Failure -> result.reason.encoding()
+    }
+
+/** The failure kinds the surface scenarios distinguish, in the encoding the specs assert. */
+private fun KadreFailure.encoding(): String = when (this) {
+    is KadreFailure.TemporarilyUnavailable -> "temporarilyUnavailable:$retryable"
+    is KadreFailure.Closed -> "closed:${resource.name.lowercase()}"
+    is KadreFailure.InvalidRequest -> "invalidRequest:${field ?: "unknown"}"
+    is KadreFailure.Unsupported -> "unsupported:${operation.name.lowercase()}"
+    is KadreFailure.AlreadyInUse -> "alreadyInUse:${resource.name.lowercase()}"
+    is KadreFailure.SourceOverflow -> "sourceOverflow:${resource.name.lowercase()}"
+    KadreFailure.ParentScopeCancelled -> "parentScopeCancelled"
+    KadreFailure.ApplicationFailure -> "applicationFailure"
+    else -> "unexpected-failure"
+}
+
+/**
+ * Hands the application's opaque factory key to the page, as `kadre/INTEROP-EXPORTS.md` section 6
+ * describes: the application exports the key and JavaScript only carries it back to `KadreWeb.attach`.
+ */
+private fun publishApplicationFactoryKey(key: String): Unit = js("globalThis.kadreApplicationFactory = key")

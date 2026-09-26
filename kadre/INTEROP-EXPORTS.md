@@ -190,13 +190,24 @@ Les strings `field`, `domain`, `code` et `sourceId` suivent les règles de redac
 Le module applicatif Kotlin produit la référence opaque avec la seule passerelle Kotlin target-specific suivante :
 
 ```kotlin
-@JsExport
 public class KadreApplicationFactoryRef internal constructor()
 
 public fun KadreApplicationFactory.asHostRef(): KadreApplicationFactoryRef
+
+/** Clé opaque que JavaScript détient pour cette référence ; ni la factory, ni un `SessionId`. */
+public val KadreApplicationFactoryRef.hostKey: String
+
+/** Publie les huit bindings de cette instance dans le registre partagé `globalThis["org.graphiks.kadre:web"]`. */
+public fun publishHostBindings()
 ```
 
-La classe conserve en interne la factory, n’expose aucun membre Kotlin public et ne peut être construite depuis JavaScript. Une application exporte par exemple une fonction `@JsExport fun applicationFactory(): KadreApplicationFactoryRef = factory.asHostRef()`. Chaque appel crée un wrapper léger ; plusieurs wrappers peuvent référencer la même factory thread-safe.
+La classe conserve en interne la factory, n’expose aucun membre Kotlin public et ne peut être construite depuis JavaScript. Une application exporte par exemple une fonction `@JsExport fun applicationFactoryKey(): String = factory.asHostRef().hostKey`. Chaque appel crée un wrapper léger ; plusieurs wrappers peuvent référencer la même factory thread-safe.
+
+La classe ne traverse pas la frontière JavaScript : Kotlin/Wasm n’exporte que des fonctions, sur des primitives, des `String`, des types de fonction et des valeurs `JsAny`. Les bindings JavaScript du module sont donc des fonctions top-level — attachement, clé de session, identifiant de session, snapshot, abonnement et désabonnement d’état, abonnement à l’outcome terminal, demande d’arrêt, fermeture — et le paquet npm livre un shim ESM écrit à la main (`index.mjs`, `index.d.ts`) qui présente exactement la surface promise ci-dessous au-dessus de ces bindings. Les deux shims ont le même corps : aucun des deux ne charge un module compilé, et ils ne diffèrent que par la façon dont le module applicatif publie ses bindings dans le registre partagé `globalThis["org.graphiks.kadre:web"]` — une bibliothèque Kotlin/JS y publie aussi ses noms exportés sous son chemin de paquet, tandis qu’un module Wasm n’a pas de load hook et doit appeler `publishHostBindings()`. Le shim résout ces bindings à chaque appel de `KadreWeb.attach`, jamais à l’import, et le dernier publieur gagne.
+
+La clé d’une référence appartient à l’instance de factory : plusieurs `asHostRef()` sur la même factory partagent la même clé. C’est cette clé — une `string` — que JavaScript détient et renvoie à `KadreWeb.attach` : un objet wrapper ne traverse pas la frontière, et un `applicationFactory` qui n’est pas une `string` est refusé avec `InvalidRequest("factoryKey")`. La couche d’interop libère l’entrée d’une session dès que son outcome terminal est publié — elle ne conserve alors que l’identifiant opaque et le snapshot terminal, de sorte qu’un élément ou une scope terminés ne restent pas retenus — et elle libère en même temps les souscriptions alors ouvertes sur ce handle : une souscription que le consommateur n’a pas annulée avant l’outcome terminal, et les captures qu’elle retient, ne survivent pas à la terminaison. Une souscription ouverte après la libération appartient au snapshot terminal et ne retient que lui.
+
+Le shim possède les conversions que la glue ne peut pas faire seule : les `Long` Kotlin traversent en chaînes et le shim les rend en `bigint`, et `KadreSessionHandle.id` est un identifiant opaque alloué par la couche d’interop pour ce handle — plus précisément, ce n’est pas le `SessionId` Kotlin.
 
 La déclaration TypeScript promise est exactement :
 
@@ -209,7 +220,7 @@ export type KadreOperation =
   | "gamepadEffect" | "stopGamepadEffects" | "textInput" | "updateTextInput"
   | "claimDropTransfer" | "readDropItem" | "capturePermission"
   | "captureRefreshSources" | "captureOpen" | "captureCollectFrames"
-  | "rawInputAccess" | "platformSurfaceAccess" | "platformWindowAccess";
+  | "rawInputAccess" | "gestureInput" | "platformSurfaceAccess" | "platformWindowAccess";
 export type KadrePermission =
   | "displayEnumeration" | "inputMonitoring" | "rawInput" | "captureScreen" | "captureWindow";
 export type KadrePolicyComponent =
@@ -310,8 +321,9 @@ export interface KadreSessionHandle {
 export interface KadreWebOptions {
   readonly policy?: KadrePolicyProfile;
   readonly attachmentPolicy?: "stopWhenDetached" | "manual";
-  readonly windowProvider?: KadreWebWindowProvider;
 }
+
+`windowProvider` est ajouté par la phase qui livre `WebWindowProvider` (phase 4 de la roadmap Web) ; aucune option publiée n’est ignorée silencieusement tant que ce chemin n’existe pas.
 
 export interface KadreWebWindowProvider {
   open(requestId: string, spec: Readonly<KadreWindowSpec>): KadreWebWindowOpenResult;
@@ -329,11 +341,13 @@ export type KadreWebWindowOpenResult =
 export declare const KadreWeb: {
   attach(
     element: HTMLElement,
-    applicationFactory: KadreApplicationFactoryRef,
+    applicationFactory: string,
     options?: Readonly<KadreWebOptions>,
   ): KadreSessionHandle;
 };
 ```
+
+Le second paramètre de `KadreWeb.attach` est la clé opaque de factory — le `hostKey` de `KadreApplicationFactoryRef`, une `string` produite par le module Kotlin de l’application — et non un objet : c’est la clé seule qui traverse la frontière, et le shim refuse tout autre type avec `invalidRequest: "factoryKey"`. `KadreApplicationFactoryRef` nomme la référence côté Kotlin pour l’orientation ; aucune valeur JavaScript ne la satisfait, puisque la classe elle-même ne traverse pas.
 
 Les unions et readonly objects ci-dessus sont générés depuis les enums et le constructeur exact du catalogue ; aucune valeur additionnelle n’est admise. `KadreWebWindowProvider.open` reçoit une copie DTO, y compris une copie de `icon.bytes`, et retourne synchroniquement la discriminated union (union discriminée) ci-dessus. `rejected.failure` accepte exactement le set de `WindowRequestOutcome.Rejected`, dont `parentScopeCancelled` uniquement pour la scope du nouveau host retourné. Une exception callback est capturée et devient `platformFailure(web, "WebWindowProvider", "callback-exception")`; une failure hors set devient le même domain avec le code `"invalid-failure"`. La génération ultérieure est une preuve contre cette spec, pas une source de design.
 

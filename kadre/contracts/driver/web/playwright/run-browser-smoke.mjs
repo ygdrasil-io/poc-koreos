@@ -5,6 +5,7 @@ import { basename, dirname, extname, join, relative, resolve, sep } from 'node:p
 import { spawn } from 'node:child_process';
 import { XMLParser, XMLValidator } from 'fast-xml-parser';
 import { createPlaywrightLaunch } from './browser-smoke-launch.mjs';
+import { browserEvidenceLocations, generateContractEvidence } from './contract-evidence.mjs';
 
 const POSIX_TERM_GRACE_MILLISECONDS = 1_000;
 const POSIX_KILL_GRACE_MILLISECONDS = 1_000;
@@ -17,6 +18,25 @@ const SERVER_FORCED_DRAIN_TIMEOUT_MILLISECONDS = 1_000;
 const DIAGNOSTIC_OPERATION_TIMEOUT_MILLISECONDS = 5_000;
 const signalExitCodes = { SIGINT: 2, SIGTERM: 15 };
 
+/** The one engine the browser contract smoke runs today: its JUnit and evidence layouts are scoped to it. */
+const BROWSER_ENGINE = 'chromium';
+/** The published package is served under `/host`, with the consumer compiled for this target. */
+const CONSUMER_PREFIX = '/host';
+const SHIM_MODULE = `${CONSUMER_PREFIX}/index.mjs`;
+const CONSUMER_MODULE = `${CONSUMER_PREFIX}/consumer.js`;
+const TYPESCRIPT_SCENARIO = 'typescript-consumer';
+/** The eight `@kadre/host` bindings of `kadre/INTEROP-EXPORTS.md` section 6, asserted by the spec. */
+const hostBindingNames = [
+  'kadreWebAttach',
+  'kadreWebSessionId',
+  'kadreWebSessionState',
+  'kadreWebSubscribeState',
+  'kadreWebSubscribeTermination',
+  'kadreWebUnsubscribeState',
+  'kadreWebRequestStop',
+  'kadreWebClose',
+];
+
 async function runBrowserSmoke(argumentsList) {
   const argumentsByName = new Map(argumentsList.map((argument) => {
     const [name, value] = argument.split('=', 2);
@@ -25,25 +45,44 @@ async function runBrowserSmoke(argumentsList) {
   const target = argumentsByName.get('--target');
   const distribution = argumentsByName.get('--distribution');
   const evidence = argumentsByName.get('--evidence');
+  const consumer = argumentsByName.get('--consumer');
+  const contracts = argumentsByName.get('--contracts');
+  const mapping = argumentsByName.get('--mapping');
+  const commit = argumentsByName.get('--commit');
   const timeoutMilliseconds = parseTimeout(argumentsByName.get('--timeout-ms'));
 
-  if (!['js', 'wasmJs'].includes(target) || !distribution || !evidence) {
-    throw new Error('expected --target=js|wasmJs, --distribution=<directory>, and --evidence=<directory>');
+  if (!['js', 'wasmJs'].includes(target) || !distribution || !evidence || !consumer || !contracts || !mapping) {
+    throw new Error(
+      'expected --target=js|wasmJs, --distribution=<directory>, --evidence=<directory>, '
+        + '--consumer=<directory> (the served @kadre/host root holding the compiled consumer), '
+        + '--contracts=<registry> and --mapping=<file>',
+    );
   }
   if (!existsSync(distribution)) {
     throw new Error(`missing ${target} browser distribution: ${distribution}`);
   }
+  if (!existsSync(consumer) || !existsSync(join(consumer, 'index.mjs'))) {
+    throw new Error(`missing ${target} @kadre/host consumer root: ${consumer}`);
+  }
+  if (!existsSync(contracts)) {
+    throw new Error(`missing contract registry: ${contracts}`);
+  }
+  if (!existsSync(mapping)) {
+    throw new Error(`missing contract evidence mapping: ${mapping}`);
+  }
 
-  const junitDirectory = join(evidence, 'test-results', 'browser', 'chromium');
+  const locations = browserEvidenceLocations(evidence, BROWSER_ENGINE);
+  const junitDirectory = locations.junitDirectory;
   const junitOutput = join(junitDirectory, 'TEST-web-phase0.xml');
   const playwrightOutput = join(evidence, 'diagnostics', 'playwright');
   const preservedPlaywrightOutput = join(evidence, 'diagnostics', 'playwright-preserved');
   const distributionRoot = await realpath(distribution);
+  const consumerRoot = await realpath(consumer);
   const entryScript = await findEntryScript(distributionRoot);
   // Recursive cleanup is restricted to prior runs and must finish before
   // Playwright can create the current run's diagnostic snapshot.
   await removeOldDiagnosticQuarantines(dirname(playwrightOutput));
-  const server = await serveDistribution(distributionRoot, entryScript);
+  const server = await serveDistribution(distributionRoot, entryScript, consumerRoot);
   const coordinator = new TerminalCoordinator();
   let businessSucceeded = false;
   let serverFinalized = false;
@@ -74,6 +113,17 @@ async function runBrowserSmoke(argumentsList) {
       } else {
         const junit = await readFile(junitOutput, 'utf8');
         validateJunitReport(junit, junitOutput);
+        const artifacts = await generateContractEvidence({
+          target,
+          engine: BROWSER_ENGINE,
+          bundlePath: join(distributionRoot, entryScript),
+          junitDirectory,
+          outputDirectory: locations.evidenceDirectory,
+          commit,
+          registryPath: contracts,
+          mappingPath: mapping,
+        });
+        for (const artifact of artifacts) console.log(`browser contract evidence: ${artifact}`);
         if (!coordinator.hasTerminalReason()) businessSucceeded = true;
       }
     }
@@ -630,25 +680,48 @@ async function findFiles(directory, matches) {
   return files.flat().sort();
 }
 
-async function serveDistribution(realRoot, entryScript) {
+/**
+ * The generated fixture page.
+ *
+ * The page always loads the target's Kotlin fixture bundle from the body, so the fixture runs while
+ * the document is parsed and publishes its bindings and factory key. The import map and the module
+ * script that runs the TypeScript scenario live in the head: the map is registered before the first
+ * module resolves, and every element the page owns exists before the fixture records its DOM
+ * baseline. `@kadre/host` resolves to the published package's shim, served straight from the consumer
+ * root, and every other scenario leaves the package unloaded.
+ */
+function fixturePage(entryScript) {
+  const imports = { '@kadre/host': SHIM_MODULE };
+  return '<!doctype html><html><head>'
+    + `<script type="importmap">${JSON.stringify({ imports })}</script>`
+    + '<script type="module">'
+    + `if (new URLSearchParams(globalThis.location.search).get('scenario') === '${TYPESCRIPT_SCENARIO}') {`
+    + ` await import('${CONSUMER_MODULE}');`
+    + ' }'
+    + '</script></head>'
+    + `<body><script src="/${entryScript}"></script></body></html>`;
+}
+
+async function serveDistribution(realRoot, entryScript, consumerRoot) {
   const sockets = new Set();
+  const page = fixturePage(entryScript);
   const instance = createServer(async (request, response) => {
     try {
       const requestPathname = new URL(request.url, 'http://127.0.0.1').pathname;
-      const requestedPath = requestPathname === '/index.html'
-        ? null
-        : resolve(realRoot, `.${requestPathname}`);
-      if (requestedPath === null) {
+      if (requestPathname === '/index.html') {
         response.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
-        response.end(`<!doctype html><html><body><script src="/${entryScript}"></script></body></html>`);
+        response.end(page);
         return;
       }
-      if (!isWithin(realRoot, requestedPath)) {
+      const servesConsumer = requestPathname.startsWith(`${CONSUMER_PREFIX}/`);
+      const root = servesConsumer ? consumerRoot : realRoot;
+      const requestedPath = resolve(root, `.${requestPathname.slice(servesConsumer ? CONSUMER_PREFIX.length : 0)}`);
+      if (!isWithin(root, requestedPath)) {
         response.writeHead(404).end();
         return;
       }
       const realFile = await realpath(requestedPath);
-      if (!isWithin(realRoot, realFile) || !(await stat(realFile)).isFile()) {
+      if (!isWithin(root, realFile) || !(await stat(realFile)).isFile()) {
         response.writeHead(404).end();
         return;
       }
@@ -754,6 +827,7 @@ function isWithin(root, path) {
 function contentType(path) {
   switch (extname(basename(path))) {
     case '.js': return 'text/javascript; charset=utf-8';
+    case '.mjs': return 'text/javascript; charset=utf-8';
     case '.wasm': return 'application/wasm';
     case '.map': return 'application/json; charset=utf-8';
     default: return 'application/octet-stream';

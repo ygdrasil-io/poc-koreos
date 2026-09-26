@@ -267,6 +267,10 @@ Rendre observable et exploitable la surface attachée sans introduire de rendere
 - JS IR et Wasm produisent le même `.d.ts` et exécutent le même scenario TypeScript target-neutre ;
 - aucune surface renderer, widget ou layout Kadre n’est créée par le test ou l’implémentation.
 
+#### État (24 septembre 2026)
+
+Livré sur les deux targets : les métriques de surface dérivées de la boîte de mise en page de l’élément hôte et du device pixel ratio du browsing context, `requestRedraw` coalescé en un seul `RedrawRequested` par animation frame sous `policy.window.redrawRequests` puis `Closed(Surface)` après terminaison, `withWebElement` en lease bornée dans les deux façades, et le paquet `@kadre/host` publié avec le consumer TypeScript commun. Sont actifs en preuve : `BCK-002` (métriques et redraw de la surface hôte), `INT-002` (exports structurels des façades JS et Wasm) et `INT-004` (escape hatch d’élément) ; `BCK-001` et `INT-003` restent `planned` parce que leurs jeux de scénarios incluent le comportement de `WebWindowProvider`. Différés à la phase 4 : `WebWindowProvider`, l’option `windowProvider` des points d’attache publics et `INT-003`, la façade Web ne promettant aucune fenêtre avant cette phase. Preuves par target : `kadre/contracts/driver/web/build/contract-evidence/<target>/contract-evidence/browser/chromium/<contractId>.json`, validés contre `kadre/contracts/driver/web/build/contract-evidence/<target>/test-results/browser/chromium/TEST-web-phase0.xml` ; cahier manuel dans `kadre/contracts/driver/web/manual/phase-2-surface.md`.
+
 ### Phase 3 — Input essentiel : clavier, pointeur et scroll
 
 #### Objectif

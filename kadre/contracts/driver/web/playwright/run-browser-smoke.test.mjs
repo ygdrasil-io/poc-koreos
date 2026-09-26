@@ -19,6 +19,17 @@ import test from 'node:test';
 const runner = resolve(dirname(fileURLToPath(import.meta.url)), 'run-browser-smoke.mjs');
 const signalExitCodes = { SIGINT: 130, SIGTERM: 143 };
 const validJunit = '<?xml version="1.0"?><testsuites tests="1" failures="0" errors="0" skipped="0"><testsuite name="web" tests="1" failures="0" errors="0" skipped="0"><testcase name="attaches" classname="web-phase0"/></testsuite></testsuites>';
+/**
+ * A hermetic registry and mapping.
+ *
+ * These fixtures drive termination and finalization, not evidence: an empty registry declares no
+ * active browser contract, so the runner writes no canonical JSON and needs neither a provisioned
+ * browser nor the repository the real registry lives in. The evidence itself is proven by the smoke
+ * gate, which the validator inspects.
+ */
+const fixtureRegistryHeader =
+  'contractId\tstatus\tsource\tsubject\trisk\toracle\tscenarios\trequiredTargets\tconditionalCapabilities\tsentinels\tretirementRef\n';
+const fixtureMappingHeader = 'contractId\ttarget\tkind\tevidenceId\ttestClass\ttestName\n';
 
 test('launch construction uses a shell for the Windows Playwright cmd shim only', async () => {
   const { createPlaywrightLaunch } = await import('./browser-smoke-launch.mjs');
@@ -119,7 +130,7 @@ test('a partial HTTP request is held through graceful drain and closed by forced
   );
 });
 
-test('GET /index.html with a scenario query serves the fixture HTML', {
+test('GET /index.html with a scenario query serves the fixture page and the published host root', {
   timeout: 10_000,
 }, async (context) => {
   const fixture = await createFixture('query-route');
@@ -128,10 +139,46 @@ test('GET /index.html with a scenario query serves the fixture HTML', {
   const result = await runSmoke(fixture).completion;
 
   assert.equal(normalizedExitStatus(result), 0, result.stderr);
+  const html = await readFile(fixture.queryResponse, 'utf8');
+  assert.match(html, /<script src="\/fixture\.js"><\/script>/);
+  // The bare specifier resolves to the published shim, and nothing else is remapped.
+  assert.equal(html.match(/"@kadre\/host":"[^"]+"/g).join(','), '"@kadre/host":"/host/index.mjs"');
+  assert.match(html, /typescript-consumer/);
+  assert.equal(await readFile(fixture.hostResponse, 'utf8'), 'export const KadreWeb = {};\n');
+  // The package root is served verbatim: the Kotlin module the application links is untouched.
   assert.equal(
-    await readFile(fixture.queryResponse, 'utf8'),
-    '<!doctype html><html><body><script src="/fixture.js"></script></body></html>',
+    await readFile(fixture.kotlinModuleResponse, 'utf8'),
+    'export const kadreWebAttach = () => {};\n',
   );
+});
+
+test('a consumer root without the published shim fails before Playwright is started', {
+  timeout: 10_000,
+}, async (context) => {
+  const fixture = await createFixture('missing-shim');
+  context.after(() => fixture.dispose());
+  await rm(join(fixture.host, 'index.mjs'));
+
+  const result = await runSmoke(fixture).completion;
+
+  assert.notEqual(normalizedExitStatus(result), 0, 'a consumer root without index.mjs was accepted');
+  assert.match(result.stderr, /@kadre\/host consumer root/, result.stderr);
+});
+
+test('a smoke without --consumer fails before Playwright is started', {
+  timeout: 10_000,
+}, async (context) => {
+  const fixture = await createFixture('missing-consumer');
+  context.after(() => fixture.dispose());
+
+  const result = await spawnRunner(fixture, [
+    '--target=js',
+    `--distribution=${fixture.distribution}`,
+    `--evidence=${fixture.evidence}`,
+  ]).completion;
+
+  assert.notEqual(normalizedExitStatus(result), 0, 'a smoke without --consumer was accepted');
+  assert.match(result.stderr, /--consumer=<directory>/, result.stderr);
 });
 
 test('successful cleanup atomically retains unreadable diagnostics without copying their contents', {
@@ -244,6 +291,9 @@ async function createFixture(scenario, junit = validJunit) {
   const root = await mkdtemp(join(tmpdir(), 'kadre-browser-runner-'));
   const distribution = join(root, 'distribution');
   const evidence = join(root, 'evidence');
+  const host = join(root, 'host');
+  const contracts = join(root, 'contracts.tsv');
+  const mapping = join(root, 'evidence.tsv');
   const binDirectory = join(root, 'node_modules', '.bin');
   const fakePlaywright = join(root, 'fake-playwright.cjs');
   const heldClient = join(root, 'held-client.cjs');
@@ -263,6 +313,8 @@ async function createFixture(scenario, junit = validJunit) {
   const diagnosticCommitRelease = join(root, 'diagnostic-commit-release');
   const diagnosticCommitSignalObserved = join(root, 'diagnostic-commit-signal-observed');
   const queryResponse = join(root, 'query-response.html');
+  const hostResponse = join(root, 'host-response.mjs');
+  const kotlinModuleResponse = join(root, 'kotlin-module-response.mjs');
   const diagnostics = join(evidence, 'diagnostics', 'playwright');
   const diagnosticsParent = dirname(diagnostics);
   const diagnosticTraceDirectory = join(diagnostics, 'trace');
@@ -272,8 +324,15 @@ async function createFixture(scenario, junit = validJunit) {
   const preservedDiagnosticMarker = join(preservedDiagnosticTraceDirectory, 'trace.txt');
 
   await mkdir(distribution, { recursive: true });
+  await mkdir(host, { recursive: true });
   await mkdir(binDirectory, { recursive: true });
+  await writeFile(contracts, fixtureRegistryHeader);
+  await writeFile(mapping, fixtureMappingHeader);
   await writeFile(join(distribution, 'fixture.js'), 'globalThis.kadreFixture = true;\n');
+  await writeFile(join(host, 'index.mjs'), 'export const KadreWeb = {};\n');
+  await writeFile(join(host, 'kadre-platform-web.js'), 'globalThis["org.graphiks.kadre:web"] = {};\n');
+  await writeFile(join(host, 'kadre-platform-web.mjs'), 'export const kadreWebAttach = () => {};\n');
+  await writeFile(join(host, 'consumer.js'), 'void 0;\n');
   await writeFile(heldClient, heldClientSource, { mode: 0o755 });
   await writeFile(descendant, descendantSource, { mode: 0o755 });
   await writeFile(fakePlaywright, fakePlaywrightSource, { mode: 0o755 });
@@ -295,6 +354,7 @@ async function createFixture(scenario, junit = validJunit) {
     cleanupStarted,
     connectionClosed,
     connectionOpened,
+    contracts,
     descendantPid,
     descendantReady,
     descendantTerminated,
@@ -304,6 +364,10 @@ async function createFixture(scenario, junit = validJunit) {
     diagnosticsParent,
     distribution,
     evidence,
+    host,
+    kotlinModuleResponse,
+    hostResponse,
+    mapping,
     preservedDiagnosticMarker,
     preservedDiagnosticTraceDirectory,
     preservedDiagnostics,
@@ -353,6 +417,8 @@ async function createFixture(scenario, junit = validJunit) {
       KADRE_RUNNER_TEST_DIAGNOSTIC_PRESERVATION_RELEASE: diagnosticPreservationRelease,
       KADRE_RUNNER_TEST_DIAGNOSTIC_COMMIT_STARTED: diagnosticCommitStarted,
       KADRE_RUNNER_TEST_DIAGNOSTIC_COMMIT_RELEASE: diagnosticCommitRelease,
+      KADRE_RUNNER_TEST_HOST_RESPONSE: hostResponse,
+      KADRE_RUNNER_TEST_KOTLIN_MODULE_RESPONSE: kotlinModuleResponse,
       KADRE_RUNNER_TEST_DIAGNOSTIC_COMMIT_SIGNAL_OBSERVED: diagnosticCommitSignalObserved,
       KADRE_RUNNER_TEST_SCENARIO: scenario,
       ...([
@@ -366,13 +432,22 @@ async function createFixture(scenario, junit = validJunit) {
   };
 }
 
-function runSmoke(fixture, extraArguments = []) {
-  const child = spawn(process.execPath, [
-    runner,
-    '--target=js',
+function runSmoke(fixture, extraArguments = [], target = 'js') {
+  return spawnRunner(fixture, [
+    `--target=${target}`,
     `--distribution=${fixture.distribution}`,
     `--evidence=${fixture.evidence}`,
+    `--consumer=${fixture.host}`,
+    `--contracts=${fixture.contracts}`,
+    `--mapping=${fixture.mapping}`,
     ...extraArguments,
+  ]);
+}
+
+function spawnRunner(fixture, argumentsList) {
+  const child = spawn(process.execPath, [
+    runner,
+    ...argumentsList,
   ], {
     cwd: fixture.root,
     env: { ...process.env, ...fixture.environment },
@@ -528,6 +603,14 @@ async function requestFixtureWithQuery() {
   if (response.status !== 200) throw new Error('query fixture returned HTTP ' + response.status);
   const html = await response.text();
   writeFileSync(process.env.KADRE_RUNNER_TEST_QUERY_RESPONSE, html);
+  await recordRoute('/host/index.mjs', process.env.KADRE_RUNNER_TEST_HOST_RESPONSE);
+  await recordRoute('/host/kadre-platform-web.mjs', process.env.KADRE_RUNNER_TEST_KOTLIN_MODULE_RESPONSE);
+}
+
+async function recordRoute(path, file) {
+  const response = await fetch(new URL(path, process.env.KADRE_FIXTURE_URL));
+  if (response.status !== 200) throw new Error(path + ' returned HTTP ' + response.status);
+  writeFileSync(file, await response.text());
 }
 
 async function waitForConnection() {

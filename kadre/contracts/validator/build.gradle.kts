@@ -17,7 +17,7 @@ kotlin {
 }
 
 val jvmMain = kotlin.targets.getByName("jvm").compilations.getByName("main")
-val webContractIds = listOf("BCK-001", "INT-002", "INT-003", "INT-004")
+val webContractIds = listOf("BCK-001", "BCK-002", "INT-002", "INT-003", "INT-004")
 val appKitContractIds = listOf(
     "APK-001", "APK-002", "APK-003", "APK-004", "APK-005", "APK-006",
     "APK-007", "APK-008", "APK-009", "APK-010", "APK-011", "APK-012",
@@ -247,7 +247,10 @@ val browserContractEvidenceTasks = listOf("js", "wasmJs").map { target ->
         group = "verification"
         description = "Validates every active $target browser contract evidence artifact."
         dependsOn("jvmMainClasses")
-        mustRunAfter(":kadre:contracts:driver:web:${target}BrowserSmoke")
+        // The browser smoke is the only producer of these artifacts, exactly as the AppKit and runtime
+        // evidence tasks are produced by their own generators: the aggregate gate runs Chromium itself
+        // rather than validating documents a previous invocation happened to leave behind.
+        dependsOn(":kadre:contracts:driver:web:${target}BrowserSmoke")
         classpath(jvmMain.output.allOutputs, jvmMain.runtimeDependencyFiles)
         mainClass.set("org.graphiks.kadre.contracts.ValidateContractEvidenceKt")
         val artifactDirectory = rootProject.file("kadre/contracts/driver/web/build/contract-evidence/$target")

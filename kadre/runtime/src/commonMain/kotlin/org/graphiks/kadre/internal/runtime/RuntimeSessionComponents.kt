@@ -147,6 +147,13 @@ public class RuntimeSessionComponents private constructor(
             diagnostics,
             rawInputPort,
         )
+        (primarySurface as? RuntimePrimarySurfaceConfiguration)?.installSessionConfiguration(
+            deliveryPolicy,
+            source,
+            sessionFailureHandler,
+            collectorAllocator,
+            maxCollectorsPerFlow,
+        )
     }
 
     internal fun installExclusiveDisplayTargetResolver(resolver: ExclusiveDisplayTargetResolver) {
@@ -173,6 +180,27 @@ internal interface RuntimeSessionWindowManager {
 internal object UnsupportedRuntimeSessionComponentsFactory : RuntimeSessionComponentsFactory {
     override fun create(sessionId: SessionId, rootScope: CoroutineScope): RuntimeSessionComponents =
         RuntimeSessionComponents(UnsupportedWindowManager(RuntimeProcessIds::nextWindowRequestId))
+}
+
+/**
+ * Unstable backend SPI implemented by a host-provided primary surface that consumes session
+ * delivery configuration.
+ *
+ * This type is technically public only so backend modules can implement it. It is not part of
+ * Kadre's supported public API and may change without compatibility guarantees.
+ *
+ * The runtime installs this configuration once per session, after the surface exists and before
+ * any application code runs. A surface must therefore buffer stimuli that arrive earlier and
+ * flush them, in order, once [installSessionConfiguration] has been called.
+ */
+public interface RuntimePrimarySurfaceConfiguration {
+    public fun installSessionConfiguration(
+        deliveryPolicy: WindowDeliveryPolicy,
+        source: () -> EventStamp,
+        sessionFailureHandler: (KadreFailure) -> Unit,
+        collectorAllocator: Any,
+        maxCollectorsPerFlow: Int,
+    )
 }
 
 /**
