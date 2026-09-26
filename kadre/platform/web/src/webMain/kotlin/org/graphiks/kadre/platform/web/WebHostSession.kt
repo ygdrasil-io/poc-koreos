@@ -37,6 +37,7 @@ import org.graphiks.kadre.internal.runtime.RuntimeSurfaceInput
 import org.graphiks.kadre.internal.runtime.SurfaceStimulus
 import org.graphiks.kadre.internal.runtime.UnsupportedTextInputPort
 import org.graphiks.kadre.internal.runtime.admitField
+import org.graphiks.kadre.internal.runtime.fieldName
 import org.graphiks.kadre.internal.runtime.unsupportedSurfaceCapabilities
 import org.graphiks.kadre.policy.ContinuousDelivery
 import org.graphiks.kadre.policy.ContinuousOverflowAction
@@ -702,17 +703,20 @@ private class WebHostSurface(
      *
      * The two requests the reference refuses before admission are refused here with the same failures,
      * and for the same reason — they are what makes a request the surface did not honour impossible to
-     * mistake for one it did: a `Clear` on a field that has no "unset" value is an
-     * `InvalidRequest(field)` (`OPERATION-CONTRACTS.md` §1.1 registers exactly these four field names
-     * for `HostSurface.apply`), and an `expectedRevision` that is not the current one is a
-     * `StaleRevision`, since a caller doing optimistic concurrency must not be told `Applied` for an
-     * update computed against a state that no longer exists.
+     * mistake for one it did: an `expectedRevision` that is not the current one is a `StaleRevision`,
+     * and a `Clear` on a field that has no "unset" value is an `InvalidRequest(field)`
+     * (`OPERATION-CONTRACTS.md` §1.1 registers exactly these four field names for
+     * `HostSurface.apply`). Both run before admission, and in the reference's order — the revision
+     * first (`MinimalWindowSurface.kt:269-278`) — so a request that is both stale and malformed is
+     * answered as stale rather than as malformed.
+     *
+     * Every admitted field is then committed or reported, one at a time: what [admitField] answers
+     * `Unchanged` for was either not requested or refused by its capability, and a field that reaches
+     * the commit with a change the surface has no path for fails loudly instead of disappearing
+     * (see [requireRefused]).
      */
     override suspend fun apply(update: SurfaceUpdate): KadreResult<SurfaceUpdateOutcome> {
         admissionFailure()?.let { return it }
-        invalidClearField(update)?.let { field ->
-            return KadreResult.Failure(KadreFailure.InvalidRequest(field))
-        }
         update.expectedRevision?.let { expected ->
             val currentRevision = mutableState.value.revision
             if (expected != currentRevision) {
@@ -721,29 +725,41 @@ private class WebHostSurface(
                 )
             }
         }
+        invalidClearField(update)?.let { field ->
+            return KadreResult.Failure(KadreFailure.InvalidRequest(field))
+        }
         val rejected = mutableListOf<RejectedSurfaceField>()
         val capabilities = mutableCapabilities.value
         // Every field is admitted, including the three that cannot be honoured: a field the surface
         // cannot honour has to be *reported*, never silently dropped, and admitting it is what records
         // the reference's own `RejectedSurfaceField(property, Unsupported(UpdateSurface))` in the list
-        // below. Those three answer `Unchanged` for every value they can carry, so their answer is not
-        // bound to anything.
-        admitField(update.cursor, SurfaceProperty.Cursor, capabilities.cursor, rejected)
-        admitField(update.pointerCapture, SurfaceProperty.PointerCapture, capabilities.pointerCapture, rejected)
-        admitField(update.hitTesting, SurfaceProperty.HitTesting, capabilities.hitTesting, rejected)
+        // below.
+        val cursor = admitField(update.cursor, SurfaceProperty.Cursor, capabilities.cursor, rejected)
+        val pointerCapture = admitField(
+            update.pointerCapture,
+            SurfaceProperty.PointerCapture,
+            capabilities.pointerCapture,
+            rejected,
+        )
+        val hitTesting = admitField(update.hitTesting, SurfaceProperty.HitTesting, capabilities.hitTesting, rejected)
         val inputDefaultBehavior = admitField(
             update.inputDefaultBehavior,
             SurfaceProperty.InputDefaultBehavior,
             capabilities.inputDefaultBehavior,
             rejected,
         )
+        // The three fields with no commit path are guarded rather than assumed away: their capabilities
+        // refuse every value today, but the day one of them becomes `Supported` the change would land
+        // here uncommitted and be answered with an `Applied` for a state that never took it.
+        cursor.requireRefused(SurfaceProperty.Cursor)
+        pointerCapture.requireRefused(SurfaceProperty.PointerCapture)
+        hitTesting.requireRefused(SurfaceProperty.HitTesting)
         val current = mutableState.value
         val committed = if (inputDefaultBehavior is PropertyChange.Set) {
             current.copy(inputDefaultBehavior = inputDefaultBehavior.value)
         } else {
-            // `cursor`, `pointerCapture` and `hitTesting` are admitted as `Unchanged` — either because
-            // the update did not request them or because their capability refused them — so no field is
-            // left to commit here. This is also the path of an update that requests nothing at all.
+            // The one path left is an update that requests nothing, or one whose request was refused:
+            // nothing is committed and, below, the revision does not move either.
             current
         }
         // One commit, one revision, and only for a state that actually moved: `next != current` is the
@@ -786,15 +802,16 @@ private class WebHostSurface(
     /**
      * The field of a `Clear` update, or `null` when no field was cleared.
      *
-     * The names are the field paths `OPERATION-CONTRACTS.md` §1.1 registers for `HostSurface.apply`,
-     * and they are the reference's own: the check runs before admission, so a `Clear` is refused whole
-     * rather than answered with a success for a state that did not move.
+     * The names come from `SurfaceProperty.fieldName`, which is the one owner of those paths — the same
+     * property an update is admitted with, and the same string `OPERATION-CONTRACTS.md` §1.1 registers
+     * for `HostSurface.apply`. The check runs before admission, so a `Clear` is refused whole rather
+     * than answered with a success for a state that did not move.
      */
     private fun invalidClearField(update: SurfaceUpdate): String? = when {
-        update.cursor is PropertyChange.Clear -> "cursor"
-        update.pointerCapture is PropertyChange.Clear -> "pointerCapture"
-        update.hitTesting is PropertyChange.Clear -> "hitTesting"
-        update.inputDefaultBehavior is PropertyChange.Clear -> "inputDefaultBehavior"
+        update.cursor is PropertyChange.Clear -> SurfaceProperty.Cursor.fieldName
+        update.pointerCapture is PropertyChange.Clear -> SurfaceProperty.PointerCapture.fieldName
+        update.hitTesting is PropertyChange.Clear -> SurfaceProperty.HitTesting.fieldName
+        update.inputDefaultBehavior is PropertyChange.Clear -> SurfaceProperty.InputDefaultBehavior.fieldName
         else -> null
     }
 
@@ -835,11 +852,20 @@ private class WebHostSurface(
      * dropped — while everything already published stays as it is: the terminal state, the end of the
      * events flow and the release of the port remain [terminate]'s work, so an observer sees the same
      * sequence whether the owner revoked first or the surface reached its own terminal transition.
+     *
+     * The capabilities go with the admission, and they go here rather than only at [terminate]: the
+     * window a revocation leaves open is exactly the one in which a consumer could still read a
+     * promise while the surface already refuses every call, and a capability that survives it would be
+     * a claim this task's field is the first to make about something the surface can no longer do. The
+     * state stays `Attached` — a revoked surface is still attached until the runtime closes it — but
+     * nothing is announced as available any more, which is the "capabilities unavailable no later than
+     * the detached state" order the teardown suite pins.
      */
     fun onOwnershipRevoked() {
         if (revoked) return
         revoked = true
         closeAdmission()
+        mutableCapabilities.value = unsupportedSurfaceCapabilities()
     }
 
     /** The runtime's teardown of this surface: it stops admitting and releases the port. */
@@ -1001,3 +1027,21 @@ private fun webSurfaceCapabilities(): SurfaceCapabilities = SurfaceCapabilities(
 
 private fun <T> unsupportedSurfaceCapability(operation: KadreOperation): Capability<T> =
     Capability.Unsupported(KadreFailure.Unsupported(operation))
+
+/**
+ * Asserts that a field the web surface has no commit path for was refused by its own capability.
+ *
+ * [WebHostSurface.apply] commits one field and *reports* the others: a field that arrives there
+ * admitted is a change the surface would neither commit nor reject, and answering `Applied` for an
+ * update no state took is exactly the fictitious success the `Clear` guard exists to prevent. Today
+ * the adapter makes that unreachable — `cursor`, `pointerCapture` and `hitTesting` carry a blanket
+ * `Unsupported(UpdateSurface)` capability, so [admitField] answers `Unchanged` for every value — but
+ * "unreachable as long as the capability stays unsupported" is an assumption about a future phase, so
+ * it is checked where the change would land instead of being trusted. The day a commit path is owed,
+ * this fires with the field in hand, rather than after a consumer was told its update had been applied.
+ */
+private fun PropertyChange<*>.requireRefused(property: SurfaceProperty) {
+    check(this is PropertyChange.Unchanged) {
+        "${property.fieldName} arrived admitted, but the web surface has no commit for it"
+    }
+}

@@ -44,10 +44,12 @@ import org.graphiks.kadre.policy.KadrePolicies
 import org.graphiks.kadre.policy.KadrePolicy
 import org.graphiks.kadre.surface.CursorIcon
 import org.graphiks.kadre.surface.CursorStyle
+import org.graphiks.kadre.surface.HitTestingMode
 import org.graphiks.kadre.surface.HostSurface
 import org.graphiks.kadre.surface.InputDefaultBehavior
 import org.graphiks.kadre.surface.LogicalDelta
 import org.graphiks.kadre.surface.LogicalPoint
+import org.graphiks.kadre.surface.PointerCaptureMode
 import org.graphiks.kadre.surface.PropertyChange
 import org.graphiks.kadre.surface.RejectedSurfaceField
 import org.graphiks.kadre.surface.SurfaceAttachmentState
@@ -580,10 +582,11 @@ class WebInputSurfaceTest {
         )
         assertEquals(FeatureAvailability.Available, inputDefaultBehavior.availability)
 
-        // Scope non-regression: this task activates one field and only one. The three fields it does
-        // not touch keep the blanket rejection of the previous phase, byte for byte.
+        // Scope non-regression: this task activates one field and only one. The four fields it does not
+        // touch keep the blanket rejection of the previous phase, byte for byte.
         assertEquals(unsupportedUpdateSurface(), capabilities.cursor)
         assertEquals(unsupportedUpdateSurface(), capabilities.customCursor)
+        assertEquals(unsupportedUpdateSurface(), capabilities.pointerCapture)
         assertEquals(unsupportedUpdateSurface(), capabilities.hitTesting)
 
         // A detached surface claims nothing at all, this field included: the capability is the
@@ -741,13 +744,145 @@ class WebInputSurfaceTest {
     }
 
     /**
-     * The two requests the reference refuses before admission, refused here with the same failures.
+     * Nothing disappears: every field of an update is either committed or reported, and an update that
+     * asks for all four moves exactly one of them.
+     *
+     * The guard this case covers is inside `apply` — a field that arrives *admitted* with no commit
+     * path on this surface fails loudly rather than being dropped in silence and answered with an
+     * `Applied` for a state that never took it. That guard cannot be reached from a test today: the
+     * three fields it protects carry a blanket `Unsupported(UpdateSurface)` capability, which the
+     * capability case pins, so `admitField` answers `Unchanged` for every value they can carry, and
+     * reaching the guard would mean publishing a capability this surface does not have. What is
+     * pinned here is its observable half, which is what a consumer sees: a field the surface cannot
+     * commit is *always* reported, and the only state a mixed update moves is the one it can commit.
+     */
+    @Test
+    fun everyFieldOfAnUpdateIsEitherCommittedOrReported() = runTest {
+        val harness = InputHarness(this)
+        harness.start()
+        val surface = harness.surface()
+        val before = surface.state.value
+
+        val partiallyApplied = assertIs<SurfaceUpdateOutcome.PartiallyApplied>(
+            assertIs<KadreResult.Success<SurfaceUpdateOutcome>>(
+                surface.apply(
+                    SurfaceUpdate(
+                        cursor = PropertyChange.Set(CursorStyle.Hidden),
+                        pointerCapture = PropertyChange.Set(PointerCaptureMode.Confined),
+                        hitTesting = PropertyChange.Set(HitTestingMode.Disabled),
+                        inputDefaultBehavior = PropertyChange.Set(InputDefaultBehavior.SuppressWhenPossible),
+                    ),
+                ),
+            ).value,
+        )
+
+        assertEquals(
+            listOf(
+                SurfaceProperty.Cursor,
+                SurfaceProperty.PointerCapture,
+                SurfaceProperty.HitTesting,
+            ),
+            partiallyApplied.rejected.map { it.field },
+            "all three fields the surface cannot commit are reported, in the order of the update",
+        )
+        assertEquals(
+            listOf(
+                KadreFailure.Unsupported(KadreOperation.UpdateSurface),
+                KadreFailure.Unsupported(KadreOperation.UpdateSurface),
+                KadreFailure.Unsupported(KadreOperation.UpdateSurface),
+            ),
+            partiallyApplied.rejected.map { it.failure },
+        )
+        assertEquals(before.cursor, partiallyApplied.state.cursor, "no rejected field is committed")
+        assertEquals(before.pointerCapture, partiallyApplied.state.pointerCapture)
+        assertEquals(before.hitTesting, partiallyApplied.state.hitTesting)
+        assertEquals(CursorStyle.System(CursorIcon.Default), partiallyApplied.state.cursor)
+        assertEquals(PointerCaptureMode.None, partiallyApplied.state.pointerCapture)
+        assertEquals(HitTestingMode.Enabled, partiallyApplied.state.hitTesting)
+        assertEquals(
+            InputDefaultBehavior.SuppressWhenPossible,
+            partiallyApplied.state.inputDefaultBehavior,
+            "the one field with a commit path is committed",
+        )
+        assertEquals(
+            before.revision.value + 1L,
+            partiallyApplied.state.revision.value,
+            "three rejections and one commit move the revision exactly once",
+        )
+
+        harness.stop()
+        testScheduler.runCurrent()
+    }
+
+    /**
+     * The revocation window claims nothing: the capabilities are already the unavailable snapshot
+     * while the surface is still attached and the port is already gone.
+     *
+     * The window is the one a cooperative stop leaves — the owner revoked the surface, so every
+     * admission site answers `Closed` and the suppression answers `false`, while the runtime still has
+     * to close the surface. A capability published there would be a promise no operation could honour,
+     * which is why the revocation publishes the terminal all-unsupported snapshot instead of waiting
+     * for the detached state. The teardown suite pins the same order for `platformAccess` ("no later
+     * than the detached state"); this case pins it for the field this task activated.
+     */
+    @Test
+    fun theRevocationWindowWithdrawsTheFieldBeforeTheTerminalState() = runTest {
+        val harness = InputHarness(this)
+        harness.start()
+        val surface = harness.surface()
+        surface.apply(
+            SurfaceUpdate(inputDefaultBehavior = PropertyChange.Set(InputDefaultBehavior.SuppressWhenPossible)),
+        )
+
+        var inputDefaultBehaviorAtRelease: Capability.Unsupported? = null
+        harness.port.onRelease = {
+            inputDefaultBehaviorAtRelease = assertIs<Capability.Unsupported>(
+                surface.capabilities.value.inputDefaultBehavior,
+            )
+        }
+
+        // The window under test: the stop releases the port before the runtime closes the surface.
+        harness.stop()
+        assertEquals(
+            SurfaceAttachmentState.Attached,
+            surface.state.value.attachment,
+            "the surface is still attached when the port goes, so the capability still describes it",
+        )
+        assertEquals(
+            unsupportedUpdateSurface(),
+            inputDefaultBehaviorAtRelease,
+            "the revocation withdraws the field with the admission it closes",
+        )
+        assertEquals(
+            KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.Surface)),
+            surface.apply(
+                SurfaceUpdate(inputDefaultBehavior = PropertyChange.Set(InputDefaultBehavior.HostDefault)),
+            ),
+            "and no call the withdrawn capability describes can be honoured in that window",
+        )
+        assertFalse(
+            harness.port.deliverInputAndAskSuppression(scrolled()),
+            "nor does the surface answer suppression for an event observed in it",
+        )
+
+        testScheduler.advanceUntilIdle()
+
+        assertEquals(SurfaceAttachmentState.Detached, surface.state.value.attachment)
+        assertEquals(unsupportedUpdateSurface(), surface.capabilities.value.inputDefaultBehavior)
+        testScheduler.runCurrent()
+    }
+
+    /**
+     * The two requests the reference refuses before admission, refused here with the same failures and
+     * in the same order.
      *
      * A `Clear` has no meaning for these fields — none of them has an "unset" value — so it is an
      * `InvalidRequest` naming the field, and the call has no effect at all. An expected revision that
      * is not the current one is a `StaleRevision`, the failure the contract reserves for it; without
      * that check a caller doing optimistic concurrency would be told `Applied` for an update it
-     * computed against a state that no longer exists.
+     * computed against a state that no longer exists. The revision is checked first, as it is on the
+     * reference surface (`MinimalWindowSurface.kt:269-278`), so a request that is both stale and
+     * malformed is answered as stale.
      */
     @Test
     fun aClearAndAStaleRevisionAreRefusedBeforeAdmission() = runTest {
@@ -778,6 +913,15 @@ class WebInputSurfaceTest {
             ),
         )
         assertEquals(committed, surface.state.value, "a stale update is refused whole, fields included")
+
+        // The precedence is the reference's: the revision first, so a request that is both stale and
+        // malformed is answered with the revision failure rather than with the field one.
+        assertEquals(
+            KadreResult.Failure(KadreFailure.StaleRevision(stale.value, committed.revision.value)),
+            surface.apply(SurfaceUpdate(expectedRevision = stale, cursor = PropertyChange.Clear)),
+            "a stale request is stale whatever else it asks for",
+        )
+        assertEquals(committed, surface.state.value)
 
         val accepted = assertIs<SurfaceUpdateOutcome.Applied>(
             assertIs<KadreResult.Success<SurfaceUpdateOutcome>>(
