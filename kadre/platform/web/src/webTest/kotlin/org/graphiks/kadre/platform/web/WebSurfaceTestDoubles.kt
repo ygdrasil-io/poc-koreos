@@ -72,8 +72,18 @@ internal class RecordingWebHostPort(
      */
     var pointerCaptureFailure: KadreFailure? = null
 
+    /**
+     * Whether this double answers the capture member at all.
+     *
+     * A target port either implements the mechanism or inherits the interface's own default; with this
+     * off the double becomes the second kind, which is how a case pins that the default cannot make the
+     * surface commit a capture nobody performed.
+     */
+    var captureImplemented: Boolean = true
+
     override fun applyPointerCapture(captured: Boolean): KadreResult<Unit> {
         pointerCaptureRequests += captured
+        if (!captureImplemented) return super.applyPointerCapture(captured)
         val failure = pointerCaptureFailure
         return if (failure == null) KadreResult.Success(Unit) else KadreResult.Failure(failure)
     }

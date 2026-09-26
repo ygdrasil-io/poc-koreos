@@ -43,6 +43,16 @@ internal class JsWebDomPort(element: HTMLElement) : WebHostPort {
      * reports a button pressed here, and forgotten when the browser reports no button of it down any
      * more — never decided, only read: whether a capture may be asked for at all is the surface's rule
      * ([WebPointerOwnership]), and this member only answers *which* pointer a request is about.
+     *
+     * **Two bookkeepings, one authority.** The identity here and the surface's pressed-button set are
+     * derived from the same observations but read different facts — a `pointerId` of the event in hand
+     * against the buttons the model recorded — so a contrived sequence can leave them one step apart (a
+     * `Released` whose `buttons` is not empty clears the surface's button but not this identity, a
+     * `FocusLost` keeps this identity while the surface forgets its pointer). The **surface's ownership
+     * is authoritative**: this member never admits anything, and a divergence only shows as the
+     * mechanism answering the failure of [applyPointerCapture] where the ownership gate would have said
+     * `InteractionRequired(Missing)` — a refusal either way, never a capture taken for a pointer the
+     * surface does not hold.
      */
     private var heldPointerId: Int? = null
 

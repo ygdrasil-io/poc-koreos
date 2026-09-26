@@ -19,6 +19,7 @@ import org.graphiks.kadre.diagnostics.Capability
 import org.graphiks.kadre.diagnostics.FeatureAvailability
 import org.graphiks.kadre.diagnostics.InteractionFailureReason
 import org.graphiks.kadre.diagnostics.KadreDiagnostic
+import org.graphiks.kadre.diagnostics.KadreException
 import org.graphiks.kadre.diagnostics.KadreFailure
 import org.graphiks.kadre.diagnostics.KadreOperation
 import org.graphiks.kadre.diagnostics.KadrePlatform
@@ -39,6 +40,7 @@ import org.graphiks.kadre.internal.runtime.SurfaceStimulus
 import org.graphiks.kadre.internal.runtime.UnsupportedTextInputPort
 import org.graphiks.kadre.internal.runtime.admitField
 import org.graphiks.kadre.internal.runtime.fieldName
+import org.graphiks.kadre.internal.runtime.normaliseFieldFailure
 import org.graphiks.kadre.internal.runtime.unsupportedSurfaceCapabilities
 import org.graphiks.kadre.policy.ContinuousDelivery
 import org.graphiks.kadre.policy.ContinuousOverflowAction
@@ -189,8 +191,18 @@ internal interface WebHostPort {
      * [captured] takes the capture of the pointer this port observed pressed on the element, and `false`
      * releases it. The member is a mechanism and nothing else: the port never decides whether a capture
      * is allowed — it is asked to perform one and either performs it or reports why the browser would
-     * not. A port that is never asked performs nothing, which is what the default does for the inert
-     * ports.
+     * not.
+     *
+     * **The default inverts the usual one.** Every other member of this interface defaults to the inert
+     * behaviour a port that does not implement it should have, which is a *success*: nothing observed,
+     * nothing scheduled, nothing installed. This one cannot, because the surface commits `Confined` only
+     * on a `Success`: a default that answered `Success(Unit)` would let a port that performs no capture
+     * at all make the surface publish a confinement the browser never took — the fictitious success this
+     * whole admission path exists to prevent. The default is therefore a **failing** one, and it is the
+     * failure the capability would have carried had it been honest: `Unsupported(UpdateSurface)`. A port
+     * that cannot capture is refused field by field instead of being believed; a port that can must
+     * override this member, perform the DOM's own capture effect, and answer with the browser's answer
+     * (containing its refusal, see below).
      *
      * The browser refuses a capture for a pointer it does not consider active (`setPointerCapture`
      * throws), and this call is made inside the callback of the event that led to the decision — a
@@ -199,9 +211,12 @@ internal interface WebHostPort {
      * (`WEB-IMPLEMENTATION-ROADMAP.md` §3.4, "un événement DOM … ne laisse pas échapper d'exception
      * Kotlin"). The failure is a [KadreFailure.PlatformFailure] of this platform because the call really
      * crosses the browser's own DOM API, and `OPERATION-CONTRACTS.md` §3 admits it on the
-     * rejected-field row of `HostSurface.apply`, which is where the surface puts it.
+     * rejected-field row of `HostSurface.apply`, which is where the surface puts it — after the shared
+     * normaliser has checked it against that closed set
+     * ([normaliseFieldFailure]), so a member of that row is required and nothing else is accepted.
      */
-    fun applyPointerCapture(captured: Boolean): KadreResult<Unit> = KadreResult.Success(Unit)
+    fun applyPointerCapture(captured: Boolean): KadreResult<Unit> =
+        KadreResult.Failure(KadreFailure.Unsupported(KadreOperation.UpdateSurface))
 
     /**
      * The host element as an untyped reference, or null once the port released it.
@@ -627,7 +642,8 @@ private class WebHostSurface(
             else -> surfaceInput.accept(stimulus.toSurfaceStimulus(id))
         }
         // The other half of the ownership rule: a pointer the surface no longer holds cannot carry a
-        // capture, and the browser ends one implicitly exactly when the pointer stops being one.
+        // capture, and the browser ends one with it on every arm but the activation-loss one (see
+        // [reconcilePointerCapture] for that divergence).
         if (!pointerOwnership.isOwned) reconcilePointerCapture()
     }
 
@@ -866,11 +882,17 @@ private class WebHostSurface(
         }
         if (next != current) mutableState.value = next
         val state = mutableState.value
+        // The rejections are merged before they are reported: this surface refuses some fields at
+        // admission and the capture at commit, so the two passes are put back into the order the update
+        // writes its fields in — the reference's own order, since it walks all four fields in one commit
+        // pass (`MinimalWindowSurface.commitUpdateLocked`). A consumer that reads a `PartiallyApplied`
+        // therefore sees the same order whatever refused which field.
+        val reported = rejected.inSurfaceUpdateOrder()
         return KadreResult.Success(
-            if (rejected.isEmpty()) {
+            if (reported.isEmpty()) {
                 SurfaceUpdateOutcome.Applied(state)
             } else {
-                SurfaceUpdateOutcome.PartiallyApplied(state, rejected)
+                SurfaceUpdateOutcome.PartiallyApplied(state, reported)
             },
         )
     }
@@ -925,10 +947,19 @@ private class WebHostSurface(
      * committed — and nothing moves, so the revision stays where it is.
      *
      * Otherwise the port performs the one browser effect and reports the browser's own answer. A success
-     * commits the mode; a refusal is reported as the failure the port contained
-     * (`PlatformFailure`, admitted on the rejected-field row), and the state stays where it was —
-     * answering `Applied` for a capture the browser never took is the fictitious success this whole
-     * path exists to prevent.
+     * commits the mode; a refusal is reported as a rejected field carrying the failure the port
+     * returned, and the state stays where it was — answering `Applied` for a capture the browser never
+     * took is the fictitious success this whole path exists to prevent.
+     *
+     * The failure is *not* trusted: it goes through the runtime's own [normaliseFieldFailure] for this
+     * platform and this property, exactly as the reference surface normalises a port's field outcome
+     * (`MinimalWindowSurface.commitField` → `normaliseFieldFailure`). A failure the closed set of
+     * `OPERATION-CONTRACTS.md` §3 does not admit — a buggy or hostile port answering `Closed(Surface)`,
+     * say — is replaced by `PlatformFailure(Web, "surface-command-port", "invalid-field-failure")`, and
+     * that adapter failure is reported rather than returned, because what the caller receives must be a
+     * failure its operation admits. A port failure that *is* in the set (this task's own
+     * `PlatformFailure(Web, "web-host", "pointer-capture-failed")`, or the default member's
+     * `Unsupported(UpdateSurface)`) passes through unchanged.
      */
     private fun commitPointerCapture(
         change: PropertyChange<PointerCaptureMode>,
@@ -940,7 +971,17 @@ private class WebHostSurface(
         return when (val honoured = port.applyPointerCapture(change.value != PointerCaptureMode.None)) {
             is KadreResult.Success -> change.value
             is KadreResult.Failure -> {
-                rejected += RejectedSurfaceField(SurfaceProperty.PointerCapture, honoured.reason)
+                val normalised = normaliseFieldFailure(
+                    KadrePlatform.Web,
+                    SurfaceProperty.PointerCapture,
+                    honoured.reason,
+                )
+                rejected += RejectedSurfaceField(SurfaceProperty.PointerCapture, normalised.failure)
+                normalised.adapterFailure?.let { adapterFailure ->
+                    // Reported, never returned (`MinimalWindowSurface.reportAdapterFailure`), and the
+                    // report itself may not destabilise the command boundary of this surface.
+                    runCatching { failureReporter.report(KadreException(adapterFailure)) }
+                }
                 null
             }
         }
@@ -950,14 +991,29 @@ private class WebHostSurface(
      * Returns the committed capture to `None`: the browser no longer confines the pointer it named.
      *
      * A `Confined` capture is a claim about the browser — the element holds that pointer — so a claim
-     * the browser has ended cannot stay published, whether the loss was reported by the port
-     * (`lostpointercapture`) or derived from the pointer the surface no longer holds (a release, a
-     * cancellation, a leave, a loss of activation: the browser releases such a capture implicitly).
+     * the browser has ended cannot stay published. It is reached from both halves of the reconciliation:
+     * the report the port makes of the browser's own `lostpointercapture`, and the loss of the pointer
+     * this surface held (a release, a cancellation, a leave, a loss of activation), because a capture
+     * and the pointer it belongs to end together.
      *
-     * Nothing is asked of the browser here: the very fact being reconciled is that there is no capture
-     * left to end, and a `releasePointerCapture` for a pointer that holds none would be a call with no
-     * decision behind it. The revision moves as it does for any committed state change, and only when
-     * there is a capture to reconcile — a surface that holds none is already at `None`.
+     * Nothing is asked of the browser here: the fact being reconciled is that there is no capture left to
+     * end, and a `releasePointerCapture` for a pointer that holds none would be a call with no decision
+     * behind it. The revision moves as it does for any committed state change, and only when there is a
+     * capture to reconcile — a surface that holds none is already at `None`.
+     *
+     * **Known divergence — the activation-loss arm only.** On every other arm the browser ends the
+     * capture implicitly with the pointer it belonged to, so the DOM and the published state agree: a
+     * button release, a `pointerleave` and a `pointercancel` all release a capture implicitly. A loss of
+     * activation does not: Chromium keeps a mouse pointer capture across a window blur, so on that arm
+     * the surface publishes `pointerCapture = None` while the DOM still confines the pointer to the
+     * element, and no `releasePointerCapture` is sent to end it. The divergence is one-directional and
+     * safe — the surface claims *less* than the browser does, the confinement it stops announcing cannot
+     * be re-taken without a new press (the ownership went with the activation), and no operation is
+     * authorised by the difference — and it is recorded in this form so the capability documentation of
+     * this adapter can state it verbatim: *after a loss of activation the web surface publishes
+     * `SurfaceState.pointerCapture = None` and does not call `releasePointerCapture`; Chromium may still
+     * hold the mouse capture until the next press, so `None` must be read as "this surface claims no
+     * capture", never as "the browser holds none".*
      */
     private fun reconcilePointerCapture() {
         val current = mutableState.value
@@ -1232,6 +1288,30 @@ private fun webSurfaceCapabilities(): SurfaceCapabilities = SurfaceCapabilities(
 
 private fun <T> unsupportedSurfaceCapability(operation: KadreOperation): Capability<T> =
     Capability.Unsupported(KadreFailure.Unsupported(operation))
+
+/**
+ * The fields of `SurfaceUpdate`, in the order the update writes them.
+ *
+ * `SurfaceProperty`'s declaration order *is* that order — `SurfaceUpdate`:104-110 declares `cursor`,
+ * `pointerCapture`, `hitTesting`, `inputDefaultBehavior`, and `OPERATION-CONTRACTS.md` §1.1 registers
+ * the same four fields in the same order — so the enum is the one owner of it and no second list is
+ * written here.
+ */
+private val SURFACE_UPDATE_FIELDS: List<SurfaceProperty> = SurfaceProperty.entries.toList()
+
+/**
+ * The rejections of one update, in the order of the update's fields.
+ *
+ * The order is not decoration: `SurfaceUpdateOutcome.PartiallyApplied.rejected` names the fields a
+ * caller wrote, and the reference emits them in the order it walks them. This surface refuses fields in
+ * *two* passes — the capability and the ownership at admission, the browser at commit — so a rejection
+ * produced by the second pass would otherwise be appended after every rejection of the first and leave
+ * the list out of order (a `Cursor` refused by its capability followed by a `HitTesting` refused the
+ * same way, with the `PointerCapture` the browser refused at the end). Sorting by the field order makes
+ * the two passes read as one, whatever refused which field.
+ */
+private fun List<RejectedSurfaceField>.inSurfaceUpdateOrder(): List<RejectedSurfaceField> =
+    sortedBy { rejection -> SURFACE_UPDATE_FIELDS.indexOf(rejection.field) }
 
 /**
  * Asserts that a field the web surface has no commit path for was refused by its own capability.
