@@ -432,6 +432,9 @@ class JsWebInputTest {
             assertEquals(
                 setOf(
                     // The input observer's own listeners, and nothing on the document or the window.
+                    // `lostpointercapture` is the one the capture seam needs: it is what tells the
+                    // surface a committed capture has ended, and it is registered and removed with the
+                    // other input listeners.
                     "keydown",
                     "keyup",
                     "pointerenter",
@@ -440,6 +443,7 @@ class JsWebInputTest {
                     "pointerup",
                     "pointerleave",
                     "pointercancel",
+                    "lostpointercapture",
                     "wheel",
                     // The lifecycle observer's element listeners are the only other registrations, and
                     // a focus loss adds none: the surface publishes the one reset that loss owes.

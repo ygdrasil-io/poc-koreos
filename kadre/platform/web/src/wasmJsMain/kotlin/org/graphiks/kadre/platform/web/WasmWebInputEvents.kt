@@ -55,6 +55,11 @@ internal external interface WasmKeyboardEvent : JsAny {
 /**
  * One `PointerEvent` as this port reads it: its device, its position, its button and its measurements.
  *
+ * `pointerId` and `buttons` are the two members the capture seam needs and no stimulus carries: the
+ * identity a `setPointerCapture` names, and the browser's own answer to whether any button of that
+ * pointer is still down. Both are read where the port records what the element holds, and neither
+ * reaches the input model — the runtime keeps one pointer identity per surface (D11).
+ *
  * Four members are read as `Double` where the JS target's own DOM declarations
  * (`kotlin-dom-api-compat`) type `clientX`/`clientY` as `Int` and `pressure`/`tangentialPressure` as
  * `Float`. This is deliberate and was *measured*, not assumed: an event whose four reads are
@@ -68,10 +73,12 @@ internal external interface WasmKeyboardEvent : JsAny {
  * `button` are integers in both declarations and are read as `Int`.
  */
 internal external interface WasmPointerEvent : JsAny {
+    val pointerId: Int
     val pointerType: String
     val clientX: Double
     val clientY: Double
     val button: Int
+    val buttons: Int
     val pressure: Double
     val tiltX: Int
     val tiltY: Int

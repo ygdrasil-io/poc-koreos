@@ -2,6 +2,9 @@
 
 package org.graphiks.kadre.platform.web
 
+import org.graphiks.kadre.diagnostics.KadreFailure
+import org.graphiks.kadre.diagnostics.KadrePlatform
+import org.graphiks.kadre.diagnostics.KadreResult
 import org.graphiks.kadre.input.PointerButtonState
 import org.w3c.dom.AddEventListenerOptions
 import org.w3c.dom.Document
@@ -32,6 +35,18 @@ internal class WasmWebDomPort(element: HTMLElement) : WebHostPort {
     private var active: Boolean = false
     private var browsingContextFocused: Boolean = originDocument.hasFocus()
     private var subtreeFocused: Boolean = element.matches(":focus-within")
+
+    /**
+     * The identity of the pointer this element holds, or `null` when it holds none.
+     *
+     * It is the one fact of a capture this port can only know from the browser: `setPointerCapture`
+     * names a `pointerId`, and the model's stimulus carries no pointer identity (the runtime keeps a
+     * single one per surface, D11). So the identity is recorded when an observation of a delivered kind
+     * reports a button pressed here, and forgotten when the browser reports no button of it down any
+     * more — never decided, only read: whether a capture may be asked for at all is the surface's rule
+     * ([WebPointerOwnership]), and this member only answers *which* pointer a request is about.
+     */
+    private var heldPointerId: Int? = null
 
     /**
      * The motion of the one pointer the runtime keeps per element (D11): every pointer observation is
@@ -139,6 +154,26 @@ internal class WasmWebDomPort(element: HTMLElement) : WebHostPort {
     }
 
     /**
+     * One `lostpointercapture`: the browser says it no longer confines that pointer to this element.
+     *
+     * It is not an input observation — nothing of the model describes a capture — so it is reported to
+     * the channel, which is the one place the surface can hear it: the surface committed the capture,
+     * and only the browser knows when it ended. The report names no mode and interprets nothing: the
+     * port read the browser's own event and says so.
+     *
+     * Only the pointer this port holds is reported: a capture lost for a pointer this element never
+     * asked about is not a claim this surface ever made.
+     */
+    private val lostPointerCaptureListener: (Event) -> Unit = { event ->
+        safely {
+            val pointer = wasmPointerEventOrNull(event) ?: return@safely
+            if (wasmPointerKind(pointer) == null) return@safely
+            if (pointer.pointerId != heldPointerId) return@safely
+            inputObserver?.onPointerCaptureLost()
+        }
+    }
+
+    /**
      * One `wheel`, observed at the frontier of the element's own scroll history.
      *
      * The wheel is recorded on the shared boundary whether or not its delta is deliverable, so the
@@ -216,7 +251,50 @@ internal class WasmWebDomPort(element: HTMLElement) : WebHostPort {
         element?.addEventListener("pointerup", pointerUpListener)
         element?.addEventListener("pointerleave", pointerLeaveListener)
         element?.addEventListener("pointercancel", pointerCancelListener)
+        element?.addEventListener("lostpointercapture", lostPointerCaptureListener)
         element?.addEventListener("wheel", wheelListener, wheelListenerOptions)
+    }
+
+    /**
+     * Performs the one browser effect a capture decision has, containing the browser's own refusal.
+     *
+     * The port decides nothing here: the surface has already decided that this pointer may be captured —
+     * or released — and this member is the mechanism that asks the browser for it. [captured] names the
+     * request, and the pointer it is about is the one the element observed pressed ([heldPointerId]),
+     * because a capture names a `pointerId` and only this port ever saw one.
+     *
+     * Three answers, and each is a fact about the mechanism rather than a policy:
+     *
+     * - a release asked for while no pointer is held is a success: there is no capture to end, and the
+     *   DOM's own `releasePointerCapture` for a pointer that holds none is a no-op. Nothing is asked of
+     *   the browser, because there is nothing for it to answer;
+     * - a capture asked for while no pointer is held is the failure of this mechanism: the browser holds
+     *   no pointer this port could ask about, and a request it never performed may not be answered with
+     *   a success;
+     * - a call the browser refuses — `setPointerCapture` throws for a pointer the browser does not
+     *   consider active — is *contained*: it is turned into the same failure and never thrown, because
+     *   this call is made from inside the DOM callback of the event that led to the decision
+     *   (`WEB-IMPLEMENTATION-ROADMAP.md` §3.4).
+     *
+     * The failure is a `PlatformFailure` of this platform with the one code of this seam: the call really
+     * crosses the browser's DOM API, and the surface reports this failure as a rejected field, which
+     * `OPERATION-CONTRACTS.md` §3 admits for it.
+     */
+    override fun applyPointerCapture(captured: Boolean): KadreResult<Unit> {
+        val pointerId = heldPointerId
+        if (pointerId == null) {
+            return if (captured) {
+                KadreResult.Failure(pointerCaptureFailure())
+            } else {
+                KadreResult.Success(Unit)
+            }
+        }
+        val current = element ?: return KadreResult.Failure(pointerCaptureFailure())
+        return if (runCatching { wasmApplyPointerCapture(current, pointerId, captured) }.isSuccess) {
+            KadreResult.Success(Unit)
+        } else {
+            KadreResult.Failure(pointerCaptureFailure())
+        }
     }
 
     /** Frames belong to the element's browsing context, which may not carry this module's global. */
@@ -242,7 +320,14 @@ internal class WasmWebDomPort(element: HTMLElement) : WebHostPort {
         runCatching { element?.removeEventListener("pointerup", pointerUpListener) }
         runCatching { element?.removeEventListener("pointerleave", pointerLeaveListener) }
         runCatching { element?.removeEventListener("pointercancel", pointerCancelListener) }
+        runCatching { element?.removeEventListener("lostpointercapture", lostPointerCaptureListener) }
         runCatching { element?.removeEventListener("wheel", wheelListener, wheelListenerOptions) }
+        // The capture this port may hold is ended with the element it was taken on: one that outlived
+        // the port would keep routing that pointer's events to an element Kadre stopped reading, which
+        // is a browser effect outliving the decision that asked for it. Contained like every call of
+        // this seam — there is nobody left to report a refusal to.
+        element?.let { current -> heldPointerId?.let { id -> runCatching { wasmApplyPointerCapture(current, id, false) } } }
+        heldPointerId = null
         runCatching { documentObserver?.disconnect() }
         runCatching { shadowRootObserver?.disconnect() }
         runCatching { resizeObserver?.disconnect() }
@@ -403,6 +488,13 @@ internal class WasmWebDomPort(element: HTMLElement) : WebHostPort {
         val current = element ?: return
         val position = wasmPointerPosition(current, pointer)
         pointerMotion.record(position)
+        // The pointer the element holds: the one the browser just reported pressed here, forgotten the
+        // moment it reports no button of it down any more. The reading is the browser's own — the
+        // model's stimulus carries no pointer identity — and it is what a capture request names.
+        when (buttonState) {
+            PointerButtonState.Pressed -> heldPointerId = pointer.pointerId
+            PointerButtonState.Released -> if (pointer.buttons == 0) heldPointerId = null
+        }
         deliverInput(
             WebInputStimulus.PointerButtonChanged(
                 button = webPointerButton(pointer.button),
@@ -430,6 +522,9 @@ internal class WasmWebDomPort(element: HTMLElement) : WebHostPort {
         if (pointer == null) return
         val kind = wasmPointerKind(pointer) ?: return
         pointerMotion.clear()
+        // The pointer is gone from this element, cancelled or left, so there is no capture to ask for on
+        // it any more — the browser ends one implicitly in both cases.
+        heldPointerId = null
         deliverInput(WebInputStimulus.PointerLeft(kind = kind))
     }
 
@@ -501,6 +596,34 @@ private fun HTMLElement.surfaceMetrics(scaleFactor: Double): WebSurfaceMetrics =
 /** The port's own readback, exposed to the target tests so they exercise it instead of a copy. */
 internal fun HTMLElement.readSurfaceMetricsForTest(scaleFactor: Double): WebSurfaceMetrics =
     surfaceMetrics(scaleFactor)
+
+/**
+ * The one capture effect this target can ask the browser for, and the only DOM call of the seam.
+ *
+ * No Kotlin/Wasm interop declares the capture members of `Element`, so the call is written in
+ * JavaScript through `@JsFun` — the one place where Kotlin/Wasm and JavaScript meet, as for every other
+ * DOM gap of this target — and it is written here rather than in the port so that the seam and its one
+ * effect are read together. The call is the DOM's own: `releasePointerCapture` for a pointer that holds
+ * no capture is a no-op, and `setPointerCapture` for a pointer the browser does not consider active
+ * throws, which the caller contains.
+ */
+@JsFun(
+    """(element, pointerId, captured) => {
+         if (captured) { element.setPointerCapture(pointerId); } else { element.releasePointerCapture(pointerId); }
+       }""",
+)
+private external fun wasmApplyPointerCapture(element: JsAny, pointerId: Int, captured: Boolean): Unit
+
+/**
+ * The one failure of this seam: the browser could not be made to perform the capture asked for.
+ *
+ * It is a `PlatformFailure` of this platform because the call really crosses the browser's DOM API
+ * (`OPERATION-CONTRACTS.md` §1.5), and it carries one stable code whatever the browser's own error
+ * said: what the surface reports as a rejected field is that this mechanism did not perform the effect,
+ * and the shape of the browser's error object is not a fact of Kadre's model.
+ */
+private fun pointerCaptureFailure(): KadreFailure =
+    KadreFailure.PlatformFailure(KadrePlatform.Web, "web-host", "pointer-capture-failed")
 
 private external interface WasmDocumentVisibility : JsAny {
     val visibilityState: JsString

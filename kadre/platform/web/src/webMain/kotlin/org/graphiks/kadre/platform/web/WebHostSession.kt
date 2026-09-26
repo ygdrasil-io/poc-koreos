@@ -17,6 +17,7 @@ import org.graphiks.kadre.application.KadreSession
 import org.graphiks.kadre.application.LifecycleState
 import org.graphiks.kadre.diagnostics.Capability
 import org.graphiks.kadre.diagnostics.FeatureAvailability
+import org.graphiks.kadre.diagnostics.InteractionFailureReason
 import org.graphiks.kadre.diagnostics.KadreDiagnostic
 import org.graphiks.kadre.diagnostics.KadreFailure
 import org.graphiks.kadre.diagnostics.KadreOperation
@@ -78,10 +79,11 @@ internal fun interface WebFrameHandle {
 /**
  * The target's input channel into the shared surface: one observer per port, installed once.
  *
- * It carries two members because one browser event carries two different facts. The first is the
- * observation itself — what the element saw — and it is the only member every implementation has to
- * answer; it is the abstract one, so a lambda implements a channel that observes and suppresses
- * nothing, which is what a test double and any port without a suppression seam want.
+ * It carries three members because three different facts reach the surface through it, and none of them
+ * can be answered by the target alone. The first is the observation itself — what the element saw — and
+ * it is the only member every implementation has to answer; it is the abstract one, so a lambda
+ * implements a channel that observes and suppresses nothing, which is what a test double and any port
+ * without a suppression seam want.
  *
  * The second is a question about the event *in hand*: may the default action that event would
  * otherwise perform be dropped? A port asks it inside that event's own callback, on that very event,
@@ -92,6 +94,11 @@ internal fun interface WebFrameHandle {
  *
  * [suppressDefaultFor] answering `false` by default is that last guarantee: suppression is never
  * implicit (`PUBLIC-API-CATALOG.md:208`), so "no answer" is "no suppression".
+ *
+ * The third is the browser's word that it ended the element's pointer capture, which is a fact about
+ * the surface's own state rather than an input observation: nothing of the input model describes it, so
+ * it is not a [WebInputStimulus] and the shared reducer has no transition for it. It is reported, like
+ * the question above, and what it means for the committed capture is decided where the state lives.
  */
 internal fun interface WebInputObserver {
     /** Delivers one immutable observation of the element. */
@@ -105,6 +112,17 @@ internal fun interface WebInputObserver {
      * question decides what the browser does *in addition* to Kadre, never whether Kadre delivers.
      */
     fun suppressDefaultFor(stimulus: WebInputStimulus): Boolean = false
+
+    /**
+     * Reports the browser's own `lostpointercapture`: the element no longer confines that pointer.
+     *
+     * The port reports the browser's fact and decides nothing — whether the loss moves the committed
+     * capture is the surface's rule — and it reports it for the pointer it holds, with no payload to
+     * interpret: the port never learns what a mode is, and the surface never learns what a DOM event is.
+     * A channel that does not answer loses nothing: a surface that is never told a capture ended keeps
+     * the one its consumer asked for, which is the conservative reading of a report nobody made.
+     */
+    fun onPointerCaptureLost() = Unit
 }
 
 internal interface WebHostPort {
@@ -164,6 +182,26 @@ internal interface WebHostPort {
      * that never schedule a frame.
      */
     fun scheduleFrame(callback: () -> Unit): WebFrameHandle = WebFrameHandle { }
+
+    /**
+     * Performs the one browser effect a capture decision has, and reports the browser's own answer.
+     *
+     * [captured] takes the capture of the pointer this port observed pressed on the element, and `false`
+     * releases it. The member is a mechanism and nothing else: the port never decides whether a capture
+     * is allowed — it is asked to perform one and either performs it or reports why the browser would
+     * not. A port that is never asked performs nothing, which is what the default does for the inert
+     * ports.
+     *
+     * The browser refuses a capture for a pointer it does not consider active (`setPointerCapture`
+     * throws), and this call is made inside the callback of the event that led to the decision — a
+     * consumer asking for a capture as it reduces a press — so the refusal is *contained here*: it is
+     * returned as a failure the surface reports as a rejected field, and never thrown into the callback
+     * (`WEB-IMPLEMENTATION-ROADMAP.md` §3.4, "un événement DOM … ne laisse pas échapper d'exception
+     * Kotlin"). The failure is a [KadreFailure.PlatformFailure] of this platform because the call really
+     * crosses the browser's own DOM API, and `OPERATION-CONTRACTS.md` §3 admits it on the
+     * rejected-field row of `HostSurface.apply`, which is where the surface puts it.
+     */
+    fun applyPointerCapture(captured: Boolean): KadreResult<Unit> = KadreResult.Success(Unit)
 
     /**
      * The host element as an untyped reference, or null once the port released it.
@@ -231,10 +269,11 @@ internal class WebHostSession(
             if (current == null) pendingInput.addLast(stimulus) else current.acceptInput(stimulus)
         }
 
-        // The one channel of this session: the target hands its observations over through it and asks
-        // it about the default of the event each observation came from. Both answers are given here,
-        // where the surface lives — the target never learns what a category is, which value the policy
-        // holds, or how either is decided.
+        // The one channel of this session: the target hands its observations over through it, asks it
+        // about the default of the event each observation came from, and reports the browser's own
+        // lost capture through it. Every answer is given here, where the surface lives — the target
+        // never learns what a category is, which value the policy holds, what a capture mode is, or how
+        // any of them is decided.
         val inputChannel = object : WebInputObserver {
             override fun onObservation(stimulus: WebInputStimulus) = deliverInput(stimulus)
 
@@ -245,6 +284,15 @@ internal class WebHostSession(
                 // holds for every stimulus the session derives itself (a focus loss), which no browser
                 // event is waiting on.
                 surface?.suppressDefaultFor(stimulus) ?: false
+
+            override fun onPointerCaptureLost() {
+                // The port reports the browser's fact as soon as it observes it, which is after the
+                // surface exists — the listeners are installed once the runtime has built it. A report
+                // that arrives with no surface yet is dropped like every other fact of that window:
+                // there is no committed capture to reconcile, because no consumer could have asked for
+                // one.
+                surface?.onPointerCaptureLost()
+            }
         }
 
         val controller = createController(initialLifecycle, ownership) { created ->
@@ -384,6 +432,17 @@ private class WebHostSurface(
 
     /** True between the admission of a lease and the end of the callback it admitted. */
     private var leaseHeld: Boolean = false
+
+    /**
+     * The pointer this surface holds, which is the one thing a `Confined` capture is admitted on.
+     *
+     * It is the surface's own record of what the element observed, kept by the shared rule of
+     * [WebPointerOwnership] and fed by the very stimuli [acceptInput] admits, so the two targets cannot
+     * derive it differently. It is not a field of `SurfaceState`: the public model has no such member,
+     * and what the element observed of a pointer is not a promise about the browser the way the
+     * committed state is.
+     */
+    private val pointerOwnership: WebPointerOwnership = WebPointerOwnership()
     private var configuration: WebSurfaceConfiguration? = null
     private val pendingStimuli = ArrayDeque<WebSurfaceStimulus>()
 
@@ -549,6 +608,10 @@ private class WebHostSurface(
      *
      * Order is arrival order: a stimulus was either reported by the target in the order its callbacks
      * arrived, or derived from the lifecycle snapshot this session just reduced.
+     *
+     * The ownership the surface holds is updated before the stimulus is reduced, so the consumer that
+     * reacts to the event the reduce publishes already sees the ownership that event describes — a
+     * release that ends the pointer ends it for the capture too, not one event later.
      */
     fun acceptInput(stimulus: WebInputStimulus) {
         if (admissionClosed) return
@@ -556,12 +619,32 @@ private class WebHostSurface(
             pendingInputStimuli.addLast(stimulus)
             return
         }
+        pointerOwnership.observe(stimulus)
         when (stimulus) {
             // The reducer owns the neutral snapshot and the one reset it publishes, and it is the one
             // transition that is not an input packet of its own.
             WebInputStimulus.FocusLost -> surfaceInput.focusLost()
             else -> surfaceInput.accept(stimulus.toSurfaceStimulus(id))
         }
+        // The other half of the ownership rule: a pointer the surface no longer holds cannot carry a
+        // capture, and the browser ends one implicitly exactly when the pointer stops being one.
+        if (!pointerOwnership.isOwned) reconcilePointerCapture()
+    }
+
+    /**
+     * The surface's half of [WebInputObserver.onPointerCaptureLost]: the browser ended the capture.
+     *
+     * The port reports the browser's own `lostpointercapture` and this reconciles what the surface had
+     * committed. Nothing of the input snapshot is touched — a lost capture is not a released button, and
+     * the pointer may well still be down on the element — which is why this is a report of its own
+     * rather than a stimulus: it moves the surface's claim about the browser, and only that.
+     *
+     * A surface that stopped admitting reconciles nothing, like every other site of this surface: its
+     * capabilities are already unavailable and its state is the terminal one.
+     */
+    fun onPointerCaptureLost() {
+        if (admissionClosed) return
+        reconcilePointerCapture()
     }
 
     /** Target-owned metrics observation; ignored once the surface is terminated. */
@@ -688,18 +771,21 @@ private class WebHostSurface(
      * Admission is the shared one — `admitField` over the capability this surface publishes, exactly
      * as the reference surface admits the same fields — so a field that cannot be honoured is rejected
      * with the same [RejectedSurfaceField] the reference produces, and a rejection never blocks the
-     * fields of the same update that can be. Today one field of the four is supported
-     * (`inputDefaultBehavior`, this task's subject) and the other three are refused by their own
-     * blanket `Unsupported(UpdateSurface)` capability, which is the outcome the previous phase already
-     * promised and which no part of this change weakens.
+     * fields of the same update that can be. Two fields of the four are supported
+     * (`inputDefaultBehavior` and `pointerCapture`, this phase's subjects) and the other two are refused
+     * by their own blanket `Unsupported(UpdateSurface)` capability, which is the outcome the previous
+     * phase already promised and which no part of this change weakens.
      *
-     * The web surface is its own backend for the field it supports: there is no port below it that
+     * The web surface is its own backend for both fields it supports: there is no port below it that
      * could report a different effective value, so an admitted field is committed here and now, with
      * the one new revision a state change owns, and the outcome carries the state the surface
-     * publishes. `CursorStyle.Custom` is the only field whose admission the reference splits between
-     * two capabilities (`cursor` for the system icons, `customCursor` for an image); on this target
-     * both are `Unsupported(UpdateSurface)`, so consulting `cursor` through the same helper gives the
-     * same rejection for every value the field can carry.
+     * publishes. `pointerCapture` is the one field whose commit is not this surface's alone — the
+     * browser is what confines a pointer, so the effect is asked of the port and the state is committed
+     * only once the browser honoured it (see [admitCaptureAttempt] and [commitPointerCapture]).
+     * `CursorStyle.Custom` is the only field whose admission the reference splits between two
+     * capabilities (`cursor` for the system icons, `customCursor` for an image); on this target both are
+     * `Unsupported(UpdateSurface)`, so consulting `cursor` through the same helper gives the same
+     * rejection for every value the field can carry.
      *
      * The two requests the reference refuses before admission are refused here with the same failures,
      * and for the same reason — they are what makes a request the surface did not honour impossible to
@@ -735,10 +821,16 @@ private class WebHostSurface(
         // the reference's own `RejectedSurfaceField(property, Unsupported(UpdateSurface))` in the list
         // below.
         val cursor = admitField(update.cursor, SurfaceProperty.Cursor, capabilities.cursor, rejected)
-        val pointerCapture = admitField(
-            update.pointerCapture,
-            SurfaceProperty.PointerCapture,
-            capabilities.pointerCapture,
+        // The capture is the one field whose admission has a second rule of this surface's own, and it
+        // is applied here rather than at the commit so that the rejected list reads in the order of the
+        // update's fields, exactly as the reference's does.
+        val pointerCapture = admitCaptureAttempt(
+            admitField(
+                update.pointerCapture,
+                SurfaceProperty.PointerCapture,
+                capabilities.pointerCapture,
+                rejected,
+            ),
             rejected,
         )
         val hitTesting = admitField(update.hitTesting, SurfaceProperty.HitTesting, capabilities.hitTesting, rejected)
@@ -748,19 +840,20 @@ private class WebHostSurface(
             capabilities.inputDefaultBehavior,
             rejected,
         )
-        // The three fields with no commit path are guarded rather than assumed away: their capabilities
+        // The two fields with no commit path are guarded rather than assumed away: their capabilities
         // refuse every value today, but the day one of them becomes `Supported` the change would land
         // here uncommitted and be answered with an `Applied` for a state that never took it.
         cursor.requireRefused(SurfaceProperty.Cursor)
-        pointerCapture.requireRefused(SurfaceProperty.PointerCapture)
         hitTesting.requireRefused(SurfaceProperty.HitTesting)
         val current = mutableState.value
-        val committed = if (inputDefaultBehavior is PropertyChange.Set) {
-            current.copy(inputDefaultBehavior = inputDefaultBehavior.value)
-        } else {
-            // The one path left is an update that requests nothing, or one whose request was refused:
-            // nothing is committed and, below, the revision does not move either.
-            current
+        var committed = current
+        // `pointerCapture` is committed only once the browser has honoured it, so the effect is asked
+        // for first and the state follows it — never the other way round.
+        commitPointerCapture(pointerCapture, current, rejected)?.let { capture ->
+            committed = committed.copy(pointerCapture = capture)
+        }
+        if (inputDefaultBehavior is PropertyChange.Set) {
+            committed = committed.copy(inputDefaultBehavior = inputDefaultBehavior.value)
         }
         // One commit, one revision, and only for a state that actually moved: `next != current` is the
         // reference's own rule (`commitUpdateLocked`), and it is what makes the revision the marker of a
@@ -779,6 +872,99 @@ private class WebHostSurface(
             } else {
                 SurfaceUpdateOutcome.PartiallyApplied(state, rejected)
             },
+        )
+    }
+
+    /**
+     * The capture change this surface may attempt, or [PropertyChange.Unchanged] when the field is
+     * refused before any browser call is made.
+     *
+     * Two rules, and both of them are this surface's rather than the browser's:
+     *
+     * - a mode this backend cannot honour — `Locked`, the only one [webPointerCaptureIsHonourable] says
+     *   no to — is reported `Unsupported(UpdateSurface)`, the same failure the shared admission helper
+     *   produces for it. It is unreachable while the capability refuses the mode, and it is stated here
+     *   rather than assumed away: the day the capability changed, the change would otherwise land as an
+     *   `Applied` for a capture no browser path could take;
+     * - a `Confined` capture needs a pointer this surface owns (D13). Without one there is nothing to
+     *   confine, and the field is reported `InteractionRequired(Missing)` — the failure
+     *   `OPERATION-CONTRACTS.md` §3 admits for a rejected field — so no effect is ever asked of the
+     *   browser for a field the surface refused.
+     *
+     * The refusals are recorded here, which is where the update's fields are walked, so the rejected
+     * list keeps the order the caller wrote its fields in.
+     */
+    private fun admitCaptureAttempt(
+        change: PropertyChange<PointerCaptureMode>,
+        rejected: MutableList<RejectedSurfaceField>,
+    ): PropertyChange<PointerCaptureMode> {
+        if (change !is PropertyChange.Set) return change
+        if (!webPointerCaptureIsHonourable(change.value)) {
+            rejected += RejectedSurfaceField(
+                SurfaceProperty.PointerCapture,
+                KadreFailure.Unsupported(KadreOperation.UpdateSurface),
+            )
+            return PropertyChange.Unchanged
+        }
+        if (change.value == PointerCaptureMode.Confined && !pointerOwnership.isOwned) {
+            rejected += RejectedSurfaceField(
+                SurfaceProperty.PointerCapture,
+                KadreFailure.InteractionRequired(InteractionFailureReason.Missing),
+            )
+            return PropertyChange.Unchanged
+        }
+        return change
+    }
+
+    /**
+     * Performs one admitted capture change through the browser and answers the value to commit, or
+     * `null` when this surface commits nothing.
+     *
+     * The value already in effect is the first answer: there is nothing to ask the browser — the state
+     * already says the capture is where the request wants it, and the browser was told so when it was
+     * committed — and nothing moves, so the revision stays where it is.
+     *
+     * Otherwise the port performs the one browser effect and reports the browser's own answer. A success
+     * commits the mode; a refusal is reported as the failure the port contained
+     * (`PlatformFailure`, admitted on the rejected-field row), and the state stays where it was —
+     * answering `Applied` for a capture the browser never took is the fictitious success this whole
+     * path exists to prevent.
+     */
+    private fun commitPointerCapture(
+        change: PropertyChange<PointerCaptureMode>,
+        current: SurfaceState,
+        rejected: MutableList<RejectedSurfaceField>,
+    ): PointerCaptureMode? {
+        if (change !is PropertyChange.Set) return null
+        if (change.value == current.pointerCapture) return null
+        return when (val honoured = port.applyPointerCapture(change.value != PointerCaptureMode.None)) {
+            is KadreResult.Success -> change.value
+            is KadreResult.Failure -> {
+                rejected += RejectedSurfaceField(SurfaceProperty.PointerCapture, honoured.reason)
+                null
+            }
+        }
+    }
+
+    /**
+     * Returns the committed capture to `None`: the browser no longer confines the pointer it named.
+     *
+     * A `Confined` capture is a claim about the browser — the element holds that pointer — so a claim
+     * the browser has ended cannot stay published, whether the loss was reported by the port
+     * (`lostpointercapture`) or derived from the pointer the surface no longer holds (a release, a
+     * cancellation, a leave, a loss of activation: the browser releases such a capture implicitly).
+     *
+     * Nothing is asked of the browser here: the very fact being reconciled is that there is no capture
+     * left to end, and a `releasePointerCapture` for a pointer that holds none would be a call with no
+     * decision behind it. The revision moves as it does for any committed state change, and only when
+     * there is a capture to reconcile — a surface that holds none is already at `None`.
+     */
+    private fun reconcilePointerCapture() {
+        val current = mutableState.value
+        if (current.pointerCapture == PointerCaptureMode.None) return
+        mutableState.value = current.copy(
+            pointerCapture = PointerCaptureMode.None,
+            revision = SurfaceRevision(current.revision.value + 1L),
         )
     }
 
@@ -920,6 +1106,11 @@ private class WebHostSurface(
         pendingStimuli.clear()
         pendingInputStimuli.clear()
         configuration = null
+        // The surface stops admitting, so it holds nothing: ownership is what a later capture would be
+        // admitted on, and a closed surface answers `Closed` to that call anyway. The capture it
+        // committed stays where it is — the terminal state is what the runtime publishes next, and the
+        // port releases the browser effect it holds with the element.
+        pointerOwnership.clear()
     }
 }
 
@@ -995,16 +1186,27 @@ private fun WebInputStimulus.toSurfaceStimulus(surfaceId: SurfaceId): SurfaceSti
 /**
  * The field capabilities of one attached web surface.
  *
- * `inputDefaultBehavior` is the one surface-update field this phase activates: the two members of its
- * enum are named one by one rather than derived from the enum — the capability is this backend's
- * promise, and a promise is written out — and `webTest` pins that set against
- * `InputDefaultBehavior.entries` in both directions, so a member the port cannot honour cannot appear
- * in the enum without failing a test. Honouring `SuppressWhenPossible` is what makes the capability
- * honest: the port asks this surface about every event it dispatches and drops the default of the
- * closed set of categories (`WebInputTranslation.kt`), so the promise is a behaviour and not a label.
+ * Two surface-update fields are activated by this phase.
+ *
+ * `inputDefaultBehavior`: the two members of its enum are named one by one rather than derived from the
+ * enum — the capability is this backend's promise, and a promise is written out — and `webTest` pins
+ * that set against `InputDefaultBehavior.entries` in both directions, so a member the port cannot
+ * honour cannot appear in the enum without failing a test. Honouring `SuppressWhenPossible` is what
+ * makes the capability honest: the port asks this surface about every event it dispatches and drops the
+ * default of the closed set of categories (`WebInputTranslation.kt`), so the promise is a behaviour and
+ * not a label.
+ *
+ * `pointerCapture`: only `None` and `Confined` are promised, because they are the two the DOM can be
+ * asked for — and `Locked` is deliberately outside, since the Pointer Lock API needs a transient user
+ * activation and belongs to `InteractionAction.LockPointer` in a later phase (`DESIGN.md` §9.6). The set
+ * is written out here as the promise and stated once more as the rule
+ * ([webPointerCaptureIsHonourable]) the commit reads; `webTest` pins the two against each other and
+ * against `PointerCaptureMode.entries`, so `Locked` is provably outside both. No member of this target
+ * can lock a pointer at all — the port's one capture effect is `setPointerCapture`, asked only for a
+ * pointer the surface owns.
  *
  * `cursor`, `customCursor` and `hitTesting` stay `Unsupported(UpdateSurface)`, exactly as they were
- * before this field was activated: the phase activates one field, and no part of this change claims
+ * before these fields were activated: the phase activates these two, and no part of this change claims
  * another one.
  *
  * This is the snapshot of an attached surface only; [terminate] publishes the all-unsupported one the
@@ -1014,7 +1216,10 @@ private fun WebInputStimulus.toSurfaceStimulus(surfaceId: SurfaceId): SurfaceSti
 private fun webSurfaceCapabilities(): SurfaceCapabilities = SurfaceCapabilities(
     cursor = unsupportedSurfaceCapability(KadreOperation.UpdateSurface),
     customCursor = unsupportedSurfaceCapability(KadreOperation.UpdateSurface),
-    pointerCapture = unsupportedSurfaceCapability(KadreOperation.UpdateSurface),
+    pointerCapture = Capability.Supported(
+        setOf(PointerCaptureMode.None, PointerCaptureMode.Confined),
+        FeatureAvailability.Available,
+    ),
     hitTesting = unsupportedSurfaceCapability(KadreOperation.UpdateSurface),
     inputDefaultBehavior = Capability.Supported(
         setOf(InputDefaultBehavior.HostDefault, InputDefaultBehavior.SuppressWhenPossible),
@@ -1031,14 +1236,19 @@ private fun <T> unsupportedSurfaceCapability(operation: KadreOperation): Capabil
 /**
  * Asserts that a field the web surface has no commit path for was refused by its own capability.
  *
- * [WebHostSurface.apply] commits one field and *reports* the others: a field that arrives there
- * admitted is a change the surface would neither commit nor reject, and answering `Applied` for an
- * update no state took is exactly the fictitious success the `Clear` guard exists to prevent. Today
- * the adapter makes that unreachable — `cursor`, `pointerCapture` and `hitTesting` carry a blanket
- * `Unsupported(UpdateSurface)` capability, so [admitField] answers `Unchanged` for every value — but
- * "unreachable as long as the capability stays unsupported" is an assumption about a future phase, so
- * it is checked where the change would land instead of being trusted. The day a commit path is owed,
- * this fires with the field in hand, rather than after a consumer was told its update had been applied.
+ * [WebHostSurface.apply] commits the fields it supports and *reports* the others: a field that arrives
+ * there admitted is a change the surface would neither commit nor reject, and answering `Applied` for an
+ * update no state took is exactly the fictitious success the `Clear` guard exists to prevent. Today the
+ * adapter makes that unreachable — `cursor` and `hitTesting` carry a blanket `Unsupported(UpdateSurface)`
+ * capability, so [admitField] answers `Unchanged` for every value — but "unreachable as long as the
+ * capability stays unsupported" is an assumption about a future phase, so it is checked where the change
+ * would land instead of being trusted. The day a commit path is owed, this fires with the field in hand,
+ * rather than after a consumer was told its update had been applied.
+ *
+ * `pointerCapture` is not guarded here because it has rules of its own that refuse a value it cannot
+ * commit — the honourable modes and the ownership a `Confined` capture needs
+ * ([WebHostSurface.admitCaptureAttempt]) — so nothing about it is trusted to a capability; and
+ * `inputDefaultBehavior` has had a commit path since it was activated.
  */
 private fun PropertyChange<*>.requireRefused(property: SurfaceProperty) {
     check(this is PropertyChange.Unchanged) {

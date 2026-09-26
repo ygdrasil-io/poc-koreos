@@ -3,13 +3,17 @@ package org.graphiks.kadre.platform.web
 import org.graphiks.kadre.input.KeyState
 import org.graphiks.kadre.input.LogicalKey
 import org.graphiks.kadre.input.NamedKey
+import org.graphiks.kadre.input.PointerButton
+import org.graphiks.kadre.input.PointerButtonState
 import org.graphiks.kadre.surface.InputDefaultBehavior
+import org.graphiks.kadre.surface.PointerCaptureMode
 
 /**
- * The suppression decision of `SurfaceUpdate.inputDefaultBehavior`, as a pure function of the
- * observation and the behaviour in effect.
+ * The two surface-update fields this phase activates, as rules over the DOM-free observations: the
+ * suppression decision of `SurfaceUpdate.inputDefaultBehavior`, and the ownership and the honourable
+ * modes of `SurfaceUpdate.pointerCapture`.
  *
- * `PUBLIC-API-CATALOG.md:208` is the normative statement this file implements:
+ * `PUBLIC-API-CATALOG.md:208` is the normative statement the suppression part implements:
  * `InputDefaultBehavior.SuppressWhenPossible` « demande au backend d'empêcher les actions natives
  * concurrentes associées aux événements livrés par Kadre, par exemple scroll/zoom browser. Il ne
  * signifie jamais que le consumer asynchrone a « handled » l'événement. Un backend incapable de
@@ -220,3 +224,81 @@ internal fun shouldSuppress(category: WebInputCategory, behaviour: InputDefaultB
         InputDefaultBehavior.HostDefault -> false
         InputDefaultBehavior.SuppressWhenPossible -> category in SUPPRESSED_INPUT_DEFAULTS
     }
+
+/**
+ * The modes of `SurfaceUpdate.pointerCapture` this backend can honour, written out as the rule it is.
+ *
+ * `None` and `Confined` are the two the DOM can be asked for: a capture the element holds, and no
+ * capture at all. `Locked` is deliberately outside, and it is not a gap of this phase but its scope —
+ * the Pointer Lock API needs a transient user activation, it belongs to `InteractionAction.LockPointer`
+ * (`DESIGN.md` §9.6), and no member of this target asks the browser to lock a pointer.
+ *
+ * The rule is a function rather than a set held next to the capability because two places have to agree
+ * on it: the capability `webSurfaceCapabilities()` publishes, and the commit of [WebHostSurface.apply],
+ * which answers a mode it cannot honour with the same `Unsupported(UpdateSurface)` the shared admission
+ * helper produces. Written as an exhaustive `when` over the enum, a fourth mode cannot be added without
+ * classifying it here, and `webTest` pins this rule and the capability's constraint set against
+ * `PointerCaptureMode.entries` in both directions.
+ */
+internal fun webPointerCaptureIsHonourable(mode: PointerCaptureMode): Boolean = when (mode) {
+    PointerCaptureMode.None, PointerCaptureMode.Confined -> true
+    PointerCaptureMode.Locked -> false
+}
+
+/**
+ * Tracks the pointer the surface currently owns: one the element observed pressed and has not seen
+ * released.
+ *
+ * Ownership is the whole of the rule D13 gives `pointerCapture`: a capture may be taken only for a
+ * pointer the surface holds, so the state this class keeps is what a `Confined` request is admitted on
+ * and what a browser call is guarded by. It is not part of `SurfaceState` — the public model has no
+ * such field and this is not a claim about the browser, it is what the surface observed of it.
+ *
+ * The rule is stated over the *buttons*, not over the pointer, because the DOM reports a transition per
+ * button: a release of one button among several does not release the pointer, which is why a set of
+ * pressed buttons is kept and ownership ends with the last of them. Every other ending of a pointer is
+ * one of the two remaining stimuli: the exit the ports deliver for a `pointerleave` and for a
+ * `pointercancel` (`WebInputStimulus.PointerLeft`), and the loss of activation the surface derives from
+ * its lifecycle reduction (`WebInputStimulus.FocusLost`), both of which reconcile the pointer — and its
+ * buttons — away, exactly as the shared reducer does.
+ *
+ * The reading lives in `webMain` on the DOM-free union, like every other rule of this file, so the two
+ * target ports cannot derive ownership differently: a port hands its observations over, and this is what
+ * the surface makes of them.
+ */
+internal class WebPointerOwnership {
+    private val pressedButtons: MutableSet<PointerButton> = mutableSetOf()
+
+    /** Whether the surface holds a pointer it may take a capture for. */
+    val isOwned: Boolean get() = pressedButtons.isNotEmpty()
+
+    /** Records one observation, which is the only thing that can begin or end the ownership. */
+    fun observe(stimulus: WebInputStimulus) {
+        when (stimulus) {
+            is WebInputStimulus.PointerButtonChanged -> when (stimulus.buttonState) {
+                PointerButtonState.Pressed -> pressedButtons.add(stimulus.button)
+                PointerButtonState.Released -> pressedButtons.remove(stimulus.button)
+            }
+
+            // The pointer is gone from the element, cancelled or left, so nothing of it is held any more.
+            is WebInputStimulus.PointerLeft -> clear()
+
+            // A loss of activation neutralises the input snapshot, pointer and buttons included: a
+            // pointer the model no longer has cannot be one this surface holds.
+            WebInputStimulus.FocusLost -> clear()
+
+            // An entry, a motion and a scroll state nothing about a button: they move a pointer the
+            // surface already holds, or none at all, and neither begins nor ends the ownership.
+            is WebInputStimulus.PointerEntered,
+            is WebInputStimulus.PointerMoved,
+            is WebInputStimulus.Scrolled,
+            is WebInputStimulus.KeyChanged,
+            -> Unit
+        }
+    }
+
+    /** Forgets the pointer: the surface stopped admitting, or lost the one it held. */
+    fun clear() {
+        pressedButtons.clear()
+    }
+}

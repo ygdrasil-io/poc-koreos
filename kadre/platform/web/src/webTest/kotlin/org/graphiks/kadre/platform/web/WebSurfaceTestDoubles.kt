@@ -1,5 +1,8 @@
 package org.graphiks.kadre.platform.web
 
+import org.graphiks.kadre.diagnostics.KadreFailure
+import org.graphiks.kadre.diagnostics.KadreResult
+
 /**
  * The one host-port double every web surface test drives.
  *
@@ -48,6 +51,32 @@ internal class RecordingWebHostPort(
     /** How often the surface cancelled a frame it had registered; a run frame is not a cancel. */
     var frameCancellations: Int = 0
         private set
+
+    /**
+     * Every capture effect the surface asked this port to perform, in the order it asked: `true` is a
+     * capture taken, `false` a capture released.
+     *
+     * This is the port's own record of what it was asked for — the observable a case reads when it has
+     * to prove that a decision *reached the browser*, or that a field the surface refused reached it not
+     * at all. Nothing else about the port is observable from above it, which is the point: the surface
+     * decides and this records, exactly as the target ports perform and decide nothing.
+     */
+    val pointerCaptureRequests: MutableList<Boolean> = mutableListOf()
+
+    /**
+     * What the next capture request answers, or `null` when the browser accepts it.
+     *
+     * It is the contained refusal of a real browser (a pointer it does not consider active), so a case
+     * can drive the path where the effect did not happen without a browser: the port reports the failure
+     * and the surface rejects the field with it.
+     */
+    var pointerCaptureFailure: KadreFailure? = null
+
+    override fun applyPointerCapture(captured: Boolean): KadreResult<Unit> {
+        pointerCaptureRequests += captured
+        val failure = pointerCaptureFailure
+        return if (failure == null) KadreResult.Success(Unit) else KadreResult.Failure(failure)
+    }
 
     /**
      * Invoked by the first [release], before the port drops the target resources it holds.
@@ -100,6 +129,16 @@ internal class RecordingWebHostPort(
         val observer = inputObserver ?: return false
         observer.onObservation(stimulus)
         return observer.suppressDefaultFor(stimulus)
+    }
+
+    /**
+     * Pushes the browser's own `lostpointercapture`, as the target would report it from its listener.
+     *
+     * It is a report and not an observation: nothing of the input model describes it, so the channel's
+     * third member is what carries it and no stimulus is delivered.
+     */
+    fun deliverPointerCaptureLost() {
+        inputObserver?.onPointerCaptureLost()
     }
 
     /** The browsing context is gone, as a detached or removed document reports it. */

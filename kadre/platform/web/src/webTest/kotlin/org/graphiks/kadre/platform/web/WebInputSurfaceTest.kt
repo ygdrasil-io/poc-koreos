@@ -18,9 +18,11 @@ import org.graphiks.kadre.application.SessionOutcome
 import org.graphiks.kadre.application.SessionStopReason
 import org.graphiks.kadre.diagnostics.Capability
 import org.graphiks.kadre.diagnostics.FeatureAvailability
+import org.graphiks.kadre.diagnostics.InteractionFailureReason
 import org.graphiks.kadre.diagnostics.KadreException
 import org.graphiks.kadre.diagnostics.KadreFailure
 import org.graphiks.kadre.diagnostics.KadreOperation
+import org.graphiks.kadre.diagnostics.KadrePlatform
 import org.graphiks.kadre.diagnostics.KadreResourceKind
 import org.graphiks.kadre.diagnostics.KadreResult
 import org.graphiks.kadre.input.InputEvent
@@ -72,10 +74,14 @@ import kotlin.test.assertTrue
  * of activation neutralised exactly once, a terminating transition that closes the input lane instead
  * of resetting it, and nothing admitted after the close.
  *
- * The last group covers `SurfaceUpdate.inputDefaultBehavior`, the one surface-update field this phase
- * activates: the capability that publishes it, the admission and commit of a value through the shared
- * helper, and the suppression decision the port asks the surface for at the point of dispatch —
- * including the phase's exit gate, which is that no category is suppressed under the default.
+ * The last groups cover the two surface-update fields this phase activates.
+ * `SurfaceUpdate.inputDefaultBehavior`: the capability that publishes it, the admission and commit of
+ * a value through the shared helper, and the suppression decision the port asks the surface for at the
+ * point of dispatch — including the phase's exit gate, which is that no category is suppressed under
+ * the default. `SurfaceUpdate.pointerCapture`: the capability over the two modes the browser can
+ * honour, the ownership a capture is admitted on, the one browser effect a capture decision has
+ * (asked of the port and never performed here), the containment of a browser that refuses it, and the
+ * reconciliation of a capture the browser ended.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class WebInputSurfaceTest {
@@ -582,11 +588,11 @@ class WebInputSurfaceTest {
         )
         assertEquals(FeatureAvailability.Available, inputDefaultBehavior.availability)
 
-        // Scope non-regression: this task activates one field and only one. The four fields it does not
-        // touch keep the blanket rejection of the previous phase, byte for byte.
+        // Scope non-regression: this task activates `pointerCapture` and nothing else (its own cases are
+        // below). The three fields it does not touch keep the blanket rejection of the previous phase,
+        // byte for byte.
         assertEquals(unsupportedUpdateSurface(), capabilities.cursor)
         assertEquals(unsupportedUpdateSurface(), capabilities.customCursor)
-        assertEquals(unsupportedUpdateSurface(), capabilities.pointerCapture)
         assertEquals(unsupportedUpdateSurface(), capabilities.hitTesting)
 
         // A detached surface claims nothing at all, this field included: the capability is the
@@ -750,11 +756,18 @@ class WebInputSurfaceTest {
      * The guard this case covers is inside `apply` — a field that arrives *admitted* with no commit
      * path on this surface fails loudly rather than being dropped in silence and answered with an
      * `Applied` for a state that never took it. That guard cannot be reached from a test today: the
-     * three fields it protects carry a blanket `Unsupported(UpdateSurface)` capability, which the
-     * capability case pins, so `admitField` answers `Unchanged` for every value they can carry, and
-     * reaching the guard would mean publishing a capability this surface does not have. What is
-     * pinned here is its observable half, which is what a consumer sees: a field the surface cannot
-     * commit is *always* reported, and the only state a mixed update moves is the one it can commit.
+     * two fields it protects (`cursor` and `hitTesting`) carry a blanket `Unsupported(UpdateSurface)`
+     * capability, which the capability case pins, so `admitField` answers `Unchanged` for every value
+     * they can carry, and reaching the guard would mean publishing a capability this surface does not
+     * have. What is pinned here is its observable half, which is what a consumer sees: a field the
+     * surface cannot commit is *always* reported, and the only state a mixed update moves is the one
+     * it can commit.
+     *
+     * `pointerCapture` is the field this task gave a commit path, and it is refused here for the reason
+     * of its own rule rather than for a missing path: no pointer is owned in this update, so a
+     * `Confined` capture has nothing to confine (`InteractionRequired(Missing)`, the failure
+     * `OPERATION-CONTRACTS.md` admits on the rejected-field row of `HostSurface.apply`). It is still a
+     * *rejection*, which is what this case is about — and it is still reported rather than dropped.
      */
     @Test
     fun everyFieldOfAnUpdateIsEitherCommittedOrReported() = runTest {
@@ -783,15 +796,17 @@ class WebInputSurfaceTest {
                 SurfaceProperty.HitTesting,
             ),
             partiallyApplied.rejected.map { it.field },
-            "all three fields the surface cannot commit are reported, in the order of the update",
+            "all three fields this update cannot commit are reported, in the order of the update",
         )
         assertEquals(
             listOf(
                 KadreFailure.Unsupported(KadreOperation.UpdateSurface),
-                KadreFailure.Unsupported(KadreOperation.UpdateSurface),
+                KadreFailure.InteractionRequired(InteractionFailureReason.Missing),
                 KadreFailure.Unsupported(KadreOperation.UpdateSurface),
             ),
             partiallyApplied.rejected.map { it.failure },
+            "each rejection carries the failure of its own rule: a blank capability, or a capture no " +
+                "pointer of this surface could carry",
         )
         assertEquals(before.cursor, partiallyApplied.state.cursor, "no rejected field is committed")
         assertEquals(before.pointerCapture, partiallyApplied.state.pointerCapture)
@@ -809,6 +824,508 @@ class WebInputSurfaceTest {
             partiallyApplied.state.revision.value,
             "three rejections and one commit move the revision exactly once",
         )
+
+        harness.stop()
+        testScheduler.runCurrent()
+    }
+
+    /**
+     * The capture capability is the two modes this backend can honour, and `Locked` is provably outside.
+     *
+     * `None` and `Confined` are named one by one — the capability is this backend's promise, so the
+     * promise is written out rather than derived from the enum — and the set is pinned against
+     * `PointerCaptureMode.entries` in both directions: the modes the capability claims are exactly the
+     * ones the rule of the commit admits, and the difference between the enum and the set is exactly
+     * `Locked`. A fourth member of the enum therefore fails this case instead of being claimed
+     * silently, and the third one is named as the mode that is *not* promised.
+     *
+     * `Locked` is not a gap in this phase's work but its scope: the Pointer Lock API needs a transient
+     * user activation and belongs to `InteractionAction.LockPointer` in a later phase (`DESIGN.md`
+     * §9.6), which is why no part of this backend can name it — the constraint set here, the commit
+     * rule pinned with it, and `apply` all refuse it, and the capture cases below pin that nothing of
+     * it ever reaches the browser.
+     *
+     * The same case closes the other end of the promise: once the surface stopped admitting, the whole
+     * snapshot is unavailable (`DESIGN.md:703`), so no mode is claimed by a surface that could not act
+     * on one.
+     */
+    @Test
+    fun thePointerCaptureCapabilityIsNoneAndConfinedAndLockedIsProvablyOutside() = runTest {
+        val harness = InputHarness(this)
+        harness.start()
+        val capabilities = harness.surface().capabilities.value
+
+        val pointerCapture = assertIs<Capability.Supported<Set<PointerCaptureMode>>>(capabilities.pointerCapture)
+        assertEquals(
+            setOf(PointerCaptureMode.None, PointerCaptureMode.Confined),
+            pointerCapture.constraints,
+            "the two modes this backend can honour are named one by one, not derived from the enum",
+        )
+        assertEquals(FeatureAvailability.Available, pointerCapture.availability)
+        assertEquals(
+            pointerCapture.constraints,
+            PointerCaptureMode.entries.filter { webPointerCaptureIsHonourable(it) }.toSet(),
+            "the set the capability promises is exactly the set the commit rule admits: a mode the " +
+                "surface cannot honour cannot be claimed here",
+        )
+        assertEquals(
+            setOf(PointerCaptureMode.Locked),
+            PointerCaptureMode.entries.toSet() - pointerCapture.constraints,
+            "and the one mode outside the promise is exactly `Locked`: a fourth member would widen this " +
+                "difference and fail here rather than be claimed in silence",
+        )
+
+        // Scope non-regression: this task activates `pointerCapture`, and the three fields it does not
+        // touch keep the blanket rejection of the previous phase.
+        assertEquals(unsupportedUpdateSurface(), capabilities.cursor)
+        assertEquals(unsupportedUpdateSurface(), capabilities.customCursor)
+        assertEquals(unsupportedUpdateSurface(), capabilities.hitTesting)
+
+        // A detached surface claims nothing at all, this field included.
+        harness.port.deliverLifecycle(harness.port.disconnectedSnapshot())
+        testScheduler.advanceUntilIdle()
+
+        assertEquals(SurfaceAttachmentState.Detached, harness.surface().state.value.attachment)
+        assertEquals(
+            unsupportedUpdateSurface(),
+            harness.surface().capabilities.value.pointerCapture,
+            "the terminal snapshot is the all-unsupported one, as the reference publishes it",
+        )
+
+        harness.stop()
+        testScheduler.runCurrent()
+    }
+
+    /**
+     * The ownership rule itself, as the rule it is: a pointer is owned from the press the element
+     * observed to the release it observed, and a leave, a cancellation or a loss of activation ends it
+     * with the pointer.
+     *
+     * Ownership is the *only* thing a capture is admitted on, so what it is worth is what it counts: the
+     * surface owns a pointer while any button of it is down, a release of one button among several is
+     * not a release of the pointer, and every way a pointer stops being one — leaving, being cancelled
+     * (`pointercancel` is what the ports deliver for it) or losing activation — ends it.
+     */
+    @Test
+    fun aPointerIsOwnedFromThePressToTheReleaseAndEveryOtherEndingOfIt() {
+        val ownership = WebPointerOwnership()
+        assertFalse(ownership.isOwned, "a surface that observed nothing owns nothing")
+
+        ownership.observe(pointerButton(PointerButton.Primary, PointerButtonState.Pressed))
+        assertTrue(ownership.isOwned, "a press of a button is what makes the pointer the surface holds")
+        ownership.observe(pointerMoved())
+        assertTrue(ownership.isOwned, "a motion moves a pointer the surface already holds; it does not begin or end one")
+
+        ownership.observe(pointerButton(PointerButton.Secondary, PointerButtonState.Pressed))
+        ownership.observe(pointerButton(PointerButton.Secondary, PointerButtonState.Released))
+        assertTrue(
+            ownership.isOwned,
+            "the primary button is still down: releasing another one is not releasing the pointer",
+        )
+
+        ownership.observe(pointerButton(PointerButton.Primary, PointerButtonState.Released))
+        assertFalse(ownership.isOwned, "the last pressed button released ends the ownership")
+
+        ownership.observe(pointerButton(PointerButton.Primary, PointerButtonState.Pressed))
+        ownership.observe(WebInputStimulus.PointerLeft(kind = PointerKind.Mouse))
+        assertFalse(ownership.isOwned, "a pointer that left is not held, whatever its buttons said before")
+
+        ownership.observe(pointerButton(PointerButton.Primary, PointerButtonState.Pressed))
+        ownership.observe(WebInputStimulus.FocusLost)
+        assertFalse(
+            ownership.isOwned,
+            "a loss of activation neutralises the snapshot the ownership describes, so it ends it too",
+        )
+
+        ownership.observe(pointerButton(PointerButton.Primary, PointerButtonState.Pressed))
+        ownership.clear()
+        assertFalse(ownership.isOwned, "a surface that stopped admitting holds nothing")
+    }
+
+    /**
+     * The capture is committed for a pointer the surface owns, and the browser is asked for it through
+     * the port — once, for that capture.
+     *
+     * The port is the only layer that can touch the DOM, so the proof that the decision reached the
+     * browser is the double's own record of what it was asked for: `true` is the one request of a
+     * `Confined` capture, and its absence in the cases below is the one proof that a rejected field
+     * never became a browser call. The state is committed here and now — there is no backend below this
+     * surface that could report a different effective value — with the one revision a state change
+     * owns.
+     */
+    @Test
+    fun takingTheCaptureOfAnOwnedPointerIsCommittedAndAsksThePortForIt() = runTest {
+        val harness = InputHarness(this)
+        harness.start()
+        val surface = harness.surface()
+        val port = harness.port
+        port.deliverInput(pointerButton(PointerButton.Primary, PointerButtonState.Pressed))
+        testScheduler.runCurrent()
+        val before = surface.state.value
+        assertEquals(
+            PointerCaptureMode.None,
+            before.pointerCapture,
+            "a surface starts without a capture, which is the state the request moves",
+        )
+
+        val applied = assertIs<SurfaceUpdateOutcome.Applied>(
+            assertIs<KadreResult.Success<SurfaceUpdateOutcome>>(
+                surface.apply(SurfaceUpdate(pointerCapture = PropertyChange.Set(PointerCaptureMode.Confined))),
+            ).value,
+        )
+
+        assertEquals(PointerCaptureMode.Confined, applied.state.pointerCapture)
+        assertEquals(
+            before.revision.value + 1L,
+            applied.state.revision.value,
+            "the effective capture is committed with one new revision",
+        )
+        assertEquals(applied.state, surface.state.value, "the outcome carries the state the surface publishes")
+        assertEquals(
+            listOf(true),
+            port.pointerCaptureRequests,
+            "the port was asked to capture the pointer the surface holds — and asked nothing else",
+        )
+
+        // The value already in effect is admitted and answered with the state it already has: nothing
+        // moves, so nothing is asked of the browser a second time either.
+        val again = assertIs<SurfaceUpdateOutcome.Applied>(
+            assertIs<KadreResult.Success<SurfaceUpdateOutcome>>(
+                surface.apply(SurfaceUpdate(pointerCapture = PropertyChange.Set(PointerCaptureMode.Confined))),
+            ).value,
+        )
+        assertEquals(PointerCaptureMode.Confined, again.state.pointerCapture)
+        assertEquals(applied.state.revision.value, again.state.revision.value)
+        assertEquals(listOf(true), port.pointerCaptureRequests)
+
+        harness.stop()
+        testScheduler.runCurrent()
+    }
+
+    /** The way back: `None` releases the capture the surface holds, and the browser is asked to release it. */
+    @Test
+    fun releasingTheCaptureIsCommittedAndAsksThePortToReleaseIt() = runTest {
+        val harness = InputHarness(this)
+        harness.start()
+        val surface = harness.surface()
+        val port = harness.port
+        port.deliverInput(pointerButton(PointerButton.Primary, PointerButtonState.Pressed))
+        surface.apply(SurfaceUpdate(pointerCapture = PropertyChange.Set(PointerCaptureMode.Confined)))
+        val confined = surface.state.value
+        assertEquals(PointerCaptureMode.Confined, confined.pointerCapture)
+
+        val released = assertIs<SurfaceUpdateOutcome.Applied>(
+            assertIs<KadreResult.Success<SurfaceUpdateOutcome>>(
+                surface.apply(SurfaceUpdate(pointerCapture = PropertyChange.Set(PointerCaptureMode.None))),
+            ).value,
+        )
+
+        assertEquals(PointerCaptureMode.None, released.state.pointerCapture)
+        assertEquals(confined.revision.value + 1L, released.state.revision.value)
+        assertEquals(PointerCaptureMode.None, surface.state.value.pointerCapture)
+        assertEquals(
+            listOf(true, false),
+            port.pointerCaptureRequests,
+            "the capture was taken and then released, in that order, through the port alone",
+        )
+
+        // Releasing a capture that is not held has nothing to do in the browser: the field is admitted,
+        // the state it asks for is already in effect, and the revision stays where it is.
+        val again = assertIs<SurfaceUpdateOutcome.Applied>(
+            assertIs<KadreResult.Success<SurfaceUpdateOutcome>>(
+                surface.apply(SurfaceUpdate(pointerCapture = PropertyChange.Set(PointerCaptureMode.None))),
+            ).value,
+        )
+        assertEquals(released.state, again.state)
+        assertEquals(listOf(true, false), port.pointerCaptureRequests)
+
+        harness.stop()
+        testScheduler.runCurrent()
+    }
+
+    /**
+     * A capture is refused when the surface owns no pointer, and the refusal costs the browser nothing.
+     *
+     * This is D13's ownership rule, and the failure is the one the contract admits for it: a
+     * `Confined` capture needs a pointer this surface observed pressed and has not seen released, and
+     * without one there is nothing to confine — `InteractionRequired(Missing)`, the reason
+     * `OPERATION-CONTRACTS.md` §3 admits on the rejected-field row of `HostSurface.apply`. The two ways
+     * of not owning one are covered: a surface that observed no pointer at all, and one whose pointer
+     * was released again.
+     *
+     * What the state does is the point of the case: the field is rejected, so the state does not move,
+     * the revision does not move (a rejection is not a change), and the port is asked *nothing* — a
+     * browser call for a field the surface refused would be an effect no decision ever authorised.
+     */
+    @Test
+    fun aCaptureIsRefusedWithoutAnOwnedPointerAndAsksThePortNothing() = runTest {
+        val harness = InputHarness(this)
+        harness.start()
+        val surface = harness.surface()
+        val port = harness.port
+        val before = surface.state.value
+
+        val withoutAPointer = assertIs<SurfaceUpdateOutcome.PartiallyApplied>(
+            assertIs<KadreResult.Success<SurfaceUpdateOutcome>>(
+                surface.apply(SurfaceUpdate(pointerCapture = PropertyChange.Set(PointerCaptureMode.Confined))),
+            ).value,
+        )
+        assertEquals(
+            listOf(
+                RejectedSurfaceField(
+                    SurfaceProperty.PointerCapture,
+                    KadreFailure.InteractionRequired(InteractionFailureReason.Missing),
+                ),
+            ),
+            withoutAPointer.rejected,
+            "nothing was pressed on this surface, so nothing can be confined to it",
+        )
+        assertEquals(before.pointerCapture, withoutAPointer.state.pointerCapture)
+        assertEquals(before.revision.value, withoutAPointer.state.revision.value, "a rejection moves no revision")
+        assertTrue(
+            port.pointerCaptureRequests.isEmpty(),
+            "the browser was asked nothing for a field the surface refused: ${port.pointerCaptureRequests}",
+        )
+
+        // The same field, on a pointer the surface held and then saw released: ownership ends with the
+        // release, and so does the eligibility of a capture of that pointer.
+        port.deliverInput(pointerButton(PointerButton.Primary, PointerButtonState.Pressed))
+        port.deliverInput(pointerButton(PointerButton.Primary, PointerButtonState.Released))
+        testScheduler.runCurrent()
+        val afterTheRelease = surface.state.value
+
+        val releasedPointer = assertIs<SurfaceUpdateOutcome.PartiallyApplied>(
+            assertIs<KadreResult.Success<SurfaceUpdateOutcome>>(
+                surface.apply(SurfaceUpdate(pointerCapture = PropertyChange.Set(PointerCaptureMode.Confined))),
+            ).value,
+        )
+        assertEquals(
+            listOf(
+                RejectedSurfaceField(
+                    SurfaceProperty.PointerCapture,
+                    KadreFailure.InteractionRequired(InteractionFailureReason.Missing),
+                ),
+            ),
+            releasedPointer.rejected,
+            "a pointer that was pressed and released is not held any more",
+        )
+        assertEquals(afterTheRelease.pointerCapture, releasedPointer.state.pointerCapture)
+        assertEquals(afterTheRelease.revision.value, releasedPointer.state.revision.value)
+        assertTrue(port.pointerCaptureRequests.isEmpty())
+
+        harness.stop()
+        testScheduler.runCurrent()
+    }
+
+    /**
+     * `Locked` is refused as a field, and nothing of it ever reaches the browser.
+     *
+     * The Pointer Lock API is not this phase's and not this backend's: it needs a transient user
+     * activation, it belongs to `InteractionAction.LockPointer` (`DESIGN.md` §9.6), and this port has no
+     * member that could ask for it at all. So the mode is refused twice over — by the capability's
+     * constraint set, which the shared admission helper turns into `Unsupported(UpdateSurface)`, and by
+     * the commit rule that would refuse it even if the capability claimed it. The port answers nothing
+     * here, which is the observable half of "no pointer-lock call may ever be made".
+     */
+    @Test
+    fun lockedIsRefusedAsAFieldAndNeverReachesThePort() = runTest {
+        val harness = InputHarness(this)
+        harness.start()
+        val surface = harness.surface()
+        val port = harness.port
+        val before = surface.state.value
+        // The pointer is held on purpose: had `Locked` been admitted, the ownership its own rule asks
+        // for is the one thing this surface could have brought to it.
+        port.deliverInput(pointerButton(PointerButton.Primary, PointerButtonState.Pressed))
+        testScheduler.runCurrent()
+        val held = surface.state.value
+
+        val refused = assertIs<SurfaceUpdateOutcome.PartiallyApplied>(
+            assertIs<KadreResult.Success<SurfaceUpdateOutcome>>(
+                surface.apply(SurfaceUpdate(pointerCapture = PropertyChange.Set(PointerCaptureMode.Locked))),
+            ).value,
+        )
+        assertEquals(
+            listOf(
+                RejectedSurfaceField(
+                    SurfaceProperty.PointerCapture,
+                    KadreFailure.Unsupported(KadreOperation.UpdateSurface),
+                ),
+            ),
+            refused.rejected,
+            "the mode the capability does not carry is refused as a field, with the shared helper's own failure",
+        )
+        assertEquals(before.pointerCapture, refused.state.pointerCapture)
+        assertEquals(held.revision.value, refused.state.revision.value, "the refusal moves nothing at all")
+        assertTrue(
+            port.pointerCaptureRequests.isEmpty(),
+            "the browser was asked nothing: no pointer-lock call may ever be made, and no capture either",
+        )
+
+        // A mixed update is refused per field: `Locked` is reported while the field that can be honoured
+        // is still committed, which is the reference's own field-by-field behaviour.
+        val mixed = assertIs<SurfaceUpdateOutcome.PartiallyApplied>(
+            assertIs<KadreResult.Success<SurfaceUpdateOutcome>>(
+                surface.apply(
+                    SurfaceUpdate(
+                        pointerCapture = PropertyChange.Set(PointerCaptureMode.Locked),
+                        inputDefaultBehavior = PropertyChange.Set(InputDefaultBehavior.SuppressWhenPossible),
+                    ),
+                ),
+            ).value,
+        )
+        assertEquals(listOf(SurfaceProperty.PointerCapture), mixed.rejected.map { it.field })
+        assertEquals(
+            InputDefaultBehavior.SuppressWhenPossible,
+            mixed.state.inputDefaultBehavior,
+            "the field that can be honoured is committed even though the other one was refused",
+        )
+        assertTrue(port.pointerCaptureRequests.isEmpty())
+
+        harness.stop()
+        testScheduler.runCurrent()
+    }
+
+    /**
+     * A browser that refuses the effect is a rejected field, never an exception and never a silent
+     * success.
+     *
+     * `setPointerCapture` throws for a pointer the browser does not consider active, and the port asks
+     * it from inside the DOM callback of the event that led to the decision — so the port contains the
+     * error and reports it (`WebHostPort.applyPointerCapture`), and what this surface does with the
+     * report is the rule this case pins: the field is rejected with the failure the port returned,
+     * which `OPERATION-CONTRACTS.md` §3 admits on the rejected-field row, and the state stays where it
+     * was. Answering `Applied` for a capture the browser never took would be the fictitious success this
+     * whole admission path exists to prevent.
+     */
+    @Test
+    fun aBrowserThatRefusesTheCaptureYieldsARejectedFieldAndMovesNothing() = runTest {
+        val harness = InputHarness(this)
+        harness.start()
+        val surface = harness.surface()
+        val port = harness.port
+        val refusal = KadreFailure.PlatformFailure(KadrePlatform.Web, "web-host", "pointer-capture-failed")
+        port.pointerCaptureFailure = refusal
+        port.deliverInput(pointerButton(PointerButton.Primary, PointerButtonState.Pressed))
+        testScheduler.runCurrent()
+        val before = surface.state.value
+
+        val refused = assertIs<SurfaceUpdateOutcome.PartiallyApplied>(
+            assertIs<KadreResult.Success<SurfaceUpdateOutcome>>(
+                surface.apply(SurfaceUpdate(pointerCapture = PropertyChange.Set(PointerCaptureMode.Confined))),
+            ).value,
+        )
+
+        assertEquals(
+            listOf(RejectedSurfaceField(SurfaceProperty.PointerCapture, refusal)),
+            refused.rejected,
+            "the browser's own refusal is what the field reports, unchanged",
+        )
+        assertEquals(PointerCaptureMode.None, refused.state.pointerCapture, "a capture the browser refused is not committed")
+        assertEquals(before.revision.value, refused.state.revision.value, "and it moves no revision")
+        assertEquals(
+            listOf(true),
+            port.pointerCaptureRequests,
+            "the port was asked exactly once: the refusal is reported, not retried behind the caller's back",
+        )
+
+        harness.stop()
+        testScheduler.runCurrent()
+    }
+
+    /**
+     * A capture the browser ended returns the state to `None`, and the pointer it belonged to leaves
+     * nothing pressed behind.
+     *
+     * Two things end a capture the surface had committed, and both are the browser's own word:
+     * `lostpointercapture` — reported to the surface by the port, because it is not an input
+     * observation and the shared union has no member for it — and the revocation of the contact, which
+     * the ports deliver as the pointer exit that `pointercancel` is. The state must follow both: a
+     * `Confined` capture the browser no longer applies is a claim about a confinement nobody holds, and
+     * the revision moves once, as it does for any state change.
+     *
+     * The snapshot stays the reducer's: the reconciliation commits the surface's own capture and
+     * touches no input state. What it may not do is leave the input claiming a button that nothing
+     * presses any more, which is what the end of the case pins — after the cancellation the pointer is
+     * gone from the snapshot, with every button it held, and the ownership is gone with it, so a later
+     * capture of that pointer is refused.
+     */
+    @Test
+    fun aLostCaptureAndACancelledPointerReturnTheStateToNoneWithoutAStuckButton() = runTest {
+        val harness = InputHarness(this)
+        harness.start()
+        val surface = harness.surface()
+        val port = harness.port
+        port.deliverInput(pointerButton(PointerButton.Primary, PointerButtonState.Pressed))
+        surface.apply(SurfaceUpdate(pointerCapture = PropertyChange.Set(PointerCaptureMode.Confined)))
+        val confined = surface.state.value
+        assertEquals(PointerCaptureMode.Confined, confined.pointerCapture)
+
+        // `lostpointercapture`: the browser says it no longer confines the pointer to this element.
+        port.deliverPointerCaptureLost()
+        testScheduler.runCurrent()
+
+        val lost = surface.state.value
+        assertEquals(
+            PointerCaptureMode.None,
+            lost.pointerCapture,
+            "the state may not keep claiming a capture the browser ended",
+        )
+        assertEquals(confined.revision.value + 1L, lost.revision.value, "the reconciliation is a state change")
+        assertEquals(
+            setOf(PointerButton.Primary),
+            surface.input.state.value.pointers.flatMap { it.pressedButtons }.toSet(),
+            "the loss of a capture is not a release of the button: the pointer is still down on the element",
+        )
+
+        // The pointer is still held, so the capture may be taken again for it — and it is asked for
+        // again, which is what makes the reconciliation a state the consumer can react to.
+        assertIs<SurfaceUpdateOutcome.Applied>(
+            assertIs<KadreResult.Success<SurfaceUpdateOutcome>>(
+                surface.apply(SurfaceUpdate(pointerCapture = PropertyChange.Set(PointerCaptureMode.Confined))),
+            ).value,
+        )
+        assertEquals(PointerCaptureMode.Confined, surface.state.value.pointerCapture)
+        assertEquals(listOf(true, true), port.pointerCaptureRequests)
+
+        // `pointercancel`: the browser revoked the contact, which the ports deliver as the pointer exit
+        // the reducer drops the pointer with.
+        port.deliverInput(WebInputStimulus.PointerLeft(kind = PointerKind.Mouse))
+        testScheduler.runCurrent()
+
+        assertEquals(
+            PointerCaptureMode.None,
+            surface.state.value.pointerCapture,
+            "a revoked contact releases the capture with the pointer it belonged to",
+        )
+        assertTrue(
+            surface.input.state.value.pointers.isEmpty(),
+            "the cancelled pointer is dropped from the snapshot, with every button it held",
+        )
+        assertEquals(
+            emptySet(),
+            surface.input.state.value.pointers.flatMap { it.pressedButtons }.toSet(),
+            "no button is left pressed by a contact the browser revoked",
+        )
+
+        // Ownership went with the pointer, so the capture that needed it is refused again.
+        val afterTheCancel = surface.state.value
+        val refused = assertIs<SurfaceUpdateOutcome.PartiallyApplied>(
+            assertIs<KadreResult.Success<SurfaceUpdateOutcome>>(
+                surface.apply(SurfaceUpdate(pointerCapture = PropertyChange.Set(PointerCaptureMode.Confined))),
+            ).value,
+        )
+        assertEquals(
+            listOf(
+                RejectedSurfaceField(
+                    SurfaceProperty.PointerCapture,
+                    KadreFailure.InteractionRequired(InteractionFailureReason.Missing),
+                ),
+            ),
+            refused.rejected,
+        )
+        assertEquals(afterTheCancel.revision.value, refused.state.revision.value)
+        assertEquals(listOf(true, true), port.pointerCaptureRequests, "a refused capture asks the browser nothing")
 
         harness.stop()
         testScheduler.runCurrent()
@@ -1207,6 +1724,25 @@ class WebInputSurfaceTest {
         fun pointerMoved(): WebInputStimulus.PointerMoved = WebInputStimulus.PointerMoved(
             position = LogicalPoint(2.0, 4.0),
             delta = LogicalDelta(1.0, 1.0),
+            pressure = null,
+            kind = PointerKind.Mouse,
+            pen = null,
+        )
+
+        /**
+         * One button transition of the mouse the runtime keeps a single identity for (D11).
+         *
+         * Presses and releases of the same pointer are the two facts ownership is made of, and the
+         * button is carried so a release of one button among several can be told from the release of
+         * the pointer.
+         */
+        fun pointerButton(
+            button: PointerButton,
+            buttonState: PointerButtonState,
+        ): WebInputStimulus.PointerButtonChanged = WebInputStimulus.PointerButtonChanged(
+            button = button,
+            buttonState = buttonState,
+            position = LogicalPoint(3.0, 6.0),
             pressure = null,
             kind = PointerKind.Mouse,
             pen = null,
