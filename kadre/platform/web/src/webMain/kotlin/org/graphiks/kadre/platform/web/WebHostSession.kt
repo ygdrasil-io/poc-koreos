@@ -209,13 +209,12 @@ internal class WebHostSession(
                     }
 
                     WebLifecycleReduction.Terminate -> {
-                        // A terminating reduction loses activation as well — the page went hidden, the
-                        // element left its document or the element is gone — so the snapshot is
-                        // neutralised once before the surface closes.
-                        if (activationWasActive) {
-                            activationWasActive = false
-                            deliverInput(WebInputStimulus.FocusLost)
-                        }
+                        // A terminating transition closes the input lane, it never resets it: the
+                        // reference surface sends its own teardown straight to the terminal path
+                        // (`MinimalWindowSurface.kt:326`) and only the terminal publication closes the
+                        // input (`:760-766`), because after a detach or a native revocation every late
+                        // stimulus is ignored and the input flow is closed. Losing activation — the one
+                        // transition that neutralises the snapshot — is the branch above, once per loss.
                         if (snapshot.pageHidden) controller.detachImmediately() else controller.detach()
                     }
                 }
@@ -466,6 +465,9 @@ private class WebHostSurface(
         )
         val pendingInput = pendingInputStimuli.toList()
         pendingInputStimuli.clear()
+        // The target's pre-configuration observations happened before the structural capability
+        // observation, so replaying them first preserves causality: the revision they move comes
+        // before the one that declares the installation they were already feeding.
         pendingInput.forEach(::acceptInput)
         val pending = pendingStimuli.toList()
         pendingStimuli.clear()

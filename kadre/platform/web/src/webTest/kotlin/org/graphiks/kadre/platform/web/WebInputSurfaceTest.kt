@@ -18,8 +18,10 @@ import org.graphiks.kadre.application.SessionOutcome
 import org.graphiks.kadre.application.SessionStopReason
 import org.graphiks.kadre.diagnostics.Capability
 import org.graphiks.kadre.diagnostics.FeatureAvailability
+import org.graphiks.kadre.diagnostics.KadreException
 import org.graphiks.kadre.diagnostics.KadreFailure
 import org.graphiks.kadre.diagnostics.KadreOperation
+import org.graphiks.kadre.diagnostics.KadreResourceKind
 import org.graphiks.kadre.diagnostics.KadreResult
 import org.graphiks.kadre.input.InputEvent
 import org.graphiks.kadre.input.InputStateResetReason
@@ -34,7 +36,10 @@ import org.graphiks.kadre.input.PointerButtonState
 import org.graphiks.kadre.input.ScrollDelta
 import org.graphiks.kadre.input.SurfaceInput
 import org.graphiks.kadre.input.SurfaceInputState
+import org.graphiks.kadre.policy.ContinuousDelivery
+import org.graphiks.kadre.policy.ContinuousOverflowAction
 import org.graphiks.kadre.policy.KadrePolicies
+import org.graphiks.kadre.policy.KadrePolicy
 import org.graphiks.kadre.surface.HostSurface
 import org.graphiks.kadre.surface.LogicalDelta
 import org.graphiks.kadre.surface.LogicalPoint
@@ -50,8 +55,9 @@ import kotlin.test.assertTrue
  *
  * Every case drives the shared [RecordingWebHostPort], which is the only target this suite has, so
  * what is proven here is the surface's own contract: one reducer per surface, buffered stimuli
- * replayed in order, structural capabilities declared only by the surface's own observation, a focus
- * loss neutralised exactly once, and nothing admitted after the close.
+ * replayed in order, structural capabilities declared only by the surface's own observation, a loss
+ * of activation neutralised exactly once, a terminating transition that closes the input lane instead
+ * of resetting it, and nothing admitted after the close.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class WebInputSurfaceTest {
@@ -178,7 +184,12 @@ class WebInputSurfaceTest {
         )
         // The structural observation is the transition that declared them: the stimulus that waited
         // for the configuration occupied the previous revision, so nothing declared keyboard or
-        // pointer available before the observation.
+        // pointer available before the observation. This is a *transition* proof, not a timeline one:
+        // the reducer owns a `StateFlow`, which carries no history, so no collector can read the
+        // capability value that existed before the install. The revision ordering is what is
+        // observable — had anything declared them earlier, the observation would have been a no-op
+        // (`updateObservationCapabilitiesLocked` returns without moving the revision) and the lane
+        // would still be at revision 1.
         assertEquals(
             2L,
             input.state.value.revision.value,
@@ -288,8 +299,20 @@ class WebInputSurfaceTest {
         testScheduler.runCurrent()
     }
 
+    /**
+     * A terminating transition closes the input lane, it never resets it.
+     *
+     * The reset belongs to the activation-loss branch alone (`MinimalWindowSurface.kt:326` routes its
+     * own teardown straight to the terminal path, `:369` calls `focusLost()` only for a `FocusChanged`
+     * observed while the lane still admits, and `:760-766` closes the input on the terminal
+     * publication), which is also what `APPKIT-PHASE-4-INPUT-DESIGN.md` states: after a detach or a
+     * native revocation, every late stimulus is ignored and the input flow is closed.
+     *
+     * The lane was live — one key was pressed before the page went away — so a synthetic reset would
+     * have been observable here.
+     */
     @Test
-    fun aPageHideNeutralisesTheSnapshotAndThenClosesTheFlow() = runTest {
+    fun aPageHideClosesTheInputFlowWithoutAReset() = runTest {
         val harness = InputHarness(this)
         harness.start()
         val port = harness.port
@@ -301,20 +324,53 @@ class WebInputSurfaceTest {
 
         port.deliverInput(keyChanged(KEY_A))
         testScheduler.runCurrent()
+        val beforeThePageHide = input.state.value
+        assertEquals(1, events.size, "the lane is live: the key was published before the page went away")
 
         port.deliverLifecycle(port.pageHiddenSnapshot())
         testScheduler.advanceUntilIdle()
 
-        assertEquals(
-            listOf(InputStateResetReason.FocusLost),
-            events.filterIsInstance<InputEvent.StateReset>().map { it.reason },
-            "a pagehide loses activation once before the surface closes",
-        )
         assertEquals(SurfaceAttachmentState.Detached, surface.state.value.attachment)
-        assertEquals(emptySet(), input.state.value.keyboard.pressedKeys)
+        assertTrue(
+            events.none { it is InputEvent.StateReset },
+            "a terminating transition publishes no StateReset",
+        )
+        assertEquals(1, events.size, "and no input event of its own either")
+        assertEquals(
+            beforeThePageHide,
+            input.state.value,
+            "the closed lane keeps the snapshot it had: closing does not neutralise it (RuntimeSurfaceInput.close)",
+        )
         assertTrue(collector.isCompleted, "the input events flow closes with the surface")
         assertEquals(1, port.releaseCount)
         assertEquals(SessionOutcome.Stopped(SessionStopReason.HostDetached), harness.outcome())
+    }
+
+    /**
+     * The same terminating transition on a lane that had nothing in flight: the closed snapshot is the
+     * neutral one, and it is reached without a reset.
+     */
+    @Test
+    fun aDisconnectClosesTheInputFlowWithANeutralSnapshot() = runTest {
+        val harness = InputHarness(this)
+        harness.start()
+        val port = harness.port
+        val surface = harness.surface()
+        val input = surface.input
+        val events = mutableListOf<InputEvent>()
+        val collector = launch { input.events.collect { events += it } }
+        testScheduler.runCurrent()
+
+        port.deliverLifecycle(port.disconnectedSnapshot())
+        testScheduler.advanceUntilIdle()
+
+        assertEquals(SurfaceAttachmentState.Detached, surface.state.value.attachment)
+        assertEquals(emptySet(), input.state.value.keyboard.pressedKeys)
+        assertTrue(input.state.value.pointers.isEmpty())
+        assertEquals(KeyboardModifiers(emptySet()), input.state.value.modifiers)
+        assertTrue(events.isEmpty(), "no input event is published by a terminating transition")
+        assertTrue(collector.isCompleted, "the input events flow closes with the surface")
+        assertEquals(1, port.releaseCount)
     }
 
     /**
@@ -350,11 +406,9 @@ class WebInputSurfaceTest {
         assertEquals(SurfaceAttachmentState.Detached, surface.state.value.attachment)
         assertEquals(closed, stateAtRelease, "the racing stimulus may not mutate a closed input")
         assertEquals(closed, input.state.value, "and the closed input stays frozen")
-        assertTrue(closed.keyboard.pressedKeys.isEmpty(), "the terminal transition neutralised it")
-        assertEquals(
-            listOf(InputStateResetReason.FocusLost),
-            events.filterIsInstance<InputEvent.StateReset>().map { it.reason },
-            "the terminal transition publishes its own reset and nothing else",
+        assertTrue(
+            events.none { it is InputEvent.StateReset },
+            "a terminating transition publishes no reset, not even one racing stimulus later",
         )
         assertTrue(
             events.none { it is InputEvent.Key && it.physicalKey == physicalKey(KEY_B) },
@@ -412,6 +466,60 @@ class WebInputSurfaceTest {
         assertTrue(collector.isCompleted)
 
         collector.cancel()
+        testScheduler.runCurrent()
+    }
+
+    /**
+     * A surface's own redraw overflow closes the input lane with the surface failure.
+     *
+     * On the reference surface the redraw request enters the surface's own publication scheduler
+     * (`MinimalWindowSurface.kt:720-750`); a `Buffered` policy whose action is `CloseSource` or
+     * `FailSession` terminalises the surface with `KadreFailure.SourceOverflow(KadreResourceKind.Surface)`
+     * (`:738-747`); the terminal publication is drained last (`:760-766`) and the drain closes the
+     * input lane with that same failure (`surfaceInput.close(publication.failure)`). The input lane
+     * keeps its own ingress policy for its own overflow — a surface-event overflow is a surface
+     * failure that also ends the input source, it does not replace the input policy.
+     */
+    @Test
+    fun aRedrawOverflowClosesTheInputLaneWithTheSurfaceFailure() = runTest {
+        val bufferedCapacity = 2
+        val policy = KadrePolicies.Default.copy(
+            window = KadrePolicies.Default.window.copy(
+                redrawRequests = ContinuousDelivery.Buffered(
+                    capacity = bufferedCapacity,
+                    onOverflow = ContinuousOverflowAction.FailSession,
+                ),
+            ),
+        )
+        val harness = InputHarness(this, policy = policy)
+        harness.start()
+        val surface = harness.surface()
+        val input = surface.input
+        var closedWith: Throwable? = null
+        val collector = launch {
+            try {
+                input.events.collect { }
+            } catch (cause: Throwable) {
+                closedWith = cause
+            }
+        }
+        testScheduler.runCurrent()
+
+        repeat(bufferedCapacity + 1) { assertEquals(KadreResult.Success(Unit), surface.requestRedraw()) }
+        testScheduler.advanceUntilIdle()
+
+        assertEquals(SurfaceAttachmentState.Detached, surface.state.value.attachment)
+        assertTrue(collector.isCompleted, "the input events flow is closed by the overflow")
+        assertEquals(
+            KadreFailure.SourceOverflow(KadreResourceKind.Surface),
+            assertIs<KadreException>(closedWith).failure,
+            "the input lane reports the surface failure it was closed with",
+        )
+        assertEquals(
+            SessionOutcome.Failed(KadreFailure.SourceOverflow(KadreResourceKind.Surface)),
+            harness.outcome(),
+        )
+        harness.stop()
         testScheduler.runCurrent()
     }
 
@@ -479,6 +587,7 @@ class WebInputSurfaceTest {
 /** One web session whose primary surface receives the target's input through the shared double. */
 private class InputHarness(
     scope: TestScope,
+    policy: KadrePolicy = KadrePolicies.Default,
     stimuliBeforeInstall: List<WebInputStimulus> = emptyList(),
 ) {
     val port = RecordingWebHostPort(WebSurfaceMetrics(48.0, 48.0, 1.0))
@@ -496,7 +605,7 @@ private class InputHarness(
                         awaitCancellation()
                     }
                 },
-                policy = KadrePolicies.Default,
+                policy = policy,
             ),
         ).value
     }
