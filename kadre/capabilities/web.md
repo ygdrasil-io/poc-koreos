@@ -26,7 +26,10 @@ target Kotlin/JS IR (`js`) et le target Kotlin/Wasm-JS (`wasmJs`), tous deux ave
 local, **148.0.7778.96** (`@playwright/test` **1.60.0**, relevé `execution.version` des documents
 `kadre/contracts/driver/web/build/contract-evidence/<target>/contract-evidence/browser/chromium/BCK-003.json`).
 Aucun autre moteur n’est déclaré, et un moteur non relevé ne se déduit pas d’un passage manuel
-(`manual/phase-3-input.md`).
+(`manual/phase-3-input.md`). Cette passe de preuve a été produite sur **macOS arm64**, qui est le
+contexte d’exécution de la preuve et non un minimum : la gate CI obligatoire exécute les mêmes smoke
+sur `ubuntu-latest` (`.github/workflows/kadre-web-contracts.yml:15`). Le seul minimum déclaré par ce
+registre est donc la révision du navigateur ; l’OS n’y entre pas.
 
 ## 1. Lecture des colonnes
 
@@ -36,7 +39,9 @@ Aucun autre moteur n’est déclaré, et un moteur non relevé ne se déduit pas
   deux targets partagent le noyau de règle, la seule part distante étant la lecture DOM
   (`JsWebInputEvents.kt` / `WasmWebInputEvents.kt`).
 - **minimum déclaré** — la version de navigateur réellement exercée : la révision Chromium épinglée
-  ci-dessus, sur macOS arm64. Kadre ne déclare aucune version de navigateur au-delà.
+  ci-dessus par `@playwright/test` **1.60.0**, et rien d’autre. Kadre ne déclare aucune version de
+  navigateur au-delà, et l’OS de la passe de preuve (macOS arm64) appartient à la « Portée de
+  lecture » ci-dessus, pas à ce minimum.
 - **compile gate** — le symbole ou le SDK dont la compilation dépend. `none` signifie qu’aucun
   symbole conditionnel n’est requis : le code compile sur les deux targets dès lors que les
   déclarations DOM de la toolchain existent.
@@ -49,32 +54,43 @@ Aucun autre moteur n’est déclaré, et un moteur non relevé ne se déduit pas
   `FeatureAvailability.Unsupported`, un `Capability.Unsupported(failure)` ou un rejet
   `Unsupported(UpdateSurface)` selon le type du champ — et jamais un état hypothétique : c’est une
   valeur lisible sur un snapshot vivant, pas une projection de ce que l’adapter ferait s’il
-  l’implémentait (`BACKEND-CAPABILITIES.md` §1 : un champ passif typé `FeatureAvailability` utilise
-  `FeatureAvailability.Unsupported` pour l’absence structurelle, et `FeatureAvailability.Unavailable`
-  pour une observation momentanément indisponible). Le snapshot **terminal** de `SurfaceCapabilities`
+  l’implémentait (`BACKEND-CAPABILITIES.md` §2, `:27` : un champ passif typé `FeatureAvailability`
+  utilise `FeatureAvailability.Unsupported` pour l’absence structurelle, et
+  `FeatureAvailability.Unavailable` pour une disponibilité pilotée à runtime — sur le Web, ce second
+  état n’est publié que par le bras **terminal** d’overflow d’ingress de la section 2.1, jamais par
+  une indisponibilité transitoire). Le snapshot **terminal** de `SurfaceCapabilities`
   est le snapshot tout-`Unsupported` partagé (`unsupportedSurfaceCapabilities()`,
   `SurfaceAdmission.kt:20`), donc un champ cette phase active redevient `Unsupported(UpdateSurface)`
-  dès que la surface cesse d’admettre. Les capabilities d’**input** ont, elles, **deux** états
-  absents : l’absence structurelle d’avant installation et l’indisponibilité du bras terminal
-  d’overflow décrit en section 2.1. Les deux valeurs sont écrites dans les lignes concernées plutôt
+  dès que la surface cesse d’admettre. Les quatre capabilities d’**input** passives du registre
+  (`keyboard`, `pointer`, `touch`, `dragAndDrop`) ont, elles, **deux** états absents : l’absence
+  structurelle d’avant installation et l’indisponibilité du bras terminal d’overflow décrit en
+  section 2.1 ; les trois autres lignes d’input (`gestures`, `textInput`, `rawInput`) n’en ont qu’un.
+  Les deux valeurs sont écrites dans les lignes concernées plutôt
   que résumées par une seule, parce que §8 demande la valeur exacte et que « `Unsupported` » seul
   serait faux sur ce bras.
-- **tests** — les identifiants de tests qui portent la ligne : les titres de scénarios de
-  `kadre/contracts/driver/web/contracts/evidence.tsv` (preuve navigateur des deux targets) puis les
-  classes de preuve sans navigateur. Un identifiant de scénario est le titre du test Playwright qui
-  le porte (`playwright/web-input.spec.mjs`).
+- **tests** — les identifiants de tests qui portent la ligne, en deux familles : les titres de
+  scénarios de `kadre/contracts/driver/web/contracts/evidence.tsv`, c’est-à-dire des entrées réelles
+  pilotées par Playwright sur le Chromium épinglé ; puis des classes hébergées par Karma
+  (`jsBrowserTest` / `wasmJsBrowserTest`) — des tests unitaires exécutés *dans* le navigateur, et non
+  des classes de preuve sans navigateur : `JsWebInputTest` patche par exemple
+  `Element.prototype.releasePointerCapture` sur un élément Chromium vivant. Un identifiant de scénario
+  est le titre du test Playwright qui le porte (`playwright/web-input.spec.mjs`). La gate CI
+  obligatoire (`.github/workflows/kadre-web-contracts.yml:43`) n’exécute que
+  `browserSmokeRunnerTest`, `jsBrowserSmoke`, `wasmJsBrowserSmoke` et `validator:check` : elle
+  exécute donc les scénarios Playwright, tandis que les classes Karma ne sont exécutées que par
+  `:kadre:check`, jamais par cette gate.
 
 ## 2. Registre
 
 | feature | target | minimum déclaré | compile gate | runtime gate | état absent | tests |
 |---|---|---|---|---|---|---|
-| `InputCapabilities.keyboard` | `js`, `wasmJs` | Chromium 148.0.7778.96, macOS arm64, `@playwright/test` 1.60.0 | `js` : `org.w3c.dom.events.KeyboardEvent` des déclarations DOM de la stdlib-js ; `wasmJs` : `org.w3c.dom.HTMLElement` des déclarations DOM Kotlin/Wasm plus `external interface` et le test `instanceof` par `@JsFun` | `none` — l’installation est structurelle ; recevoir une frappe dépend en plus du focus de l’élément, responsabilité du host (D7) | `FeatureAvailability.Unsupported` (snapshot d’avant installation, `RuntimeSurfaceInput.kt:73` et `:1434-1446`) ; `FeatureAvailability.Unavailable(SourceOverflow(InputSource))` sur le bras terminal d’overflow (section 2.1) | `web-input-key-state-before-event`, `web-input-key-modifiers`, sentinelle `web-input-no-parallel-reducer` ; `JsWebInputTest`/`WasmWebInputTest`, `WebInputSurfaceTest.keyboardAndPointerAreDeclaredOnlyByTheSurfaceOwnStructuralObservation`, `WebInputMappingTest` |
+| `InputCapabilities.keyboard` | `js`, `wasmJs` | Chromium 148.0.7778.96, `@playwright/test` 1.60.0 | `js` : `org.w3c.dom.events.KeyboardEvent` des déclarations DOM de la stdlib-js ; `wasmJs` : `org.w3c.dom.HTMLElement` des déclarations DOM Kotlin/Wasm plus `external interface` et le test `instanceof` par `@JsFun` | `none` — l’installation est structurelle ; recevoir une frappe dépend en plus du focus de l’élément, responsabilité du host (D7) | `FeatureAvailability.Unsupported` (snapshot d’avant installation, `RuntimeSurfaceInput.kt:73` et `:1455-1467`) ; `FeatureAvailability.Unavailable(SourceOverflow(InputSource))` sur le bras terminal d’overflow (section 2.1) | `web-input-key-state-before-event`, `web-input-key-modifiers`, sentinelle `web-input-no-parallel-reducer` ; `JsWebInputTest`/`WasmWebInputTest`, `WebInputSurfaceTest.keyboardAndPointerAreDeclaredOnlyByTheSurfaceOwnStructuralObservation`, `WebInputMappingTest` |
 | `InputCapabilities.pointer` | `js`, `wasmJs` | idem | `js` : `org.w3c.dom.pointerevents.PointerEvent` ; `wasmJs` : `WasmPointerEvent` en `external interface JsAny` et `instanceof` par `@JsFun` | `none` — listeners posés sur l’élément attaché à l’installation ; la position publiée est relative à la surface | `FeatureAvailability.Unsupported` (même snapshot d’avant installation) ; `FeatureAvailability.Unavailable(SourceOverflow(InputSource))` sur le bras terminal d’overflow (section 2.1) | `web-input-pointer-primary`, `web-input-pointer-multi`, `web-input-pointer-cancel`, sentinelle `web-input-no-stuck-button` ; `JsWebInputTest`/`WasmWebInputTest`, `WebInputTrackingTest` |
 | `InputCapabilities.touch` | `js`, `wasmJs` | idem | `org.w3c.dom.pointerevents.PointerEvent` — le port refuse `pointerType == "touch"` avant toute lecture, sans second chemin | `none` — aucun observer de touch n’est installé (`touchInstalled = false`, `WebHostSession.kt:615`) | `FeatureAvailability.Unsupported` ; `FeatureAvailability.Unavailable(SourceOverflow(InputSource))` sur le bras terminal d’overflow (section 2.1) — jamais `Available` | `web-input-touch-deferred`, sentinelle `web-input-no-touch-claim` ; `JsWebInputTest.aTouchPointerProducesNoStimulusAtAll`, `WebInputMappingTest.theDeliveredPointerKindsAreTheMouseAndThePenAndTouchIsRefused` |
-| `InputCapabilities.gestures` | `js`, `wasmJs` | idem | `none` | `none` — `gestureKinds = emptySet()` (`WebHostSession.kt:616`) | `Capability.Unsupported(KadreFailure.Unsupported(KadreOperation.GestureInput))`, y compris sur le bras terminal d’overflow, qui ne transforme pas un `Capability.Unsupported` en `Unavailable` (`RuntimeSurfaceInput.kt:1455-1458`) | `web-input-touch-deferred` (l’attribut `data-kadre-input-caps` vaut `gestures=unsupported:gestureinput`, assertion partagée par les douze scénarios) ; `WebInputSurfaceTest.keyboardAndPointerAreDeclaredOnlyByTheSurfaceOwnStructuralObservation` |
+| `InputCapabilities.gestures` | `js`, `wasmJs` | idem | `none` | `none` — `gestureKinds = emptySet()` (`WebHostSession.kt:616`) | `Capability.Unsupported(KadreFailure.Unsupported(KadreOperation.GestureInput))`, y compris sur le bras terminal d’overflow, qui ne transforme pas un `Capability.Unsupported` en `Unavailable` (`RuntimeSurfaceInput.kt:1476-1479`) | `web-input-touch-deferred` (l’attribut `data-kadre-input-caps` vaut `gestures=unsupported:gestureinput`, assertion partagée par les douze scénarios) ; `WebInputSurfaceTest.keyboardAndPointerAreDeclaredOnlyByTheSurfaceOwnStructuralObservation` |
 | `InputCapabilities.dragAndDrop` | `js`, `wasmJs` | idem | `none` | `none` — aucun listener de drag n’existe dans les deux ports | `FeatureAvailability.Unsupported` (`dragAndDropAvailable = false`, `WebHostSession.kt:585`) ; `FeatureAvailability.Unavailable(SourceOverflow(InputSource))` sur le bras terminal d’overflow (section 2.1) | `WebInputSurfaceTest.keyboardAndPointerAreDeclaredOnlyByTheSurfaceOwnStructuralObservation` (seul porteur : aucun scénario navigateur ne l’observe dans cette phase) |
-| `InputCapabilities.textInput` | `js`, `wasmJs` | idem | `none` | `none` — `UnsupportedTextInputPort` est la seule implémentation câblée (`WebHostSession.kt:580`) | `Capability.Unsupported(KadreFailure.Unsupported(KadreOperation.TextInput))` (`TextInputPort.kt:91`), inchangé sur le bras terminal d’overflow (`RuntimeSurfaceInput.kt:1456`) | `WebInputSurfaceTest.keyboardAndPointerAreDeclaredOnlyByTheSurfaceOwnStructuralObservation` |
-| `InputCapabilities.rawInput` | `js`, `wasmJs` | idem | `none` | `none` — `rawInputCoordinator = null` et la capability sont posés au même endroit (`WebHostSession.kt:583-584`) | `Capability.Unsupported(KadreFailure.Unsupported(KadreOperation.RawInputAccess))`, inchangé sur le bras terminal d’overflow (`RuntimeSurfaceInput.kt:1457`) | `WebInputSurfaceTest.keyboardAndPointerAreDeclaredOnlyByTheSurfaceOwnStructuralObservation` |
+| `InputCapabilities.textInput` | `js`, `wasmJs` | idem | `none` | `none` — `UnsupportedTextInputPort` est la seule implémentation câblée (`WebHostSession.kt:580`) | `Capability.Unsupported(KadreFailure.Unsupported(KadreOperation.TextInput))` (`TextInputPort.kt:91`), inchangé sur le bras terminal d’overflow (`RuntimeSurfaceInput.kt:1481`) | `WebInputSurfaceTest.keyboardAndPointerAreDeclaredOnlyByTheSurfaceOwnStructuralObservation` |
+| `InputCapabilities.rawInput` | `js`, `wasmJs` | idem | `none` | `none` — `rawInputCoordinator = null` et la capability sont posés au même endroit (`WebHostSession.kt:583-584`) | `Capability.Unsupported(KadreFailure.Unsupported(KadreOperation.RawInputAccess))`, inchangé sur le bras terminal d’overflow (`RuntimeSurfaceInput.kt:1482`) | `WebInputSurfaceTest.keyboardAndPointerAreDeclaredOnlyByTheSurfaceOwnStructuralObservation` |
 | `SurfaceCapabilities.cursor` et `SurfaceCapabilities.customCursor` | `js`, `wasmJs` | idem | `none` | `none` — aucun chemin de commit n’existe et `clear` est refusé avant admission (`WebHostSession.kt:1053`) | `Capability.Unsupported(KadreFailure.Unsupported(KadreOperation.UpdateSurface))` : snapshot attaché par `webSurfaceCapabilities()` (`WebHostSession.kt:1273`, `:1274`), snapshot terminal par `unsupportedSurfaceCapabilities()` (`SurfaceAdmission.kt:21-22`, publié à `WebHostSession.kt:1139`) | `WebInputSurfaceTest.theInputDefaultBehaviorCapabilityIsTheWholeEnumAndTheOtherFieldsStayUnsupported` (snapshot attaché, `:595-597`) ; le porteur du snapshot terminal est `unsupportedSurfaceCapabilities()` (`SurfaceAdmission.kt:20-29`), dont la même règle est asservie pour un autre champ par le même test (`:606-610`) |
 | `SurfaceCapabilities.pointerCapture` | `js`, `wasmJs` | idem | `none` | `none` — `Confined` exige en plus un pointeur que la surface détient déjà, sinon rejet `InteractionRequired(Missing)` | `Capability.Unsupported(KadreFailure.Unsupported(KadreOperation.UpdateSurface))` au snapshot terminal (la surface attachée publie `Supported({None, Confined}, Available)`) | `web-input-pointer-capture` ; `JsWebPointerCaptureTest`/`WasmWebPointerCaptureTest`, `WebInputSurfaceTest.thePointerCaptureCapabilityIsNoneAndConfinedAndLockedIsProvablyOutside` |
 | `SurfaceCapabilities.hitTesting` | `js`, `wasmJs` | idem | `none` | `none` — aucun chemin de commit | `Capability.Unsupported(KadreFailure.Unsupported(KadreOperation.UpdateSurface))` | `WebInputSurfaceTest.theInputDefaultBehaviorCapabilityIsTheWholeEnumAndTheOtherFieldsStayUnsupported` |
@@ -97,8 +113,8 @@ après la fermeture ne publie ni état, ni événement, ni reset (`web-input-ter
 Les quatre capabilities passives du registre (`keyboard`, `pointer`, `touch`, `dragAndDrop`) ne
 valent pas `Unsupported` dans tous les états. Sur le **bras terminal d’overflow d’ingress**, le
 reducer publie `FeatureAvailability.Unavailable(SourceOverflow(InputSource))` — une indisponibilité
-observée, pas une absence structurelle, exactement la distinction que `BACKEND-CAPABILITIES.md` §1
-fait entre les deux formes. Le bras est atteignable sous `KadrePolicies.Default` :
+observée, pas une absence structurelle, exactement la distinction que `BACKEND-CAPABILITIES.md` §2
+(`:27`) fait entre les deux formes. Le bras est atteignable sous `KadrePolicies.Default` :
 
 1. `KadrePolicies.Default` donne `discreteCapacity = 256` et `eventIngress =
    IngressOverflowAction.CloseSource` (`KadrePolicies.kt:6-29`), et le constructeur de profil en
@@ -108,24 +124,31 @@ fait entre les deux formes. Le bras est atteignable sous `KadrePolicies.Default`
    `enqueuePublicationLocked` termine par `terminaliseLocked(failure =
    KadreFailure.SourceOverflow(KadreResourceKind.InputSource), failSession =
    deliveryPolicy.discreteEvents.ingressOverflow == IngressOverflowAction.FailSession)`
-   (`RuntimeSurfaceInput.kt:833-835`) — avec `CloseSource`, `failSession` vaut `false` : la **lane
+   (`RuntimeSurfaceInput.kt:840-842`) — avec `CloseSource`, `failSession` vaut `false` : la **lane
    d’input** est terminalisée, la session ne l’est pas ;
 3. `terminaliseLocked` publie le snapshot neutre dont la composition de capabilities est
    `unavailableInputCapabilities(currentState.capabilities, failure)`
-   (`RuntimeSurfaceInput.kt:855-871`), et cette fonction pose `keyboard = pointer = touch =
-   dragAndDrop = FeatureAvailability.Unavailable(failure)` (`RuntimeSurfaceInput.kt:1451-1454`,
-   `:1459`) ;
+   (`RuntimeSurfaceInput.kt:862-878`), et cette fonction pose `keyboard = pointer = touch =
+   dragAndDrop = FeatureAvailability.Unavailable(failure)` (`RuntimeSurfaceInput.kt:1472-1475`,
+   `:1480`) ;
 4. le même chemin est atteint par un profil à livraison continue `Buffered(…, CloseSource)`, qui
    produit `ContinuousOverflowAction.CloseSource` avec le même `SourceOverflow(InputSource)`
-   (`RuntimeSurfaceInput.kt:842-846`).
+   (`RuntimeSurfaceInput.kt:849-852`).
 
 Deux conséquences à ne pas confondre, et qui sont la raison pour laquelle la colonne `état absent`
 porte deux valeurs : `gestures` **ne** devient pas `Unavailable` sur ce bras — un
-`Capability.Unsupported` y reste inchangé (`RuntimeSurfaceInput.kt:1455-1458`) — et `textInput` et
-`rawInput` y sont re-posés en `Capability.Unsupported` (`:1460-1461`), donc leurs lignes n’ont
+`Capability.Unsupported` y reste inchangé (`RuntimeSurfaceInput.kt:1476-1479`) — et `textInput` et
+`rawInput` y sont re-posés en `Capability.Unsupported` (`:1481-1482`), donc leurs lignes n’ont
 qu’une valeur. L’adapter Web est concerné par ce bras comme tout hôte acceptant
 `KadrePolicies.Default`, et le contrat `BCK-003` ne le prouve pas en navigateur : il est décrit ici
 parce que §8 demande la valeur exacte, et sa réserve est celle de la section 4.
+
+Ce bras terminalise la **lane** d’input, jamais la surface : `terminaliseLocked(failSession = false)`
+laisse la session et la surface vivantes, et le champ `SurfaceCapabilities.inputDefaultBehavior`
+qu’elles publient reste celui du snapshot attaché — `Supported({HostDefault, SuppressWhenPossible},
+Available)`. `WebHostSession.suppressDefaultFor` ne lit en effet que la fermeture d’admission et ce
+champ (`WebHostSession.kt:1039-1041`) : la suppression peut donc encore être accordée pour une lane
+qui ne livre plus rien, jusqu’à ce que la surface elle-même devienne terminale.
 
 La colonne `runtime gate` est à `none` pour toutes les lignes : aucune feature ne dépend d’une
 permission, d’un secure context, d’un protocole ou d’un matériel, et ce qui dépend d’un élément

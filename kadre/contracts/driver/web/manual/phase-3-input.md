@@ -1,14 +1,16 @@
 # Web Phase 3 — Input manual charter
 
-This is a short manual complement to the deterministic Phase 3 browser tests. It
-covers browser behaviour that headless automation cannot honestly produce: a
-host element that its own page never made focusable, the real `deltaMode` a
-wheel reports per engine, trackpad momentum, a real keyboard layout that is not
-US, real pen hardware, and pointer lock, which this phase deliberately leaves to
-a later one. It is informative; it creates no validator evidence, it does not
-change any contract status, and it is not wired into the contract validator. It
-never replaces an automated proof, and nothing in it may be read as the
-capability register: the register of this adapter's input features is
+This is a short manual complement to the deterministic Phase 3 browser tests. Its
+procedures cover the browser frontiers headless automation cannot honestly
+produce: the real `deltaMode` a wheel reports per engine, trackpad momentum, a
+real keyboard layout that is not US, real pen hardware, and pointer lock, which
+this phase deliberately leaves to a later one. Procedure 1 is kept for a
+different reason and is not one of those frontiers: it records a boundary whose
+owner is the page rather than the adapter — focusability — and the fixture's own
+page provides it. The charter is informative; it creates no validator evidence,
+it does not change any contract status, and it is not wired into the contract
+validator. It never replaces an automated proof, and nothing in it may be read as
+the capability register: the register of this adapter's input features is
 [capabilities/web.md](../../../../capabilities/web.md), and it declares the one
 engine the automated smoke really runs.
 
@@ -116,9 +118,14 @@ Press the same key again: the surface now publishes the key event
 `?scenario=input-pointer` for the pointer: the listeners are on the element, so
 a pointer over the host is observed whether or not the element is focusable,
 while a keyboard observation requires the focus the page must make possible.
-The one consequence of a non-focusable host that a manual pass can show and the
-automated suite cannot stage is the honest silence: the surface claims
-`keyboard = available` and receives nothing at all.
+The consequence of a non-focusable host is the honest silence: the surface claims
+`keyboard = available` and receives nothing at all. The reason this pass is
+written down rather than asserted is the owner of the boundary, not a limit of
+the suite: removing `tabindex` and pressing a key is deterministic, but
+focusability belongs to the page — Kadre writes no `tabindex` (D7) and the
+fixture's own page makes its host focusable (`host.tabIndex = 0`) — so an
+automated scenario could stage that silence only by asserting the fixture page's
+own choice rather than the adapter's contract.
 
 ### 2. The real `deltaMode` of a wheel, per engine
 

@@ -145,7 +145,8 @@ each row is what asserts it:
 | `InputCapabilities.touch`, `InputCapabilities.gestures` | `Unsupported` and `Unsupported(GestureInput)`: no touch observation is delivered | `web-input-touch-deferred` |
 | `SurfaceCapabilities.pointerCapture` | `Supported({None, Confined}, Available)`; a `Confined` request without an owned pointer is refused `InteractionRequired(Missing)`, and `Locked` is `Unsupported(UpdateSurface)` | `web-input-pointer-capture` |
 | `SurfaceCapabilities.inputDefaultBehavior` | `Supported({HostDefault, SuppressWhenPossible}, Available)`; under `HostDefault` no browser default is dropped, under `SuppressWhenPossible` only the wheel and a press of the nine document-scroll keys are | `web-input-default-behavior` |
-| every surface field at the terminal transition | unavailable, and the input lane is closed rather than reset | `web-input-terminal-closed` |
+| the terminal `SurfaceCapabilities` | unavailable: the shared all-`Unsupported` snapshot (`unsupportedSurfaceCapabilities()`, `SurfaceAdmission.kt:20`) | `WebInputSurfaceTest.theInputDefaultBehaviorCapabilityIsTheWholeEnumAndTheOtherFieldsStayUnsupported` — the scenario `web-input-terminal-closed` reads `data-kadre-input-state`, a `SurfaceInputState`, plus the session and flow closure, and the fixture publishes no `SurfaceCapabilities` attribute at all |
+| the input lane at the terminal transition | closed rather than reset: a key held at the close stays readable in the frozen snapshot, and no later stimulus is admitted | `web-input-terminal-closed` |
 
 ## Phase 2 limits
 

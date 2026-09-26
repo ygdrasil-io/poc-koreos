@@ -68,9 +68,9 @@ Toutes les lignes possèdent les managers communs `windows`, `displays`, `device
 | pointer | C | C | C | C, `Available` après installation | C | C | C | C |
 | touch | C | C | C | N, jamais `Available` | C | C | C | C |
 | gestures reconnues par le host | C | C | C | N(GestureInput) | C | C | C | C |
-| drag-and-drop | C | C | C | C | C | C | C | C |
-| IME / text input | C | C | C | C | C | C | C | C |
-| raw input | C | C | C | C | C | C | C | C |
+| drag-and-drop | C | C | C | N, jamais `Available` | C | C | C | C |
+| IME / text input | C | C | C | N(TextInput) | C | C | C | C |
+| raw input | C | C | C | N(RawInputAccess) | C | C | C | C |
 | gamepad observation | C | C | C | C | C | C | C | C |
 | effets gamepad | C | C | C | C | C | C | C | C |
 | capture target `HostChoice` | C | C | C | C | C | C | C | C |
