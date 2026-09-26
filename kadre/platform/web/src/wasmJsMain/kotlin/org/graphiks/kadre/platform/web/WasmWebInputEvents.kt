@@ -52,7 +52,21 @@ internal external interface WasmKeyboardEvent : JsAny {
     fun getModifierState(key: String): Boolean
 }
 
-/** One `PointerEvent` as this port reads it: its device, its position, its button and its measurements. */
+/**
+ * One `PointerEvent` as this port reads it: its device, its position, its button and its measurements.
+ *
+ * Four members are read as `Double` where the JS target's own DOM declarations
+ * (`kotlin-dom-api-compat`) type `clientX`/`clientY` as `Int` and `pressure`/`tangentialPressure` as
+ * `Float`. This is deliberate and was *measured*, not assumed: an event whose four reads are
+ * overridden to carry fractional values (`JsWebInputPrecisionTest` in `jsTest` and
+ * `WasmWebInputPrecisionTest` in `wasmJsTest`, the same event and the same assertions on both targets)
+ * reaches `WebInputStimulus` as `LogicalPoint(x=10.5, y=20.25)`, `pressure=0.1` and
+ * `tangentialPressure=0.3` on *both* targets — a JS external read of a narrow declared type does not
+ * narrow the runtime value, so the declared types are nominal. Reading them as `Double` here keeps the
+ * two targets agreeing on every delivered value; declaring `Int`/`Float` instead would truncate and
+ * round *only* on Wasm, which is exactly the drift this phase forbids. `tiltX`/`tiltY`/`twist` and
+ * `button` are integers in both declarations and are read as `Int`.
+ */
 internal external interface WasmPointerEvent : JsAny {
     val pointerType: String
     val clientX: Double
