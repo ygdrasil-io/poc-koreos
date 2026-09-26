@@ -335,6 +335,33 @@ internal fun webPointerKind(pointerType: String): PointerKind? = when (pointerTy
 }
 
 /**
+ * The pen state of one observation, for the pointer kinds the model lets carry one.
+ *
+ * The kind is what decides: the model validates `pen == null || kind == PointerKind.Pen ||
+ * kind == PointerKind.Eraser` on every pointer payload it builds, because a pen state belongs to a
+ * pen. Reading the four pen members without asking the kind first would hand the model either a
+ * state it rejects or, worse, a mouse delivered as a pen lying flat and untwisted — a mouse reports
+ * zeros for every pen member, and only the kind tells those zeros from a real pen's.
+ *
+ * This is a rule of the mapping and lives with it rather than in a port, so a second port cannot get
+ * it wrong. A kind that carries no pen state, and a pen whose four members are all outside the
+ * domains the model documents, both answer `null`: the caller then delivers a pointer the model
+ * accepts, with no pen state at all, rather than a fabricated one.
+ */
+internal fun webPenStateFor(
+    kind: PointerKind,
+    tiltXDegrees: Double?,
+    tiltYDegrees: Double?,
+    twistDegrees: Double?,
+    tangentialPressure: Double?,
+): PenState? =
+    if (kind == PointerKind.Pen || kind == PointerKind.Eraser) {
+        webPenState(tiltXDegrees, tiltYDegrees, twistDegrees, tangentialPressure)
+    } else {
+        null
+    }
+
+/**
  * Maps the modifier primitives of a keyboard event to the model's modifier set.
  *
  * The flags are the DOM's own: `shiftKey`, `ctrlKey`, `altKey`, `metaKey`, and the toggle states

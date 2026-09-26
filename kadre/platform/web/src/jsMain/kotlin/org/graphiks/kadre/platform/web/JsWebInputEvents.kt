@@ -87,24 +87,20 @@ internal fun jsPointerPosition(element: HTMLElement, event: PointerEvent): Logic
 internal fun jsPointerPressure(event: PointerEvent): Double? = webPointerPressure(event.pressure.toDouble())
 
 /**
- * The pen state of one observation, for the kinds that can carry one.
+ * The pen state of one pointer observation, read from the browser's four pen members.
  *
- * Only a pen carries a pen state: `PointerState` and the pointer events themselves require it, and a
- * mouse reports zeros for every pen member, which would otherwise read as a pen lying flat and
- * untwisted. The angles are the browser's own fields, and the core drops the ones outside the domains
- * the model validates instead of clamping them.
+ * Only the reading is here: which kinds may carry a pen state, and what happens to a value outside
+ * the domains the model documents, are the shared rule of [webPenStateFor], so the Wasm port — which
+ * reads those four fields through its own interop — cannot get either wrong.
  */
 internal fun jsPointerPenState(kind: PointerKind, event: PointerEvent): PenState? =
-    if (kind == PointerKind.Pen) {
-        webPenState(
-            tiltXDegrees = event.tiltX.toDouble(),
-            tiltYDegrees = event.tiltY.toDouble(),
-            twistDegrees = event.twist.toDouble(),
-            tangentialPressure = event.tangentialPressure.toDouble(),
-        )
-    } else {
-        null
-    }
+    webPenStateFor(
+        kind = kind,
+        tiltXDegrees = event.tiltX.toDouble(),
+        tiltYDegrees = event.tiltY.toDouble(),
+        twistDegrees = event.twist.toDouble(),
+        tangentialPressure = event.tangentialPressure.toDouble(),
+    )
 
 /**
  * The scroll stimulus of one wheel event at [coalescingBoundary], or `null` when the model cannot

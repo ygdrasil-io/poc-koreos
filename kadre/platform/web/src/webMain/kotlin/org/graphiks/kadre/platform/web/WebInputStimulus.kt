@@ -94,8 +94,11 @@ internal sealed interface WebInputStimulus {
     /**
      * One scroll observation.
      *
-     * [coalescingBoundary] is the target's own phase/momentum frontier: equal boundaries may merge,
-     * and a target advances it exactly when the browser's phase or momentum phase changes. The
+     * [coalescingBoundary] is the target's own coalescing frontier: equal boundaries may merge, and a
+     * target advances it exactly at the frontier its own platform can report. A native target
+     * advances it when the browser's phase or momentum phase changes — the rule of AppKit's
+     * `AppKitScrollBoundary`; a Web target has neither, so it advances it at the frontier its platform
+     * does expose, one browser delivery frame (the rule of `WebScrollBoundary` in `webMain`). The
      * boundary is a coalescing fact, never public input state.
      */
     data class Scrolled(

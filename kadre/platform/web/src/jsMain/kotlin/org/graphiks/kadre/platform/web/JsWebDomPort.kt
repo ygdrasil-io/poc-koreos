@@ -326,8 +326,8 @@ internal class JsWebDomPort(element: HTMLElement) : WebHostPort {
      */
     private fun deliverPointerEntered(pointer: PointerEvent?) {
         if (pointer == null) return
-        val current = element ?: return
         val kind = jsPointerKind(pointer) ?: return
+        val current = element ?: return
         val position = jsPointerPosition(current, pointer)
         pointerMotion.record(position)
         deliverInput(WebInputStimulus.PointerEntered(position = position, kind = kind))
@@ -342,8 +342,8 @@ internal class JsWebDomPort(element: HTMLElement) : WebHostPort {
      */
     private fun deliverPointerMoved(pointer: PointerEvent?) {
         if (pointer == null) return
-        val current = element ?: return
         val kind = jsPointerKind(pointer) ?: return
+        val current = element ?: return
         val position = jsPointerPosition(current, pointer)
         val delta = pointerMotion.advance(position)
         deliverInput(
@@ -365,8 +365,8 @@ internal class JsWebDomPort(element: HTMLElement) : WebHostPort {
      */
     private fun deliverPointerButton(pointer: PointerEvent?, buttonState: PointerButtonState) {
         if (pointer == null) return
-        val current = element ?: return
         val kind = jsPointerKind(pointer) ?: return
+        val current = element ?: return
         val position = jsPointerPosition(current, pointer)
         pointerMotion.record(position)
         deliverInput(
@@ -388,12 +388,15 @@ internal class JsWebDomPort(element: HTMLElement) : WebHostPort {
      * the exit the reducer reconciles the pointer with — the same member a leave uses, with the kind
      * the browser reported for the pointer that went away. A touch pointer is refused here as it is
      * everywhere else, because nothing of it was ever delivered and the surface declares touch
-     * unsupported.
+     * unsupported, and the refusal comes first: a pointer this port does not deliver must not even
+     * disturb the motion of the one it does, which a touch exit reaching the same listener otherwise
+     * would by forgetting where the pointer was.
      */
     private fun deliverPointerLeft(pointer: PointerEvent?) {
         if (pointer == null) return
+        val kind = jsPointerKind(pointer) ?: return
         pointerMotion.clear()
-        deliverInput(WebInputStimulus.PointerLeft(kind = jsPointerKind(pointer) ?: return))
+        deliverInput(WebInputStimulus.PointerLeft(kind = kind))
     }
 
     /** Hands one immutable observation to the observer, if one is still installed. */

@@ -485,6 +485,45 @@ class WebInputMappingTest {
         }
     }
 
+    // --- The kind a pen state belongs to ----------------------------------------------------------
+
+    @Test
+    fun onlyAPenOrAnEraserCarriesThePenMembersEvenWhenTheyReadLikeAPens() {
+        // The reading is the same for every kind, so the kind is the only thing that can tell a pen's
+        // angles from the zeros a mouse reports for every pen member. The model validates
+        // `pen == null || kind == Pen || kind == Eraser` on every pointer payload, so a port that read
+        // the four members without asking the kind first would hand it a state it rejects — or, worse,
+        // a mouse delivered as a pen lying flat and untwisted.
+        listOf(PointerKind.Mouse, PointerKind.Touchpad, PointerKind.Unknown).forEach { kind ->
+            assertNull(
+                webPenStateFor(kind, 12.0, -30.0, 90.0, 0.25),
+                "a $kind reports no pen state, whatever its four members read",
+            )
+        }
+        // And a mouse's own zeros are not a pen lying flat either.
+        assertNull(webPenStateFor(PointerKind.Mouse, 0.0, 0.0, 0.0, 0.0))
+
+        val pen = webPenStateFor(PointerKind.Pen, 12.0, -30.0, 90.0, 0.25)
+        assertEquals(12.0, pen?.tiltXDegrees)
+        assertEquals(-30.0, pen?.tiltYDegrees)
+        assertEquals(PI / 2.0, pen?.twistRadians ?: 0.0, 1e-12)
+        assertEquals(0.25, pen?.tangentialPressure)
+        assertEquals(
+            pen,
+            webPenStateFor(PointerKind.Eraser, 12.0, -30.0, 90.0, 0.25),
+            "the model lets the eraser carry a pen state too, so the rule follows the model",
+        )
+
+        // The domains are still the mapping's own business: a value the model cannot carry is dropped.
+        val partial = webPenStateFor(PointerKind.Pen, 120.0, -30.0, null, null)
+        assertNull(partial?.tiltXDegrees, "a tilt beyond 90 degrees is not a tilt")
+        assertEquals(-30.0, partial?.tiltYDegrees, "its valid sibling is still carried")
+        assertNull(
+            webPenStateFor(PointerKind.Pen, null, null, null, null),
+            "a pen that reported nothing pen-like carries no state rather than an empty record",
+        )
+    }
+
     private companion object {
         /**
          * The modifier primitive of the mapping, in its declared order, so a case can name only the

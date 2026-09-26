@@ -320,6 +320,52 @@ class JsWebInputTest {
         }
     }
 
+    /**
+     * A refused observation is refused whole: it may produce no stimulus *and* may leave nothing of
+     * the pointer the port does deliver behind.
+     *
+     * A touch contact reaches the element like any other pointer, so its exit is dispatched to the
+     * same listener a mouse's exit is. The mouse is mid-motion here on purpose: had the refusal
+     * happened after the shared motion forgot its position, the mouse's next motion would report no
+     * movement at all, which is a stimulus built from another pointer's event.
+     */
+    @Test
+    fun aRefusedTouchExitLeavesTheMouseMotionItDoesNotBelongTo() {
+        val harness = JsInputHarness()
+        try {
+            val origin = harness.elementOrigin()
+            dispatchPointer(harness.element, "pointerenter", "mouse", clientX = origin.x + 10.0, clientY = origin.y + 10.0)
+            dispatchPointer(harness.element, "pointermove", "mouse", clientX = origin.x + 12.0, clientY = origin.y + 14.0)
+            dispatchPointer(harness.element, "pointerleave", "touch", clientX = origin.x + 99.0, clientY = origin.y + 99.0)
+            dispatchPointer(harness.element, "pointermove", "mouse", clientX = origin.x + 15.0, clientY = origin.y + 18.0)
+
+            assertEquals(
+                listOf<WebInputStimulus>(
+                    WebInputStimulus.PointerEntered(position = LogicalPoint(10.0, 10.0), kind = PointerKind.Mouse),
+                    WebInputStimulus.PointerMoved(
+                        position = LogicalPoint(12.0, 14.0),
+                        delta = LogicalDelta(2.0, 4.0),
+                        pressure = 0.0,
+                        kind = PointerKind.Mouse,
+                        pen = null,
+                    ),
+                    WebInputStimulus.PointerMoved(
+                        position = LogicalPoint(15.0, 18.0),
+                        delta = LogicalDelta(3.0, 4.0),
+                        pressure = 0.0,
+                        kind = PointerKind.Mouse,
+                        pen = null,
+                    ),
+                ),
+                harness.delivered.toList(),
+                "a touch exit delivers nothing and must not move the mouse's own motion: the last mouse " +
+                    "motion measures from the mouse's previous position",
+            )
+        } finally {
+            harness.close()
+        }
+    }
+
     @Test
     fun aCancelledPointerIsReconciledLikeAPointerThatLeft() {
         val harness = JsInputHarness()
