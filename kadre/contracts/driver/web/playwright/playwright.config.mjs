@@ -13,6 +13,7 @@ export default defineConfig({
     'web-phase0.spec.mjs',
     'web-lifecycle.spec.mjs',
     'web-surface.spec.mjs',
+    'web-input.spec.mjs',
     'web-typescript.spec.mjs',
   ],
   timeout: 30_000,
