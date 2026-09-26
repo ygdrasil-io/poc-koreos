@@ -62,9 +62,17 @@ internal class WebSurfaceConfiguration(
     val collectorAllocator: Any,
     /** The per-flow collector limit of those gates. */
     val maxCollectorsPerFlow: Int,
-    /** The session scope a drop transfer outlives its stimulus in. */
+    /**
+     * The session scope a drop transfer outlives its stimulus in; received deliberately and unused
+     * until drag-and-drop is activated in Phase 5.
+     */
     val dropTransferScope: CoroutineScope?,
-    /** The session diagnostic channel the reducer reports non-fatal input diagnostics through. */
+    /**
+     * The session diagnostic channel the reducer's raw-input coordinator reports through.
+     *
+     * The reducer's own reporter of non-session-failure diagnostics is not this channel: it is the
+     * failure reporter the host session itself was built with, which the surface already holds.
+     */
     val diagnostics: (KadreDiagnostic) -> Unit,
     /** The session-owned raw-input port, or null when the session has no raw input. */
     val rawInputPort: RawInputPort?,

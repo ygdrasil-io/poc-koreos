@@ -9,14 +9,13 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.channelFlow
-import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.launch
+import org.graphiks.kadre.application.ActivationState
 import org.graphiks.kadre.application.EventStamp
 import org.graphiks.kadre.application.KadreApplicationFactory
 import org.graphiks.kadre.application.KadreSession
 import org.graphiks.kadre.application.LifecycleState
 import org.graphiks.kadre.diagnostics.Capability
-import org.graphiks.kadre.diagnostics.DelicateKadreApi
 import org.graphiks.kadre.diagnostics.FeatureAvailability
 import org.graphiks.kadre.diagnostics.KadreDiagnostic
 import org.graphiks.kadre.diagnostics.KadreFailure
@@ -24,22 +23,20 @@ import org.graphiks.kadre.diagnostics.KadreOperation
 import org.graphiks.kadre.diagnostics.KadrePlatform
 import org.graphiks.kadre.diagnostics.KadreResourceKind
 import org.graphiks.kadre.diagnostics.KadreResult
-import org.graphiks.kadre.input.InputCapabilities
-import org.graphiks.kadre.input.InputStateRevision
-import org.graphiks.kadre.input.KeyboardModifiers
-import org.graphiks.kadre.input.KeyboardState
-import org.graphiks.kadre.input.RawInputAccess
+import org.graphiks.kadre.input.PointerKind
 import org.graphiks.kadre.input.SurfaceInput
-import org.graphiks.kadre.input.SurfaceInputState
-import org.graphiks.kadre.input.TextInputConfig
-import org.graphiks.kadre.input.TextInputSession
 import org.graphiks.kadre.internal.runtime.RawInputPort
+import org.graphiks.kadre.internal.runtime.RuntimeDropTransferBudget
+import org.graphiks.kadre.internal.runtime.RuntimeEventCollectorAllocator
 import org.graphiks.kadre.internal.runtime.RuntimeFailureReporter
 import org.graphiks.kadre.internal.runtime.RuntimeHostController
 import org.graphiks.kadre.internal.runtime.RuntimePrimarySurface
 import org.graphiks.kadre.internal.runtime.RuntimePrimarySurfaceConfiguration
 import org.graphiks.kadre.internal.runtime.RuntimeSessionRevocationHandler
 import org.graphiks.kadre.internal.runtime.RuntimeSessionObserver
+import org.graphiks.kadre.internal.runtime.RuntimeSurfaceInput
+import org.graphiks.kadre.internal.runtime.SurfaceStimulus
+import org.graphiks.kadre.internal.runtime.UnsupportedTextInputPort
 import org.graphiks.kadre.policy.ContinuousDelivery
 import org.graphiks.kadre.policy.ContinuousOverflowAction
 import org.graphiks.kadre.policy.InputDeliveryPolicy
@@ -107,6 +104,16 @@ internal interface WebHostPort {
     fun installMetricsObserver(observer: (WebSurfaceMetrics) -> Unit) = Unit
 
     /**
+     * Installs target-owned input observation after ownership has been reserved.
+     *
+     * The observer receives one immutable, DOM-free [WebInputStimulus] per input fact the target
+     * observed; a borrowed browser event never crosses this boundary. Implementations deliver in the
+     * order the browser reported the facts, and may deliver nothing at all. [release] removes this
+     * observer together with every other target resource.
+     */
+    fun installInputObserver(observer: (WebInputStimulus) -> Unit) = Unit
+
+    /**
      * Registers [callback] for the next animation frame of the browsing context that owns the
      * element.
      *
@@ -171,12 +178,44 @@ internal class WebHostSession(
         }
         val ownership = WebHostOwnership(port, reservation)
         var surface: WebHostSurface? = null
-        val controller = createController(initialLifecycle, ownership) { created -> surface = created }
+        // Input the target reports before this session built its surface waits here, in the order it
+        // was reported: the observer is installed before the runtime creates the surface, so that
+        // window is real. The stimuli are handed to the surface as soon as it exists, where they wait
+        // again — still in order — for the session configuration that builds the reducer.
+        val pendingInput = ArrayDeque<WebInputStimulus>()
+
+        fun deliverInput(stimulus: WebInputStimulus) {
+            val current = surface
+            if (current == null) pendingInput.addLast(stimulus) else current.acceptInput(stimulus)
+        }
+
+        val controller = createController(initialLifecycle, ownership) { created ->
+            surface = created
+            pendingInput.forEach(created::acceptInput)
+            pendingInput.clear()
+        }
+        // The reduced lifecycle is where this session learns activation, so it is also where a loss of
+        // it neutralises the surface's input snapshot: once per transition that leaves Active, never
+        // twice for the same loss, and never on a transition that does not lose it.
+        var activationWasActive: Boolean = initialLifecycle.activation == ActivationState.Active
         val installed = runCatching {
             port.installLifecycleObserver { snapshot ->
                 when (val reduction = reducer.reduce(snapshot)) {
-                    is WebLifecycleReduction.Update -> controller.updateLifecycle(reduction.state)
+                    is WebLifecycleReduction.Update -> {
+                        val wasActive = activationWasActive
+                        activationWasActive = reduction.state.activation == ActivationState.Active
+                        controller.updateLifecycle(reduction.state)
+                        if (wasActive && !activationWasActive) deliverInput(WebInputStimulus.FocusLost)
+                    }
+
                     WebLifecycleReduction.Terminate -> {
+                        // A terminating reduction loses activation as well — the page went hidden, the
+                        // element left its document or the element is gone — so the snapshot is
+                        // neutralised once before the surface closes.
+                        if (activationWasActive) {
+                            activationWasActive = false
+                            deliverInput(WebInputStimulus.FocusLost)
+                        }
                         if (snapshot.pageHidden) controller.detachImmediately() else controller.detach()
                     }
                 }
@@ -197,6 +236,13 @@ internal class WebHostSession(
                 KadreFailure.PlatformFailure(KadrePlatform.Web, "web-host", "metrics-install-failed"),
             )
         }
+        val inputInstalled = runCatching { port.installInputObserver(::deliverInput) }
+        if (inputInstalled.isFailure) {
+            ownership.releaseAfterAttachFailure()
+            return KadreResult.Failure(
+                KadreFailure.PlatformFailure(KadrePlatform.Web, "web-host", "input-install-failed"),
+            )
+        }
 
         val attached = controller.attach(parentScope, applicationFactory, policy)
         if (attached is KadreResult.Failure) ownership.releaseAfterAttachFailure()
@@ -214,7 +260,7 @@ internal class WebHostSession(
         sessionObserver = RuntimeSessionObserver { _, _ -> ownership.releaseReservation() },
         failureReporter = failureReporter,
         primarySurfaceFactory = { id ->
-            val surface = WebHostSurface(id, port, ownership)
+            val surface = WebHostSurface(id, port, ownership, failureReporter)
             // The ownership releases the target's bridges before the runtime closes the surface, so
             // it has to be able to stop the surface from admitting anything new in between.
             ownership.observeSurface(surface::onOwnershipRevoked)
@@ -268,6 +314,7 @@ private class WebHostSurface(
     override val id: SurfaceId,
     private val port: WebHostPort,
     private val ownership: WebHostOwnership,
+    private val failureReporter: RuntimeFailureReporter,
 ) : HostSurface, RuntimePrimarySurfaceConfiguration, WebElementLeasePort {
     private var detached: Boolean = false
     private var terminated: Boolean = false
@@ -282,7 +329,26 @@ private class WebHostSurface(
     private var leaseHeld: Boolean = false
     private var configuration: WebSurfaceConfiguration? = null
     private val pendingStimuli = ArrayDeque<WebSurfaceStimulus>()
+
+    /**
+     * The input stimuli the target reported before the session configuration built the reducer.
+     *
+     * They are replayed in this order the moment it exists, so an input the element reported before
+     * Kadre was ready is reduced rather than dropped.
+     */
+    private val pendingInputStimuli = ArrayDeque<WebInputStimulus>()
+
+    /**
+     * The shared ordinary-input reducer of this surface, built once from the session configuration.
+     *
+     * Nothing before that configuration is this surface's to invent: the delivery policy, the stamp
+     * source, the collector allocator and the failure reporter all belong to the session. It is only
+     * unreachable before the runtime installs them, because application code can only obtain this
+     * surface from the session that configured it.
+     */
+    private lateinit var surfaceInput: RuntimeSurfaceInput
     private var pendingRedraw: Boolean = false
+
     private var bufferedRedraws: Int = 0
     private var frameHandle: WebFrameHandle? = null
     private val mutableState = MutableStateFlow(
@@ -323,7 +389,15 @@ private class WebHostSurface(
         terminal.await()
         forwarding.cancel()
     }
-    override val input: SurfaceInput = UnsupportedWebSurfaceInput
+
+    /**
+     * The shared ordinary-input reducer of this surface, which is its one input.
+     *
+     * It is built from the session configuration — never from a default of this surface's own — and
+     * closed by the terminal transition, so its `events` stream ends with the surface and every later
+     * stimulus is refused.
+     */
+    override val input: SurfaceInput get() = surfaceInput
 
     /**
      * Installs the session-owned configuration this surface publishes through.
@@ -332,9 +406,10 @@ private class WebHostSurface(
      * that were waiting for it: [closeAdmission] cleared both, and assigning one here would leave a
      * live configuration on a dead surface — the invariant every admission site relies on.
      *
-     * Every parameter is stored verbatim: the input configuration is what this surface builds the
-     * shared ordinary-input reducer from, so nothing is defaulted or narrowed here. The surface's
-     * `input` stays the unsupported stub until that reducer exists.
+     * Every parameter is stored verbatim, and the input configuration is what this surface builds the
+     * shared ordinary-input reducer from: the same delivery policy, stamp source, collector gates and
+     * failure handling the components-side window manager builds its own from. The stimuli the target
+     * reported earlier are reduced first, in order, and the structural observation is published last.
      */
     override fun installSessionConfiguration(
         deliveryPolicy: WindowDeliveryPolicy,
@@ -349,6 +424,9 @@ private class WebHostSurface(
         rawInputPort: RawInputPort?,
     ) {
         if (admissionClosed) return
+        // One configuration builds one reducer: installing a second one would leave the first
+        // reducer's event stream unclosed and its stimuli unaccounted for.
+        check(!this::surfaceInput.isInitialized) { "the session input configuration was already installed" }
         val active = WebSurfaceConfiguration(
             deliveryPolicy = deliveryPolicy,
             inputDeliveryPolicy = inputDeliveryPolicy,
@@ -362,9 +440,68 @@ private class WebHostSurface(
             rawInputPort = rawInputPort,
         )
         configuration = active
+        val sessionAllocator = sessionCollectorAllocator(collectorAllocator)
+        surfaceInput = RuntimeSurfaceInput(
+            surfaceId = id,
+            deliveryPolicy = inputDeliveryPolicy,
+            eventStampSource = source,
+            eventCollectorGate = sessionAllocator.newGate(maxCollectorsPerFlow),
+            textInputPort = UnsupportedTextInputPort,
+            // Raw input is not activated in this phase, so the session's own port is not wired here;
+            // the capability says so structurally instead of leaving the omission implicit.
+            rawInputCoordinator = null,
+            rawInputCapability = Capability.Unsupported(KadreFailure.Unsupported(KadreOperation.RawInputAccess)),
+            dragAndDropAvailable = false,
+            resources = resources,
+            dropTransferBudget = RuntimeDropTransferBudget(resources.maxConcurrentDropTransfers),
+            // The scope is received deliberately and unused until drag-and-drop is activated in
+            // Phase 5.
+            dropTransferScope = null,
+            textInputEventCollectorGate = sessionAllocator.newGate(maxCollectorsPerFlow),
+            // The reporter of diagnostics that are not session failures is the session's own failure
+            // reporter, the one this host was built with; the session diagnostic channel feeds the
+            // raw-input coordinator of a later phase, not this one.
+            failureReporter = { cause -> failureReporter.report(cause) },
+            sessionFailureHandler = sessionFailureHandler,
+        )
+        val pendingInput = pendingInputStimuli.toList()
+        pendingInputStimuli.clear()
+        pendingInput.forEach(::acceptInput)
         val pending = pendingStimuli.toList()
         pendingStimuli.clear()
         pending.forEach { publish(it, active) }
+        // The installation is structural and complete: keyboard and pointer observation exist from
+        // here on, and the capabilities may say so. Nothing of the kind is claimed earlier, and touch
+        // and gestures stay unsupported until a phase installs their observers.
+        surfaceInput.accept(
+            SurfaceStimulus.InputObservationChanged(
+                surfaceId = id,
+                keyboardInstalled = true,
+                pointerInstalled = true,
+                touchInstalled = false,
+                gestureKinds = emptySet(),
+            ),
+        )
+    }
+
+    /**
+     * Admits one observed input stimulus, from the target's observer or from the lifecycle reduction.
+     *
+     * Order is arrival order: a stimulus was either reported by the target in the order its callbacks
+     * arrived, or derived from the lifecycle snapshot this session just reduced.
+     */
+    fun acceptInput(stimulus: WebInputStimulus) {
+        if (admissionClosed) return
+        if (!this::surfaceInput.isInitialized) {
+            pendingInputStimuli.addLast(stimulus)
+            return
+        }
+        when (stimulus) {
+            // The reducer owns the neutral snapshot and the one reset it publishes, and it is the one
+            // transition that is not an input packet of its own.
+            WebInputStimulus.FocusLost -> surfaceInput.focusLost()
+            else -> surfaceInput.accept(stimulus.toSurfaceStimulus(id))
+        }
     }
 
     /** Target-owned metrics observation; ignored once the surface is terminated. */
@@ -425,7 +562,8 @@ private class WebHostSurface(
                         // admission flag: the excess request carries no payload beyond the revision
                         // the frame reads when it admits, so either action drops it and lets the
                         // requests already awaiting their frame admit once, as usual. Neither action
-                        // can report: a surface has no diagnostic channel in this phase.
+                        // reports: a redraw request dropped under a documented drop policy is not a
+                        // failure this surface announces.
                         ContinuousOverflowAction.DropOldestAndReport,
                         ContinuousOverflowAction.DropLatestAndReport,
                         -> bufferedRedraws = delivery.capacity
@@ -434,12 +572,12 @@ private class WebHostSurface(
                         // CloseSource closes this surface and leaves the session running. FailSession
                         // additionally reports the overflow, which terminates the session.
                         ContinuousOverflowAction.CloseSource -> {
-                            terminate()
+                            terminate(KadreFailure.SourceOverflow(KadreResourceKind.Surface))
                             return
                         }
 
                         ContinuousOverflowAction.FailSession -> {
-                            terminate()
+                            terminate(KadreFailure.SourceOverflow(KadreResourceKind.Surface))
                             active.sessionFailureHandler(
                                 KadreFailure.SourceOverflow(KadreResourceKind.Surface),
                             )
@@ -533,18 +671,19 @@ private class WebHostSurface(
 
     /** The runtime's teardown of this surface: it stops admitting and releases the port. */
     fun detach() {
-        terminate()
+        terminate(failure = null)
     }
 
     /**
      * The one terminal transition of this surface.
      *
-     * It is reached both by the host detaching ([detach]) and by a redraw overflow under a
-     * `CloseSource` policy, so the two paths cannot drift: the surface admits nothing, owns nothing
-     * and reports itself detached whichever one led here. Only a failing overflow additionally
-     * reports the failure to the session, which is why the caller owns that call.
+     * It is reached both by the host detaching ([detach]), by the owner revoking it, and by a redraw
+     * overflow under a `CloseSource` or `FailSession` policy, so the paths cannot drift: the surface
+     * admits nothing, owns nothing and reports itself detached whichever one led here. Only a failing
+     * overflow additionally reports the failure to the session, which is why the caller owns that
+     * call, and only [failure] closes the input stream as failed.
      */
-    private fun terminate() {
+    private fun terminate(failure: KadreFailure?) {
         if (terminated) return
         terminated = true
         detached = true
@@ -557,6 +696,9 @@ private class WebHostSurface(
                 revision = SurfaceRevision(current.revision.value + 1L),
             )
         } finally {
+            // The reducer goes last, so the terminal state it can no longer publish is already out:
+            // closing it ends the events stream and refuses every later stimulus, once and once only.
+            if (this::surfaceInput.isInitialized) surfaceInput.close(failure)
             terminal.complete(Unit)
             ownership.releasePort()
         }
@@ -570,40 +712,78 @@ private class WebHostSurface(
         frameHandle?.cancel()
         frameHandle = null
         pendingStimuli.clear()
+        pendingInputStimuli.clear()
         configuration = null
     }
 }
 
-private object UnsupportedWebSurfaceInput : SurfaceInput {
-    private val unsupportedTextInput = KadreFailure.Unsupported(KadreOperation.TextInput)
-    private val mutableState = MutableStateFlow(
-        SurfaceInputState(
-            keyboard = KeyboardState(emptySet()),
-            pointers = emptyList(),
-            touches = emptyList(),
-            modifiers = KeyboardModifiers(emptySet()),
-            capabilities = InputCapabilities(
-                keyboard = FeatureAvailability.Unsupported,
-                pointer = FeatureAvailability.Unsupported,
-                touch = FeatureAvailability.Unsupported,
-                gestures = Capability.Unsupported(KadreFailure.Unsupported(KadreOperation.GestureInput)),
-                dragAndDrop = FeatureAvailability.Unsupported,
-                textInput = Capability.Unsupported(unsupportedTextInput),
-                rawInput = Capability.Unsupported(KadreFailure.Unsupported(KadreOperation.RawInputAccess)),
-            ),
-            revision = InputStateRevision(0L),
-        ),
+/**
+ * The session's collector allocator, handed over as the untyped value of the SPI.
+ *
+ * The allocator is runtime-internal, so the SPI carries it as [Any]; a surface must hand it back to
+ * the runtime unchanged rather than interpret it, and an implementation that cannot is a bug, not a
+ * policy the surface may substitute one of its own for.
+ */
+private fun sessionCollectorAllocator(allocator: Any): RuntimeEventCollectorAllocator =
+    allocator as? RuntimeEventCollectorAllocator
+        ?: error("runtime session collector allocator has an invalid type")
+
+/**
+ * One target input observation as the shared reducer's own stimulus.
+ *
+ * The target's union carries no `surfaceId` because a stimulus describes what the element observed;
+ * adding the identity is the surface's own step, exactly as the components-side manager adds it. A
+ * focus loss has no branch here: it is not an input packet at all, and the surface reduces it through
+ * the reducer's `focusLost`.
+ */
+private fun WebInputStimulus.toSurfaceStimulus(surfaceId: SurfaceId): SurfaceStimulus = when (this) {
+    is WebInputStimulus.KeyChanged -> SurfaceStimulus.KeyChanged(
+        surfaceId = surfaceId,
+        physicalKey = physicalKey,
+        logicalKey = logicalKey,
+        location = location,
+        keyState = keyState,
+        repeat = repeat,
+        modifiers = modifiers,
     )
 
-    override val events: Flow<org.graphiks.kadre.input.InputEvent> = emptyFlow()
-    override val state: StateFlow<SurfaceInputState> = mutableState.asStateFlow()
+    is WebInputStimulus.PointerEntered -> SurfaceStimulus.PointerEntered(
+        surfaceId = surfaceId,
+        kind = PointerKind.Mouse,
+        position = position,
+    )
 
-    override suspend fun openTextInput(config: TextInputConfig): KadreResult<TextInputSession> =
-        KadreResult.Failure(unsupportedTextInput)
+    is WebInputStimulus.PointerMoved -> SurfaceStimulus.PointerMoved(
+        surfaceId = surfaceId,
+        kind = PointerKind.Mouse,
+        position = position,
+        delta = delta,
+        pressure = pressure,
+        pen = null,
+    )
 
-    @OptIn(DelicateKadreApi::class)
-    override suspend fun requestRawInput(): KadreResult<RawInputAccess> =
-        KadreResult.Failure(KadreFailure.Unsupported(KadreOperation.RawInputAccess))
+    is WebInputStimulus.PointerButtonChanged -> SurfaceStimulus.PointerButtonChanged(
+        surfaceId = surfaceId,
+        kind = PointerKind.Mouse,
+        button = button,
+        buttonState = buttonState,
+        position = position,
+        pressure = pressure,
+        pen = null,
+    )
+
+    WebInputStimulus.PointerLeft -> SurfaceStimulus.PointerLeft(
+        surfaceId = surfaceId,
+        kind = PointerKind.Mouse,
+    )
+
+    is WebInputStimulus.Scrolled -> SurfaceStimulus.Scroll(
+        surfaceId = surfaceId,
+        delta = delta,
+        coalescingBoundary = coalescingBoundary,
+    )
+
+    WebInputStimulus.FocusLost -> error("a focus loss is reduced by the reducer, not as a stimulus")
 }
 
 private fun webSurfaceCapabilities(platformAccessSupported: Boolean): SurfaceCapabilities = SurfaceCapabilities(

@@ -16,8 +16,19 @@ internal class RecordingWebHostPort(
     override val stableIdentity: Any = Any()
     private var metricsObserver: ((WebSurfaceMetrics) -> Unit)? = null
     private var lifecycleObserver: ((WebLifecycleSnapshot) -> Unit)? = null
+    private var inputObserver: ((WebInputStimulus) -> Unit)? = null
     private var frame: (() -> Unit)? = null
     private var released: Boolean = false
+
+    /**
+     * The stimuli the target observed before Kadre was listening, delivered in order the instant the
+     * observer is installed.
+     *
+     * This is the window a real port works in: it installs its observation before the session
+     * configuration exists, so input the element already reported is handed over before anything can
+     * reduce it. A test sets this before attaching to drive exactly that window.
+     */
+    var preInstallInput: List<WebInputStimulus> = emptyList()
 
     /**
      * The host element this port was built around, as the untyped reference the surface lends.
@@ -62,6 +73,19 @@ internal class RecordingWebHostPort(
     /** Pushes [snapshot] as if the target had just observed the browsing context. */
     fun deliverLifecycle(snapshot: WebLifecycleSnapshot) {
         lifecycleObserver?.invoke(snapshot)
+    }
+
+    override fun installInputObserver(observer: (WebInputStimulus) -> Unit) {
+        check(inputObserver == null) { "this port already installed an input observer" }
+        inputObserver = observer
+        val observed = preInstallInput
+        preInstallInput = emptyList()
+        observed.forEach(observer)
+    }
+
+    /** Pushes [stimulus] as if the target had just observed it; inert once released. */
+    fun deliverInput(stimulus: WebInputStimulus) {
+        inputObserver?.invoke(stimulus)
     }
 
     /** The browsing context is gone, as a detached or removed document reports it. */
@@ -109,6 +133,7 @@ internal class RecordingWebHostPort(
         onRelease?.invoke()
         metricsObserver = null
         lifecycleObserver = null
+        inputObserver = null
         element = null
     }
 }

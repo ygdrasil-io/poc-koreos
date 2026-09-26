@@ -233,16 +233,23 @@ internal object UnsupportedRuntimeSessionComponentsFactory : RuntimeSessionCompo
  * - [dropTransferScope] feeds `RuntimeSurfaceInput.dropTransferScope`, the scope a drop transfer
  *   outlives the stimulus that admitted it in.
  * - [diagnostics] feeds the diagnostic channel the reducer's raw-input coordinator reports
- *   through, and the reporter a failed input publication is announced on.
+ *   through. It is not where the reducer's own reporter comes from: the reporter a failed input
+ *   publication is announced on is the reporter of diagnostics that are not session failures, and a
+ *   surface obtains that one from the backend that built its host — the Web host session's own
+ *   `RuntimeFailureReporter`, adapted to `(Throwable) -> Unit`, is the worked example, and it is the
+ *   same kind of value a components-side window manager receives from its backend.
  * - [rawInputPort] feeds `RuntimeSurfaceInput.rawInputCoordinator` when it is non-null, which is
  *   also where `RuntimeSurfaceInput.rawInputCapability` comes from; a session without raw input
  *   delivers `null` and the reducer stays unsupported for it.
  *
- * What the reducer also needs is deliberately not here, because the surface owns it: its
- * `RuntimeSurfaceInput.surfaceId`, its `textInputPort`, whether drag and drop is available at all,
- * and the reporter of diagnostics that are not session failures. The drop-transfer budget is
- * derived from [resources] instead of being passed because `RuntimeDropTransferBudget` is
- * runtime-internal and cannot appear in this signature.
+ * What the reducer also needs is deliberately not here, because it is not the session's to give: its
+ * `RuntimeSurfaceInput.surfaceId` is the identity the runtime itself allocated to the surface, its
+ * `textInputPort` and whether drag and drop is available at all are the surface's own activation
+ * decisions, and its reporter of diagnostics that are not session failures is the failure reporter
+ * of the backend that built the surface's host (a `RuntimeFailureReporter` the Web host session
+ * already holds), not the session's [diagnostics] channel. The drop-transfer budget is derived from
+ * [resources] instead of being passed because `RuntimeDropTransferBudget` is runtime-internal and
+ * cannot appear in this signature.
  */
 public interface RuntimePrimarySurfaceConfiguration {
     public fun installSessionConfiguration(
