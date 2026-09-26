@@ -260,14 +260,24 @@ test('web-input-wheel-pixel', async ({ page }) => {
   const box = await host.boundingBox();
 
   // A real wheel. Chromium reports a pixel delta (`deltaMode == 0`), so the model carries a logical
-  // scroll, and every wheel the pipeline delivers is one observation: three wheels, three exact
-  // payloads, nothing merged away and nothing approximated.
+  // scroll, and every wheel the pipeline delivers in its own frontier is one observation: three
+  // wheels, three exact payloads, nothing merged away and nothing approximated.
   await page.mouse.move(box.x + 100, box.y + 60);
   await page.mouse.wheel(0, 120);
   await expect.poll(async () => scrollDeltas(await host.getAttribute('data-kadre-input-events')))
     .toEqual(['logical(0,120)']);
 
+  // A real frame between two wheels, so each one opens a frontier of its own: the Web frontier opens
+  // for the first wheel a new animation frame delivers (`WebScrollBoundary.advance`), and two wheels
+  // the browser delivers in one frame may legitimately merge into one summed scroll. Waiting for the
+  // frame is what makes "one wheel, one observation" what this test asserts rather than a bet on the
+  // frame the previous CDP command happened to land in.
+  await nextFrame(page);
   await page.mouse.wheel(0, 120);
+  await expect.poll(async () => scrollDeltas(await host.getAttribute('data-kadre-input-events')))
+    .toEqual(['logical(0,120)', 'logical(0,120)']);
+
+  await nextFrame(page);
   await page.mouse.wheel(-40, 0);
   await expect.poll(async () => scrollDeltas(await host.getAttribute('data-kadre-input-events')))
     .toEqual(['logical(0,120)', 'logical(0,120)', 'logical(-40,0)']);
@@ -421,12 +431,12 @@ test('web-input-default-behavior', async ({ page }) => {
   expect(await settledScrollY(page)).toBe(0);
 
   // The suppression is bounded to the closed set of suppressed categories: `Tab`'s default is not a
-  // document scroll, so it is kept — the focus really leaves the surface while the policy asks for
-  // suppression.
+  // document scroll, so it is kept — the focus really moves to the next stop of the page's tab order,
+  // which the fixture owns and which is not inside the surface.
   const activeHost = () => page.evaluate(() => document.activeElement?.getAttribute('data-kadre-host') ?? null);
   expect(await activeHost()).toBe('input-default-behavior');
   await page.keyboard.press('Tab');
-  await expect.poll(activeHost).toBeNull();
+  await expect(page.locator('[data-kadre-focus-outside]')).toBeFocused();
 
   // And it follows the committed state rather than latching: asking for the default back gives the page
   // its own behaviour again.

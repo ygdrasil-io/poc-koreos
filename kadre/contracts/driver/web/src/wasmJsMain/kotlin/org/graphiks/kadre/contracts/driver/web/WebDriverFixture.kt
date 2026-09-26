@@ -486,12 +486,14 @@ private fun inputTerminalScenario() = inputScenario("input-terminal") { handles 
  * The page's own default behaviour under both members of `InputDefaultBehavior`.
  *
  * The document is made scrollable here, because the browser's wheel and arrow defaults act on the
- * scrollable ancestor: without a scrollable page there would be no default to observe.
+ * scrollable ancestor: without a scrollable page there would be no default to observe. The focus
+ * target is created *after* the host, so it is the next stop of the page's tab order and a spec can
+ * prove that `Tab`'s default really ran by reading the focus it moved to.
  */
 private fun inputDefaultBehaviorScenario() {
     document.body!!.style.height = "4000px"
-    createFocusOutside()
     inputScenario("input-default-behavior") { handles ->
+        createFocusOutside()
         installCommand("kadre-behavior-host-default") {
             handles.host.setAttribute(
                 "data-kadre-behavior-host-default",
@@ -774,10 +776,12 @@ private class InputObservation(private val host: HTMLElement) {
 }
 
 /**
- * The focus target the focus spec moves the focus to: a real, focusable element outside the host.
+ * The focus target a spec moves the focus to: a real, focusable element outside the host.
  *
- * It exists so the loss of activation is a real focus change of the page rather than a synthetic
- * event, and it is created by the fixture before readiness, like every other element of a scenario.
+ * It exists so a loss of activation is a real focus change of the page rather than a synthetic event.
+ * It is created by the fixture before readiness, like every other element of a scenario, and the
+ * moment the caller creates it decides the page's tab order: a scenario that proves `Tab`'s default
+ * ran creates it after the host, so it is the stop the default moves the focus to.
  */
 private fun createFocusOutside() {
     val element = document.createElement("div") as HTMLElement
