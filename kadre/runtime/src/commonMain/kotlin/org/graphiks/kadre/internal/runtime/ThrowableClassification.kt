@@ -1,0 +1,18 @@
+package org.graphiks.kadre.internal.runtime
+
+/**
+ * Whether this throwable is a linkage failure: the kind of error a broken native or generated
+ * bridge raises when the code it links against is missing or incompatible.
+ *
+ * The ordinary-input pipeline reports such a failure instead of letting it escape, so this
+ * classification carries policy and must stay exact per target — never widened to "an Error" or
+ * "an unexpected throwable", which would silently swallow real defects.
+ *
+ * Per target:
+ * - jvm: `true` for a `LinkageError`, `false` for anything else.
+ * - js, wasmJs: `false` for every throwable. Neither target has a `LinkageError` type at all
+ *   (the closest thing is the stdlib-internal `IrLinkageError`), so there is nothing to
+ *   classify: a browser build reports an ordinary failure where the JVM would report a broken
+ *   bridge, and never claims a linkage failure it cannot observe.
+ */
+internal expect fun Throwable.isLinkageFailure(): Boolean
