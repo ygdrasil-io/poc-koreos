@@ -7,19 +7,21 @@ import java.util.IdentityHashMap
  *
  * [java.util.IdentityHashMap] is exactly the semantics the expect declaration documents, so this
  * actual adds nothing to it: no wrapper, no extra allocation, no weaker comparison.
+ *
+ * It inherits the identity map rather than holding one, so the live map a caller observes is the
+ * reference-keyed `java.util.Map` the ordinary-input contract tests exercise (reference-keyed
+ * `get`/`set`/`remove`/`clear` with the map contract around them).
  */
-internal actual class IdentityKeyedMap<T> actual constructor() {
-    private val delegate = IdentityHashMap<Any, T>()
+internal actual class IdentityKeyedMap<T> actual constructor() : IdentityHashMap<Any, T>() {
+    actual override operator fun get(key: Any): T? = super.get(key)
 
-    internal actual operator fun get(key: Any): T? = delegate[key]
-
-    internal actual operator fun set(key: Any, value: T) {
-        delegate[key] = value
+    actual operator fun set(key: Any, value: T) {
+        put(key, value)
     }
 
-    internal actual fun remove(key: Any): T? = delegate.remove(key)
+    actual override fun remove(key: Any): T? = super.remove(key)
 
-    internal actual fun clear() {
-        delegate.clear()
+    actual override fun clear() {
+        super.clear()
     }
 }
