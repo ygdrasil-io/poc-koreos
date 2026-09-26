@@ -18,6 +18,7 @@ import org.graphiks.kadre.application.LifecycleState
 import org.graphiks.kadre.diagnostics.Capability
 import org.graphiks.kadre.diagnostics.DelicateKadreApi
 import org.graphiks.kadre.diagnostics.FeatureAvailability
+import org.graphiks.kadre.diagnostics.KadreDiagnostic
 import org.graphiks.kadre.diagnostics.KadreFailure
 import org.graphiks.kadre.diagnostics.KadreOperation
 import org.graphiks.kadre.diagnostics.KadrePlatform
@@ -32,6 +33,7 @@ import org.graphiks.kadre.input.SurfaceInput
 import org.graphiks.kadre.input.SurfaceInputState
 import org.graphiks.kadre.input.TextInputConfig
 import org.graphiks.kadre.input.TextInputSession
+import org.graphiks.kadre.internal.runtime.RawInputPort
 import org.graphiks.kadre.internal.runtime.RuntimeFailureReporter
 import org.graphiks.kadre.internal.runtime.RuntimeHostController
 import org.graphiks.kadre.internal.runtime.RuntimePrimarySurface
@@ -40,7 +42,9 @@ import org.graphiks.kadre.internal.runtime.RuntimeSessionRevocationHandler
 import org.graphiks.kadre.internal.runtime.RuntimeSessionObserver
 import org.graphiks.kadre.policy.ContinuousDelivery
 import org.graphiks.kadre.policy.ContinuousOverflowAction
+import org.graphiks.kadre.policy.InputDeliveryPolicy
 import org.graphiks.kadre.policy.KadrePolicy
+import org.graphiks.kadre.policy.ResourceBudgetPolicy
 import org.graphiks.kadre.policy.WindowDeliveryPolicy
 import org.graphiks.kadre.surface.CursorIcon
 import org.graphiks.kadre.surface.CursorStyle
@@ -327,16 +331,36 @@ private class WebHostSurface(
      * A configuration that arrives after the surface stopped admitting is dropped with the stimuli
      * that were waiting for it: [closeAdmission] cleared both, and assigning one here would leave a
      * live configuration on a dead surface — the invariant every admission site relies on.
+     *
+     * Every parameter is stored verbatim: the input configuration is what this surface builds the
+     * shared ordinary-input reducer from, so nothing is defaulted or narrowed here. The surface's
+     * `input` stays the unsupported stub until that reducer exists.
      */
     override fun installSessionConfiguration(
         deliveryPolicy: WindowDeliveryPolicy,
+        inputDeliveryPolicy: InputDeliveryPolicy,
         source: () -> EventStamp,
         sessionFailureHandler: (KadreFailure) -> Unit,
         collectorAllocator: Any,
         maxCollectorsPerFlow: Int,
+        resources: ResourceBudgetPolicy,
+        dropTransferScope: CoroutineScope?,
+        diagnostics: (KadreDiagnostic) -> Unit,
+        rawInputPort: RawInputPort?,
     ) {
         if (admissionClosed) return
-        val active = WebSurfaceConfiguration(deliveryPolicy, source, sessionFailureHandler)
+        val active = WebSurfaceConfiguration(
+            deliveryPolicy = deliveryPolicy,
+            inputDeliveryPolicy = inputDeliveryPolicy,
+            stampSource = source,
+            sessionFailureHandler = sessionFailureHandler,
+            collectorAllocator = collectorAllocator,
+            maxCollectorsPerFlow = maxCollectorsPerFlow,
+            resources = resources,
+            dropTransferScope = dropTransferScope,
+            diagnostics = diagnostics,
+            rawInputPort = rawInputPort,
+        )
         configuration = active
         val pending = pendingStimuli.toList()
         pendingStimuli.clear()

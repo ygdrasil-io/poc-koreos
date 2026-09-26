@@ -101,6 +101,7 @@ internal class SessionRuntime(
                 ::eventDeliveryFailed,
                 eventCollectorAllocator,
                 policy.resources.maxEventCollectorsPerFlow,
+                policy.resources,
                 rootScope,
                 runtimeDiagnostics::report,
                 components.rawInputPort,
