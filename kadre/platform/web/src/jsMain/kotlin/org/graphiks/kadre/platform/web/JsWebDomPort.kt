@@ -1,7 +1,6 @@
 package org.graphiks.kadre.platform.web
 
 import org.graphiks.kadre.input.PointerButtonState
-import org.graphiks.kadre.surface.LogicalPoint
 import org.w3c.dom.AddEventListenerOptions
 import org.w3c.dom.Document
 import org.w3c.dom.HTMLElement
@@ -33,15 +32,22 @@ internal class JsWebDomPort(element: HTMLElement) : WebHostPort {
     private var subtreeFocused: Boolean = element.matches(":focus-within")
 
     /**
-     * The position of the last pointer observation, which is what makes the next motion's delta a
-     * measured fact: the DOM reports no delta for a `pointermove`. A leave clears it, so the first
-     * motion of a re-entry measures from its entry point rather than from wherever the pointer was
-     * when it left.
+     * The motion of the one pointer the runtime keeps per element (D11): every pointer observation is
+     * recorded there, so a motion measures from the last position the browser reported, and the exit
+     * forgets it so a re-entry measures from its own entry point. The rule itself is shared with the
+     * Wasm port ([WebPointerMotion]); only reading a position is this target's.
      */
-    private var lastPointerPosition: LogicalPoint? = null
+    private val pointerMotion: WebPointerMotion = WebPointerMotion()
 
-    /** The scroll-coalescing frontier of this element, which owns one animation-frame registration. */
-    private val scrollFrontier: JsScrollCoalescingFrontier = JsScrollCoalescingFrontier(originWindow)
+    /**
+     * The scroll-coalescing frontier of this element ([WebScrollBoundary]) and the animation-frame
+     * registration that reports the one fact of its rule no wheel event carries: that the browsing
+     * context entered a new frame.
+     */
+    private val scrollBoundary: WebScrollBoundary = WebScrollBoundary()
+    private val scrollFrame: JsAnimationFrameMarker = JsAnimationFrameMarker(originWindow) {
+        scrollBoundary.frameOpened()
+    }
 
     /**
      * The `wheel` registration is the one listener that declares its options: a passive listener
@@ -106,12 +112,7 @@ internal class JsWebDomPort(element: HTMLElement) : WebHostPort {
         safely { deliverPointerButton(event as? PointerEvent, PointerButtonState.Released) }
     }
 
-    /**
-     * One `pointerleave`, over the element and its whole subtree.
-     *
-     * It carries the kind the browser reported, so a pen leaving is not delivered as a mouse leaving,
-     * and it clears the motion baseline the way the next entry expects.
-     */
+    /** One `pointerleave` over the element and its whole subtree. */
     private val pointerLeaveListener: (Event) -> Unit = { event ->
         safely { deliverPointerLeft(event as? PointerEvent) }
     }
@@ -125,7 +126,11 @@ internal class JsWebDomPort(element: HTMLElement) : WebHostPort {
     }
 
     /**
-     * One `wheel`, read at the frontier the element's own scroll history is on.
+     * One `wheel`, observed at the frontier of the element's own scroll history.
+     *
+     * The wheel is recorded on the shared boundary whether or not its delta is deliverable, so the
+     * frontier describes what the browser delivered; the frame registration keeps the boundary able
+     * to tell the first wheel of a new frame from the one after it in the same frame.
      *
      * The listener is registered as non-passive because the surface decides later whether the
      * browser's default is suppressed, and a passive listener could never suppress it. The port
@@ -134,7 +139,9 @@ internal class JsWebDomPort(element: HTMLElement) : WebHostPort {
     private val wheelListener: (Event) -> Unit = { event ->
         safely {
             (event as? WheelEvent)?.let { wheel ->
-                jsScrollStimulus(wheel, scrollFrontier.frontierFor(wheel))?.let(::deliverInput)
+                val boundary = scrollBoundary.advance(wheel.deltaMode, wheel.buttons.toInt())
+                scrollFrame.arm()
+                jsScrollStimulus(wheel, boundary)?.let(::deliverInput)
             }
         }
     }
@@ -221,9 +228,12 @@ internal class JsWebDomPort(element: HTMLElement) : WebHostPort {
         runCatching { documentObserver?.disconnect() }
         runCatching { shadowRootObserver?.disconnect() }
         runCatching { resizeObserver?.disconnect() }
-        // The frontier owns a frame registration of its own, so it is cancelled with the other
-        // per-element resources rather than left to fire for an element the port no longer holds.
-        runCatching { scrollFrontier.close() }
+        // The scroll frontier owns a frame registration of its own, so it is cancelled with the other
+        // per-element resources rather than left to fire for an element the port no longer holds, and
+        // both shared trackers forget what they observed of this element.
+        runCatching { scrollFrame.close() }
+        scrollBoundary.clear()
+        pointerMotion.clear()
         reconnectAnimationFrame?.let { animationFrame ->
             runCatching { originWindow?.cancelAnimationFrame(animationFrame) }
         }
@@ -235,7 +245,6 @@ internal class JsWebDomPort(element: HTMLElement) : WebHostPort {
         lifecycleObserver = null
         metricsObserver = null
         inputObserver = null
-        lastPointerPosition = null
         element = null
     }
 
@@ -312,32 +321,31 @@ internal class JsWebDomPort(element: HTMLElement) : WebHostPort {
     /**
      * One pointer entry: the first observation of a pointer over the element's subtree.
      *
-     * The entry also opens the motion baseline, so the first motion of the pointer measures from
-     * where it entered rather than from nothing.
+     * The entry records the position on the shared motion, so the first motion of the pointer
+     * measures from where it entered.
      */
     private fun deliverPointerEntered(pointer: PointerEvent?) {
         if (pointer == null) return
         val current = element ?: return
         val kind = jsPointerKind(pointer) ?: return
         val position = jsPointerPosition(current, pointer)
-        lastPointerPosition = position
+        pointerMotion.record(position)
         deliverInput(WebInputStimulus.PointerEntered(position = position, kind = kind))
     }
 
     /**
-     * One pointer motion, with the motion it made since the last pointer observation of the element.
+     * One pointer motion, with the motion it made since the previous pointer observation.
      *
-     * The DOM reports no delta for a `pointermove`: the delta is the measured difference from the
-     * position of the previous observation, whichever pointer event carried it. The runtime coalesces
-     * motions by summing deltas, which is why the delta of one motion is the only one it can carry.
+     * The DOM reports no delta for a `pointermove`, so the motion comes from the shared rule that
+     * measures one observation against the last ([WebPointerMotion]); the runtime coalesces motions
+     * by summing deltas, which is why an incremental delta is the only one it can carry.
      */
     private fun deliverPointerMoved(pointer: PointerEvent?) {
         if (pointer == null) return
         val current = element ?: return
         val kind = jsPointerKind(pointer) ?: return
         val position = jsPointerPosition(current, pointer)
-        val delta = jsPointerDelta(lastPointerPosition, position)
-        lastPointerPosition = position
+        val delta = pointerMotion.advance(position)
         deliverInput(
             WebInputStimulus.PointerMoved(
                 position = position,
@@ -352,15 +360,15 @@ internal class JsWebDomPort(element: HTMLElement) : WebHostPort {
     /**
      * One pointer-button transition, copied with its position, its pressure and its own kind.
      *
-     * The transition also moves the motion baseline, so a motion that follows it measures from the
-     * position the browser reported with the transition rather than skipping that movement.
+     * The transition moves the shared motion too, so a motion that follows it measures from the
+     * position the browser reported with it instead of repeating movement already reported.
      */
     private fun deliverPointerButton(pointer: PointerEvent?, buttonState: PointerButtonState) {
         if (pointer == null) return
         val current = element ?: return
         val kind = jsPointerKind(pointer) ?: return
         val position = jsPointerPosition(current, pointer)
-        lastPointerPosition = position
+        pointerMotion.record(position)
         deliverInput(
             WebInputStimulus.PointerButtonChanged(
                 button = webPointerButton(pointer.button.toInt()),
@@ -384,7 +392,7 @@ internal class JsWebDomPort(element: HTMLElement) : WebHostPort {
      */
     private fun deliverPointerLeft(pointer: PointerEvent?) {
         if (pointer == null) return
-        lastPointerPosition = null
+        pointerMotion.clear()
         deliverInput(WebInputStimulus.PointerLeft(kind = jsPointerKind(pointer) ?: return))
     }
 

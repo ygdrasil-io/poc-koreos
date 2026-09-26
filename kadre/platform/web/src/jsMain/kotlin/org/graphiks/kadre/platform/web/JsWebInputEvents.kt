@@ -4,7 +4,6 @@ import org.graphiks.kadre.input.KeyState
 import org.graphiks.kadre.input.KeyboardModifiers
 import org.graphiks.kadre.input.PenState
 import org.graphiks.kadre.input.PointerKind
-import org.graphiks.kadre.surface.LogicalDelta
 import org.graphiks.kadre.surface.LogicalPoint
 import org.w3c.dom.HTMLElement
 import org.w3c.dom.Window
@@ -14,17 +13,19 @@ import org.w3c.dom.pointerevents.PointerEvent
 
 /**
  * The DOM-reading half of the JS input port: it reads the fields of a browser event, calls the
- * shared mapping core of `WebInputMapping.kt`, and hands back an immutable [WebInputStimulus].
+ * shared core of `WebInputMapping.kt` and `WebInputTracking.kt`, and hands back an immutable
+ * [WebInputStimulus].
  *
- * Nothing here holds a policy and nothing here touches a DOM object after it returns: a borrowed
- * event is read within its own callback and never stored, and no returned stimulus names a DOM type.
- * The Wasm port reads the same fields through its own interop and calls the same core, so the two
- * targets cannot disagree on what a `code`, a `deltaMode` or a `pointerType` means — only on how a
- * field is read.
+ * Nothing here holds a policy, and nothing here decides *how* a browser fact becomes a model value:
+ * which usage a `code` means, which kind a `pointerType` is, which delta a `deltaMode` carries, when
+ * a scroll may merge and what a motion is all live in the shared core, so the Wasm port — which reads
+ * the same fields through its own interop — cannot drift from this one. What is target-specific here
+ * is only the reading: the DOM types, the fields they expose, and the two readings a browser event
+ * does not carry at all (the surface-relative position of a pointer, and the moment a new animation
+ * frame begins).
  *
- * The one decision this file makes that the core does not is the boundary of the phase itself: a
- * `pointerType` whose kind the core refuses (`touch`, D12) produces no stimulus at all rather than a
- * stimulus of another kind.
+ * A borrowed event is read within its own callback and never stored, and no returned stimulus names a
+ * DOM type.
  */
 
 /**
@@ -70,6 +71,9 @@ internal fun jsPointerKind(event: PointerEvent): PointerKind? = webPointerKind(e
  * is the client coordinate of the event minus the element's own origin: its border box
  * (`getBoundingClientRect`, which is viewport-relative like `clientX`) moved in by its border
  * (`clientLeft`/`clientTop`) and out by any ancestor scroll the rect already reflects.
+ *
+ * The reading is target-specific because it is a measurement of this element in this page; the motion
+ * a port derives from two such positions is not, and lives in [WebPointerMotion].
  */
 internal fun jsPointerPosition(element: HTMLElement, event: PointerEvent): LogicalPoint {
     val box = element.getBoundingClientRect()
@@ -79,22 +83,6 @@ internal fun jsPointerPosition(element: HTMLElement, event: PointerEvent): Logic
     )
 }
 
-/**
- * The motion between the previous pointer observation and [position].
- *
- * The DOM reports no delta for a `pointermove`, so the motion is measured from the last position
- * this port observed on any pointer event, and a motion with nothing before it — the first of a
- * re-entry, or the first after the port was installed — is `(0, 0)`: no motion was observed, and
- * inventing one would be an approximation. Clearing the last position on a leave is what makes the
- * first motion of a re-entry measure from its entry point.
- */
-internal fun jsPointerDelta(previous: LogicalPoint?, position: LogicalPoint): LogicalDelta =
-    if (previous == null) {
-        LogicalDelta(0.0, 0.0)
-    } else {
-        LogicalDelta(position.x - previous.x, position.y - previous.y)
-    }
-
 /** The pointer pressure the model can carry, or `null` when this event reports one it cannot. */
 internal fun jsPointerPressure(event: PointerEvent): Double? = webPointerPressure(event.pressure.toDouble())
 
@@ -103,8 +91,8 @@ internal fun jsPointerPressure(event: PointerEvent): Double? = webPointerPressur
  *
  * Only a pen carries a pen state: `PointerState` and the pointer events themselves require it, and a
  * mouse reports zeros for every pen member, which would otherwise read as a pen lying flat and
- * untwisted. The angles are the browser's own fields, and the core drops the ones outside the
- * domains the model validates instead of clamping them.
+ * untwisted. The angles are the browser's own fields, and the core drops the ones outside the domains
+ * the model validates instead of clamping them.
  */
 internal fun jsPointerPenState(kind: PointerKind, event: PointerEvent): PenState? =
     if (kind == PointerKind.Pen) {
@@ -128,59 +116,37 @@ internal fun jsScrollStimulus(event: WheelEvent, coalescingBoundary: Long): WebI
 }
 
 /**
- * The scroll-coalescing frontier of the Web port, as the phase's Web rule defines it.
+ * The DOM-side source of the "this wheel is the first one a new animation frame delivers" fact that
+ * [WebScrollBoundary] rules on.
  *
- * The DOM exposes neither the native phase nor the momentum phase an AppKit event carries, so the
- * frontier is the browser's own delivery granularity instead: it opens when the browser's unit of
- * measurement changes (`deltaMode`), when the pointer's button state changes, and for the first wheel
- * every animation frame delivers. Every other wheel shares the frontier of the wheel before it, which
- * is exactly what lets the runtime merge the scrolls of one frame and what keeps the separations the
- * browser did report. No listener is registered here: one animation-frame callback is armed when a
- * wheel event is observed and cancelled when the port releases it.
+ * The DOM exposes no phase and no frame counter, so the fact is observed by asking the browsing
+ * context for the next frame: while that callback is still pending, every wheel belongs to the frame
+ * the browser is already in; when it fires, [onFrame] hears that a new frame began. One registration
+ * at a time is armed, and only when a wheel is observed, so a port that never scrolls never asks the
+ * browser for a frame; [close] cancels a pending one, because a registration that outlives the port
+ * it was armed for is a leak. A browsing context that cannot schedule frames reports no frame at all,
+ * which leaves the other two rules of the boundary to separate the scrolls it did deliver.
  */
-internal class JsScrollCoalescingFrontier(private val browsingWindow: Window?) {
-    private var frontier: Long = 0L
-    private var lastDeltaMode: Int? = null
-    private var lastButtons: Short? = null
-    private var frameIsNew: Boolean = true
-    private var frameMarker: Int? = null
+internal class JsAnimationFrameMarker(
+    private val browsingWindow: Window?,
+    private val onFrame: () -> Unit,
+) {
+    private var marker: Int? = null
 
-    /**
-     * Records one observed wheel event and answers the frontier its scroll belongs to.
-     *
-     * A wheel the port cannot deliver — a page-mode one — is still an observation of the browser, so
-     * it moves the frontier like any other: the frontier describes what the browser delivered, not
-     * what the model could carry.
-     */
-    fun frontierFor(event: WheelEvent): Long {
-        val opened = frameIsNew || lastDeltaMode != event.deltaMode || lastButtons != event.buttons
-        lastDeltaMode = event.deltaMode
-        lastButtons = event.buttons
-        frameIsNew = false
-        armFrameMarker()
-        if (opened) frontier += 1L
-        return frontier
-    }
-
-    /**
-     * Cancels the frame registration this frontier owns.
-     *
-     * A browsing context that cannot schedule frames has none to cancel: the first wheel of a frame
-     * cannot be told from the one after it there, so only the unit and button rules separate scrolls.
-     */
-    fun close() {
-        val marker = frameMarker ?: return
-        frameMarker = null
-        runCatching { browsingWindow?.cancelAnimationFrame(marker) }
-    }
-
-    /** Registers the frame callback that opens the next frontier, unless one is already registered. */
-    private fun armFrameMarker() {
-        if (frameMarker != null) return
+    /** Arms the frame registration, unless one is already pending for the frame already begun. */
+    fun arm() {
+        if (marker != null) return
         val browserWindow = browsingWindow ?: return
-        frameMarker = browserWindow.requestAnimationFrame {
-            frameMarker = null
-            frameIsNew = true
+        marker = browserWindow.requestAnimationFrame {
+            marker = null
+            onFrame()
         }
+    }
+
+    /** Cancels the pending registration, if any. */
+    fun close() {
+        val pending = marker ?: return
+        marker = null
+        runCatching { browsingWindow?.cancelAnimationFrame(pending) }
     }
 }

@@ -284,8 +284,10 @@ class JsWebInputTest {
     fun theScrollFrontierSeparatesFramesUnitsAndButtonStates() = runTest {
         val harness = JsInputHarness()
         try {
-            // One browser frame: the first wheel opens a frontier, the one that follows it in the same
-            // frame shares it, and the two facts that separate scrolls inside a frame each open one.
+            // The rule itself is proven without a browser in `WebInputTrackingTest`, over the shared
+            // [WebScrollBoundary]; what this case proves is the reading this target feeds it: the
+            // wheels of one real frame share a frontier, and a real animation frame — observed by the
+            // port's own registration — is what makes the next wheel open one.
             dispatchWheel(harness.element, deltaMode = 0, deltaX = 0.0, deltaY = 1.0)
             dispatchWheel(harness.element, deltaMode = 0, deltaX = 0.0, deltaY = 2.0)
             dispatchWheel(harness.element, deltaMode = 0, deltaX = 0.0, deltaY = 3.0, buttons = 1)
