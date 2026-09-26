@@ -137,20 +137,28 @@ class WebInputMappingTest {
     }
 
     @Test
-    fun anUnknownCodeBecomesUnidentifiedWithoutATokenAndWithoutThrowing() {
-        // An unmapped code carries no token, and a code that violates the model's stable-identifier
-        // rule is never handed to the constructor that would validate and throw on it: both are
-        // `Unidentified` without a token, because the physical mapping recognises a key by its code
-        // and has nothing else to add.
-        listOf(
-            "KeyFoo", "Fn", "", " ", "é", "KeyA ", "日本語", "a b", "a\nb", "x".repeat(300), "\u0000", "𝄞",
-        ).forEach { code ->
+    fun anUnknownCodeKeepsItsTokenWhenTheTokenConformsAndLosesItOtherwise() {
+        // A `code` the HID table does not enumerate is still a real native identifier, so the model's
+        // `Unidentified` carries it — the same shape AppKit gives an unmapped key code
+        // (`PhysicalKey.Unidentified("mac:<keyCode>")`). Dropping a token that the model accepts
+        // would throw away the only thing Kadre knows about that key.
+        listOf("KeyFoo", "Fn", "IntlHash", "Lang1", "Help", "Again").forEach { code ->
             assertEquals(
-                PhysicalKey.Unidentified(null),
+                PhysicalKey.Unidentified(code),
                 webPhysicalKey(code),
-                "an unmapped or non-conforming code carries no token: $code",
+                "an unmapped code keeps its own token: $code",
             )
         }
+        // A token that does not satisfy the model's stable-identifier rule is dropped rather than
+        // handed to the constructor that would validate and throw on it.
+        listOf("", " ", "é", "a b", "KeyA ", " KeyA", "a\nb", "x".repeat(257), "\u0000", "𝄞", "KeyA\u007f", "KeyA\u0080")
+            .forEach { code ->
+                assertEquals(
+                    PhysicalKey.Unidentified(null),
+                    webPhysicalKey(code),
+                    "a non-conforming token is not carried: $code",
+                )
+            }
     }
 
     @Test
@@ -171,52 +179,77 @@ class WebInputMappingTest {
     // --- Logical keys ----------------------------------------------------------------------------
 
     @Test
-    fun aSinglePrintableCharacterBecomesItsLogicalCharacterWithItsCasePreserved() {
+    fun aSingleCharacterBecomesItsLogicalCharacterWhateverItsCodePointAndKeepsItsCase() {
         assertEquals(LogicalKey.Character("a"), webLogicalKey("a"))
         assertEquals(LogicalKey.Character("A"), webLogicalKey("A"))
         assertEquals(LogicalKey.Character("1"), webLogicalKey("1"))
         assertEquals(LogicalKey.Character("-"), webLogicalKey("-"))
         assertEquals(LogicalKey.Character("~"), webLogicalKey("~"))
         assertNotEquals(webLogicalKey("a"), webLogicalKey("A"), "the case is the logical key, never folded")
+        // A non-US layout produces these as ordinary keyboard input, and `Character` is the model's
+        // key for a produced character: there is no ASCII rule to satisfy here, and dropping them
+        // would lose what the user actually typed.
+        assertEquals(LogicalKey.Character("é"), webLogicalKey("é"))
+        assertEquals(LogicalKey.Character("ß"), webLogicalKey("ß"))
+        assertEquals(LogicalKey.Character("€"), webLogicalKey("€"))
+        assertEquals(LogicalKey.Character("ñ"), webLogicalKey("ñ"))
+        // One code point is one character even when it is not one UTF-16 code unit.
+        assertEquals(LogicalKey.Character("𝄞"), webLogicalKey("𝄞"))
     }
 
     @Test
-    fun theSpaceAndTheNamedKeysBecomeNamedLogicalKeys() {
+    fun everyNamedKeyOfTheModelIsReachableFromItsDomValueAndNoneIsLostToSanitisation() {
         assertEquals(LogicalKey.Named(NamedKey.Space), webLogicalKey(" "))
-        listOf(
-            "Enter" to NamedKey.Enter,
-            "Tab" to NamedKey.Tab,
-            "Backspace" to NamedKey.Backspace,
-            "Escape" to NamedKey.Escape,
-            "Delete" to NamedKey.Delete,
-            "Insert" to NamedKey.Insert,
-            "Home" to NamedKey.Home,
-            "End" to NamedKey.End,
-            "PageUp" to NamedKey.PageUp,
-            "PageDown" to NamedKey.PageDown,
-            "ArrowLeft" to NamedKey.ArrowLeft,
-            "ArrowRight" to NamedKey.ArrowRight,
-            "ArrowUp" to NamedKey.ArrowUp,
-            "ArrowDown" to NamedKey.ArrowDown,
-            "Shift" to NamedKey.Shift,
-            "Control" to NamedKey.Control,
-            "Alt" to NamedKey.Alt,
-            "Meta" to NamedKey.Meta,
-            "CapsLock" to NamedKey.CapsLock,
-            "NumLock" to NamedKey.NumLock,
-            "ContextMenu" to NamedKey.ContextMenu,
-            "F1" to NamedKey.F1,
-            "F5" to NamedKey.F5,
-            "F12" to NamedKey.F12,
-            "MediaPlayPause" to NamedKey.MediaPlayPause,
-            "MediaStop" to NamedKey.MediaStop,
-            "MediaTrackNext" to NamedKey.MediaNext,
-            "MediaTrackPrevious" to NamedKey.MediaPrevious,
-            "AudioVolumeUp" to NamedKey.VolumeUp,
-            "AudioVolumeDown" to NamedKey.VolumeDown,
-            "AudioVolumeMute" to NamedKey.VolumeMute,
-        ).forEach { (key, named) ->
-            assertEquals(LogicalKey.Named(named), webLogicalKey(key), "the key $key is $named")
+        val domValues = mapOf(
+            NamedKey.Enter to "Enter",
+            NamedKey.Tab to "Tab",
+            NamedKey.Space to " ",
+            NamedKey.Backspace to "Backspace",
+            NamedKey.Escape to "Escape",
+            NamedKey.Delete to "Delete",
+            NamedKey.Insert to "Insert",
+            NamedKey.Home to "Home",
+            NamedKey.End to "End",
+            NamedKey.PageUp to "PageUp",
+            NamedKey.PageDown to "PageDown",
+            NamedKey.ArrowLeft to "ArrowLeft",
+            NamedKey.ArrowRight to "ArrowRight",
+            NamedKey.ArrowUp to "ArrowUp",
+            NamedKey.ArrowDown to "ArrowDown",
+            NamedKey.Shift to "Shift",
+            NamedKey.Control to "Control",
+            NamedKey.Alt to "Alt",
+            NamedKey.Meta to "Meta",
+            NamedKey.CapsLock to "CapsLock",
+            NamedKey.NumLock to "NumLock",
+            NamedKey.ContextMenu to "ContextMenu",
+            NamedKey.F1 to "F1",
+            NamedKey.F2 to "F2",
+            NamedKey.F3 to "F3",
+            NamedKey.F4 to "F4",
+            NamedKey.F5 to "F5",
+            NamedKey.F6 to "F6",
+            NamedKey.F7 to "F7",
+            NamedKey.F8 to "F8",
+            NamedKey.F9 to "F9",
+            NamedKey.F10 to "F10",
+            NamedKey.F11 to "F11",
+            NamedKey.F12 to "F12",
+            NamedKey.MediaPlayPause to "MediaPlayPause",
+            NamedKey.MediaStop to "MediaStop",
+            NamedKey.MediaNext to "MediaTrackNext",
+            NamedKey.MediaPrevious to "MediaTrackPrevious",
+            NamedKey.VolumeUp to "AudioVolumeUp",
+            NamedKey.VolumeDown to "AudioVolumeDown",
+            NamedKey.VolumeMute to "AudioVolumeMute",
+        )
+        assertEquals(
+            NamedKey.entries.toSet(),
+            domValues.keys,
+            "every named key of the model is produced by the table, none is unreachable",
+        )
+        domValues.forEach { (named, value) ->
+            assertEquals(LogicalKey.Named(named), webLogicalKey(value), "the key value $value is $named")
         }
         // The volume keys are still reported under their legacy names by browsers in the field.
         assertEquals(LogicalKey.Named(NamedKey.VolumeUp), webLogicalKey("VolumeUp"))
@@ -225,15 +258,17 @@ class WebInputMappingTest {
     }
 
     @Test
-    fun aLongOrNonAsciiKeyBecomesUnidentifiedWithASanitisedToken() {
+    fun aMultiCharacterKeyBecomesUnidentifiedWithASanitisedToken() {
         assertEquals(LogicalKey.Unidentified("Dead"), webLogicalKey("Dead"))
         assertEquals(LogicalKey.Unidentified("Unidentified"), webLogicalKey("Unidentified"))
         assertEquals(LogicalKey.Unidentified("AltGraph"), webLogicalKey("AltGraph"))
+        // `AltGraph`, `Dead`, `Unidentified` and `Process` are real key values the model has no name
+        // for: the token is exactly what Kadre knows about them.
         // Non-conforming tokens are dropped rather than carried: the model validates them, and the
         // mapping must not hand it a value it would reject.
         assertEquals(LogicalKey.Unidentified(null), webLogicalKey(""))
-        assertEquals(LogicalKey.Unidentified(null), webLogicalKey("é"))
         assertEquals(LogicalKey.Unidentified(null), webLogicalKey("日本語"))
+        assertEquals(LogicalKey.Unidentified(null), webLogicalKey("Aé"))
         assertEquals(LogicalKey.Unidentified(null), webLogicalKey("a b"))
         assertEquals(LogicalKey.Unidentified(null), webLogicalKey("x".repeat(257)))
         assertEquals(LogicalKey.Unidentified("x".repeat(256)), webLogicalKey("x".repeat(256)))

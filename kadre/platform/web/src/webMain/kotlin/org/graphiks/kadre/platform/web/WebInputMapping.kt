@@ -32,21 +32,26 @@ import kotlin.math.PI
  *   `ScrollDelta`), this core produces a value the model accepts instead of passing the model
  *   something it would reject.
  * - **No approximation.** A primitive the model cannot carry is dropped, never clamped, rescaled or
- *   wrapped into range. The dropped value becomes `Unidentified(null)` or `null`, so an unrepresentable
- *   observation stays visible as an absence rather than as a number Kadre invented.
+ *   wrapped into range, and a primitive the model can carry is kept as the browser reported it. An
+ *   unmappable key becomes `Unidentified` with its own native token when that token satisfies the
+ *   model's rule and with `Unidentified(null)` when it cannot be a token at all; an unrepresentable
+ *   measurement becomes `null`, so the observation stays visible as an absence rather than as a
+ *   number Kadre invented.
  */
 /**
  * Maps `KeyboardEvent.code` to the physical key of the model.
  *
- * A `code` the HID table does not know — or one that is not a stable ASCII identifier at all, which
- * the model's own token validation would reject — carries no token: the physical key of this model is
- * identified by its HID usage, so a code without one is `Unidentified(null)` rather than a raw
- * browser string smuggled into a validated token.
+ * A `code` the HID table does not enumerate is not a lost observation: it becomes
+ * `Unidentified` with the code as its native token, which is what that member exists for — the same
+ * shape AppKit gives a key code outside its own table (`PhysicalKey.Unidentified("mac:<keyCode>")`).
+ * The token is sanitised first, so a code that is not a stable ASCII identifier (an empty one, a
+ * non-ASCII one, one with a space in it, one over 256 code units) is carried as no token at all
+ * rather than as a value the model would reject.
  */
 internal fun webPhysicalKey(code: String): PhysicalKey =
     webHidUsageForCode(code)
         ?.let { usageId -> PhysicalKey.Code(usagePage = WEB_KEYBOARD_USAGE_PAGE, usageId = usageId) }
-        ?: PhysicalKey.Unidentified(null)
+        ?: PhysicalKey.Unidentified(webNativeToken(code))
 
 /** The HID usage of one `code`, or `null` when the table does not enumerate that key. */
 private fun webHidUsageForCode(code: String): Int? = when (code) {
@@ -205,17 +210,26 @@ private fun webHidUsageForCode(code: String): Int? = when (code) {
 /**
  * Maps `KeyboardEvent.key` to the logical key it describes.
  *
- * A named key keeps its name, a single printable ASCII character keeps its case (the logical key of
- * `"a"` is not the logical key of `"A"`), and everything else — a multi-character value the model has
- * no name for, an empty value, a character outside the model's stable-identifier rule — becomes
- * `Unidentified` with the value sanitised to what the model accepts, or with no token at all when the
- * value cannot be a token.
+ * A named key keeps its name — the lookup runs on the value as the browser reported it, so no named
+ * key can be lost to sanitisation. A value of exactly one character (one code point, so a letter of
+ * any script, a digit, a punctuation mark or an astral character) is the character the key produced
+ * and keeps its case: the logical key of `"a"` is not the logical key of `"A"`, and a layout that
+ * produces `"é"` or `"ß"` produces a character like any other. Everything else — a multi-character
+ * value the model has no name for, an empty value — becomes `Unidentified` with the value sanitised
+ * to the token the model accepts, or with no token at all when the value cannot be a token.
  */
 internal fun webLogicalKey(key: String): LogicalKey {
     webNamedKeyForValue(key)?.let { named -> return LogicalKey.Named(named) }
-    if (key.length == 1 && key[0].code in WEB_TOKEN_CHARACTERS) return LogicalKey.Character(key)
+    if (key.isSingleCharacter()) return LogicalKey.Character(key)
     return LogicalKey.Unidentified(webNativeToken(key))
 }
+
+/**
+ * Whether the value is one character, counted in code points rather than in UTF-16 code units: an
+ * astral character is one character reported as a surrogate pair.
+ */
+private fun String.isSingleCharacter(): Boolean =
+    length == 1 || (length == 2 && this[0].isHighSurrogate() && this[1].isLowSurrogate())
 
 /**
  * The `KeyboardEvent.key` values the common model names.
