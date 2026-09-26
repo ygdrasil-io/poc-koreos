@@ -4,9 +4,11 @@ import org.graphiks.kadre.input.KeyLocation
 import org.graphiks.kadre.input.KeyState
 import org.graphiks.kadre.input.KeyboardModifiers
 import org.graphiks.kadre.input.LogicalKey
+import org.graphiks.kadre.input.PenState
 import org.graphiks.kadre.input.PhysicalKey
 import org.graphiks.kadre.input.PointerButton
 import org.graphiks.kadre.input.PointerButtonState
+import org.graphiks.kadre.input.PointerKind
 import org.graphiks.kadre.input.ScrollDelta
 import org.graphiks.kadre.surface.LogicalDelta
 import org.graphiks.kadre.surface.LogicalPoint
@@ -21,9 +23,9 @@ import org.graphiks.kadre.surface.LogicalPoint
  * `surfaceId` either: a stimulus describes what the element observed, and the surface it belongs to
  * is the one that received it.
  *
- * The union covers what this phase activates — keyboard, the mouse pointer, scroll and the loss of
- * focus. Touch and gestures stay out of it, because their capabilities stay `Unsupported` until a
- * later phase installs the observers that would produce them.
+ * The union covers what this phase activates — keyboard, the mouse and pen pointers, scroll and the
+ * loss of focus. Touch and gestures stay out of it, because their capabilities stay `Unsupported`
+ * until a later phase installs the observers that would produce them.
  *
  * The reference design is AppKit's `AppKitInput`, whose members these mirror, with the same
  * immutability rule: a borrowed native event never crosses the boundary.
@@ -46,26 +48,48 @@ internal sealed interface WebInputStimulus {
         }
     }
 
-    /** The mouse pointer entered the element's subtree. */
-    data class PointerEntered(val position: LogicalPoint) : WebInputStimulus
+    /**
+     * One pointer entry over the element's subtree.
+     *
+     * [kind] is the kind the browser reported for the pointer that entered, and it is carried rather
+     * than assumed: a `pointerType` of `pen` delivered as a mouse would be an approximation of a fact
+     * the browser stated, which the phase's exit gate forbids. A touch pointer produces no stimulus at
+     * all, because the surface declares touch unsupported until a later phase installs its observers.
+     */
+    data class PointerEntered(
+        val position: LogicalPoint,
+        val kind: PointerKind,
+    ) : WebInputStimulus
 
-    /** One pointer motion. [pressure] is the pointer's own pressure, or null when it reports none. */
+    /**
+     * One pointer motion. [pressure] is the pointer's own pressure, or null when it reports none, and
+     * [pen] is the pen state of a pointer that reported one — never of a mouse, which reports zeros.
+     */
     data class PointerMoved(
         val position: LogicalPoint,
         val delta: LogicalDelta,
         val pressure: Double?,
+        val kind: PointerKind,
+        val pen: PenState?,
     ) : WebInputStimulus
 
-    /** One pointer-button transition at its own position. */
+    /** One pointer-button transition at its own position, of its own kind. */
     data class PointerButtonChanged(
         val button: PointerButton,
         val buttonState: PointerButtonState,
         val position: LogicalPoint,
         val pressure: Double?,
+        val kind: PointerKind,
+        val pen: PenState?,
     ) : WebInputStimulus
 
-    /** The mouse pointer left the element's subtree. */
-    data object PointerLeft : WebInputStimulus
+    /**
+     * The pointer left the element's subtree, or the browser cancelled it.
+     *
+     * A cancellation is the same fact for the reducer: the runtime drops the pointer of that kind
+     * with everything the pointer held, which is what reconciles a lost contact or a revoked capture.
+     */
+    data class PointerLeft(val kind: PointerKind) : WebInputStimulus
 
     /**
      * One scroll observation.

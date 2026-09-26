@@ -8,6 +8,7 @@ import org.graphiks.kadre.input.NamedKey
 import org.graphiks.kadre.input.PenState
 import org.graphiks.kadre.input.PhysicalKey
 import org.graphiks.kadre.input.PointerButton
+import org.graphiks.kadre.input.PointerKind
 import org.graphiks.kadre.input.ScrollDelta
 import kotlin.math.PI
 import kotlin.test.Test
@@ -460,6 +461,28 @@ class WebInputMappingTest {
         // A pointer that observed nothing pen-like carries no pen state at all, rather than an empty
         // record the caller would have to interpret.
         assertNull(webPenState(null, null, null, null))
+    }
+
+    // --- Pointer kinds ---------------------------------------------------------------------------
+
+    @Test
+    fun theDeliveredPointerKindsAreTheMouseAndThePenAndTouchIsRefused() {
+        assertEquals(PointerKind.Mouse, webPointerKind("mouse"))
+        assertEquals(PointerKind.Pen, webPointerKind("pen"))
+        // D12: touch belongs to the phase that installs its observers, so it must produce no stimulus
+        // at all. Refusing it here is what keeps the surface from claiming a capability it does not
+        // install, exactly as `DOM_DELTA_PAGE` is refused rather than converted (D9).
+        assertNull(webPointerKind("touch"), "a touch pointer is not delivered in this phase")
+        // A kind the browser cannot name is the model's own `Unknown`: dropping the observation would
+        // lose a motion the model can carry, and naming it a mouse would invent a device.
+        assertEquals(PointerKind.Unknown, webPointerKind(""))
+        listOf("eraser", "Mouse", "MOUSE", "trackpad", "unknown", " ").forEach { pointerType ->
+            assertEquals(
+                PointerKind.Unknown,
+                webPointerKind(pointerType),
+                "\"$pointerType\" is not a device this phase can name",
+            )
+        }
     }
 
     private companion object {

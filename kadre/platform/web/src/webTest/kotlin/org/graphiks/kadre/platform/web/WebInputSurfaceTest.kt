@@ -33,6 +33,7 @@ import org.graphiks.kadre.input.ModifierKey
 import org.graphiks.kadre.input.PhysicalKey
 import org.graphiks.kadre.input.PointerButton
 import org.graphiks.kadre.input.PointerButtonState
+import org.graphiks.kadre.input.PointerKind
 import org.graphiks.kadre.input.ScrollDelta
 import org.graphiks.kadre.input.SurfaceInput
 import org.graphiks.kadre.input.SurfaceInputState
@@ -104,9 +105,15 @@ class WebInputSurfaceTest {
         testScheduler.runCurrent()
 
         harness.port.deliverInput(keyChanged(KEY_A, modifiers = SHIFT))
-        harness.port.deliverInput(WebInputStimulus.PointerEntered(LogicalPoint(11.0, 12.0)))
+        harness.port.deliverInput(WebInputStimulus.PointerEntered(LogicalPoint(11.0, 12.0), kind = PointerKind.Mouse))
         harness.port.deliverInput(
-            WebInputStimulus.PointerMoved(LogicalPoint(13.0, 14.0), LogicalDelta(2.0, 2.0), pressure = 0.5),
+            WebInputStimulus.PointerMoved(
+                LogicalPoint(13.0, 14.0),
+                LogicalDelta(2.0, 2.0),
+                pressure = 0.5,
+                kind = PointerKind.Mouse,
+                pen = null,
+            ),
         )
         harness.port.deliverInput(
             WebInputStimulus.PointerButtonChanged(
@@ -114,10 +121,12 @@ class WebInputSurfaceTest {
                 buttonState = PointerButtonState.Pressed,
                 position = LogicalPoint(13.0, 14.0),
                 pressure = 0.5,
+                kind = PointerKind.Mouse,
+                pen = null,
             ),
         )
         harness.port.deliverInput(WebInputStimulus.Scrolled(ScrollDelta.Lines(0.0, 3.0), coalescingBoundary = 0L))
-        harness.port.deliverInput(WebInputStimulus.PointerLeft)
+        harness.port.deliverInput(WebInputStimulus.PointerLeft(kind = PointerKind.Mouse))
         harness.port.deliverInput(keyChanged(KEY_A, KeyState.Released))
         testScheduler.runCurrent()
 
@@ -198,7 +207,7 @@ class WebInputSurfaceTest {
 
         // No target stimulus can declare a capability: the union has no way of saying so.
         harness.port.deliverInput(keyChanged(KEY_B))
-        harness.port.deliverInput(WebInputStimulus.PointerEntered(LogicalPoint(1.0, 1.0)))
+        harness.port.deliverInput(WebInputStimulus.PointerEntered(LogicalPoint(1.0, 1.0), kind = PointerKind.Mouse))
         testScheduler.runCurrent()
 
         assertEquals(capabilities, input.state.value.capabilities, "a stimulus never declares a capability")
@@ -219,7 +228,7 @@ class WebInputSurfaceTest {
         testScheduler.runCurrent()
 
         port.deliverInput(keyChanged(KEY_A, modifiers = SHIFT))
-        port.deliverInput(WebInputStimulus.PointerEntered(LogicalPoint(4.0, 5.0)))
+        port.deliverInput(WebInputStimulus.PointerEntered(LogicalPoint(4.0, 5.0), kind = PointerKind.Mouse))
         testScheduler.runCurrent()
         val pressed = input.state.value
         assertEquals(1, pressed.pointers.size)

@@ -8,6 +8,7 @@ import org.graphiks.kadre.input.NamedKey
 import org.graphiks.kadre.input.PenState
 import org.graphiks.kadre.input.PhysicalKey
 import org.graphiks.kadre.input.PointerButton
+import org.graphiks.kadre.input.PointerKind
 import org.graphiks.kadre.input.ScrollDelta
 import kotlin.math.PI
 
@@ -307,6 +308,30 @@ internal fun webKeyLocation(location: Int): KeyLocation = when (location) {
     2 -> KeyLocation.Right
     3 -> KeyLocation.Numpad
     else -> KeyLocation.Standard
+}
+
+/**
+ * Maps `PointerEvent.pointerType` to the pointer kind of the model, or to `null` when this phase
+ * does not deliver that kind at all.
+ *
+ * `mouse` and `pen` are the two kinds this phase delivers, and the kind is the one the browser
+ * reported for the event at hand: a pen is never delivered as a mouse, which is what makes the
+ * `PenState` of [webPenState] a real observation instead of an approximation.
+ *
+ * `touch` is refused — `null`, no stimulus — because D12 defers touch to the phase that installs its
+ * observers: `InputCapabilities.touch` stays `Unsupported`, so nothing may claim a touch pointer
+ * exists. The refusal is the same kind of declared boundary as the `DOM_DELTA_PAGE` one of
+ * [webScrollDelta]: the variant is named and dropped, never converted.
+ *
+ * Every other value is [PointerKind.Unknown], including the empty string a browser reports when it
+ * cannot name the device. The model has that member for exactly this case, and dropping a motion
+ * because its device went unnamed would lose an observation the model can carry.
+ */
+internal fun webPointerKind(pointerType: String): PointerKind? = when (pointerType) {
+    "mouse" -> PointerKind.Mouse
+    "pen" -> PointerKind.Pen
+    "touch" -> null
+    else -> PointerKind.Unknown
 }
 
 /**

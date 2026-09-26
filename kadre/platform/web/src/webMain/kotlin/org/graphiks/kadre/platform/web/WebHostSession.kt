@@ -23,7 +23,6 @@ import org.graphiks.kadre.diagnostics.KadreOperation
 import org.graphiks.kadre.diagnostics.KadrePlatform
 import org.graphiks.kadre.diagnostics.KadreResourceKind
 import org.graphiks.kadre.diagnostics.KadreResult
-import org.graphiks.kadre.input.PointerKind
 import org.graphiks.kadre.input.SurfaceInput
 import org.graphiks.kadre.internal.runtime.RawInputPort
 import org.graphiks.kadre.internal.runtime.RuntimeDropTransferBudget
@@ -751,32 +750,32 @@ private fun WebInputStimulus.toSurfaceStimulus(surfaceId: SurfaceId): SurfaceSti
 
     is WebInputStimulus.PointerEntered -> SurfaceStimulus.PointerEntered(
         surfaceId = surfaceId,
-        kind = PointerKind.Mouse,
+        kind = kind,
         position = position,
     )
 
     is WebInputStimulus.PointerMoved -> SurfaceStimulus.PointerMoved(
         surfaceId = surfaceId,
-        kind = PointerKind.Mouse,
+        kind = kind,
         position = position,
         delta = delta,
         pressure = pressure,
-        pen = null,
+        pen = pen,
     )
 
     is WebInputStimulus.PointerButtonChanged -> SurfaceStimulus.PointerButtonChanged(
         surfaceId = surfaceId,
-        kind = PointerKind.Mouse,
+        kind = kind,
         button = button,
         buttonState = buttonState,
         position = position,
         pressure = pressure,
-        pen = null,
+        pen = pen,
     )
 
-    WebInputStimulus.PointerLeft -> SurfaceStimulus.PointerLeft(
+    is WebInputStimulus.PointerLeft -> SurfaceStimulus.PointerLeft(
         surfaceId = surfaceId,
-        kind = PointerKind.Mouse,
+        kind = kind,
     )
 
     is WebInputStimulus.Scrolled -> SurfaceStimulus.Scroll(
