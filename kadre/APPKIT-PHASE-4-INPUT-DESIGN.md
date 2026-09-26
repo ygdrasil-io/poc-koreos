@@ -141,3 +141,38 @@ scroll précis, momentum, perte de focus pendant une touche ou un bouton
 maintenu et fermeture pendant input. Une observation humaine ne remplace jamais
 les preuves O2/O3 ; elle couvre seulement le routing responder que cette
 primitive synthétique ne sait pas cibler.
+
+## Clarifications Web de la frontière et du reset
+
+Cette section est la formulation citable par le contrat Web `BCK-003` des règles ci-dessus. Les
+règles de réduction, de reset et de terminalisation sont **les mêmes** pour le Web que pour AppKit,
+parce qu’elles vivent dans le reducer commun et non dans l’adapter :
+
+- une touche ou un bouton modifie le snapshot, incrémente la révision, puis publie l’événement avec
+  cette révision ; un repeat qui ne change ni keys ni modifiers conserve la révision courante et
+  reste un événement ordonné ; un scroll ne modifie pas le snapshot et référence la révision
+  courante ;
+- après une perte d’activation, le runtime publie atomiquement un état neutre, incrémente une unique
+  révision puis publie exactement un `InputEvent.StateReset(FocusLost)` ; il ne synthétise aucune
+  release, et un nouveau focus ne réactive aucun ancien état ;
+- une transition terminale (détachement, révocation, fermeture) ferme la lane input, termine son
+  flow et ignore tout stimulus tardif. **Elle ne publie aucun reset synthétique** : une touche
+  pressée ou un bouton tenu à cet instant reste dans le snapshot gelé que la surface a publié, et
+  seule une perte d’activation neutralise un snapshot, par le `StateReset(FocusLost)` du point
+  ci-dessus. La conséquence observable est qu’une
+  touche tenue au moment de la fermeture reste lisible dans le dernier `SurfaceInput.state` — un
+  état gelé, que Kadre ne neutralise ni ne réécrit après coup, puisqu’aucune transition ne peut plus
+  être insérée. Ce que la fermeture retire, c’est la capability, pas l’état.
+
+La **frontière de coalescence** Web substitue un autre fait au couple phase/momentum natif
+ci-dessus, parce que le DOM n’expose ni l’un ni l’autre : la frontière y est l’unité de livraison
+réelle du navigateur, la frame d’animation, complétée par le changement d’`deltaMode` — l’unité de
+mesure du navigateur — et par le changement de l’état des boutons du pointeur. La frontière s’ouvre
+pour le premier wheel qu’une nouvelle frame livre, et pour ces deux changements ; tout autre wheel
+réutilise la frontière du wheel précédent. Deux scrolls de frontière égale peuvent donc fusionner,
+deux frontières distinctes ne fusionnent jamais, et aucune séparation livrée par le navigateur n’est
+perdue silencieusement. Comme pour AppKit, la frontière est un fait de coalescence : elle n’est
+jamais publique et n’apparaît pas dans `SurfaceInput.state`. La règle est épinglée côté Web par
+`WebInputTrackingTest` sans navigateur, et par
+`JsWebInputTest.theScrollFrontierSeparatesFramesUnitsAndButtonStates` (idem Wasm) avec de vrais
+événements.
