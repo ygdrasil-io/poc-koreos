@@ -36,6 +36,8 @@ import org.graphiks.kadre.internal.runtime.RuntimeSessionObserver
 import org.graphiks.kadre.internal.runtime.RuntimeSurfaceInput
 import org.graphiks.kadre.internal.runtime.SurfaceStimulus
 import org.graphiks.kadre.internal.runtime.UnsupportedTextInputPort
+import org.graphiks.kadre.internal.runtime.admitField
+import org.graphiks.kadre.internal.runtime.unsupportedSurfaceCapabilities
 import org.graphiks.kadre.policy.ContinuousDelivery
 import org.graphiks.kadre.policy.ContinuousOverflowAction
 import org.graphiks.kadre.policy.InputDeliveryPolicy
@@ -49,6 +51,8 @@ import org.graphiks.kadre.surface.HitTestingMode
 import org.graphiks.kadre.surface.InputDefaultBehavior
 import org.graphiks.kadre.surface.LogicalInsets
 import org.graphiks.kadre.surface.PointerCaptureMode
+import org.graphiks.kadre.surface.PropertyChange
+import org.graphiks.kadre.surface.RejectedSurfaceField
 import org.graphiks.kadre.surface.SurfaceAttachmentState
 import org.graphiks.kadre.surface.SurfaceAppearance
 import org.graphiks.kadre.surface.SurfaceCapabilities
@@ -57,6 +61,7 @@ import org.graphiks.kadre.surface.SurfaceEvent
 import org.graphiks.kadre.surface.SurfaceFocus
 import org.graphiks.kadre.surface.SurfaceId
 import org.graphiks.kadre.surface.SurfaceOcclusion
+import org.graphiks.kadre.surface.SurfaceProperty
 import org.graphiks.kadre.surface.SurfaceRevision
 import org.graphiks.kadre.surface.SurfaceState
 import org.graphiks.kadre.surface.SurfaceTheme
@@ -67,6 +72,38 @@ import org.graphiks.kadre.surface.SurfaceVisibility
 /** A target-owned animation-frame registration that can be cancelled by the shared surface. */
 internal fun interface WebFrameHandle {
     fun cancel()
+}
+
+/**
+ * The target's input channel into the shared surface: one observer per port, installed once.
+ *
+ * It carries two members because one browser event carries two different facts. The first is the
+ * observation itself — what the element saw — and it is the only member every implementation has to
+ * answer; it is the abstract one, so a lambda implements a channel that observes and suppresses
+ * nothing, which is what a test double and any port without a suppression seam want.
+ *
+ * The second is a question about the event *in hand*: may the default action that event would
+ * otherwise perform be dropped? A port asks it inside that event's own callback, on that very event,
+ * and applies the answer there and nowhere else. The answer belongs to the surface — it reads the
+ * `inputDefaultBehavior` in effect and the category of the observation, through the pure rule of
+ * `WebInputTranslation.kt` — so the port holds no policy: it applies whatever it is told, and a port
+ * that is told nothing (or asks a channel that does not answer) suppresses nothing at all.
+ *
+ * [suppressDefaultFor] answering `false` by default is that last guarantee: suppression is never
+ * implicit (`PUBLIC-API-CATALOG.md:208`), so "no answer" is "no suppression".
+ */
+internal fun interface WebInputObserver {
+    /** Delivers one immutable observation of the element. */
+    fun onObservation(stimulus: WebInputStimulus)
+
+    /**
+     * Whether the browser default of the event that carried [stimulus] must be dropped.
+     *
+     * Asked synchronously, within that event's own callback, and answered `false` unless the surface
+     * was explicitly told to suppress this category. The observation is always delivered first: this
+     * question decides what the browser does *in addition* to Kadre, never whether Kadre delivers.
+     */
+    fun suppressDefaultFor(stimulus: WebInputStimulus): Boolean = false
 }
 
 internal interface WebHostPort {
@@ -109,8 +146,13 @@ internal interface WebHostPort {
      * observed; a borrowed browser event never crosses this boundary. Implementations deliver in the
      * order the browser reported the facts, and may deliver nothing at all. [release] removes this
      * observer together with every other target resource.
+     *
+     * The same channel answers the one question a target cannot answer for itself — whether the
+     * default action of the event it is holding must be dropped — so a port suppresses a browser
+     * default only where the surface told it to, on the event the surface was just handed
+     * ([WebInputObserver.suppressDefaultFor]).
      */
-    fun installInputObserver(observer: (WebInputStimulus) -> Unit) = Unit
+    fun installInputObserver(observer: WebInputObserver) = Unit
 
     /**
      * Registers [callback] for the next animation frame of the browsing context that owns the
@@ -188,6 +230,22 @@ internal class WebHostSession(
             if (current == null) pendingInput.addLast(stimulus) else current.acceptInput(stimulus)
         }
 
+        // The one channel of this session: the target hands its observations over through it and asks
+        // it about the default of the event each observation came from. Both answers are given here,
+        // where the surface lives — the target never learns what a category is, which value the policy
+        // holds, or how either is decided.
+        val inputChannel = object : WebInputObserver {
+            override fun onObservation(stimulus: WebInputStimulus) = deliverInput(stimulus)
+
+            override fun suppressDefaultFor(stimulus: WebInputStimulus): Boolean =
+                // Input observed before the runtime built the surface waits in `pendingInput`, and the
+                // question is answered `false` for it: the behaviour the decision reads is the
+                // surface's own state, and a surface that does not exist has stated none. The same
+                // holds for every stimulus the session derives itself (a focus loss), which no browser
+                // event is waiting on.
+                surface?.suppressDefaultFor(stimulus) ?: false
+        }
+
         val controller = createController(initialLifecycle, ownership) { created ->
             surface = created
             pendingInput.forEach(created::acceptInput)
@@ -234,7 +292,7 @@ internal class WebHostSession(
                 KadreFailure.PlatformFailure(KadrePlatform.Web, "web-host", "metrics-install-failed"),
             )
         }
-        val inputInstalled = runCatching { port.installInputObserver(::deliverInput) }
+        val inputInstalled = runCatching { port.installInputObserver(inputChannel) }
         if (inputInstalled.isFailure) {
             ownership.releaseAfterAttachFailure()
             return KadreResult.Failure(
@@ -367,7 +425,7 @@ private class WebHostSurface(
             revision = SurfaceRevision(0L),
         ),
     )
-    private val mutableCapabilities = MutableStateFlow(webSurfaceCapabilities(platformAccessSupported = true))
+    private val mutableCapabilities = MutableStateFlow(webSurfaceCapabilities())
     private val mutableEvents = MutableSharedFlow<SurfaceEvent>(replay = 0, extraBufferCapacity = 16)
     private val terminal = CompletableDeferred<Unit>()
 
@@ -623,8 +681,122 @@ private class WebHostSurface(
         return KadreResult.Success(Unit)
     }
 
-    override suspend fun apply(update: SurfaceUpdate): KadreResult<SurfaceUpdateOutcome> =
-        admissionFailure() ?: KadreResult.Failure(KadreFailure.Unsupported(KadreOperation.UpdateSurface))
+    /**
+     * Admits the surface-update fields this backend can honour, one field at a time.
+     *
+     * Admission is the shared one — `admitField` over the capability this surface publishes, exactly
+     * as the reference surface admits the same fields — so a field that cannot be honoured is rejected
+     * with the same [RejectedSurfaceField] the reference produces, and a rejection never blocks the
+     * fields of the same update that can be. Today one field of the four is supported
+     * (`inputDefaultBehavior`, this task's subject) and the other three are refused by their own
+     * blanket `Unsupported(UpdateSurface)` capability, which is the outcome the previous phase already
+     * promised and which no part of this change weakens.
+     *
+     * The web surface is its own backend for the field it supports: there is no port below it that
+     * could report a different effective value, so an admitted field is committed here and now, with
+     * the one new revision a state change owns, and the outcome carries the state the surface
+     * publishes. `CursorStyle.Custom` is the only field whose admission the reference splits between
+     * two capabilities (`cursor` for the system icons, `customCursor` for an image); on this target
+     * both are `Unsupported(UpdateSurface)`, so consulting `cursor` through the same helper gives the
+     * same rejection for every value the field can carry.
+     *
+     * The two requests the reference refuses before admission are refused here with the same failures,
+     * and for the same reason — they are what makes a request the surface did not honour impossible to
+     * mistake for one it did: a `Clear` on a field that has no "unset" value is an
+     * `InvalidRequest(field)` (`OPERATION-CONTRACTS.md` §1.1 registers exactly these four field names
+     * for `HostSurface.apply`), and an `expectedRevision` that is not the current one is a
+     * `StaleRevision`, since a caller doing optimistic concurrency must not be told `Applied` for an
+     * update computed against a state that no longer exists.
+     */
+    override suspend fun apply(update: SurfaceUpdate): KadreResult<SurfaceUpdateOutcome> {
+        admissionFailure()?.let { return it }
+        invalidClearField(update)?.let { field ->
+            return KadreResult.Failure(KadreFailure.InvalidRequest(field))
+        }
+        update.expectedRevision?.let { expected ->
+            val currentRevision = mutableState.value.revision
+            if (expected != currentRevision) {
+                return KadreResult.Failure(
+                    KadreFailure.StaleRevision(expected.value, currentRevision.value),
+                )
+            }
+        }
+        val rejected = mutableListOf<RejectedSurfaceField>()
+        val capabilities = mutableCapabilities.value
+        // Every field is admitted, including the three that cannot be honoured: a field the surface
+        // cannot honour has to be *reported*, never silently dropped, and admitting it is what records
+        // the reference's own `RejectedSurfaceField(property, Unsupported(UpdateSurface))` in the list
+        // below. Those three answer `Unchanged` for every value they can carry, so their answer is not
+        // bound to anything.
+        admitField(update.cursor, SurfaceProperty.Cursor, capabilities.cursor, rejected)
+        admitField(update.pointerCapture, SurfaceProperty.PointerCapture, capabilities.pointerCapture, rejected)
+        admitField(update.hitTesting, SurfaceProperty.HitTesting, capabilities.hitTesting, rejected)
+        val inputDefaultBehavior = admitField(
+            update.inputDefaultBehavior,
+            SurfaceProperty.InputDefaultBehavior,
+            capabilities.inputDefaultBehavior,
+            rejected,
+        )
+        val current = mutableState.value
+        val committed = if (inputDefaultBehavior is PropertyChange.Set) {
+            current.copy(inputDefaultBehavior = inputDefaultBehavior.value)
+        } else {
+            // `cursor`, `pointerCapture` and `hitTesting` are admitted as `Unchanged` — either because
+            // the update did not request them or because their capability refused them — so no field is
+            // left to commit here. This is also the path of an update that requests nothing at all.
+            current
+        }
+        // One commit, one revision, and only for a state that actually moved: `next != current` is the
+        // reference's own rule (`commitUpdateLocked`), and it is what makes the revision the marker of a
+        // state change rather than of a call. Requesting the value already in effect is admitted and
+        // answered `Applied` with the state, and therefore the revision, unchanged.
+        val next = if (committed != current) {
+            committed.copy(revision = SurfaceRevision(current.revision.value + 1L))
+        } else {
+            current
+        }
+        if (next != current) mutableState.value = next
+        val state = mutableState.value
+        return KadreResult.Success(
+            if (rejected.isEmpty()) {
+                SurfaceUpdateOutcome.Applied(state)
+            } else {
+                SurfaceUpdateOutcome.PartiallyApplied(state, rejected)
+            },
+        )
+    }
+
+    /**
+     * Whether the browser default of the event that carried [stimulus] must be dropped.
+     *
+     * This is the surface's half of [WebInputObserver.suppressDefaultFor]: the target computes the
+     * observation, the category is derived from it (`WebInputTranslation.kt`), and the effective
+     * behaviour is read from the state [apply] commits. So the suppression follows the committed value
+     * and nothing else, immediately — the next event of a suppressing category is answered with the
+     * new policy, without any re-registration.
+     *
+     * A surface that stopped admitting answers `false`: a revoked, detached or terminated surface owns
+     * nothing, and least of all a subtraction from the behaviour of the page it no longer holds.
+     */
+    fun suppressDefaultFor(stimulus: WebInputStimulus): Boolean {
+        if (admissionClosed) return false
+        return shouldSuppress(webInputCategory(stimulus), mutableState.value.inputDefaultBehavior)
+    }
+
+    /**
+     * The field of a `Clear` update, or `null` when no field was cleared.
+     *
+     * The names are the field paths `OPERATION-CONTRACTS.md` §1.1 registers for `HostSurface.apply`,
+     * and they are the reference's own: the check runs before admission, so a `Clear` is refused whole
+     * rather than answered with a success for a state that did not move.
+     */
+    private fun invalidClearField(update: SurfaceUpdate): String? = when {
+        update.cursor is PropertyChange.Clear -> "cursor"
+        update.pointerCapture is PropertyChange.Clear -> "pointerCapture"
+        update.hitTesting is PropertyChange.Clear -> "hitTesting"
+        update.inputDefaultBehavior is PropertyChange.Clear -> "inputDefaultBehavior"
+        else -> null
+    }
 
     /**
      * Lends the element its port holds, for the duration of [block] and no longer.
@@ -689,7 +861,14 @@ private class WebHostSurface(
         terminated = true
         detached = true
         closeAdmission()
-        mutableCapabilities.value = webSurfaceCapabilities(platformAccessSupported = false)
+        // The detachment makes the capabilities unavailable before the detached state is published,
+        // in the reference's own words and its own snapshot (`DESIGN.md:703`: « Le détachement rend
+        // d'abord les capabilities indisponibles, publie ensuite `SurfaceState.Detached` »). Every
+        // field is unavailable from here on, `inputDefaultBehavior` included even though it is
+        // `Supported`/`Available` while attached: a surface that stopped admitting cannot drop any
+        // browser default any more, and [suppressDefaultFor] answers `false` for exactly that reason,
+        // so a capability that still claimed it would be a promise no operation could honour.
+        mutableCapabilities.value = unsupportedSurfaceCapabilities()
         try {
             val current = mutableState.value
             mutableState.value = current.copy(
@@ -787,19 +966,37 @@ private fun WebInputStimulus.toSurfaceStimulus(surfaceId: SurfaceId): SurfaceSti
     WebInputStimulus.FocusLost -> error("a focus loss is reduced by the reducer, not as a stimulus")
 }
 
-private fun webSurfaceCapabilities(platformAccessSupported: Boolean): SurfaceCapabilities = SurfaceCapabilities(
+/**
+ * The field capabilities of one attached web surface.
+ *
+ * `inputDefaultBehavior` is the one surface-update field this phase activates: the two members of its
+ * enum are named one by one rather than derived from the enum — the capability is this backend's
+ * promise, and a promise is written out — and `webTest` pins that set against
+ * `InputDefaultBehavior.entries` in both directions, so a member the port cannot honour cannot appear
+ * in the enum without failing a test. Honouring `SuppressWhenPossible` is what makes the capability
+ * honest: the port asks this surface about every event it dispatches and drops the default of the
+ * closed set of categories (`WebInputTranslation.kt`), so the promise is a behaviour and not a label.
+ *
+ * `cursor`, `customCursor` and `hitTesting` stay `Unsupported(UpdateSurface)`, exactly as they were
+ * before this field was activated: the phase activates one field, and no part of this change claims
+ * another one.
+ *
+ * This is the snapshot of an attached surface only; [terminate] publishes the all-unsupported one the
+ * reference publishes at its own terminal transition, so no field is ever claimed by a surface that
+ * stopped admitting.
+ */
+private fun webSurfaceCapabilities(): SurfaceCapabilities = SurfaceCapabilities(
     cursor = unsupportedSurfaceCapability(KadreOperation.UpdateSurface),
     customCursor = unsupportedSurfaceCapability(KadreOperation.UpdateSurface),
     pointerCapture = unsupportedSurfaceCapability(KadreOperation.UpdateSurface),
     hitTesting = unsupportedSurfaceCapability(KadreOperation.UpdateSurface),
-    inputDefaultBehavior = unsupportedSurfaceCapability(KadreOperation.UpdateSurface),
+    inputDefaultBehavior = Capability.Supported(
+        setOf(InputDefaultBehavior.HostDefault, InputDefaultBehavior.SuppressWhenPossible),
+        FeatureAvailability.Available,
+    ),
     handlerInteractions = unsupportedSurfaceCapability(KadreOperation.InstallInteractionHandler),
     armedInteractions = unsupportedSurfaceCapability(KadreOperation.ArmInteraction),
-    platformAccess = if (platformAccessSupported) {
-        Capability.Supported(Unit, FeatureAvailability.Available)
-    } else {
-        unsupportedSurfaceCapability(KadreOperation.PlatformSurfaceAccess)
-    },
+    platformAccess = Capability.Supported(Unit, FeatureAvailability.Available),
 )
 
 private fun <T> unsupportedSurfaceCapability(operation: KadreOperation): Capability<T> =

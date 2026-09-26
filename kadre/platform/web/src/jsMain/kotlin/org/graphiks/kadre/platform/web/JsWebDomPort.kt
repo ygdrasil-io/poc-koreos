@@ -21,7 +21,7 @@ internal class JsWebDomPort(element: HTMLElement) : WebHostPort {
     private val originWindow: Window? = originDocument.defaultView
     private var lifecycleObserver: ((WebLifecycleSnapshot) -> Unit)? = null
     private var metricsObserver: ((WebSurfaceMetrics) -> Unit)? = null
-    private var inputObserver: ((WebInputStimulus) -> Unit)? = null
+    private var inputObserver: WebInputObserver? = null
     private var documentObserver: MutationObserver? = null
     private var shadowRootObserver: MutationObserver? = null
     private var observedShadowRoot: ShadowRoot? = null
@@ -86,9 +86,20 @@ internal class JsWebDomPort(element: HTMLElement) : WebHostPort {
         safely { deliverSnapshot(pageHidden = true) }
     }
 
-    /** One `keydown`: the browser's own physical key, logical key, location and modifiers. */
+    /**
+     * One `keydown`: the browser's own physical key, logical key, location and modifiers.
+     *
+     * It is one of the two listeners that route through [suppressDefaultFor], because a key press is
+     * one of the two events whose page-level default this phase delivers: some keys scroll the
+     * document. Which ones, and whether they are suppressed at all, is not decided here — the port
+     * hands the observation over and applies the answer it gets.
+     */
     private val keyDownListener: (Event) -> Unit = { event ->
-        safely { (event as? KeyboardEvent)?.let { deliverInput(jsKeyStimulus(it, pressed = true)) } }
+        safely {
+            (event as? KeyboardEvent)?.let { keyboard ->
+                suppressDefaultFor(keyboard, jsKeyStimulus(keyboard, pressed = true))
+            }
+        }
     }
 
     /** One `keyup`. The port reads no focus here: the lifecycle reduction already owns that. */
@@ -132,16 +143,19 @@ internal class JsWebDomPort(element: HTMLElement) : WebHostPort {
      * frontier describes what the browser delivered; the frame registration keeps the boundary able
      * to tell the first wheel of a new frame from the one after it in the same frame.
      *
-     * The listener is registered as non-passive because the surface decides later whether the
-     * browser's default is suppressed, and a passive listener could never suppress it. The port
-     * itself never decides: it calls no `preventDefault`, and nothing here holds that policy.
+     * The listener is registered as non-passive because a wheel is the event whose default the surface
+     * is asked about, and a passive listener could never drop it. The port itself still decides
+     * nothing: [suppressDefaultFor] asks and applies. A wheel Kadre cannot deliver — a page-mode delta
+     * (D9), a component that is not finite — never reaches the question at all, and keeps the browser's
+     * default: suppression is asked for an event Kadre was handed, never a default Kadre merely
+     * noticed.
      */
     private val wheelListener: (Event) -> Unit = { event ->
         safely {
             (event as? WheelEvent)?.let { wheel ->
                 val boundary = scrollBoundary.advance(wheel.deltaMode, wheel.buttons.toInt())
                 scrollFrame.arm()
-                jsScrollStimulus(wheel, boundary)?.let(::deliverInput)
+                jsScrollStimulus(wheel, boundary)?.let { stimulus -> suppressDefaultFor(wheel, stimulus) }
             }
         }
     }
@@ -186,8 +200,11 @@ internal class JsWebDomPort(element: HTMLElement) : WebHostPort {
      * activation needs no listener here either — the lifecycle reduction already observes
      * `focusout`/`blur`/`visibilitychange`/`pagehide`, and the surface publishes the single reset
      * that loss owes, so a second path would produce a second reset for the same loss.
+     *
+     * The same isolation is what bounds the suppression: a browser default is only ever dropped for an
+     * event this element was handed, so nothing here can act on the page as a whole.
      */
-    override fun installInputObserver(observer: (WebInputStimulus) -> Unit) {
+    override fun installInputObserver(observer: WebInputObserver) {
         check(inputObserver == null)
         inputObserver = observer
         element?.addEventListener("keydown", keyDownListener)
@@ -399,9 +416,38 @@ internal class JsWebDomPort(element: HTMLElement) : WebHostPort {
         deliverInput(WebInputStimulus.PointerLeft(kind = kind))
     }
 
-    /** Hands one immutable observation to the observer, if one is still installed. */
-    private fun deliverInput(stimulus: WebInputStimulus) {
-        inputObserver?.invoke(stimulus)
+    /**
+     * Hands one observation over and answers what the channel said about the default of the event that
+     * carried it.
+     *
+     * The answer is `false` when no observer is installed or when the channel does not answer at all,
+     * so a port that is not attached suppresses nothing — and asking is always part of delivering, so
+     * a stimulus is never held back by the question.
+     */
+    private fun deliverInput(stimulus: WebInputStimulus): Boolean {
+        val observer = inputObserver ?: return false
+        observer.onObservation(stimulus)
+        return observer.suppressDefaultFor(stimulus)
+    }
+
+    /**
+     * The one place this port can drop a browser default, and the only one.
+     *
+     * The port holds no policy: it hands the observation over and asks the same channel whether the
+     * default action of the event that just carried it must be dropped, then applies that answer to
+     * that very event, inside that event's own callback. Under `HostDefault` — and for every category
+     * Kadre does not suppress — the answer is `false`, so nothing is dropped at all; only a surface
+     * that was explicitly told to suppress a category the observation belongs to gets a
+     * `preventDefault` out of this port.
+     *
+     * Only the two listeners whose event has a page-level default route through it: the wheel, whose
+     * default scrolls or zooms the browsing context, and the key press, whose scroll keys move the
+     * document. Every other listener delivers through [deliverInput] and ignores the answer. No
+     * listener of the document, the window or an ancestor calls this, and this file contains no other
+     * `preventDefault` anywhere.
+     */
+    private fun suppressDefaultFor(event: Event, stimulus: WebInputStimulus) {
+        if (deliverInput(stimulus)) event.preventDefault()
     }
 
     private fun lifecycleSnapshot(

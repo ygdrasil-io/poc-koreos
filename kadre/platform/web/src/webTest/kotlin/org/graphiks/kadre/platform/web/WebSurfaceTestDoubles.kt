@@ -16,7 +16,7 @@ internal class RecordingWebHostPort(
     override val stableIdentity: Any = Any()
     private var metricsObserver: ((WebSurfaceMetrics) -> Unit)? = null
     private var lifecycleObserver: ((WebLifecycleSnapshot) -> Unit)? = null
-    private var inputObserver: ((WebInputStimulus) -> Unit)? = null
+    private var inputObserver: WebInputObserver? = null
     private var frame: (() -> Unit)? = null
     private var released: Boolean = false
 
@@ -75,17 +75,31 @@ internal class RecordingWebHostPort(
         lifecycleObserver?.invoke(snapshot)
     }
 
-    override fun installInputObserver(observer: (WebInputStimulus) -> Unit) {
+    override fun installInputObserver(observer: WebInputObserver) {
         check(inputObserver == null) { "this port already installed an input observer" }
         inputObserver = observer
         val observed = preInstallInput
         preInstallInput = emptyList()
-        observed.forEach(observer)
+        observed.forEach(observer::onObservation)
     }
 
     /** Pushes [stimulus] as if the target had just observed it; inert once released. */
     fun deliverInput(stimulus: WebInputStimulus) {
-        inputObserver?.invoke(stimulus)
+        inputObserver?.onObservation(stimulus)
+    }
+
+    /**
+     * Pushes [stimulus] as the target would, and answers what the channel said about the default of
+     * the event that carried it — the question a real port asks inside that event's own callback.
+     *
+     * Asking here is what lets the surface's answer be proven on both targets without a browser: a
+     * real port computes the stimulus, hands it over and applies the answer to the event it is
+     * holding, which is this call plus the `preventDefault` the target tests observe on the event.
+     */
+    fun deliverInputAndAskSuppression(stimulus: WebInputStimulus): Boolean {
+        val observer = inputObserver ?: return false
+        observer.onObservation(stimulus)
+        return observer.suppressDefaultFor(stimulus)
     }
 
     /** The browsing context is gone, as a detached or removed document reports it. */
