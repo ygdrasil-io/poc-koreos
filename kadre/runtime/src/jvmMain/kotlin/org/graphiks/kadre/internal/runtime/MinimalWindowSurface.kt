@@ -18,7 +18,6 @@ import org.graphiks.kadre.application.EventStamp
 import org.graphiks.kadre.diagnostics.Capability
 import org.graphiks.kadre.diagnostics.DelicateKadreApi
 import org.graphiks.kadre.diagnostics.FeatureAvailability
-import org.graphiks.kadre.diagnostics.InteractionFailureReason
 import org.graphiks.kadre.diagnostics.KadreException
 import org.graphiks.kadre.diagnostics.KadreFailure
 import org.graphiks.kadre.diagnostics.KadreOperation
@@ -591,29 +590,6 @@ internal class RuntimeWindowSurface(
         return change
     }
 
-    private fun <T> admitField(
-        change: PropertyChange<T>,
-        property: SurfaceProperty,
-        capability: Capability<Set<T>>,
-        rejected: MutableList<RejectedSurfaceField>,
-    ): PropertyChange<T> {
-        if (change is PropertyChange.Unchanged) return change
-        val failure = capabilityFailure(capability)
-        if (failure != null) {
-            rejected += RejectedSurfaceField(property, failure)
-            return PropertyChange.Unchanged
-        }
-        if (
-            change is PropertyChange.Set &&
-            capability is Capability.Supported &&
-            change.value !in capability.constraints
-        ) {
-            rejected += RejectedSurfaceField(property, KadreFailure.Unsupported(KadreOperation.UpdateSurface))
-            return PropertyChange.Unchanged
-        }
-        return change
-    }
-
     private fun commitUpdateLocked(
         admission: UpdateAdmission,
         backend: SurfaceUpdateCommandOutcome,
@@ -671,7 +647,7 @@ internal class RuntimeWindowSurface(
         return when (outcome) {
             is SurfaceFieldOutcome.Applied -> applyValue(state, outcome.value)
             is SurfaceFieldOutcome.Rejected -> state.also {
-                val normalised = normaliseFieldFailure(property, outcome.failure)
+                val normalised = normaliseFieldFailure(platform, property, outcome.failure)
                 rejected += RejectedSurfaceField(
                     property,
                     normalised.failure,
@@ -936,7 +912,7 @@ internal class RuntimeWindowSurface(
         ) {
             NormalisedPortFailure(failure)
         } else {
-            invalidPortFailure("invalid-redraw-failure")
+            invalidPortFailure(platform, "invalid-redraw-failure")
         }
 
     private fun normaliseUpdateFailure(failure: KadreFailure): NormalisedPortFailure =
@@ -951,31 +927,8 @@ internal class RuntimeWindowSurface(
         ) {
             NormalisedPortFailure(failure)
         } else {
-            invalidPortFailure("invalid-update-failure")
+            invalidPortFailure(platform, "invalid-update-failure")
         }
-
-    private fun normaliseFieldFailure(
-        property: SurfaceProperty,
-        failure: KadreFailure,
-    ): NormalisedPortFailure =
-        if (
-            failure == KadreFailure.Unsupported(KadreOperation.UpdateSurface) ||
-            failure is KadreFailure.InteractionRequired ||
-            failure is KadreFailure.InvalidRequest && failure.field == property.fieldName ||
-            failure is KadreFailure.ResourceLimitExceeded &&
-            failure.resource in SURFACE_UPDATE_LIMIT_RESOURCES ||
-            failure is KadreFailure.TemporarilyUnavailable ||
-            failure is KadreFailure.PlatformFailure
-        ) {
-            NormalisedPortFailure(failure)
-        } else {
-            invalidPortFailure("invalid-field-failure")
-        }
-
-    private fun invalidPortFailure(code: String): NormalisedPortFailure {
-        val failure = KadreFailure.PlatformFailure(platform, "surface-command-port", code)
-        return NormalisedPortFailure(failure, failure)
-    }
 
     private fun reportAdapterFailure(failure: KadreFailure.PlatformFailure) {
         safeReport(KadreException(failure))
@@ -1009,11 +962,6 @@ internal class RuntimeWindowSurface(
         val adapterFailures: List<KadreFailure.PlatformFailure>,
     )
 
-    private data class NormalisedPortFailure(
-        val failure: KadreFailure,
-        val adapterFailure: KadreFailure.PlatformFailure? = null,
-    )
-
     private data class SurfacePublication(
         val state: SurfaceState? = null,
         val event: SurfaceEvent? = null,
@@ -1037,21 +985,10 @@ internal class RuntimeWindowSurface(
             "hitTesting",
             "inputDefaultBehavior",
         )
-        val SURFACE_UPDATE_LIMIT_RESOURCES = setOf(
-            KadreResourceKind.ImageResource,
-            KadreResourceKind.RetainedPayload,
-        )
     }
 }
 
 private enum class SurfaceEventLane { Discrete, Geometry, Redraw }
-
-private sealed interface QueueOfferResult {
-    data object Accepted : QueueOfferResult
-    data class Dropped(val latestWasDropped: Boolean) : QueueOfferResult
-    data object DiscreteOverflow : QueueOfferResult
-    data class ContinuousOverflow(val action: ContinuousOverflowAction) : QueueOfferResult
-}
 
 private class BoundedSurfaceScheduler<T>(
     private val discreteCapacity: Int,
@@ -1240,11 +1177,6 @@ private class SurfaceEventSubscriber(
         synchronized(lock) { scheduler.clear() }
         signal.cancel()
     }
-}
-
-private sealed interface FlowTerminal {
-    data object Closed : FlowTerminal
-    data class Failed(val failure: KadreFailure) : FlowTerminal
 }
 
 private fun SurfaceEvent.lane(): SurfaceEventLane = when (this) {
@@ -3047,30 +2979,6 @@ private fun initialState(snapshot: SurfaceInitialSnapshot): SurfaceState = Surfa
     revision = SurfaceRevision(0L),
 )
 
-internal fun unsupportedSurfaceCapabilities(): SurfaceCapabilities = SurfaceCapabilities(
-    cursor = unsupported(KadreOperation.UpdateSurface),
-    customCursor = unsupported(KadreOperation.UpdateSurface),
-    pointerCapture = unsupported(KadreOperation.UpdateSurface),
-    hitTesting = unsupported(KadreOperation.UpdateSurface),
-    inputDefaultBehavior = unsupported(KadreOperation.UpdateSurface),
-    handlerInteractions = unsupported(KadreOperation.InstallInteractionHandler),
-    armedInteractions = unsupported(KadreOperation.ArmInteraction),
-    platformAccess = unsupported(KadreOperation.PlatformSurfaceAccess),
-)
-
-private fun capabilityFailure(capability: Capability<*>): KadreFailure? = when (capability) {
-    is Capability.Unsupported -> capability.failure
-    is Capability.Supported -> when (val availability = capability.availability) {
-        FeatureAvailability.Available -> null
-        FeatureAvailability.Unsupported -> KadreFailure.Unsupported(KadreOperation.UpdateSurface)
-        is FeatureAvailability.Unavailable -> availability.failure
-        is FeatureAvailability.RequiresInteraction ->
-            KadreFailure.InteractionRequired(InteractionFailureReason.Missing)
-
-        is FeatureAvailability.RequiresPermission -> KadreFailure.Unsupported(KadreOperation.UpdateSurface)
-    }
-}
-
 private fun SurfaceUpdateCommand.isEmpty(): Boolean =
     cursor is PropertyChange.Unchanged &&
         pointerCapture is PropertyChange.Unchanged &&
@@ -3135,14 +3043,3 @@ private fun invalidClearField(update: SurfaceUpdate): String? = when {
     update.inputDefaultBehavior is PropertyChange.Clear -> "inputDefaultBehavior"
     else -> null
 }
-
-private val SurfaceProperty.fieldName: String
-    get() = when (this) {
-        SurfaceProperty.Cursor -> "cursor"
-        SurfaceProperty.PointerCapture -> "pointerCapture"
-        SurfaceProperty.HitTesting -> "hitTesting"
-        SurfaceProperty.InputDefaultBehavior -> "inputDefaultBehavior"
-    }
-
-private fun <T> unsupported(operation: KadreOperation): Capability<T> =
-    Capability.Unsupported(KadreFailure.Unsupported(operation))
