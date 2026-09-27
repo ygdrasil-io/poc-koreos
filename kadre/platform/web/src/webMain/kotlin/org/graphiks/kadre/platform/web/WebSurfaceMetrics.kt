@@ -1,7 +1,12 @@
 package org.graphiks.kadre.platform.web
 
+import kotlinx.coroutines.CoroutineScope
 import org.graphiks.kadre.application.EventStamp
+import org.graphiks.kadre.diagnostics.KadreDiagnostic
 import org.graphiks.kadre.diagnostics.KadreFailure
+import org.graphiks.kadre.internal.runtime.RawInputPort
+import org.graphiks.kadre.policy.InputDeliveryPolicy
+import org.graphiks.kadre.policy.ResourceBudgetPolicy
 import org.graphiks.kadre.policy.WindowDeliveryPolicy
 import org.graphiks.kadre.surface.LogicalSize
 import org.graphiks.kadre.surface.PhysicalSize
@@ -37,9 +42,38 @@ internal sealed interface WebSurfaceStimulus {
     data object Redraw : WebSurfaceStimulus
 }
 
-/** The session-owned facts a surface needs to publish an event for an observed stimulus. */
+/**
+ * The session-owned facts a surface needs to publish an event for an observed stimulus, and the
+ * session input configuration it needs to build the shared ordinary-input reducer.
+ *
+ * One immutable record of what the runtime installed: nothing here is derived or defaulted by the
+ * surface, so the reducer this surface builds later is configured from the session's own policy
+ * and collaborators, exactly like the components-side window manager.
+ */
 internal class WebSurfaceConfiguration(
     val deliveryPolicy: WindowDeliveryPolicy,
     val stampSource: () -> EventStamp,
     val sessionFailureHandler: (KadreFailure) -> Unit,
+    /** The session input delivery policy feeding the reducer's ingress and lane behaviour. */
+    val inputDeliveryPolicy: InputDeliveryPolicy,
+    /** The session resource budgets feeding the reducer's payload bounds and drop transfer budget. */
+    val resources: ResourceBudgetPolicy,
+    /** The one session collector allocator the reducer's collector gates are derived from. */
+    val collectorAllocator: Any,
+    /** The per-flow collector limit of those gates. */
+    val maxCollectorsPerFlow: Int,
+    /**
+     * The session scope a drop transfer outlives its stimulus in; received deliberately and unused
+     * until drag-and-drop is activated in Phase 5.
+     */
+    val dropTransferScope: CoroutineScope?,
+    /**
+     * The session diagnostic channel the reducer's raw-input coordinator reports through.
+     *
+     * The reducer's own reporter of non-session-failure diagnostics is not this channel: it is the
+     * failure reporter the host session itself was built with, which the surface already holds.
+     */
+    val diagnostics: (KadreDiagnostic) -> Unit,
+    /** The session-owned raw-input port, or null when the session has no raw input. */
+    val rawInputPort: RawInputPort?,
 )

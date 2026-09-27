@@ -9,38 +9,44 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.channelFlow
-import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.launch
+import org.graphiks.kadre.application.ActivationState
 import org.graphiks.kadre.application.EventStamp
 import org.graphiks.kadre.application.KadreApplicationFactory
 import org.graphiks.kadre.application.KadreSession
 import org.graphiks.kadre.application.LifecycleState
 import org.graphiks.kadre.diagnostics.Capability
-import org.graphiks.kadre.diagnostics.DelicateKadreApi
 import org.graphiks.kadre.diagnostics.FeatureAvailability
+import org.graphiks.kadre.diagnostics.InteractionFailureReason
+import org.graphiks.kadre.diagnostics.KadreDiagnostic
+import org.graphiks.kadre.diagnostics.KadreException
 import org.graphiks.kadre.diagnostics.KadreFailure
 import org.graphiks.kadre.diagnostics.KadreOperation
 import org.graphiks.kadre.diagnostics.KadrePlatform
 import org.graphiks.kadre.diagnostics.KadreResourceKind
 import org.graphiks.kadre.diagnostics.KadreResult
-import org.graphiks.kadre.input.InputCapabilities
-import org.graphiks.kadre.input.InputStateRevision
-import org.graphiks.kadre.input.KeyboardModifiers
-import org.graphiks.kadre.input.KeyboardState
-import org.graphiks.kadre.input.RawInputAccess
 import org.graphiks.kadre.input.SurfaceInput
-import org.graphiks.kadre.input.SurfaceInputState
-import org.graphiks.kadre.input.TextInputConfig
-import org.graphiks.kadre.input.TextInputSession
+import org.graphiks.kadre.internal.runtime.RawInputPort
+import org.graphiks.kadre.internal.runtime.RuntimeDropTransferBudget
+import org.graphiks.kadre.internal.runtime.RuntimeEventCollectorAllocator
 import org.graphiks.kadre.internal.runtime.RuntimeFailureReporter
 import org.graphiks.kadre.internal.runtime.RuntimeHostController
 import org.graphiks.kadre.internal.runtime.RuntimePrimarySurface
 import org.graphiks.kadre.internal.runtime.RuntimePrimarySurfaceConfiguration
 import org.graphiks.kadre.internal.runtime.RuntimeSessionRevocationHandler
 import org.graphiks.kadre.internal.runtime.RuntimeSessionObserver
+import org.graphiks.kadre.internal.runtime.RuntimeSurfaceInput
+import org.graphiks.kadre.internal.runtime.SurfaceStimulus
+import org.graphiks.kadre.internal.runtime.UnsupportedTextInputPort
+import org.graphiks.kadre.internal.runtime.admitField
+import org.graphiks.kadre.internal.runtime.fieldName
+import org.graphiks.kadre.internal.runtime.normaliseFieldFailure
+import org.graphiks.kadre.internal.runtime.unsupportedSurfaceCapabilities
 import org.graphiks.kadre.policy.ContinuousDelivery
 import org.graphiks.kadre.policy.ContinuousOverflowAction
+import org.graphiks.kadre.policy.InputDeliveryPolicy
 import org.graphiks.kadre.policy.KadrePolicy
+import org.graphiks.kadre.policy.ResourceBudgetPolicy
 import org.graphiks.kadre.policy.WindowDeliveryPolicy
 import org.graphiks.kadre.surface.CursorIcon
 import org.graphiks.kadre.surface.CursorStyle
@@ -49,6 +55,8 @@ import org.graphiks.kadre.surface.HitTestingMode
 import org.graphiks.kadre.surface.InputDefaultBehavior
 import org.graphiks.kadre.surface.LogicalInsets
 import org.graphiks.kadre.surface.PointerCaptureMode
+import org.graphiks.kadre.surface.PropertyChange
+import org.graphiks.kadre.surface.RejectedSurfaceField
 import org.graphiks.kadre.surface.SurfaceAttachmentState
 import org.graphiks.kadre.surface.SurfaceAppearance
 import org.graphiks.kadre.surface.SurfaceCapabilities
@@ -57,6 +65,7 @@ import org.graphiks.kadre.surface.SurfaceEvent
 import org.graphiks.kadre.surface.SurfaceFocus
 import org.graphiks.kadre.surface.SurfaceId
 import org.graphiks.kadre.surface.SurfaceOcclusion
+import org.graphiks.kadre.surface.SurfaceProperty
 import org.graphiks.kadre.surface.SurfaceRevision
 import org.graphiks.kadre.surface.SurfaceState
 import org.graphiks.kadre.surface.SurfaceTheme
@@ -67,6 +76,55 @@ import org.graphiks.kadre.surface.SurfaceVisibility
 /** A target-owned animation-frame registration that can be cancelled by the shared surface. */
 internal fun interface WebFrameHandle {
     fun cancel()
+}
+
+/**
+ * The target's input channel into the shared surface: one observer per port, installed once.
+ *
+ * It carries three members because three different facts reach the surface through it, and none of them
+ * can be answered by the target alone. The first is the observation itself — what the element saw — and
+ * it is the only member every implementation has to answer; it is the abstract one, so a lambda
+ * implements a channel that observes and suppresses nothing, which is what a test double and any port
+ * without a suppression seam want.
+ *
+ * The second is a question about the event *in hand*: may the default action that event would
+ * otherwise perform be dropped? A port asks it inside that event's own callback, on that very event,
+ * and applies the answer there and nowhere else. The answer belongs to the surface — it reads the
+ * `inputDefaultBehavior` in effect and the category of the observation, through the pure rule of
+ * `WebInputTranslation.kt` — so the port holds no policy: it applies whatever it is told, and a port
+ * that is told nothing (or asks a channel that does not answer) suppresses nothing at all.
+ *
+ * [suppressDefaultFor] answering `false` by default is that last guarantee: suppression is never
+ * implicit (`PUBLIC-API-CATALOG.md:208`), so "no answer" is "no suppression".
+ *
+ * The third is the browser's word that it ended the element's pointer capture, which is a fact about
+ * the surface's own state rather than an input observation: nothing of the input model describes it, so
+ * it is not a [WebInputStimulus] and the shared reducer has no transition for it. It is reported, like
+ * the question above, and what it means for the committed capture is decided where the state lives.
+ */
+internal fun interface WebInputObserver {
+    /** Delivers one immutable observation of the element. */
+    fun onObservation(stimulus: WebInputStimulus)
+
+    /**
+     * Whether the browser default of the event that carried [stimulus] must be dropped.
+     *
+     * Asked synchronously, within that event's own callback, and answered `false` unless the surface
+     * was explicitly told to suppress this category. The observation is always delivered first: this
+     * question decides what the browser does *in addition* to Kadre, never whether Kadre delivers.
+     */
+    fun suppressDefaultFor(stimulus: WebInputStimulus): Boolean = false
+
+    /**
+     * Reports the browser's own `lostpointercapture`: the element no longer confines that pointer.
+     *
+     * The port reports the browser's fact and decides nothing — whether the loss moves the committed
+     * capture is the surface's rule — and it reports it for the pointer it holds, with no payload to
+     * interpret: the port never learns what a mode is, and the surface never learns what a DOM event is.
+     * A channel that does not answer loses nothing: a surface that is never told a capture ended keeps
+     * the one its consumer asked for, which is the conservative reading of a report nobody made.
+     */
+    fun onPointerCaptureLost() = Unit
 }
 
 internal interface WebHostPort {
@@ -103,6 +161,21 @@ internal interface WebHostPort {
     fun installMetricsObserver(observer: (WebSurfaceMetrics) -> Unit) = Unit
 
     /**
+     * Installs target-owned input observation after ownership has been reserved.
+     *
+     * The observer receives one immutable, DOM-free [WebInputStimulus] per input fact the target
+     * observed; a borrowed browser event never crosses this boundary. Implementations deliver in the
+     * order the browser reported the facts, and may deliver nothing at all. [release] removes this
+     * observer together with every other target resource.
+     *
+     * The same channel answers the one question a target cannot answer for itself — whether the
+     * default action of the event it is holding must be dropped — so a port suppresses a browser
+     * default only where the surface told it to, on the event the surface was just handed
+     * ([WebInputObserver.suppressDefaultFor]).
+     */
+    fun installInputObserver(observer: WebInputObserver) = Unit
+
+    /**
      * Registers [callback] for the next animation frame of the browsing context that owns the
      * element.
      *
@@ -111,6 +184,39 @@ internal interface WebHostPort {
      * that never schedule a frame.
      */
     fun scheduleFrame(callback: () -> Unit): WebFrameHandle = WebFrameHandle { }
+
+    /**
+     * Performs the one browser effect a capture decision has, and reports the browser's own answer.
+     *
+     * [captured] takes the capture of the pointer this port observed pressed on the element, and `false`
+     * releases it. The member is a mechanism and nothing else: the port never decides whether a capture
+     * is allowed — it is asked to perform one and either performs it or reports why the browser would
+     * not.
+     *
+     * **The default inverts the usual one.** Every other member of this interface defaults to the inert
+     * behaviour a port that does not implement it should have, which is a *success*: nothing observed,
+     * nothing scheduled, nothing installed. This one cannot, because the surface commits `Confined` only
+     * on a `Success`: a default that answered `Success(Unit)` would let a port that performs no capture
+     * at all make the surface publish a confinement the browser never took — the fictitious success this
+     * whole admission path exists to prevent. The default is therefore a **failing** one, and it is the
+     * failure the capability would have carried had it been honest: `Unsupported(UpdateSurface)`. A port
+     * that cannot capture is refused field by field instead of being believed; a port that can must
+     * override this member, perform the DOM's own capture effect, and answer with the browser's answer
+     * (containing its refusal, see below).
+     *
+     * The browser refuses a capture for a pointer it does not consider active (`setPointerCapture`
+     * throws), and this call is made inside the callback of the event that led to the decision — a
+     * consumer asking for a capture as it reduces a press — so the refusal is *contained here*: it is
+     * returned as a failure the surface reports as a rejected field, and never thrown into the callback
+     * (`WEB-IMPLEMENTATION-ROADMAP.md` §3.4, "un événement DOM … ne laisse pas échapper d'exception
+     * Kotlin"). The failure is a [KadreFailure.PlatformFailure] of this platform because the call really
+     * crosses the browser's own DOM API, and `OPERATION-CONTRACTS.md` §3 admits it on the
+     * rejected-field row of `HostSurface.apply`, which is where the surface puts it — after the shared
+     * normaliser has checked it against that closed set
+     * ([normaliseFieldFailure]), so a member of that row is required and nothing else is accepted.
+     */
+    fun applyPointerCapture(captured: Boolean): KadreResult<Unit> =
+        KadreResult.Failure(KadreFailure.Unsupported(KadreOperation.UpdateSurface))
 
     /**
      * The host element as an untyped reference, or null once the port released it.
@@ -167,12 +273,69 @@ internal class WebHostSession(
         }
         val ownership = WebHostOwnership(port, reservation)
         var surface: WebHostSurface? = null
-        val controller = createController(initialLifecycle, ownership) { created -> surface = created }
+        // Input the target reports before this session built its surface waits here, in the order it
+        // was reported: the observer is installed before the runtime creates the surface, so that
+        // window is real. The stimuli are handed to the surface as soon as it exists, where they wait
+        // again — still in order — for the session configuration that builds the reducer.
+        val pendingInput = ArrayDeque<WebInputStimulus>()
+
+        fun deliverInput(stimulus: WebInputStimulus) {
+            val current = surface
+            if (current == null) pendingInput.addLast(stimulus) else current.acceptInput(stimulus)
+        }
+
+        // The one channel of this session: the target hands its observations over through it, asks it
+        // about the default of the event each observation came from, and reports the browser's own
+        // lost capture through it. Every answer is given here, where the surface lives — the target
+        // never learns what a category is, which value the policy holds, what a capture mode is, or how
+        // any of them is decided.
+        val inputChannel = object : WebInputObserver {
+            override fun onObservation(stimulus: WebInputStimulus) = deliverInput(stimulus)
+
+            override fun suppressDefaultFor(stimulus: WebInputStimulus): Boolean =
+                // Input observed before the runtime built the surface waits in `pendingInput`, and the
+                // question is answered `false` for it: the behaviour the decision reads is the
+                // surface's own state, and a surface that does not exist has stated none. The same
+                // holds for every stimulus the session derives itself (a focus loss), which no browser
+                // event is waiting on.
+                surface?.suppressDefaultFor(stimulus) ?: false
+
+            override fun onPointerCaptureLost() {
+                // The port reports the browser's fact as soon as it observes it, which is after the
+                // surface exists — the listeners are installed once the runtime has built it. A report
+                // that arrives with no surface yet is dropped like every other fact of that window:
+                // there is no committed capture to reconcile, because no consumer could have asked for
+                // one.
+                surface?.onPointerCaptureLost()
+            }
+        }
+
+        val controller = createController(initialLifecycle, ownership) { created ->
+            surface = created
+            pendingInput.forEach(created::acceptInput)
+            pendingInput.clear()
+        }
+        // The reduced lifecycle is where this session learns activation, so it is also where a loss of
+        // it neutralises the surface's input snapshot: once per transition that leaves Active, never
+        // twice for the same loss, and never on a transition that does not lose it.
+        var activationWasActive: Boolean = initialLifecycle.activation == ActivationState.Active
         val installed = runCatching {
             port.installLifecycleObserver { snapshot ->
                 when (val reduction = reducer.reduce(snapshot)) {
-                    is WebLifecycleReduction.Update -> controller.updateLifecycle(reduction.state)
+                    is WebLifecycleReduction.Update -> {
+                        val wasActive = activationWasActive
+                        activationWasActive = reduction.state.activation == ActivationState.Active
+                        controller.updateLifecycle(reduction.state)
+                        if (wasActive && !activationWasActive) deliverInput(WebInputStimulus.FocusLost)
+                    }
+
                     WebLifecycleReduction.Terminate -> {
+                        // A terminating transition closes the input lane, it never resets it: the
+                        // reference surface sends its own teardown straight to the terminal path
+                        // (`MinimalWindowSurface.kt:326`) and only the terminal publication closes the
+                        // input (`:760-766`), because after a detach or a native revocation every late
+                        // stimulus is ignored and the input flow is closed. Losing activation — the one
+                        // transition that neutralises the snapshot — is the branch above, once per loss.
                         if (snapshot.pageHidden) controller.detachImmediately() else controller.detach()
                     }
                 }
@@ -193,6 +356,13 @@ internal class WebHostSession(
                 KadreFailure.PlatformFailure(KadrePlatform.Web, "web-host", "metrics-install-failed"),
             )
         }
+        val inputInstalled = runCatching { port.installInputObserver(inputChannel) }
+        if (inputInstalled.isFailure) {
+            ownership.releaseAfterAttachFailure()
+            return KadreResult.Failure(
+                KadreFailure.PlatformFailure(KadrePlatform.Web, "web-host", "input-install-failed"),
+            )
+        }
 
         val attached = controller.attach(parentScope, applicationFactory, policy)
         if (attached is KadreResult.Failure) ownership.releaseAfterAttachFailure()
@@ -210,7 +380,7 @@ internal class WebHostSession(
         sessionObserver = RuntimeSessionObserver { _, _ -> ownership.releaseReservation() },
         failureReporter = failureReporter,
         primarySurfaceFactory = { id ->
-            val surface = WebHostSurface(id, port, ownership)
+            val surface = WebHostSurface(id, port, ownership, failureReporter)
             // The ownership releases the target's bridges before the runtime closes the surface, so
             // it has to be able to stop the surface from admitting anything new in between.
             ownership.observeSurface(surface::onOwnershipRevoked)
@@ -264,6 +434,7 @@ private class WebHostSurface(
     override val id: SurfaceId,
     private val port: WebHostPort,
     private val ownership: WebHostOwnership,
+    private val failureReporter: RuntimeFailureReporter,
 ) : HostSurface, RuntimePrimarySurfaceConfiguration, WebElementLeasePort {
     private var detached: Boolean = false
     private var terminated: Boolean = false
@@ -276,9 +447,39 @@ private class WebHostSurface(
 
     /** True between the admission of a lease and the end of the callback it admitted. */
     private var leaseHeld: Boolean = false
+
+    /**
+     * The pointer this surface holds, which is the one thing a `Confined` capture is admitted on.
+     *
+     * It is the surface's own record of what the element observed, kept by the shared rule of
+     * [WebPointerOwnership] and fed by the very stimuli [acceptInput] admits, so the two targets cannot
+     * derive it differently. It is not a field of `SurfaceState`: the public model has no such member,
+     * and what the element observed of a pointer is not a promise about the browser the way the
+     * committed state is.
+     */
+    private val pointerOwnership: WebPointerOwnership = WebPointerOwnership()
     private var configuration: WebSurfaceConfiguration? = null
     private val pendingStimuli = ArrayDeque<WebSurfaceStimulus>()
+
+    /**
+     * The input stimuli the target reported before the session configuration built the reducer.
+     *
+     * They are replayed in this order the moment it exists, so an input the element reported before
+     * Kadre was ready is reduced rather than dropped.
+     */
+    private val pendingInputStimuli = ArrayDeque<WebInputStimulus>()
+
+    /**
+     * The shared ordinary-input reducer of this surface, built once from the session configuration.
+     *
+     * Nothing before that configuration is this surface's to invent: the delivery policy, the stamp
+     * source, the collector allocator and the failure reporter all belong to the session. It is only
+     * unreachable before the runtime installs them, because application code can only obtain this
+     * surface from the session that configured it.
+     */
+    private lateinit var surfaceInput: RuntimeSurfaceInput
     private var pendingRedraw: Boolean = false
+
     private var bufferedRedraws: Int = 0
     private var frameHandle: WebFrameHandle? = null
     private val mutableState = MutableStateFlow(
@@ -299,7 +500,7 @@ private class WebHostSurface(
             revision = SurfaceRevision(0L),
         ),
     )
-    private val mutableCapabilities = MutableStateFlow(webSurfaceCapabilities(platformAccessSupported = true))
+    private val mutableCapabilities = MutableStateFlow(webSurfaceCapabilities())
     private val mutableEvents = MutableSharedFlow<SurfaceEvent>(replay = 0, extraBufferCapacity = 16)
     private val terminal = CompletableDeferred<Unit>()
 
@@ -319,7 +520,15 @@ private class WebHostSurface(
         terminal.await()
         forwarding.cancel()
     }
-    override val input: SurfaceInput = UnsupportedWebSurfaceInput
+
+    /**
+     * The shared ordinary-input reducer of this surface, which is its one input.
+     *
+     * It is built from the session configuration — never from a default of this surface's own — and
+     * closed by the terminal transition, so its `events` stream ends with the surface and every later
+     * stimulus is refused.
+     */
+    override val input: SurfaceInput get() = surfaceInput
 
     /**
      * Installs the session-owned configuration this surface publishes through.
@@ -327,20 +536,131 @@ private class WebHostSurface(
      * A configuration that arrives after the surface stopped admitting is dropped with the stimuli
      * that were waiting for it: [closeAdmission] cleared both, and assigning one here would leave a
      * live configuration on a dead surface — the invariant every admission site relies on.
+     *
+     * Every parameter is stored verbatim, and the input configuration is what this surface builds the
+     * shared ordinary-input reducer from: the same delivery policy, stamp source, collector gates and
+     * failure handling the components-side window manager builds its own from. The stimuli the target
+     * reported earlier are reduced first, in order, and the structural observation is published last.
      */
     override fun installSessionConfiguration(
         deliveryPolicy: WindowDeliveryPolicy,
+        inputDeliveryPolicy: InputDeliveryPolicy,
         source: () -> EventStamp,
         sessionFailureHandler: (KadreFailure) -> Unit,
         collectorAllocator: Any,
         maxCollectorsPerFlow: Int,
+        resources: ResourceBudgetPolicy,
+        dropTransferScope: CoroutineScope?,
+        diagnostics: (KadreDiagnostic) -> Unit,
+        rawInputPort: RawInputPort?,
     ) {
         if (admissionClosed) return
-        val active = WebSurfaceConfiguration(deliveryPolicy, source, sessionFailureHandler)
+        // One configuration builds one reducer: installing a second one would leave the first
+        // reducer's event stream unclosed and its stimuli unaccounted for.
+        check(!this::surfaceInput.isInitialized) { "the session input configuration was already installed" }
+        val active = WebSurfaceConfiguration(
+            deliveryPolicy = deliveryPolicy,
+            inputDeliveryPolicy = inputDeliveryPolicy,
+            stampSource = source,
+            sessionFailureHandler = sessionFailureHandler,
+            collectorAllocator = collectorAllocator,
+            maxCollectorsPerFlow = maxCollectorsPerFlow,
+            resources = resources,
+            dropTransferScope = dropTransferScope,
+            diagnostics = diagnostics,
+            rawInputPort = rawInputPort,
+        )
         configuration = active
+        val sessionAllocator = sessionCollectorAllocator(collectorAllocator)
+        surfaceInput = RuntimeSurfaceInput(
+            surfaceId = id,
+            deliveryPolicy = inputDeliveryPolicy,
+            eventStampSource = source,
+            eventCollectorGate = sessionAllocator.newGate(maxCollectorsPerFlow),
+            textInputPort = UnsupportedTextInputPort,
+            // Raw input is not activated in this phase, so the session's own port is not wired here;
+            // the capability says so structurally instead of leaving the omission implicit.
+            rawInputCoordinator = null,
+            rawInputCapability = Capability.Unsupported(KadreFailure.Unsupported(KadreOperation.RawInputAccess)),
+            dragAndDropAvailable = false,
+            resources = resources,
+            dropTransferBudget = RuntimeDropTransferBudget(resources.maxConcurrentDropTransfers),
+            // The scope is received deliberately and unused until drag-and-drop is activated in
+            // Phase 5.
+            dropTransferScope = null,
+            textInputEventCollectorGate = sessionAllocator.newGate(maxCollectorsPerFlow),
+            // The reporter of diagnostics that are not session failures is the session's own failure
+            // reporter, the one this host was built with; the session diagnostic channel feeds the
+            // raw-input coordinator of a later phase, not this one.
+            failureReporter = { cause -> failureReporter.report(cause) },
+            sessionFailureHandler = sessionFailureHandler,
+        )
+        val pendingInput = pendingInputStimuli.toList()
+        pendingInputStimuli.clear()
+        // The target's pre-configuration observations happened before the structural capability
+        // observation, so replaying them first preserves causality: the revision they move comes
+        // before the one that declares the installation they were already feeding.
+        pendingInput.forEach(::acceptInput)
         val pending = pendingStimuli.toList()
         pendingStimuli.clear()
         pending.forEach { publish(it, active) }
+        // The installation is structural and complete: keyboard and pointer observation exist from
+        // here on, and the capabilities may say so. Nothing of the kind is claimed earlier, and touch
+        // and gestures stay unsupported until a phase installs their observers.
+        surfaceInput.accept(
+            SurfaceStimulus.InputObservationChanged(
+                surfaceId = id,
+                keyboardInstalled = true,
+                pointerInstalled = true,
+                touchInstalled = false,
+                gestureKinds = emptySet(),
+            ),
+        )
+    }
+
+    /**
+     * Admits one observed input stimulus, from the target's observer or from the lifecycle reduction.
+     *
+     * Order is arrival order: a stimulus was either reported by the target in the order its callbacks
+     * arrived, or derived from the lifecycle snapshot this session just reduced.
+     *
+     * The ownership the surface holds is updated before the stimulus is reduced, so the consumer that
+     * reacts to the event the reduce publishes already sees the ownership that event describes — a
+     * release that ends the pointer ends it for the capture too, not one event later.
+     */
+    fun acceptInput(stimulus: WebInputStimulus) {
+        if (admissionClosed) return
+        if (!this::surfaceInput.isInitialized) {
+            pendingInputStimuli.addLast(stimulus)
+            return
+        }
+        pointerOwnership.observe(stimulus)
+        when (stimulus) {
+            // The reducer owns the neutral snapshot and the one reset it publishes, and it is the one
+            // transition that is not an input packet of its own.
+            WebInputStimulus.FocusLost -> surfaceInput.focusLost()
+            else -> surfaceInput.accept(stimulus.toSurfaceStimulus(id))
+        }
+        // The other half of the ownership rule: a pointer the surface no longer holds cannot carry a
+        // capture, and the browser ends one with it on every arm but the activation-loss one (see
+        // [reconcilePointerCapture] for that divergence).
+        if (!pointerOwnership.isOwned) reconcilePointerCapture()
+    }
+
+    /**
+     * The surface's half of [WebInputObserver.onPointerCaptureLost]: the browser ended the capture.
+     *
+     * The port reports the browser's own `lostpointercapture` and this reconciles what the surface had
+     * committed. Nothing of the input snapshot is touched — a lost capture is not a released button, and
+     * the pointer may well still be down on the element — which is why this is a report of its own
+     * rather than a stimulus: it moves the surface's claim about the browser, and only that.
+     *
+     * A surface that stopped admitting reconciles nothing, like every other site of this surface: its
+     * capabilities are already unavailable and its state is the terminal one.
+     */
+    fun onPointerCaptureLost() {
+        if (admissionClosed) return
+        reconcilePointerCapture()
     }
 
     /** Target-owned metrics observation; ignored once the surface is terminated. */
@@ -401,7 +721,8 @@ private class WebHostSurface(
                         // admission flag: the excess request carries no payload beyond the revision
                         // the frame reads when it admits, so either action drops it and lets the
                         // requests already awaiting their frame admit once, as usual. Neither action
-                        // can report: a surface has no diagnostic channel in this phase.
+                        // reports: a redraw request dropped under a documented drop policy is not a
+                        // failure this surface announces.
                         ContinuousOverflowAction.DropOldestAndReport,
                         ContinuousOverflowAction.DropLatestAndReport,
                         -> bufferedRedraws = delivery.capacity
@@ -410,12 +731,12 @@ private class WebHostSurface(
                         // CloseSource closes this surface and leaves the session running. FailSession
                         // additionally reports the overflow, which terminates the session.
                         ContinuousOverflowAction.CloseSource -> {
-                            terminate()
+                            terminate(KadreFailure.SourceOverflow(KadreResourceKind.Surface))
                             return
                         }
 
                         ContinuousOverflowAction.FailSession -> {
-                            terminate()
+                            terminate(KadreFailure.SourceOverflow(KadreResourceKind.Surface))
                             active.sessionFailureHandler(
                                 KadreFailure.SourceOverflow(KadreResourceKind.Surface),
                             )
@@ -460,8 +781,281 @@ private class WebHostSurface(
         return KadreResult.Success(Unit)
     }
 
-    override suspend fun apply(update: SurfaceUpdate): KadreResult<SurfaceUpdateOutcome> =
-        admissionFailure() ?: KadreResult.Failure(KadreFailure.Unsupported(KadreOperation.UpdateSurface))
+    /**
+     * Admits the surface-update fields this backend can honour, one field at a time.
+     *
+     * Admission is the shared one — `admitField` over the capability this surface publishes, exactly
+     * as the reference surface admits the same fields — so a field that cannot be honoured is rejected
+     * with the same [RejectedSurfaceField] the reference produces, and a rejection never blocks the
+     * fields of the same update that can be. Two fields of the four are supported
+     * (`inputDefaultBehavior` and `pointerCapture`, this phase's subjects) and the other two are refused
+     * by their own blanket `Unsupported(UpdateSurface)` capability, which is the outcome the previous
+     * phase already promised and which no part of this change weakens.
+     *
+     * The web surface is its own backend for both fields it supports: there is no port below it that
+     * could report a different effective value, so an admitted field is committed here and now, with
+     * the one new revision a state change owns, and the outcome carries the state the surface
+     * publishes. `pointerCapture` is the one field whose commit is not this surface's alone — the
+     * browser is what confines a pointer, so the effect is asked of the port and the state is committed
+     * only once the browser honoured it (see [admitCaptureAttempt] and [commitPointerCapture]).
+     * `CursorStyle.Custom` is the only field whose admission the reference splits between two
+     * capabilities (`cursor` for the system icons, `customCursor` for an image); on this target both are
+     * `Unsupported(UpdateSurface)`, so consulting `cursor` through the same helper gives the same
+     * rejection for every value the field can carry.
+     *
+     * The two requests the reference refuses before admission are refused here with the same failures,
+     * and for the same reason — they are what makes a request the surface did not honour impossible to
+     * mistake for one it did: an `expectedRevision` that is not the current one is a `StaleRevision`,
+     * and a `Clear` on a field that has no "unset" value is an `InvalidRequest(field)`
+     * (`OPERATION-CONTRACTS.md` §1.1 registers exactly these four field names for
+     * `HostSurface.apply`). Both run before admission, and in the reference's order — the revision
+     * first (`MinimalWindowSurface.kt:269-278`) — so a request that is both stale and malformed is
+     * answered as stale rather than as malformed.
+     *
+     * Every admitted field is then committed or reported, one at a time: what [admitField] answers
+     * `Unchanged` for was either not requested or refused by its capability, and a field that reaches
+     * the commit with a change the surface has no path for fails loudly instead of disappearing
+     * (see [requireRefused]).
+     */
+    override suspend fun apply(update: SurfaceUpdate): KadreResult<SurfaceUpdateOutcome> {
+        admissionFailure()?.let { return it }
+        update.expectedRevision?.let { expected ->
+            val currentRevision = mutableState.value.revision
+            if (expected != currentRevision) {
+                return KadreResult.Failure(
+                    KadreFailure.StaleRevision(expected.value, currentRevision.value),
+                )
+            }
+        }
+        invalidClearField(update)?.let { field ->
+            return KadreResult.Failure(KadreFailure.InvalidRequest(field))
+        }
+        val rejected = mutableListOf<RejectedSurfaceField>()
+        val capabilities = mutableCapabilities.value
+        // Every field is admitted, including the three that cannot be honoured: a field the surface
+        // cannot honour has to be *reported*, never silently dropped, and admitting it is what records
+        // the reference's own `RejectedSurfaceField(property, Unsupported(UpdateSurface))` in the list
+        // below.
+        val cursor = admitField(update.cursor, SurfaceProperty.Cursor, capabilities.cursor, rejected)
+        // The capture is the one field whose admission has a second rule of this surface's own, and it
+        // is applied here rather than at the commit so that the rejected list reads in the order of the
+        // update's fields, exactly as the reference's does.
+        val pointerCapture = admitCaptureAttempt(
+            admitField(
+                update.pointerCapture,
+                SurfaceProperty.PointerCapture,
+                capabilities.pointerCapture,
+                rejected,
+            ),
+            rejected,
+        )
+        val hitTesting = admitField(update.hitTesting, SurfaceProperty.HitTesting, capabilities.hitTesting, rejected)
+        val inputDefaultBehavior = admitField(
+            update.inputDefaultBehavior,
+            SurfaceProperty.InputDefaultBehavior,
+            capabilities.inputDefaultBehavior,
+            rejected,
+        )
+        // The two fields with no commit path are guarded rather than assumed away: their capabilities
+        // refuse every value today, but the day one of them becomes `Supported` the change would land
+        // here uncommitted and be answered with an `Applied` for a state that never took it.
+        cursor.requireRefused(SurfaceProperty.Cursor)
+        hitTesting.requireRefused(SurfaceProperty.HitTesting)
+        val current = mutableState.value
+        var committed = current
+        // `pointerCapture` is committed only once the browser has honoured it, so the effect is asked
+        // for first and the state follows it — never the other way round.
+        commitPointerCapture(pointerCapture, current, rejected)?.let { capture ->
+            committed = committed.copy(pointerCapture = capture)
+        }
+        if (inputDefaultBehavior is PropertyChange.Set) {
+            committed = committed.copy(inputDefaultBehavior = inputDefaultBehavior.value)
+        }
+        // One commit, one revision, and only for a state that actually moved: `next != current` is the
+        // reference's own rule (`commitUpdateLocked`), and it is what makes the revision the marker of a
+        // state change rather than of a call. Requesting the value already in effect is admitted and
+        // answered `Applied` with the state, and therefore the revision, unchanged.
+        val next = if (committed != current) {
+            committed.copy(revision = SurfaceRevision(current.revision.value + 1L))
+        } else {
+            current
+        }
+        if (next != current) mutableState.value = next
+        val state = mutableState.value
+        // The rejections are merged before they are reported: this surface refuses some fields at
+        // admission and the capture at commit, so the two passes are put back into the order the update
+        // writes its fields in — the reference's own order, since it walks all four fields in one commit
+        // pass (`MinimalWindowSurface.commitUpdateLocked`). A consumer that reads a `PartiallyApplied`
+        // therefore sees the same order whatever refused which field.
+        val reported = rejected.inSurfaceUpdateOrder()
+        return KadreResult.Success(
+            if (reported.isEmpty()) {
+                SurfaceUpdateOutcome.Applied(state)
+            } else {
+                SurfaceUpdateOutcome.PartiallyApplied(state, reported)
+            },
+        )
+    }
+
+    /**
+     * The capture change this surface may attempt, or [PropertyChange.Unchanged] when the field is
+     * refused before any browser call is made.
+     *
+     * Two rules, and both of them are this surface's rather than the browser's:
+     *
+     * - a mode this backend cannot honour — `Locked`, the only one [webPointerCaptureIsHonourable] says
+     *   no to — is reported `Unsupported(UpdateSurface)`, the same failure the shared admission helper
+     *   produces for it. It is unreachable while the capability refuses the mode, and it is stated here
+     *   rather than assumed away: the day the capability changed, the change would otherwise land as an
+     *   `Applied` for a capture no browser path could take;
+     * - a `Confined` capture needs a pointer this surface owns (D13). Without one there is nothing to
+     *   confine, and the field is reported `InteractionRequired(Missing)` — the failure
+     *   `OPERATION-CONTRACTS.md` §3 admits for a rejected field — so no effect is ever asked of the
+     *   browser for a field the surface refused.
+     *
+     * The refusals are recorded here, which is where the update's fields are walked, so the rejected
+     * list keeps the order the caller wrote its fields in.
+     */
+    private fun admitCaptureAttempt(
+        change: PropertyChange<PointerCaptureMode>,
+        rejected: MutableList<RejectedSurfaceField>,
+    ): PropertyChange<PointerCaptureMode> {
+        if (change !is PropertyChange.Set) return change
+        if (!webPointerCaptureIsHonourable(change.value)) {
+            rejected += RejectedSurfaceField(
+                SurfaceProperty.PointerCapture,
+                KadreFailure.Unsupported(KadreOperation.UpdateSurface),
+            )
+            return PropertyChange.Unchanged
+        }
+        if (change.value == PointerCaptureMode.Confined && !pointerOwnership.isOwned) {
+            rejected += RejectedSurfaceField(
+                SurfaceProperty.PointerCapture,
+                KadreFailure.InteractionRequired(InteractionFailureReason.Missing),
+            )
+            return PropertyChange.Unchanged
+        }
+        return change
+    }
+
+    /**
+     * Performs one admitted capture change through the browser and answers the value to commit, or
+     * `null` when this surface commits nothing.
+     *
+     * The value already in effect is the first answer: there is nothing to ask the browser — the state
+     * already says the capture is where the request wants it, and the browser was told so when it was
+     * committed — and nothing moves, so the revision stays where it is.
+     *
+     * Otherwise the port performs the one browser effect and reports the browser's own answer. A success
+     * commits the mode; a refusal is reported as a rejected field carrying the failure the port
+     * returned, and the state stays where it was — answering `Applied` for a capture the browser never
+     * took is the fictitious success this whole path exists to prevent.
+     *
+     * The failure is *not* trusted: it goes through the runtime's own [normaliseFieldFailure] for this
+     * platform and this property, exactly as the reference surface normalises a port's field outcome
+     * (`MinimalWindowSurface.commitField` → `normaliseFieldFailure`). A failure the closed set of
+     * `OPERATION-CONTRACTS.md` §3 does not admit — a buggy or hostile port answering `Closed(Surface)`,
+     * say — is replaced by `PlatformFailure(Web, "surface-command-port", "invalid-field-failure")`, and
+     * that adapter failure is reported rather than returned, because what the caller receives must be a
+     * failure its operation admits. A port failure that *is* in the set (this task's own
+     * `PlatformFailure(Web, "web-host", "pointer-capture-failed")`, or the default member's
+     * `Unsupported(UpdateSurface)`) passes through unchanged.
+     */
+    private fun commitPointerCapture(
+        change: PropertyChange<PointerCaptureMode>,
+        current: SurfaceState,
+        rejected: MutableList<RejectedSurfaceField>,
+    ): PointerCaptureMode? {
+        if (change !is PropertyChange.Set) return null
+        if (change.value == current.pointerCapture) return null
+        return when (val honoured = port.applyPointerCapture(change.value != PointerCaptureMode.None)) {
+            is KadreResult.Success -> change.value
+            is KadreResult.Failure -> {
+                val normalised = normaliseFieldFailure(
+                    KadrePlatform.Web,
+                    SurfaceProperty.PointerCapture,
+                    honoured.reason,
+                )
+                rejected += RejectedSurfaceField(SurfaceProperty.PointerCapture, normalised.failure)
+                normalised.adapterFailure?.let { adapterFailure ->
+                    // Reported, never returned (`MinimalWindowSurface.reportAdapterFailure`), and the
+                    // report itself may not destabilise the command boundary of this surface.
+                    runCatching { failureReporter.report(KadreException(adapterFailure)) }
+                }
+                null
+            }
+        }
+    }
+
+    /**
+     * Returns the committed capture to `None`: the browser no longer confines the pointer it named.
+     *
+     * A `Confined` capture is a claim about the browser — the element holds that pointer — so a claim
+     * the browser has ended cannot stay published. It is reached from both halves of the reconciliation:
+     * the report the port makes of the browser's own `lostpointercapture`, and the loss of the pointer
+     * this surface held (a release, a cancellation, a leave, a loss of activation), because a capture
+     * and the pointer it belongs to end together.
+     *
+     * Nothing is asked of the browser here: the fact being reconciled is that there is no capture left to
+     * end, and a `releasePointerCapture` for a pointer that holds none would be a call with no decision
+     * behind it. The revision moves as it does for any committed state change, and only when there is a
+     * capture to reconcile — a surface that holds none is already at `None`.
+     *
+     * **Known divergence — the activation-loss arm only.** On every other arm the browser ends the
+     * capture implicitly with the pointer it belonged to, so the DOM and the published state agree: a
+     * button release, a `pointerleave` and a `pointercancel` all release a capture implicitly. A loss of
+     * activation does not: Chromium keeps a mouse pointer capture across a window blur, so on that arm
+     * the surface publishes `pointerCapture = None` while the DOM still confines the pointer to the
+     * element, and no `releasePointerCapture` is sent to end it. The divergence is one-directional and
+     * safe — the surface claims *less* than the browser does, the confinement it stops announcing cannot
+     * be re-taken without a new press (the ownership went with the activation), and no operation is
+     * authorised by the difference — and it is recorded in this form so the capability documentation of
+     * this adapter can state it verbatim: *after a loss of activation the web surface publishes
+     * `SurfaceState.pointerCapture = None` and does not call `releasePointerCapture`; Chromium may still
+     * hold the mouse capture until the next press, so `None` must be read as "this surface claims no
+     * capture", never as "the browser holds none".*
+     */
+    private fun reconcilePointerCapture() {
+        val current = mutableState.value
+        if (current.pointerCapture == PointerCaptureMode.None) return
+        mutableState.value = current.copy(
+            pointerCapture = PointerCaptureMode.None,
+            revision = SurfaceRevision(current.revision.value + 1L),
+        )
+    }
+
+    /**
+     * Whether the browser default of the event that carried [stimulus] must be dropped.
+     *
+     * This is the surface's half of [WebInputObserver.suppressDefaultFor]: the target computes the
+     * observation, the category is derived from it (`WebInputTranslation.kt`), and the effective
+     * behaviour is read from the state [apply] commits. So the suppression follows the committed value
+     * and nothing else, immediately — the next event of a suppressing category is answered with the
+     * new policy, without any re-registration.
+     *
+     * A surface that stopped admitting answers `false`: a revoked, detached or terminated surface owns
+     * nothing, and least of all a subtraction from the behaviour of the page it no longer holds.
+     */
+    fun suppressDefaultFor(stimulus: WebInputStimulus): Boolean {
+        if (admissionClosed) return false
+        return shouldSuppress(webInputCategory(stimulus), mutableState.value.inputDefaultBehavior)
+    }
+
+    /**
+     * The field of a `Clear` update, or `null` when no field was cleared.
+     *
+     * The names come from `SurfaceProperty.fieldName`, which is the one owner of those paths — the same
+     * property an update is admitted with, and the same string `OPERATION-CONTRACTS.md` §1.1 registers
+     * for `HostSurface.apply`. The check runs before admission, so a `Clear` is refused whole rather
+     * than answered with a success for a state that did not move.
+     */
+    private fun invalidClearField(update: SurfaceUpdate): String? = when {
+        update.cursor is PropertyChange.Clear -> SurfaceProperty.Cursor.fieldName
+        update.pointerCapture is PropertyChange.Clear -> SurfaceProperty.PointerCapture.fieldName
+        update.hitTesting is PropertyChange.Clear -> SurfaceProperty.HitTesting.fieldName
+        update.inputDefaultBehavior is PropertyChange.Clear -> SurfaceProperty.InputDefaultBehavior.fieldName
+        else -> null
+    }
 
     /**
      * Lends the element its port holds, for the duration of [block] and no longer.
@@ -500,32 +1094,49 @@ private class WebHostSurface(
      * dropped — while everything already published stays as it is: the terminal state, the end of the
      * events flow and the release of the port remain [terminate]'s work, so an observer sees the same
      * sequence whether the owner revoked first or the surface reached its own terminal transition.
+     *
+     * The capabilities go with the admission, and they go here rather than only at [terminate]: the
+     * window a revocation leaves open is exactly the one in which a consumer could still read a
+     * promise while the surface already refuses every call, and a capability that survives it would be
+     * a claim this task's field is the first to make about something the surface can no longer do. The
+     * state stays `Attached` — a revoked surface is still attached until the runtime closes it — but
+     * nothing is announced as available any more, which is the "capabilities unavailable no later than
+     * the detached state" order the teardown suite pins.
      */
     fun onOwnershipRevoked() {
         if (revoked) return
         revoked = true
         closeAdmission()
+        mutableCapabilities.value = unsupportedSurfaceCapabilities()
     }
 
     /** The runtime's teardown of this surface: it stops admitting and releases the port. */
     fun detach() {
-        terminate()
+        terminate(failure = null)
     }
 
     /**
      * The one terminal transition of this surface.
      *
-     * It is reached both by the host detaching ([detach]) and by a redraw overflow under a
-     * `CloseSource` policy, so the two paths cannot drift: the surface admits nothing, owns nothing
-     * and reports itself detached whichever one led here. Only a failing overflow additionally
-     * reports the failure to the session, which is why the caller owns that call.
+     * It is reached both by the host detaching ([detach]), by the owner revoking it, and by a redraw
+     * overflow under a `CloseSource` or `FailSession` policy, so the paths cannot drift: the surface
+     * admits nothing, owns nothing and reports itself detached whichever one led here. Only a failing
+     * overflow additionally reports the failure to the session, which is why the caller owns that
+     * call, and only [failure] closes the input stream as failed.
      */
-    private fun terminate() {
+    private fun terminate(failure: KadreFailure?) {
         if (terminated) return
         terminated = true
         detached = true
         closeAdmission()
-        mutableCapabilities.value = webSurfaceCapabilities(platformAccessSupported = false)
+        // The detachment makes the capabilities unavailable before the detached state is published,
+        // in the reference's own words and its own snapshot (`DESIGN.md:703`: « Le détachement rend
+        // d'abord les capabilities indisponibles, publie ensuite `SurfaceState.Detached` »). Every
+        // field is unavailable from here on, `inputDefaultBehavior` included even though it is
+        // `Supported`/`Available` while attached: a surface that stopped admitting cannot drop any
+        // browser default any more, and [suppressDefaultFor] answers `false` for exactly that reason,
+        // so a capability that still claimed it would be a promise no operation could honour.
+        mutableCapabilities.value = unsupportedSurfaceCapabilities()
         try {
             val current = mutableState.value
             mutableState.value = current.copy(
@@ -533,6 +1144,9 @@ private class WebHostSurface(
                 revision = SurfaceRevision(current.revision.value + 1L),
             )
         } finally {
+            // The reducer goes last, so the terminal state it can no longer publish is already out:
+            // closing it ends the events stream and refuses every later stimulus, once and once only.
+            if (this::surfaceInput.isInitialized) surfaceInput.close(failure)
             terminal.complete(Unit)
             ownership.releasePort()
         }
@@ -546,56 +1160,178 @@ private class WebHostSurface(
         frameHandle?.cancel()
         frameHandle = null
         pendingStimuli.clear()
+        pendingInputStimuli.clear()
         configuration = null
+        // The surface stops admitting, so it holds nothing: ownership is what a later capture would be
+        // admitted on, and a closed surface answers `Closed` to that call anyway. The capture it
+        // committed stays where it is — the terminal state is what the runtime publishes next, and the
+        // port releases the browser effect it holds with the element.
+        pointerOwnership.clear()
     }
 }
 
-private object UnsupportedWebSurfaceInput : SurfaceInput {
-    private val unsupportedTextInput = KadreFailure.Unsupported(KadreOperation.TextInput)
-    private val mutableState = MutableStateFlow(
-        SurfaceInputState(
-            keyboard = KeyboardState(emptySet()),
-            pointers = emptyList(),
-            touches = emptyList(),
-            modifiers = KeyboardModifiers(emptySet()),
-            capabilities = InputCapabilities(
-                keyboard = FeatureAvailability.Unsupported,
-                pointer = FeatureAvailability.Unsupported,
-                touch = FeatureAvailability.Unsupported,
-                gestures = Capability.Unsupported(KadreFailure.Unsupported(KadreOperation.GestureInput)),
-                dragAndDrop = FeatureAvailability.Unsupported,
-                textInput = Capability.Unsupported(unsupportedTextInput),
-                rawInput = Capability.Unsupported(KadreFailure.Unsupported(KadreOperation.RawInputAccess)),
-            ),
-            revision = InputStateRevision(0L),
-        ),
+/**
+ * The session's collector allocator, handed over as the untyped value of the SPI.
+ *
+ * The allocator is runtime-internal, so the SPI carries it as [Any]; a surface must hand it back to
+ * the runtime unchanged rather than interpret it, and an implementation that cannot is a bug, not a
+ * policy the surface may substitute one of its own for.
+ */
+private fun sessionCollectorAllocator(allocator: Any): RuntimeEventCollectorAllocator =
+    allocator as? RuntimeEventCollectorAllocator
+        ?: error("runtime session collector allocator has an invalid type")
+
+/**
+ * One target input observation as the shared reducer's own stimulus.
+ *
+ * The target's union carries no `surfaceId` because a stimulus describes what the element observed;
+ * adding the identity is the surface's own step, exactly as the components-side manager adds it. A
+ * focus loss has no branch here: it is not an input packet at all, and the surface reduces it through
+ * the reducer's `focusLost`.
+ */
+private fun WebInputStimulus.toSurfaceStimulus(surfaceId: SurfaceId): SurfaceStimulus = when (this) {
+    is WebInputStimulus.KeyChanged -> SurfaceStimulus.KeyChanged(
+        surfaceId = surfaceId,
+        physicalKey = physicalKey,
+        logicalKey = logicalKey,
+        location = location,
+        keyState = keyState,
+        repeat = repeat,
+        modifiers = modifiers,
     )
 
-    override val events: Flow<org.graphiks.kadre.input.InputEvent> = emptyFlow()
-    override val state: StateFlow<SurfaceInputState> = mutableState.asStateFlow()
+    is WebInputStimulus.PointerEntered -> SurfaceStimulus.PointerEntered(
+        surfaceId = surfaceId,
+        kind = kind,
+        position = position,
+    )
 
-    override suspend fun openTextInput(config: TextInputConfig): KadreResult<TextInputSession> =
-        KadreResult.Failure(unsupportedTextInput)
+    is WebInputStimulus.PointerMoved -> SurfaceStimulus.PointerMoved(
+        surfaceId = surfaceId,
+        kind = kind,
+        position = position,
+        delta = delta,
+        pressure = pressure,
+        pen = pen,
+    )
 
-    @OptIn(DelicateKadreApi::class)
-    override suspend fun requestRawInput(): KadreResult<RawInputAccess> =
-        KadreResult.Failure(KadreFailure.Unsupported(KadreOperation.RawInputAccess))
+    is WebInputStimulus.PointerButtonChanged -> SurfaceStimulus.PointerButtonChanged(
+        surfaceId = surfaceId,
+        kind = kind,
+        button = button,
+        buttonState = buttonState,
+        position = position,
+        pressure = pressure,
+        pen = pen,
+    )
+
+    is WebInputStimulus.PointerLeft -> SurfaceStimulus.PointerLeft(
+        surfaceId = surfaceId,
+        kind = kind,
+    )
+
+    is WebInputStimulus.Scrolled -> SurfaceStimulus.Scroll(
+        surfaceId = surfaceId,
+        delta = delta,
+        coalescingBoundary = coalescingBoundary,
+    )
+
+    WebInputStimulus.FocusLost -> error("a focus loss is reduced by the reducer, not as a stimulus")
 }
 
-private fun webSurfaceCapabilities(platformAccessSupported: Boolean): SurfaceCapabilities = SurfaceCapabilities(
+/**
+ * The field capabilities of one attached web surface.
+ *
+ * Two surface-update fields are activated by this phase.
+ *
+ * `inputDefaultBehavior`: the two members of its enum are named one by one rather than derived from the
+ * enum — the capability is this backend's promise, and a promise is written out — and `webTest` pins
+ * that set against `InputDefaultBehavior.entries` in both directions, so a member the port cannot
+ * honour cannot appear in the enum without failing a test. Honouring `SuppressWhenPossible` is what
+ * makes the capability honest: the port asks this surface about every event it dispatches and drops the
+ * default of the closed set of categories (`WebInputTranslation.kt`), so the promise is a behaviour and
+ * not a label.
+ *
+ * `pointerCapture`: only `None` and `Confined` are promised, because they are the two the DOM can be
+ * asked for — and `Locked` is deliberately outside, since the Pointer Lock API needs a transient user
+ * activation and belongs to `InteractionAction.LockPointer` in a later phase (`DESIGN.md` §9.6). The set
+ * is written out here as the promise and stated once more as the rule
+ * ([webPointerCaptureIsHonourable]) the commit reads; `webTest` pins the two against each other and
+ * against `PointerCaptureMode.entries`, so `Locked` is provably outside both. No member of this target
+ * can lock a pointer at all — the port's one capture effect is `setPointerCapture`, asked only for a
+ * pointer the surface owns.
+ *
+ * `cursor`, `customCursor` and `hitTesting` stay `Unsupported(UpdateSurface)`, exactly as they were
+ * before these fields were activated: the phase activates these two, and no part of this change claims
+ * another one.
+ *
+ * This is the snapshot of an attached surface only; [terminate] publishes the all-unsupported one the
+ * reference publishes at its own terminal transition, so no field is ever claimed by a surface that
+ * stopped admitting.
+ */
+private fun webSurfaceCapabilities(): SurfaceCapabilities = SurfaceCapabilities(
     cursor = unsupportedSurfaceCapability(KadreOperation.UpdateSurface),
     customCursor = unsupportedSurfaceCapability(KadreOperation.UpdateSurface),
-    pointerCapture = unsupportedSurfaceCapability(KadreOperation.UpdateSurface),
+    pointerCapture = Capability.Supported(
+        setOf(PointerCaptureMode.None, PointerCaptureMode.Confined),
+        FeatureAvailability.Available,
+    ),
     hitTesting = unsupportedSurfaceCapability(KadreOperation.UpdateSurface),
-    inputDefaultBehavior = unsupportedSurfaceCapability(KadreOperation.UpdateSurface),
+    inputDefaultBehavior = Capability.Supported(
+        setOf(InputDefaultBehavior.HostDefault, InputDefaultBehavior.SuppressWhenPossible),
+        FeatureAvailability.Available,
+    ),
     handlerInteractions = unsupportedSurfaceCapability(KadreOperation.InstallInteractionHandler),
     armedInteractions = unsupportedSurfaceCapability(KadreOperation.ArmInteraction),
-    platformAccess = if (platformAccessSupported) {
-        Capability.Supported(Unit, FeatureAvailability.Available)
-    } else {
-        unsupportedSurfaceCapability(KadreOperation.PlatformSurfaceAccess)
-    },
+    platformAccess = Capability.Supported(Unit, FeatureAvailability.Available),
 )
 
 private fun <T> unsupportedSurfaceCapability(operation: KadreOperation): Capability<T> =
     Capability.Unsupported(KadreFailure.Unsupported(operation))
+
+/**
+ * The fields of `SurfaceUpdate`, in the order the update writes them.
+ *
+ * `SurfaceProperty`'s declaration order *is* that order — `SurfaceUpdate`:104-110 declares `cursor`,
+ * `pointerCapture`, `hitTesting`, `inputDefaultBehavior`, and `OPERATION-CONTRACTS.md` §1.1 registers
+ * the same four fields in the same order — so the enum is the one owner of it and no second list is
+ * written here.
+ */
+private val SURFACE_UPDATE_FIELDS: List<SurfaceProperty> = SurfaceProperty.entries.toList()
+
+/**
+ * The rejections of one update, in the order of the update's fields.
+ *
+ * The order is not decoration: `SurfaceUpdateOutcome.PartiallyApplied.rejected` names the fields a
+ * caller wrote, and the reference emits them in the order it walks them. This surface refuses fields in
+ * *two* passes — the capability and the ownership at admission, the browser at commit — so a rejection
+ * produced by the second pass would otherwise be appended after every rejection of the first and leave
+ * the list out of order (a `Cursor` refused by its capability followed by a `HitTesting` refused the
+ * same way, with the `PointerCapture` the browser refused at the end). Sorting by the field order makes
+ * the two passes read as one, whatever refused which field.
+ */
+private fun List<RejectedSurfaceField>.inSurfaceUpdateOrder(): List<RejectedSurfaceField> =
+    sortedBy { rejection -> SURFACE_UPDATE_FIELDS.indexOf(rejection.field) }
+
+/**
+ * Asserts that a field the web surface has no commit path for was refused by its own capability.
+ *
+ * [WebHostSurface.apply] commits the fields it supports and *reports* the others: a field that arrives
+ * there admitted is a change the surface would neither commit nor reject, and answering `Applied` for an
+ * update no state took is exactly the fictitious success the `Clear` guard exists to prevent. Today the
+ * adapter makes that unreachable — `cursor` and `hitTesting` carry a blanket `Unsupported(UpdateSurface)`
+ * capability, so [admitField] answers `Unchanged` for every value — but "unreachable as long as the
+ * capability stays unsupported" is an assumption about a future phase, so it is checked where the change
+ * would land instead of being trusted. The day a commit path is owed, this fires with the field in hand,
+ * rather than after a consumer was told its update had been applied.
+ *
+ * `pointerCapture` is not guarded here because it has rules of its own that refuse a value it cannot
+ * commit — the honourable modes and the ownership a `Confined` capture needs
+ * ([WebHostSurface.admitCaptureAttempt]) — so nothing about it is trusted to a capability; and
+ * `inputDefaultBehavior` has had a commit path since it was activated.
+ */
+private fun PropertyChange<*>.requireRefused(property: SurfaceProperty) {
+    check(this is PropertyChange.Unchanged) {
+        "${property.fieldName} arrived admitted, but the web surface has no commit for it"
+    }
+}

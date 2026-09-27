@@ -49,7 +49,7 @@ internal class RawInputCoordinator(
         require(maxCollectorsPerFlow > 0) { "maxCollectorsPerFlow must be positive" }
     }
 
-    private val lock = Any()
+    private val lock = RuntimeLock()
     private val accesses = linkedMapOf<RuntimeRawInputAccess, SurfaceId?>()
     private val closedOwners = mutableSetOf<SurfaceId>()
     private var reserved = 0
@@ -60,7 +60,7 @@ internal class RawInputCoordinator(
      * native registration. Cancellation before handoff releases only this caller's reservation.
      */
     suspend fun requestAccess(owner: SurfaceId? = null): KadreResult<RawInputAccess> {
-        val admission = synchronized(lock) {
+        val admission = lock.withLock {
             when {
                 closed -> RawInputAdmission.Closed
                 owner != null && owner in closedOwners -> RawInputAdmission.Closed
@@ -112,7 +112,7 @@ internal class RawInputCoordinator(
                 onAvailability = ::publishAvailability,
                 onClosed = ::release,
             )
-            val installed = synchronized(lock) {
+            val installed = lock.withLock {
                 if (closed || (owner != null && owner in closedOwners)) {
                     false
                 } else {
@@ -141,7 +141,7 @@ internal class RawInputCoordinator(
     }
 
     override fun close() {
-        val descendants = synchronized(lock) {
+        val descendants = lock.withLock {
             if (closed) return
             closed = true
             accesses.keys.toList()
@@ -150,7 +150,7 @@ internal class RawInputCoordinator(
         try {
             port.close()
         } finally {
-            synchronized(lock) {
+            lock.withLock {
                 check(accesses.isEmpty()) { "raw-input coordinator retained an access after close" }
                 check(reserved == 0) { "raw-input coordinator retained a reservation after close" }
             }
@@ -159,7 +159,7 @@ internal class RawInputCoordinator(
 
     /** Closes the raw-input accesses owned by one detached surface without affecting its siblings. */
     fun closeOwner(owner: SurfaceId) {
-        val descendants = synchronized(lock) {
+        val descendants = lock.withLock {
             closedOwners += owner
             accesses.filterValues { it == owner }.keys.toList()
         }
@@ -167,7 +167,7 @@ internal class RawInputCoordinator(
     }
 
     private fun release(access: RuntimeRawInputAccess) {
-        val released = synchronized(lock) {
+        val released = lock.withLock {
             if (!accesses.containsKey(access)) {
                 false
             } else {
@@ -180,7 +180,7 @@ internal class RawInputCoordinator(
         check(released) { "raw-input access was released without ownership" }
     }
 
-    private fun releaseReservation() = synchronized(lock) {
+    private fun releaseReservation() = lock.withLock {
         check(reserved > 0) { "raw-input reservation underflow" }
         reserved -= 1
     }
@@ -207,7 +207,7 @@ private class RuntimeRawInputAccess(
     private val onAvailability: (FeatureAvailability) -> Unit,
     private val onClosed: (RuntimeRawInputAccess) -> Unit,
 ) : RawInputAccess {
-    private val lock = Any()
+    private val lock = RuntimeLock()
     private val mutableState = MutableStateFlow<RawInputState>(RawInputState.Active)
     private val subscribers = linkedSetOf<RawInputSubscriber>()
     private var terminal: RawInputTerminal? = null
@@ -259,7 +259,7 @@ private class RuntimeRawInputAccess(
     }
 
     private fun publish(event: RawInputEvent) {
-        val targets = synchronized(lock) {
+        val targets = lock.withLock {
             if (terminal != null || mutableState.value != RawInputState.Active) emptyList() else subscribers.toList()
         }
         var shouldClose = false
@@ -280,14 +280,14 @@ private class RuntimeRawInputAccess(
             return
         }
         val next = availability.toRawInputState() ?: return
-        synchronized(lock) {
+        lock.withLock {
             if (terminal != null || mutableState.value == next) return
             mutableState.value = next
         }
     }
 
     private fun terminate(failure: KadreFailure?) {
-        val cleanup = synchronized(lock) {
+        val cleanup = lock.withLock {
             if (terminal != null) return
             terminal = failure?.let(RawInputTerminal::Failed) ?: RawInputTerminal.Closed
             mutableState.value = RawInputState.Closed
@@ -304,7 +304,7 @@ private class RuntimeRawInputAccess(
         onClosed(this)
     }
 
-    private fun register(subscriber: RawInputSubscriber): RawInputSubscription = synchronized(lock) {
+    private fun register(subscriber: RawInputSubscriber): RawInputSubscription = lock.withLock {
         when (val terminalSnapshot = terminal) {
             null -> {
                 check(subscribers.add(subscriber))
@@ -317,7 +317,7 @@ private class RuntimeRawInputAccess(
     }
 
     private fun unregister(subscriber: RawInputSubscriber) {
-        synchronized(lock) { subscribers.remove(subscriber) }
+        lock.withLock { subscribers.remove(subscriber) }
         subscriber.dispose()
     }
 
@@ -368,13 +368,13 @@ private sealed interface RawInputSubscriberOffer {
 private class RawInputSubscriber(
     private val policy: RawInputDeliveryPolicy,
 ) {
-    private val lock = Any()
+    private val lock = RuntimeLock()
     private val signal = Channel<Unit>(capacity = 1)
     private val entries = ArrayDeque<RawInputEvent>()
     private var terminal: RawInputTerminal? = null
 
     fun offer(event: RawInputEvent): RawInputSubscriberOffer {
-        val outcome = synchronized(lock) {
+        val outcome = lock.withLock {
             if (terminal != null) return RawInputSubscriberOffer.Accepted
             if (entries.size < policy.capacity) {
                 entries += event
@@ -398,7 +398,7 @@ private class RawInputSubscriber(
 
     suspend fun next(): RawInputEvent? {
         while (true) {
-            val terminalSnapshot = synchronized(lock) {
+            val terminalSnapshot = lock.withLock {
                 entries.removeFirstOrNull()?.let { return it }
                 terminal
             }
@@ -411,7 +411,7 @@ private class RawInputSubscriber(
     }
 
     fun terminate(failure: KadreFailure?) {
-        synchronized(lock) {
+        lock.withLock {
             if (terminal != null) return
             entries.clear()
             terminal = failure?.let(RawInputTerminal::Failed) ?: RawInputTerminal.Closed
@@ -420,7 +420,7 @@ private class RawInputSubscriber(
     }
 
     fun dispose() {
-        synchronized(lock) { entries.clear() }
+        lock.withLock { entries.clear() }
         signal.cancel()
     }
 }

@@ -20,12 +20,25 @@ import org.graphiks.kadre.application.KadreSession
 import org.graphiks.kadre.application.LifecycleState
 import org.graphiks.kadre.application.SessionOutcome
 import org.graphiks.kadre.application.SessionState
+import org.graphiks.kadre.diagnostics.Capability
 import org.graphiks.kadre.diagnostics.DelicateKadreApi
+import org.graphiks.kadre.diagnostics.FeatureAvailability
 import org.graphiks.kadre.diagnostics.KadreFailure
 import org.graphiks.kadre.diagnostics.KadreOperation
 import org.graphiks.kadre.diagnostics.KadrePlatformApi
 import org.graphiks.kadre.diagnostics.KadreResourceKind
 import org.graphiks.kadre.diagnostics.KadreResult
+import org.graphiks.kadre.input.GestureKind
+import org.graphiks.kadre.input.InputCapabilities
+import org.graphiks.kadre.input.InputEvent
+import org.graphiks.kadre.input.KeyState
+import org.graphiks.kadre.input.LogicalKey
+import org.graphiks.kadre.input.PhysicalKey
+import org.graphiks.kadre.input.PointerButton
+import org.graphiks.kadre.input.PointerButtonState
+import org.graphiks.kadre.input.PointerState
+import org.graphiks.kadre.input.ScrollDelta
+import org.graphiks.kadre.input.SurfaceInputState
 import org.graphiks.kadre.platform.web.WebAttachmentPolicy
 import org.graphiks.kadre.platform.web.asHostRef
 import org.graphiks.kadre.platform.web.attachKadre
@@ -36,8 +49,16 @@ import org.graphiks.kadre.policy.ContinuousDelivery
 import org.graphiks.kadre.policy.ContinuousOverflowAction
 import org.graphiks.kadre.policy.KadrePolicies
 import org.graphiks.kadre.surface.HostSurface
+import org.graphiks.kadre.surface.InputDefaultBehavior
+import org.graphiks.kadre.surface.LogicalDelta
+import org.graphiks.kadre.surface.LogicalPoint
+import org.graphiks.kadre.surface.PointerCaptureMode
+import org.graphiks.kadre.surface.PropertyChange
 import org.graphiks.kadre.surface.SurfaceEvent
+import org.graphiks.kadre.surface.SurfaceProperty
 import org.graphiks.kadre.surface.SurfaceState
+import org.graphiks.kadre.surface.SurfaceUpdate
+import org.graphiks.kadre.surface.SurfaceUpdateOutcome
 import org.graphiks.kadre.window.WindowRequestOutcome
 import org.graphiks.kadre.window.WindowSpec
 import org.w3c.dom.HTMLElement
@@ -73,6 +94,16 @@ public fun main() {
         "surface-no-renderer" -> surfaceNoRendererScenario()
         "element-lease" -> elementLeaseScenario()
         "element-lease-close" -> elementLeaseCloseScenario()
+        "input-key" -> inputKeyScenario()
+        "input-wheel" -> inputWheelScenario()
+        "input-pointer" -> inputPointerScenario()
+        "input-pointer-multi" -> inputPointerMultiScenario()
+        "input-pointer-cancel" -> inputPointerCancelScenario()
+        "input-focus" -> inputFocusScenario()
+        "input-terminal" -> inputTerminalScenario()
+        "input-default-behavior" -> inputDefaultBehaviorScenario()
+        "input-pointer-capture" -> inputPointerCaptureScenario()
+        "input-touch-deferred" -> inputTouchDeferredScenario()
         "typescript-consumer" -> typescriptConsumerScenario()
         else -> phaseZeroScenario()
     }
@@ -369,6 +400,149 @@ private fun typescriptConsumerScenario() {
     publishApplicationFactoryKey(applicationFactory())
 }
 
+/**
+ * The Phase 3 input scenarios.
+ *
+ * Every one of them attaches a host through the public API, observes the surface's own input stream
+ * — `HostSurface.input.state` and `HostSurface.input.events` — and publishes what it read as
+ * `data-kadre-*` attributes of the host element. The specs drive real browser input (keyboard, mouse,
+ * wheel, focus) or, where Chromium cannot produce it, a synthetic event, and correlate it with those
+ * attributes: the observations are the public model's values, never an internal journal of the
+ * fixture, so an attribute a spec reads is a fact a consumer of this API can read too.
+ *
+ * The commands are installed synchronously, before `main` publishes `data-kadre-ready` (the
+ * installation barrier), and each body waits for the surface its application block publishes, because
+ * the runtime starts that block after this task.
+ */
+
+/** The handles a fixture command waits for: the surface and the session the application block owns. */
+private class InputHandles(val host: HTMLElement) {
+    val surface: CompletableDeferred<HostSurface> = CompletableDeferred()
+    val session: CompletableDeferred<KadreSession> = CompletableDeferred()
+}
+
+/**
+ * Installs one input scenario: the host, its input observation and the commands [configure] adds.
+ *
+ * The scenario returns as soon as every listener exists, which is what makes the readiness flag
+ * meaningful; the fixture's own attributes are read by the spec, never by the fixture.
+ */
+private fun inputScenario(
+    name: String,
+    configure: CoroutineScope.(InputHandles) -> Unit = {},
+) {
+    val host = createHost(name)
+    val parentScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    val handles = InputHandles(host)
+    // The observation belongs to the scenario's own scope rather than to the application block: a
+    // spec observes the input stream *across* a close, which is where the flow's completion and the
+    // frozen snapshot are read, so the collector may not be cancelled with the application.
+    parentScope.launch { InputObservation(host).install(parentScope, handles.surface.await()) }
+    parentScope.configure(handles)
+    val attached = host.attachKadre(parentScope) {
+        handles.surface.complete(checkNotNull(primarySurface.value))
+        awaitCancellation()
+    }
+    host.setAttribute("data-kadre-attach", describeAttach(attached))
+    if (attached is KadreResult.Success) {
+        handles.session.complete(attached.value)
+        observeSession(attached.value, name, parentScope)
+    }
+}
+
+/** One real key sequence; the two key specs assert the order and the modifiers it publishes. */
+private fun inputKeyScenario() = inputScenario("input-key")
+
+/** One real wheel, plus the wheel variants Chromium cannot produce; the two wheel specs read it. */
+private fun inputWheelScenario() = inputScenario("input-wheel")
+
+/** Real pointer input over the host: entry, motion, a primary press and its release. */
+private fun inputPointerScenario() = inputScenario("input-pointer")
+
+/** Real multi-button input and the one pointer identity the runtime keeps, whatever DOM pointer. */
+private fun inputPointerMultiScenario() = inputScenario("input-pointer-multi")
+
+/** A press the browser really reported, then a `pointercancel` Chromium never produces for a mouse. */
+private fun inputPointerCancelScenario() = inputScenario("input-pointer-cancel")
+
+/**
+ * A key and a button held, then a real loss of activation.
+ *
+ * The loss is a real focus move: the fixture owns a second focusable element outside the host, and
+ * the spec focuses it. No synthetic event is involved, and the focus observation travels the same
+ * lifecycle path a host's own focus change does.
+ */
+private fun inputFocusScenario() {
+    createFocusOutside()
+    inputScenario("input-focus")
+}
+
+/** A held key across the session's own stop, which is the close the terminal spec freezes. */
+private fun inputTerminalScenario() = inputScenario("input-terminal") { handles ->
+    installCommand("kadre-stop-input") { handles.session.await().requestStop() }
+}
+
+/**
+ * The page's own default behaviour under both members of `InputDefaultBehavior`.
+ *
+ * The document is made scrollable here, because the browser's wheel and arrow defaults act on the
+ * scrollable ancestor: without a scrollable page there would be no default to observe. The focus
+ * target is created *after* the host, so it is the next stop of the page's tab order and a spec can
+ * prove that `Tab`'s default really ran by reading the focus it moved to.
+ */
+private fun inputDefaultBehaviorScenario() {
+    document.body!!.style.height = "4000px"
+    inputScenario("input-default-behavior") { handles ->
+        createFocusOutside()
+        installCommand("kadre-behavior-host-default") {
+            handles.host.setAttribute(
+                "data-kadre-behavior-host-default",
+                handles.surface.await().applyDefaultBehavior(InputDefaultBehavior.HostDefault),
+            )
+        }
+        installCommand("kadre-behavior-suppress") {
+            handles.host.setAttribute(
+                "data-kadre-behavior-suppress",
+                handles.surface.await().applyDefaultBehavior(InputDefaultBehavior.SuppressWhenPossible),
+            )
+        }
+    }
+}
+
+/** The two capture modes this backend promises, asked for with and without an owned pointer. */
+private fun inputPointerCaptureScenario(): Unit {
+    createFocusOutside()
+    inputScenario("input-pointer-capture") { handles ->
+        installCommand("kadre-capture-unowned") {
+            handles.host.setAttribute(
+                "data-kadre-capture-unowned",
+                handles.surface.await().applyCapture(PointerCaptureMode.Confined),
+            )
+        }
+        installCommand("kadre-capture-locked") {
+            handles.host.setAttribute(
+                "data-kadre-capture-locked",
+                handles.surface.await().applyCapture(PointerCaptureMode.Locked),
+            )
+        }
+        installCommand("kadre-capture-confined") {
+            handles.host.setAttribute(
+                "data-kadre-capture-confined",
+                handles.surface.await().applyCapture(PointerCaptureMode.Confined),
+            )
+        }
+    }
+}
+
+/**
+ * The touch boundary of this phase (D12): a real touch on a touch-enabled page, observed as nothing.
+ *
+ * The spec drives `page.touchscreen` in a browsing context that declares touch, so the pointer events
+ * the element receives are real ones; the port refuses the kind whole, so the surface publishes no
+ * pointer, no touch and no event.
+ */
+private fun inputTouchDeferredScenario() = inputScenario("input-touch-deferred")
+
 private fun phaseZeroScenario() {
     val host = createHost("phase0")
     val domBaseline = document.getElementsByTagName("*").length
@@ -515,6 +689,7 @@ private fun KadreFailure.encoding(): String = when (this) {
     is KadreFailure.Unsupported -> "unsupported:${operation.name.lowercase()}"
     is KadreFailure.AlreadyInUse -> "alreadyInUse:${resource.name.lowercase()}"
     is KadreFailure.SourceOverflow -> "sourceOverflow:${resource.name.lowercase()}"
+    is KadreFailure.InteractionRequired -> "interactionRequired:${reason.name.lowercase()}"
     KadreFailure.ParentScopeCancelled -> "parentScopeCancelled"
     KadreFailure.ApplicationFailure -> "applicationFailure"
     else -> "unexpected-failure"
@@ -525,3 +700,249 @@ private fun KadreFailure.encoding(): String = when (this) {
  * describes: the application exports the key and JavaScript only carries it back to `KadreWeb.attach`.
  */
 private fun publishApplicationFactoryKey(key: String): Unit = js("globalThis.kadreApplicationFactory = key")
+
+/**
+ * Publishes one input scenario's observations as attributes of the host, from the surface's own
+ * stream.
+ *
+ * Four facts are read, and each is a public value rather than a fixture journal:
+ *
+ * - `data-kadre-input-state`: the whole `SurfaceInputState` the runtime published — pressed physical
+ *   keys, modifiers, the pointers the runtime keeps with their kinds, buttons and positions, the
+ *   number of touches, and the input revision;
+ * - `data-kadre-input-caps`: the derived `InputCapabilities`, which is where the touch and gesture
+ *   boundary of this phase is observable;
+ * - `data-kadre-input-events`: every `InputEvent` the surface published, in order, each carrying the
+ *   input revision it was published with — so a spec can read both the payload and its order. The
+ *   entries are separated by `;`, because a scroll payload carries a comma of its own;
+ * - `data-kadre-input-order`: for every event, whether the state cell already carried that event's
+ *   revision and its change when the event was observed, which is the state-before-event claim;
+ * - `data-kadre-input-resets`: how many `StateReset` events were published and why.
+ *
+ * `data-kadre-surface-state` is the committed `SurfaceState` (attachment, `inputDefaultBehavior` and
+ * `pointerCapture`), and `data-kadre-input-flow-closed` is set when the input events flow completes —
+ * the surface's close, observed as a consumer observes it.
+ */
+private class InputObservation(private val host: HTMLElement) {
+    private val events: MutableList<String> = mutableListOf()
+    private val order: MutableList<String> = mutableListOf()
+    private val resets: MutableList<String> = mutableListOf()
+
+    fun install(scope: CoroutineScope, surface: HostSurface) {
+        // The empty observation is published first, so a spec that drives no input at all still reads
+        // a value the fixture really produced rather than a missing attribute.
+        host.setAttribute("data-kadre-input-events", "")
+        host.setAttribute("data-kadre-input-count", "0")
+        host.setAttribute("data-kadre-input-order", "")
+        host.setAttribute("data-kadre-input-resets", "0:")
+        scope.launch {
+            surface.input.state.collect { state ->
+                host.setAttribute("data-kadre-input-state", state.encoded())
+                host.setAttribute("data-kadre-input-caps", state.capabilities.encoded())
+            }
+        }
+        // The event subscription is registered undispatched, so it exists by the time this call
+        // returns: the surface's event flow is cold, and an observation made before its collector
+        // registered would be delivered to nobody. Reading the capability attribute a spec waits on
+        // is therefore also the proof that every later event of the scenario reaches the observer.
+        scope.launch(start = CoroutineStart.UNDISPATCHED) {
+            surface.input.events.collect { event ->
+                val state = surface.input.state.value
+                events += event.encoded()
+                order += "${event.revisionless()}:${if (state.agreesWith(event)) "synced" else "unsynced"}"
+                if (event is InputEvent.StateReset) {
+                    resets += event.reason.name.replaceFirstChar(Char::lowercase)
+                }
+                host.setAttribute("data-kadre-input-events", events.joinToString(";"))
+                host.setAttribute("data-kadre-input-count", events.size.toString())
+                host.setAttribute("data-kadre-input-order", order.joinToString(";"))
+                host.setAttribute("data-kadre-input-resets", "${resets.size}:${resets.joinToString(",")}")
+                if (event is InputEvent.PointerMoved) {
+                    // A capture confines the pointer to the element, so a motion beyond its logical box
+                    // is exactly what a real capture delivers and a release-less capture ends with.
+                    val size = surface.state.value.logicalSize
+                    val outside = event.position.x < 0.0 || event.position.y < 0.0 ||
+                        event.position.x > size.width || event.position.y > size.height
+                    host.setAttribute("data-kadre-pointer-outside", if (outside) "true" else "false")
+                    host.setAttribute("data-kadre-pointer-motion", event.position.encoded())
+                }
+            }
+            host.setAttribute("data-kadre-input-flow-closed", "true")
+        }
+        scope.launch {
+            surface.state.collect { state -> host.setAttribute("data-kadre-surface-state", state.encoded()) }
+        }
+    }
+}
+
+/**
+ * The focus target a spec moves the focus to: a real, focusable element outside the host.
+ *
+ * It exists so a loss of activation is a real focus change of the page rather than a synthetic event.
+ * It is created by the fixture before readiness, like every other element of a scenario, and the
+ * moment the caller creates it decides the page's tab order: a scenario that proves `Tab`'s default
+ * ran creates it after the host, so it is the stop the default moves the focus to.
+ */
+private fun createFocusOutside() {
+    val element = document.createElement("div") as HTMLElement
+    element.setAttribute("data-kadre-focus-outside", "true")
+    element.tabIndex = 0
+    document.body!!.appendChild(element)
+}
+
+/** Applies one `InputDefaultBehavior` through the public update and renders the outcome. */
+private suspend fun HostSurface.applyDefaultBehavior(behavior: InputDefaultBehavior): String =
+    apply(SurfaceUpdate(inputDefaultBehavior = PropertyChange.Set(behavior))).outcomeEncoding()
+
+/** Asks for one `PointerCaptureMode` through the public update and renders the outcome. */
+private suspend fun HostSurface.applyCapture(mode: PointerCaptureMode): String =
+    apply(SurfaceUpdate(pointerCapture = PropertyChange.Set(mode))).outcomeEncoding()
+
+/**
+ * The outcome of one `apply`, as the specs assert it: the fields the surface rejected are named with
+ * the failure of each, so a spec can tell an admitted field from a refused one.
+ */
+private fun KadreResult<SurfaceUpdateOutcome>.outcomeEncoding(): String = when (this) {
+    is KadreResult.Success -> when (val outcome = value) {
+        is SurfaceUpdateOutcome.Applied -> "applied"
+        is SurfaceUpdateOutcome.PartiallyApplied -> "partiallyApplied[" + outcome.rejected.joinToString(
+            separator = ",",
+        ) { rejection -> "${rejection.field.encoded()}=${rejection.failure.encoding()}" } + "]"
+    }
+
+    is KadreResult.Failure -> "failure:${reason.encoding()}"
+}
+
+/** The committed surface state, as the specs read it: attachment, behaviour, capture and revision. */
+private fun SurfaceState.encoded(): String =
+    "${attachment.name.lowercase()}|${inputDefaultBehavior.name.lowercase()}|" +
+        "${pointerCapture.name.lowercase()}|rev=${revision.value}"
+
+/** The whole input state, as the specs read it. */
+private fun SurfaceInputState.encoded(): String =
+    "rev=${revision.value}" +
+        " keys=[${keyboard.pressedKeys.map { it.encoded() }.sorted().joinToString(",")}]" +
+        " mods=[${modifiers.pressed.map { it.name }.sorted().joinToString(",")}]" +
+        " pointers=[${pointers.joinToString(",") { it.encoded() }}]" +
+        " touches=${touches.size}"
+
+/** The derived input capabilities: the feature availabilities and the gesture constraint set. */
+private fun InputCapabilities.encoded(): String =
+    "keyboard=${keyboard.encoded()}" +
+        " pointer=${pointer.encoded()}" +
+        " touch=${touch.encoded()}" +
+        " gestures=${gestures.encoded()}"
+
+private fun FeatureAvailability.encoded(): String = when (this) {
+    FeatureAvailability.Available -> "available"
+    FeatureAvailability.Unsupported -> "unsupported"
+    is FeatureAvailability.RequiresPermission -> "requiresPermission"
+    is FeatureAvailability.RequiresInteraction -> "requiresInteraction"
+    is FeatureAvailability.Unavailable -> "unavailable"
+}
+
+private fun Capability<Set<GestureKind>>.encoded(): String = when (this) {
+    is Capability.Unsupported -> "unsupported:${failure.operation.name.lowercase()}"
+    is Capability.Supported -> "supported[${constraints.map { it.name }.sorted().joinToString("+")}]"
+}
+
+private fun PointerState.encoded(): String =
+    "${kind.name.lowercase()}#${pressedButtons.map { it.encoded() }.sorted().joinToString("+")}" +
+        "@${position?.encoded() ?: "none"}${if (pen == null) "" else ":pen"}"
+
+private fun PointerButton.encoded(): String = when (this) {
+    PointerButton.Primary -> "primary"
+    PointerButton.Secondary -> "secondary"
+    PointerButton.Auxiliary -> "auxiliary"
+    PointerButton.Back -> "back"
+    PointerButton.Forward -> "forward"
+    PointerButton.Barrel -> "barrel"
+    PointerButton.Eraser -> "eraser"
+    is PointerButton.Other -> "other:$nativeCode"
+}
+
+private fun PhysicalKey.encoded(): String = when (this) {
+    is PhysicalKey.Code -> "code:$usagePage:$usageId"
+    is PhysicalKey.Unidentified -> "unidentified:$nativeCode"
+}
+
+private fun LogicalKey.encoded(): String = when (this) {
+    is LogicalKey.Character -> value
+    is LogicalKey.Named -> value.name
+    is LogicalKey.Unidentified -> "unidentified:$nativeCode"
+}
+
+private fun ScrollDelta.encoded(): String = when (this) {
+    is ScrollDelta.Logical -> "logical(${number(x)},${number(y)})"
+    is ScrollDelta.Lines -> "lines(${number(x)},${number(y)})"
+}
+
+private fun LogicalPoint.encoded(): String = "(${number(x)},${number(y)})"
+
+private fun LogicalDelta.encoded(): String = "(${number(x)},${number(y)})"
+
+private fun SurfaceProperty.encoded(): String = when (this) {
+    SurfaceProperty.Cursor -> "cursor"
+    SurfaceProperty.PointerCapture -> "pointerCapture"
+    SurfaceProperty.HitTesting -> "hitTesting"
+    SurfaceProperty.InputDefaultBehavior -> "inputDefaultBehavior"
+}
+
+/** One published input event, with the input revision it carried. */
+private fun InputEvent.encoded(): String = when (this) {
+    is InputEvent.Key -> "key:${logicalKey.encoded()}:${keyState.name.lowercase()}" +
+        ":mods[${modifiers.pressed.map { it.name }.sorted().joinToString("+")}]:rev=${stateRevision.value}"
+
+    is InputEvent.PointerEntered -> "enter:${kind.name.lowercase()}@${position.encoded()}:rev=${stateRevision.value}"
+
+    is InputEvent.PointerMoved -> "move:${kind.name.lowercase()}@${position.encoded()}" +
+        ":d=${delta.encoded()}:rev=${stateRevision.value}"
+
+    is InputEvent.PointerButtonChanged -> "button:${button.encoded()}:${buttonState.name.lowercase()}" +
+        "@${position.encoded()}:rev=${stateRevision.value}"
+
+    is InputEvent.PointerLeft -> "leave:${kind.name.lowercase()}:rev=${stateRevision.value}"
+
+    is InputEvent.Scrolled -> "scroll:${delta.encoded()}:rev=${stateRevision.value}"
+
+    is InputEvent.StateReset -> "reset:${reason.name.replaceFirstChar(Char::lowercase)}:rev=${stateRevision.value}"
+
+    else -> "other:rev=${stateRevision.value}"
+}
+
+/**
+ * One event's observation, revision excluded: what the ordering attribute names its entry by.
+ *
+ * The payload is the whole encoded event without its revision, because the revision is what the entry's
+ * value is about: a scroll delta carries a comma of its own, which is why the lists of the fixture are
+ * separated by `;`.
+ */
+private fun InputEvent.revisionless(): String = encoded().substringBefore(":rev=")
+
+/**
+ * Whether the state cell the surface publishes already carried this event when the event was
+ * observed: the revision the event names is the state's own, and the change the event describes is in
+ * it — a key press is in the pressed set, a release is not, a button transition is (or is no longer)
+ * among the pointer's buttons, and a reset left a neutral snapshot.
+ *
+ * That conjunction is the state-before-event claim: a consumer that reads `input.state` when it
+ * receives an event reads the state that event produced, never the one before it.
+ */
+private fun SurfaceInputState.agreesWith(event: InputEvent): Boolean {
+    if (revision != event.stateRevision) return false
+    return when (event) {
+        is InputEvent.Key -> when (event.keyState) {
+            KeyState.Pressed -> event.physicalKey in keyboard.pressedKeys
+            KeyState.Released -> event.physicalKey !in keyboard.pressedKeys
+        }
+
+        is InputEvent.PointerButtonChanged -> when (event.buttonState) {
+            PointerButtonState.Pressed -> pointers.any { event.button in it.pressedButtons }
+            PointerButtonState.Released -> pointers.none { event.button in it.pressedButtons }
+        }
+
+        is InputEvent.StateReset -> keyboard.pressedKeys.isEmpty() && pointers.isEmpty() && modifiers.pressed.isEmpty()
+
+        else -> true
+    }
+}

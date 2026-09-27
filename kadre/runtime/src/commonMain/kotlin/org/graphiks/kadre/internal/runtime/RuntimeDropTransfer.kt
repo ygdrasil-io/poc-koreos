@@ -20,20 +20,45 @@ import org.graphiks.kadre.input.DropTransfer
 import org.graphiks.kadre.input.DroppedItem
 import org.graphiks.kadre.policy.ResourceBudgetPolicy
 
+/**
+ * Backend-owned source retained by one runtime-owned drop offer.
+ *
+ * The source is Kotlin-only: implementations must not allow a borrowed native pasteboard object
+ * or filesystem path to escape through this interface. The runtime closes it on every terminal
+ * path that has not handed the resulting transfer to the application.
+ */
+public interface DropTransferSource : AutoCloseable {
+    public val items: List<DropItemSource>
+
+    public override fun close()
+}
+
+/** One deferred byte source behind a portable dropped item. */
+public interface DropItemSource {
+    public val descriptor: DropItemDescriptor
+    public val readMode: DropItemReadMode
+
+    /** Delivers source-owned chunks no larger than [maxChunkBytes]. */
+    public suspend fun collectBytes(
+        maxChunkBytes: Int,
+        collector: suspend (ByteArray) -> Unit,
+    ): KadreResult<Unit>
+}
+
 /** Session-scoped, atomic accounting for transfers from admission through close. */
 internal class RuntimeDropTransferBudget(
     private val limit: Int,
 ) {
-    private val lock = Any()
+    private val lock = RuntimeLock()
     private var reserved = 0
 
-    fun tryReserve(): RuntimeDropTransferReservation? = synchronized(lock) {
-        if (reserved >= limit) return@synchronized null
+    fun tryReserve(): RuntimeDropTransferReservation? = lock.withLock {
+        if (reserved >= limit) return@withLock null
         reserved += 1
         RuntimeDropTransferReservation(this)
     }
 
-    private fun release() = synchronized(lock) {
+    private fun release() = lock.withLock {
         check(reserved > 0) { "drop transfer reservation underflow" }
         reserved -= 1
     }
@@ -41,10 +66,11 @@ internal class RuntimeDropTransferBudget(
     internal class RuntimeDropTransferReservation(
         private val budget: RuntimeDropTransferBudget,
     ) : AutoCloseable {
+        private val lock = RuntimeLock()
         private var closed = false
 
         override fun close() {
-            val release = synchronized(this) {
+            val release = lock.withLock {
                 if (closed) false else {
                     closed = true
                     true
@@ -69,7 +95,7 @@ internal class RuntimeDropOffer(
     private val resources: ResourceBudgetPolicy,
     private val transferBudget: RuntimeDropTransferBudget,
 ) : DropOffer {
-    private val lock = Any()
+    private val lock = RuntimeLock()
     private val mutableState = MutableStateFlow<DropOfferState>(DropOfferState.Presented)
     private var transfer: RuntimeDropTransfer? = null
     private var claimed = false
@@ -79,12 +105,12 @@ internal class RuntimeDropOffer(
     override val items: List<DropItemDescriptor> = itemSources.map(RuntimeDropItemSource::descriptor)
     override val state = mutableState.asStateFlow()
 
-    fun accept(): KadreResult<Unit> = synchronized(lock) {
+    fun accept(): KadreResult<Unit> = lock.withLock {
         if (mutableState.value != DropOfferState.Presented) {
-            return@synchronized KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.DropTransfer))
+            return@withLock KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.DropTransfer))
         }
         val acquired = transferBudget.tryReserve()
-            ?: return@synchronized KadreResult.Failure(
+            ?: return@withLock KadreResult.Failure(
                 KadreFailure.ResourceLimitExceeded(
                     KadreResourceKind.DropTransfer,
                     resources.maxConcurrentDropTransfers.toLong(),
@@ -99,8 +125,8 @@ internal class RuntimeDropOffer(
         scope: CoroutineScope?,
         onTransferClosed: (RuntimeDropTransfer) -> Unit,
     ): RuntimeDropTransfer? {
-        val created = synchronized(lock) {
-            if (mutableState.value != DropOfferState.Accepted) return@synchronized null
+        val created = lock.withLock {
+            if (mutableState.value != DropOfferState.Accepted) return@withLock null
             val next = RuntimeDropTransfer(
                 source = source,
                 itemSources = itemSources,
@@ -120,7 +146,7 @@ internal class RuntimeDropOffer(
             }
         }
         if (timeout != null) {
-            val cancel = synchronized(lock) {
+            val cancel = lock.withLock {
                 if (mutableState.value == DropOfferState.TransferAvailable && transfer === created) {
                     claimTimeout = timeout
                     false
@@ -134,7 +160,7 @@ internal class RuntimeDropOffer(
     }
 
     fun terminate(reason: DropOfferTerminationReason): Boolean {
-        val cleanup = synchronized(lock) {
+        val cleanup = lock.withLock {
             when (mutableState.value) {
                 DropOfferState.Claimed,
                 is DropOfferState.Terminated,
@@ -158,7 +184,7 @@ internal class RuntimeDropOffer(
     override suspend fun claimTransfer(): KadreResult<DropTransfer> {
         while (true) {
             var timeoutToCancel: Job? = null
-            val immediate = synchronized(lock) {
+            val immediate = lock.withLock {
                 when (val current = mutableState.value) {
                     DropOfferState.TransferAvailable -> {
                         if (claimed) {
@@ -192,7 +218,7 @@ internal class RuntimeDropOffer(
     }
 
     private fun timeoutClaim(expected: RuntimeDropTransfer) {
-        val cleanup = synchronized(lock) {
+        val cleanup = lock.withLock {
             if (mutableState.value != DropOfferState.TransferAvailable || transfer !== expected) return
             mutableState.value = DropOfferState.Terminated(DropOfferTerminationReason.ClaimTimedOut)
             DropOfferCleanup(
@@ -244,7 +270,7 @@ internal class RuntimeDropTransfer(
     private val reservation: RuntimeDropTransferBudget.RuntimeDropTransferReservation,
     private val onClosed: (RuntimeDropTransfer) -> Unit,
 ) : DropTransfer {
-    private val lock = Any()
+    private val lock = RuntimeLock()
     private var closed = false
     private var reading = false
 
@@ -253,7 +279,7 @@ internal class RuntimeDropTransfer(
     }
 
     override fun close() {
-        val closeSource = synchronized(lock) {
+        val closeSource = lock.withLock {
             if (closed) false else {
                 closed = true
                 true
@@ -272,7 +298,7 @@ internal class RuntimeDropTransfer(
         }
     }
 
-    private fun isClosed(): Boolean = synchronized(lock) { closed }
+    private fun isClosed(): Boolean = lock.withLock { closed }
 
     suspend fun collect(
         source: RuntimeDropItemSource,
@@ -280,7 +306,7 @@ internal class RuntimeDropTransfer(
         maxBytes: Long,
         collector: suspend (ByteArray) -> Unit,
     ): KadreResult<Unit> {
-        val admission = synchronized(lock) {
+        val admission = lock.withLock {
             when {
                 closed -> DropReadAdmission.Closed
                 reading -> DropReadAdmission.AlreadyInUse
@@ -313,8 +339,9 @@ internal class RuntimeDropTransfer(
                 if (isClosed()) throw DropTransferClosed
                 if (bytes.size > resources.maxDropChunkBytes) throw DropChunkLimitExceeded
                 val next = try {
-                    Math.addExact(delivered, bytes.size.toLong())
-                } catch (_: ArithmeticException) {
+                    checkedAdd(delivered, bytes.size.toLong())
+                } catch (_: IllegalStateException) {
+                    // checkedAdd fails the overflow through `check`, where Math.addExact threw.
                     throw DropReadLimitExceeded
                 }
                 if (next > maxBytes) throw DropReadLimitExceeded
@@ -332,7 +359,7 @@ internal class RuntimeDropTransfer(
         } catch (_: DropTransferClosed) {
             KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.DropTransfer))
         } finally {
-            synchronized(lock) { reading = false }
+            lock.withLock { reading = false }
         }
     }
 

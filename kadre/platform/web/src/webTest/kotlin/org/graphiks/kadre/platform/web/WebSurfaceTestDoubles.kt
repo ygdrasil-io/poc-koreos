@@ -1,5 +1,8 @@
 package org.graphiks.kadre.platform.web
 
+import org.graphiks.kadre.diagnostics.KadreFailure
+import org.graphiks.kadre.diagnostics.KadreResult
+
 /**
  * The one host-port double every web surface test drives.
  *
@@ -16,8 +19,19 @@ internal class RecordingWebHostPort(
     override val stableIdentity: Any = Any()
     private var metricsObserver: ((WebSurfaceMetrics) -> Unit)? = null
     private var lifecycleObserver: ((WebLifecycleSnapshot) -> Unit)? = null
+    private var inputObserver: WebInputObserver? = null
     private var frame: (() -> Unit)? = null
     private var released: Boolean = false
+
+    /**
+     * The stimuli the target observed before Kadre was listening, delivered in order the instant the
+     * observer is installed.
+     *
+     * This is the window a real port works in: it installs its observation before the session
+     * configuration exists, so input the element already reported is handed over before anything can
+     * reduce it. A test sets this before attaching to drive exactly that window.
+     */
+    var preInstallInput: List<WebInputStimulus> = emptyList()
 
     /**
      * The host element this port was built around, as the untyped reference the surface lends.
@@ -37,6 +51,42 @@ internal class RecordingWebHostPort(
     /** How often the surface cancelled a frame it had registered; a run frame is not a cancel. */
     var frameCancellations: Int = 0
         private set
+
+    /**
+     * Every capture effect the surface asked this port to perform, in the order it asked: `true` is a
+     * capture taken, `false` a capture released.
+     *
+     * This is the port's own record of what it was asked for — the observable a case reads when it has
+     * to prove that a decision *reached the browser*, or that a field the surface refused reached it not
+     * at all. Nothing else about the port is observable from above it, which is the point: the surface
+     * decides and this records, exactly as the target ports perform and decide nothing.
+     */
+    val pointerCaptureRequests: MutableList<Boolean> = mutableListOf()
+
+    /**
+     * What the next capture request answers, or `null` when the browser accepts it.
+     *
+     * It is the contained refusal of a real browser (a pointer it does not consider active), so a case
+     * can drive the path where the effect did not happen without a browser: the port reports the failure
+     * and the surface rejects the field with it.
+     */
+    var pointerCaptureFailure: KadreFailure? = null
+
+    /**
+     * Whether this double answers the capture member at all.
+     *
+     * A target port either implements the mechanism or inherits the interface's own default; with this
+     * off the double becomes the second kind, which is how a case pins that the default cannot make the
+     * surface commit a capture nobody performed.
+     */
+    var captureImplemented: Boolean = true
+
+    override fun applyPointerCapture(captured: Boolean): KadreResult<Unit> {
+        pointerCaptureRequests += captured
+        if (!captureImplemented) return super.applyPointerCapture(captured)
+        val failure = pointerCaptureFailure
+        return if (failure == null) KadreResult.Success(Unit) else KadreResult.Failure(failure)
+    }
 
     /**
      * Invoked by the first [release], before the port drops the target resources it holds.
@@ -62,6 +112,43 @@ internal class RecordingWebHostPort(
     /** Pushes [snapshot] as if the target had just observed the browsing context. */
     fun deliverLifecycle(snapshot: WebLifecycleSnapshot) {
         lifecycleObserver?.invoke(snapshot)
+    }
+
+    override fun installInputObserver(observer: WebInputObserver) {
+        check(inputObserver == null) { "this port already installed an input observer" }
+        inputObserver = observer
+        val observed = preInstallInput
+        preInstallInput = emptyList()
+        observed.forEach(observer::onObservation)
+    }
+
+    /** Pushes [stimulus] as if the target had just observed it; inert once released. */
+    fun deliverInput(stimulus: WebInputStimulus) {
+        inputObserver?.onObservation(stimulus)
+    }
+
+    /**
+     * Pushes [stimulus] as the target would, and answers what the channel said about the default of
+     * the event that carried it — the question a real port asks inside that event's own callback.
+     *
+     * Asking here is what lets the surface's answer be proven on both targets without a browser: a
+     * real port computes the stimulus, hands it over and applies the answer to the event it is
+     * holding, which is this call plus the `preventDefault` the target tests observe on the event.
+     */
+    fun deliverInputAndAskSuppression(stimulus: WebInputStimulus): Boolean {
+        val observer = inputObserver ?: return false
+        observer.onObservation(stimulus)
+        return observer.suppressDefaultFor(stimulus)
+    }
+
+    /**
+     * Pushes the browser's own `lostpointercapture`, as the target would report it from its listener.
+     *
+     * It is a report and not an observation: nothing of the input model describes it, so the channel's
+     * third member is what carries it and no stimulus is delivered.
+     */
+    fun deliverPointerCaptureLost() {
+        inputObserver?.onPointerCaptureLost()
     }
 
     /** The browsing context is gone, as a detached or removed document reports it. */
@@ -109,6 +196,7 @@ internal class RecordingWebHostPort(
         onRelease?.invoke()
         metricsObserver = null
         lifecycleObserver = null
+        inputObserver = null
         element = null
     }
 }

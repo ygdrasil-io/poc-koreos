@@ -7,6 +7,7 @@ import org.graphiks.kadre.diagnostics.KadreDiagnostic
 import org.graphiks.kadre.diagnostics.KadreFailure
 import org.graphiks.kadre.display.DisplayManager
 import org.graphiks.kadre.policy.InputDeliveryPolicy
+import org.graphiks.kadre.policy.ResourceBudgetPolicy
 import org.graphiks.kadre.policy.WindowDeliveryPolicy
 import org.graphiks.kadre.surface.HostSurface
 import org.graphiks.kadre.window.WindowManager
@@ -132,6 +133,7 @@ public class RuntimeSessionComponents private constructor(
         sessionFailureHandler: (KadreFailure) -> Unit,
         collectorAllocator: Any,
         maxCollectorsPerFlow: Int,
+        resources: ResourceBudgetPolicy,
         dropTransferScope: CoroutineScope,
         diagnostics: (KadreDiagnostic) -> Unit,
         rawInputPort: RawInputPort?,
@@ -147,12 +149,22 @@ public class RuntimeSessionComponents private constructor(
             diagnostics,
             rawInputPort,
         )
+        // One parameter more than the components-side manager: the resource budgets. The components
+        // branch receives its policy when its backend constructs the manager for this session, while
+        // a host-provided primary surface is built by a factory that never sees the session policy.
+        // Delivering it here is what keeps the primary surface able to build the same shared reducer
+        // as the components branch instead of falling back to a built-in default.
         (primarySurface as? RuntimePrimarySurfaceConfiguration)?.installSessionConfiguration(
             deliveryPolicy,
+            inputDeliveryPolicy,
             source,
             sessionFailureHandler,
             collectorAllocator,
             maxCollectorsPerFlow,
+            resources,
+            dropTransferScope,
+            diagnostics,
+            rawInputPort,
         )
     }
 
@@ -192,14 +204,65 @@ internal object UnsupportedRuntimeSessionComponentsFactory : RuntimeSessionCompo
  * The runtime installs this configuration once per session, after the surface exists and before
  * any application code runs. A surface must therefore buffer stimuli that arrive earlier and
  * flush them, in order, once [installSessionConfiguration] has been called.
+ *
+ * The parameters are the session-owned collaborators an implementation cannot obtain on its own,
+ * and they are the same ones [RuntimeSessionWindowManager] receives, so a primary surface builds
+ * the same shared ordinary-input reducer as the components-side window manager. Each parameter
+ * names the reducer field it feeds:
+ *
+ * - [deliveryPolicy] feeds the surface's own window-delivery policy (redraw and geometry
+ *   publication), as it does for the components-side manager.
+ * - [inputDeliveryPolicy] feeds `RuntimeSurfaceInput.deliveryPolicy`: the ingress capacity of
+ *   discrete input, the per-lane delivery shape, and the overflow action every lane applies.
+ * - [source] feeds `RuntimeSurfaceInput.eventStampSource`, the session-owned stamp of every
+ *   reduced input event and of every surface observation.
+ * - [sessionFailureHandler] feeds `RuntimeSurfaceInput.sessionFailureHandler`, the one path an
+ *   input overflow takes to fail the session.
+ * - [collectorAllocator] and [maxCollectorsPerFlow] feed `RuntimeSurfaceInput.eventCollectorGate`
+ *   and `RuntimeSurfaceInput.textInputEventCollectorGate`: the allocator is typed [Any] because the
+ *   concrete allocator is runtime-internal, and an implementation must hand the value back to the
+ *   runtime unchanged rather than interpret it.
+ * - [resources] feeds `RuntimeSurfaceInput.resources` (the payload bounds a drop snapshot is
+ *   admitted against) and the drop-transfer budget derived from
+ *   `ResourceBudgetPolicy.maxConcurrentDropTransfers`, exactly as the components-side manager
+ *   derives it from the same policy. It is delivered here rather than at construction time because
+ *   the components branch is handed its policy when its backend constructs the manager for the
+ *   session, whereas a primary surface comes from a host factory that never sees the session
+ *   policy; a surface that cannot receive it could only guess one, and a guessed budget is not the
+ *   session's.
+ * - [dropTransferScope] feeds `RuntimeSurfaceInput.dropTransferScope`, the scope a drop transfer
+ *   outlives the stimulus that admitted it in.
+ * - [diagnostics] feeds the diagnostic channel the reducer's raw-input coordinator reports
+ *   through. It is not where the reducer's own reporter comes from: the reporter a failed input
+ *   publication is announced on is the reporter of diagnostics that are not session failures, and a
+ *   surface obtains that one from the backend that built its host — the Web host session's own
+ *   `RuntimeFailureReporter`, adapted to `(Throwable) -> Unit`, is the worked example, and it is the
+ *   same kind of value a components-side window manager receives from its backend.
+ * - [rawInputPort] feeds `RuntimeSurfaceInput.rawInputCoordinator` when it is non-null, which is
+ *   also where `RuntimeSurfaceInput.rawInputCapability` comes from; a session without raw input
+ *   delivers `null` and the reducer stays unsupported for it.
+ *
+ * What the reducer also needs is deliberately not here, because it is not the session's to give: its
+ * `RuntimeSurfaceInput.surfaceId` is the identity the runtime itself allocated to the surface, its
+ * `textInputPort` and whether drag and drop is available at all are the surface's own activation
+ * decisions, and its reporter of diagnostics that are not session failures is the failure reporter
+ * of the backend that built the surface's host (a `RuntimeFailureReporter` the Web host session
+ * already holds), not the session's [diagnostics] channel. The drop-transfer budget is derived from
+ * [resources] instead of being passed because `RuntimeDropTransferBudget` is runtime-internal and
+ * cannot appear in this signature.
  */
 public interface RuntimePrimarySurfaceConfiguration {
     public fun installSessionConfiguration(
         deliveryPolicy: WindowDeliveryPolicy,
+        inputDeliveryPolicy: InputDeliveryPolicy,
         source: () -> EventStamp,
         sessionFailureHandler: (KadreFailure) -> Unit,
         collectorAllocator: Any,
         maxCollectorsPerFlow: Int,
+        resources: ResourceBudgetPolicy,
+        dropTransferScope: CoroutineScope?,
+        diagnostics: (KadreDiagnostic) -> Unit,
+        rawInputPort: RawInputPort?,
     )
 }
 
