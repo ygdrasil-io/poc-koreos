@@ -540,7 +540,7 @@ class RuntimeInteractionHandlerTest {
         }
         val callback = Thread {
             handler.dispatch(pointerEvent(), setOf(InteractionKind.BeginWindowMove)) {
-                KadreResult.Success(Unit)
+                NativeInteractionOutcome.Now(KadreResult.Success(Unit))
             }
         }.apply { isDaemon = true }
 
