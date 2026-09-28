@@ -244,6 +244,16 @@ internal class RuntimeInteractionHandler(
             }
             when (nativeOutcome) {
                 is NativeInteractionOutcome.Now -> {
+                    // The registration may have closed while the native call ran. A request can
+                    // only complete against a live registration — the same guard as admission —
+                    // because a closed flow could never observe the outcome. A close landing
+                    // after this check is benign: the `finally` publication is best-effort and
+                    // the `Now` path admits no pending.
+                    lock.withLock {
+                        if (registration.closed || this@RuntimeInteractionHandler.registration !== registration) {
+                            return KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.Interaction))
+                        }
+                    }
                     outcome = when (val nativeResult = nativeOutcome.result) {
                         is KadreResult.Success -> InteractionActionOutcome.Committed(
                             requestId,
@@ -266,6 +276,13 @@ internal class RuntimeInteractionHandler(
                     // already consumed, so the refusal happens after the native primitive was
                     // emitted and the backend observes the refusal through this failure.
                     val admitted = lock.withLock {
+                        // The registration may have closed while the native call ran: admission is
+                        // refused exactly like the pre-call admission, and the guard is atomic
+                        // with the insert under this lock, so a closed registration can never hold
+                        // a pending the close sweep would miss.
+                        if (registration.closed || this@RuntimeInteractionHandler.registration !== registration) {
+                            return KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.Interaction))
+                        }
                         if (pendingRequests.size >= maxPendingInteractionRequests) {
                             false
                         } else {
@@ -361,9 +378,10 @@ internal class RuntimeInteractionHandler(
                 closed = true
                 if (terminalFailure == null && failure != null) terminalFailure = failure
                 if (registration === this@Registration) registration = null
-                // The sweep is atomic with `closed`: a pending registered after this point is
-                // impossible. The abandoned outcomes publish before terminalisation so live
-                // subscribers still observe them.
+                // The sweep runs under this lock, and pending admission re-checks `closed` under
+                // the same lock before inserting, so every pending admitted before the close is
+                // swept here and no pending can be admitted afterwards. The abandoned outcomes
+                // publish before terminalisation so live subscribers still observe them.
                 abandoned = pendingRequests.values.toList().also { pendingRequests.clear() }
                 abandoned.forEach { pending ->
                     pending.registration.publish(

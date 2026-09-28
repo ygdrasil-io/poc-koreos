@@ -419,6 +419,56 @@ class RuntimeInteractionHandlerCommonTest {
         )
     }
 
+    @Test
+    fun requestRefusesWithClosedWhenTheRegistrationClosesDuringTheNativeCall() = runTest {
+        val handler = handler()
+        lateinit var registration: InteractionRegistration
+        var request: KadreResult<InteractionRequestId>? = null
+        registration = handler.install(InteractionHandler { context, _ ->
+            request = context.request(InteractionAction.BeginWindowMove)
+        }).successValue()
+        val outcomes = async(start = CoroutineStart.UNDISPATCHED) { registration.outcomes.toList() }
+
+        handler.dispatch(pointerEvent(), setOf(InteractionKind.BeginWindowMove)) { _ ->
+            registration.close()
+            NativeInteractionOutcome.Now(KadreResult.Success(Unit))
+        }
+
+        assertEquals(
+            KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.Interaction)),
+            request,
+        )
+        assertEquals<List<InteractionActionOutcome>>(emptyList(), outcomes.await())
+    }
+
+    @Test
+    fun deferredAdmissionRefusesWithClosedWhenTheRegistrationClosesDuringTheNativeCall() = runTest {
+        val handler = handler(advertised = setOf(InteractionKind.EnterFullscreen))
+        lateinit var registration: InteractionRegistration
+        var request: KadreResult<InteractionRequestId>? = null
+        var completed: Pair<Boolean, KadreFailure?>? = null
+        registration = handler.install(InteractionHandler { context, _ ->
+            request = context.request(InteractionAction.EnterFullscreen(FullscreenMode.Borderless))
+        }).successValue()
+        val outcomes = async(start = CoroutineStart.UNDISPATCHED) { registration.outcomes.toList() }
+
+        handler.dispatch(pointerEvent(), setOf(InteractionKind.EnterFullscreen)) { _ ->
+            registration.close()
+            NativeInteractionOutcome.Deferred { committed, failure -> completed = committed to failure }
+        }
+
+        assertEquals(
+            KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.Interaction)),
+            request,
+        )
+        assertEquals<List<InteractionActionOutcome>>(emptyList(), outcomes.await())
+
+        // The pending was never admitted: the terminal callback is neither stored nor invoked,
+        // so a later completePending for this request id is a no-op.
+        handler.completePending(InteractionRequestId(0L), committed = true, failure = null)
+        assertEquals(null, completed)
+    }
+
     private fun handler(
         surfaceId: SurfaceId = SurfaceId(5L),
         advertised: Set<InteractionKind> = setOf(InteractionKind.BeginWindowMove),
