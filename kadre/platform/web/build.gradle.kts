@@ -80,6 +80,19 @@ tasks.withType<Kotlin2JsCompile>().configureEach {
                 },
             )
         }
+
+        // The web tests exercise the same internal runtime seam webMain does — the launch identity a
+        // child attachment carries, the window request-id allocator — so the test compilations need
+        // the same friends the main compilation has. `friendPaths` composes with the friend paths the
+        // Kotlin plugin already adds for the associated main compilation (webMain internals stay
+        // visible); the precedent is the runtime module's own test compilations.
+        "compileTestKotlinJs" -> {
+            dependsOn(foundationProject.tasks.named("compileKotlinJs"))
+            dependsOn(runtimeProject.tasks.named("compileKotlinJs"))
+            friendPaths.from(runtimeJsMain)
+            friendPaths.from(foundationJsMain)
+        }
+
         "compileKotlinWasmJs" -> {
             dependsOn(foundationProject.tasks.named("compileKotlinWasmJs"))
             dependsOn(runtimeProject.tasks.named("compileKotlinWasmJs"))
@@ -88,6 +101,13 @@ tasks.withType<Kotlin2JsCompile>().configureEach {
                     "-Xfriend-modules=${runtime.asFile.absolutePath}${File.pathSeparator}${foundation.asFile.absolutePath}"
                 },
             )
+        }
+
+        "compileTestKotlinWasmJs" -> {
+            dependsOn(foundationProject.tasks.named("compileKotlinWasmJs"))
+            dependsOn(runtimeProject.tasks.named("compileKotlinWasmJs"))
+            friendPaths.from(runtimeWasmJsMain)
+            friendPaths.from(foundationWasmJsMain)
         }
     }
 }

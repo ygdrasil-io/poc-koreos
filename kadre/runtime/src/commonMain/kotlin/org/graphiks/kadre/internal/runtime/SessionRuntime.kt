@@ -58,6 +58,7 @@ internal class SessionRuntime(
     private val onStopping: (SessionRuntime) -> KadreFailure.PlatformFailure?,
     private val onTerminated: (SessionRuntime, SessionOutcome) -> Unit,
     componentsFactory: RuntimeSessionComponentsFactory,
+    private val launchInfo: KadreLaunchInfo? = null,
 ) : KadreSession {
     private val lock = RuntimeLock()
     private val parentJob = checkNotNull(parentScope.coroutineContext[Job])
@@ -189,7 +190,16 @@ internal class SessionRuntime(
         val startup = rootScope.launch(start = CoroutineStart.LAZY) {
             val application = try {
                 applicationFactory.create(
-                    KadreLaunchContext(id, KadreLaunchReason.InitialHostAttachment, null, null),
+                    // The launch identity is the attachment's, not this session's invention: an
+                    // ordinary host attachment states nothing and the application observes exactly
+                    // the initial-host launch it always has, while a child session opened for an
+                    // admitted window request reports that reason and the request that caused it.
+                    KadreLaunchContext(
+                        id,
+                        launchInfo?.reason ?: KadreLaunchReason.InitialHostAttachment,
+                        launchInfo?.originatingRequestId,
+                        null,
+                    ),
                 )
             } catch (cause: Throwable) {
                 handleApplicationThrowable(cause)

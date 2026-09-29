@@ -36,6 +36,7 @@ import org.graphiks.kadre.interaction.InteractionRegistration
 import org.graphiks.kadre.interaction.InteractionRequestId
 import org.graphiks.kadre.interaction.InteractionToken
 import org.graphiks.kadre.internal.runtime.NativeInteractionOutcome
+import org.graphiks.kadre.internal.runtime.KadreLaunchInfo
 import org.graphiks.kadre.internal.runtime.RawInputPort
 import org.graphiks.kadre.internal.runtime.RuntimeDropTransferBudget
 import org.graphiks.kadre.internal.runtime.RuntimeEventCollectorAllocator
@@ -44,6 +45,8 @@ import org.graphiks.kadre.internal.runtime.RuntimeHostController
 import org.graphiks.kadre.internal.runtime.RuntimeInteractionHandler
 import org.graphiks.kadre.internal.runtime.RuntimePrimarySurface
 import org.graphiks.kadre.internal.runtime.RuntimePrimarySurfaceConfiguration
+import org.graphiks.kadre.internal.runtime.RuntimeProcessIds
+import org.graphiks.kadre.internal.runtime.RuntimeSessionComponents
 import org.graphiks.kadre.internal.runtime.RuntimeSessionRevocationHandler
 import org.graphiks.kadre.internal.runtime.RuntimeSessionObserver
 import org.graphiks.kadre.internal.runtime.RuntimeSurfaceInput
@@ -365,11 +368,27 @@ internal class WebHostSession(
     private val registry: WebHostRegistry = WebHostRegistry.shared,
     private val failureReporter: RuntimeFailureReporter = RuntimeFailureReporter { },
 ) {
+    /**
+     * Attaches one session to the element this port holds.
+     *
+     * The window parameters are the provider seam (plan decision D5): a host that configured a
+     * [windowProvider] carries it with its child session factory and its target probe, and this
+     * session receives a [WebHostWindowManager] as its window manager instead of the unsupported
+     * one. A host that configured none takes the exact path this session has always taken — the
+     * unsupported manager, byte for byte — because a provider absent is a capability absent.
+     *
+     * [launch] is the launch identity a child session carries (plan decision D6): an ordinary host
+     * attachment states none and the application observes the initial-host launch it always has.
+     */
     fun attach(
         parentScope: CoroutineScope,
         applicationFactory: KadreApplicationFactory,
         policy: KadrePolicy,
         attachmentPolicy: WebAttachmentPolicy = WebAttachmentPolicy.StopWhenDetached,
+        launch: KadreLaunchInfo? = null,
+        windowProvider: WebHostWindowProvider? = null,
+        childSessionFactory: WebChildSessionFactory? = null,
+        windowHostProbe: WebWindowHostProbe? = null,
     ): KadreResult<KadreSession> {
         val reducer = WebLifecycleReducer(attachmentPolicy)
         val initialLifecycle = when (val reduction = reducer.reduce(port.initialLifecycleSnapshot)) {
@@ -385,6 +404,20 @@ internal class WebHostSession(
             is KadreResult.Failure -> return result
         }
         val ownership = WebHostOwnership(port, reservation)
+        // The window manager exists only where a provider does (plan decision D5): the parameters are
+        // one seam and arrive together, so a host that set the provider set the factory and the probe
+        // with it, and the session without a provider never leaves the path it has always taken.
+        val windowManager = windowProvider?.let { provider ->
+            WebHostWindowManager(
+                policy = policy,
+                nextRequestId = RuntimeProcessIds::nextWindowRequestId,
+                provider = provider,
+                childSessionFactory = checkNotNull(childSessionFactory) {
+                    "windowProvider requires childSessionFactory"
+                },
+                probe = checkNotNull(windowHostProbe) { "windowProvider requires windowHostProbe" },
+            )
+        }
         var surface: WebHostSurface? = null
         // Input the target reports before this session built its surface waits here, in the order it
         // was reported: the observer is installed before the runtime creates the surface, so that
@@ -423,7 +456,7 @@ internal class WebHostSession(
             }
         }
 
-        val controller = createController(initialLifecycle, ownership) { created ->
+        val controller = createController(initialLifecycle, ownership, windowManager) { created ->
             surface = created
             pendingInput.forEach(created::acceptInput)
             pendingInput.clear()
@@ -477,7 +510,7 @@ internal class WebHostSession(
             )
         }
 
-        val attached = controller.attach(parentScope, applicationFactory, policy)
+        val attached = controller.attach(parentScope, applicationFactory, policy, launch)
         if (attached is KadreResult.Failure) ownership.releaseAfterAttachFailure()
         return attached
     }
@@ -485,22 +518,49 @@ internal class WebHostSession(
     private fun createController(
         initialLifecycle: LifecycleState,
         ownership: WebHostOwnership,
+        windows: WebHostWindowManager?,
         onSurfaceCreated: (WebHostSurface) -> Unit,
-    ): RuntimeHostController = RuntimeHostController.withPrimarySurface(
-        platform = KadrePlatform.Web,
-        initialLifecycleState = initialLifecycle,
-        sessionRevocationHandler = RuntimeSessionRevocationHandler { ownership.releasePort() },
-        sessionObserver = RuntimeSessionObserver { _, _ -> ownership.releaseReservation() },
-        failureReporter = failureReporter,
-        primarySurfaceFactory = { id ->
-            val surface = WebHostSurface(id, port, ownership, failureReporter)
-            // The ownership releases the target's bridges before the runtime closes the surface, so
-            // it has to be able to stop the surface from admitting anything new in between.
-            ownership.observeSurface(surface::onOwnershipRevoked)
-            onSurfaceCreated(surface)
-            RuntimePrimarySurface(surface, surface::detach)
-        },
-    )
+    ): RuntimeHostController = when (windows) {
+        // No provider, no seam: this session keeps the construction it has always had, byte for byte.
+        null -> RuntimeHostController.withPrimarySurface(
+            platform = KadrePlatform.Web,
+            initialLifecycleState = initialLifecycle,
+            sessionRevocationHandler = RuntimeSessionRevocationHandler { ownership.releasePort() },
+            sessionObserver = RuntimeSessionObserver { _, _ -> ownership.releaseReservation() },
+            failureReporter = failureReporter,
+            primarySurfaceFactory = { id ->
+                val surface = WebHostSurface(id, port, ownership, failureReporter)
+                // The ownership releases the target's bridges before the runtime closes the surface, so
+                // it has to be able to stop the surface from admitting anything new in between.
+                ownership.observeSurface(surface::onOwnershipRevoked)
+                onSurfaceCreated(surface)
+                RuntimePrimarySurface(surface, surface::detach)
+            },
+        )
+
+        else -> RuntimeHostController.withComponents(
+            platform = KadrePlatform.Web,
+            initialLifecycleState = initialLifecycle,
+            sessionRevocationHandler = RuntimeSessionRevocationHandler { ownership.releasePort() },
+            sessionObserver = RuntimeSessionObserver { _, _ ->
+                // The session is gone: the manager is closed with it, so a late `requestWindow` from
+                // a consumer still holding the scope is refused instead of opening a session for a
+                // host that no longer exists.
+                windows.close()
+                ownership.releaseReservation()
+            },
+            failureReporter = failureReporter,
+            componentsFactory = { _, _ ->
+                val surface = WebHostSurface(RuntimeProcessIds.nextSurfaceId(), port, ownership, failureReporter)
+                ownership.observeSurface(surface::onOwnershipRevoked)
+                onSurfaceCreated(surface)
+                RuntimeSessionComponents(
+                    windows = windows,
+                    primarySurface = RuntimePrimarySurface(surface, surface::detach),
+                )
+            },
+        )
+    }
 }
 
 private class WebHostOwnership(

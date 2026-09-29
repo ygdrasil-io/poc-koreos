@@ -13,6 +13,8 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withContext
 import org.graphiks.kadre.application.KadreApplication
 import org.graphiks.kadre.application.KadreApplicationFactory
+import org.graphiks.kadre.application.KadreLaunchContext
+import org.graphiks.kadre.application.KadreLaunchReason
 import org.graphiks.kadre.application.KadreScope
 import org.graphiks.kadre.application.KadreSession
 import org.graphiks.kadre.application.SessionOutcome
@@ -93,6 +95,66 @@ class RuntimeHostControllerCommonTest {
         session.requestStop()
         testScheduler.runCurrent()
         assertEquals(SurfaceAttachmentState.Detached, suppliedSurface.state.value.attachment)
+    }
+
+    @Test
+    fun theDefaultLaunchReportsInitialHostAttachmentToTheApplication() = runTest {
+        val observed = CompletableDeferred<KadreLaunchContext>()
+        val controller = RuntimeHostController.withPrimarySurface(KadrePlatform.Web) { id ->
+            val surface = RuntimeHostSurface(id, initialSurfaceState())
+            RuntimePrimarySurface(surface, surface::close)
+        }
+        val factory = KadreApplicationFactory { context ->
+            observed.complete(context)
+            KadreApplication { awaitCancellation() }
+        }
+
+        val session = assertIs<KadreResult.Success<KadreSession>>(
+            controller.attach(this, factory, KadrePolicies.Default),
+        ).value
+        testScheduler.runCurrent()
+
+        // The application observes the launch through the one consumption site of the context —
+        // the factory callback (`KadreApplicationFactory.create`) — never through an internal field.
+        assertEquals(
+            KadreLaunchContext(session.id, KadreLaunchReason.InitialHostAttachment, null, null),
+            observed.await(),
+        )
+
+        session.requestStop()
+        testScheduler.runCurrent()
+    }
+
+    @Test
+    fun aProvidedLaunchInfoReachesTheApplicationAsAnAdditionalHostRequest() = runTest {
+        val observed = CompletableDeferred<KadreLaunchContext>()
+        val controller = RuntimeHostController.withPrimarySurface(KadrePlatform.Web) { id ->
+            val surface = RuntimeHostSurface(id, initialSurfaceState())
+            RuntimePrimarySurface(surface, surface::close)
+        }
+        val factory = KadreApplicationFactory { context ->
+            observed.complete(context)
+            KadreApplication { awaitCancellation() }
+        }
+        val requestId = RuntimeProcessIds.nextWindowRequestId()
+
+        val session = assertIs<KadreResult.Success<KadreSession>>(
+            controller.attach(
+                this,
+                factory,
+                KadrePolicies.Default,
+                KadreLaunchInfo(KadreLaunchReason.AdditionalHostRequested, requestId),
+            ),
+        ).value
+        testScheduler.runCurrent()
+
+        assertEquals(
+            KadreLaunchContext(session.id, KadreLaunchReason.AdditionalHostRequested, requestId, null),
+            observed.await(),
+        )
+
+        session.requestStop()
+        testScheduler.runCurrent()
     }
 
     @Test
