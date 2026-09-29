@@ -39,6 +39,9 @@ import org.graphiks.kadre.input.PointerButtonState
 import org.graphiks.kadre.input.PointerState
 import org.graphiks.kadre.input.ScrollDelta
 import org.graphiks.kadre.input.SurfaceInputState
+import org.graphiks.kadre.interaction.InteractionAction
+import org.graphiks.kadre.interaction.InteractionActionOutcome
+import org.graphiks.kadre.interaction.InteractionHandler
 import org.graphiks.kadre.platform.web.WebAttachmentPolicy
 import org.graphiks.kadre.platform.web.asHostRef
 import org.graphiks.kadre.platform.web.attachKadre
@@ -59,6 +62,7 @@ import org.graphiks.kadre.surface.SurfaceProperty
 import org.graphiks.kadre.surface.SurfaceState
 import org.graphiks.kadre.surface.SurfaceUpdate
 import org.graphiks.kadre.surface.SurfaceUpdateOutcome
+import org.graphiks.kadre.window.FullscreenMode
 import org.graphiks.kadre.window.WindowRequestOutcome
 import org.graphiks.kadre.window.WindowSpec
 import org.w3c.dom.HTMLElement
@@ -104,6 +108,7 @@ public fun main() {
         "input-default-behavior" -> inputDefaultBehaviorScenario()
         "input-pointer-capture" -> inputPointerCaptureScenario()
         "input-touch-deferred" -> inputTouchDeferredScenario()
+        "web-interaction" -> inputInteractionScenario()
         "typescript-consumer" -> typescriptConsumerScenario()
         else -> phaseZeroScenario()
     }
@@ -543,6 +548,59 @@ private fun inputPointerCaptureScenario(): Unit {
  */
 private fun inputTouchDeferredScenario() = inputScenario("input-touch-deferred")
 
+/**
+ * The interaction seam of phase 4: a real click, whose press the port's own `pointerdown` listener
+ * dispatches as a synchronous interaction, and whose handler asks the fullscreen primitive inside
+ * that same frame of transient activation.
+ *
+ * What is recorded is exactly what the browser answered — committed when this Chromium honoured the
+ * primitive, refused with the one honest code when it did not — never what the scenario hoped: a
+ * headless refusal is an honest reading of this browser, and the real-screen proof of the primitive
+ * belongs to the manual charter. The spec asserts the closed set of honest outcomes, so a wiring
+ * that hangs, lies or publishes twice fails here.
+ */
+private fun inputInteractionScenario() = inputScenario("web-interaction") { handles ->
+    launch { observeFullscreenInteraction(handles) }
+}
+
+/** Installs the fullscreen interaction handler once the surface exists, and records its outcomes. */
+@OptIn(DelicateKadreApi::class)
+private suspend fun observeFullscreenInteraction(handles: InputHandles) {
+    val surface = handles.surface.await()
+    val registration = when (
+        val installed = surface.installInteractionHandler(
+            InteractionHandler { context, _ ->
+                context.request(InteractionAction.EnterFullscreen(FullscreenMode.Borderless))
+            },
+        )
+    ) {
+        is KadreResult.Success -> {
+            // The armed flag is the spec's barrier: the handler is installed, and the next press of
+            // the page is dispatched into it through the port's own listener.
+            handles.host.setAttribute("data-kadre-interaction-armed", "true")
+            installed.value
+        }
+        is KadreResult.Failure -> {
+            handles.host.setAttribute(
+                "data-kadre-interaction-fullscreen",
+                "install-failure:${installed.reason.encoding()}",
+            )
+            return
+        }
+    }
+    registration.outcomes.collect { outcome ->
+        handles.host.setAttribute("data-kadre-interaction-fullscreen", outcome.encoding())
+    }
+}
+
+/** The terminal outcome of one interaction request, as the specs read it. */
+private fun InteractionActionOutcome.encoding(): String = when (this) {
+    is InteractionActionOutcome.Committed -> "committed"
+    is InteractionActionOutcome.Rejected -> "rejected:${failure.encoding()}"
+    is InteractionActionOutcome.Expired -> "expired"
+    is InteractionActionOutcome.OwnerClosed -> "owner-closed"
+}
+
 private fun phaseZeroScenario() {
     val host = createHost("phase0")
     val domBaseline = document.getElementsByTagName("*").length
@@ -690,6 +748,7 @@ private fun KadreFailure.encoding(): String = when (this) {
     is KadreFailure.AlreadyInUse -> "alreadyInUse:${resource.name.lowercase()}"
     is KadreFailure.SourceOverflow -> "sourceOverflow:${resource.name.lowercase()}"
     is KadreFailure.InteractionRequired -> "interactionRequired:${reason.name.lowercase()}"
+    is KadreFailure.PlatformFailure -> "platformFailure:${platform.name.lowercase()}:${domain}:${code}"
     KadreFailure.ParentScopeCancelled -> "parentScopeCancelled"
     KadreFailure.ApplicationFailure -> "applicationFailure"
     else -> "unexpected-failure"

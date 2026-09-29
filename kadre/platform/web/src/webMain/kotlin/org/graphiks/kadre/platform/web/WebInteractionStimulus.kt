@@ -60,6 +60,28 @@ internal const val WEB_FULLSCREEN_DOMAIN: String = "fullscreen"
 internal const val WEB_POINTER_LOCK_DOMAIN: String = "pointer-lock"
 
 /**
+ * The four terminal events of the browser primitives, as the DOM names them.
+ *
+ * They are plain `addEventListener` names — no binding declares them, and none is needed — but they
+ * are the interaction seam's own vocabulary and both targets must speak it identically, which is why
+ * they are written once here rather than as literals in each port. The change of each primitive is
+ * the browser's committed answer; the error of each is its refusal, the one honest not-committed
+ * answer the DOM exposes no reason for (plan decision D2).
+ */
+
+/** Fired when the browsing context's fullscreen element changed — on the element that entered, bubbling to the document, or on the document for an exit. */
+internal const val WEB_FULLSCREEN_CHANGE_EVENT: String = "fullscreenchange"
+
+/** Fired when a fullscreen request failed, on the document or on the failing element. */
+internal const val WEB_FULLSCREEN_ERROR_EVENT: String = "fullscreenerror"
+
+/** Fired when the document's pointer-lock element changed; the Pointer Lock API fires it on the document. */
+internal const val WEB_POINTER_LOCK_CHANGE_EVENT: String = "pointerlockchange"
+
+/** Fired when a pointer-lock request failed, on the document. */
+internal const val WEB_POINTER_LOCK_ERROR_EVENT: String = "pointerlockerror"
+
+/**
  * The one failure a browser refusal of a fullscreen or pointer-lock primitive produces.
  *
  * The DOM exposes no reason — a `fullscreenerror`, a `pointerlockerror` and a rejected promise all
@@ -69,3 +91,57 @@ internal const val WEB_POINTER_LOCK_DOMAIN: String = "pointer-lock"
  */
 internal fun refusalFailure(domain: String): KadreFailure =
     KadreFailure.PlatformFailure(KadrePlatform.Web, domain, "refused")
+
+/**
+ * One primitive emission awaiting the browser's terminal answer, settled exactly once.
+ *
+ * The DOM ports hook their terminal listeners onto the browser's own events, and the browser answers
+ * each primitive on more than one channel at once — a refused `requestFullscreen` both fires a
+ * `fullscreenerror` and rejects its promise — so the emission is the one-shot rule those channels
+ * need: the first terminal answer wins, the listeners it took its answer from go with it, and every
+ * later answer of the same primitive is nothing at all. A member that could not ask the browser at
+ * all withdraws its emission instead ([abandon]): the listeners go, and no terminal fires, because
+ * the surface completes the request synchronously with the failure and no pending exists behind it.
+ *
+ * The rule is DOM-free and shared by both ports, which is what keeps them from drifting on the one
+ * behaviour a floating second answer would corrupt; the listeners themselves, and the teardown of
+ * whatever they hooked onto the document, are each target's own.
+ */
+internal class WebPrimitiveEmission(
+    private val terminal: WebPrimitiveTerminal,
+) {
+    private var settled: Boolean = false
+    private val removals: MutableList<() -> Unit> = mutableListOf()
+
+    /**
+     * Registers the teardown of one terminal listener the emission installed, or runs it at once for
+     * an emission that already settled — an answer that raced the installation removes itself.
+     */
+    fun addRemoval(removal: () -> Unit) {
+        if (settled) {
+            removal()
+        } else {
+            removals += removal
+        }
+    }
+
+    /** The browser's terminal answer: the first one wins, and the terminal fires exactly once. */
+    fun settle(committed: Boolean) {
+        if (settled) return
+        settled = true
+        removeListeners()
+        terminal.onTerminal(committed)
+    }
+
+    /** Withdraws the emission without an answer: the primitive was never asked of the browser. */
+    fun abandon() {
+        if (settled) return
+        settled = true
+        removeListeners()
+    }
+
+    private fun removeListeners() {
+        removals.forEach { removal -> runCatching { removal() } }
+        removals.clear()
+    }
+}

@@ -791,8 +791,9 @@ private class WebHostSurface(
      * installed behind [EmissionBindingContext], which observes each `request` result so that a
      * primitive emitted inside the request is bound to the request id the runtime allocated. Without
      * that binding, a browser primitive whose terminal callback fires later would have no request id
-     * to complete — `invokeNative` runs before the id exists, and only the caller of `request` ever
-     * sees it.
+     * to complete — the engine allocates the id *before* `invokeNative` runs, but the native call's
+     * signature receives only the action, so the id never reaches the emission and only the caller
+     * of `request` ever sees it.
      *
      * A surface that stopped admitting answers [KadreFailure.Closed] like every other admission site,
      * a surface without its engine (the session configuration has not installed) answers
@@ -895,8 +896,9 @@ private class WebHostSurface(
     /**
      * Emits one primitive through the port and answers the deferred outcome for it.
      *
-     * The terminal callback closes over the emission record, not over a request id — there is none
-     * yet, `invokeNative` running before the engine allocates it. A terminal that fires after the
+     * The terminal callback closes over the emission record, not over a request id — the engine
+     * allocates the id before `invokeNative` runs, but it is not passed to the native call, whose
+     * only parameter is the action. A terminal that fires after the
      * request returned finds the record bound and completes the pending through it; a terminal that
      * fires synchronously inside the primitive call (the exiting defaults) records its answer on the
      * record instead, and the binding below completes the pending the moment the request id exists.
@@ -1546,10 +1548,11 @@ private class WebHostSurface(
  * One primitive emission awaiting its terminal answer and, until the request that carried it returns,
  * its request id.
  *
- * The record exists because the engine allocates the id *after* `invokeNative` emitted the primitive:
- * the terminal callback cannot close over an id that does not exist yet, so it closes over this
- * record, and the wrapped context binds the two the instant the id exists. [terminal] holds the
- * answer of a primitive whose browser replied synchronously, inside the emission call itself.
+ * The record exists because the id the engine allocates — *before* `invokeNative` runs — is not
+ * passed to the native call: the terminal callback cannot close over an id it never receives, so it
+ * closes over this record, and the wrapped context binds the two the instant the caller of `request`
+ * sees the id. [terminal] holds the answer of a primitive whose browser replied synchronously, inside
+ * the emission call itself.
  */
 private class WebInteractionEmission {
     var requestId: InteractionRequestId? = null
