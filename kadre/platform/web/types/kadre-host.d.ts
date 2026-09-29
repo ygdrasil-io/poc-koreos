@@ -1,5 +1,6 @@
 /**
- * `@kadre/host` — the curated TypeScript contract of `kadre/INTEROP-EXPORTS.md` section 6, phase 2.
+ * `@kadre/host` — the curated TypeScript contract of `kadre/INTEROP-EXPORTS.md` section 6, carrying
+ * the `windowProvider` option and the provider interfaces that section promises.
  *
  * This file is the published `index.d.ts` of the npm package; it types `index.mjs`, the ESM shim
  * that presents `KadreWeb` over the module's exported function bindings, and it was reconciled with
@@ -98,11 +99,58 @@ export interface KadreApplicationFactoryRef {
   readonly __kadreApplicationFactory: unique symbol;
 }
 
-/** The options of `KadreWeb.attach`. `windowProvider` arrives with the phase that delivers `WebWindowProvider`. */
+export interface KadreLogicalSize { readonly width: number; readonly height: number }
+export interface KadrePhysicalPoint { readonly x: number; readonly y: number }
+export interface KadrePhysicalSize { readonly width: number; readonly height: number }
+export interface KadreBinaryImage {
+  readonly format: "png" | "jpeg" | "webp" | "rgba8";
+  readonly bytes: Uint8Array;
+  readonly pixelSize: Readonly<KadrePhysicalSize> | null;
+}
+export type KadreFullscreenMode =
+  | { readonly kind: "windowed" }
+  | { readonly kind: "borderless" }
+  | { readonly kind: "exclusive"; readonly displayId: string; readonly physicalWidth: number; readonly physicalHeight: number; readonly refreshRateHz: number | null; readonly bitDepth: number | null };
+export interface KadreWindowSpec {
+  readonly title: string;
+  readonly contentSize: Readonly<KadreLogicalSize>;
+  readonly minimumSize: Readonly<KadreLogicalSize> | null;
+  readonly maximumSize: Readonly<KadreLogicalSize> | null;
+  readonly outerPosition: Readonly<KadrePhysicalPoint> | null;
+  readonly resizable: boolean;
+  readonly fullscreen: Readonly<KadreFullscreenMode>;
+  readonly decorations: "system" | "borderless";
+  readonly systemButtons: "all" | "closeOnly" | "none";
+  readonly level: "normal" | "floating" | "modal";
+  readonly transparent: boolean;
+  readonly blurBehind: boolean;
+  readonly icon: Readonly<KadreBinaryImage> | null;
+  readonly contentProtection: boolean;
+}
+
+/**
+ * The options of `KadreWeb.attach`. `windowProvider` is delivered by the phase that ships
+ * `WebWindowProvider` — phase 4 of the Web roadmap — and is never silently ignored: an option that
+ * is present but not callable is refused.
+ */
 export interface KadreWebOptions {
   readonly policy?: KadrePolicyProfile;
   readonly attachmentPolicy?: "stopWhenDetached" | "manual";
+  readonly windowProvider?: KadreWebWindowProvider | null;
 }
+
+export interface KadreWebWindowProvider {
+  open(requestId: string, spec: Readonly<KadreWindowSpec>): KadreWebWindowOpenResult;
+}
+
+export interface KadreWebWindowHost {
+  readonly element: HTMLElement;
+  readonly attachmentPolicy?: "stopWhenDetached" | "manual";
+}
+
+export type KadreWebWindowOpenResult =
+  | { readonly kind: "opened"; readonly host: Readonly<KadreWebWindowHost> }
+  | { readonly kind: "rejected"; readonly failure: KadreFailure };
 
 export declare class KadreHostError extends Error {
   readonly failure: KadreFailure;

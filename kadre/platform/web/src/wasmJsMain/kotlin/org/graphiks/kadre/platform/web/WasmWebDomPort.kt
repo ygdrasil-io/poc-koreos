@@ -132,7 +132,16 @@ internal class WasmWebDomPort(element: HTMLElement) : WebHostPort {
             deliverSnapshot()
         }
     }
-    private val pagehideListener: (Event) -> Unit = {
+    /**
+     * One `pagehide`.
+     *
+     * The listener is deliberately typed over `JsAny`, not `Event`: the browser delivers a
+     * `PageTransitionEvent` here, and that type is one of the DOM gaps of `kotlinx-browser` (the
+     * ResizeObserver precedent) — a Kotlin/Wasm adapter rejecting it for an undeclared external
+     * type would crash the very delivery this listener exists for. The payload is never read: the
+     * fact the port observes is that the page hid, not what the event carries.
+     */
+    private val pagehideListener: (JsAny) -> Unit = {
         safely { deliverSnapshot(pageHidden = true) }
     }
 

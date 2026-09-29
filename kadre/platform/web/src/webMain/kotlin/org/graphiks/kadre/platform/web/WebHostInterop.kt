@@ -18,6 +18,7 @@ import org.graphiks.kadre.diagnostics.KadrePlatform
 import org.graphiks.kadre.diagnostics.KadrePolicyComponent
 import org.graphiks.kadre.diagnostics.KadreResourceKind
 import org.graphiks.kadre.diagnostics.KadreResult
+import org.graphiks.kadre.display.DisplayId
 import org.graphiks.kadre.input.KadrePermission
 import org.graphiks.kadre.policy.KadrePolicies
 import org.graphiks.kadre.policy.KadrePolicy
@@ -72,10 +73,13 @@ internal object KadreWebInterop {
     private val sessions = mutableMapOf<Int, KadreWebSession>()
 
     private val registrations = mutableMapOf<Int, Registration>()
+    private val displayKeys = mutableMapOf<DisplayId, String>()
     private var nextFactory = 0
     private var nextHandle = 0
     private var nextRegistration = 0
     private var nextSession = 0
+    private var nextWindowRequest = 0
+    private var nextDisplay = 0
 
     fun reserveFactoryKey(factory: KadreApplicationFactory): String {
         factoryKeys[factory]?.let { return it }
@@ -89,6 +93,23 @@ internal object KadreWebInterop {
 
     /** Reserves the key of a session before its handle exists, so the handle can name itself. */
     fun reserveHandleKey(): Int = nextHandle++
+
+    /**
+     * The opaque correlation token one window request carries to the facade's provider.
+     *
+     * It is an interop-layer identifier for the request, allocated fresh per open call — not the
+     * Kotlin `WindowRequestId`, which does not cross the boundary (the child session's launch context
+     * carries the real one, plan decision D6).
+     */
+    fun nextWindowRequestIdentity(): String = "kadre-window-request-${nextWindowRequest++}"
+
+    /**
+     * The opaque string the facade's spec DTO carries for [displayId], stable per display identity
+     * for the lifetime of the page: two requests describing the same display describe it with the
+     * same token, and distinct displays never share one.
+     */
+    fun displayKey(displayId: DisplayId): String =
+        displayKeys.getOrPut(displayId) { "kadre-display-${nextDisplay++}" }
 
     fun registerHandle(key: Int, session: KadreWebSession) {
         sessions[key] = session
@@ -344,21 +365,42 @@ internal fun observerFailure(error: Throwable): Unit {
 }
 
 /**
+ * The `windowProvider` option of the facade's `attach`, resolved by the target into the closed union
+ * this layer decides on (plan decision D8). `P` is the target's own provider type — the public
+ * `WebWindowProvider` fun interface each target declares — held opaquely because `webMain` cannot
+ * name it; the target's own `attach` lambda is the only code that unpacks it.
+ */
+internal sealed interface WebWindowProviderOption<out P> {
+    /** The option is absent or `null`: the attach keeps exactly the provider-free behaviour it always had. */
+    data object Absent : WebWindowProviderOption<Nothing>
+
+    /** The option carries a callable provider: the attach arms the child-session capability with it. */
+    data class Provided<P>(val provider: P) : WebWindowProviderOption<P>
+
+    /** The option is present but carries no callable `open`: refused, never silently ignored. */
+    data object Invalid : WebWindowProviderOption<Nothing>
+}
+
+/**
  * Resolves the options of `KadreWeb.attach` and attaches [element] with a fresh session scope.
  *
- * The body is shared; only the element type and the `attachKadre` overload are target-specific.
+ * The body is shared; only the element type and the `attachKadre` overload are target-specific, and
+ * the `windowProvider` option arrives as the closed union the target's own bridge resolves from the
+ * raw value the shim passed.
  */
-internal inline fun <E> attachSession(
+internal inline fun <E, P> attachSession(
     element: E,
     factoryKey: String,
     policy: String,
     attachmentPolicy: String,
+    windowProvider: WebWindowProviderOption<P>,
     attach: (
         element: E,
         factory: KadreApplicationFactory,
         policy: KadrePolicy,
         attachmentPolicy: WebAttachmentPolicy,
         scope: CoroutineScope,
+        windowProvider: P?,
     ) -> KadreResult<KadreSession>,
 ): String {
     val factory = KadreWebInterop.factory(factoryKey)
@@ -375,9 +417,17 @@ internal inline fun <E> attachSession(
         "manual" -> WebAttachmentPolicy.Manual
         else -> return refused(KadreFailure.InvalidRequest("options.attachmentPolicy"))
     }
+    val resolvedProvider = when (windowProvider) {
+        is WebWindowProviderOption.Provided -> windowProvider.provider
+        WebWindowProviderOption.Absent -> null
+        WebWindowProviderOption.Invalid ->
+            // The option union is closed like the others: a present value that is not a callable
+            // provider is refused instead of silently ignored (plan decision D8).
+            return refused(KadreFailure.InvalidRequest("options.windowProvider"))
+    }
 
     val scope = MainScope()
-    return when (val attached = attach(element, factory, resolvedPolicy, resolvedAttachment, scope)) {
+    return when (val attached = attach(element, factory, resolvedPolicy, resolvedAttachment, scope, resolvedProvider)) {
         is KadreResult.Success -> {
             // The handle needs its own key, because it releases itself on the terminal path.
             val key = KadreWebInterop.reserveHandleKey()
@@ -395,6 +445,92 @@ internal inline fun <E> attachSession(
 }
 
 internal fun refused(failure: KadreFailure): String = "failed|" + WebInteropJson.encode(failure)
+
+/**
+ * The fields of one `rejected` failure the facade's provider returned, as this layer receives them.
+ *
+ * The target's glue reads them off the raw object the provider handed over — the closed-set reading
+ * itself is this layer's [decodeWindowRequestFailure], the same on both targets.
+ */
+internal class WebWindowFailureFields(
+    internal val kind: String?,
+    internal val operation: String?,
+    internal val field: String?,
+    internal val reason: String?,
+    internal val resource: String?,
+    internal val retryable: Boolean?,
+    /** The `limit` payload as the target read it — a `bigint` per the promise, stringified by the glue. */
+    internal val limit: String?,
+    internal val platform: String?,
+    internal val domain: String?,
+    internal val code: String?,
+)
+
+/**
+ * Decodes one rejected failure the facade's provider returned, over the closed set
+ * `kadre/INTEROP-EXPORTS.md` section 6 promises (`OPERATION-CONTRACTS.md` §4's
+ * `WindowRequestOutcome.Rejected` failures): `unsupported` naming `requestWindow`,
+ * `invalidRequest`, `interactionRequired`, `alreadyInUse` and `closed` naming the host,
+ * `parentScopeCancelled`, `resourceLimitExceeded` naming the window, `temporarilyUnavailable` and
+ * `platformFailure`.
+ *
+ * `null` means the raw object is not a member of that set — an unknown kind, a payload the member
+ * does not admit (a `Busy` naming another resource, say) or a missing one — and the caller reports
+ * the whole failure as the closed `invalid-failure` instead of leaking it.
+ */
+internal fun decodeWindowRequestFailure(raw: WebWindowFailureFields): KadreFailure? = when (raw.kind) {
+    "unsupported" ->
+        if (raw.operation == "requestWindow") KadreFailure.Unsupported(KadreOperation.RequestWindow) else null
+
+    "invalidRequest" -> KadreFailure.InvalidRequest(raw.field)
+    "interactionRequired" -> interactionFailureReasonNamed(raw.reason)?.let(KadreFailure::InteractionRequired)
+    "alreadyInUse" -> if (raw.resource == "host") KadreFailure.AlreadyInUse(KadreResourceKind.Host) else null
+    "closed" -> if (raw.resource == "host") KadreFailure.Closed(KadreResourceKind.Host) else null
+    "parentScopeCancelled" -> KadreFailure.ParentScopeCancelled
+    "resourceLimitExceeded" ->
+        raw.limit?.toLongOrNull()?.takeIf { raw.resource == "window" }
+            ?.let { KadreFailure.ResourceLimitExceeded(KadreResourceKind.Window, it) }
+
+    "temporarilyUnavailable" -> raw.retryable?.let(KadreFailure::TemporarilyUnavailable)
+    "platformFailure" -> {
+        val platform = kadrePlatformNamed(raw.platform)
+        val domain = raw.domain
+        val code = raw.code
+        if (platform == null || domain == null || code == null) null else KadreFailure.PlatformFailure(platform, domain, code)
+    }
+
+    else -> null
+}
+
+/** The `InteractionFailureReason` the published name decodes to, or `null` when it is not one. */
+internal fun interactionFailureReasonNamed(name: String?): InteractionFailureReason? = when (name) {
+    "missing" -> InteractionFailureReason.Missing
+    "expired" -> InteractionFailureReason.Expired
+    "consumed" -> InteractionFailureReason.Consumed
+    "wrongSurface" -> InteractionFailureReason.WrongSurface
+    else -> null
+}
+
+/** The `KadrePlatform` the published name decodes to, or `null` when it is not one. */
+internal fun kadrePlatformNamed(name: String?): KadrePlatform? = when (name) {
+    "android" -> KadrePlatform.Android
+    "uikit" -> KadrePlatform.UIKit
+    "web" -> KadrePlatform.Web
+    "appKit" -> KadrePlatform.AppKit
+    "win32" -> KadrePlatform.Win32
+    "x11" -> KadrePlatform.X11
+    "wayland" -> KadrePlatform.Wayland
+    "fake" -> KadrePlatform.Fake
+    else -> null
+}
+
+/**
+ * The failure of a facade provider result that is not a member of the promised union — a result
+ * whose shape nothing here can read, or a rejected failure outside the closed set — in the domain
+ * `OPERATION-CONTRACTS.md` §4 gives the provider, never the raw value itself.
+ */
+internal fun invalidWindowProviderResult(): KadreFailure =
+    KadreFailure.PlatformFailure(KadrePlatform.Web, WEB_WINDOW_PROVIDER_DOMAIN, "invalid-failure")
 
 /** The JSON encoding of the value model, shared by both facades. */
 internal object WebInteropJson {
@@ -479,7 +615,8 @@ internal object WebInteropJson {
     private fun StringBuilder.rawField(name: String, value: String): StringBuilder =
         append(",\"").append(name).append("\":").append(value)
 
-    private fun escape(value: String): String = buildString(value.length) {
+    /** The string escaping the JSON encodings of this layer share, DTO builder included. */
+    internal fun escape(value: String): String = buildString(value.length) {
         value.forEach { character ->
             when (character) {
                 '"' -> append("\\\"")

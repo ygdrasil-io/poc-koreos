@@ -185,6 +185,11 @@ export const KadreWeb = {
     if (typeof applicationFactory !== "string") {
       throw new KadreHostError({ kind: "invalidRequest", field: "factoryKey" });
     }
+    // No published option is ever silently ignored: a `windowProvider` that is present but not
+    // callable is refused here, before the Kotlin half sees it.
+    if (options?.windowProvider != null && typeof options.windowProvider.open !== "function") {
+      throw new KadreHostError({ kind: "invalidRequest", field: "options.windowProvider" });
+    }
     // Resolved here, per call: the application may publish after this module was imported.
     const bindings = hostBindings();
     const result = bindings.kadreWebAttach(
@@ -192,6 +197,7 @@ export const KadreWeb = {
       applicationFactory,
       options?.policy ?? "default",
       options?.attachmentPolicy ?? "stopWhenDetached",
+      options?.windowProvider ?? null,
     );
     const separator = result.indexOf("|");
     const status = result.slice(0, separator);
