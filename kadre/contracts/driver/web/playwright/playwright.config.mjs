@@ -15,6 +15,8 @@ export default defineConfig({
     'web-surface.spec.mjs',
     'web-input.spec.mjs',
     'web-interaction.spec.mjs',
+    'web-window-provider.spec.mjs',
+    'web-host-facade.spec.mjs',
     'web-typescript.spec.mjs',
   ],
   timeout: 30_000,

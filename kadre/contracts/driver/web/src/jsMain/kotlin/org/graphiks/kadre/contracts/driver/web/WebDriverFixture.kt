@@ -16,6 +16,9 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import org.graphiks.kadre.application.KadreApplication
 import org.graphiks.kadre.application.KadreApplicationFactory
+import org.graphiks.kadre.application.KadreLaunchContext
+import org.graphiks.kadre.application.KadreLaunchReason
+import org.graphiks.kadre.application.KadreScope
 import org.graphiks.kadre.application.KadreSession
 import org.graphiks.kadre.application.LifecycleState
 import org.graphiks.kadre.application.SessionOutcome
@@ -43,6 +46,8 @@ import org.graphiks.kadre.interaction.InteractionAction
 import org.graphiks.kadre.interaction.InteractionActionOutcome
 import org.graphiks.kadre.interaction.InteractionHandler
 import org.graphiks.kadre.platform.web.WebAttachmentPolicy
+import org.graphiks.kadre.platform.web.WebWindowHost
+import org.graphiks.kadre.platform.web.WebWindowProvider
 import org.graphiks.kadre.platform.web.asHostRef
 import org.graphiks.kadre.platform.web.attachKadre
 import org.graphiks.kadre.platform.web.hostKey
@@ -63,9 +68,14 @@ import org.graphiks.kadre.surface.SurfaceState
 import org.graphiks.kadre.surface.SurfaceUpdate
 import org.graphiks.kadre.surface.SurfaceUpdateOutcome
 import org.graphiks.kadre.window.FullscreenMode
+import org.graphiks.kadre.window.WindowCreationMode
+import org.graphiks.kadre.window.WindowRequest
 import org.graphiks.kadre.window.WindowRequestOutcome
 import org.graphiks.kadre.window.WindowSpec
 import org.w3c.dom.HTMLElement
+import kotlin.coroutines.CoroutineContext
+import kotlin.coroutines.EmptyCoroutineContext
+import kotlin.js.unsafeCast
 
 /**
  * Runs the scenario named by the query string and then publishes the readiness flag the specs wait on.
@@ -110,6 +120,10 @@ public fun main() {
         "input-touch-deferred" -> inputTouchDeferredScenario()
         "web-interaction" -> inputInteractionScenario()
         "typescript-consumer" -> typescriptConsumerScenario()
+        "window-provider" -> windowProviderScenario()
+        "shadow-late-reinsert" -> shadowLateReinsertScenario()
+        "host-facade" -> hostFacadeScenario()
+        "host-provider" -> hostProviderScenario()
         else -> phaseZeroScenario()
     }
     document.body!!.setAttribute("data-kadre-ready", "true")
@@ -151,10 +165,15 @@ private fun manualShadowReconnectScenario() {
 
 private fun manualDetachReconnectScenario() {
     val host = createHost("manual-detach")
-    attachAndObserve(host, "manual-detach", WebAttachmentPolicy.Manual)
+    val attached = attachAndObserve(host, "manual-detach", WebAttachmentPolicy.Manual)
     document.addEventListener("kadre-reconnect-manual", {
         if (!host.isConnected) document.body!!.appendChild(host)
     })
+    // The stop leg of `web-manual-detach-and-stop`: a Manual session the host asked to stop while it
+    // is still attached terminates with the outcome the stop requested.
+    if (attached is KadreResult.Success) {
+        document.addEventListener("kadre-stop-manual-detach", { attached.value.requestStop() })
+    }
 }
 
 private fun independentScenario() {
@@ -191,6 +210,7 @@ private fun hostOwnedScenario() {
         body.setAttribute("data-kadre-dom-after", document.getElementsByTagName("*").length.toString())
         body.setAttribute("data-kadre-window-primary", if (windows.state.value.primary == null) "null" else "present")
         body.setAttribute("data-kadre-window-count", windows.state.value.windows.size.toString())
+        body.setAttribute("data-kadre-window-caps", windows.state.value.capabilities.requestWindow.encoded())
         launch {
             val request = windows.requestWindow(WindowSpec())
             val outcome = when (request) {
@@ -599,6 +619,258 @@ private fun InteractionActionOutcome.encoding(): String = when (this) {
     is InteractionActionOutcome.Rejected -> "rejected:${failure.encoding()}"
     is InteractionActionOutcome.Expired -> "expired"
     is InteractionActionOutcome.OwnerClosed -> "owner-closed"
+}
+
+/**
+ * The Phase 4 window-provider scenarios.
+ *
+ * The fixture is the host: it prepares the second browsing context — a same-origin `about:blank`
+ * popup with a focusable host element inside it — **before** any Kadre call of its scenario, exactly
+ * the way a host would (the roadmap exit gate: no test creates the context to make the capability
+ * pass). No Kadre code creates a browsing context, an element or a popup, and the specs reach the
+ * popup through `page.on("popup")`.
+ *
+ * `windowProviderScenario` attaches through the public provider overload with a `WebWindowProvider`
+ * whose behaviour the spec selects per command, and the requester's command encodes the
+ * `WindowRequestOutcome` the manager produced. Every session the application factory creates — the
+ * requester and each child — records its own identity on the element it is attached to, read back
+ * through the public element escape hatch: a child session in the popup is proven by its element
+ * carrying the session hash the outcome named, never by a fixture journal.
+ */
+
+/** The second browsing context the fixture prepared before any Kadre call, plus the failing answers. */
+private class PreparedProviderWindow(
+    val popupElement: HTMLElement,
+    val popupDetachedElement: HTMLElement,
+    val sameDocumentElement: HTMLElement,
+    val noContextElement: HTMLElement,
+)
+
+/** The provider behaviours the specs select, one per provider scenario of the contract. */
+private enum class ProviderBehaviour {
+    Prepared, SameDocument, Disconnected, NoContext, InvalidScope, Throwing
+}
+
+/**
+ * Prepares the provider's second browsing context and the elements the failing provider modes answer
+ * with. It must run before any Kadre call of its scenario.
+ */
+private fun prepareProviderWindow(): PreparedProviderWindow {
+    val popupWindow = window.open("about:blank", "kadre-provider-window", "popup=true,width=480,height=320")
+    val popupDocument = checkNotNull(popupWindow?.document) { "the host could not open the provider popup" }
+    // The popup's elements live in the popup's own realm: an `as` cast would test instanceof against
+    // this window's constructor, so the casts are unchecked, exactly as the platform's own bridge does.
+    val popupElement = popupDocument.createElement("div").unsafeCast<HTMLElement>().also { element ->
+        element.setAttribute("data-kadre-provider-host", "true")
+        element.tabIndex = 0
+        element.style.width = "240px"
+        element.style.height = "120px"
+        (popupDocument.body ?: popupDocument.documentElement!!.unsafeCast<HTMLElement>()).appendChild(element)
+    }
+    val popupDetachedElement = popupDocument.createElement("div").unsafeCast<HTMLElement>().also { element ->
+        element.setAttribute("data-kadre-provider-detached", "true")
+    }
+    val sameDocumentElement = (document.createElement("div") as HTMLElement).also { element ->
+        element.setAttribute("data-kadre-provider-same-document", "true")
+        document.body!!.appendChild(element)
+    }
+    // An element of an inert implementation-created document: connected to its own node tree, whose
+    // `defaultView` is null — the "no browsing context" reading the validation ladder refuses.
+    val noContextElement = (document.implementation.createHTMLDocument("kadre-no-context").body as HTMLElement)
+        .also { element -> element.setAttribute("data-kadre-provider-no-context", "true") }
+    return PreparedProviderWindow(popupElement, popupDetachedElement, sameDocumentElement, noContextElement)
+}
+
+/** The answer each provider mode gives, one rung of the validation ladder per failing mode. */
+private fun ProviderBehaviour.open(prepared: PreparedProviderWindow): KadreResult<WebWindowHost> = when (this) {
+    ProviderBehaviour.Prepared -> KadreResult.Success(
+        WebWindowHost(prepared.popupElement, CoroutineScope(SupervisorJob() + Dispatchers.Default)),
+    )
+
+    ProviderBehaviour.SameDocument -> KadreResult.Success(
+        WebWindowHost(prepared.sameDocumentElement, CoroutineScope(SupervisorJob() + Dispatchers.Default)),
+    )
+
+    ProviderBehaviour.Disconnected -> KadreResult.Success(
+        WebWindowHost(prepared.popupDetachedElement, CoroutineScope(SupervisorJob() + Dispatchers.Default)),
+    )
+
+    ProviderBehaviour.NoContext -> KadreResult.Success(
+        WebWindowHost(prepared.noContextElement, CoroutineScope(SupervisorJob() + Dispatchers.Default)),
+    )
+
+    // A scope whose context carries no Job: the rung the ladder answers InvalidRequest("parentScope").
+    ProviderBehaviour.InvalidScope -> KadreResult.Success(
+        WebWindowHost(
+            prepared.popupElement,
+            object : CoroutineScope {
+                override val coroutineContext: CoroutineContext get() = EmptyCoroutineContext
+            },
+        ),
+    )
+
+    ProviderBehaviour.Throwing -> throw IllegalStateException("the provider exploded on purpose")
+}
+
+/** The provider scenario: one requester, one prepared popup, one switchable provider. */
+private fun windowProviderScenario() {
+    val prepared = prepareProviderWindow()
+    val host = createHost("window-provider")
+    val parentScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    val requesterScope = CompletableDeferred<KadreScope>()
+    var behaviour = ProviderBehaviour.Prepared
+    listOf(
+        "kadre-provider-same-document" to ProviderBehaviour.SameDocument,
+        "kadre-provider-disconnected" to ProviderBehaviour.Disconnected,
+        "kadre-provider-no-context" to ProviderBehaviour.NoContext,
+        "kadre-provider-invalid-scope" to ProviderBehaviour.InvalidScope,
+        "kadre-provider-throwing" to ProviderBehaviour.Throwing,
+    ).forEach { (command, selected) ->
+        parentScope.installCommand(command) {
+            behaviour = selected
+            host.setAttribute("data-kadre-provider-mode", command.removePrefix("kadre-provider-"))
+        }
+    }
+    parentScope.installCommand("kadre-request-window") {
+        val scope = requesterScope.await()
+        host.setAttribute("data-kadre-window-caps", scope.windows.state.value.capabilities.requestWindow.encoded())
+        host.setAttribute("data-kadre-window-outcome", scope.windows.requestWindow(WindowSpec()).requestEncoding())
+    }
+    val attached = host.attachKadre(
+        parentScope,
+        applicationFactory = sessionIdentityApplicationFactory(requesterScope, host, prepared.popupElement),
+        windowProvider = WebWindowProvider { _, _ -> behaviour.open(prepared) },
+    )
+    host.setAttribute("data-kadre-attach", describeAttach(attached))
+}
+
+/** The late shadow-root reinsertion: a delivered detach stays terminal, whatever comes back later. */
+private fun shadowLateReinsertScenario() {
+    val host = createHost("shadow-late-reinsert")
+    attachAndObserve(host, "shadow-late-reinsert")
+    document.addEventListener("kadre-reinsert-shadow-late", {
+        val container = document.querySelector("[data-kadre-shadow-container='late-reinsert']")
+        if (!host.isConnected) container?.shadowRoot?.appendChild(host)
+    })
+}
+
+/**
+ * The `web-host-*` facade scenarios: the fixture publishes the factory keys the specs hand to
+ * `KadreWeb.attach` and prepares the second browsing context before any Kadre call; the published
+ * `@kadre/host` shim and the specs drive everything else.
+ */
+private fun hostFacadeScenario() {
+    createHost("host-facade")
+    publishApplicationFactoryKey(applicationFactory())
+}
+
+private fun hostProviderScenario() {
+    val prepared = prepareProviderWindow()
+    val host = createHost("host-provider")
+    facadeRequesterElement = host
+    facadeOfferedElement = prepared.popupElement
+    publishWindowRequestFactoryKey(windowRequestApplicationFactory())
+    publishProviderHost(prepared.popupElement)
+}
+
+/** The elements the facade scenario's factory records session identities on, set before the key is published. */
+private var facadeRequesterElement: HTMLElement? = null
+private var facadeOfferedElement: HTMLElement? = null
+
+/**
+ * The application factory behind the `web-host-provider` scenario.
+ *
+ * The session the facade created answers the fixture's own request command through the window manager
+ * the facade's `windowProvider` option armed; only the requester installs that command. Every session
+ * the factory creates records its launch identity on the element its host prepared — the requester's
+ * own host for the initial attachment, the offered element for the child a provider opened.
+ */
+@JsExport
+public fun windowRequestApplicationFactory(): String {
+    publishHostBindings()
+    val requesterElement = facadeRequesterElement
+    val offeredElement = facadeOfferedElement
+    val reference = KadreApplicationFactory { context ->
+        KadreApplication {
+            if (context.reason == KadreLaunchReason.InitialHostAttachment) {
+                if (requesterElement != null) {
+                    requesterElement.setAttribute("data-kadre-session-hash", context.sessionId.hashCode().toString())
+                    requesterElement.setAttribute("data-kadre-session-reason", "initialHostAttachment")
+                }
+                document.addEventListener("kadre-facade-request-window", {
+                    launch {
+                        document.body!!.setAttribute(
+                            "data-kadre-facade-window",
+                            windows.requestWindow(WindowSpec()).requestEncoding(),
+                        )
+                    }
+                })
+            } else if (offeredElement != null) {
+                offeredElement.setAttribute("data-kadre-session-hash", context.sessionId.hashCode().toString())
+                offeredElement.setAttribute("data-kadre-session-reason", context.reason.name.replaceFirstChar(Char::lowercase))
+                launch {
+                    lifecycle.state.collect { state ->
+                        offeredElement.setAttribute("data-kadre-session-lifecycle", state.encoded())
+                    }
+                }
+            }
+            awaitCancellation()
+        }
+    }.asHostRef()
+    return reference.hostKey
+}
+
+/**
+ * The application factory of the provider scenarios: every session it creates records its launch
+ * identity on the element its host prepared — the requester's own host, or the offered element — and
+ * the requester parks its scope for the fixture command that asks the window manager for a window.
+ */
+private fun sessionIdentityApplicationFactory(
+    requesterScope: CompletableDeferred<KadreScope>?,
+    requesterElement: HTMLElement,
+    offeredElement: HTMLElement?,
+): KadreApplicationFactory = KadreApplicationFactory { context ->
+    KadreApplication {
+        if (context.reason == KadreLaunchReason.InitialHostAttachment) {
+            requesterScope?.complete(this)
+            requesterElement.setAttribute("data-kadre-session-hash", context.sessionId.hashCode().toString())
+            requesterElement.setAttribute("data-kadre-session-reason", "initialHostAttachment")
+        } else if (offeredElement != null) {
+            offeredElement.setAttribute("data-kadre-session-hash", context.sessionId.hashCode().toString())
+            offeredElement.setAttribute("data-kadre-session-reason", context.reason.name.replaceFirstChar(Char::lowercase))
+            launch {
+                lifecycle.state.collect { state ->
+                    offeredElement.setAttribute("data-kadre-session-lifecycle", state.encoded())
+                }
+            }
+        }
+        awaitCancellation()
+    }
+}
+
+/** Hands the facade scenario's window-request application factory key to the page. */
+private fun publishWindowRequestFactoryKey(key: String): Unit = js("globalThis.kadreWindowRequestFactory = key")
+
+/** Hands the prepared provider host element to the page, for the facade's own provider object. */
+private fun publishProviderHost(element: HTMLElement): Unit = js("globalThis.kadreProviderHost = element")
+
+/** The window capability of the manager, as the specs read it. */
+private fun Capability<Set<WindowCreationMode>>.encoded(): String = when (this) {
+    is Capability.Unsupported -> "unsupported:${failure.operation.name.lowercase()}"
+    is Capability.Supported -> "supported[${constraints.map { it.name }.sorted().joinToString("+")}]"
+}
+
+/** One window request, as the specs read it: the terminal outcome the manager already published. */
+private suspend fun KadreResult<WindowRequest>.requestEncoding(): String = when (this) {
+    is KadreResult.Success -> when (val outcome = value.await()) {
+        is WindowRequestOutcome.OpenedHere -> "opened-here"
+        is WindowRequestOutcome.OpenedInNewSession -> "opened-in-new-session:${outcome.sessionId.hashCode()}"
+        is WindowRequestOutcome.Rejected -> "rejected:${outcome.failure.encoding()}"
+        WindowRequestOutcome.Cancelled -> "cancelled"
+        WindowRequestOutcome.RequesterDetached -> "requester-detached"
+    }
+
+    is KadreResult.Failure -> "request-failure:${reason.encoding()}"
 }
 
 private fun phaseZeroScenario() {
