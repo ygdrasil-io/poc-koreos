@@ -102,6 +102,19 @@ internal enum class WebInputCategory {
     Pointer,
 
     /**
+     * One touch contact observation: a contact's beginning, motion, end or cancellation.
+     *
+     * Deliberately not suppressible, and for a reason of its own: the browser default of a touch
+     * event is the native scroll and pan the element's `touch-action` governs — a style of the host's
+     * element, and Kadre never modifies the host DOM. The contact a browser cancelled to perform that
+     * native scroll arrives as a `Cancelled` delivered as reported, and suppressing the event's
+     * default would be an authority over a stylesheet this target does not have and has not been
+     * given: the host decides what a touch does to the page, and `SuppressWhenPossible` never
+     * overrides that decision implicitly.
+     */
+    Touch,
+
+    /**
      * The loss of activation the surface reduces from the lifecycle observation rather than from a
      * browser event.
      *
@@ -180,8 +193,8 @@ private val WEB_DOCUMENT_SCROLL_KEYS: Set<NamedKey> = setOf(
  *
  * A wheel is [WebInputCategory.Wheel] whatever it carries; only a *press* of a document-scroll key is
  * [WebInputCategory.ScrollingKey], since a release moves nothing; every other key observation is
- * [WebInputCategory.Key]; every pointer observation is [WebInputCategory.Pointer]; and the loss of
- * activation is [WebInputCategory.Focus].
+ * [WebInputCategory.Key]; every pointer observation is [WebInputCategory.Pointer]; every touch
+ * contact is [WebInputCategory.Touch]; and the loss of activation is [WebInputCategory.Focus].
  */
 internal fun webInputCategory(stimulus: WebInputStimulus): WebInputCategory = when (stimulus) {
     is WebInputStimulus.Scrolled -> WebInputCategory.Wheel
@@ -201,6 +214,8 @@ internal fun webInputCategory(stimulus: WebInputStimulus): WebInputCategory = wh
     is WebInputStimulus.PointerButtonChanged,
     is WebInputStimulus.PointerLeft,
     -> WebInputCategory.Pointer
+
+    is WebInputStimulus.TouchChanged -> WebInputCategory.Touch
 
     WebInputStimulus.FocusLost -> WebInputCategory.Focus
 }
@@ -286,6 +301,10 @@ internal class WebPointerOwnership {
             // A loss of activation neutralises the input snapshot, pointer and buttons included: a
             // pointer the model no longer has cannot be one this surface holds.
             WebInputStimulus.FocusLost -> clear()
+
+            // A touch contact is not a pointer: it begins and ends no capture ownership, and its
+            // ending reconciles nothing of the pointer that may still be down on the element.
+            is WebInputStimulus.TouchChanged -> Unit
 
             // An entry, a motion and a scroll state nothing about a button: they move a pointer the
             // surface already holds, or none at all, and neither begins nor ends the ownership.

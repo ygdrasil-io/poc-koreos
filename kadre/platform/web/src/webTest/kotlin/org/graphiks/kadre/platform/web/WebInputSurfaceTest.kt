@@ -40,6 +40,7 @@ import org.graphiks.kadre.input.PointerKind
 import org.graphiks.kadre.input.ScrollDelta
 import org.graphiks.kadre.input.SurfaceInput
 import org.graphiks.kadre.input.SurfaceInputState
+import org.graphiks.kadre.input.TouchPhase
 import org.graphiks.kadre.internal.runtime.RuntimeFailureReporter
 import org.graphiks.kadre.policy.ContinuousDelivery
 import org.graphiks.kadre.policy.ContinuousOverflowAction
@@ -62,6 +63,7 @@ import org.graphiks.kadre.surface.SurfaceUpdateOutcome
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNotEquals
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
@@ -193,7 +195,7 @@ class WebInputSurfaceTest {
     }
 
     @Test
-    fun keyboardAndPointerAreDeclaredOnlyByTheSurfaceOwnStructuralObservation() = runTest {
+    fun keyboardPointerAndTouchAreDeclaredOnlyByTheSurfaceOwnStructuralObservation() = runTest {
         val harness = InputHarness(this, stimuliBeforeInstall = listOf(keyChanged(KEY_A)))
         harness.start()
         val input = harness.surface().input
@@ -201,7 +203,13 @@ class WebInputSurfaceTest {
 
         assertEquals(FeatureAvailability.Available, capabilities.keyboard)
         assertEquals(FeatureAvailability.Available, capabilities.pointer)
-        assertEquals(FeatureAvailability.Unsupported, capabilities.touch)
+        // Touch is declared by the same structural observation: the ports route the touch contacts
+        // their pointer listeners already observe, so the observers exist from the install on — never
+        // earlier, never by a stimulus of its own.
+        assertEquals(FeatureAvailability.Available, capabilities.touch)
+        // Gestures stay `Unsupported(GestureInput)`: no recognizer exists on this target (D-T2), and
+        // `gestureKinds` stays empty in the very observation that declares touch. A capability nobody
+        // could honour is not published alongside one the ports do honour.
         assertEquals(
             Capability.Unsupported(KadreFailure.Unsupported(KadreOperation.GestureInput)),
             capabilities.gestures,
@@ -217,7 +225,7 @@ class WebInputSurfaceTest {
         )
         // The structural observation is the transition that declared them: the stimulus that waited
         // for the configuration occupied the previous revision, so nothing declared keyboard or
-        // pointer available before the observation. This is a *transition* proof, not a timeline one:
+        // pointer before the observation. This is a *transition* proof, not a timeline one:
         // the reducer owns a `StateFlow`, which carries no history, so no collector can read the
         // capability value that existed before the install. The revision ordering is what is
         // observable — had anything declared them earlier, the observation would have been a no-op
@@ -229,14 +237,196 @@ class WebInputSurfaceTest {
             "the pre-configuration stimulus (1) and the observation's capability change (2)",
         )
 
-        // No target stimulus can declare a capability: the union has no way of saying so.
+        // No target stimulus can declare a capability: the union has no way of saying so — a touch
+        // contact included, whose delivery rides on the same structural observation as the rest.
         harness.port.deliverInput(keyChanged(KEY_B))
         harness.port.deliverInput(WebInputStimulus.PointerEntered(LogicalPoint(1.0, 1.0), kind = PointerKind.Mouse))
+        harness.port.deliverInput(
+            WebInputStimulus.TouchChanged(
+                nativeIdentity = Any(),
+                phase = TouchPhase.Started,
+                position = LogicalPoint(2.0, 2.0),
+                pressure = null,
+            ),
+        )
         testScheduler.runCurrent()
 
         assertEquals(capabilities, input.state.value.capabilities, "a stimulus never declares a capability")
         assertEquals(setOf(physicalKey(KEY_A), physicalKey(KEY_B)), input.state.value.keyboard.pressedKeys)
 
+        harness.stop()
+        testScheduler.runCurrent()
+    }
+
+    /**
+     * A touch contact becomes a touch state of its own, never a pointer state.
+     *
+     * The stimulus carries the contact's stable native identity, its phase, its position and its
+     * pressure; the reducer allocates the public `TouchId` and keeps the contact on its own lane. What
+     * must never happen is the contact reaching `pointers`: the two lists stay disjoint, and a
+     * routing that delivered a contact as any pointer stimulus would fail the `pointers` assertion
+     * here.
+     */
+    @Test
+    fun aTouchContactBecomesATouchStateWithItsOwnPositionAndPressureAndNeverAPointerState() = runTest {
+        val harness = InputHarness(this)
+        harness.start()
+        val input = harness.surface().input
+        val events = mutableListOf<InputEvent>()
+        val collector = launch { input.events.collect { events += it } }
+        testScheduler.runCurrent()
+
+        val contact = Any()
+        harness.port.deliverInput(touchChanged(contact, TouchPhase.Started, LogicalPoint(7.0, 9.0), 0.5))
+        harness.port.deliverInput(touchChanged(contact, TouchPhase.Moved, LogicalPoint(11.0, 13.0), 0.25))
+        testScheduler.runCurrent()
+
+        val state = input.state.value
+        assertEquals(1, state.touches.size, "one contact, one touch state")
+        val touch = state.touches.single()
+        assertEquals(LogicalPoint(11.0, 13.0), touch.position, "the contact is where the event reported it")
+        assertEquals(0.25, touch.pressure, "the pressure the event reported is the pressure the state keeps")
+        assertTrue(
+            state.pointers.isEmpty(),
+            "a contact never becomes a pointer state: `pointers` and `touches` stay disjoint",
+        )
+
+        val touchEvents = events.filterIsInstance<InputEvent.TouchChanged>()
+        assertEquals(listOf(TouchPhase.Started, TouchPhase.Moved), touchEvents.map { it.phase })
+        assertEquals(touch.id, touchEvents.last().touchId, "the event carries the touch identity the state holds")
+
+        collector.cancel()
+        harness.stop()
+        testScheduler.runCurrent()
+    }
+
+    /**
+     * Two simultaneous contacts are two touches with two distinct stable identities.
+     *
+     * Each native identity the port holds allocates exactly one public `TouchId` (one per contact,
+     * never one per event), and a move of the first contact keeps its own identity while the second
+     * contact stays where it was. An allocator that minted an identity per event — or one shared by
+     * both contacts — would fail either the distinctness or the stability half.
+     */
+    @Test
+    fun twoSimultaneousContactsProduceTwoDistinctTouchIdsStableAcrossTheirMoves() = runTest {
+        val harness = InputHarness(this)
+        harness.start()
+        val input = harness.surface().input
+        val events = mutableListOf<InputEvent>()
+        val collector = launch { input.events.collect { events += it } }
+        testScheduler.runCurrent()
+
+        val firstContact = Any()
+        val secondContact = Any()
+        harness.port.deliverInput(touchChanged(firstContact, TouchPhase.Started, LogicalPoint(2.0, 3.0), null))
+        harness.port.deliverInput(touchChanged(secondContact, TouchPhase.Started, LogicalPoint(20.0, 30.0), null))
+        harness.port.deliverInput(touchChanged(firstContact, TouchPhase.Moved, LogicalPoint(4.0, 5.0), null))
+        testScheduler.runCurrent()
+
+        assertEquals(2, input.state.value.touches.size, "two contacts, two touch states")
+        val started = events.filterIsInstance<InputEvent.TouchChanged>().filter { it.phase == TouchPhase.Started }
+        assertEquals(2, started.size)
+        assertNotEquals(
+            started[0].touchId,
+            started[1].touchId,
+            "two contacts are two identities of the model, never one shared between them",
+        )
+        val firstMoved = events.filterIsInstance<InputEvent.TouchChanged>().last()
+        assertEquals(
+            started[0].touchId,
+            firstMoved.touchId,
+            "the move of the first contact carries the identity its own start allocated: stable per contact",
+        )
+        assertEquals(
+            LogicalPoint(20.0, 30.0),
+            input.state.value.touches.first { it.id == started[1].touchId }.position,
+            "the second contact is untouched by the first contact's move",
+        )
+
+        collector.cancel()
+        harness.stop()
+        testScheduler.runCurrent()
+    }
+
+    /**
+     * The end of a contact retires it: the touch leaves the state, and later events of the same
+     * native identity deliver nothing.
+     *
+     * An `Ended` contact whose `pointerId` then reports another move — a stray event after the
+     * browser finished the gesture — must not resurrect it, and a `Cancelled` one behaves the same:
+     * the retirement is the reducer's own, pinned here at the Web level.
+     */
+    @Test
+    fun anEndedOrCancelledContactIsRetiredAndNothingIsDeliveredForItAfterwards() = runTest {
+        val harness = InputHarness(this)
+        harness.start()
+        val input = harness.surface().input
+        val events = mutableListOf<InputEvent>()
+        val collector = launch { input.events.collect { events += it } }
+        testScheduler.runCurrent()
+
+        val contact = Any()
+        harness.port.deliverInput(touchChanged(contact, TouchPhase.Started, LogicalPoint(1.0, 1.0), null))
+        harness.port.deliverInput(touchChanged(contact, TouchPhase.Ended, LogicalPoint(2.0, 2.0), null))
+        harness.port.deliverInput(touchChanged(contact, TouchPhase.Moved, LogicalPoint(3.0, 3.0), null))
+        testScheduler.runCurrent()
+
+        assertTrue(
+            input.state.value.touches.isEmpty(),
+            "a contact that ended is not held by the state any more",
+        )
+        assertEquals(2, events.size, "the move after the end delivers nothing: the contact is retired")
+
+        val cancelled = Any()
+        harness.port.deliverInput(touchChanged(cancelled, TouchPhase.Started, LogicalPoint(5.0, 5.0), null))
+        harness.port.deliverInput(touchChanged(cancelled, TouchPhase.Cancelled, LogicalPoint(6.0, 6.0), null))
+        harness.port.deliverInput(touchChanged(cancelled, TouchPhase.Moved, LogicalPoint(7.0, 7.0), null))
+        testScheduler.runCurrent()
+
+        assertTrue(input.state.value.touches.isEmpty(), "a cancelled contact is gone too")
+        assertEquals(4, events.size, "and its stray move after the cancellation delivers nothing")
+
+        collector.cancel()
+        harness.stop()
+        testScheduler.runCurrent()
+    }
+
+    /**
+     * A loss of activation empties `touches` with the rest of the snapshot.
+     *
+     * The shared reducer neutralises the whole input snapshot on the one transition that leaves
+     * Active; the touch lane it keeps rides on that transition like every other lane, and the pin
+     * here is the Web-level half of that contract: a contact held when the element's subtree lost
+     * focus is gone from the state, once, with one reset published.
+     */
+    @Test
+    fun aLossOfActivationEmptiesTheTouchContactsWithTheRestOfTheSnapshot() = runTest {
+        val harness = InputHarness(this)
+        harness.start()
+        val port = harness.port
+        val input = harness.surface().input
+        val events = mutableListOf<InputEvent>()
+        val collector = launch { input.events.collect { events += it } }
+        testScheduler.runCurrent()
+
+        port.deliverInput(touchChanged(Any(), TouchPhase.Started, LogicalPoint(4.0, 6.0), 0.5))
+        testScheduler.runCurrent()
+        assertEquals(1, input.state.value.touches.size, "the contact is held before the loss")
+
+        port.deliverLifecycle(subtreeBlurredSnapshot())
+        testScheduler.runCurrent()
+
+        val neutral = input.state.value
+        assertTrue(neutral.touches.isEmpty(), "the loss of activation emptied the contacts with the snapshot")
+        assertTrue(neutral.pointers.isEmpty())
+        val resets = events.filterIsInstance<InputEvent.StateReset>()
+        assertEquals(1, resets.size, "one loss, one reset: the touch lane adds no reset of its own")
+        assertEquals(InputStateResetReason.FocusLost, resets.single().reason)
+        // The capability describes the structural installation: still available after the loss.
+        assertEquals(FeatureAvailability.Available, neutral.capabilities.touch)
+
+        collector.cancel()
         harness.stop()
         testScheduler.runCurrent()
     }
@@ -1757,7 +1947,14 @@ class WebInputSurfaceTest {
         )
         assertEquals(SUPPRESSED_INPUT_DEFAULTS, suppressed, "the decision suppresses the closed set and nothing else")
         assertEquals(
-            setOf(WebInputCategory.Wheel, WebInputCategory.ScrollingKey, WebInputCategory.Key, WebInputCategory.Pointer, WebInputCategory.Focus),
+            setOf(
+                WebInputCategory.Wheel,
+                WebInputCategory.ScrollingKey,
+                WebInputCategory.Key,
+                WebInputCategory.Pointer,
+                WebInputCategory.Touch,
+                WebInputCategory.Focus,
+            ),
             WebInputCategory.entries.toSet(),
             "every category this phase observes is enumerated: a new one must be classified against the decision",
         )
@@ -1819,6 +2016,11 @@ class WebInputSurfaceTest {
         )
         assertEquals(WebInputCategory.Wheel, webInputCategory(scrolled()))
         assertEquals(WebInputCategory.Pointer, webInputCategory(pointerMoved()))
+        assertEquals(
+            WebInputCategory.Touch,
+            webInputCategory(touchChanged(Any(), TouchPhase.Started, LogicalPoint(1.0, 1.0), null)),
+            "a touch contact is a category of its own: it is not a pointer observation",
+        )
         assertEquals(WebInputCategory.Focus, webInputCategory(WebInputStimulus.FocusLost))
     }
 
@@ -1998,6 +2200,22 @@ class WebInputSurfaceTest {
             pressure = null,
             kind = PointerKind.Mouse,
             pen = null,
+        )
+
+        /**
+         * One touch contact observation of the given [phase], for the stable native identity a port
+         * holds per contact.
+         */
+        fun touchChanged(
+            nativeIdentity: Any,
+            phase: TouchPhase,
+            position: LogicalPoint,
+            pressure: Double?,
+        ): WebInputStimulus.TouchChanged = WebInputStimulus.TouchChanged(
+            nativeIdentity = nativeIdentity,
+            phase = phase,
+            position = position,
+            pressure = pressure,
         )
     }
 }

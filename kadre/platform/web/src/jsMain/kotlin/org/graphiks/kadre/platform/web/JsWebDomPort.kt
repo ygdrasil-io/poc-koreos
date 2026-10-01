@@ -4,6 +4,7 @@ import org.graphiks.kadre.diagnostics.KadreFailure
 import org.graphiks.kadre.diagnostics.KadrePlatform
 import org.graphiks.kadre.diagnostics.KadreResult
 import org.graphiks.kadre.input.PointerButtonState
+import org.graphiks.kadre.input.TouchPhase
 import org.graphiks.kadre.internal.runtime.RuntimeSynchronousInteraction
 import org.w3c.dom.AddEventListenerOptions
 import org.w3c.dom.Document
@@ -66,6 +67,22 @@ internal class JsWebDomPort(element: HTMLElement) : WebHostPort {
      * Wasm port ([WebPointerMotion]); only reading a position is this target's.
      */
     private val pointerMotion: WebPointerMotion = WebPointerMotion()
+
+    /**
+     * The touch contacts this element holds, keyed by the browser's own `pointerId`
+     * ([WebTouchContacts]): one stable identity per contact, minted at its `pointerdown` and retired
+     * at its `pointerup`/`pointercancel`, which is what the reducer's reference-keyed native-identity
+     * map requires and what keeps two simultaneous contacts two touches. The rule is shared with the
+     * Wasm port; only reading a `pointerId` is this target's.
+     */
+    private val touchContacts: WebTouchContacts = WebTouchContacts()
+
+    /**
+     * The touch identity of this element's interaction triggers ([WebTouchInteractions]): one
+     * `TouchStarted` trigger per touch `pointerdown`, dispatched before the ordinary stimulus of the
+     * same event (the AppKit order, `DESIGN.md:983-989`).
+     */
+    private val touchInteractions: WebTouchInteractions = WebTouchInteractions()
 
     /**
      * The interaction dispatcher the surface installed with its session configuration, or `null`
@@ -186,17 +203,21 @@ internal class JsWebDomPort(element: HTMLElement) : WebHostPort {
         safely { deliverPointerButton(event as? PointerEvent, PointerButtonState.Released) }
     }
 
-    /** One `pointerleave` over the element and its whole subtree. */
+    /**
+     * One `pointerleave` over the element and its whole subtree. The type travels with the event so
+     * a touch contact's exit can be told from its cancellation: a leave carries no touch fact.
+     */
     private val pointerLeaveListener: (Event) -> Unit = { event ->
-        safely { deliverPointerLeft(event as? PointerEvent) }
+        safely { deliverPointerLeft(event as? PointerEvent, "pointerleave") }
     }
 
     /**
-     * One `pointercancel`: the browser revoked the contact, so the pointer is reconciled by dropping
-     * it with everything it held, which is what the reducer's pointer exit does.
+     * One `pointercancel`: for a pointer, the browser revoked the contact, so the pointer is
+     * reconciled by dropping it with everything it held; for a touch contact, it is the contact's own
+     * `Cancelled`.
      */
     private val pointerCancelListener: (Event) -> Unit = { event ->
-        safely { deliverPointerLeft(event as? PointerEvent) }
+        safely { deliverPointerLeft(event as? PointerEvent, "pointercancel") }
     }
 
     /**
@@ -207,8 +228,10 @@ internal class JsWebDomPort(element: HTMLElement) : WebHostPort {
      * and only the browser knows when it ended. The report names no mode and interprets nothing: the
      * port read the browser's own event and says so.
      *
-     * Only the pointer this port holds is reported: a capture lost for a pointer this element never
-     * asked about is not a claim this surface ever made.
+     * Only a pointer the surface could ever hold is reported, which the kind gate states: a touch
+     * contact is not a pointer, this port never asks the browser to capture one, and the identity
+     * check below would refuse it anyway — the contact's own revocation travels the touch path as a
+     * `pointercancel`, never as a capture report.
      */
     private val lostPointerCaptureListener: (Event) -> Unit = { event ->
         safely {
@@ -529,10 +552,11 @@ internal class JsWebDomPort(element: HTMLElement) : WebHostPort {
         runCatching { resizeObserver?.disconnect() }
         // The scroll frontier owns a frame registration of its own, so it is cancelled with the other
         // per-element resources rather than left to fire for an element the port no longer holds, and
-        // both shared trackers forget what they observed of this element.
+        // the shared trackers forget what they observed of this element.
         runCatching { scrollFrame.close() }
         scrollBoundary.clear()
         pointerMotion.clear()
+        touchContacts.clear()
         reconnectAnimationFrame?.let { animationFrame ->
             runCatching { originWindow?.cancelAnimationFrame(animationFrame) }
         }
@@ -622,7 +646,9 @@ internal class JsWebDomPort(element: HTMLElement) : WebHostPort {
      * One pointer entry: the first observation of a pointer over the element's subtree.
      *
      * The entry records the position on the shared motion, so the first motion of the pointer
-     * measures from where it entered.
+     * measures from where it entered. A touch contact has no entry: a contact has no hover, its
+     * `pointerenter` carries no fact the touch model has a phase for, and delivering nothing here
+     * also keeps the contact out of the motion of the pointer this port does deliver.
      */
     private fun deliverPointerEntered(pointer: PointerEvent?) {
         if (pointer == null) return
@@ -638,11 +664,13 @@ internal class JsWebDomPort(element: HTMLElement) : WebHostPort {
      *
      * The DOM reports no delta for a `pointermove`, so the motion comes from the shared rule that
      * measures one observation against the last ([WebPointerMotion]); the runtime coalesces motions
-     * by summing deltas, which is why an incremental delta is the only one it can carry.
+     * by summing deltas, which is why an incremental delta is the only one it can carry. A touch
+     * contact's motion is not a pointer motion at all: it is routed to the touch path, where it
+     * moves the contact instead of the pointer.
      */
     private fun deliverPointerMoved(pointer: PointerEvent?) {
         if (pointer == null) return
-        val kind = jsPointerKind(pointer) ?: return
+        val kind = jsPointerKind(pointer) ?: return deliverTouchContact(pointer, "pointermove")
         val current = element ?: return
         val position = jsPointerPosition(current, pointer)
         val delta = pointerMotion.advance(position)
@@ -661,11 +689,18 @@ internal class JsWebDomPort(element: HTMLElement) : WebHostPort {
      * One pointer-button transition, copied with its position, its pressure and its own kind.
      *
      * The transition moves the shared motion too, so a motion that follows it measures from the
-     * position the browser reported with it instead of repeating movement already reported.
+     * position the browser reported with it instead of repeating movement already reported. A touch
+     * contact's press and release are not button transitions: they are routed to the touch path as
+     * the contact's beginning and end, and the pointer's own bookkeeping — the motion and the held
+     * identity a capture request would name — is left exactly as it was.
      */
     private fun deliverPointerButton(pointer: PointerEvent?, buttonState: PointerButtonState) {
         if (pointer == null) return
-        val kind = jsPointerKind(pointer) ?: return
+        val kind = jsPointerKind(pointer)
+            ?: return deliverTouchContact(
+                pointer,
+                if (buttonState == PointerButtonState.Pressed) "pointerdown" else "pointerup",
+            )
         val current = element ?: return
         val position = jsPointerPosition(current, pointer)
         pointerMotion.record(position)
@@ -693,20 +728,47 @@ internal class JsWebDomPort(element: HTMLElement) : WebHostPort {
      *
      * A cancellation is not a button release but a revocation of the contact, so it is delivered as
      * the exit the reducer reconciles the pointer with — the same member a leave uses, with the kind
-     * the browser reported for the pointer that went away. A touch pointer is refused here as it is
-     * everywhere else, because nothing of it was ever delivered and the surface declares touch
-     * unsupported, and the refusal comes first: a pointer this port does not deliver must not even
-     * disturb the motion of the one it does, which a touch exit reaching the same listener otherwise
-     * would by forgetting where the pointer was.
+     * the browser reported for the pointer that went away. A touch contact's exit belongs to the
+     * touch path: a `pointercancel` is the contact's own `Cancelled`, and a `pointerleave` carries no
+     * touch fact at all ([webTouchPhase] answers `null` for it and nothing is delivered) — neither
+     * disturbs the motion or the identity of the pointer this port does deliver.
      */
-    private fun deliverPointerLeft(pointer: PointerEvent?) {
+    private fun deliverPointerLeft(pointer: PointerEvent?, eventType: String) {
         if (pointer == null) return
-        val kind = jsPointerKind(pointer) ?: return
+        val kind = jsPointerKind(pointer) ?: return deliverTouchContact(pointer, eventType)
         pointerMotion.clear()
         // The pointer is gone from this element, cancelled or left, so there is no capture to ask for on
         // it any more — the browser ends one implicitly in both cases.
         heldPointerId = null
         deliverInput(WebInputStimulus.PointerLeft(kind = kind))
+    }
+
+    /**
+     * One touch contact observation: the event the element saw, delivered on the contact's own lane.
+     *
+     * The phase is the event type's own fact through the shared mapping ([webTouchPhase]); the
+     * identity is the contact's own stable one, minted by [touchContacts] at the `pointerdown` the
+     * DOM's per-contact `pointerId` named and reused for every event of that contact. A contact the
+     * table does not hold — a move without a down, a duplicated down, an event after the end —
+     * delivers nothing, exactly as the reducer refuses the same shape.
+     */
+    private fun deliverTouchContact(pointer: PointerEvent, eventType: String) {
+        val phase = webTouchPhase(eventType) ?: return
+        val current = element ?: return
+        val position = jsPointerPosition(current, pointer)
+        val identity = when (phase) {
+            TouchPhase.Started -> touchContacts.begin(pointer.pointerId) ?: return
+            TouchPhase.Moved -> touchContacts.identity(pointer.pointerId) ?: return
+            TouchPhase.Ended, TouchPhase.Cancelled -> touchContacts.retire(pointer.pointerId) ?: return
+        }
+        deliverInput(
+            WebInputStimulus.TouchChanged(
+                nativeIdentity = identity,
+                phase = phase,
+                position = position,
+                pressure = jsPointerPressure(pointer),
+            ),
+        )
     }
 
     /**
@@ -729,16 +791,24 @@ internal class JsWebDomPort(element: HTMLElement) : WebHostPort {
      * The trigger is read with the very mappings the ordinary stimulus of the same event is read
      * with — kind, position, pressure, button — so the interaction and the observation cannot
      * disagree about the event the element saw, and the pressure reaches the interaction exactly as
-     * the model carries it, never narrowed. A pointer kind this phase refuses delivers no
-     * observation, so it dispatches no interaction either: the kind is the ordinary path's own gate.
-     * With no dispatcher installed — before the session configuration, or after [release] — there is
-     * nothing to invoke, and the ordinary stimulus continues as it always has.
+     * the model carries it, never narrowed. A touch contact triggers its own interaction
+     * (`TouchStarted`, D-T3) at the same point of the same listener: dispatched first, in this
+     * event's own callback, with the ordinary touch stimulus of the event following as it would
+     * have anyway. With no dispatcher installed — before the session configuration, or after
+     * [release] — there is nothing to invoke, and the ordinary stimulus continues as it always has.
      */
     private fun dispatchInteractionFor(pointer: PointerEvent?) {
         val dispatcher = interactionDispatcher ?: return
         if (pointer == null) return
-        jsPointerKind(pointer) ?: return
         val current = element ?: return
+        if (jsPointerKind(pointer) == null) {
+            // Only a down that begins a contact triggers: the contact table is what the ordinary
+            // path reads right after, so a duplicated down dispatches no trigger and delivers no
+            // stimulus either — the two lanes cannot disagree about the event the element saw.
+            if (touchContacts.identity(pointer.pointerId) != null) return
+            dispatcher.dispatch(touchInteractions.started(jsPointerPosition(current, pointer)))
+            return
+        }
         dispatcher.dispatch(
             RuntimeSynchronousInteraction.PointerPressed(
                 button = webPointerButton(pointer.button.toInt()),

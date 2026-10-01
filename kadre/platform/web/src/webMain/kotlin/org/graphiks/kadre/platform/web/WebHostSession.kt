@@ -821,15 +821,17 @@ private class WebHostSurface(
         val pending = pendingStimuli.toList()
         pendingStimuli.clear()
         pending.forEach { publish(it, active) }
-        // The installation is structural and complete: keyboard and pointer observation exist from
-        // here on, and the capabilities may say so. Nothing of the kind is claimed earlier, and touch
-        // and gestures stay unsupported until a phase installs their observers.
+        // The installation is structural and complete: keyboard, pointer and touch observation exist
+        // from here on, and the capabilities may say so. The touch contacts ride on the very pointer
+        // listeners the ports installed, so there is no second installation to wait for. Gestures
+        // stay unsupported — no recognizer exists on this target (D-T2), and `gestureKinds` stays
+        // empty in the very observation that declares touch.
         surfaceInput.accept(
             SurfaceStimulus.InputObservationChanged(
                 surfaceId = id,
                 keyboardInstalled = true,
                 pointerInstalled = true,
-                touchInstalled = false,
+                touchInstalled = true,
                 gestureKinds = emptySet(),
             ),
         )
@@ -883,9 +885,10 @@ private class WebHostSurface(
      *
      * A surface that stopped admitting dispatches nothing: its listeners are on their way out with
      * the port's bridges, and an interaction on a closed surface is an authority nobody can honour.
-     * Touch is deliberately absent: no port of this target builds a `TouchStarted` trigger (the plan's
-     * recorded limits), so the branch exists to be refused rather than to classify a member that
-     * cannot arrive.
+     * A touch start is dispatched like the pointer and key triggers are — the port builds it from the
+     * touch `pointerdown` it already observes — and the ordinary touch stimulus of the same event is
+     * the port's own next step, unchanged: the interaction informs the handler, the ordinary path
+     * feeds the reducer, and neither stands in for the other.
      */
     private fun dispatchInteraction(trigger: RuntimeSynchronousInteraction) {
         if (admissionClosed) return
@@ -903,7 +906,11 @@ private class WebHostSurface(
                 active.stampSource(),
             )
 
-            is RuntimeSynchronousInteraction.TouchStarted -> return
+            is RuntimeSynchronousInteraction.TouchStarted -> InteractionEvent.TouchStarted(
+                trigger.touchId,
+                trigger.position,
+                active.stampSource(),
+            )
         }
         interaction.dispatch(event, advertisedInteractions, ::invokeNative)
     }
@@ -1677,6 +1684,14 @@ private fun WebInputStimulus.toSurfaceStimulus(surfaceId: SurfaceId): SurfaceSti
     is WebInputStimulus.PointerLeft -> SurfaceStimulus.PointerLeft(
         surfaceId = surfaceId,
         kind = kind,
+    )
+
+    is WebInputStimulus.TouchChanged -> SurfaceStimulus.TouchChanged(
+        surfaceId = surfaceId,
+        nativeIdentity = nativeIdentity,
+        phase = phase,
+        position = position,
+        pressure = pressure,
     )
 
     is WebInputStimulus.Scrolled -> SurfaceStimulus.Scroll(

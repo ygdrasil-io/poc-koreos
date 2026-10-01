@@ -10,6 +10,7 @@ import org.graphiks.kadre.input.PhysicalKey
 import org.graphiks.kadre.input.PointerButton
 import org.graphiks.kadre.input.PointerKind
 import org.graphiks.kadre.input.ScrollDelta
+import org.graphiks.kadre.input.TouchPhase
 import kotlin.math.PI
 
 /**
@@ -311,17 +312,18 @@ internal fun webKeyLocation(location: Int): KeyLocation = when (location) {
 }
 
 /**
- * Maps `PointerEvent.pointerType` to the pointer kind of the model, or to `null` when this phase
- * does not deliver that kind at all.
+ * Maps `PointerEvent.pointerType` to the pointer kind of the model, or to `null` when the event is
+ * not a pointer observation of this model at all.
  *
- * `mouse` and `pen` are the two kinds this phase delivers, and the kind is the one the browser
- * reported for the event at hand: a pen is never delivered as a mouse, which is what makes the
- * `PenState` of [webPenState] a real observation instead of an approximation.
+ * `mouse` and `pen` are the two kinds the ports deliver as pointers, and the kind is the one the
+ * browser reported for the event at hand: a pen is never delivered as a mouse, which is what makes
+ * the `PenState` of [webPenState] a real observation instead of an approximation.
  *
- * `touch` is refused — `null`, no stimulus — because D12 defers touch to the phase that installs its
- * observers: `InputCapabilities.touch` stays `Unsupported`, so nothing may claim a touch pointer
- * exists. The refusal is the same kind of declared boundary as the `DOM_DELTA_PAGE` one of
- * [webScrollDelta]: the variant is named and dropped, never converted.
+ * `touch` answers `null` because a touch contact is not a pointer: the model has no `Touch` member
+ * of `PointerKind` and never lets a contact into `pointers`, so a contact that reached this function
+ * must produce no pointer stimulus of any kind. The ports read the `null` as the routing predicate
+ * it is and hand the event to the touch path ([webTouchPhase] and the ports' contact table), where
+ * it becomes a `TouchChanged` — a contact becomes a touch state, never a pointer state.
  *
  * Every other value is [PointerKind.Unknown], including the empty string a browser reports when it
  * cannot name the device. The model has that member for exactly this case, and dropping a motion
@@ -332,6 +334,30 @@ internal fun webPointerKind(pointerType: String): PointerKind? = when (pointerTy
     "pen" -> PointerKind.Pen
     "touch" -> null
     else -> PointerKind.Unknown
+}
+
+/**
+ * Maps a pointer event's own type to the touch phase the model carries for it, or to `null` when
+ * that event type carries no touch fact at all.
+ *
+ * The four pointer events a browser delivers for a touch contact are the four phases of the model:
+ * a `pointerdown` begins the contact (`Started`), a `pointermove` moves it, a `pointerup` ends it
+ * (`Ended`), and a `pointercancel` — the browser revoking the contact, for example for a native
+ * scroll the host's own `touch-action` let through — is delivered as the `Cancelled` it is, as
+ * reported and never compensated. The argument is the event's own type name, read by the port that
+ * was registered for exactly that type, so the two targets cannot drift on which event is which
+ * phase.
+ *
+ * The other pointer events of a contact answer `null` and produce no stimulus: a touch contact has
+ * no hover, so a `pointerenter` and a `pointerleave` carry no fact the touch model has a phase for.
+ * The contact's own beginning and end travel `pointerdown`/`pointerup`/`pointercancel` alone.
+ */
+internal fun webTouchPhase(eventType: String): TouchPhase? = when (eventType) {
+    "pointerdown" -> TouchPhase.Started
+    "pointermove" -> TouchPhase.Moved
+    "pointerup" -> TouchPhase.Ended
+    "pointercancel" -> TouchPhase.Cancelled
+    else -> null
 }
 
 /**

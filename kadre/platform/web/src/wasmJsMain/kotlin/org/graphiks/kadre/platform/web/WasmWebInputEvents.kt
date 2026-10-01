@@ -139,12 +139,14 @@ internal fun wasmKeyStimulus(event: WasmKeyboardEvent, pressed: Boolean): WebInp
     )
 
 /**
- * The kind of the pointer that produced one pointer event, or `null` when this phase delivers no
- * stimulus for it.
+ * The kind of the pointer that produced one pointer event, or `null` when the event is not a pointer
+ * observation of this model at all.
  *
  * The kind comes from the browser's own `pointerType` through the shared core, so the port never
  * substitutes a device for the one the browser named: a pen that reported itself as a pen is
- * delivered as a pen, with the pen state it carries, and a touch pointer is refused whole (D12).
+ * delivered as a pen, with the pen state it carries. The `null` of a touch contact is the routing
+ * predicate of every delivery path: a contact is not a pointer, so it goes to the touch path
+ * ([webTouchPhase], the port's contact table) and never becomes a pointer observation.
  */
 internal fun wasmPointerKind(event: WasmPointerEvent): PointerKind? = webPointerKind(event.pointerType)
 

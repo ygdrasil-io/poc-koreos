@@ -20,12 +20,14 @@ import org.graphiks.kadre.input.PointerButton
 import org.graphiks.kadre.input.PointerButtonState
 import org.graphiks.kadre.input.PointerKind
 import org.graphiks.kadre.input.ScrollDelta
+import org.graphiks.kadre.input.TouchPhase
 import org.graphiks.kadre.surface.LogicalDelta
 import org.graphiks.kadre.surface.LogicalPoint
 import org.w3c.dom.HTMLElement
 import kotlin.math.PI
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
 /**
@@ -33,9 +35,9 @@ import kotlin.test.assertTrue
  *
  * This is the Wasm twin of `JsWebInputTest`, with the same cases and the same names so the two can be
  * read side by side: a browser event is read, copied through the shared mapping core of
- * `WebInputMapping.kt`, and delivered as an immutable, DOM-free [WebInputStimulus]; a pointer kind this
- * phase does not deliver produces no stimulus at all; and `release` leaves neither a delivering
- * listener nor an observed resource behind.
+ * `WebInputMapping.kt`, and delivered as an immutable, DOM-free [WebInputStimulus]; a touch contact
+ * becomes a touch observation of its own — never a pointer observation, and with one stable identity
+ * per contact — and `release` leaves neither a delivering listener nor an observed resource behind.
  *
  * Only the interop of this file differs from the JS one — the events are built and the listeners are
  * watched through `@JsFun` snippets instead of `js(…)` ones, because Kotlin/Wasm sees neither a Kotlin
@@ -212,30 +214,197 @@ class WasmWebInputTest {
         }
     }
 
+    /**
+     * A touch contact becomes a touch observation, never a pointer observation.
+     *
+     * The four pointer events of a contact map to the four phases of the touch model, each carrying
+     * the contact's own stable identity, its position and its pressure; the entry and the leave of a
+     * contact deliver nothing (a contact has no hover), and a move after the contact ended delivers
+     * nothing either — the contact was retired by its own `pointerup`. What must never appear is a
+     * pointer stimulus of any kind: a contact becomes a touch state, never a pointer state.
+     */
     @Test
-    fun aTouchPointerProducesNoStimulusAtAll() {
+    fun aTouchContactBecomesATouchObservationNeverAPointerObservation() {
         val harness = WasmInputHarness()
         try {
             val origin = harness.elementOrigin()
-            listOf("pointerenter", "pointermove", "pointerdown", "pointerup", "pointerleave", "pointercancel")
-                .forEach { type ->
-                    dispatchPointer(
-                        harness.element,
-                        type,
-                        "touch",
-                        clientX = origin.x + 7.0,
-                        clientY = origin.y + 7.0,
-                        button = 0,
-                        buttons = 1,
-                        pressure = 0.5,
-                    )
-                }
-
-            assertTrue(
-                harness.delivered.isEmpty(),
-                "touch is deferred to the phase that installs its observers (D12), so nothing may be " +
-                    "delivered for it, not even a pointer of another kind: ${harness.delivered}",
+            dispatchPointer(harness.element, "pointerenter", "touch", clientX = origin.x + 7.0, clientY = origin.y + 7.0, pointerId = 7)
+            dispatchPointer(
+                harness.element,
+                "pointerdown",
+                "touch",
+                clientX = origin.x + 7.0,
+                clientY = origin.y + 7.0,
+                button = 0,
+                buttons = 1,
+                pressure = 0.5,
+                pointerId = 7,
             )
+            dispatchPointer(
+                harness.element,
+                "pointermove",
+                "touch",
+                clientX = origin.x + 9.0,
+                clientY = origin.y + 11.0,
+                pressure = 0.25,
+                pointerId = 7,
+            )
+            dispatchPointer(
+                harness.element,
+                "pointerup",
+                "touch",
+                clientX = origin.x + 10.0,
+                clientY = origin.y + 12.0,
+                button = 0,
+                buttons = 0,
+                pointerId = 7,
+            )
+            dispatchPointer(harness.element, "pointerleave", "touch", clientX = origin.x + 10.0, clientY = origin.y + 12.0, pointerId = 7)
+            dispatchPointer(harness.element, "pointermove", "touch", clientX = origin.x + 12.0, clientY = origin.y + 14.0, pointerId = 7)
+
+            assertEquals(3, harness.delivered.size, "entry, leave and the stray post-up move deliver nothing")
+            val touchStimuli = harness.delivered.map { stimulus ->
+                assertIs<WebInputStimulus.TouchChanged>(stimulus)
+            }
+            assertEquals(
+                listOf(TouchPhase.Started, TouchPhase.Moved, TouchPhase.Ended),
+                touchStimuli.map { it.phase },
+                "the four pointer events of a contact are the four phases of the touch model",
+            )
+            assertEquals(LogicalPoint(7.0, 7.0), touchStimuli[0].position)
+            assertEquals(0.5, touchStimuli[0].pressure, "the pressure the browser reported travels with the contact")
+            assertEquals(LogicalPoint(9.0, 11.0), touchStimuli[1].position)
+            assertEquals(0.25, touchStimuli[1].pressure)
+            assertEquals(LogicalPoint(10.0, 12.0), touchStimuli[2].position)
+            assertEquals(
+                touchStimuli[0].nativeIdentity,
+                touchStimuli[1].nativeIdentity,
+                "the identity the down minted is the one the move reads: stable for the gesture's duration",
+            )
+            assertEquals(
+                touchStimuli[0].nativeIdentity,
+                touchStimuli[2].nativeIdentity,
+                "and the one the up retires: one contact, one identity",
+            )
+            assertTrue(
+                harness.delivered.none {
+                    it is WebInputStimulus.PointerEntered ||
+                        it is WebInputStimulus.PointerMoved ||
+                        it is WebInputStimulus.PointerButtonChanged ||
+                        it is WebInputStimulus.PointerLeft
+                },
+                "a contact never becomes a pointer observation of any kind: ${harness.delivered}",
+            )
+        } finally {
+            harness.close()
+        }
+    }
+
+    /**
+     * Two simultaneous contacts are two touches with two distinct identities, each stable across its
+     * own moves.
+     *
+     * The browser identifies a contact by its `pointerId`, so the two downs open two contacts and
+     * every later event of one of them reads the identity its own down minted — never the other's,
+     * never a new one. An identity minted per event, or shared by both contacts, fails either
+     * assertion here.
+     */
+    @Test
+    fun twoSimultaneousContactsCarryTwoDistinctStableIdentities() {
+        val harness = WasmInputHarness()
+        try {
+            val origin = harness.elementOrigin()
+            dispatchPointer(
+                harness.element,
+                "pointerdown",
+                "touch",
+                clientX = origin.x + 2.0,
+                clientY = origin.y + 3.0,
+                button = 0,
+                buttons = 1,
+                pointerId = 1,
+            )
+            dispatchPointer(
+                harness.element,
+                "pointerdown",
+                "touch",
+                clientX = origin.x + 20.0,
+                clientY = origin.y + 30.0,
+                button = 0,
+                buttons = 2,
+                pointerId = 2,
+            )
+            dispatchPointer(harness.element, "pointermove", "touch", clientX = origin.x + 4.0, clientY = origin.y + 5.0, pointerId = 1)
+            dispatchPointer(harness.element, "pointermove", "touch", clientX = origin.x + 24.0, clientY = origin.y + 35.0, pointerId = 2)
+
+            val touchStimuli = harness.delivered.map { stimulus ->
+                assertIs<WebInputStimulus.TouchChanged>(stimulus)
+            }
+            assertEquals(
+                listOf(TouchPhase.Started, TouchPhase.Started, TouchPhase.Moved, TouchPhase.Moved),
+                touchStimuli.map { it.phase },
+            )
+            val first = touchStimuli[0].nativeIdentity
+            val second = touchStimuli[1].nativeIdentity
+            assertTrue(
+                first !== second && first != second,
+                "two contacts are two identities, never one shared between them",
+            )
+            assertEquals(
+                first,
+                touchStimuli[2].nativeIdentity,
+                "the first move carries the first contact's identity",
+            )
+            assertEquals(
+                second,
+                touchStimuli[3].nativeIdentity,
+                "and the second move the second contact's: stable per contact, never re-minted per event",
+            )
+        } finally {
+            harness.close()
+        }
+    }
+
+    /**
+     * A contact the browser revoked arrives as its own cancellation.
+     *
+     * A native scroll the host's `touch-action` let through makes the browser fire `pointercancel`
+     * for the contact it took over; the port delivers it as `TouchPhase.Cancelled`, as reported and
+     * never compensated, and the contact is retired with it — a later event of the same `pointerId`
+     * delivers nothing.
+     */
+    @Test
+    fun aBrowserCancelledContactArrivesAsItsOwnCancellation() {
+        val harness = WasmInputHarness()
+        try {
+            val origin = harness.elementOrigin()
+            dispatchPointer(
+                harness.element,
+                "pointerdown",
+                "touch",
+                clientX = origin.x + 5.0,
+                clientY = origin.y + 6.0,
+                button = 0,
+                buttons = 1,
+                pointerId = 9,
+            )
+            dispatchPointer(harness.element, "pointercancel", "touch", clientX = origin.x + 6.0, clientY = origin.y + 7.0, pointerId = 9)
+            dispatchPointer(harness.element, "pointermove", "touch", clientX = origin.x + 8.0, clientY = origin.y + 9.0, pointerId = 9)
+
+            val touchStimuli = harness.delivered.map { stimulus ->
+                assertIs<WebInputStimulus.TouchChanged>(stimulus)
+            }
+            assertEquals(
+                listOf(TouchPhase.Started, TouchPhase.Cancelled),
+                touchStimuli.map { it.phase },
+                "the revocation is the Cancelled the model carries, delivered as the browser reported it",
+            )
+            assertEquals(
+                touchStimuli[0].nativeIdentity,
+                touchStimuli[1].nativeIdentity,
+                "the cancellation retires the very contact its down began",
+            )
+            assertEquals(2, harness.delivered.size, "and a move of the retired contact delivers nothing")
         } finally {
             harness.close()
         }
@@ -689,6 +858,7 @@ private fun dispatchPointer(
     tiltY: Int = 0,
     twist: Int = 0,
     tangentialPressure: Double = 0.0,
+    pointerId: Int = 1,
 ): Unit = dispatchWasmPointer(
     element = element,
     type = type,
@@ -702,6 +872,7 @@ private fun dispatchPointer(
     tiltY = tiltY,
     twist = twist,
     tangentialPressure = tangentialPressure,
+    pointerId = pointerId,
 )
 
 /** Dispatches a real wheel event on [element], as a browser delivers one. */
@@ -816,11 +987,11 @@ private external fun dispatchWasmKey(
 
 /** Dispatches a real pointer event on [element], as a browser delivers one. */
 @JsFun(
-    """(element, type, pointerType, clientX, clientY, button, buttons, pressure, tiltX, tiltY, twist, tangentialPressure) =>
+    """(element, type, pointerType, clientX, clientY, button, buttons, pressure, tiltX, tiltY, twist, tangentialPressure, pointerId) =>
          element.dispatchEvent(new PointerEvent(type, {
-           pointerType: pointerType, clientX: clientX, clientY: clientY, button: button, buttons: buttons,
-           pressure: pressure, tiltX: tiltX, tiltY: tiltY, twist: twist, tangentialPressure: tangentialPressure,
-           bubbles: true, cancelable: true }))""",
+           pointerId: pointerId, pointerType: pointerType, clientX: clientX, clientY: clientY,
+           button: button, buttons: buttons, pressure: pressure, tiltX: tiltX, tiltY: tiltY, twist: twist,
+           tangentialPressure: tangentialPressure, bubbles: true, cancelable: true }))""",
 )
 private external fun dispatchWasmPointer(
     element: JsAny,
@@ -835,6 +1006,7 @@ private external fun dispatchWasmPointer(
     tiltY: Int,
     twist: Int,
     tangentialPressure: Double,
+    pointerId: Int,
 ): Unit
 
 /** Dispatches a real wheel event on [element], as a browser delivers one. */

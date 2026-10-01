@@ -10,6 +10,7 @@ import org.graphiks.kadre.input.PointerButton
 import org.graphiks.kadre.input.PointerButtonState
 import org.graphiks.kadre.input.PointerKind
 import org.graphiks.kadre.input.ScrollDelta
+import org.graphiks.kadre.input.TouchPhase
 import org.graphiks.kadre.surface.LogicalDelta
 import org.graphiks.kadre.surface.LogicalPoint
 
@@ -23,9 +24,11 @@ import org.graphiks.kadre.surface.LogicalPoint
  * `surfaceId` either: a stimulus describes what the element observed, and the surface it belongs to
  * is the one that received it.
  *
- * The union covers what this phase activates — keyboard, the mouse and pen pointers, scroll and the
- * loss of focus. Touch and gestures stay out of it, because their capabilities stay `Unsupported`
- * until a later phase installs the observers that would produce them.
+ * The union covers what this phase activates — keyboard, the mouse and pen pointers, touch contacts,
+ * scroll and the loss of focus. The touch contacts and the pointers stay disjoint, as the model
+ * keeps them: a contact is a [TouchChanged] and never a pointer member, and a pointer is never a
+ * contact. Gestures stay out of it, because this target publishes no gesture capability — no
+ * recognizer exists on the Web (D-T2), and a stimulus nothing can reduce is a fiction.
  *
  * The reference design is AppKit's `AppKitInput`, whose members these mirror, with the same
  * immutability rule: a borrowed native event never crosses the boundary.
@@ -53,8 +56,9 @@ internal sealed interface WebInputStimulus {
      *
      * [kind] is the kind the browser reported for the pointer that entered, and it is carried rather
      * than assumed: a `pointerType` of `pen` delivered as a mouse would be an approximation of a fact
-     * the browser stated, which the phase's exit gate forbids. A touch pointer produces no stimulus at
-     * all, because the surface declares touch unsupported until a later phase installs its observers.
+     * the browser stated, which the phase's exit gate forbids. A touch contact produces no pointer
+     * stimulus of any kind — it is not a pointer — so a contact's `pointerenter` delivers nothing at
+     * all: the entry a contact has no fact for, since a contact has no hover.
      */
     data class PointerEntered(
         val position: LogicalPoint,
@@ -81,6 +85,26 @@ internal sealed interface WebInputStimulus {
         val pressure: Double?,
         val kind: PointerKind,
         val pen: PenState?,
+    ) : WebInputStimulus
+
+    /**
+     * One touch contact observation, in the phase its own pointer event described.
+     *
+     * [nativeIdentity] is the identity of the contact the browser reported: one stable reference per
+     * contact, held by the port's contact table for the gesture's duration, which is what the shared
+     * reducer keys its own contact identities by. A contact is never a pointer — this member exists
+     * so the two stay disjoint — and its pressure is the one the event reported, dropped to `null`
+     * when it reported none the model can carry.
+     *
+     * A `pointercancel` the browser fires under a native scroll arrives here as
+     * `TouchPhase.Cancelled`, delivered as reported: the host owns `touch-action`, and a contact it
+     * let the browser revoke is not compensated.
+     */
+    data class TouchChanged(
+        val nativeIdentity: Any,
+        val phase: TouchPhase,
+        val position: LogicalPoint,
+        val pressure: Double?,
     ) : WebInputStimulus
 
     /**
