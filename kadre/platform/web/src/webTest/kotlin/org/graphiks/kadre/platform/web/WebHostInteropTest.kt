@@ -3,6 +3,7 @@ package org.graphiks.kadre.platform.web
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.MainScope
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -22,9 +23,22 @@ import org.graphiks.kadre.diagnostics.KadreOperation
 import org.graphiks.kadre.diagnostics.KadrePlatform
 import org.graphiks.kadre.diagnostics.KadrePolicyComponent
 import org.graphiks.kadre.diagnostics.KadreResourceKind
+import org.graphiks.kadre.diagnostics.KadreResult
+import org.graphiks.kadre.display.DisplayId
+import org.graphiks.kadre.display.DisplayMode
+import org.graphiks.kadre.display.DisplayModeId
 import org.graphiks.kadre.input.KadrePermission
+import org.graphiks.kadre.surface.BinaryImage
+import org.graphiks.kadre.surface.ImageFormat
+import org.graphiks.kadre.surface.LogicalSize
+import org.graphiks.kadre.surface.PhysicalPoint
+import org.graphiks.kadre.surface.PhysicalSize
+import org.graphiks.kadre.window.FullscreenMode
+import org.graphiks.kadre.window.WindowSpec
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
@@ -486,6 +500,244 @@ class WebHostInteropTest {
             first.startsWith("kadre-host-session-"),
             "the identifier is allocated by the interop layer, not taken from the Kotlin SessionId",
         )
+    }
+
+    @Test
+    fun everyWindowRequestCarriesItsOwnOpaqueCorrelationToken() {
+        val first = KadreWebInterop.nextWindowRequestIdentity()
+        val second = KadreWebInterop.nextWindowRequestIdentity()
+
+        assertTrue(first != second, "two window requests must not share a correlation token")
+        assertTrue(
+            first.startsWith("kadre-window-request-"),
+            "the token is allocated by the interop layer, not taken from the Kotlin WindowRequestId",
+        )
+    }
+
+    @Test
+    fun aDisplayTokenIsStablePerDisplayIdentityAndDistinctBetweenDisplays() {
+        val first = DisplayId(7)
+        val second = DisplayId(8)
+
+        assertEquals(KadreWebInterop.displayKey(first), KadreWebInterop.displayKey(first))
+        assertTrue(
+            KadreWebInterop.displayKey(first) != KadreWebInterop.displayKey(second),
+            "two displays must not share a token",
+        )
+    }
+
+    @Test
+    fun everyAdmittedWindowRequestFailureDecodesFromItsPublishedFields() {
+        val none: String? = null
+        val mapped = listOf(
+            WebWindowFailureFields("unsupported", "requestWindow", none, none, none, null, none, none, none, none) to
+                KadreFailure.Unsupported(KadreOperation.RequestWindow),
+            WebWindowFailureFields("invalidRequest", none, "element", none, none, null, none, none, none, none) to
+                KadreFailure.InvalidRequest("element"),
+            WebWindowFailureFields("invalidRequest", none, none, none, none, null, none, none, none, none) to
+                KadreFailure.InvalidRequest(null),
+            WebWindowFailureFields("interactionRequired", none, none, "missing", none, null, none, none, none, none) to
+                KadreFailure.InteractionRequired(InteractionFailureReason.Missing),
+            WebWindowFailureFields("interactionRequired", none, none, "expired", none, null, none, none, none, none) to
+                KadreFailure.InteractionRequired(InteractionFailureReason.Expired),
+            WebWindowFailureFields("interactionRequired", none, none, "consumed", none, null, none, none, none, none) to
+                KadreFailure.InteractionRequired(InteractionFailureReason.Consumed),
+            WebWindowFailureFields("interactionRequired", none, none, "wrongSurface", none, null, none, none, none, none) to
+                KadreFailure.InteractionRequired(InteractionFailureReason.WrongSurface),
+            WebWindowFailureFields("alreadyInUse", none, none, none, "host", null, none, none, none, none) to
+                KadreFailure.AlreadyInUse(KadreResourceKind.Host),
+            WebWindowFailureFields("closed", none, none, none, "host", null, none, none, none, none) to
+                KadreFailure.Closed(KadreResourceKind.Host),
+            WebWindowFailureFields("parentScopeCancelled", none, none, none, none, null, none, none, none, none) to
+                KadreFailure.ParentScopeCancelled,
+            WebWindowFailureFields("resourceLimitExceeded", none, none, none, "window", null, "4", none, none, none) to
+                KadreFailure.ResourceLimitExceeded(KadreResourceKind.Window, 4L),
+            WebWindowFailureFields("temporarilyUnavailable", none, none, none, none, true, none, none, none, none) to
+                KadreFailure.TemporarilyUnavailable(retryable = true),
+            WebWindowFailureFields("temporarilyUnavailable", none, none, none, none, false, none, none, none, none) to
+                KadreFailure.TemporarilyUnavailable(retryable = false),
+            WebWindowFailureFields("platformFailure", none, none, none, none, null, none, "web", "WebWindowProvider", "callback-exception") to
+                KadreFailure.PlatformFailure(KadrePlatform.Web, "WebWindowProvider", "callback-exception"),
+        )
+
+        mapped.forEach { (fields, expected) -> assertEquals(expected, decodeWindowRequestFailure(fields)) }
+    }
+
+    @Test
+    fun aFailureOutsideTheClosedWindowRequestSetDoesNotDecode() {
+        val none: String? = null
+        val outside = listOf(
+            // An `unsupported` naming another operation is not the closed set's row.
+            WebWindowFailureFields("unsupported", "updateSurface", none, none, none, null, none, none, none, none),
+            // A reason, a resource or a platform the unions do not name is out of the set.
+            WebWindowFailureFields("interactionRequired", none, none, "bogus", none, null, none, none, none, none),
+            WebWindowFailureFields("alreadyInUse", none, none, none, "surface", null, none, none, none, none),
+            WebWindowFailureFields("closed", none, none, none, "window", null, none, none, none, none),
+            WebWindowFailureFields("resourceLimitExceeded", none, none, none, "windowRequest", null, "2", none, none, none),
+            // A limit that is absent or not a number payload does not decode either.
+            WebWindowFailureFields("resourceLimitExceeded", none, none, none, "window", null, none, none, none, none),
+            WebWindowFailureFields("resourceLimitExceeded", none, none, none, "window", null, "many", none, none, none),
+            // A `temporary` without its retryable payload is not a member.
+            WebWindowFailureFields("temporarilyUnavailable", none, none, none, none, null, none, none, none, none),
+            // A platform failure needs all three payloads from the closed unions.
+            WebWindowFailureFields("platformFailure", none, none, none, none, null, none, "natron", "WebWindowProvider", "x"),
+            WebWindowFailureFields("platformFailure", none, none, none, none, null, none, "web", none, "x"),
+            WebWindowFailureFields("platformFailure", none, none, none, none, null, none, "web", "WebWindowProvider", none),
+            // Anything else — an unknown kind or no kind at all — is undecodable.
+            WebWindowFailureFields("bogus", none, none, none, none, null, none, none, none, none),
+            WebWindowFailureFields(null, none, none, none, none, null, none, none, none, none),
+        )
+
+        outside.forEach { fields -> assertNull(decodeWindowRequestFailure(fields), "no failure for $fields") }
+    }
+
+    @Test
+    fun aPresentWindowProviderOptionWithoutCallableOpenIsRefusedInsteadOfIgnored() {
+        val key = KadreApplicationFactory { KadreApplication { awaitCancellation() } }.asHostRef().hostKey
+        var attachReached = false
+
+        val refused = attachSession(
+            "element",
+            key,
+            "default",
+            "manual",
+            WebWindowProviderOption.Invalid,
+        ) { _, _, _, _, _, _ ->
+            attachReached = true
+            KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.Host))
+        }
+
+        assertEquals(
+            "{\"kind\":\"invalidRequest\",\"field\":\"options.windowProvider\"}",
+            refused.removePrefix("failed|"),
+        )
+        assertFalse(attachReached, "a refused option never reaches the attach")
+    }
+
+    @Test
+    fun anAbsentWindowProviderOptionAttachesWithoutAProvider() {
+        val key = KadreApplicationFactory { KadreApplication { awaitCancellation() } }.asHostRef().hostKey
+        var received: Any? = "unset"
+
+        val refused = attachSession(
+            "element",
+            key,
+            "default",
+            "manual",
+            WebWindowProviderOption.Absent,
+        ) { _, _, _, _, _, provider ->
+            received = provider
+            KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.Host))
+        }
+
+        assertNull(received, "an absent option attaches with no provider")
+        assertEquals("{\"kind\":\"closed\",\"resource\":\"host\"}", refused.removePrefix("failed|"))
+    }
+
+    @Test
+    fun aProvidedWindowProviderOptionReachesTheAttachUnchanged() {
+        val key = KadreApplicationFactory { KadreApplication { awaitCancellation() } }.asHostRef().hostKey
+        var received: Any? = "unset"
+
+        attachSession(
+            "element",
+            key,
+            "default",
+            "manual",
+            WebWindowProviderOption.Provided("the-target-provider"),
+        ) { _, _, _, _, _, provider ->
+            received = provider
+            KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.Host))
+        }
+
+        assertEquals("the-target-provider", received, "the target's own provider value crosses untouched")
+    }
+
+    @Test
+    fun theWindowProviderOptionIsRefusedAfterTheOtherOptions() {
+        val key = KadreApplicationFactory { KadreApplication { awaitCancellation() } }.asHostRef().hostKey
+
+        assertEquals(
+            "options.policy",
+            (attachSession(
+                "element",
+                key,
+                "turbo",
+                "manual",
+                WebWindowProviderOption.Invalid,
+            ) { _, _, _, _, _, _ -> KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.Host)) })
+                .removePrefix("failed|")
+                .removePrefix("{\"kind\":\"invalidRequest\",\"field\":\"")
+                .removeSuffix("\"}"),
+            "the policy is resolved before the provider option",
+        )
+        assertEquals(
+            "options.attachmentPolicy",
+            (attachSession(
+                "element",
+                key,
+                "default",
+                "sometimes",
+                WebWindowProviderOption.Invalid,
+            ) { _, _, _, _, _, _ -> KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.Host)) })
+                .removePrefix("failed|")
+                .removePrefix("{\"kind\":\"invalidRequest\",\"field\":\"")
+                .removeSuffix("\"}"),
+            "the attachment policy is resolved before the provider option",
+        )
+        assertEquals(
+            "factoryKey",
+            (attachSession(
+                "element",
+                "kadre-factory-none",
+                "default",
+                "manual",
+                WebWindowProviderOption.Invalid,
+            ) { _, _, _, _, _, _ -> KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.Host)) })
+                .removePrefix("failed|")
+                .removePrefix("{\"kind\":\"invalidRequest\",\"field\":\"")
+                .removeSuffix("\"}"),
+            "the factory key is resolved before the provider option",
+        )
+    }
+
+    @Test
+    fun theSpecDtoJsonCarriesThePublishedShapes() {
+        val spec = WindowSpec(
+            title = "fac\"ade",
+            icon = BinaryImage(byteArrayOf(1, 2, 3), ImageFormat.Png, PhysicalSize(4, 5)),
+            minimumSize = LogicalSize(320.0, 240.0),
+            outerPosition = PhysicalPoint(3, 4),
+            fullscreen = FullscreenMode.Exclusive(
+                DisplayId(9),
+                DisplayMode(DisplayModeId(1), PhysicalSize(3840, 2160), 120.0, 10),
+            ),
+        )
+
+        val json = webWindowSpecDtoJson(spec, "kadre-display-0")
+
+        // Every field of the section 6 shape is present, quoted where the union quotes it, with the
+        // escaped strings and the base64 icon payload — the exact `Double` rendering is the target's.
+        assertTrue(json.startsWith("{\"title\":\"fac\\\"ade\",\"contentSize\":{"), json)
+        assertTrue(json.contains("\"minimumSize\":{\"width\":"), json)
+        assertTrue(json.contains("\"maximumSize\":null"), json)
+        assertTrue(json.contains("\"outerPosition\":{\"x\":3,\"y\":4}"), json)
+        assertTrue(json.contains("\"resizable\":true"), json)
+        assertTrue(
+            json.contains(
+                "\"fullscreen\":{\"kind\":\"exclusive\",\"displayId\":\"kadre-display-0\"," +
+                    "\"physicalWidth\":3840,\"physicalHeight\":2160,\"refreshRateHz\":",
+            ),
+            json,
+        )
+        assertTrue(json.contains("\"bitDepth\":10}"), json)
+        assertTrue(json.contains("\"decorations\":\"system\",\"systemButtons\":\"all\",\"level\":\"normal\""), json)
+        assertTrue(json.contains("\"transparent\":false,\"blurBehind\":false"), json)
+        assertTrue(
+            json.contains("\"icon\":{\"format\":\"png\",\"bytes\":\"AQID\",\"pixelSize\":{\"width\":4,\"height\":5}}"),
+            json,
+        )
+        assertTrue(json.contains("\"contentProtection\":false}"), json)
     }
 
     private fun <T> assertPublishedNames(entries: List<T>, expected: List<Pair<T, String>>, publishedName: (T) -> String) {

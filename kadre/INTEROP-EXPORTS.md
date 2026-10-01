@@ -321,9 +321,10 @@ export interface KadreSessionHandle {
 export interface KadreWebOptions {
   readonly policy?: KadrePolicyProfile;
   readonly attachmentPolicy?: "stopWhenDetached" | "manual";
+  readonly windowProvider?: KadreWebWindowProvider | null;
 }
 
-`windowProvider` est ajouté par la phase qui livre `WebWindowProvider` (phase 4 de la roadmap Web) ; aucune option publiée n’est ignorée silencieusement tant que ce chemin n’existe pas.
+`windowProvider` est livré depuis la phase 4 de la roadmap Web (la phase qui livre `WebWindowProvider`) : l’option `readonly windowProvider?: KadreWebWindowProvider | null` ci-dessus fait partie de la déclaration publiée de `types/kadre-host.d.ts`, les trois interfaces `KadreWebWindowProvider`/`KadreWebWindowHost`/`KadreWebWindowOpenResult` et les types de spec dont elles dépendent y sont copiés verbatim, et les deux shims valident défensivement l’option — une option présente mais non appelable est refusée `InvalidRequest("options.windowProvider")` ; aucune option publiée n’est ignorée silencieusement.
 
 export interface KadreWebWindowProvider {
   open(requestId: string, spec: Readonly<KadreWindowSpec>): KadreWebWindowOpenResult;

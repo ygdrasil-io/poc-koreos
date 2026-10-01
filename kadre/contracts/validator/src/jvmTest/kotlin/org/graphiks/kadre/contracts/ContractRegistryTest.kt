@@ -137,7 +137,7 @@ class ContractRegistryTest {
             mapOf(
                 "BCK-001" to webContract(
                     contractId = "BCK-001",
-                    status = ContractStatus.Planned,
+                    status = ContractStatus.Active,
                     source = "DESIGN.md#15.3",
                     subject = "DOM host attach and lifecycle",
                     risk = "surface/window confusion, lifecycle loss, cross-session leak or false capability",
@@ -215,7 +215,7 @@ class ContractRegistryTest {
                 ),
                 "INT-003" to webContract(
                     contractId = "INT-003",
-                    status = ContractStatus.Planned,
+                    status = ContractStatus.Active,
                     source = "INTEROP-EXPORTS.md#6",
                     subject = "JS and Wasm host facade runtime",
                     risk = "incorrect host outcome, notification ordering or ownership",
@@ -262,9 +262,19 @@ class ContractRegistryTest {
 
     @Test
     fun plannedWebGatesAcceptMissingMappingsAndArtifactDirectoriesForBothTargets() {
+        // The phase 4 registry declares BCK-001 and INT-003 active; a gate that has not activated
+        // them yet accepts missing mappings and artifact directories for both of its targets.
+        val fixture = createTempDirectory("kadre-planned-web-gate-")
+        val registry = fixture.resolve("contracts.tsv").also {
+            it.writeText(
+                repositoryFile("kadre/contracts/registry/contracts.tsv").readText()
+                    .replace("BCK-001\tactive", "BCK-001\tplanned")
+                    .replace("INT-003\tactive", "INT-003\tplanned"),
+            )
+        }
         listOf("js", "wasmJs").forEach { target ->
             val index = validateContractEvidence(
-                registryPath = repositoryFile("kadre/contracts/registry/contracts.tsv"),
+                registryPath = registry,
                 mappingPaths = repositoryMappingFiles(),
                 expectedCommit = COMMIT,
                 target = target,
@@ -282,9 +292,16 @@ class ContractRegistryTest {
     fun activatingAWebGateRequiresMappingsForBothTargets() {
         val fixture = createTempDirectory("kadre-active-web-gate-")
         val registry = fixture.resolve("contracts.tsv").also {
+            it.writeText(repositoryFile("kadre/contracts/registry/contracts.tsv").readText())
+        }
+        // The gate activates with BCK-001's own mapping rows absent: every declared scenario of the
+        // contract is then a missing mapping, per target, before any artifact is even looked for.
+        val mapping = fixture.resolve("evidence.tsv").also {
             it.writeText(
-                repositoryFile("kadre/contracts/registry/contracts.tsv").readText()
-                    .replace("BCK-001\tplanned", "BCK-001\tactive"),
+                repositoryFile("kadre/contracts/driver/web/contracts/evidence.tsv").readText()
+                    .lineSequence()
+                    .filterNot { line -> line.startsWith("BCK-001\t") }
+                    .joinToString(separator = "\n", postfix = "\n"),
             )
         }
 
@@ -292,7 +309,7 @@ class ContractRegistryTest {
             val exception = assertFailsWith<IllegalStateException> {
                 validateContractEvidence(
                     registryPath = registry,
-                    mappingPaths = repositoryMappingFiles(),
+                    mappingPaths = listOf(mapping),
                     expectedCommit = COMMIT,
                     target = target,
                     expectedExecutions = ExpectedContractExecutions.Browser(setOf("chromium")),

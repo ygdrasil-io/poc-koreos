@@ -79,9 +79,6 @@ import org.graphiks.kadre.window.WindowState
 import org.graphiks.kadre.window.WindowSystemButtons
 import org.graphiks.kadre.window.WindowUpdate
 import org.graphiks.kadre.window.WindowUpdateOutcome
-import org.graphiks.kadre.input.PointerButton
-import org.graphiks.kadre.input.PhysicalKey
-import org.graphiks.kadre.input.TouchId
 import org.graphiks.kadre.input.DropOfferId
 import org.graphiks.kadre.interaction.InteractionAction
 import org.graphiks.kadre.interaction.InteractionKind
@@ -1792,22 +1789,6 @@ public class RuntimeWindowManager public constructor(
         data class Success<T>(val value: T) : GuardedCall<T>
         data class Failure(val failure: KadreFailure.PlatformFailure) : GuardedCall<Nothing>
     }
-}
-
-/** Unstable backend-only callback payload for [RuntimeWindowManager.dispatchSynchronousInteraction]. */
-public sealed interface RuntimeSynchronousInteraction {
-    public data class PointerPressed(
-        public val button: PointerButton,
-        public val position: LogicalPoint,
-        public val pressure: Double?,
-    ) : RuntimeSynchronousInteraction
-
-    public data class KeyPressed(public val physicalKey: PhysicalKey) : RuntimeSynchronousInteraction
-
-    public data class TouchStarted(
-        public val touchId: TouchId,
-        public val position: LogicalPoint,
-    ) : RuntimeSynchronousInteraction
 }
 
 private fun fallbackSurfaceSnapshot(effectiveSpec: WindowSpec): SurfaceInitialSnapshot = SurfaceInitialSnapshot(

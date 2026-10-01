@@ -2,6 +2,7 @@ package org.graphiks.kadre.platform.web
 
 import org.graphiks.kadre.diagnostics.KadreFailure
 import org.graphiks.kadre.diagnostics.KadreResult
+import org.graphiks.kadre.internal.runtime.RuntimeSynchronousInteraction
 
 /**
  * The one host-port double every web surface test drives.
@@ -81,11 +82,126 @@ internal class RecordingWebHostPort(
      */
     var captureImplemented: Boolean = true
 
+    /**
+     * The interaction dispatcher the surface installed, or `null` before that structural install.
+     *
+     * A real DOM port keeps the dispatcher to invoke it inside its own `pointerdown`/`keydown`
+     * listeners; this double keeps it so the tests can drive the very same seam, and records the
+     * installation so a case can pin that it happens exactly once, with the session configuration.
+     */
+    var interactionDispatcher: WebInteractionDispatcher? = null
+        private set
+
+    /** How often the surface installed an interaction dispatcher; the structural install happens once. */
+    var interactionDispatcherInstallations: Int = 0
+        private set
+
+    /**
+     * Every primitive call the surface asked of this port, in the order it asked: the four fullscreen
+     * and pointer-lock members of this phase, named as the member that was called.
+     *
+     * This is the browser-effect journal of the interaction seam, the counterpart of
+     * [pointerCaptureRequests]: an action refused before the native call — an unsupported kind, a
+     * `LockPointer` mode the surface rejects — must leave it untouched, which is how the admission
+     * ordering is proven rather than asserted.
+     */
+    val primitiveCalls: MutableList<String> = mutableListOf()
+
+    /** The terminal callbacks the surface handed the port with its primitive calls, in call order. */
+    val handedTerminals: MutableList<WebPrimitiveTerminal> = mutableListOf()
+
+    /**
+     * What the next [requestFullscreen] answers, or `null` for the port's own refusing default.
+     *
+     * An effect receives the terminal and answers the emission result: returning a success without
+     * firing the terminal is a deferred emission the browser has not answered yet, firing the terminal
+     * before returning is a synchronous answer — exactly the two shapes a real DOM port produces.
+     */
+    var requestFullscreenEffect: ((WebPrimitiveTerminal) -> KadreResult<Unit>)? = null
+
+    /** What the next [exitFullscreen] answers, or `null` for the port's own exiting default. */
+    var exitFullscreenEffect: ((WebPrimitiveTerminal) -> KadreResult<Unit>)? = null
+
+    /** What the next [requestPointerLock] answers, or `null` for the port's own refusing default. */
+    var requestPointerLockEffect: ((WebPrimitiveTerminal) -> KadreResult<Unit>)? = null
+
+    /** What the next [exitPointerLock] answers, or `null` for the port's own exiting default. */
+    var exitPointerLockEffect: ((WebPrimitiveTerminal) -> KadreResult<Unit>)? = null
+
+    /**
+     * The order the target acted in, as its own listener would: the interaction dispatch first, the
+     * ordinary observation second. The journal is what an ordering case reads alongside the surface's
+     * own revisions to prove that the dispatcher ran before the stimulus was admitted.
+     */
+    val deliveryJournal: MutableList<String> = mutableListOf()
+
     override fun applyPointerCapture(captured: Boolean): KadreResult<Unit> {
         pointerCaptureRequests += captured
         if (!captureImplemented) return super.applyPointerCapture(captured)
         val failure = pointerCaptureFailure
         return if (failure == null) KadreResult.Success(Unit) else KadreResult.Failure(failure)
+    }
+
+    override fun installInteractionDispatcher(dispatcher: WebInteractionDispatcher) {
+        check(interactionDispatcher == null) { "this port already installed an interaction dispatcher" }
+        interactionDispatcher = dispatcher
+        interactionDispatcherInstallations += 1
+    }
+
+    /** Records the call, then answers with the effect a test set, or with the port's own default. */
+    override fun requestFullscreen(onTerminal: WebPrimitiveTerminal): KadreResult<Unit> {
+        primitiveCalls += "requestFullscreen"
+        handedTerminals += onTerminal
+        return requestFullscreenEffect?.invoke(onTerminal) ?: super.requestFullscreen(onTerminal)
+    }
+
+    /** Records the call, then answers with the effect a test set, or with the port's own default. */
+    override fun exitFullscreen(onTerminal: WebPrimitiveTerminal): KadreResult<Unit> {
+        primitiveCalls += "exitFullscreen"
+        handedTerminals += onTerminal
+        return exitFullscreenEffect?.invoke(onTerminal) ?: super.exitFullscreen(onTerminal)
+    }
+
+    /** Records the call, then answers with the effect a test set, or with the port's own default. */
+    override fun requestPointerLock(onTerminal: WebPrimitiveTerminal): KadreResult<Unit> {
+        primitiveCalls += "requestPointerLock"
+        handedTerminals += onTerminal
+        return requestPointerLockEffect?.invoke(onTerminal) ?: super.requestPointerLock(onTerminal)
+    }
+
+    /** Records the call, then answers with the effect a test set, or with the port's own default. */
+    override fun exitPointerLock(onTerminal: WebPrimitiveTerminal): KadreResult<Unit> {
+        primitiveCalls += "exitPointerLock"
+        handedTerminals += onTerminal
+        return exitPointerLockEffect?.invoke(onTerminal) ?: super.exitPointerLock(onTerminal)
+    }
+
+    /**
+     * Fires the terminal the surface handed the port with its most recent primitive call, as the
+     * browser fires its own terminal event later: the committed answer a `fullscreenchange` carries,
+     * or the refusal a `fullscreenerror` carries.
+     */
+    fun fireLatestTerminal(committed: Boolean) {
+        handedTerminals.last().onTerminal(committed)
+    }
+
+    /**
+     * Acts as the target's own listener acts: the interaction dispatcher first, synchronously, then
+     * the ordinary observation — the order the DOM ports of the next task wire into `pointerdown`
+     * and `keydown`.
+     */
+    fun deliverInteractionThenInput(trigger: RuntimeSynchronousInteraction, stimulus: WebInputStimulus) {
+        val dispatcher = checkNotNull(interactionDispatcher) { "this port has no interaction dispatcher" }
+        deliveryJournal += "interaction"
+        dispatcher.dispatch(trigger)
+        deliveryJournal += "observation"
+        deliverInput(stimulus)
+    }
+
+    /** Dispatches one interaction trigger, as a listener whose event carries no ordinary stimulus would. */
+    fun deliverInteraction(trigger: RuntimeSynchronousInteraction) {
+        val dispatcher = checkNotNull(interactionDispatcher) { "this port has no interaction dispatcher" }
+        dispatcher.dispatch(trigger)
     }
 
     /**
@@ -197,6 +313,7 @@ internal class RecordingWebHostPort(
         metricsObserver = null
         lifecycleObserver = null
         inputObserver = null
+        interactionDispatcher = null
         element = null
     }
 }

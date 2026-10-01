@@ -13,6 +13,8 @@ import {
   type KadreFailure,
   type KadreSessionOutcome,
   type KadreSessionSnapshot,
+  type KadreWebWindowOpenResult,
+  type KadreWebWindowProvider,
 } from "@kadre/host";
 
 /**
@@ -107,7 +109,10 @@ async function waitUntil(condition: () => boolean, timeoutMillis: number): Promi
  * Runs the scenario and returns `"passed"` or the diagnostic of the first divergence.
  *
  * The application factory key is owned by the page's Kotlin application; the consumer only passes the
- * opaque key back to `KadreWeb.attach`, which types that parameter as the `string` it is.
+ * opaque key back to `KadreWeb.attach`, which types that parameter as the `string` it is. The
+ * `windowProvider` option is carried, fully typed as `kadre/INTEROP-EXPORTS.md` section 6 declares
+ * it: the scenario never requests a window, so `open` is never invoked — the option's presence is
+ * what the type check and the run prove.
  */
 export async function runScenario(): Promise<string> {
   const page = globalThis as typeof globalThis & { kadreApplicationFactory?: string };
@@ -119,8 +124,14 @@ export async function runScenario(): Promise<string> {
   const element = document.createElement("div");
   document.body.appendChild(element);
 
+  const windowProvider: KadreWebWindowProvider = {
+    open(): KadreWebWindowOpenResult {
+      return { kind: "rejected", failure: { kind: "unsupported", operation: "requestWindow" } };
+    },
+  };
+
   try {
-    const handle = KadreWeb.attach(element, applicationFactory);
+    const handle = KadreWeb.attach(element, applicationFactory, { windowProvider });
 
     const observed: string[] = [];
     const unsubscribe = handle.subscribeState((state) => {

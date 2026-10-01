@@ -319,8 +319,21 @@ this element's own `pointermove`. What the browser reports for a confined or
 hidden pointer during a page-owned lock is that page's reading and not a Kadre
 promise; this phase claims nothing about it. What a manual pass records is that
 this phase neither locks a pointer nor claims to, and that a lock the page took
-by itself leaves the published capture at `none`. A later phase will have to
-prove the interaction path, with the transient activation the API requires.
+by itself leaves the published capture at `none`.
+
+**Discharged by phase 4.** The interaction path this procedure deferred is
+delivered: the Web surface installs the common interaction engine and publishes
+`handlerInteractions = {EnterFullscreen, ExitFullscreen, LockPointer, UnlockPointer}`,
+the port now carries the `requestPointerLock`/`exitPointerLock` primitives with
+their one-shot terminal listeners, and the transient-activation frame the API
+requires is the DOM callback the dispatch runs in. The automated smoke proves
+that path end-to-end with a real trusted click
+(`web-interaction-fullscreen`, `web-interaction.spec.mjs`); the real-screen
+proof of the pointer-lock primitive — confined movement, `Esc` — is
+[phase-4-interactions.md](phase-4-interactions.md), procedure 2, which also
+records the boundary that remains: the delivered fixture's handler requests
+fullscreen only, so a Kadre-*driven* lock on a real screen still awaits a
+fixture command selecting the action.
 
 ### 7. Two pointers at once: the DOM gives two, the model keeps one
 

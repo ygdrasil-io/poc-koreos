@@ -6,6 +6,7 @@ import org.graphiks.kadre.diagnostics.KadreFailure
 import org.graphiks.kadre.diagnostics.KadrePlatform
 import org.graphiks.kadre.diagnostics.KadreResult
 import org.graphiks.kadre.input.PointerButtonState
+import org.graphiks.kadre.internal.runtime.RuntimeSynchronousInteraction
 import org.w3c.dom.AddEventListenerOptions
 import org.w3c.dom.Document
 import org.w3c.dom.HTMLElement
@@ -16,6 +17,7 @@ import org.w3c.dom.Window
 import org.w3c.dom.events.Event
 import kotlin.js.JsAny
 import kotlin.js.JsString
+import kotlin.js.Promise
 import kotlin.js.toJsArray
 import kotlin.js.unsafeCast
 import kotlin.math.max
@@ -67,6 +69,27 @@ internal class WasmWebDomPort(element: HTMLElement) : WebHostPort {
     private val pointerMotion: WebPointerMotion = WebPointerMotion()
 
     /**
+     * The interaction dispatcher the surface installed with its session configuration, or `null`
+     * before that moment and after [release].
+     *
+     * The two press listeners invoke it synchronously, inside their own callback and before the
+     * ordinary stimulus of the same event is enqueued (the AppKit order, `DESIGN.md:983-989`): the
+     * trigger is DOM-free, built with the very mappings the ordinary observation is built with, so
+     * the two cannot disagree about the event the element saw.
+     */
+    private var interactionDispatcher: WebInteractionDispatcher? = null
+
+    /**
+     * The primitive emissions whose terminal listeners are still installed on the document.
+     *
+     * More than one can be live at a time — a second dispatch may emit while the browser has not
+     * answered the first — so a list, not a slot: each emission removes itself the moment it
+     * settles, and [release] abandons the survivors, whose pendings the surface has already
+     * completed with the closed failure.
+     */
+    private val pendingPrimitiveEmissions: MutableList<WebPrimitiveEmission> = mutableListOf()
+
+    /**
      * The scroll-coalescing frontier of this element ([WebScrollBoundary]) and the animation-frame
      * registration that reports the one fact of its rule no wheel event carries: that the browsing
      * context entered a new frame.
@@ -109,21 +132,34 @@ internal class WasmWebDomPort(element: HTMLElement) : WebHostPort {
             deliverSnapshot()
         }
     }
-    private val pagehideListener: (Event) -> Unit = {
+    /**
+     * One `pagehide`.
+     *
+     * The listener is deliberately typed over `JsAny`, not `Event`: the browser delivers a
+     * `PageTransitionEvent` here, and that type is one of the DOM gaps of `kotlinx-browser` (the
+     * ResizeObserver precedent) — a Kotlin/Wasm adapter rejecting it for an undeclared external
+     * type would crash the very delivery this listener exists for. The payload is never read: the
+     * fact the port observes is that the page hid, not what the event carries.
+     */
+    private val pagehideListener: (JsAny) -> Unit = {
         safely { deliverSnapshot(pageHidden = true) }
     }
 
     /**
      * One `keydown`: the browser's own physical key, logical key, location and modifiers.
      *
-     * It is one of the two listeners that route through [suppressDefaultFor], because a key press is
-     * one of the two events whose page-level default this phase delivers: some keys scroll the
-     * document. Which ones, and whether they are suppressed at all, is not decided here — the port
-     * hands the observation over and applies the answer it gets.
+     * It is one of the two listeners that dispatch an interaction first — synchronously, inside this
+     * very callback, before the observation below is enqueued (the AppKit order,
+     * `DESIGN.md:983-989`), which is where the event's transient activation still holds — and one of
+     * the two that route through [suppressDefaultFor], because a key press is one of the two events
+     * whose page-level default this phase delivers: some keys scroll the document. Which ones, and
+     * whether they are suppressed at all, is not decided here — the port hands the observation over
+     * and applies the answer it gets.
      */
     private val keyDownListener: (Event) -> Unit = { event ->
         safely {
             wasmKeyboardEventOrNull(event)?.let { keyboard ->
+                dispatchInteractionFor(keyboard)
                 suppressDefaultFor(event, wasmKeyStimulus(keyboard, pressed = true))
             }
         }
@@ -142,8 +178,18 @@ internal class WasmWebDomPort(element: HTMLElement) : WebHostPort {
         safely { deliverPointerMoved(wasmPointerEventOrNull(event)) }
     }
 
+    /**
+     * One `pointerdown`: the interaction dispatch first, synchronously, in this event's own callback
+     * and before the ordinary stimulus of it is enqueued (the AppKit order, `DESIGN.md:983-989`) —
+     * the frame whose transient activation is the authority a fullscreen or pointer-lock request
+     * needs — then the ordinary observation, which continues normally.
+     */
     private val pointerDownListener: (Event) -> Unit = { event ->
-        safely { deliverPointerButton(wasmPointerEventOrNull(event), PointerButtonState.Pressed) }
+        safely {
+            val pointer = wasmPointerEventOrNull(event)
+            dispatchInteractionFor(pointer)
+            deliverPointerButton(pointer, PointerButtonState.Pressed)
+        }
     }
 
     private val pointerUpListener: (Event) -> Unit = { event ->
@@ -307,6 +353,149 @@ internal class WasmWebDomPort(element: HTMLElement) : WebHostPort {
         }
     }
 
+    /**
+     * Keeps the dispatcher the surface installed, for the press listeners to invoke.
+     *
+     * The surface installs it once, with the session configuration that builds the interaction
+     * engine, so the check is the one guarantee that keeps a second installation from silently
+     * replacing the channel the first listeners were handed. [release] drops it with the bridges.
+     */
+    override fun installInteractionDispatcher(dispatcher: WebInteractionDispatcher) {
+        check(interactionDispatcher == null) { "this port already installed an interaction dispatcher" }
+        interactionDispatcher = dispatcher
+    }
+
+    /**
+     * Emits the fullscreen request of the browser, synchronously, in the frame the action was
+     * admitted in.
+     *
+     * The emission is the synchronous answer ([KadreResult.Success] — the primitive is out, the
+     * verdict is not in yet); the verdict is the browser's, and it is collected on the two channels
+     * the DOM answers a fullscreen request with, both hooked here and both one-shot through
+     * [WebPrimitiveEmission]:
+     *
+     * - the `fullscreenchange` the browser fires **on the element it took fullscreen** — the
+     *   committed answer, and this element's own word only: the gate on the event's target keeps a
+     *   change that belongs to another element (or the document-fired one of an exit) from answering
+     *   a request this element made;
+     * - the `fullscreenerror` — fired on the document or on the failing element, bubbling to the
+     *   document listener either way — and the rejected promise the same failure carries; the DOM
+     *   exposes no reason, so both deliver the one honest refusal ([refusalFailure]'s code) through
+     *   the terminal, and the promise's rejection is caught whatever the terminal already said, so
+     *   no rejection of this port is ever left floating.
+     *
+     * Anything the browser would not even let this port ask — a read or a call that throws — is
+     * contained as the same refusal, with the listeners withdrawn, because no terminal will ever
+     * fire for a call that never happened.
+     */
+    override fun requestFullscreen(onTerminal: WebPrimitiveTerminal): KadreResult<Unit> {
+        val current = element ?: return KadreResult.Failure(refusalFailure(WEB_FULLSCREEN_DOMAIN))
+        val emission = newPrimitiveEmission(onTerminal)
+        return try {
+            installTerminalListener(emission, WEB_FULLSCREEN_CHANGE_EVENT, committed = true) { event ->
+                event.target === current
+            }
+            installTerminalListener(emission, WEB_FULLSCREEN_ERROR_EVENT, committed = false) { _ -> true }
+            current.requestFullscreen().onRejection { emission.settle(false) }
+            KadreResult.Success(Unit)
+        } catch (cause: Throwable) {
+            emission.abandon()
+            KadreResult.Failure(refusalFailure(WEB_FULLSCREEN_DOMAIN))
+        }
+    }
+
+    /**
+     * Emits the exit-fullscreen request of the browser, or answers it without one.
+     *
+     * The exit is only asked where there is a fullscreen to leave: `document.fullscreenElement` is
+     * the browser's own state, and reading it null answers the action synchronously with the
+     * committed answer — there is nothing to ask the browser for, and a `document.exitFullscreen`
+     * call for a document that holds no fullscreen element would be a call with no decision behind
+     * it (the zero-call exit the smoke ledger proves). Otherwise the exit is emitted like any
+     * request, and the `fullscreenchange` the browser fires on the document — the fullscreen element
+     * is already cleared when it fires — is the committed answer, with the rejected promise the
+     * refusal's other channel; no promise of this port is ever left floating. A read of the state
+     * that throws is the refusal too, contained like every call of this seam.
+     */
+    override fun exitFullscreen(onTerminal: WebPrimitiveTerminal): KadreResult<Unit> {
+        val fullscreenElement = try {
+            originDocument.fullscreenElement
+        } catch (cause: Throwable) {
+            return KadreResult.Failure(refusalFailure(WEB_FULLSCREEN_DOMAIN))
+        }
+        if (fullscreenElement == null) {
+            onTerminal.onTerminal(true)
+            return KadreResult.Success(Unit)
+        }
+        val emission = newPrimitiveEmission(onTerminal)
+        return try {
+            installTerminalListener(emission, WEB_FULLSCREEN_CHANGE_EVENT, committed = true) { _ -> true }
+            originDocument.exitFullscreen().onRejection { emission.settle(false) }
+            KadreResult.Success(Unit)
+        } catch (cause: Throwable) {
+            emission.abandon()
+            KadreResult.Failure(refusalFailure(WEB_FULLSCREEN_DOMAIN))
+        }
+    }
+
+    /**
+     * Emits the pointer-lock request of the browser, synchronously, in the frame the action was
+     * admitted in.
+     *
+     * The emission/terminal split is [requestFullscreen]'s, and so are the two channels of the
+     * verdict: the `pointerlockchange` and `pointerlockerror` the Pointer Lock API fires **on the
+     * document**, plus the promise form of Chromium's own `requestPointerLock` — preferred by this
+     * reading, and absorbed as absent when a browser without it answers `undefined`, which leaves
+     * the error event the one refusal path. No gate is possible on the change: the event targets
+     * the document, so the browser's word arrives as it is, and the one-shot settlement plus the
+     * surface's single-request serialisation bound what a second pointer's word could reach.
+     */
+    override fun requestPointerLock(onTerminal: WebPrimitiveTerminal): KadreResult<Unit> {
+        val current = element ?: return KadreResult.Failure(refusalFailure(WEB_POINTER_LOCK_DOMAIN))
+        val emission = newPrimitiveEmission(onTerminal)
+        return try {
+            installTerminalListener(emission, WEB_POINTER_LOCK_CHANGE_EVENT, committed = true) { _ -> true }
+            installTerminalListener(emission, WEB_POINTER_LOCK_ERROR_EVENT, committed = false) { _ -> true }
+            wasmRequestPointerLock(current.unsafeCast<JsAny>())?.onRejection { emission.settle(false) }
+            KadreResult.Success(Unit)
+        } catch (cause: Throwable) {
+            emission.abandon()
+            KadreResult.Failure(refusalFailure(WEB_POINTER_LOCK_DOMAIN))
+        }
+    }
+
+    /**
+     * Emits the unlock-pointer request of the browser, or answers it without one.
+     *
+     * The exit is only asked where this element is what holds the lock: `document.pointerLockElement`
+     * is the browser's own state, and reading it anything but this element — another element's lock,
+     * or no lock at all — answers the action synchronously with the committed answer and zero browser
+     * calls. Otherwise the exit is emitted, and the `pointerlockchange` the browser fires on the
+     * document is the committed answer: the Pointer Lock API produces no promise and no error event
+     * for an unlock, so the change is the one channel the verdict arrives on. A read of the state
+     * that throws is the refusal too, contained like every call of this seam.
+     */
+    override fun exitPointerLock(onTerminal: WebPrimitiveTerminal): KadreResult<Unit> {
+        val lockedElement = try {
+            wasmPointerLockElement(originDocument.unsafeCast<JsAny>())
+        } catch (cause: Throwable) {
+            return KadreResult.Failure(refusalFailure(WEB_POINTER_LOCK_DOMAIN))
+        }
+        if (lockedElement == null || lockedElement !== element) {
+            onTerminal.onTerminal(true)
+            return KadreResult.Success(Unit)
+        }
+        val emission = newPrimitiveEmission(onTerminal)
+        return try {
+            installTerminalListener(emission, WEB_POINTER_LOCK_CHANGE_EVENT, committed = true) { _ -> true }
+            wasmExitPointerLock(originDocument.unsafeCast<JsAny>())
+            KadreResult.Success(Unit)
+        } catch (cause: Throwable) {
+            emission.abandon()
+            KadreResult.Failure(refusalFailure(WEB_POINTER_LOCK_DOMAIN))
+        }
+    }
+
     /** Frames belong to the element's browsing context, which may not carry this module's global. */
     override fun scheduleFrame(callback: () -> Unit): WebFrameHandle {
         val browserWindow = originWindow ?: return WebFrameHandle { }
@@ -332,6 +521,12 @@ internal class WasmWebDomPort(element: HTMLElement) : WebHostPort {
         runCatching { element?.removeEventListener("pointercancel", pointerCancelListener) }
         runCatching { element?.removeEventListener("lostpointercapture", lostPointerCaptureListener) }
         runCatching { element?.removeEventListener("wheel", wheelListener, wheelListenerOptions) }
+        // The terminal listeners of the primitives still awaiting the browser's answer are the last
+        // bridges this port holds into the browsing context, and they go with the rest of them: a
+        // late fullscreenchange or pointerlockchange must not answer an emission nobody is waiting
+        // on, and the surface has already abandoned their pendings with the closed failure.
+        runCatching { pendingPrimitiveEmissions.toList().forEach { it.abandon() } }
+        pendingPrimitiveEmissions.clear()
         // The capture this port may hold is ended with the element it was taken on: one that outlived
         // the port would keep routing that pointer's events to an element Kadre stopped reading, which
         // is a browser effect outliving the decision that asked for it. Contained like every call of
@@ -355,6 +550,7 @@ internal class WasmWebDomPort(element: HTMLElement) : WebHostPort {
         observedShadowRoot = null
         shadowRootObserver = null
         resizeObserver = null
+        interactionDispatcher = null
         lifecycleObserver = null
         metricsObserver = null
         inputObserver = null
@@ -539,6 +735,41 @@ internal class WasmWebDomPort(element: HTMLElement) : WebHostPort {
     }
 
     /**
+     * The interaction trigger of one pointer press, dispatched synchronously, or nothing at all.
+     *
+     * The trigger is read with the very mappings the ordinary stimulus of the same event is read
+     * with — kind, position, pressure, button — so the interaction and the observation cannot
+     * disagree about the event the element saw, and the pressure reaches the interaction exactly as
+     * the model carries it, never narrowed. A pointer kind this phase refuses delivers no
+     * observation, so it dispatches no interaction either: the kind is the ordinary path's own gate.
+     * With no dispatcher installed — before the session configuration, or after [release] — there is
+     * nothing to invoke, and the ordinary stimulus continues as it always has.
+     */
+    private fun dispatchInteractionFor(pointer: WasmPointerEvent?) {
+        val dispatcher = interactionDispatcher ?: return
+        if (pointer == null) return
+        wasmPointerKind(pointer) ?: return
+        val current = element ?: return
+        dispatcher.dispatch(
+            RuntimeSynchronousInteraction.PointerPressed(
+                button = webPointerButton(pointer.button),
+                position = wasmPointerPosition(current, pointer),
+                pressure = wasmPointerPressure(pointer),
+            ),
+        )
+    }
+
+    /**
+     * The interaction trigger of one key press: the physical key the ordinary stimulus of the same
+     * event carries, dispatched synchronously before that stimulus is enqueued.
+     */
+    private fun dispatchInteractionFor(keyboard: WasmKeyboardEvent) {
+        interactionDispatcher?.dispatch(
+            RuntimeSynchronousInteraction.KeyPressed(physicalKey = webPhysicalKey(keyboard.code)),
+        )
+    }
+
+    /**
      * Hands one observation over and answers what the channel said about the default of the event that
      * carried it.
      *
@@ -570,6 +801,41 @@ internal class WasmWebDomPort(element: HTMLElement) : WebHostPort {
      */
     private fun suppressDefaultFor(event: Event, stimulus: WebInputStimulus) {
         if (deliverInput(stimulus)) event.preventDefault()
+    }
+
+    /**
+     * Creates the one-shot settlement of one primitive emission, tracked until it settles.
+     *
+     * The tracking is what teardown reads: a port released while the browser has not answered
+     * withdraws its live emissions ([release]), whose listeners are the only bridges it still holds
+     * into the browsing context. The emission removes itself from the list the moment it settles,
+     * first answer or withdrawal, so the list holds only what is still listening.
+     */
+    private fun newPrimitiveEmission(onTerminal: WebPrimitiveTerminal): WebPrimitiveEmission =
+        WebPrimitiveEmission(onTerminal).also { emission ->
+            pendingPrimitiveEmissions += emission
+            emission.addRemoval { pendingPrimitiveEmissions.remove(emission) }
+        }
+
+    /**
+     * Hooks one terminal listener of [type] onto the document, settled by [emission] only.
+     *
+     * The listener lives on the document because that is where the browser fires every terminal of
+     * these primitives that is not fired on the element itself — and the element-fired ones bubble
+     * to it — so one listener site hears the browser's word whichever way the DOM delivers it.
+     * [gate] answers whether the event is the answer to *this* emission's question: the request's
+     * change is this element's own word, and every other terminal is ungated. The removal is the
+     * emission's, so the first terminal takes its listener down with it.
+     */
+    private fun installTerminalListener(
+        emission: WebPrimitiveEmission,
+        type: String,
+        committed: Boolean,
+        gate: (Event) -> Boolean,
+    ) {
+        val listener: (Event) -> Unit = { event -> if (gate(event)) emission.settle(committed) }
+        originDocument.addEventListener(type, listener)
+        emission.addRemoval { originDocument.removeEventListener(type, listener) }
     }
 
     private fun lifecycleSnapshot(
@@ -634,6 +900,40 @@ private external fun wasmApplyPointerCapture(element: JsAny, pointerId: Int, cap
  */
 private fun pointerCaptureFailure(): KadreFailure =
     KadreFailure.PlatformFailure(KadrePlatform.Web, "web-host", "pointer-capture-failed")
+
+/**
+ * The pointer-lock members of the element and of the document, absent de kotlinx-browser 0.5.0 —
+ * the gap this port reads through `@JsFun` instead, the way `wasmApplyPointerCapture` reads the
+ * capture members the same bindings do not declare.
+ *
+ * `requestPointerLock` is read in the promise form Chromium answers with (and rejected promises are
+ * the refusals the terminal is taken from); a browser without that form answers `undefined`, which
+ * the nullable read absorbs and the `pointerlockerror` listener remains the refusal path.
+ * `pointerLockElement` is the browser's own state an unlock is read against, and `exitPointerLock`
+ * the one effect an unlock has — a void call with no promise, whose only terminal is the change.
+ */
+@JsFun("(element) => element.requestPointerLock()")
+private external fun wasmRequestPointerLock(element: JsAny): Promise<JsAny?>?
+
+@JsFun("(doc) => doc.exitPointerLock()")
+private external fun wasmExitPointerLock(doc: JsAny)
+
+@JsFun("(doc) => doc.pointerLockElement")
+private external fun wasmPointerLockElement(doc: JsAny): JsAny?
+
+/**
+ * Takes [rejected] as what this promise's refusal means for the primitive that made it, and answers
+ * a promise nobody reads.
+ *
+ * Kotlin/Wasm's own `catch` hands the rejection reason over as a `JsAny` and expects one back, so
+ * the handler returns `null` — a rejection the port handled produces no value anyone uses, and the
+ * primitive's verdict travels through the emission's terminal instead.
+ */
+private fun Promise<JsAny?>.onRejection(rejected: () -> Unit): Promise<JsAny?> =
+    catch { _ ->
+        rejected()
+        null
+    }
 
 private external interface WasmDocumentVisibility : JsAny {
     val visibilityState: JsString

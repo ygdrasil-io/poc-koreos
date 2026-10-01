@@ -163,6 +163,7 @@ internal class RuntimeWindowSurface(
                 eventCollectorGate = collectorAllocator.newGate(maxCollectorsPerFlow),
                 failureReporter = failureReporter,
                 sessionFailureHandler = sessionFailureHandler,
+                maxPendingInteractionRequests = resources.maxPendingInteractionRequests,
             )
         }
     private val interactionDispatchLock = ReentrantLock()
@@ -464,7 +465,9 @@ internal class RuntimeWindowSurface(
         val stamped = admitted.event
         if (dispatchHandler) {
             try {
-                interactionHandler?.dispatch(stamped, supported, invokeNative)
+                interactionHandler?.dispatch(stamped, supported) { action ->
+                    NativeInteractionOutcome.Now(invokeNative(action))
+                }
             } finally {
                 surfaceInput.acceptInteraction(stamped, admitted.pointerPressure)
                 while (true) {

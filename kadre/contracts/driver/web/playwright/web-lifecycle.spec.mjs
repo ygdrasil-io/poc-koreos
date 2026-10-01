@@ -165,6 +165,39 @@ test('Manual stays attached through a delivered detach and reconnects later', as
     'data-kadre-lifecycle',
     'attached-foreground-inactive',
   );
+
+  // The stop the policy still honours: the session the host asked to stop terminates with the
+  // outcome the stop requested.
+  await page.evaluate(() => document.dispatchEvent(new Event('kadre-stop-manual-detach')));
+  await expect(body).toHaveAttribute('data-kadre-manual-detach-session', 'terminated');
+  await expect(body).toHaveAttribute('data-kadre-manual-detach-outcome', 'hostRequested');
+});
+
+test('web-shadow-root-late-reinsert', async ({ page }) => {
+  await loadScenario(page, 'shadow-late-reinsert');
+  const body = page.locator('body');
+  await expect(body).toHaveAttribute('data-kadre-shadow-late-reinsert-session', 'running');
+
+  await page.locator('[data-kadre-host="shadow-late-reinsert"]').evaluate((host) => {
+    const shadowHost = document.createElement('section');
+    shadowHost.setAttribute('data-kadre-shadow-container', 'late-reinsert');
+    document.body.appendChild(shadowHost);
+    shadowHost.attachShadow({ mode: 'open' }).appendChild(host);
+  });
+  await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => resolve())));
+  await expect(body).toHaveAttribute('data-kadre-shadow-late-reinsert-session', 'running');
+
+  await page.locator('[data-kadre-shadow-container="late-reinsert"]').evaluate((container) => {
+    container.shadowRoot.querySelector('[data-kadre-host="shadow-late-reinsert"]').remove();
+  });
+  await expect(body).toHaveAttribute('data-kadre-shadow-late-reinsert-session', 'terminated');
+  await expect(body).toHaveAttribute('data-kadre-shadow-late-reinsert-outcome', 'host-detached');
+
+  // The late reinsert: the host returns to the same shadow root in a later task — and the delivered
+  // detach stays terminal, whatever comes back.
+  await page.evaluate(() => document.dispatchEvent(new Event('kadre-reinsert-shadow-late')));
+  await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => resolve())));
+  await expect(body).toHaveAttribute('data-kadre-shadow-late-reinsert-session', 'terminated');
 });
 
 test('independent hosts terminate independently', async ({ page }) => {
@@ -245,5 +278,6 @@ test('attach creates no DOM and exposes no primary Window', async ({ page }) => 
   await expect(body).toHaveAttribute('data-kadre-dom-after', await body.getAttribute('data-kadre-dom-before'));
   await expect(body).toHaveAttribute('data-kadre-window-primary', 'null');
   await expect(body).toHaveAttribute('data-kadre-window-count', '0');
+  await expect(body).toHaveAttribute('data-kadre-window-caps', 'unsupported:requestwindow');
   await expect(body).toHaveAttribute('data-kadre-request-window', 'unsupported');
 });

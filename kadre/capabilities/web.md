@@ -7,10 +7,14 @@ feature de la matrice de sa section 4, avec les colonnes `feature`, `target`, `m
 
 **Première édition, et premier registre de ce dépôt.** Aucun adapter n’avait produit ce fichier
 avant la phase 3 Web ; celui-ci est donc le premier du genre, et il n’existe pas de registre
-antérieur à citer comme modèle. Il documente les features du **domaine input** que cette phase
-active, borne ou rejette : `keyboard`, `pointer`, `touch`, `gestures`, `drag-and-drop`,
-`IME`/`text input`, `raw input`, et les quatre champs de `SurfaceUpdate` que la même phase active ou
-borne (`cursor`, `pointer capture`, `hit testing`, `inputDefaultBehavior`).
+antérieur à citer comme modèle. Sa première édition documentait les features du **domaine input**
+que la phase 3 active, borne ou rejette : `keyboard`, `pointer`, `touch`, `gestures`,
+`drag-and-drop`, `IME`/`text input`, `raw input`, et les quatre champs de `SurfaceUpdate` que la
+même phase active ou borne (`cursor`, `pointer capture`, `hit testing`, `inputDefaultBehavior`).
+La phase 4 étend le registre aux features d’**interaction** et de **fenêtre** qu’elle livre :
+les deux capabilities d’interaction de `SurfaceCapabilities` (`handlerInteractions`,
+`armedInteractions`), la capability de fenêtre `WindowManagerCapabilities.requestWindow` et
+l’échelle d’admission de `InteractionContext.request` (les quatre lignes du bas du §2).
 
 Deux remarques de périmètre, pour que la lecture des lignes soit exacte. Les trois premiers
 features, `drag-and-drop`, `IME`/`text input` et `raw input` sont des lignes de la matrice de
@@ -95,6 +99,10 @@ registre est donc la révision du navigateur ; l’OS n’y entre pas.
 | `SurfaceCapabilities.pointerCapture` | `js`, `wasmJs` | idem | `none` | `none` — `Confined` exige en plus un pointeur que la surface détient déjà, sinon rejet `InteractionRequired(Missing)` | `Capability.Unsupported(KadreFailure.Unsupported(KadreOperation.UpdateSurface))` au snapshot terminal (la surface attachée publie `Supported({None, Confined}, Available)`) | `web-input-pointer-capture` ; `JsWebPointerCaptureTest`/`WasmWebPointerCaptureTest`, `WebInputSurfaceTest.thePointerCaptureCapabilityIsNoneAndConfinedAndLockedIsProvablyOutside` |
 | `SurfaceCapabilities.hitTesting` | `js`, `wasmJs` | idem | `none` | `none` — aucun chemin de commit | `Capability.Unsupported(KadreFailure.Unsupported(KadreOperation.UpdateSurface))` | `WebInputSurfaceTest.theInputDefaultBehaviorCapabilityIsTheWholeEnumAndTheOtherFieldsStayUnsupported` |
 | `SurfaceCapabilities.inputDefaultBehavior` | `js`, `wasmJs` | idem | `none` | `none` — les deux membres sont honorés dès l’installation ; la réponse est relue à chaque événement | `Capability.Unsupported(KadreFailure.Unsupported(KadreOperation.UpdateSurface))` au snapshot terminal (la surface attachée publie `Supported({HostDefault, SuppressWhenPossible}, Available)`) | `web-input-default-behavior`, sentinelle `web-input-no-default-suppression` ; `JsWebInputDefaultBehaviorTest`/`WasmWebInputDefaultBehaviorTest`, `WebInputSurfaceTest.hostDefaultSuppressesNoCategoryAtAll`, `.suppressWhenPossibleSuppressesExactlyTheClosedSet`, `.theSurfaceAnswersSuppressionForTheEventItWasJustHanded` |
+| `SurfaceCapabilities.handlerInteractions` | `js`, `wasmJs` | idem | `none` pour la capability elle-même, décidée en `webMain` (`interactionActionsForWeb()`, `WebInteractionStimulus.kt:30-35`) ; les symboles DOM que les quatre actions conduisent sont les membres fullscreen des déclarations DOM de la toolchain et la lacune pointer-lock que chaque port déclare lui-même (`JsPointerLockRequester`/`JsDocumentPointerLock`, `JsWebDomPort.kt:893-900` ; `@JsFun` `WasmWebDomPort.kt:915-922`) | `none` — la publication est structurelle, au même moment structural que le reducer d’input (`WebHostSession.kt:841-843`) ; *réussir* une action dépend en plus de l’activation transitoire que l’événement porte, autorité du navigateur (section 3.7), jamais gate de la publication | `Capability.Unsupported(KadreFailure.Unsupported(KadreOperation.InstallInteractionHandler))` — la même valeur avant l’installation (`preInstallSurfaceCapabilities()`, `WebHostSession.kt:1752-1753`) et au snapshot terminal (`SurfaceAdmission.kt:26`, publié à `WebHostSession.kt:1573`) ; la surface attachée publie `Supported({EnterFullscreen, ExitFullscreen, LockPointer, UnlockPointer}, Available)` | `web-interaction-fullscreen` (smoke hors contrat : l’ensemble fermé des outcomes honnêtes, cliqué réellement) ; `WebInteractionSurfaceTest.handlerInteractionsIsTheFourWebActionsOnceStructurallyInstalled`, `.thePreInstallSnapshotClaimsNoInteractionAtAll` |
+| `SurfaceCapabilities.armedInteractions` | `js`, `wasmJs` | idem | `none` | `none` | `Capability.Unsupported(KadreFailure.Unsupported(KadreOperation.ArmInteraction))` dans **tous** les snapshots, attaché comme terminal (`WebHostSession.kt:1743`, `SurfaceAdmission.kt:27`) — aucune plateforme n’implémente le chemin armé et le token du handler est la seule autorité d’interaction de ce target | `WebInteractionSurfaceTest.armedInteractionsRemainsUnsupported` |
+| `WindowManagerCapabilities.requestWindow` | `js`, `wasmJs` | idem | `none` | `none` — la capability est décidée une fois à la construction du manager, par la seule présence d’un provider (`WebHostWindowManager.kt:207-214`) | sans provider, la session garde le `UnsupportedWindowManager` à l’identique : `Capability.Unsupported(KadreFailure.Unsupported(KadreOperation.RequestWindow))` (`UnsupportedManagers.kt:57`) et toute requête est un `WindowRequest` déjà terminal `Rejected(Unsupported(RequestWindow))` (`UnsupportedManagers.kt:63-71`) ; avec provider, `Supported({OpenedInNewSession}, Available)` — `OpenedHere` n’est jamais promis, Web n’exerce aucun chemin de commit | `web-no-implicit-window` (sans provider, inchangé) ; `web-window-provider-new-session`, `web-window-provider-same-context`, `web-window-provider-no-context`, `web-window-provider-invalid-element`, `web-window-provider-invalid-scope`, `web-window-provider-owned-element`, `web-window-provider-callback-failure`, sentinelles `web-provider-no-same-document-window`, `web-provider-owned-element-rejected` ; `WebHostWindowManagerTest` |
+| `InteractionContext.request` (échelle d’admission) | `js`, `wasmJs` | idem | `none` | `none` — l’échelle est celle du handler commun, identique sur les trois cibles (`RuntimeInteractionHandler.kt:214-222`) | hors frame valide : `InteractionRequired(Expired)` ; frame d’une autre surface : `InteractionRequired(WrongSurface)` ; token déjà consommé : `InteractionRequired(Consumed)` ; action hors ensemble publié : `Unsupported(KadreOperation.Interaction)` — refusée *avant* `invokeNative`, donc sans aucun appel navigateur (`WebHostSession.kt:947-953`) ; registration fermée pendant l’appel natif : `Closed(KadreResourceKind.Interaction)` (`:225-227` et `:252-256`/`:283-285`, garde partagée des chemins `Now` et `Deferred`) ; budget différé épuisé : `ResourceLimitExceeded(KadreResourceKind.Interaction, maxPendingInteractionRequests)` (`:286-306`) ; les champs admis sont exactement ceux d’`OPERATION-CONTRACTS.md` §1.1, `LockPointer` exigeant `PointerCaptureMode.Locked`, tout autre mode valant `InvalidRequest("action.mode")` (`WebInteractionStimulus.kt:50-54`) | `WebInteractionSurfaceTest.aRetainedContextIsRefusedExpiredAfterTheHandlerReturns`, `.lockPointerRefusesEveryModeButLockedAsInvalidActionMode`, `.anUnsupportedActionNeverTouchesTheBrowser`, `.pendingRequestsRespectMaxPendingInteractionRequests`, `.terminationAbandonsDeferredRequestsWithClosedInteraction` ; `RuntimeInteractionHandlerCommonTest.requestRefusesWithClosedWhenTheRegistrationClosesDuringTheNativeCall`, `.deferredAdmissionRefusesWithClosedWhenTheRegistrationClosesDuringTheNativeCall`, `.pendingBudgetExceededRefusesWithResourceLimit`, `.duplicateRetainedExpiredAndUnsupportedRequestsFailWithoutCallingNativeCode`, `.retainedContextIsWrongSurfaceDuringAnotherSurfaceCallback` |
 
 Les deux availabilities d’entrée sont déclarées par une seule transition structurelle, à la fin de
 `installSessionConfiguration` (`WebHostSession.kt:610-618`) : `keyboardInstalled = true`,
@@ -107,6 +115,18 @@ après avoir livré une frappe et une entrée de pointeur.
 Aux quatre sentinelles rattachées à une ligne ci-dessus s’ajoute la cinquième du contrat,
 `web-input-post-terminal-stimulus`, qui garde la lane d’une surface terminale : l’input réel livré
 après la fermeture ne publie ni état, ni événement, ni reset (`web-input-terminal-closed`).
+
+Les quatre lignes du bas du registre sont celles de la phase 4. La première particularité de
+lecture : le scénario navigateur de l’interaction, `web-interaction-fullscreen`, **n’est pas** une
+preuve de contrat — il ne figure dans aucun `evidenceId` de `BCK-001` ; la suite
+`web-interaction.spec.mjs` clique réellement le host et n’asserte que l’ensemble fermé des
+outcomes honnêtes — `committed`, ou `rejected:platformFailure:web:fullscreen:refused` — en
+enregistrant celui que ce Chromium a observé dans son propre journal d’exécution
+(`web-interaction.spec.mjs:37-44`). Les tests qui asservissent les lignes sont les classes
+`webTest`/`commonTest` citées, exécutées par `:kadre:check` et non par la gate CI. La seconde
+particularité : `WindowManagerCapabilities.requestWindow` n’est pas une capability de surface mais
+de manager, décidée à la construction de la session — c’est la seule ligne du registre dont l’état
+dépend d’un choix du host fait *avant* toute installation (`WebHostSession.kt:410-418`).
 
 ### 2.1 Le bras terminal d’overflow : la seconde valeur d’absence des capabilities passives
 
@@ -297,20 +317,138 @@ jamais dans le flux d’événements de surface.
    une fonction exhaustive sur l’énumération (`webPointerCaptureIsHonourable`,
    `WebInputTranslation.kt:243-246`), épinglée contre `PointerCaptureMode.entries` dans les deux sens.
 
+### 3.7 Le modèle de token d’interaction sur Web : la frame est le callback DOM
+
+La mécanique est celle du runtime, liftée en `commonMain` et partagée par les trois cibles —
+`RuntimeInteractionHandler` ne fork ni token-machine ni sérialiseur Web
+(`kadre/runtime/src/commonMain/.../RuntimeInteractionHandler.kt`) — avec exactement deux seams par
+target : le **frame d’appel** (`InteractionCallFrame`, expect/actual — un `ThreadLocal<SurfaceId?>`
+en JVM, un simple champ en js/wasmJs, `InteractionCallFrame.kt:23-33`) et la **forme de l’outcome
+natif** (`NativeInteractionOutcome`, `NativeInteractionOutcome.kt:20-24`). Les faits que ce target
+en fait :
+
+1. **Le dispatch part des listeners `pointerdown`/`keydown` de la phase 3, synchronement, avant
+   l’admission du stimulus ordinaire** (`JsWebDomPort.kt:149-183`, `WasmWebDomPort.kt:159-190` ;
+   l’ordre AppKit de `DESIGN.md:983-989`), et la surface ne dispatche rien dès qu’elle a cessé
+   d’admettre (`WebHostSession.kt:891`). Le handler s’exécute dans le callback DOM même : c’est la
+   frame dont la transient activation est l’autorité que le modèle préserve.
+2. **Le token est single-use et expire au retour du callback.** Un second `request` dans le même
+   callback vaut `InteractionRequired(Consumed)` (`RuntimeInteractionHandler.kt:218`, consommation
+   atomique avec l’allocation à `:228`) ; un contexte retenu et réutilisé après le retour vaut
+   `InteractionRequired(Expired)` (`:216`, invalidation dans le `finally` du dispatch à `:113-115` et
+   `:312-314`) ; un contexte d’une autre surface vaut `WrongSurface` (`:217`). L’ensemble est
+   asservi par `RuntimeInteractionHandlerCommonTest` et `WebInteractionSurfaceTest`.
+3. **L’outcome des primitives du navigateur est différé.** `requestFullscreen`/`requestPointerLock`
+   sont émis synchronement dans la frame du handler (`WebHostSession.kt:927-954`) ; l’outcome
+   terminal est publié au callback du navigateur — `fullscreenchange`/`pointerlockchange` confirmés
+   → `Committed` (`JsWebDomPort.kt:386-388`, `:448`), `fullscreenerror`/`pointerlockerror`/promesse
+   rejetée → `Rejected(PlatformFailure(Web, "fullscreen"|"pointer-lock", "refused"))`
+   (`WebInteractionStimulus.kt:73-93`). Le DOM n’expose aucune raison — un refus navigateur a un
+   seul code honnête, et un échec d’émission répond exactement le même (`JsWebDomPort.kt:383`,
+   `:394`, `:415`, `:428`, `:445`, `:454`, `:473`, `:486`). Chaque canal terminal est one-shot
+   (`WebPrimitiveEmission`, `WebInteractionStimulus.kt:110-147`) : le premier terminal gagne, les
+   listeners s’en vont avec lui, aucune seconde réponse ne peut corrompre le verdict.
+4. **Un pending différé occupe le budget `maxPendingInteractionRequests` jusqu’à son outcome
+   terminal** (`RuntimeInteractionHandler.kt:274-307` ; 16 sous `KadrePolicies.Default`,
+   `KadrePolicies.kt:26`) ; au-delà, la requête est refusée
+   `ResourceLimitExceeded(KadreResourceKind.Interaction, …)` (`:286-306`). **Aucun timeout
+   synthétique** ne la termine : si le callback terminal n’arrive jamais, le pending tient son
+   budget jusqu’à la terminalisation de la surface, qui abandonne chaque pending avec
+   `Closed(KadreResourceKind.Interaction)` (`abandonPendingRequests`, `:167-178` ; appelé à
+   `WebHostSession.kt:1562-1565`) — un `Rejected` par pending, puis la fin du flow.
+5. **Une fermeture pendant l’appel natif est refusée `Closed(KadreResourceKind.Interaction)`** sur
+   les deux chemins — `Now` (`:252-256`) comme `Deferred` (`:283-285`) — la garde étant atomique
+   avec l’insertion du pending sous le même lock, si bien qu’un sweep de fermeture ne peut manquer
+   aucun pending (`:381-395`).
+6. **Kadre ne lit pas `navigator.userActivation`** — zéro occurrence dans les sources des deux
+   targets, du runtime et du consumer. La règle (D4) : les listeners `pointerdown`/`keydown`
+   appariés sont déjà des événements *trusted* porteurs d’activation ; `hasBeenActive` est collant
+   et ne distingue pas « cette frame » ; et un second-guess de Kadre transformerait un refus
+   navigateur légitime en refus Kadre prématuré. La perte d’activation réelle se manifeste au refus
+   de la primitive elle-même, livré comme outcome `Rejected` ci-dessus : **le navigateur est
+   l’arbitre de ses primitives**. Enregistré comme limite documentée, pas comme trou.
+7. **Les sorties d’état nul sont des zéros appels navigateur.** Un `ExitFullscreen` dont
+   `document.fullscreenElement` est déjà nul et un `UnlockPointer` dont
+   `document.pointerLockElement` n’est pas cet élément répondent `Committed` synchronement, sans
+   appeler le navigateur — un appel sans décision derrière lui n’est pas posé
+   (`JsWebDomPort.kt:411-420`, `:469-478` ; miroirs `WasmWebDomPort.kt:420-429`, `:478-487`).
+
+### 3.8 Le provider de fenêtres : l’échelle de validation, la session enfant, le budget
+
+1. **`OpenWindow` reste `Unsupported` sur Web même avec provider** (`DESIGN.md:1933`) : l’action est
+   hors de l’ensemble publié (`WebInteractionStimulus.kt:30-35`), refusée à l’admission
+   `Unsupported(KadreOperation.Interaction)` et n’atteint aucune API navigateur
+   (`WebHostSession.kt:947-953`). L’ouverture passe exclusivement par
+   `WindowManager.requestWindow` + provider.
+2. **L’échelle de validation d’un host offert** (`validateWindowHostChecks`,
+   `WebHostWindowManager.kt:113-122`) produit exactement les codes d’`OPERATION-CONTRACTS.md` §4 :
+   `InvalidRequest("element")` (élément déconnecté sous `StopWhenDetached`),
+   `InvalidRequest("element.ownerDocument")` (`defaultView` nul **ou** égal au contexte d’origine —
+   les deux lectures pliées en un booléen par la sonde par target, `WebHostWindowManager.kt:64-75`),
+   `InvalidRequest("parentScope")`, `ParentScopeCancelled` — ce dernier ne décrivant que la scope du
+   nouveau host, jamais celle du requester. **Ordre enregistré** : l’échelle livrée évalue le rung
+   `element` **avant** `element.ownerDocument` (`:117-118`) — l’énumération de D7 — alors que la
+   prose du contrat nomme `ownerDocument` d’abord (`OPERATION-CONTRACTS.md:104`) ; l’ordre choisi
+   est celui des codes du §1.1, où `"element"` précède `"element.ownerDocument"`, et il est épinglé
+   par `WebHostWindowManagerTest` (`:394-402`) : tous rungs en échec, la seule réponse est
+   `InvalidRequest("element")`. Les lectures DOM (`isConnected`, `defaultView`, état du `Job`) sont
+   faites par target (`JsWebAttach.kt:110-120`), la décision est la fonction pure `webMain`.
+3. **Les exceptions du provider sont capturées** : un throw du callback devient
+   `PlatformFailure(Web, "WebWindowProvider", "callback-exception")` (`WebHostWindowManager.kt:274-278`,
+   `:298-299`) et une failure retournée hors de l’ensemble fermé de
+   `WindowRequestOutcome.Rejected` devient le même domain avec le code `"invalid-failure"`
+   (`:290-296`, ensemble à `:132-150`). Ce sont des **outcomes de la requête admise**, jamais des
+   failures de l’appel `requestWindow` extérieur — l’appel répond toujours
+   `Success(WindowRequest)`.
+4. **La session enfant passe par le chemin d’attach ordinaire** (`WebChildSessionFactory`,
+   `WebHostWindowManager.kt:94-96`) : le même `WebHostSession.attach`, le même registre global
+   d’ownership `WebHostRegistry` — un élément possédé par une session vivante produit
+   `AlreadyInUse(Host)` (le `Busy(Host)` du contrat, `WebHostRegistry.kt:18`) à l’attach enfant,
+   donc aucun duplicate owner n’est possible entre contexts — et un launch context threadé :
+   `KadreLaunchInfo(AdditionalHostRequested, originatingRequestId)` (`JsWebAttach.kt:93-104`)
+   publié à l’application comme `KadreLaunchContext` (`SessionRuntime.kt:196-201` ;
+   `KadreLaunchReason.AdditionalHostRequested`, `Application.kt:34`). La fermeture du requester
+   n’atteint jamais l’enfant : pour la façade, la scope de l’enfant est un `MainScope()` Kadre
+   frais, créé par host ouvert (`JsWebHostProviderBridge.kt:80-83`), jamais un enfant de la scope
+   du requester.
+5. **Comptage du budget, divergence enregistrée : une requête terminale tient son créneau
+   `maxPendingWindowRequests` jusqu’à `close()`.** La référence évict le pending de son budget au
+   handoff (`RuntimeWindowManager.kt:522-526`, `finishOpenDispatchLocked` après resume) ; le manager
+   Web le garde jusqu’à ce que le requester appelle `WindowRequest.close()` (`WebHostWindowManager.kt:314-316`,
+   `:259-261`) ou que la session termine (`:249-256`). C’est la seule lecture qui rend
+   `Limit(WindowRequest)` exécutable pour un provider synchrone : l’outcome est terminal **avant**
+   que le caller voie la requête (`:237-242`), un evict au handoff viderait le budget à chaque
+   requête et la limite ne limiterait rien ; tenir le créneau jusqu’au `close()` du requester en
+   fait une borne réelle sur les requêtes que les callers possèdent. Les sémantiques
+   `cancel()`/`await()`/`close()` produites restent celles de la référence, dégénérées honnêtement
+   parce que l’outcome est déjà connu : `AlreadyTerminated`, outcome terminal, libération seule
+   (`:301-340`).
+6. **Le provider ne voit qu’une copie DTO** : `WindowSpec.dtoCopyForProvider()` re-copie chaque
+   champ et re-copie les octets de l’icône, le seul champ porteur d’un tableau mutable
+   (`WebHostWindowManager.kt:343-352`) ; la façade livre de même un objet frais au provider JS —
+   `JSON.parse` du DTO sérialisé, `Uint8Array` reconstruite (`JsWebHostProviderBridge.kt:108-146`).
+
 ## 4. Portée restante au regard de §8
 
-Ce registre couvre les features du domaine input que la phase 3 borne ou active, plus les quatre
-champs de `SurfaceUpdate`. Les autres lignes de la matrice de `BACKEND-CAPABILITIES.md` §4 —
-`gamepad observation`, `effets gamepad`, les trois cibles de capture (`HostChoice`, `Source`,
-`Surface`) et les deux lignes `platformAccess` — ne sont pas produites ici : cette phase n’en active
-aucune et rien dans ce document ne les modifie. §8 rappelle qu’« une ligne manquante empêche
-l’adapter d’être déclaré supporté » : ces lignes restent donc à produire avant toute déclaration
-« supported » de l’adapter Web, sans que cette phase les rouvre.
+Ce registre couvre les features du domaine input que la phase 3 borne ou active, les quatre champs
+de `SurfaceUpdate`, puis les features d’interaction et de fenêtre que la phase 4 livre (§2, quatre
+lignes du bas ; §3.7-3.8). Le **verrouillage de pointeur quitte la portée restante de l’input** :
+`InteractionAction.LockPointer` est désormais une action publiée et prouvée de ce target (§3.7),
+et la réserve D13 de la phase 3 ne vaut plus que pour le champ `SurfaceUpdate.pointerCapture`, où
+`Locked` reste refusé `Unsupported(UpdateSurface)` — le verrou passe exclusivement par l’action.
+Les autres lignes de la matrice de `BACKEND-CAPABILITIES.md` §4 — `gamepad observation`, `effets
+gamepad`, les trois cibles de capture (`HostChoice`, `Source`, `Surface`), touch, gestures,
+drag-and-drop, IME/text input, raw input, et les deux lignes `platformAccess` — ne sont pas
+produites ici : ces phases n’en activent aucune et rien dans ce document ne les modifie. §8
+rappelle qu’« une ligne manquante empêche l’adapter d’être déclaré supporté » : ces lignes restent
+donc à produire avant toute déclaration « supported » de l’adapter Web, sans que cette phase les
+rouvre.
 
 ## 5. Références
 
 - [Contrats des adapters et matrice de capabilities](../BACKEND-CAPABILITIES.md) — mandat §8, matrice §4, points d’attachement Web §6.3
 - [Design Kadre](../DESIGN.md) — §15.3 (input ordinaire Web), §9.6 (interactions transitoires)
-- [Registre des contrats](../contracts/registry/contracts.tsv) — ligne `BCK-003` (source `DESIGN.md#15.3`, preuves `js`/`wasmJs`)
+- [Registre des contrats](../contracts/registry/contracts.tsv) — lignes `BCK-003` (source `DESIGN.md#15.3`) et `BCK-001`/`INT-003` (sources `DESIGN.md#15.3` et `INTEROP-EXPORTS.md#6`, preuves `js`/`wasmJs`)
 - [Charte manuelle Web Phase 3](../contracts/driver/web/manual/phase-3-input.md) — frontières non déterministes que ce registre ne prétend pas couvrir
-- [Driver navigateur Web](../contracts/driver/web/README.md) — limites de la phase 3 et table de disponibilité publiée
+- [Charte manuelle Web Phase 4](../contracts/driver/web/manual/phase-4-interactions.md) — preuves plein écran et pointer lock sur vrai écran, popup réelle
+- [Driver navigateur Web](../contracts/driver/web/README.md) — limites des phases 3 et 4 et table de disponibilité publiée

@@ -6,6 +6,7 @@ import org.graphiks.kadre.application.ActivationState
 import org.graphiks.kadre.application.AttachmentState
 import org.graphiks.kadre.application.KadreApplicationFactory
 import org.graphiks.kadre.application.KadreHost
+import org.graphiks.kadre.application.KadreLaunchReason
 import org.graphiks.kadre.application.KadreSession
 import org.graphiks.kadre.application.LifecycleCapabilities
 import org.graphiks.kadre.application.LifecycleState
@@ -23,6 +24,7 @@ import org.graphiks.kadre.policy.KadrePolicies
 import org.graphiks.kadre.policy.KadrePolicy
 import org.graphiks.kadre.surface.HostSurface
 import org.graphiks.kadre.surface.SurfaceId
+import org.graphiks.kadre.window.WindowRequestId
 
 public fun interface RuntimeFailureReporter {
     public fun report(cause: Throwable)
@@ -35,6 +37,19 @@ public fun interface RuntimeSessionObserver {
 public fun interface RuntimeSessionStopHandler {
     public fun stop(sessionId: SessionId): KadreFailure.PlatformFailure?
 }
+
+/**
+ * The launch identity an attachment carries into the application's [KadreLaunchContext].
+ *
+ * The default attachment states none, and the session reports [KadreLaunchReason.InitialHostAttachment]
+ * with no originating request — the behaviour every existing host observes, unchanged. A host that
+ * opens a session as the result of an admitted window request states the pair instead, so the child
+ * application learns why it was launched and which request caused it.
+ */
+internal data class KadreLaunchInfo(
+    val reason: KadreLaunchReason,
+    val originatingRequestId: WindowRequestId?,
+)
 
 internal fun interface RuntimeSessionRevocationHandler {
     fun revoke(sessionId: SessionId)
@@ -81,6 +96,13 @@ public class RuntimeHostController private constructor(
         parentScope: CoroutineScope,
         applicationFactory: KadreApplicationFactory,
         policy: KadrePolicy,
+    ): KadreResult<KadreSession> = attach(parentScope, applicationFactory, policy, launch = null)
+
+    internal fun attach(
+        parentScope: CoroutineScope,
+        applicationFactory: KadreApplicationFactory,
+        policy: KadrePolicy,
+        launch: KadreLaunchInfo?,
     ): KadreResult<KadreSession> {
         val parentJob = parentScope.coroutineContext[Job]
             ?: return KadreResult.Failure(KadreFailure.InvalidRequest("parentScope"))
@@ -106,6 +128,7 @@ public class RuntimeHostController private constructor(
                 onStopping = ::sessionStopping,
                 onTerminated = ::sessionTerminated,
                 componentsFactory = componentsFactory,
+                launchInfo = launch,
             )
         } catch (cause: Throwable) {
             reportFailure(cause)
@@ -292,6 +315,32 @@ public class RuntimeHostController private constructor(
             initialLifecycleCapabilities,
             failureReporter,
             NO_SESSION_REVOCATION,
+            sessionStopHandler,
+            sessionObserver,
+            MonotonicRuntimeClockFactory,
+            componentsFactory,
+        )
+
+        /**
+         * Creates a host with session-owned components and the revocation handler the embedded
+         * owners need: the public [withComponents] has no such parameter, and a host whose components
+         * hold target-owned bridges must release them when its session is revoked.
+         */
+        internal fun withComponents(
+            platform: KadrePlatform,
+            sessionRevocationHandler: RuntimeSessionRevocationHandler,
+            componentsFactory: RuntimeSessionComponentsFactory,
+            initialLifecycleState: LifecycleState = DEFAULT_LIFECYCLE_STATE,
+            initialLifecycleCapabilities: LifecycleCapabilities = DEFAULT_LIFECYCLE_CAPABILITIES,
+            failureReporter: RuntimeFailureReporter = RuntimeFailureReporter { },
+            sessionStopHandler: RuntimeSessionStopHandler = RuntimeSessionStopHandler { null },
+            sessionObserver: RuntimeSessionObserver = RuntimeSessionObserver { _, _ -> },
+        ): RuntimeHostController = RuntimeHostController(
+            platform,
+            initialLifecycleState,
+            initialLifecycleCapabilities,
+            failureReporter,
+            sessionRevocationHandler,
             sessionStopHandler,
             sessionObserver,
             MonotonicRuntimeClockFactory,

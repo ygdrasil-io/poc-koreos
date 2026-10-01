@@ -61,3 +61,89 @@ BCK-003	wasmJs	sentinel	web-input-no-stuck-button	web-input.spec.mjs	web-input-f
 BCK-003	wasmJs	sentinel	web-input-no-parallel-reducer	web-input.spec.mjs	web-input-key-state-before-event
 BCK-003	wasmJs	sentinel	web-input-post-terminal-stimulus	web-input.spec.mjs	web-input-terminal-closed
 BCK-003	wasmJs	sentinel	web-input-no-touch-claim	web-input.spec.mjs	web-input-touch-deferred
+BCK-001	js	scenario	web-attach-connected	web-lifecycle.spec.mjs	attaching preserves the provided element own-property identity surface
+BCK-001	js	scenario	web-attach-detached-rejected	web-lifecycle.spec.mjs	StopWhenDetached rejects an initially disconnected host
+BCK-001	js	scenario	web-attach-manual-detached	web-lifecycle.spec.mjs	Manual accepts an initial detach and reconnects through the origin context
+BCK-001	js	scenario	web-manual-initial-shadow-reinsert	web-lifecycle.spec.mjs	Manual reconnects an initially disconnected host inside an already connected ShadowRoot
+BCK-001	js	scenario	web-detach-reparent-batch	web-lifecycle.spec.mjs	a same-document detach and reinsert before observer delivery keeps the session
+BCK-001	js	scenario	web-shadow-root-detach-reparent	web-lifecycle.spec.mjs	moving into a same-document ShadowRoot reinstalls observation on that root
+BCK-001	js	scenario	web-shadow-root-late-reinsert	web-lifecycle.spec.mjs	web-shadow-root-late-reinsert
+BCK-001	js	scenario	web-detach-cross-document-terminal	web-lifecycle.spec.mjs	an inter-document transfer terminates the session
+BCK-001	js	scenario	web-manual-detach-and-stop	web-lifecycle.spec.mjs	Manual stays attached through a delivered detach and reconnects later
+BCK-001	js	scenario	web-visibility-focus	web-lifecycle.spec.mjs	visibility and focus keep only a foreground focused host active
+BCK-001	js	scenario	web-focus-transfer-between-hosts	web-lifecycle.spec.mjs	visibility and focus keep only a foreground focused host active
+BCK-001	js	scenario	web-attach-detach-admission-race	web-lifecycle.spec.mjs	a duplicate attach is rejected without another DOM observer or listener
+BCK-001	js	scenario	web-detach-terminal	web-lifecycle.spec.mjs	a durable detach terminates the session
+BCK-001	js	scenario	web-multi-session-isolation	web-lifecycle.spec.mjs	independent hosts terminate independently
+BCK-001	js	scenario	web-attach-same-element-busy	web-lifecycle.spec.mjs	a duplicate attach is rejected without another DOM observer or listener
+BCK-001	js	scenario	web-no-implicit-window	web-lifecycle.spec.mjs	attach creates no DOM and exposes no primary Window
+BCK-001	js	scenario	web-window-provider-new-session	web-window-provider.spec.mjs	web-window-provider-new-session
+BCK-001	js	scenario	web-window-provider-same-context	web-window-provider.spec.mjs	web-window-provider-same-context
+BCK-001	js	scenario	web-window-provider-no-context	web-window-provider.spec.mjs	web-window-provider-no-context
+BCK-001	js	scenario	web-window-provider-invalid-element	web-window-provider.spec.mjs	web-window-provider-invalid-element
+BCK-001	js	scenario	web-window-provider-invalid-scope	web-window-provider.spec.mjs	web-window-provider-invalid-scope
+BCK-001	js	scenario	web-window-provider-owned-element	web-window-provider.spec.mjs	web-window-provider-owned-element
+BCK-001	js	scenario	web-window-provider-callback-failure	web-window-provider.spec.mjs	web-window-provider-callback-failure
+BCK-001	js	scenario	web-pagehide-admission-close	web-lifecycle.spec.mjs	persisted pagehide terminates immediately and pageshow cannot resurrect
+BCK-001	js	scenario	web-pagehide-navigation	web-lifecycle.spec.mjs	persisted pagehide terminates immediately and pageshow cannot resurrect
+BCK-001	js	scenario	web-pagehide-no-resurrection	web-lifecycle.spec.mjs	persisted pagehide terminates immediately and pageshow cannot resurrect
+BCK-001	js	sentinel	web-surface-never-window	web-lifecycle.spec.mjs	attach creates no DOM and exposes no primary Window
+BCK-001	js	sentinel	web-no-implicit-dom	web-lifecycle.spec.mjs	attach creates no DOM and exposes no primary Window
+BCK-001	js	sentinel	web-cross-session-isolation	web-lifecycle.spec.mjs	independent hosts terminate independently
+BCK-001	js	sentinel	web-host-single-owner	web-lifecycle.spec.mjs	a duplicate attach is rejected without another DOM observer or listener
+BCK-001	js	sentinel	web-detach-no-resurrection	web-lifecycle.spec.mjs	persisted pagehide terminates immediately and pageshow cannot resurrect
+BCK-001	js	sentinel	web-shadow-root-observation	web-lifecycle.spec.mjs	removing the host from inside its connected ShadowRoot terminates the session
+BCK-001	js	sentinel	web-provider-no-same-document-window	web-window-provider.spec.mjs	web-window-provider-same-context
+BCK-001	js	sentinel	web-provider-owned-element-rejected	web-window-provider.spec.mjs	web-window-provider-owned-element
+BCK-001	js	sentinel	web-active-gate-requires-js-and-wasm	web-lifecycle.spec.mjs	a durable detach terminates the session
+INT-003	js	scenario	web-host-attach-failure	web-host-facade.spec.mjs	web-host-attach-failure
+INT-003	js	scenario	web-host-state-subscription	web-host-facade.spec.mjs	web-host-state-subscription
+INT-003	js	scenario	web-host-observer-exception	web-host-facade.spec.mjs	web-host-observer-exception
+INT-003	js	scenario	web-host-stop-close-outcome	web-host-facade.spec.mjs	web-host-stop-close-outcome
+INT-003	js	scenario	web-host-provider	web-host-facade.spec.mjs	web-host-provider
+INT-003	js	sentinel	web-host-microtask-order	web-host-facade.spec.mjs	web-host-state-subscription
+INT-003	js	sentinel	web-host-callback-isolation	web-host-facade.spec.mjs	web-host-observer-exception
+INT-003	js	sentinel	web-host-outcome-rejection	web-host-facade.spec.mjs	web-host-stop-close-outcome
+BCK-001	wasmJs	scenario	web-attach-connected	web-lifecycle.spec.mjs	attaching preserves the provided element own-property identity surface
+BCK-001	wasmJs	scenario	web-attach-detached-rejected	web-lifecycle.spec.mjs	StopWhenDetached rejects an initially disconnected host
+BCK-001	wasmJs	scenario	web-attach-manual-detached	web-lifecycle.spec.mjs	Manual accepts an initial detach and reconnects through the origin context
+BCK-001	wasmJs	scenario	web-manual-initial-shadow-reinsert	web-lifecycle.spec.mjs	Manual reconnects an initially disconnected host inside an already connected ShadowRoot
+BCK-001	wasmJs	scenario	web-detach-reparent-batch	web-lifecycle.spec.mjs	a same-document detach and reinsert before observer delivery keeps the session
+BCK-001	wasmJs	scenario	web-shadow-root-detach-reparent	web-lifecycle.spec.mjs	moving into a same-document ShadowRoot reinstalls observation on that root
+BCK-001	wasmJs	scenario	web-shadow-root-late-reinsert	web-lifecycle.spec.mjs	web-shadow-root-late-reinsert
+BCK-001	wasmJs	scenario	web-detach-cross-document-terminal	web-lifecycle.spec.mjs	an inter-document transfer terminates the session
+BCK-001	wasmJs	scenario	web-manual-detach-and-stop	web-lifecycle.spec.mjs	Manual stays attached through a delivered detach and reconnects later
+BCK-001	wasmJs	scenario	web-visibility-focus	web-lifecycle.spec.mjs	visibility and focus keep only a foreground focused host active
+BCK-001	wasmJs	scenario	web-focus-transfer-between-hosts	web-lifecycle.spec.mjs	visibility and focus keep only a foreground focused host active
+BCK-001	wasmJs	scenario	web-attach-detach-admission-race	web-lifecycle.spec.mjs	a duplicate attach is rejected without another DOM observer or listener
+BCK-001	wasmJs	scenario	web-detach-terminal	web-lifecycle.spec.mjs	a durable detach terminates the session
+BCK-001	wasmJs	scenario	web-multi-session-isolation	web-lifecycle.spec.mjs	independent hosts terminate independently
+BCK-001	wasmJs	scenario	web-attach-same-element-busy	web-lifecycle.spec.mjs	a duplicate attach is rejected without another DOM observer or listener
+BCK-001	wasmJs	scenario	web-no-implicit-window	web-lifecycle.spec.mjs	attach creates no DOM and exposes no primary Window
+BCK-001	wasmJs	scenario	web-window-provider-new-session	web-window-provider.spec.mjs	web-window-provider-new-session
+BCK-001	wasmJs	scenario	web-window-provider-same-context	web-window-provider.spec.mjs	web-window-provider-same-context
+BCK-001	wasmJs	scenario	web-window-provider-no-context	web-window-provider.spec.mjs	web-window-provider-no-context
+BCK-001	wasmJs	scenario	web-window-provider-invalid-element	web-window-provider.spec.mjs	web-window-provider-invalid-element
+BCK-001	wasmJs	scenario	web-window-provider-invalid-scope	web-window-provider.spec.mjs	web-window-provider-invalid-scope
+BCK-001	wasmJs	scenario	web-window-provider-owned-element	web-window-provider.spec.mjs	web-window-provider-owned-element
+BCK-001	wasmJs	scenario	web-window-provider-callback-failure	web-window-provider.spec.mjs	web-window-provider-callback-failure
+BCK-001	wasmJs	scenario	web-pagehide-admission-close	web-lifecycle.spec.mjs	persisted pagehide terminates immediately and pageshow cannot resurrect
+BCK-001	wasmJs	scenario	web-pagehide-navigation	web-lifecycle.spec.mjs	persisted pagehide terminates immediately and pageshow cannot resurrect
+BCK-001	wasmJs	scenario	web-pagehide-no-resurrection	web-lifecycle.spec.mjs	persisted pagehide terminates immediately and pageshow cannot resurrect
+BCK-001	wasmJs	sentinel	web-surface-never-window	web-lifecycle.spec.mjs	attach creates no DOM and exposes no primary Window
+BCK-001	wasmJs	sentinel	web-no-implicit-dom	web-lifecycle.spec.mjs	attach creates no DOM and exposes no primary Window
+BCK-001	wasmJs	sentinel	web-cross-session-isolation	web-lifecycle.spec.mjs	independent hosts terminate independently
+BCK-001	wasmJs	sentinel	web-host-single-owner	web-lifecycle.spec.mjs	a duplicate attach is rejected without another DOM observer or listener
+BCK-001	wasmJs	sentinel	web-detach-no-resurrection	web-lifecycle.spec.mjs	persisted pagehide terminates immediately and pageshow cannot resurrect
+BCK-001	wasmJs	sentinel	web-shadow-root-observation	web-lifecycle.spec.mjs	removing the host from inside its connected ShadowRoot terminates the session
+BCK-001	wasmJs	sentinel	web-provider-no-same-document-window	web-window-provider.spec.mjs	web-window-provider-same-context
+BCK-001	wasmJs	sentinel	web-provider-owned-element-rejected	web-window-provider.spec.mjs	web-window-provider-owned-element
+BCK-001	wasmJs	sentinel	web-active-gate-requires-js-and-wasm	web-lifecycle.spec.mjs	a durable detach terminates the session
+INT-003	wasmJs	scenario	web-host-attach-failure	web-host-facade.spec.mjs	web-host-attach-failure
+INT-003	wasmJs	scenario	web-host-state-subscription	web-host-facade.spec.mjs	web-host-state-subscription
+INT-003	wasmJs	scenario	web-host-observer-exception	web-host-facade.spec.mjs	web-host-observer-exception
+INT-003	wasmJs	scenario	web-host-stop-close-outcome	web-host-facade.spec.mjs	web-host-stop-close-outcome
+INT-003	wasmJs	scenario	web-host-provider	web-host-facade.spec.mjs	web-host-provider
+INT-003	wasmJs	sentinel	web-host-microtask-order	web-host-facade.spec.mjs	web-host-state-subscription
+INT-003	wasmJs	sentinel	web-host-callback-isolation	web-host-facade.spec.mjs	web-host-observer-exception
+INT-003	wasmJs	sentinel	web-host-outcome-rejection	web-host-facade.spec.mjs	web-host-stop-close-outcome

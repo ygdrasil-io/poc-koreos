@@ -1,3 +1,5 @@
+@file:OptIn(kotlin.js.ExperimentalWasmJsInterop::class)
+
 package org.graphiks.kadre.platform.web
 
 import kotlinx.browser.document

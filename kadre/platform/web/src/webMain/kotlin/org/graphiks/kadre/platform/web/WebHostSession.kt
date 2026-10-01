@@ -16,6 +16,7 @@ import org.graphiks.kadre.application.KadreApplicationFactory
 import org.graphiks.kadre.application.KadreSession
 import org.graphiks.kadre.application.LifecycleState
 import org.graphiks.kadre.diagnostics.Capability
+import org.graphiks.kadre.diagnostics.DelicateKadreApi
 import org.graphiks.kadre.diagnostics.FeatureAvailability
 import org.graphiks.kadre.diagnostics.InteractionFailureReason
 import org.graphiks.kadre.diagnostics.KadreDiagnostic
@@ -26,16 +27,30 @@ import org.graphiks.kadre.diagnostics.KadrePlatform
 import org.graphiks.kadre.diagnostics.KadreResourceKind
 import org.graphiks.kadre.diagnostics.KadreResult
 import org.graphiks.kadre.input.SurfaceInput
+import org.graphiks.kadre.interaction.InteractionAction
+import org.graphiks.kadre.interaction.InteractionContext
+import org.graphiks.kadre.interaction.InteractionEvent
+import org.graphiks.kadre.interaction.InteractionHandler
+import org.graphiks.kadre.interaction.InteractionKind
+import org.graphiks.kadre.interaction.InteractionRegistration
+import org.graphiks.kadre.interaction.InteractionRequestId
+import org.graphiks.kadre.interaction.InteractionToken
+import org.graphiks.kadre.internal.runtime.NativeInteractionOutcome
+import org.graphiks.kadre.internal.runtime.KadreLaunchInfo
 import org.graphiks.kadre.internal.runtime.RawInputPort
 import org.graphiks.kadre.internal.runtime.RuntimeDropTransferBudget
 import org.graphiks.kadre.internal.runtime.RuntimeEventCollectorAllocator
 import org.graphiks.kadre.internal.runtime.RuntimeFailureReporter
 import org.graphiks.kadre.internal.runtime.RuntimeHostController
+import org.graphiks.kadre.internal.runtime.RuntimeInteractionHandler
 import org.graphiks.kadre.internal.runtime.RuntimePrimarySurface
 import org.graphiks.kadre.internal.runtime.RuntimePrimarySurfaceConfiguration
+import org.graphiks.kadre.internal.runtime.RuntimeProcessIds
+import org.graphiks.kadre.internal.runtime.RuntimeSessionComponents
 import org.graphiks.kadre.internal.runtime.RuntimeSessionRevocationHandler
 import org.graphiks.kadre.internal.runtime.RuntimeSessionObserver
 import org.graphiks.kadre.internal.runtime.RuntimeSurfaceInput
+import org.graphiks.kadre.internal.runtime.RuntimeSynchronousInteraction
 import org.graphiks.kadre.internal.runtime.SurfaceStimulus
 import org.graphiks.kadre.internal.runtime.UnsupportedTextInputPort
 import org.graphiks.kadre.internal.runtime.admitField
@@ -76,6 +91,37 @@ import org.graphiks.kadre.surface.SurfaceVisibility
 /** A target-owned animation-frame registration that can be cancelled by the shared surface. */
 internal fun interface WebFrameHandle {
     fun cancel()
+}
+
+/**
+ * The one channel the surface registers with its target for the synchronous interaction dispatch.
+ *
+ * A real DOM port keeps it and invokes [dispatch] inside its own `pointerdown`/`keydown` listeners,
+ * synchronously and **before** the ordinary stimulus of the same event is enqueued — the AppKit order
+ * (`DESIGN.md:983-989`): the interaction first, the regular input continuing normally afterwards.
+ * The trigger is DOM-free by construction — the port translates the event into a
+ * [RuntimeSynchronousInteraction] with the mapping utilities of this package (`WebInputMapping.kt`),
+ * carrying the event's own pressure rather than narrowing it — and the surface decides everything
+ * else: whether a handler is installed, which actions the token may take, and what the primitives are.
+ */
+internal fun interface WebInteractionDispatcher {
+    /** Dispatches one trigger the target observed, within that event's own callback. */
+    fun dispatch(trigger: RuntimeSynchronousInteraction)
+}
+
+/**
+ * The terminal answer of one browser primitive, delivered when the browsing context has decided.
+ *
+ * `true` is the confirmation a `fullscreenchange`/`pointerlockchange` carries; `false` is the refusal
+ * a `fullscreenerror`/`pointerlockerror` or a rejected promise carries. The port decides nothing and
+ * explains nothing — the DOM exposes no reason, and the one honest code the refusal produces is
+ * [refusalFailure]'s. A member that answers synchronously may invoke this before it returns (the
+ * exiting defaults do exactly that); a member that emitted the primitive invokes it later, from the
+ * terminal event's own callback.
+ */
+internal fun interface WebPrimitiveTerminal {
+    /** Reports the browser's terminal answer for the primitive that was emitted. */
+    fun onTerminal(committed: Boolean)
 }
 
 /**
@@ -219,6 +265,76 @@ internal interface WebHostPort {
         KadreResult.Failure(KadreFailure.Unsupported(KadreOperation.UpdateSurface))
 
     /**
+     * Registers the channel the surface dispatches its interactions through.
+     *
+     * The default preserves the inert ports: a target without interaction listeners simply never
+     * invokes what it is given, exactly as a port that installs no observation delivers nothing. The
+     * real DOM ports override this member to keep the dispatcher and invoke it from their own
+     * `pointerdown`/`keydown` listeners (the task that wires the primitives); the surface installs
+     * the dispatcher once, with the session configuration that builds the interaction engine.
+     */
+    fun installInteractionDispatcher(dispatcher: WebInteractionDispatcher) = Unit
+
+    /**
+     * Emits the one browser effect the fullscreen action has, and reports the browser's answer.
+     *
+     * The member is a mechanism and nothing else — the surface has already admitted the action inside
+     * a live interaction callback, and this is asked to perform it while the event's transient
+     * activation still holds. It answers whether the primitive *was emitted* ([KadreResult.Success])
+     * or could not be at all (a failure); whether the browser then honours it is not this answer's
+     * business — that verdict arrives through [WebPrimitiveTerminal.onTerminal], when the browsing
+     * context confirms or refuses the primitive. The distinction is the deferred outcome's whole
+     * shape: an emission failure is synchronous, a browser refusal is a terminal callback.
+     *
+     * **The default inverts the usual one, exactly as `applyPointerCapture` does.** A port that does
+     * not implement the member cannot emit the primitive, and a default that answered `Success` would
+     * let the surface promise a fullscreen nobody asked the browser for — the fictitious success the
+     * interaction contract exists to prevent. The default is therefore a **failing** one, carrying
+     * the refusal the capability's own domain names (`refusalFailure(WEB_FULLSCREEN_DOMAIN)`): the
+     * request is refused synchronously, no terminal callback will ever fire for it, and the outcome
+     * the surface publishes is the rejection. A port that can emit must override this member.
+     */
+    fun requestFullscreen(onTerminal: WebPrimitiveTerminal): KadreResult<Unit> =
+        KadreResult.Failure(refusalFailure(WEB_FULLSCREEN_DOMAIN))
+
+    /**
+     * Emits the one browser effect the exit-fullscreen action has, and reports the browser's answer.
+     *
+     * The emission/terminal split is [requestFullscreen]'s; this member differs only in its default,
+     * which is an **inert success that fires its terminal synchronously**: there is no fullscreen to
+     * leave for a port that never enters one, so "already there" *is* the committed answer, and a
+     * consumer's exit action completes committed instead of hanging on a callback that would never
+     * fire. A real port overrides it to ask the browser to leave.
+     */
+    fun exitFullscreen(onTerminal: WebPrimitiveTerminal): KadreResult<Unit> {
+        onTerminal.onTerminal(true)
+        return KadreResult.Success(Unit)
+    }
+
+    /**
+     * Emits the one browser effect the pointer-lock action has, and reports the browser's answer.
+     *
+     * The emission/terminal split is [requestFullscreen]'s, and so is the refusing default: a port
+     * that does not implement the member cannot lock a pointer, and answering anything but a
+     * synchronous refusal would let the surface publish a commitment no browser made. The refusal
+     * names the pointer-lock domain (`refusalFailure(WEB_POINTER_LOCK_DOMAIN)`).
+     */
+    fun requestPointerLock(onTerminal: WebPrimitiveTerminal): KadreResult<Unit> =
+        KadreResult.Failure(refusalFailure(WEB_POINTER_LOCK_DOMAIN))
+
+    /**
+     * Emits the one browser effect the unlock-pointer action has, and reports the browser's answer.
+     *
+     * The emission/terminal split is [requestFullscreen]'s, and the default is [exitFullscreen]'s:
+     * nothing is locked, so nothing needs unlocking, and the terminal fires synchronously with the
+     * committed answer. A real port overrides it to ask the browser to release the pointer.
+     */
+    fun exitPointerLock(onTerminal: WebPrimitiveTerminal): KadreResult<Unit> {
+        onTerminal.onTerminal(true)
+        return KadreResult.Success(Unit)
+    }
+
+    /**
      * The host element as an untyped reference, or null once the port released it.
      *
      * The reference is valid only while [WebElementLeasePort.lease] runs its block; the target port
@@ -252,11 +368,27 @@ internal class WebHostSession(
     private val registry: WebHostRegistry = WebHostRegistry.shared,
     private val failureReporter: RuntimeFailureReporter = RuntimeFailureReporter { },
 ) {
+    /**
+     * Attaches one session to the element this port holds.
+     *
+     * The window parameters are the provider seam (plan decision D5): a host that configured a
+     * [windowProvider] carries it with its child session factory and its target probe, and this
+     * session receives a [WebHostWindowManager] as its window manager instead of the unsupported
+     * one. A host that configured none takes the exact path this session has always taken — the
+     * unsupported manager, byte for byte — because a provider absent is a capability absent.
+     *
+     * [launch] is the launch identity a child session carries (plan decision D6): an ordinary host
+     * attachment states none and the application observes the initial-host launch it always has.
+     */
     fun attach(
         parentScope: CoroutineScope,
         applicationFactory: KadreApplicationFactory,
         policy: KadrePolicy,
         attachmentPolicy: WebAttachmentPolicy = WebAttachmentPolicy.StopWhenDetached,
+        launch: KadreLaunchInfo? = null,
+        windowProvider: WebHostWindowProvider? = null,
+        childSessionFactory: WebChildSessionFactory? = null,
+        windowHostProbe: WebWindowHostProbe? = null,
     ): KadreResult<KadreSession> {
         val reducer = WebLifecycleReducer(attachmentPolicy)
         val initialLifecycle = when (val reduction = reducer.reduce(port.initialLifecycleSnapshot)) {
@@ -272,6 +404,20 @@ internal class WebHostSession(
             is KadreResult.Failure -> return result
         }
         val ownership = WebHostOwnership(port, reservation)
+        // The window manager exists only where a provider does (plan decision D5): the parameters are
+        // one seam and arrive together, so a host that set the provider set the factory and the probe
+        // with it, and the session without a provider never leaves the path it has always taken.
+        val windowManager = windowProvider?.let { provider ->
+            WebHostWindowManager(
+                policy = policy,
+                nextRequestId = RuntimeProcessIds::nextWindowRequestId,
+                provider = provider,
+                childSessionFactory = checkNotNull(childSessionFactory) {
+                    "windowProvider requires childSessionFactory"
+                },
+                probe = checkNotNull(windowHostProbe) { "windowProvider requires windowHostProbe" },
+            )
+        }
         var surface: WebHostSurface? = null
         // Input the target reports before this session built its surface waits here, in the order it
         // was reported: the observer is installed before the runtime creates the surface, so that
@@ -310,7 +456,7 @@ internal class WebHostSession(
             }
         }
 
-        val controller = createController(initialLifecycle, ownership) { created ->
+        val controller = createController(initialLifecycle, ownership, windowManager) { created ->
             surface = created
             pendingInput.forEach(created::acceptInput)
             pendingInput.clear()
@@ -364,7 +510,7 @@ internal class WebHostSession(
             )
         }
 
-        val attached = controller.attach(parentScope, applicationFactory, policy)
+        val attached = controller.attach(parentScope, applicationFactory, policy, launch)
         if (attached is KadreResult.Failure) ownership.releaseAfterAttachFailure()
         return attached
     }
@@ -372,22 +518,49 @@ internal class WebHostSession(
     private fun createController(
         initialLifecycle: LifecycleState,
         ownership: WebHostOwnership,
+        windows: WebHostWindowManager?,
         onSurfaceCreated: (WebHostSurface) -> Unit,
-    ): RuntimeHostController = RuntimeHostController.withPrimarySurface(
-        platform = KadrePlatform.Web,
-        initialLifecycleState = initialLifecycle,
-        sessionRevocationHandler = RuntimeSessionRevocationHandler { ownership.releasePort() },
-        sessionObserver = RuntimeSessionObserver { _, _ -> ownership.releaseReservation() },
-        failureReporter = failureReporter,
-        primarySurfaceFactory = { id ->
-            val surface = WebHostSurface(id, port, ownership, failureReporter)
-            // The ownership releases the target's bridges before the runtime closes the surface, so
-            // it has to be able to stop the surface from admitting anything new in between.
-            ownership.observeSurface(surface::onOwnershipRevoked)
-            onSurfaceCreated(surface)
-            RuntimePrimarySurface(surface, surface::detach)
-        },
-    )
+    ): RuntimeHostController = when (windows) {
+        // No provider, no seam: this session keeps the construction it has always had, byte for byte.
+        null -> RuntimeHostController.withPrimarySurface(
+            platform = KadrePlatform.Web,
+            initialLifecycleState = initialLifecycle,
+            sessionRevocationHandler = RuntimeSessionRevocationHandler { ownership.releasePort() },
+            sessionObserver = RuntimeSessionObserver { _, _ -> ownership.releaseReservation() },
+            failureReporter = failureReporter,
+            primarySurfaceFactory = { id ->
+                val surface = WebHostSurface(id, port, ownership, failureReporter)
+                // The ownership releases the target's bridges before the runtime closes the surface, so
+                // it has to be able to stop the surface from admitting anything new in between.
+                ownership.observeSurface(surface::onOwnershipRevoked)
+                onSurfaceCreated(surface)
+                RuntimePrimarySurface(surface, surface::detach)
+            },
+        )
+
+        else -> RuntimeHostController.withComponents(
+            platform = KadrePlatform.Web,
+            initialLifecycleState = initialLifecycle,
+            sessionRevocationHandler = RuntimeSessionRevocationHandler { ownership.releasePort() },
+            sessionObserver = RuntimeSessionObserver { _, _ ->
+                // The session is gone: the manager is closed with it, so a late `requestWindow` from
+                // a consumer still holding the scope is refused instead of opening a session for a
+                // host that no longer exists.
+                windows.close()
+                ownership.releaseReservation()
+            },
+            failureReporter = failureReporter,
+            componentsFactory = { _, _ ->
+                val surface = WebHostSurface(RuntimeProcessIds.nextSurfaceId(), port, ownership, failureReporter)
+                ownership.observeSurface(surface::onOwnershipRevoked)
+                onSurfaceCreated(surface)
+                RuntimeSessionComponents(
+                    windows = windows,
+                    primarySurface = RuntimePrimarySurface(surface, surface::detach),
+                )
+            },
+        )
+    }
 }
 
 private class WebHostOwnership(
@@ -478,6 +651,33 @@ private class WebHostSurface(
      * surface from the session that configured it.
      */
     private lateinit var surfaceInput: RuntimeSurfaceInput
+
+    /**
+     * The common interaction engine of this surface, built with the session configuration and never
+     * before it.
+     *
+     * It is the runtime's own token engine — the same class the reference surface builds, not a second
+     * machine (`plan` decision D1) — so its registration, its token and its pending budget are the
+     * runtime's, and the capabilities claim the four web actions only once this exists. `null` is the
+     * honest pre-install state: an interaction handler cannot be admitted on a surface whose session
+     * has not configured it, and [installInteractionHandler] answers `Unsupported` for exactly that.
+     */
+    private var interactionHandler: RuntimeInteractionHandler? = null
+
+    /** The actions the engine advertises, as the dispatch's supported set reads them. */
+    private var advertisedInteractions: Set<InteractionKind> = emptySet()
+
+    /**
+     * The primitive emission of the request currently being admitted, if it emitted a primitive whose
+     * terminal answer has not been routed yet.
+     *
+     * One request runs at a time on this target — the browser is mono-threaded and the token is
+     * single-use — so a single slot is exact: [invokeNative] sets it when a primitive was emitted for
+     * the request in flight, and the context the surface wraps around the consumer's handler reads it
+     * the moment `request` returns, binding the emission to the request id the runtime allocated (or
+     * dropping it, when that request failed after the emission and no pending exists to complete).
+     */
+    private var interactionEmissionInFlight: WebInteractionEmission? = null
     private var pendingRedraw: Boolean = false
 
     private var bufferedRedraws: Int = 0
@@ -500,7 +700,7 @@ private class WebHostSurface(
             revision = SurfaceRevision(0L),
         ),
     )
-    private val mutableCapabilities = MutableStateFlow(webSurfaceCapabilities())
+    private val mutableCapabilities = MutableStateFlow(preInstallSurfaceCapabilities())
     private val mutableEvents = MutableSharedFlow<SurfaceEvent>(replay = 0, extraBufferCapacity = 16)
     private val terminal = CompletableDeferred<Unit>()
 
@@ -595,6 +795,23 @@ private class WebHostSurface(
             failureReporter = { cause -> failureReporter.report(cause) },
             sessionFailureHandler = sessionFailureHandler,
         )
+        // The interaction engine is built from the same configuration the ordinary reducer is — the
+        // same delivery policy, collector gate and session failure handling — mirroring the reference
+        // surface's own construction, so the web target owns no token machinery of its own (plan
+        // decision D1). The dispatcher goes to the port at the same moment: from here on, the
+        // target's listeners can dispatch an interaction into it.
+        val interactions = interactionActionsForWeb()
+        interactionHandler = RuntimeInteractionHandler(
+            surfaceId = id,
+            advertised = interactions,
+            deliveryPolicy = deliveryPolicy,
+            eventCollectorGate = sessionAllocator.newGate(maxCollectorsPerFlow),
+            failureReporter = failureReporter,
+            sessionFailureHandler = sessionFailureHandler,
+            maxPendingInteractionRequests = resources.maxPendingInteractionRequests,
+        )
+        advertisedInteractions = interactions
+        port.installInteractionDispatcher(WebInteractionDispatcher { trigger -> dispatchInteraction(trigger) })
         val pendingInput = pendingInputStimuli.toList()
         pendingInputStimuli.clear()
         // The target's pre-configuration observations happened before the structural capability
@@ -616,6 +833,214 @@ private class WebHostSurface(
                 gestureKinds = emptySet(),
             ),
         )
+        // The same structural moment publishes the interaction capability, with the exact set the
+        // engine just started advertising — never before: an installation that has not happened is a
+        // promise nobody could honour, which is what the pre-install snapshot says instead. The arm
+        // path stays unsupported on every platform; the handler's token is the only interaction
+        // authority this target exposes.
+        mutableCapabilities.value = webSurfaceCapabilities(
+            Capability.Supported(interactions, FeatureAvailability.Available),
+        )
+    }
+
+    /**
+     * Admits the one synchronous interaction handler this surface carries, through the common engine.
+     *
+     * The delegation is the whole story — the runtime owns the token, the serialisation and the
+     * single-registration rule (`plan` decision D1) — except for one wrapping: the handler is
+     * installed behind [EmissionBindingContext], which observes each `request` result so that a
+     * primitive emitted inside the request is bound to the request id the runtime allocated. Without
+     * that binding, a browser primitive whose terminal callback fires later would have no request id
+     * to complete — the engine allocates the id *before* `invokeNative` runs, but the native call's
+     * signature receives only the action, so the id never reaches the emission and only the caller
+     * of `request` ever sees it.
+     *
+     * A surface that stopped admitting answers [KadreFailure.Closed] like every other admission site,
+     * a surface without its engine (the session configuration has not installed) answers
+     * `Unsupported(InstallInteractionHandler)` — the failure its pre-install capability describes —
+     * and a second handler while one lives is the engine's own `AlreadyInUse`.
+     */
+    @OptIn(DelicateKadreApi::class)
+    override fun installInteractionHandler(
+        handler: InteractionHandler,
+    ): KadreResult<InteractionRegistration> {
+        admissionFailure()?.let { return it }
+        val interaction = interactionHandler
+            ?: return KadreResult.Failure(KadreFailure.Unsupported(KadreOperation.InstallInteractionHandler))
+        return interaction.install(InteractionHandler { context, event ->
+            handler.onInteraction(EmissionBindingContext(context), event)
+        })
+    }
+
+    /**
+     * The dispatcher's half of the seam: one trigger the target observed, dispatched synchronously.
+     *
+     * This runs inside the DOM callback the port invoked it from, before that event's ordinary
+     * stimulus is enqueued (the AppKit order, `DESIGN.md:983-989`), so the callback may request an
+     * action while the event's transient activation still holds — which is the entire authority the
+     * interaction model preserves. Nothing here suspends or escapes: an exception out of the
+     * consumer's handler is captured by the engine, reported, and fails the session, never the page.
+     *
+     * A surface that stopped admitting dispatches nothing: its listeners are on their way out with
+     * the port's bridges, and an interaction on a closed surface is an authority nobody can honour.
+     * Touch is deliberately absent: no port of this target builds a `TouchStarted` trigger (the plan's
+     * recorded limits), so the branch exists to be refused rather than to classify a member that
+     * cannot arrive.
+     */
+    private fun dispatchInteraction(trigger: RuntimeSynchronousInteraction) {
+        if (admissionClosed) return
+        val interaction = interactionHandler ?: return
+        val active = configuration ?: return
+        val event = when (trigger) {
+            is RuntimeSynchronousInteraction.PointerPressed -> InteractionEvent.PointerPressed(
+                trigger.button,
+                trigger.position,
+                active.stampSource(),
+            )
+
+            is RuntimeSynchronousInteraction.KeyPressed -> InteractionEvent.KeyPressed(
+                trigger.physicalKey,
+                active.stampSource(),
+            )
+
+            is RuntimeSynchronousInteraction.TouchStarted -> return
+        }
+        interaction.dispatch(event, advertisedInteractions, ::invokeNative)
+    }
+
+    /**
+     * The one native step an admitted action takes, asked by the engine inside its callback frame.
+     *
+     * Unreachable members first, because they are the guarantee the admission ordering is made of: an
+     * action outside the advertised set is refused by the engine *before* this is called, so no
+     * browser API is ever asked for an action the surface does not support. The branch remains,
+     * exhaustive, as the closed answer that keeps the function total.
+     *
+     * The four web actions validate what the admission cannot see — a `LockPointer` mode this target
+     * does not take is refused here, still before any primitive call — and then emit their primitive
+     * through the port. What comes back decides the outcome's shape: an emission failure is
+     * synchronous ([NativeInteractionOutcome.Now]), an emitted primitive is deferred to the browser's
+     * terminal answer ([NativeInteractionOutcome.Deferred]), whose callback completes the pending
+     * with [refusalFailure] when the browser refused — a `committed = false` without a failure would
+     * be a rejection nobody could name.
+     */
+    private fun invokeNative(action: InteractionAction): NativeInteractionOutcome = when (action) {
+        is InteractionAction.EnterFullscreen -> emitWebPrimitive(WEB_FULLSCREEN_DOMAIN) { terminal ->
+            port.requestFullscreen(terminal)
+        }
+
+        is InteractionAction.ExitFullscreen -> emitWebPrimitive(WEB_FULLSCREEN_DOMAIN) { terminal ->
+            port.exitFullscreen(terminal)
+        }
+
+        is InteractionAction.LockPointer -> when (val mode = normaliseLockPointerMode(action.mode)) {
+            is KadreResult.Failure -> NativeInteractionOutcome.Now(mode)
+            is KadreResult.Success -> emitWebPrimitive(WEB_POINTER_LOCK_DOMAIN) { terminal ->
+                port.requestPointerLock(terminal)
+            }
+        }
+
+        is InteractionAction.UnlockPointer -> emitWebPrimitive(WEB_POINTER_LOCK_DOMAIN) { terminal ->
+            port.exitPointerLock(terminal)
+        }
+
+        InteractionAction.BeginWindowMove,
+        is InteractionAction.BeginWindowResize,
+        is InteractionAction.AcceptDrop,
+        is InteractionAction.OpenWindow,
+        -> NativeInteractionOutcome.Now(
+            KadreResult.Failure(KadreFailure.Unsupported(KadreOperation.Interaction)),
+        )
+    }
+
+    /**
+     * Emits one primitive through the port and answers the deferred outcome for it.
+     *
+     * The terminal callback closes over the emission record, not over a request id — the engine
+     * allocates the id before `invokeNative` runs, but it is not passed to the native call, whose
+     * only parameter is the action. A terminal that fires after the
+     * request returned finds the record bound and completes the pending through it; a terminal that
+     * fires synchronously inside the primitive call (the exiting defaults) records its answer on the
+     * record instead, and the binding below completes the pending the moment the request id exists.
+     * A port that could not emit at all answers synchronously and the outcome is a `Now` rejection:
+     * no terminal will ever fire for a call that never happened.
+     */
+    private fun emitWebPrimitive(
+        domain: String,
+        emit: (WebPrimitiveTerminal) -> KadreResult<Unit>,
+    ): NativeInteractionOutcome {
+        val emission = WebInteractionEmission()
+        val terminal = WebPrimitiveTerminal { committed ->
+            onPrimitiveTerminal(emission, committed, if (committed) null else refusalFailure(domain))
+        }
+        val emitted = emit(terminal)
+        if (emitted is KadreResult.Failure) {
+            return NativeInteractionOutcome.Now(emitted)
+        }
+        // The primitive is out, its answer pending: the request in flight owns this emission, and the
+        // wrapped context binds it to the id the engine allocates before returning.
+        interactionEmissionInFlight = emission
+        return NativeInteractionOutcome.Deferred { _, _ ->
+            // The engine's terminal notification, delivered after the outcome was published. Nothing
+            // to release in this phase: the terminal listeners a real DOM port hooks onto the
+            // browser's events are the overriding member's own, and both completion paths route
+            // through `onPrimitiveTerminal` above.
+        }
+    }
+
+    /** Routes one primitive terminal to its pending, binding it first if the request just returned. */
+    private fun onPrimitiveTerminal(
+        emission: WebInteractionEmission,
+        committed: Boolean,
+        failure: KadreFailure?,
+    ) {
+        val requestId = emission.requestId
+        if (requestId != null) {
+            interactionHandler?.completePending(requestId, committed, failure)
+        } else {
+            // The terminal fired before the runtime returned the request id — a synchronous answer,
+            // like the exiting defaults give: the binding completes it instead.
+            emission.terminal = committed to failure
+        }
+    }
+
+    /**
+     * The wrapped context's half: binds the emission of the request that just returned, or drops it.
+     *
+     * A failed result after the primitive was emitted — the pending budget refused it, or the
+     * registration closed during the native call — has no pending behind it: the engine admits no
+     * pending for a refused request, so the emission's terminal would complete nothing and is dropped
+     * with the record. A successful result binds the id; a terminal that already fired completes the
+     * fresh pending right here, which is what makes a synchronously-answering port commit instead of
+     * hanging.
+     */
+    private fun bindEmission(result: KadreResult<InteractionRequestId>) {
+        val emission = interactionEmissionInFlight ?: return
+        interactionEmissionInFlight = null
+        val requestId = (result as? KadreResult.Success)?.value ?: return
+        emission.requestId = requestId
+        emission.terminal?.let { (committed, failure) ->
+            interactionHandler?.completePending(requestId, committed, failure)
+        }
+        emission.terminal = null
+    }
+
+    /**
+     * The context the consumer's handler actually receives, which differs from the engine's own by
+     * exactly one behaviour: each `request` result is observed, so the primitive emitted inside that
+     * request is bound to — or dropped with — the id the engine allocated for it. Everything else is
+     * forwarded verbatim: the token, and the engine's own admission rules.
+     */
+    private inner class EmissionBindingContext(
+        private val delegate: InteractionContext,
+    ) : InteractionContext {
+        override val token: InteractionToken get() = delegate.token
+
+        override fun request(action: InteractionAction): KadreResult<InteractionRequestId> {
+            val result = delegate.request(action)
+            bindEmission(result)
+            return result
+        }
     }
 
     /**
@@ -1129,6 +1554,15 @@ private class WebHostSurface(
         terminated = true
         detached = true
         closeAdmission()
+        // The interaction engine is drained with the admission it belongs to, before the terminal
+        // state is published: every deferred pending — a primitive the browser never answered — is
+        // abandoned with the closed failure and its budget slot released, and the registration is
+        // closed so no later dispatch can revive it. Subscribers observe one `Rejected` per pending
+        // and then the flow's end, the same sequence the reference surface's own close produces.
+        interactionHandler?.let { interaction ->
+            interaction.abandonPendingRequests(KadreFailure.Closed(KadreResourceKind.Interaction))
+            interaction.close()
+        }
         // The detachment makes the capabilities unavailable before the detached state is published,
         // in the reference's own words and its own snapshot (`DESIGN.md:703`: « Le détachement rend
         // d'abord les capabilities indisponibles, publie ensuite `SurfaceState.Detached` »). Every
@@ -1168,6 +1602,21 @@ private class WebHostSurface(
         // port releases the browser effect it holds with the element.
         pointerOwnership.clear()
     }
+}
+
+/**
+ * One primitive emission awaiting its terminal answer and, until the request that carried it returns,
+ * its request id.
+ *
+ * The record exists because the id the engine allocates — *before* `invokeNative` runs — is not
+ * passed to the native call: the terminal callback cannot close over an id it never receives, so it
+ * closes over this record, and the wrapped context binds the two the instant the caller of `request`
+ * sees the id. [terminal] holds the answer of a primitive whose browser replied synchronously, inside
+ * the emission call itself.
+ */
+private class WebInteractionEmission {
+    var requestId: InteractionRequestId? = null
+    var terminal: Pair<Boolean, KadreFailure?>? = null
 }
 
 /**
@@ -1254,7 +1703,7 @@ private fun WebInputStimulus.toSurfaceStimulus(surfaceId: SurfaceId): SurfaceSti
  *
  * `pointerCapture`: only `None` and `Confined` are promised, because they are the two the DOM can be
  * asked for — and `Locked` is deliberately outside, since the Pointer Lock API needs a transient user
- * activation and belongs to `InteractionAction.LockPointer` in a later phase (`DESIGN.md` §9.6). The set
+ * activation and belongs to `InteractionAction.LockPointer` (`DESIGN.md` §9.6). The set
  * is written out here as the promise and stated once more as the rule
  * ([webPointerCaptureIsHonourable]) the commit reads; `webTest` pins the two against each other and
  * against `PointerCaptureMode.entries`, so `Locked` is provably outside both. No member of this target
@@ -1265,26 +1714,43 @@ private fun WebInputStimulus.toSurfaceStimulus(surfaceId: SurfaceId): SurfaceSti
  * before these fields were activated: the phase activates these two, and no part of this change claims
  * another one.
  *
+ * `handlerInteractions` is not a field of this function's own choosing: the caller names it, because
+ * it is the one capability that is a *transition* rather than a promise — the pre-install snapshot
+ * ([preInstallSurfaceCapabilities]) claims nothing, and the session configuration publishes the four
+ * web actions at the same structural moment it builds the engine that honours them, mirroring how
+ * keyboard and pointer are declared by the reducer's own structural observation. `armedInteractions`
+ * stays `Unsupported(ArmInteraction)` in both snapshots: no platform implements the arm path, and the
+ * handler's token is the only interaction authority this target exposes.
+ *
  * This is the snapshot of an attached surface only; [terminate] publishes the all-unsupported one the
  * reference publishes at its own terminal transition, so no field is ever claimed by a surface that
  * stopped admitting.
  */
-private fun webSurfaceCapabilities(): SurfaceCapabilities = SurfaceCapabilities(
-    cursor = unsupportedSurfaceCapability(KadreOperation.UpdateSurface),
-    customCursor = unsupportedSurfaceCapability(KadreOperation.UpdateSurface),
-    pointerCapture = Capability.Supported(
-        setOf(PointerCaptureMode.None, PointerCaptureMode.Confined),
-        FeatureAvailability.Available,
-    ),
-    hitTesting = unsupportedSurfaceCapability(KadreOperation.UpdateSurface),
-    inputDefaultBehavior = Capability.Supported(
-        setOf(InputDefaultBehavior.HostDefault, InputDefaultBehavior.SuppressWhenPossible),
-        FeatureAvailability.Available,
-    ),
-    handlerInteractions = unsupportedSurfaceCapability(KadreOperation.InstallInteractionHandler),
-    armedInteractions = unsupportedSurfaceCapability(KadreOperation.ArmInteraction),
-    platformAccess = Capability.Supported(Unit, FeatureAvailability.Available),
-)
+private fun webSurfaceCapabilities(handlerInteractions: Capability<Set<InteractionKind>>): SurfaceCapabilities =
+    SurfaceCapabilities(
+        cursor = unsupportedSurfaceCapability(KadreOperation.UpdateSurface),
+        customCursor = unsupportedSurfaceCapability(KadreOperation.UpdateSurface),
+        pointerCapture = Capability.Supported(
+            setOf(PointerCaptureMode.None, PointerCaptureMode.Confined),
+            FeatureAvailability.Available,
+        ),
+        hitTesting = unsupportedSurfaceCapability(KadreOperation.UpdateSurface),
+        inputDefaultBehavior = Capability.Supported(
+            setOf(InputDefaultBehavior.HostDefault, InputDefaultBehavior.SuppressWhenPossible),
+            FeatureAvailability.Available,
+        ),
+        handlerInteractions = handlerInteractions,
+        armedInteractions = unsupportedSurfaceCapability(KadreOperation.ArmInteraction),
+        platformAccess = Capability.Supported(Unit, FeatureAvailability.Available),
+    )
+
+/**
+ * The capability snapshot before the session configuration installed: nothing about the interaction
+ * seam is claimed, because nothing of it exists yet — the engine that would honour a handler is built
+ * by that installation and never before it.
+ */
+internal fun preInstallSurfaceCapabilities(): SurfaceCapabilities =
+    webSurfaceCapabilities(unsupportedSurfaceCapability(KadreOperation.InstallInteractionHandler))
 
 private fun <T> unsupportedSurfaceCapability(operation: KadreOperation): Capability<T> =
     Capability.Unsupported(KadreFailure.Unsupported(operation))

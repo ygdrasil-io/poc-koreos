@@ -1,4 +1,4 @@
-@file:OptIn(kotlin.js.ExperimentalJsExport::class)
+@file:OptIn(kotlin.js.ExperimentalJsExport::class, kotlin.js.ExperimentalWasmJsInterop::class)
 
 // The JavaScript surface of `@kadre/host` for the Kotlin/JS target.
 //
@@ -15,12 +15,15 @@ import org.graphiks.kadre.application.KadreSession
 import org.graphiks.kadre.diagnostics.KadreResult
 import org.graphiks.kadre.policy.KadrePolicy
 import org.w3c.dom.HTMLElement
+import kotlin.js.JsAny
 
 /**
  * Attaches a session to the element [element] of the browsing context.
  *
- * [factoryKey] is the opaque key of `KadreApplicationFactoryRef.hostKey`. Returns `"ok|<handle key>"`
- * or `"failed|<failure JSON>"`; the shim turns the latter into `KadreHostError`.
+ * [factoryKey] is the opaque key of `KadreApplicationFactoryRef.hostKey`. [windowProvider] is the
+ * raw `KadreWebWindowProvider` the promise of `kadre/INTEROP-EXPORTS.md` section 6 declares, or
+ * `null`; the facade's bridge reads it (`JsWebHostProviderBridge.kt`). Returns
+ * `"ok|<handle key>"` or `"failed|<failure JSON>"`; the shim turns the latter into `KadreHostError`.
  */
 @JsExport
 public fun kadreWebAttach(
@@ -28,7 +31,15 @@ public fun kadreWebAttach(
     factoryKey: String,
     policy: String,
     attachmentPolicy: String,
-): String = attachSession(element, factoryKey, policy, attachmentPolicy, ::attachElement)
+    windowProvider: JsAny? = null,
+): String = attachSession(
+    element,
+    factoryKey,
+    policy,
+    attachmentPolicy,
+    windowProvider = jsWindowProviderOption(windowProvider),
+    attach = ::attachElement,
+)
 
 /** The opaque identifier of the session behind [handleKey]. Not the Kotlin `SessionId`. */
 @JsExport
@@ -75,11 +86,13 @@ private fun attachElement(
     policy: KadrePolicy,
     attachmentPolicy: WebAttachmentPolicy,
     scope: CoroutineScope,
+    windowProvider: WebWindowProvider?,
 ): KadreResult<KadreSession> = element.attachKadre(
     parentScope = scope,
     applicationFactory = factory,
     policy = policy,
     attachmentPolicy = attachmentPolicy,
+    windowProvider = windowProvider,
 )
 
 
@@ -115,7 +128,7 @@ public fun publishHostBindings(): Unit = publishBindings(
  * single expression, which both targets accept.
  */
 private fun publishBindings(
-    attach: (HTMLElement, String, String, String) -> String,
+    attach: (HTMLElement, String, String, String, JsAny?) -> String,
     sessionId: (Int) -> String,
     sessionState: (Int) -> String,
     subscribeState: (Int, (String) -> Unit) -> Int,
