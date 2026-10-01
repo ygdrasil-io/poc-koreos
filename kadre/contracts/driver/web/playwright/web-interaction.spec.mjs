@@ -20,8 +20,9 @@ async function loadScenario(page, scenario) {
  * headless Chromium gives is what the scenario recorded, and the run log below is the record of it:
  * if headless honours the primitive, this run is the browser-contract proof; if it refuses, the
  * refusal is honestly recorded here and the real-screen proof belongs to the manual charter
- * (`kadre/contracts/driver/web/manual/phase-4-interactions.md`). A hang, a lie (a committed outcome
- * for a primitive the browser never confirmed) or a second outcome per click all fail this test.
+ * (`kadre/contracts/driver/web/manual/phase-4-interactions.md`). A hang, or an outcome encoded
+ * outside this closed set, fails this test; a match inside the set is the record of what this
+ * browser answered, and does not by itself prove the browser confirmed the primitive.
  */
 test('web-interaction-fullscreen', async ({ page }) => {
   await loadScenario(page, 'web-interaction');
