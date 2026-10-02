@@ -8,6 +8,7 @@ import org.graphiks.kadre.input.TouchPhase
 import org.graphiks.kadre.internal.runtime.RuntimeSynchronousInteraction
 import org.w3c.dom.AddEventListenerOptions
 import org.w3c.dom.Document
+import org.w3c.dom.DragEvent
 import org.w3c.dom.Element
 import org.w3c.dom.HTMLElement
 import org.w3c.dom.MutationObserver
@@ -94,6 +95,18 @@ internal class JsWebDomPort(element: HTMLElement) : WebHostPort {
      * the two cannot disagree about the event the element saw.
      */
     private var interactionDispatcher: WebInteractionDispatcher? = null
+
+    /**
+     * The drop snapshot this element's drag in flight presented, or `null` while no drag is in
+     * flight.
+     *
+     * It is the glue's own memory — the source's index-by-index entries — of what the browser
+     * reported at the entry, kept so the drop event can re-read its own data against it. The source
+     * it carries is the one the surface may have presented an offer from, retained by the runtime
+     * while the drag lasts; this field holds only the drop-time correlation, and it is replaced by
+     * the next entry and dropped with the leave or the drop that ends the drag.
+     */
+    private var dropSnapshot: JsWebDropSnapshot? = null
 
     /**
      * The primitive emissions whose terminal listeners are still installed on the document.
@@ -266,6 +279,59 @@ internal class JsWebDomPort(element: HTMLElement) : WebHostPort {
         }
     }
 
+    /**
+     * One `dragenter`: the drag's data store is snapshotted into the source the drop seam presents,
+     * and the entry is reported through the channel, synchronously, in this event's own callback —
+     * the frame the `DropEntered` interaction is dispatched in (D-D2).
+     *
+     * No default is dropped here: a `dragenter` has nothing of its own to prevent, and the element
+     * becomes a drop target only through the offer question the `dragover`/`drop` callbacks ask
+     * (D-D3). A store the browser hands as nothing read as nothing, and no entry is reported.
+     */
+    private val dragEnterListener: (Event) -> Unit = { event ->
+        safely {
+            (event as? DragEvent)?.let { drag -> deliverDragEntered(drag) }
+        }
+    }
+
+    /**
+     * One `dragover`: the drag's motion over the element, delivered like any observation, and the one
+     * question this event exists for — does the surface hold an offer this drag may complete? If it
+     * does, this event's default ("refuse this drop") is dropped: that is what makes the element a
+     * drop target at all, an activation of a target the surface owns and never a suppression of a
+     * page behaviour (D-D3). Without an offer nothing is dropped, whatever the policy says.
+     */
+    private val dragOverListener: (Event) -> Unit = { event ->
+        safely {
+            (event as? DragEvent)?.let { drag -> deliverDragOver(drag) }
+        }
+    }
+
+    /**
+     * One `dragleave`: the drag left the element's subtree, and the offer it carried ends with it.
+     * A leave has no default to drop, and none is asked about. The entry's snapshot goes with the
+     * leave: no later event of this drag can arrive on this element, so the handles the snapshot's
+     * payloads keep are dropped with the drag they belonged to.
+     */
+    private val dragLeaveListener: (Event) -> Unit = { _ ->
+        safely {
+            dropSnapshot = null
+            deliverInput(WebInputStimulus.DropExited)
+        }
+    }
+
+    /**
+     * One `drop`: the store's own data is re-read against the snapshot the entry presented — the
+     * handles the drag protected until now are the drop's to give — then the observation is
+     * delivered and the same offer question as the `dragover`'s is asked of this event: with an
+     * active offer, this event's default (the navigation to the dropped content) is dropped.
+     */
+    private val dropListener: (Event) -> Unit = { event ->
+        safely {
+            (event as? DragEvent)?.let { drag -> deliverDropPerformed(drag) }
+        }
+    }
+
     override val stableIdentity: Any get() = checkNotNull(element)
     override val leasedElement: Any? get() = element
     override val initialSnapshot: WebSurfaceMetrics =
@@ -323,6 +389,10 @@ internal class JsWebDomPort(element: HTMLElement) : WebHostPort {
         element?.addEventListener("pointercancel", pointerCancelListener)
         element?.addEventListener("lostpointercapture", lostPointerCaptureListener)
         element?.addEventListener("wheel", wheelListener, wheelListenerOptions)
+        element?.addEventListener("dragenter", dragEnterListener)
+        element?.addEventListener("dragover", dragOverListener)
+        element?.addEventListener("dragleave", dragLeaveListener)
+        element?.addEventListener("drop", dropListener)
     }
 
     /**
@@ -535,6 +605,10 @@ internal class JsWebDomPort(element: HTMLElement) : WebHostPort {
         runCatching { element?.removeEventListener("pointercancel", pointerCancelListener) }
         runCatching { element?.removeEventListener("lostpointercapture", lostPointerCaptureListener) }
         runCatching { element?.removeEventListener("wheel", wheelListener, wheelListenerOptions) }
+        runCatching { element?.removeEventListener("dragenter", dragEnterListener) }
+        runCatching { element?.removeEventListener("dragover", dragOverListener) }
+        runCatching { element?.removeEventListener("dragleave", dragLeaveListener) }
+        runCatching { element?.removeEventListener("drop", dropListener) }
         // The terminal listeners of the primitives still awaiting the browser's answer are the last
         // bridges this port holds into the browsing context, and they go with the rest of them: a
         // late fullscreenchange or pointerlockchange must not answer an emission nobody is waiting
@@ -557,6 +631,10 @@ internal class JsWebDomPort(element: HTMLElement) : WebHostPort {
         scrollBoundary.clear()
         pointerMotion.clear()
         touchContacts.clear()
+        // The snapshot of a drag in flight is the drop seam's own resource: with the element gone,
+        // no drop can re-read its entries, and the source the runtime may still retain needs no
+        // second keeper.
+        dropSnapshot = null
         reconnectAnimationFrame?.let { animationFrame ->
             runCatching { originWindow?.cancelAnimationFrame(animationFrame) }
         }
@@ -772,6 +850,61 @@ internal class JsWebDomPort(element: HTMLElement) : WebHostPort {
     }
 
     /**
+     * One drag entry: the store snapshotted into the source the drop seam presents, and the entry
+     * reported through the channel in this very callback.
+     *
+     * The snapshot is kept for the drop's own re-read, replacing the one a previous drag left; a
+     * store the browser hands as nothing read as nothing, and no entry is reported — there is no
+     * source to present an offer from, and the browser keeps the default of the drag it was having.
+     */
+    private fun deliverDragEntered(drag: DragEvent) {
+        val current = element ?: return
+        val dataTransfer = runCatching { drag.dataTransfer }.getOrNull() ?: return
+        val snapshot = jsDropSnapshot(dataTransfer) ?: return
+        dropSnapshot = snapshot
+        inputObserver?.onDropEntered(snapshot.source, jsDropPosition(current, drag))
+    }
+
+    /**
+     * One drag over the element: the offer question asked of the state this event arrives on, the
+     * observation delivered, and the event's default dropped only on an active offer (D-D3).
+     *
+     * The question comes first, and for both drag events the order is load-bearing: the delivery of
+     * the observation can spend the offer it asks about — a `drop` does exactly that — and a default
+     * dropped for an offer the surface no longer holds would be a prevention nobody could name. The
+     * question is asked of the very event in hand, inside its own callback, exactly as
+     * [suppressDefaultFor] is for the categories the policy governs; this one is not the policy's to
+     * answer, which is why it is a question of its own, answered by the surface that holds the offer.
+     */
+    private fun deliverDragOver(drag: DragEvent) {
+        val current = element ?: return
+        val observer = inputObserver ?: return
+        val activate = observer.holdsActiveDropOffer()
+        observer.onObservation(WebInputStimulus.DropMoved(jsDropPosition(current, drag)))
+        if (activate) drag.preventDefault()
+    }
+
+    /**
+     * One drop on the element: the drop's own data re-read against the entry's snapshot, the offer
+     * question asked of the state the drop arrives on, the observation delivered — which spends the
+     * offer — and the navigation default dropped because the answer was yes.
+     */
+    private fun deliverDropPerformed(drag: DragEvent) {
+        val current = element ?: return
+        val observer = inputObserver ?: return
+        val snapshot = dropSnapshot
+        if (snapshot != null) {
+            runCatching { drag.dataTransfer }.getOrNull()?.let { dataTransfer ->
+                snapshot.attachDropData(dataTransfer)
+            }
+        }
+        val activate = observer.holdsActiveDropOffer()
+        dropSnapshot = null
+        observer.onObservation(WebInputStimulus.DropPerformed(jsDropPosition(current, drag)))
+        if (activate) drag.preventDefault()
+    }
+
+    /**
      * Hands one observation over and answers what the channel said about the default of the event that
      * carried it.
      *
@@ -840,9 +973,11 @@ internal class JsWebDomPort(element: HTMLElement) : WebHostPort {
      *
      * Only the two listeners whose event has a page-level default route through it: the wheel, whose
      * default scrolls or zooms the browsing context, and the key press, whose scroll keys move the
-     * document. Every other listener delivers through [deliverInput] and ignores the answer. No
-     * listener of the document, the window or an ancestor calls this, and this file contains no other
-     * `preventDefault` anywhere.
+     * document. Every other listener delivers through [deliverInput] and ignores the answer — except
+     * the drag ones, whose `dragover`/`drop` defaults are dropped through the offer question of their
+     * own ([deliverDragOver], [deliverDropPerformed]), an activation of a target the surface holds
+     * and never a policy suppression. No listener of the document, the window or an ancestor drops a
+     * default, and these are the only three `preventDefault` sites of this file.
      */
     private fun suppressDefaultFor(event: Event, stimulus: WebInputStimulus) {
         if (deliverInput(stimulus)) event.preventDefault()

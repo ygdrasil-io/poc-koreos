@@ -214,7 +214,10 @@ class WebInputSurfaceTest {
             Capability.Unsupported(KadreFailure.Unsupported(KadreOperation.GestureInput)),
             capabilities.gestures,
         )
-        assertEquals(FeatureAvailability.Unsupported, capabilities.dragAndDrop)
+        // Drag-and-drop is declared by the same structural observation: the drag listeners are part
+        // of the observation this install belongs to (D-D1/D-D2), so the offers they present are the
+        // reducer's to own from the install on — never earlier, never by a stimulus of its own.
+        assertEquals(FeatureAvailability.Available, capabilities.dragAndDrop)
         assertEquals(
             Capability.Unsupported(KadreFailure.Unsupported(KadreOperation.TextInput)),
             capabilities.textInput,
@@ -1954,6 +1957,7 @@ class WebInputSurfaceTest {
                 WebInputCategory.Pointer,
                 WebInputCategory.Touch,
                 WebInputCategory.Focus,
+                WebInputCategory.Drop,
             ),
             WebInputCategory.entries.toSet(),
             "every category this phase observes is enumerated: a new one must be classified against the decision",

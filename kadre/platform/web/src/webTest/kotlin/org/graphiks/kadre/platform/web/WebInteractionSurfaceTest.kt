@@ -67,7 +67,7 @@ import kotlin.test.assertTrue
 @OptIn(ExperimentalCoroutinesApi::class, DelicateKadreApi::class)
 class WebInteractionSurfaceTest {
     @Test
-    fun handlerInteractionsIsTheFourWebActionsOnceStructurallyInstalled() = runTest {
+    fun handlerInteractionsIsTheFiveWebActionsOnceStructurallyInstalled() = runTest {
         val harness = InteractionHarness(this)
         harness.start()
 
@@ -78,6 +78,7 @@ class WebInteractionSurfaceTest {
                     InteractionKind.ExitFullscreen,
                     InteractionKind.LockPointer,
                     InteractionKind.UnlockPointer,
+                    InteractionKind.AcceptDrop,
                 ),
                 FeatureAvailability.Available,
             ),

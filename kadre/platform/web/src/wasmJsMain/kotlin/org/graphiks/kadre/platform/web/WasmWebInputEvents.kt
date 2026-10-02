@@ -9,6 +9,7 @@ import org.graphiks.kadre.input.KeyboardModifiers
 import org.graphiks.kadre.input.PenState
 import org.graphiks.kadre.input.PointerKind
 import org.graphiks.kadre.surface.LogicalPoint
+import org.w3c.dom.DragEvent
 import org.w3c.dom.HTMLElement
 import org.w3c.dom.Window
 import org.w3c.dom.events.Event
@@ -112,6 +113,17 @@ internal external fun wasmPointerEventOrNull(event: Event): WasmPointerEvent?
 /** The borrowed event as a wheel event, or `null` when it is not one. */
 @JsFun("(event) => event instanceof WheelEvent ? event : null")
 internal external fun wasmWheelEventOrNull(event: Event): WasmWheelEvent?
+
+/**
+ * The borrowed event as a drag event, or `null` when it is not one.
+ *
+ * The drag events of the drop seam carry their store (`dataTransfer`) and the position the drag is
+ * at; the declared `DragEvent` binding carries both, so only the type of the borrowed event needs the
+ * JavaScript's own `instanceof` — the listener is registered for its own event type, and the check is
+ * kept because dropping a mismatched event beats reading fields off one.
+ */
+@JsFun("(event) => event instanceof DragEvent ? event : null")
+internal external fun wasmDragEventOrNull(event: Event): DragEvent?
 
 /**
  * The stimulus of one key event, read from a `keydown` or a `keyup`.

@@ -2,7 +2,9 @@ package org.graphiks.kadre.platform.web
 
 import org.graphiks.kadre.diagnostics.KadreFailure
 import org.graphiks.kadre.diagnostics.KadreResult
+import org.graphiks.kadre.internal.runtime.DropTransferSource
 import org.graphiks.kadre.internal.runtime.RuntimeSynchronousInteraction
+import org.graphiks.kadre.surface.LogicalPoint
 
 /**
  * The one host-port double every web surface test drives.
@@ -266,6 +268,22 @@ internal class RecordingWebHostPort(
     fun deliverPointerCaptureLost() {
         inputObserver?.onPointerCaptureLost()
     }
+
+    /**
+     * Reports a drag entry the element just observed, as a real port does from its `dragenter`
+     * listener: the source the target snapshotted, and the position the event carried. The drop
+     * dispatch that follows is the surface's, synchronously inside this call.
+     */
+    fun deliverDropEntered(source: DropTransferSource, position: LogicalPoint) {
+        inputObserver?.onDropEntered(source, position)
+    }
+
+    /**
+     * Asks the channel the question a real port asks inside its `dragover`/`drop` listeners before
+     * it may drop their browser default: does the surface hold an active drop offer? The answer is
+     * what the journal of preventDefault calls a real target keeps would record.
+     */
+    fun holdsActiveDropOffer(): Boolean = inputObserver?.holdsActiveDropOffer() ?: false
 
     /** The browsing context is gone, as a detached or removed document reports it. */
     fun disconnectedSnapshot(): WebLifecycleSnapshot = WebLifecycleSnapshot(

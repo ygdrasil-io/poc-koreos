@@ -123,6 +123,18 @@ internal enum class WebInputCategory {
      * Kadre delivers as input, and none of its defaults is a concurrent page action.
      */
     Focus,
+
+    /**
+     * One drop observation: a drag over, a drag leave or a drop on the element.
+     *
+     * Deliberately not suppressible, and for a reason of its own: the browser default of a
+     * `dragover`/`drop` is "refuse this drop", and the drop pipeline drops it through a question of
+     * its own — does the surface hold an active offer? ([WebInputObserver.holdsActiveDropOffer], plan
+     * decision D-D3) — because that prevention is the activation of a target the surface owns, not
+     * the inhibition of a concurrent page motion. A policy category would make the activation
+     * conditional on `inputDefaultBehavior`, which it is not, under either member of that enum.
+     */
+    Drop,
 }
 
 /**
@@ -194,7 +206,8 @@ private val WEB_DOCUMENT_SCROLL_KEYS: Set<NamedKey> = setOf(
  * A wheel is [WebInputCategory.Wheel] whatever it carries; only a *press* of a document-scroll key is
  * [WebInputCategory.ScrollingKey], since a release moves nothing; every other key observation is
  * [WebInputCategory.Key]; every pointer observation is [WebInputCategory.Pointer]; every touch
- * contact is [WebInputCategory.Touch]; and the loss of activation is [WebInputCategory.Focus].
+ * contact is [WebInputCategory.Touch]; every drop observation is [WebInputCategory.Drop]; and the
+ * loss of activation is [WebInputCategory.Focus].
  */
 internal fun webInputCategory(stimulus: WebInputStimulus): WebInputCategory = when (stimulus) {
     is WebInputStimulus.Scrolled -> WebInputCategory.Wheel
@@ -216,6 +229,11 @@ internal fun webInputCategory(stimulus: WebInputStimulus): WebInputCategory = wh
     -> WebInputCategory.Pointer
 
     is WebInputStimulus.TouchChanged -> WebInputCategory.Touch
+
+    is WebInputStimulus.DropMoved,
+    WebInputStimulus.DropExited,
+    is WebInputStimulus.DropPerformed,
+    -> WebInputCategory.Drop
 
     WebInputStimulus.FocusLost -> WebInputCategory.Focus
 }
@@ -305,6 +323,13 @@ internal class WebPointerOwnership {
             // A touch contact is not a pointer: it begins and ends no capture ownership, and its
             // ending reconciles nothing of the pointer that may still be down on the element.
             is WebInputStimulus.TouchChanged -> Unit
+
+            // A drop observation is not a pointer fact either: the drag it belongs to carries no
+            // button state the capture ownership could read, and it ends no pointer the element held.
+            is WebInputStimulus.DropMoved,
+            WebInputStimulus.DropExited,
+            is WebInputStimulus.DropPerformed,
+            -> Unit
 
             // An entry, a motion and a scroll state nothing about a button: they move a pointer the
             // surface already holds, or none at all, and neither begins nor ends the ownership.

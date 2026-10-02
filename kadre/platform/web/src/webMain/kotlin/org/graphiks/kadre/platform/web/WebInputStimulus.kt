@@ -25,10 +25,13 @@ import org.graphiks.kadre.surface.LogicalPoint
  * is the one that received it.
  *
  * The union covers what this phase activates — keyboard, the mouse and pen pointers, touch contacts,
- * scroll and the loss of focus. The touch contacts and the pointers stay disjoint, as the model
- * keeps them: a contact is a [TouchChanged] and never a pointer member, and a pointer is never a
- * contact. Gestures stay out of it, because this target publishes no gesture capability — no
- * recognizer exists on the Web (D-T2), and a stimulus nothing can reduce is a fiction.
+ * scroll, the drop observations of a drag over the element, and the loss of focus. The touch
+ * contacts and the pointers stay disjoint, as the model keeps them: a contact is a [TouchChanged]
+ * and never a pointer member, and a pointer is never a contact. Gestures stay out of it, because
+ * this target publishes no gesture capability — no recognizer exists on the Web (D-T2), and a
+ * stimulus nothing can reduce is a fiction. The entry of a drag stays out of it too, for the same
+ * reason the runtime has no `DropEntered` stimulus: an offer is presented by a host call, and the
+ * entry travels the drop seam of [WebInputObserver] instead.
  *
  * The reference design is AppKit's `AppKitInput`, whose members these mirror, with the same
  * immutability rule: a borrowed native event never crosses the boundary.
@@ -133,6 +136,36 @@ internal sealed interface WebInputStimulus {
             require(coalescingBoundary >= 0L) { "coalescingBoundary must be non-negative" }
         }
     }
+
+    /**
+     * One drag over the element, while a drag it presented an offer for is in flight.
+     *
+     * The offer it rides is the surface's own record — the one it presented and a handler accepted —
+     * so the reducer can tie the motion to the offer it still holds; a drag over an element with no
+     * active offer is delivered all the same and reduced by nothing, which is exactly what the model
+     * does with input no offer answers. This is not a `SurfaceStimulus.DropEntered` substitute: the
+     * entry itself travels the drop seam ([WebInputObserver.onDropEntered]) and never appears in
+     * this union, because the model presents an offer by a host call, not by a stimulus.
+     */
+    data class DropMoved(val position: LogicalPoint) : WebInputStimulus
+
+    /**
+     * The drag left the element's subtree, taking the offer it carried with it.
+     *
+     * The surface ties it to the offer it still holds and the reducer ends that offer — the drag
+     * that left can claim nothing.
+     */
+    data object DropExited : WebInputStimulus
+
+    /**
+     * The drag was dropped on the element.
+     *
+     * The position is the drop's own, and the surface ties the observation to the offer it holds:
+     * the reducer makes that offer's transfer claimable, which is the one moment the payload a read
+     * resolves is the browser's to give. A drop over an element with no active offer is delivered
+     * all the same and reduced by nothing.
+     */
+    data class DropPerformed(val position: LogicalPoint) : WebInputStimulus
 
     /**
      * The element's subtree, its browsing context, or the whole document stopped being active.

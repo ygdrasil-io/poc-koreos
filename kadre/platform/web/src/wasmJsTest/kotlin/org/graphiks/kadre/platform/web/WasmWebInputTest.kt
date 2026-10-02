@@ -623,6 +623,12 @@ class WasmWebInputTest {
                     "pointercancel",
                     "lostpointercapture",
                     "wheel",
+                    // The drag listeners of the drop seam are element listeners of the same phase: the
+                    // entry presents the offer, the over/leave/drop deliver the drag's observations.
+                    "dragenter",
+                    "dragover",
+                    "dragleave",
+                    "drop",
                     // The lifecycle observer's element listeners are the only other registrations, and
                     // a focus loss adds none: the surface publishes the one reset that loss owes.
                     "focusin",

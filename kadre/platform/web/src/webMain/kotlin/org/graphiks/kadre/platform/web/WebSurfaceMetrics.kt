@@ -63,8 +63,9 @@ internal class WebSurfaceConfiguration(
     /** The per-flow collector limit of those gates. */
     val maxCollectorsPerFlow: Int,
     /**
-     * The session scope a drop transfer outlives its stimulus in; received deliberately and unused
-     * until drag-and-drop is activated in Phase 5.
+     * The session scope a drop transfer outlives its stimulus in: the scope the reducer keeps a
+     * performed offer's claim timeout alive on, passed to the reducer through the drop configuration
+     * this surface builds.
      */
     val dropTransferScope: CoroutineScope?,
     /**
