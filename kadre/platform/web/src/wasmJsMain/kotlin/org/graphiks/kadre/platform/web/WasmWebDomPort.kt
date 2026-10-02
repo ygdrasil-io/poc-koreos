@@ -305,11 +305,12 @@ internal class WasmWebDomPort(element: HTMLElement) : WebHostPort {
     }
 
     /**
-     * One `dragover`: the drag's motion over the element, delivered like any observation, and the one
-     * question this event exists for — does the surface hold an offer this drag may complete? If it
-     * does, this event's default ("refuse this drop") is dropped: that is what makes the element a
-     * drop target at all, an activation of a target the surface owns and never a suppression of a
-     * page behaviour (D-D3). Without an offer nothing is dropped, whatever the policy says.
+     * One `dragover`: the drag's motion over the element, the entry re-made when no offer is held
+     * (D-D1's re-present rule — [deliverDragOver]), and the one question this event exists for —
+     * does the surface hold an offer this drag may complete? If it does, this event's default
+     * ("refuse this drop") is dropped: that is what makes the element a drop target at all, an
+     * activation of a target the surface owns and never a suppression of a page behaviour (D-D3).
+     * Without an offer nothing is dropped, whatever the policy says.
      */
     private val dragOverListener: (Event) -> Unit = { event ->
         safely {
@@ -891,19 +892,31 @@ internal class WasmWebDomPort(element: HTMLElement) : WebHostPort {
     }
 
     /**
-     * One drag over the element: the offer question asked of the state this event arrives on, the
-     * observation delivered, and the event's default dropped only on an active offer (D-D3).
+     * One drag over the element: the entry re-made when no offer is held (D-D1's re-present rule),
+     * the offer question asked of the state this event arrives on, the observation delivered, and
+     * the event's default dropped only on an active offer (D-D3).
      *
-     * The question comes first, and for both drag events the order is load-bearing: the delivery of
-     * the observation can spend the offer it asks about — a `drop` does exactly that — and a default
-     * dropped for an offer the surface no longer holds would be a prevention nobody could name. The
-     * question is asked of the very event in hand, inside its own callback, exactly as
-     * [suppressDefaultFor] is for the categories the policy governs; this one is not the policy's to
-     * answer, which is why it is a question of its own, answered by the surface that holds the offer.
+     * The re-present half is the parenthetical of D-D1 — the snapshot is built at the entry *and at
+     * every over without an active offer* — and it exists because the DOM's own bubbling spends
+     * offers behind the element's back: a move onto a child fires the child's `dragenter` before the
+     * parent's `dragleave`, so an ordinary nested target ends its own churn with no offer in hand,
+     * and a rejected offer leaves the same state behind. The over re-snapshots the store and
+     * re-presents through the very same seam a `dragenter` uses, so the handler decides again while
+     * this over is the event in hand and the element with children stays a drop target; the offer
+     * question is then asked of the state the re-presentation left — the acceptance the dispatch
+     * just committed is what it reads.
+     *
+     * The question's order stays load-bearing: the delivery of the observation can spend the offer
+     * it asks about — a `drop` does exactly that — and a default dropped for an offer the surface
+     * no longer holds would be a prevention nobody could name. It is asked of the very event in
+     * hand, inside its own callback, exactly as [suppressDefaultFor] is for the categories the
+     * policy governs; this one is not the policy's to answer, which is why it is a question of its
+     * own, answered by the surface that holds the offer.
      */
     private fun deliverDragOver(drag: DragEvent) {
         val current = element ?: return
         val observer = inputObserver ?: return
+        if (!observer.holdsActiveDropOffer()) deliverDragEntered(drag)
         val activate = observer.holdsActiveDropOffer()
         observer.onObservation(WebInputStimulus.DropMoved(wasmDropPosition(current, drag)))
         if (activate) drag.preventDefault()

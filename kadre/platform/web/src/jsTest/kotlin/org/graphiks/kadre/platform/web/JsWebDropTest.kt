@@ -206,6 +206,76 @@ class JsWebDropTest {
     }
 
     @Test
+    fun aDragOverAfterTheChildChurnRePresentsTheOfferTheDropCompletesOn() = runTest {
+        val harness = JsDropHarness()
+        try {
+            // The mutation this case kills: a port that builds the drop source only at `dragenter`.
+            // The DOM's own bubbling makes a move onto a child fire the child's enter BEFORE the
+            // parent's leave, so the churn of an ordinary nested target spends the offer the entry
+            // presented — and the next over arrives with no offer in hand. Without the re-present
+            // rule (D-D1's parenthetical), that over prevents nothing, the browser refuses the
+            // target, and no drop can ever complete on an element with children.
+            harness.autoAccept = true
+            val origin = harness.elementOrigin()
+            val child = (document.createElement("div") as HTMLElement).also {
+                it.style.position = "absolute"
+                it.style.left = "0px"
+                it.style.top = "0px"
+                it.style.width = "160px"
+                it.style.height = "90px"
+                harness.element.appendChild(it)
+            }
+            val dataTransfer = newDataTransfer()
+            dataTransfer.items.add("hello", "text/plain")
+
+            dispatchDrag(harness.element, "dragenter", dataTransfer, origin.x, origin.y)
+            dispatchDrag(child, "dragenter", dataTransfer, origin.x, origin.y)
+            dispatchDrag(harness.element, "dragleave", dataTransfer, origin.x, origin.y)
+            assertTrue(
+                !harness.offerActive,
+                "the churn's leave spent the offer the child's bubbled entry presented",
+            )
+
+            val over = dispatchDrag(child, "dragover", dataTransfer, origin.x, origin.y)
+            assertTrue(
+                over.defaultPrevented,
+                "the first over after the churn re-presents the offer: an element with children stays a drop target",
+            )
+            val drop = dispatchDrag(child, "drop", dataTransfer, origin.x, origin.y)
+            assertTrue(
+                drop.defaultPrevented,
+                "the drop completes on the re-presented offer, and its navigation default is dropped",
+            )
+
+            assertEquals(
+                3,
+                harness.entered.size,
+                "the parent entry, the child's bubbled entry, and the re-presentation the over made",
+            )
+            assertEquals(
+                1,
+                harness.delivered.filterIsInstance<WebInputStimulus.DropExited>().size,
+                "the churn's leave is the one exit the port delivered",
+            )
+            assertIs<WebInputStimulus.DropPerformed>(harness.delivered.last())
+
+            // The drop re-read the store against the re-presented snapshot: the bytes the drag
+            // protected belong to the offer the over re-made, not to an earlier entry's source.
+            val chunks = mutableListOf<ByteArray>()
+            withContext(Dispatchers.Default) {
+                harness.entered.last().first.items.single().collectBytes(2) { chunk -> chunks += chunk }
+            }
+            assertEquals(
+                "hello".encodeToByteArray().toList(),
+                chunks.flatMap { it.toList() },
+                "the re-presented source is the one the drop fed",
+            )
+        } finally {
+            harness.close()
+        }
+    }
+
+    @Test
     fun aReleasedPortDeliversNoDropFactAtAll() {
         val harness = JsDropHarness()
         harness.close()
@@ -226,6 +296,10 @@ class JsWebDropTest {
  *
  * The [JsDropHarness.offerActive] flag is the surface's half of the offer question, played by the
  * case: the port asks and applies, and what the surface answers is proven by `WebDropSurfaceTest`.
+ * [JsDropHarness.autoAccept] plays the other half of a real surface — the synchronous accept that
+ * commits *inside* the entry dispatch itself, which is what the offer question a port asks right
+ * after a re-presentation reads; the cases that drive the question one dispatch at a time leave it
+ * off and set [JsDropHarness.offerActive] by hand.
  */
 private class JsDropHarness {
     val element: HTMLElement = (document.createElement("div") as HTMLElement).also {
@@ -246,6 +320,9 @@ private class JsDropHarness {
     /** What the channel answers to the offer question, as the surface would. */
     var offerActive: Boolean = false
 
+    /** Whether every entry the port reports is accepted inside the dispatch that carries it. */
+    var autoAccept: Boolean = false
+
     private val port: JsWebDomPort = JsWebDomPort(element)
     private var released: Boolean = false
 
@@ -265,6 +342,7 @@ private class JsDropHarness {
 
             override fun onDropEntered(source: DropTransferSource, position: LogicalPoint) {
                 entered += source to position
+                if (autoAccept) offerActive = true
             }
 
             override fun holdsActiveDropOffer(): Boolean = offerActive
