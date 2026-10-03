@@ -12,9 +12,12 @@ Run both targets from the repository root:
 rtk ./gradlew :kadre:contracts:driver:web:jsBrowserSmoke :kadre:contracts:driver:web:wasmJsBrowserSmoke --rerun-tasks
 ```
 
-Four target-specific Playwright suites run in Chromium and emit target-specific
+Eleven target-specific Playwright suites run in Chromium and emit target-specific
 JUnit results:
 
+- [web-phase0.spec.mjs](playwright/web-phase0.spec.mjs) proves the baseline the
+  other suites assume: an existing host attaches through the public API, the
+  page creates no DOM of its own, and the session stops on request;
 - [web-lifecycle.spec.mjs](playwright/web-lifecycle.spec.mjs) proves the
   attachment lifecycle: ownership, detach/reinsert, cross-document transfer,
   Shadow DOM observation, `Manual` reconnection, focus and visibility reduction,
@@ -30,7 +33,8 @@ JUnit results:
   runtime keeps, a cancelled contact, the pixel and line wheel payloads, the
   single focus reset, the frozen snapshot of a closed surface, the page's own
   default behaviour under both members of `InputDefaultBehavior`, the pointer
-  capture taken for an owned pointer, and the touch boundary of this phase;
+  capture taken for an owned pointer, and a real touch tap delivered through
+  that same lane (the touch contract itself is `BCK-004`'s);
 - [web-interaction.spec.mjs](playwright/web-interaction.spec.mjs) drives the
   interaction seam with a real click and asserts only the closed set of honest
   outcomes — `committed`, or the one `refused` code the DOM exposes — recording
@@ -52,6 +56,28 @@ JUnit results:
 - [web-host-facade.spec.mjs](playwright/web-host-facade.spec.mjs) proves the
   five facade scenarios of `INT-003`, including `web-host-provider` through the
   delivered `windowProvider` option;
+- [web-touch.spec.mjs](playwright/web-touch.spec.mjs) proves the eight touch
+  scenarios of `BCK-004` in a browsing context that declares touch: a real
+  contact driven through CDP begins, moves, ends and is cancelled as the model's
+  own touch phases, two contacts keep two identities, the touch `pointerdown`
+  dispatches the `TouchStarted` interaction before the stimulus, the capability
+  is declared by the structural observation alone, a focus loss clears the
+  contacts, and no pointer state is ever aliased by a contact;
+- [web-drop.spec.mjs](playwright/web-drop.spec.mjs) proves the ten drop
+  scenarios of `BCK-006` against a real `DragEvent` of a `DataTransfer` the
+  fixture's host prepared before any Kadre call: one active offer, the
+  synchronous accept, the rejected offer without a handler, motion and exit and
+  performed drop on the accepted offer, the single claim winner, the bounded
+  copied read, the teardown that closes the transfers, and no `DataTransfer`
+  handle that ever crosses an interface;
+- [web-text-input.spec.mjs](playwright/web-text-input.spec.mjs) proves the nine
+  text-input scenarios of `BCK-005` on the `<input>` (and, for the multiline
+  branch, `<textarea>`) the fixture prepared: one session per surface, the
+  revision-stamped observations, a real composition driven by CDP
+  `Input.imeSetComposition`, the synthetic cancellation branches Chromium
+  cannot be driven into, the focus suspension, the stale-revision refusal, the
+  write-back sync, the submission action, and the teardown that closes the
+  session;
 - [web-typescript.spec.mjs](playwright/web-typescript.spec.mjs) proves the
   published `@kadre/host` facade, driven by the same TypeScript consumer that
   `kadre/consumers/typescript` type-checks.
@@ -60,7 +86,9 @@ Playwright diagnostics are removed after a successful smoke; they are preserved
 on a failure or interruption. Every identity of
 [contracts/evidence.tsv](contracts/evidence.tsv) names what it maps: the four
 surface scenarios, the two lease scenarios, the twelve input scenarios, the
-seven provider scenarios of `BCK-001` and the five facade scenarios of
+seven provider scenarios of `BCK-001`, the eight touch scenarios of `BCK-004`,
+the nine text-input scenarios of `BCK-005`, the ten drop scenarios of `BCK-006`
+and the five facade scenarios of
 `INT-003` are titled with the evidence id they carry, so a JUnit
 `testcase/@name` maps to them without interpretation; the phase 1 lifecycle
 suites keep their descriptive titles, pre-dating that rule, and their rows in
@@ -127,11 +155,17 @@ statement of the input contract is `DESIGN.md` §15.3, which the registry row
   (D11). `web-input-pointer-multi` proves the merge — a synthetic pen pointer
   joins the real mouse pointer in the single published entry — and the coherence
   of the two, including that no button stays stuck;
-- touch and gestures stay `Unsupported` until the phase that installs their
-  observers (D12): a real tap on a touch-enabled page publishes no pointer, no
-  touch and no event, and `InputCapabilities.touch` keeps saying so.
-  `web-input-touch-deferred` is the only test that creates its own browsing
-  context, because a touch input requires one that declares touch;
+- **gestures stay `Unsupported(GestureInput)`, and touch is no longer deferred.**
+  The gesture half of the old D12 boundary stands as a recorded limit, not a
+  phase gap: no recognizer exists anywhere in Kadre and the browser offers no
+  recognition primitive, so `InputCapabilities.gestures` stays
+  `Unsupported(GestureInput)` in every state — exactly the combination
+  `BACKEND-CAPABILITIES.md` §5 blesses (touch `Available`, gestures
+  `Unsupported`). The touch half was delivered by phase 5 on the pointer events
+  this suite already carries (`BCK-004`, `web-touch.spec.mjs`): `web-input-touch-delivered`
+  keeps a smoke tab on the ordinary lane — a real tap in a touch-declaring
+  browsing context publishes the contact's own touch events and never a pointer
+  — and the suite keeps its own touch-declaring context for that test;
 - `PointerCaptureMode.Locked` stays outside the promise of this phase: pointer
   lock needs a transient user activation and belongs to
   `InteractionAction.LockPointer` (`DESIGN.md` §9.6). `web-input-pointer-capture`
@@ -166,11 +200,145 @@ each row is what asserts it:
 | --- | --- | --- |
 | `SurfaceInput.state` | `keyboard` and `pointer` become `Available` once the session configuration installed the observers; the state carries the pressed physical keys, the modifiers, the single pointer with its kind/buttons/position and the input revision | `web-input-key-state-before-event`, `web-input-key-modifiers`, `web-input-pointer-primary` |
 | `SurfaceInput.events` | one `InputEvent` per observation, each naming the input revision the state already carries; the flow completes when the surface closes | every input scenario; the completion specifically in `web-input-terminal-closed` |
-| `InputCapabilities.touch`, `InputCapabilities.gestures` | `Unsupported` and `Unsupported(GestureInput)`: no touch observation is delivered | `web-input-touch-deferred` |
+| `InputCapabilities.touch`, `InputCapabilities.gestures` | `touch` becomes `Available` with the same structural observation as `keyboard`/`pointer` (phase 5 delivers the contacts; the contract is `BCK-004`'s), and `gestures` stays `Unsupported(GestureInput)` — no recognizer exists | `web-input-touch-delivered` (delivery on the ordinary lane); the capability cell itself is asserted by every phase 5 scenario and by `WebInputSurfaceTest.keyboardAndPointerAreDeclaredOnlyByTheSurfaceOwnStructuralObservation` |
 | `SurfaceCapabilities.pointerCapture` | `Supported({None, Confined}, Available)`; a `Confined` request without an owned pointer is refused `InteractionRequired(Missing)`, and `Locked` is `Unsupported(UpdateSurface)` | `web-input-pointer-capture` |
 | `SurfaceCapabilities.inputDefaultBehavior` | `Supported({HostDefault, SuppressWhenPossible}, Available)`; under `HostDefault` no browser default is dropped, under `SuppressWhenPossible` only the wheel and a press of the nine document-scroll keys are | `web-input-default-behavior` |
 | the terminal `SurfaceCapabilities` | unavailable: the shared all-`Unsupported` snapshot (`unsupportedSurfaceCapabilities()`, `SurfaceAdmission.kt:20`) | `WebInputSurfaceTest.theInputDefaultBehaviorCapabilityIsTheWholeEnumAndTheOtherFieldsStayUnsupported` — the scenario `web-input-terminal-closed` reads `data-kadre-input-state`, a `SurfaceInputState`, plus the session and flow closure, and the fixture publishes no `SurfaceCapabilities` attribute at all |
 | the input lane at the terminal transition | closed rather than reset: a key held at the close stays readable in the frozen snapshot, and no later stimulus is admitted | `web-input-terminal-closed` |
+
+## Phase 5 touch, text input and drag-and-drop limits
+
+These are the real boundaries of the delivered phase, not defects. The normative
+statements are `DESIGN.md` §10.3 (IME), §10.4 (drag-and-drop) and the phase-5
+rewrites of §15.3, and the adapter register `kadre/capabilities/web.md`
+§3.9-3.11, which each statement below cites. The three active contracts of this
+phase are `BCK-004` (touch delivery), `BCK-005` (text input and IME) and
+`BCK-006` (drag-and-drop):
+
+- **gestures stay `Unsupported(GestureInput)` without a recognizer** (D-T2).
+  No recognizer exists in the runtime, the foundation or this adapter, and the
+  browser offers no recognition primitive; the surface publishes
+  `gestureKinds = emptySet()` in the very observation that declares touch
+  (`WebHostSession.kt:912-925`), and the sentinel `web-touch-no-gesture-claim`
+  pins the cell. `BACKEND-CAPABILITIES.md` §5 explicitly blesses pointer/touch
+  `Available` with gestures `Unsupported`; a hand-rolled Pan or Pinch would be
+  a hidden approximation, the same species as the dropped page-mode wheel;
+- **touch rides the pointer events, and the DOM touch events are not read.**
+  The contacts route through `webTouchPhase` on the existing
+  `pointerdown`/`pointermove`/`pointerup`/`pointercancel` listeners
+  (`WebInputMapping.kt:355-361`); no `touchstart`/`touchmove`/`touchend`
+  listener exists anywhere in the two ports. A contact keeps its own
+  `TouchId`, minted by the reducer per stable contact identity — the ports'
+  `WebTouchContacts` table mints one identity object per `pointerId` and never
+  lets a contact alias the single pointer identity (`WebInputTracking.kt:109-157`);
+- **`touch-action` is the host's responsibility.** Kadre writes no style and
+  no `touch-action`; a contact the browser revokes for a native scroll the host
+  let through arrives as `pointercancel` and is delivered
+  `TouchPhase.Cancelled` as reported, never compensated
+  (`WebInputMapping.kt:345-347`). [phase-5-text-input.md](manual/phase-5-text-input.md)
+  procedure 3 makes the host boundary observable;
+- **the text-input v1 scope is `<input>` and `<textarea>`** (D-X3): the two
+  element kinds whose value and selection *are* the document, probed with the
+  browser's own `instanceof` (`JsWebTextInputEvents.kt:139-152`) so a
+  non-addressable element never takes an expando write. A session opened on
+  anything else — `contenteditable` included — observes nothing, and its
+  write-back is refused `Closed(TextInputSession)` with the element untouched
+  (`WebTextInputPort.kt:189`, `:238-241`); the open itself is never refused,
+  because editability is the host's boundary (D-X2);
+- **`updateCursor` has no browser effect** (recorded limit): the rect is
+  accepted at the exact revision and stored in the port's shadow; the browser
+  draws its own caret (`WebTextInputPort.kt:208-216`);
+- **the delete `beforeinput` types produce no observation** (recorded limit):
+  a delete removes a grapheme cluster and the DOM names no cluster boundary
+  without the Segmentation API Kadre does not embed, so
+  `deleteContentBackward`/`deleteContentForward` and every other unmapped type
+  publish nothing (`WebTextInputPort.kt:257-271`) — also on a non-collapsed
+  selection, where the edit would be exactly computable; only `deleteByCut`,
+  whose range *is* the selection, stays mapped (`:308-314`). The conservative
+  arm could be restored later on the `deleteByCut` reasoning; the next accepted
+  write-back always restores the element-and-model agreement;
+- **a real cancellation carries the empty string, not null.** A real
+  `CompositionEvent` cannot carry null data — Web IDL stringifies it — so the
+  mid-composition `Esc` of a real browser reports the removal the browser
+  performed (a `Replace` the runtime refuses by its own range check, the
+  application never having accepted the composition) followed by the terminal
+  `CompositionChanged(null, "", null)`
+  (`WebTextInputSurfaceTest.aCancellationTheBrowserPerformedReportsTheRemovalTheRuntimeRefusesAndStillEndsClean`,
+  scenario `web-text-composition-cancelled`);
+- **Chromium cancels a composition on a real blur.** The focus-loss suspension
+  preserves the composition — the arm pinned by the Kotlin surface tests
+  (`WebTextInputSurfaceTest.aFocusLossSuspendsWithTheCompositionPreservedAndARegainedFocusResumesIt`)
+  and by `web-text-focus-suspends` without an active composition — but a real
+  window blur makes Chromium withdraw its own composition text before the
+  suspension lands, and what the element shows afterwards is the browser's
+  doing. [phase-5-text-input.md](manual/phase-5-text-input.md) procedure 2
+  observes it on a real IME;
+- **a listener exception closes the port owner, not the runtime session**
+  (recorded limit): the containment closes the owner, withdraws the listeners
+  and answers `Closed(TextInputSession)` to every later operation, while the
+  session the application holds stays in its current state until the
+  application closes it (`WebTextInputPort.kt:395-403`). The app-closable shape
+  is the delivered contract, recorded as such;
+- **`keyboard.insertText` does fire `beforeinput`** — correcting the plan's
+  note: the scenario `web-text-replace-event` proves the arrival as an
+  `insertText` `beforeinput` and the `Replace` the port publishes
+  (`playwright/web-text-input.spec.mjs:88-108`). It still produces no `keydown`
+  and no composition event, so no submission action and no composition
+  observation;
+- **a bounded read of an unknown-size drop item answers
+  `PlatformFailure(Web, "drop", "byte-read")`, not the limit failure**
+  (recorded limit): the runtime can only bound an unknown-size total mid-read,
+  throwing from the collector it hands the source, and the port's containment
+  converts that throw into the seam's platform failure before the runtime's own
+  `ResourceLimitExceeded` branch is reached (`RuntimeDropTransfer.kt:338-355`,
+  `WebDropStimulus.kt:161-175`). A known-size item keeps the up-front check
+  (`RuntimeDropTransfer.kt:314`). The read fails closed either way; the failure
+  shape differs, and the register records the difference rather than paying a
+  runtime change for it;
+- **`dragover` without an offer re-snapshots and re-presents** (the D-D1
+  re-present rule, now the model's own semantics): the DOM's bubbling spends
+  offers behind the element's back — a child's `dragenter` fires before the
+  parent's `dragleave` — and a rejected offer leaves the same state, so an
+  offer-less `dragover` rebuilds the snapshot and re-presents through the same
+  seam, and with a rejecting handler every offer-less `dragover` re-dispatches
+  a presentation (`JsWebDomPort.kt:878-907`);
+- **`preventDefault` is target activation, never default suppression** (D-D3):
+  the `dragover` and `drop` handlers call `preventDefault()` only while the
+  surface holds the accepted offer of the drag in hand — the one thing that
+  makes the element a drop target at all — and the closed
+  `SUPPRESSED_INPUT_DEFAULTS` set is not extended. These are the only three
+  `preventDefault` sites of each port (`JsWebDomPort.kt:986-1006`), pinned by
+  the sentinel `web-drop-no-prevent-default-without-offer`;
+- **Kadre is never the source of a drag.** Only incoming drops are received;
+  there is no drag-out, and no `DropEntered` stimulus exists — the offer is
+  presented by the host-side seam call, the model's own shape
+  (`DESIGN.md` §10.4). A real drag from the OS (a file from Finder, text from
+  another tab) cannot be staged honestly headlessly and is the procedure of
+  [phase-5-text-input.md](manual/phase-5-text-input.md), procedure 5.
+
+### Published phase 5 availability
+
+The canonical JSON of `BCK-004`, `BCK-005` and `BCK-006` carries the same empty
+`capabilities.initial` / `capabilities.transitions` arrays as every other
+browser contract, so this table is the availability record of the phase — it
+names what an attached web surface really publishes, and the scenario or test
+next to each row is what asserts it:
+
+| API | Published value | Asserted by |
+| --- | --- | --- |
+| `InputCapabilities.touch` | `FeatureAvailability.Available` once the session configuration installed, from the structural observation alone (`touchInstalled = true`); `Unsupported` before installation and `Unavailable(SourceOverflow(InputSource))` on the terminal overflow arm | every `web-touch.spec.mjs` scenario (capability cell), `web-touch-capability-structural` in particular; `web-input-touch-delivered` on the ordinary lane |
+| `InputCapabilities.gestures` | `Capability.Unsupported(Unsupported(GestureInput))` in every state, overflow arm included | `web-touch-capability-structural`, sentinel `web-touch-no-gesture-claim` |
+| `SurfaceInput.state.touches` / `InputEvent.TouchChanged` | one `TouchState` per live contact, keyed by the reducer's own `TouchId` allocation; `pointers` and `touches` disjoint; a focus loss clears the contacts with the neutral snapshot | `web-touch-started`, `web-touch-multi-contact`, `web-touch-ended`, `web-touch-cancelled`, `web-touch-no-pointer-alias`, `web-touch-focus-loss-clears` |
+| the interaction trigger of a touch | `InteractionEvent.TouchStarted` dispatched synchronously from the touch `pointerdown`, before the ordinary stimulus | `web-touch-interaction-trigger` |
+| `InputCapabilities.textInput` | `Capability.Supported(Unit, Available)` structurally, at the session configuration; the pre-install input state and the terminal overflow arm publish `Capability.Unsupported(Unsupported(TextInput))`; a second open while one session is live is `AlreadyInUse(TextInputSession)` | every `web-text-input.spec.mjs` scenario (capability cell); `web-text-open-single-session` |
+| the text session events | `TextInputEvent.Replace`/`SelectionChanged`/`CompositionChanged`/`Action`, each stamped with the accepted document revision; composition end is the terminal `CompositionChanged(null, "", null)`; a focus loss suspends and a regained focus resumes with the composition preserved | `web-text-replace-event`, `web-text-composition-lifecycle`, `web-text-composition-cancelled`, `web-text-focus-suspends`, `web-text-action-submit` |
+| the write-back | `updateSurroundingText` writes `value` + `setSelectionRange` on the addressed element (`<input>`/`<textarea>` v1 only) and re-syncs the shadow; a stale revision is refused, a non-addressable element closes the session with `Closed(TextInputSession)` and the element untouched | `web-text-writeback-sync`, `web-text-stale-revision` |
+| teardown | the surface's termination closes the session, withdraws the listeners and delivers no late observation | `web-text-teardown-closes` |
+| `InputCapabilities.dragAndDrop` | `FeatureAvailability.Available` once the session configuration installed (`dragAndDropAvailable = true`); `Unsupported` before installation and `Unavailable(SourceOverflow(InputSource))` on the terminal overflow arm | every `web-drop.spec.mjs` scenario (capability cell), `web-drop-presented-single-active` in particular |
+| the drop offer flow | `DropOffer` presented by the seam's `presentDrop` (one active offer, the previous one `LeftSurface`), `InteractionEvent.DropEntered` dispatched in the `dragenter` frame, `AcceptDrop` accepted or the offer rejected; `dragover` with an offer → `DropMoved`, `dragleave` → `DropExited`, `drop` → `DropPerformed` making the transfer claimable | `web-drop-presented-single-active`, `web-drop-accept-synchronous`, `web-drop-rejected-without-handler`, `web-drop-moved-after-accept`, `web-drop-exit-terminates`, `web-drop-performed-claimable` |
+| the transfer | exactly one claim winner, bounded copied reads (`collectBytes`), one reader at a time; an item the browser never let the port attach answers `PlatformFailure(Web, "drop", "payload-unavailable")` | `web-drop-claim-single-winner`, `web-drop-read-bounded-copy` |
+| teardown and leak sentinels | the session's terminal transition closes the offer and the transfers exactly once; no `DataTransfer`, `File` or `Blob` handle crosses a Kadre interface | `web-drop-teardown-closes`, `web-drop-close-exactly-once`, `web-drop-no-data-transfer-leak`, `web-drop-no-fabricated-mime` |
+
 
 ## Phase 4 interaction and window limits
 
@@ -254,7 +422,7 @@ named next to each row is what asserts it:
 
 | API | Published value | Asserted by |
 | --- | --- | --- |
-| `SurfaceCapabilities.handlerInteractions` | `Unsupported(InstallInteractionHandler)` before installation and at the terminal snapshot; `Supported({EnterFullscreen, ExitFullscreen, LockPointer, UnlockPointer}, Available)` once the session configuration installed, at the same structural moment as `keyboard`/`pointer` | `WebInteractionSurfaceTest.handlerInteractionsIsTheFourWebActionsOnceStructurallyInstalled`, `.thePreInstallSnapshotClaimsNoInteractionAtAll`; the smoke scenario `web-interaction-fullscreen` reads the armed flag `data-kadre-interaction-armed` the fixture sets after a successful install |
+| `SurfaceCapabilities.handlerInteractions` | `Unsupported(InstallInteractionHandler)` before installation and at the terminal snapshot; `Supported({EnterFullscreen, ExitFullscreen, LockPointer, UnlockPointer, AcceptDrop}, Available)` once the session configuration installed, at the same structural moment as `keyboard`/`pointer` — the phase 5 `AcceptDrop` is the one action with no browser primitive behind it, answered by the drop seam | `WebInteractionSurfaceTest.handlerInteractionsIsTheFiveWebActionsOnceStructurallyInstalled`, `.thePreInstallSnapshotClaimsNoInteractionAtAll`; the smoke scenario `web-interaction-fullscreen` reads the armed flag `data-kadre-interaction-armed` the fixture sets after a successful install |
 | `SurfaceCapabilities.armedInteractions` | `Unsupported(ArmInteraction)` in every snapshot — no platform implements the arm path | `WebInteractionSurfaceTest.armedInteractionsRemainsUnsupported` |
 | `InteractionContext.request` | the common engine's admission: `Expired`, `WrongSurface`, `Consumed`, `Unsupported(Interaction)` at admission, `Closed(Interaction)` when the registration closes during the native call (both `Now` and `Deferred` paths), `ResourceLimitExceeded(Interaction, limit)` past the deferred budget; a `LockPointer` mode other than `Locked` is `InvalidRequest("action.mode")`; the terminal outcome is `Committed` or `Rejected` — `Committed` only after the browser confirmed | `RuntimeInteractionHandlerCommonTest` (`duplicateRetainedExpiredAndUnsupportedRequestsFailWithoutCallingNativeCode`, `requestRefusesWithClosedWhenTheRegistrationClosesDuringTheNativeCall`, `deferredAdmissionRefusesWithClosedWhenTheRegistrationClosesDuringTheNativeCall`, `pendingBudgetExceededRefusesWithResourceLimit`), `WebInteractionSurfaceTest` (`aRetainedContextIsRefusedExpiredAfterTheHandlerReturns`, `lockPointerRefusesEveryModeButLockedAsInvalidActionMode`, `aDeferredTerminalRefusalIsRejectedWithTheRefusalFailureAndFreesTheBudget`, `aSynchronousExitTerminalCommitsThePending`) |
 | the interaction outcomes flow | one `InteractionActionOutcome` per admitted request, terminal only — `Committed` at the browser's change event, `Rejected` at its error event, promise rejection, emission failure or abandonment; the flow completes at the surface's terminal transition | `web-interaction-fullscreen` (closed set, one outcome per click); `WebInteractionSurfaceTest.terminationAbandonsDeferredRequestsWithClosedInteraction` |
@@ -363,7 +531,12 @@ automated smokes:
   user-activated fullscreen with the browser's own `Esc` exit, a real pointer
   lock with the pointer hidden and confined, the token rules observable from a
   page console, and the real visible popup the provider scenarios only reach
-  headlessly.
+  headlessly;
+- [phase-5-text-input.md](manual/phase-5-text-input.md) covers the real OS IME
+  (activation, candidates, commit, mid-composition `Esc` cancellation), a real
+  multi-layout keyboard, the host's own `touch-action`, the `contenteditable`
+  element the v1 text-input contract does not address, and a real OS drag into
+  the element, which headless automation cannot stage.
 
 They are informative, they do not create validator evidence, and they do not
 change contract status.

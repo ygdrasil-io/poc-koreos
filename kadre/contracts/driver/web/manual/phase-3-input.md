@@ -61,7 +61,7 @@ consumer of this API can read:
 | Attribute | What it carries |
 | --- | --- |
 | `data-kadre-input-state` | the whole `SurfaceInputState`: `rev=N keys=[code:7:4] mods=[Shift] pointers=[mouse#primary@(40,30)] touches=0` |
-| `data-kadre-input-caps` | `keyboard=available pointer=available touch=unsupported gestures=unsupported:gestureinput` |
+| `data-kadre-input-caps` | `keyboard=available pointer=available touch=available gestures=unsupported:gestureinput dragAndDrop=available textInput=supported rawInput=unsupported:rawinputaccess` |
 | `data-kadre-input-events` | every `InputEvent` published, in order, `;`-separated, each with its `:rev=` |
 | `data-kadre-input-count` | how many events were published |
 | `data-kadre-input-resets` | how many `StateReset` were published, and why (`1:focusLost`) |
@@ -274,12 +274,13 @@ without hardware. The fixture marks that a pen state exists (`:pen`) rather than
 republishing its members, so what this pass reads is the kind and the pen's
 presence; the exact member values are read from the consumer's own
 `SurfaceInput.state`. Record the pen model and what it reports. A digitizer that
-reports `pointerType == "touch"` for its stylus is the declared boundary of this
-phase and not a failure: the port refuses the touch kind before acting, so
-nothing is published, no `TouchState` is created and `InputCapabilities.touch`
-keeps saying `unsupported` on the live surface this pass reads (the register's
-`touch` row gives its two absent states, the second being the overflow-terminal
-one this procedure does not stage). Also compare the two `pointerType` values your
+reports `pointerType == "touch"` for its stylus is no longer the declared
+boundary it was at phase 3: the contact travels the touch path phase 5 delivered
+(`BCK-004`), as its own touch states and never as a pointer — the observation
+below can confirm the pointer half of that (`pointers=[…]` never gains the
+contact) against the touch half the register records
+([capabilities/web.md](../../../../capabilities/web.md) §3.9). Also compare the
+two `pointerType` values your
 hardware actually produces (hover versus contact, eraser versus tip) against the
 kind readback; a pen-specific behaviour the automated suite cannot stage — a
 pressure ramp, an eraser end, a barrel button — is exactly what this procedure
@@ -360,12 +361,32 @@ the merge does not leave a button stuck: after the merged identity's last press
 is released the entry shows no button (`pointers=[pen#@(60,40):pen]` while the
 pen is the current kind, `pointers=[mouse#@(60,40)]` once the mouse moves again
 — the two forms `web-input-pointer-multi` asserts). A second concurrent pointer
-from a device the DOM reports separately (a touch contact, for instance)
-produces nothing at all, because the touch kind is refused whole. Combinations
+from a device the DOM reports separately — a touch contact — has its own track
+since phase 5 delivered touch (D12 discharged by `BCK-004`): it appears in
+`touches=[…]`, never in `pointers=[…]`, which is the disjointness the register's
+touch row pins (§3.9) — what this pass cannot see here is the touch track
+itself, because this scenario's page does not declare touch and this procedure
+stages the pointer lane only. Combinations
 this pass should record, because hardware makes them easy and the automated
 suite cannot stage them: mouse and pen held simultaneously, a pen re-entering
 while the mouse is outside, and a pen lift that reports `pointerleave` while the
 mouse is still over the element.
+
+**Discharged by phase 5 — the touch half.** The D12 boundary this charter
+recorded ("a real touch produces no pointer, no touch and no event") was a
+phase limit, not a model limit, and its touch half is delivered: the contacts
+ride the pointer events the element already observes, each carrying its own
+stable contact identity into the common reducer's own `TouchId`s, and the
+contract is `BCK-004` with its own suite (`web-touch.spec.mjs`) and its own
+capability row. What remains of D12 here is exactly the half phase 5 could not
+honour honestly — **gestures stay `Unsupported(GestureInput)` without a
+recognizer**, a recorded limit rather than a deferral — and the invariant that
+made the old refusal safe and keeps the delivery safe: a contact never aliases
+the single pointer identity, `pointers` and `touches` stay disjoint
+([capabilities/web.md](../../../../capabilities/web.md) §3.9). The real-touch
+edges a manual pass can still add — the host's `touch-action` deciding whether
+a native scroll cancels a contact, real multi-contact hardware — are the
+procedures of [phase-5-text-input.md](phase-5-text-input.md).
 
 ## Limits and diagnostic record
 
@@ -388,6 +409,7 @@ turned into an automated test when the browser permits it.
 - [Web browser driver](../README.md) — Phase 3 limits and published availability
 - [Web Phase 1 lifecycle charter](phase-1-lifecycle.md) — the static host and the target commands
 - [Web Phase 2 surface charter](phase-2-surface.md)
+- [Web Phase 5 text input charter](phase-5-text-input.md) — the touch/IME/drop procedures the phase 5 delivery added
 - [AppKit Phase 4 input design](../../../../APPKIT-PHASE-4-INPUT-DESIGN.md) — the native phase/momentum frontier this adapter substitutes
 - [Kadre design](../../../../DESIGN.md) — §15.3, §9.6
 - [Web implementation roadmap](../../../../WEB-IMPLEMENTATION-ROADMAP.md)

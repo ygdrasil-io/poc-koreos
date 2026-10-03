@@ -346,6 +346,68 @@ Livré sur les deux targets : le moteur d’interaction du runtime lifté en `co
 - les scénarios ne confondent pas un échec de permission/activation navigateur avec une absence de capability Kadre ;
 - les cas non automatisables de clavier natif/IME reçoivent une procédure manuelle ciblée, sans remplacer les invariants déterministes automatisés.
 
+#### État (3 octobre 2026)
+
+Livré sur les deux targets, entièrement en code Web — le runtime `commonMain` ne bouge pas, le
+reducer et les ports communs étaient prêts. **Touch** : les contacts de `pointerType == "touch"`
+sont routés par `webTouchPhase` vers `SurfaceStimulus.TouchChanged` sur les tout mêmes listeners
+pointer que la phase 3 (aucun listener `touchstart`/`touchmove`/`touchend`), une table de contacts
+frappe un objet d’identité stable par `pointerId` pour la durée du geste et le reducer commun
+alloue ses `TouchId` par là — `pointers` et `touches` restent disjoints ; `touchInstalled = true`
+à l’observation structurelle, un `pointerdown` tactile dispatch `TouchStarted` avant le stimulus
+ordinaire, la perte de focus vide les contacts côté reducer, et un contact que le navigateur
+révoque pour un scroll natif arrive `Cancelled` tel quel — le `touch-action` restant une
+responsabilité du host. **Gestures** : `Unsupported(GestureInput)` sans recognizer, décision
+honnête explicitement permise par `BACKEND-CAPABILITIES.md:133`, enregistrée comme limite et non
+comme différé — le paragraphe normatif D12 de `DESIGN.md` §15.3 est réécrit en conséquence.
+**Text input/IME** : `WebTextInputPort` avec un document-shadow port-internal (le précédent
+`AppKitTextInputShadow`), les listeners `beforeinput`/`composition*`, des observations stampées à
+la révision acceptée contre le shadow, l’écriture retour (`updateSurroundingText` → `value` +
+`setSelectionRange`) sondée par le `instanceof` du navigateur sur `<input>`/`<textarea>`
+seulement — `contenteditable` hors v1 : la session s’ouvre, n’observe rien, et l’écriture-retour
+est refusée `Closed(TextInputSession)` sans toucher l’élément ; `updateCursor` est stocké sans
+effet navigateur (le caret est au navigateur) ; les types delete non computables (grapèmes)
+ne publient rien, `deleteByCut` restant mappé à l’étendue exacte de la sélection ; la touche de
+soumission d’un mono-ligne publie l’`Action` de la config et jamais de texte ; la cancellation
+porte la forme réelle (un `CompositionEvent` ne peut pas porter `null` : `data=""` → le retrait
+que le navigateur a exécuté, que le runtime refuse par son test d’étendue, puis la terminale
+`CompositionChanged(null, "", null)`) ; la perte de focus suspend en préservant la composition
+(Chromium annule lui-même sa composition sur un blur réel — bras asservi par les tests de
+surface Kotlin et noté au cahier manuel) ; une exception de listener ferme le port owner, la
+session runtime restant closeable par l’application ; `keyboard.insertText` tire bien un
+`beforeinput`, corrigeant la note du plan. **Drag-and-drop** : listeners `dragenter`/`dragover`/
+`dragleave`/`drop` sur l’élément, descripteurs snapshotés à l’entrée (mimes canoniques seuls,
+les non-canoniques ignorés jamais fabriqués, `File`/`Blob` internes aux closures), offer
+présentée par le seam synchrone (`presentDrop` → `DropEntered` dans la frame DOM →
+`AcceptDrop` à token `Now`, sinon rejet et défaut navigateur gardé), re-présentation sur un
+`dragover` sans offre (le churn enter/leave des enfants absorbé), `preventDefault` uniquement
+pendant qu’une offre est tenue (trois sites par port, D-D3), lectures bornées copiées,
+fermeture de session → `OwnerClosed` + transfers clos exactement une fois ; limite enregistrée :
+une lecture bornée d’un item de `sizeBytes` inconnu répond
+`PlatformFailure(Web, "drop", "byte-read")` plutôt que la failure de limite (le containment du
+port enveloppe l’appel du collecteur où le runtime lève son exception de limite). Sont actifs en
+preuve : `BCK-003` réécrit (11 scénarios + 4 sentinelles, la paire touch-deferred retirée dans le
+même commit que le flip) et les trois lignes nouvelles `BCK-004` (touch, 8 scénarios + 4
+sentinelles), `BCK-005` (text input/IME, 9 + 4) et `BCK-006` (drag-and-drop, 10 + 4) — 77
+scénarios Playwright verts sur les deux targets, evidence JSON+JUnit corrélée par
+`kadre/contracts/driver/web/contracts/evidence.tsv` et validateur vert (l’état intermédiaire
+assumé du gate entre les tâches de code et le flip est résolu). Les touches réelles passent par
+CDP `Input.dispatchTouchEvent` dans un contexte déclarant touch, la composition réelle par CDP
+`Input.imeSetComposition`, et les branches que Chromium ne produit pas restent synthétiques (le
+précédent D10). Différés/limites enregistrées : gestures sans recognizer (D-T2), `contenteditable` hors v1 (D-X3), `updateCursor` sans effet navigateur, deletes non computables
+sans observation, session runtime closeable par l’application après exception d’listener,
+`byte-read` sur les items de taille inconnue, pas de drag-sortant. Les cas non automatisables —
+IME OS réel (candidats, commit, annulation Échap), clavier multi-layout, `touch-action` du host,
+`contenteditable`, drag OS réel hors headless — font l’objet du cahier manuel
+`kadre/contracts/driver/web/manual/phase-5-text-input.md` ; le cahier de la phase 3 porte la
+décharge D12 ; le registre des capabilities est réécrit dans `kadre/capabilities/web.md` (§2,
+trois lignes réécrites + textInput ; §3.9-3.11 ; §4) ; limites et tables de disponibilité dans
+`kadre/contracts/driver/web/README.md` ; matrice et points d’attachement dans
+`kadre/BACKEND-CAPABILITIES.md` §4/§6.3 ; preuves par target :
+`kadre/contracts/driver/web/build/contract-evidence/<target>/contract-evidence/browser/chromium/BCK-004.json`,
+`…/BCK-005.json`, `…/BCK-006.json` et le `BCK-003.json` réécrit, validés contre le rapport JUnit
+du même smoke et rejoués par `:kadre:contracts:validator:check`.
+
 ### Phase 6 — Displays, devices, gamepads et permissions
 
 #### Objectif
