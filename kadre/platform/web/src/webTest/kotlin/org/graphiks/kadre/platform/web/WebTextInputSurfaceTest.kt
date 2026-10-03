@@ -298,6 +298,69 @@ class WebTextInputSurfaceTest {
     }
 
     @Test
+    fun aDeleteTheShadowCannotComputePublishesNothingAtAll() = runTest {
+        val harness = TextInputHarness(this)
+        harness.start()
+        val session = assertIs<KadreResult.Success<TextInputSession>>(
+            harness.surface().input.openTextInput(
+                config(
+                    surroundingText = "a😀b",
+                    selection = TextRange(4, 4),
+                    documentRevision = TextDocumentRevision(7),
+                ),
+            ),
+        ).value
+        val events = collect(session)
+
+        // The caret sits after the surrogate pair, the shape a backspace is aimed at in the wild: a
+        // browser removes the whole grapheme cluster, and the shadow has no cluster boundary to
+        // compute it from — the one-code-unit edit it could reach would report deleting the low
+        // surrogate, silently splitting the character in the application's document.
+        harness.access.emitBeforeInput("deleteContentBackward", null)
+        harness.access.emitBeforeInput("deleteContentForward", null)
+        testScheduler.runCurrent()
+
+        assertEquals(
+            emptyList<TextInputEvent>(),
+            events,
+            "a delete is a grapheme-cluster edit the shadow cannot compute: it produces no " +
+                "observation, and the next accepted write-back rewrites the element and re-syncs",
+        )
+        session.close()
+        harness.stop()
+        testScheduler.runCurrent()
+    }
+
+    @Test
+    fun aWriteBackOnAnElementThatCannotCarryItAnswersClosedWithoutTouchingTheElement() = runTest {
+        val harness = TextInputHarness(this, kind = "div")
+        harness.start()
+        val access = harness.access
+        val session = assertIs<KadreResult.Success<TextInputSession>>(
+            harness.surface().input.openTextInput(config()),
+        ).value
+
+        assertEquals(
+            KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.TextInputSession)),
+            session.updateSurroundingText("next", TextRange(4, 4), TextDocumentRevision(1)),
+            "the write-back is the contract and this element cannot carry it: the closed failure, " +
+                "never a write of a non-contract property onto the host's element",
+        )
+        assertTrue(
+            access.writes.isEmpty(),
+            "the element is never asked: the port refuses before the write, on every target",
+        )
+        assertEquals(
+            KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.TextInputSession)),
+            session.updateSurroundingText("next", TextRange(4, 4), TextDocumentRevision(2)),
+            "the session that could not honour its own write-back answers Closed from then on",
+        )
+        session.close()
+        harness.stop()
+        testScheduler.runCurrent()
+    }
+
+    @Test
     fun theWriteBackReachesTheElementAndTheSameRevisionIsIdempotentOrRefused() = runTest {
         val harness = TextInputHarness(this)
         harness.start()

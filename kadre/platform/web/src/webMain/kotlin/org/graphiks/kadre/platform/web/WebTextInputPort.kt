@@ -223,12 +223,22 @@ internal class WebTextInputOwner(
      * — the shape its non-reconciliable guard exists for. The shadow's own application is the
      * AppKit precedent's; its refusals (`Stale`, `CompositionActive`) are unreachable behind the
      * runtime's own admission, and answered with the failures that name them.
+     *
+     * An element the v1 contract does not address cannot carry the write-back at all, and the
+     * write-back *is* the contract: the session stops here — the owner closes, so no later command
+     * and no late observation pretend it still serves — and answers the closed failure, rather than
+     * writing a non-contract property onto the host's element (D-X2 permits the open; nothing
+     * licenses the write).
      */
     fun applyDocument(
         text: String,
         selection: TextRange,
         revision: TextDocumentRevision,
     ): KadreResult<Unit> {
+        if (!addressable) {
+            close()
+            return KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.TextInputSession))
+        }
         if (!access.writeDocument(text, selection.startUtf16, selection.endExclusiveUtf16)) {
             return KadreResult.Failure(
                 KadreFailure.PlatformFailure(KadrePlatform.Web, TEXT_INPUT_SEAM_DOMAIN, TEXT_INPUT_WRITE_BACK_CODE),
@@ -248,12 +258,21 @@ internal class WebTextInputOwner(
      * One `beforeinput`: the edit its `inputType` describes, computed against the shadow.
      *
      * The types carried here are the ones a shadow can compute honestly: the insertions whose text
-     * the event (or its data transfer) names, the deletions that are the selection or one code unit
-     * of it, the line breaks a multiline element performs, and the tab the AppKit mapping turns into
-     * the next action. A composition owns its own edits — every `beforeinput` inside one, the
-     * `insertCompositionText` of the engines that pair it with the composition events, is the
-     * composition's fact and is never an observation of its own. A type this mapping cannot compute
-     * produces nothing: an observation invented to fill a gap would be a lie about the document.
+     * the event (or its data transfer) names — the range is the selection, the replacement is the
+     * payload — the cut, whose range is the whole selection and so needs no boundary of its own, the
+     * line breaks a multiline element performs, and the tab the AppKit mapping turns into the next
+     * action. The delete types (`deleteContentBackward`, `deleteContentForward`) are **not** mapped:
+     * a delete removes a grapheme cluster — backspace over `😀` removes the whole surrogate pair,
+     * over a decomposed `é` the base and its combining mark — and the DOM names no cluster boundary
+     * without the Segmentation API Kadre does not embed. Computing the one-code-unit edit a shadow
+     * can reach would report deleting half a character: the observation would pass the runtime's
+     * range check and still be a lie about the document, silently splitting astral characters. They
+     * therefore produce nothing, like every other type this mapping cannot compute; the next
+     * accepted write-back rewrites the element and restores the agreement.
+     *
+     * A composition owns its own edits — every `beforeinput` inside one, the `insertCompositionText`
+     * of the engines that pair it with the composition events, is the composition's fact and is
+     * never an observation of its own.
      */
     private fun onBeforeInput(inputType: String?, data: String?) {
         if (!addressable || closed || shadow.markedRange != null) return
@@ -281,32 +300,6 @@ internal class WebTextInputOwner(
                 // The AppKit mapping: `insertTab:` is the next action. No v1 element the contract
                 // addresses performs it, but a browser that delivers one finds the answer here.
                 publish(TextInputObservation.Action(TextInputAction.Next, shadow.documentRevision))
-
-            "deleteContentBackward" -> {
-                val selection = shadow.selection
-                val range = when {
-                    selection.startUtf16 != selection.endExclusiveUtf16 -> selection
-                    selection.startUtf16 > 0 -> TextRange(selection.startUtf16 - 1, selection.startUtf16)
-                    else -> return
-                }
-                if (shadow.replaceText(range, "")) {
-                    publish(TextInputObservation.Replace(range, "", shadow.documentRevision))
-                }
-            }
-
-            "deleteContentForward" -> {
-                val selection = shadow.selection
-                val range = when {
-                    selection.startUtf16 != selection.endExclusiveUtf16 -> selection
-                    selection.endExclusiveUtf16 < shadow.text.length ->
-                        TextRange(selection.startUtf16, selection.startUtf16 + 1)
-
-                    else -> return
-                }
-                if (shadow.replaceText(range, "")) {
-                    publish(TextInputObservation.Replace(range, "", shadow.documentRevision))
-                }
-            }
 
             "deleteByCut" -> {
                 val selection = shadow.selection

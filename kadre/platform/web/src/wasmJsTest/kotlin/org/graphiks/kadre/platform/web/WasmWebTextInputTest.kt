@@ -3,6 +3,8 @@ package org.graphiks.kadre.platform.web
 import kotlinx.browser.document
 import kotlinx.coroutines.test.runTest
 import kotlin.js.JsAny
+import org.graphiks.kadre.diagnostics.KadreFailure
+import org.graphiks.kadre.diagnostics.KadreResourceKind
 import org.graphiks.kadre.diagnostics.KadreResult
 import org.graphiks.kadre.input.TextDocumentRevision
 import org.graphiks.kadre.input.TextInputAction
@@ -215,6 +217,54 @@ class WasmWebTextInputTest {
     }
 
     @Test
+    fun theWriteBackSetsTheValueAndTheSelectionOfARealTextarea() = runTest {
+        val harness = WasmTextHarness("textarea")
+        try {
+            val owner = harness.open()
+
+            val written = harness.port.updateDocument(
+                TextInputDocumentCommand(owner, "a😀bé", TextRange(5, 5), TextDocumentRevision(8)),
+            )
+            assertIs<KadreResult.Success<Unit>>(written)
+            assertEquals("a😀bé", wasmReadValue(harness.element), "the multiline element takes its own branch of the probe")
+            assertEquals(5, wasmSelectionStart(harness.element), "the caret after the emoji is offset 5, not code point 4")
+            assertEquals(5, wasmSelectionEnd(harness.element))
+        } finally {
+            harness.close()
+        }
+    }
+
+    @Test
+    fun theWriteBackOnAnElementThatCannotCarryItIsRefusedAndTheElementIsUntouched() = runTest {
+        val harness = WasmTextHarness("div")
+        try {
+            val owner = assertIs<KadreResult.Success<TextInputOwner>>(harness.portOpen()).value
+            val attributesBefore = attributeCount(harness.element)
+
+            val refused = harness.port.updateDocument(
+                TextInputDocumentCommand(owner, "x", TextRange(0, 0), TextDocumentRevision(8)),
+            )
+            assertEquals(
+                KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.TextInputSession)),
+                refused,
+                "the write-back is the contract and a plain div cannot carry it: the closed failure",
+            )
+            assertTrue(
+                noValueExpando(harness.element),
+                "the div carries no expando value property: the host element is never written " +
+                    "outside the contract (D-X3)",
+            )
+            assertEquals(
+                attributesBefore,
+                attributeCount(harness.element),
+                "the element's attributes are exactly what they were before the refused write",
+            )
+        } finally {
+            harness.close()
+        }
+    }
+
+    @Test
     fun anOpenInstallsExactlyTheTextListenersAndTheOwnerCloseWithdrawsThem() {
         val harness = WasmTextHarness("input")
         try {
@@ -368,6 +418,14 @@ private external fun registeredListenerTypes(target: HTMLElement): String
        }""",
 )
 private external fun listenersWithoutRemoval(target: HTMLElement): String
+
+/** Whether [element] took no expando `value` property: the untouched-div proof. */
+@JsFun("(element) => Object.getOwnPropertyNames(element).indexOf(\"value\") === -1")
+private external fun noValueExpando(element: HTMLElement): Boolean
+
+/** How many attributes [element] carries, so a refused write is provable against its own before. */
+@JsFun("(element) => element.attributes.length")
+private external fun attributeCount(element: HTMLElement): Int
 
 /** Reads the element's `value` back, as the browser holds it. */
 @JsFun("(element) => element.value")

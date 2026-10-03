@@ -78,8 +78,13 @@ internal class JsWebTextInputElementAccess(element: HTMLElement) : WebTextInputE
     override fun writeDocument(text: String, selectionStart: Int, selectionEnd: Int): Boolean {
         val current = target ?: return false
         return runCatching {
-            val input = current as? HTMLInputValue
-            val area = current as? HTMLTextAreaValue
+            // The writable probe is the browser's own `instanceof`, never a Kotlin cast: a cast to an
+            // external interface is unchecked on this target, so a non-addressable element would take
+            // the input branch, take an expando `value` write, and only then meet the
+            // `setSelectionRange` refusal — a host mutation outside the contract (D-X3). An input
+            // takes its branch, a textarea its own, and anything else takes neither.
+            val input = jsInputElementOrNull(current)
+            val area = jsTextAreaElementOrNull(current)
             when {
                 input != null -> {
                     if (input.value != text) input.value = text
@@ -130,3 +135,18 @@ private external interface HTMLTextAreaValue {
     val selectionEnd: Int?
     fun setSelectionRange(start: Int, end: Int)
 }
+
+/**
+ * The element as an `<input>` whose value and selection the write-back may set, or `null` when the
+ * browser says it is not one.
+ *
+ * The check lives in the JavaScript's own `instanceof` because a Kotlin cast to an external
+ * interface compiles to a bare null check on this target — the unchecked shape that let a plain
+ * `div` reach the input branch and take an expando write before the guaranteed refusal.
+ */
+private fun jsInputElementOrNull(element: HTMLElement): HTMLInputValue? =
+    js("element instanceof HTMLInputElement ? element : null")
+
+/** The element as a `<textarea>`, the same probe and the same reason, for the multiline element. */
+private fun jsTextAreaElementOrNull(element: HTMLElement): HTMLTextAreaValue? =
+    js("element instanceof HTMLTextAreaElement ? element : null")
