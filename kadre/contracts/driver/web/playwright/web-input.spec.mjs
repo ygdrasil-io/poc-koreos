@@ -23,12 +23,15 @@ async function nextFrame(page) {
  * Reading this attribute is the barrier every input test opens with: the observation exists (its event
  * subscription is registered before this attribute can be published), the session published the input
  * capabilities structurally, and the tests below can therefore correlate the input they drive with what
- * the surface observed of it.
+ * the surface observed of it. The whole public cell is asserted, so a regression in any member of it —
+ * including the members this surface now delivers, touch, drag-and-drop and the text session, and the
+ * gesture half that stays unsupported (D-T2) — is named by this one line.
  */
 async function awaitInputObservation(host) {
   await expect(host).toHaveAttribute(
     'data-kadre-input-caps',
-    'keyboard=available pointer=available touch=unsupported gestures=unsupported:gestureinput',
+    'keyboard=available pointer=available touch=available gestures=unsupported:gestureinput '
+      + 'dragAndDrop=available textInput=supported rawInput=unsupported:rawinputaccess',
   );
 }
 
@@ -521,9 +524,9 @@ test('web-input-pointer-capture', async ({ page }) => {
   await page.mouse.up();
 });
 
-test('web-input-touch-deferred', async ({ browser }) => {
-  // A browsing context that declares touch: the pointer events the element receives for a tap are real
-  // ones, which is the only honest way to prove this phase's touch boundary in a browser.
+test('web-input-touch-delivered', async ({ browser }) => {
+  // A browsing context that declares touch: the tap the element receives is a real one, which is the
+  // only honest way to prove the input lane's touch delivery in this file's own terms.
   const context = await browser.newContext({ hasTouch: true });
   try {
     const page = await context.newPage();
@@ -535,11 +538,17 @@ test('web-input-touch-deferred', async ({ browser }) => {
     await page.touchscreen.tap(box.x + 50, box.y + 40);
     await nextFrame(page);
 
-    // Nothing of the touch was delivered — no pointer, no touch, no event — and the capabilities still
-    // say so: touch and gestures belong to the phase that installs their observers (D12).
-    await expect(host).toHaveAttribute('data-kadre-input-events', '');
-    await expect(host).toHaveAttribute('data-kadre-input-count', '0');
-    await expect(host).toHaveAttribute('data-kadre-input-state', /keys=\[\] mods=\[\] pointers=\[\] touches=0/);
+    // The contact is delivered through the same input observation every input of this file rides: the
+    // tap's two phases are the journal's only entries — no pointer fact of any kind exists for it —
+    // and the state keeps the contact out of the pointers, with nothing stuck after it. What stays
+    // deferred is the gesture half of the boundary (D-T2): the capability cell this file opens every
+    // test with still promises no recognizer, and the touch delivery contract itself is BCK-004's.
+    await expect(host).toHaveAttribute(
+      'data-kadre-input-events',
+      /^touch:started@\(50,40\):rev=\d+;touch:ended@\(50,40\):rev=\d+$/,
+    );
+    await expect(host).toHaveAttribute('data-kadre-input-count', '2');
+    await expect(host).toHaveAttribute('data-kadre-input-state', /pointers=\[\] touches=0/);
     await awaitInputObservation(host);
   } finally {
     await context.close();
