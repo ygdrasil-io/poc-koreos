@@ -31,6 +31,13 @@ import org.graphiks.kadre.diagnostics.KadreOperation
 import org.graphiks.kadre.diagnostics.KadrePlatformApi
 import org.graphiks.kadre.diagnostics.KadreResourceKind
 import org.graphiks.kadre.diagnostics.KadreResult
+import org.graphiks.kadre.input.DropItemDescriptor
+import org.graphiks.kadre.input.DropOffer
+import org.graphiks.kadre.input.DropOfferId
+import org.graphiks.kadre.input.DropOfferState
+import org.graphiks.kadre.input.DropOfferTerminationReason
+import org.graphiks.kadre.input.DropTransfer
+import org.graphiks.kadre.input.DroppedItem
 import org.graphiks.kadre.input.GestureKind
 import org.graphiks.kadre.input.InputCapabilities
 import org.graphiks.kadre.input.InputEvent
@@ -42,8 +49,17 @@ import org.graphiks.kadre.input.PointerButtonState
 import org.graphiks.kadre.input.PointerState
 import org.graphiks.kadre.input.ScrollDelta
 import org.graphiks.kadre.input.SurfaceInputState
+import org.graphiks.kadre.input.TextDocumentRevision
+import org.graphiks.kadre.input.TextInputAction
+import org.graphiks.kadre.input.TextInputConfig
+import org.graphiks.kadre.input.TextInputEvent
+import org.graphiks.kadre.input.TextInputPurpose
+import org.graphiks.kadre.input.TextInputSession
+import org.graphiks.kadre.input.TextInputState
+import org.graphiks.kadre.input.TextRange
 import org.graphiks.kadre.interaction.InteractionAction
 import org.graphiks.kadre.interaction.InteractionActionOutcome
+import org.graphiks.kadre.interaction.InteractionEvent
 import org.graphiks.kadre.interaction.InteractionHandler
 import org.graphiks.kadre.platform.web.WebAttachmentPolicy
 import org.graphiks.kadre.platform.web.WebWindowHost
@@ -72,6 +88,8 @@ import org.graphiks.kadre.window.WindowCreationMode
 import org.graphiks.kadre.window.WindowRequest
 import org.graphiks.kadre.window.WindowRequestOutcome
 import org.graphiks.kadre.window.WindowSpec
+import org.w3c.dom.DataTransfer
+import org.w3c.dom.DragEvent
 import org.w3c.dom.HTMLElement
 import kotlin.coroutines.CoroutineContext
 import kotlin.coroutines.EmptyCoroutineContext
@@ -118,6 +136,13 @@ public fun main() {
         "input-default-behavior" -> inputDefaultBehaviorScenario()
         "input-pointer-capture" -> inputPointerCaptureScenario()
         "input-touch-deferred" -> inputTouchDeferredScenario()
+        "touch" -> touchScenario("touch")
+        "touch-interaction" -> touchInteractionScenario()
+        "touch-focus" -> touchFocusScenario()
+        "drop" -> dropScenario(accepting = true)
+        "drop-reject" -> dropScenario(accepting = false)
+        "text-input" -> textInputScenario(singleLine = true)
+        "text-area" -> textInputScenario(singleLine = false)
         "web-interaction" -> inputInteractionScenario()
         "typescript-consumer" -> typescriptConsumerScenario()
         "window-provider" -> windowProviderScenario()
@@ -1021,6 +1046,8 @@ private fun KadreFailure.encoding(): String = when (this) {
     is KadreFailure.SourceOverflow -> "sourceOverflow:${resource.name.lowercase()}"
     is KadreFailure.InteractionRequired -> "interactionRequired:${reason.name.lowercase()}"
     is KadreFailure.PlatformFailure -> "platformFailure:${platform.name.lowercase()}:${domain}:${code}"
+    is KadreFailure.ResourceLimitExceeded -> "resourceLimitExceeded:${resource.name.lowercase()}:${limit}"
+    is KadreFailure.StaleRevision -> "staleRevision:${expected}:${received}"
     KadreFailure.ParentScopeCancelled -> "parentScopeCancelled"
     KadreFailure.ApplicationFailure -> "applicationFailure"
     else -> "unexpected-failure"
@@ -1031,6 +1058,582 @@ private fun KadreFailure.encoding(): String = when (this) {
  * describes: the application exports the key and JavaScript only carries it back to `KadreWeb.attach`.
  */
 private fun publishApplicationFactoryKey(key: String): Unit = js("globalThis.kadreApplicationFactory = key")
+
+/**
+ * The Phase 5 scenarios: touch delivery, drag-and-drop and text input, on the `inputScenario`
+ * pattern — the surface's own streams are the observation, every command listener exists before
+ * the readiness flag, and every attribute a spec reads is a public value of the model, never a
+ * fixture journal.
+ */
+
+/**
+ * The touch scenarios: the shared input observation, with the touch contacts of the events journal
+ * encoded by the shared encoder below.
+ */
+private fun touchScenario(name: String) = inputScenario(name)
+
+/** The touch trigger scenario: a real touch press, dispatched as an interaction before the stimulus. */
+private fun touchInteractionScenario() = inputScenario("touch-interaction") { handles ->
+    launch { observeTouchInteraction(handles) }
+}
+
+/** The touch focus scenario: a held real contact, and the loss of activation that clears it. */
+private fun touchFocusScenario() {
+    createFocusOutside()
+    touchScenario("touch-focus")
+}
+
+/**
+ * Installs the touch trigger handler once the surface exists, and records what it dispatched.
+ *
+ * The record is the one fact the interaction model adds to the ordinary touch path — a
+ * `TouchStarted` trigger reached the handler — plus the moment it was dispatched in: the published
+ * input state at that moment, which is how the ordering claim (interaction first, ordinary stimulus
+ * second) is observable rather than asserted. A surface whose handler refused to install records
+ * that refusal where the armed flag would have been, so a capability break reads as one.
+ */
+@OptIn(DelicateKadreApi::class)
+private suspend fun observeTouchInteraction(handles: InputHandles) {
+    val surface = handles.surface.await()
+    val registration = when (
+        val installed = surface.installInteractionHandler(
+            InteractionHandler { _, event ->
+                if (event is InteractionEvent.TouchStarted) {
+                    handles.host.setAttribute(
+                        "data-kadre-touch-interaction",
+                        "started@${event.position.encoded()}" +
+                            ":touchesAtDispatch=${surface.input.state.value.touches.size}",
+                    )
+                }
+            },
+        )
+    ) {
+        is KadreResult.Success -> {
+            handles.host.setAttribute("data-kadre-interaction-armed", "true")
+            installed.value
+        }
+
+        is KadreResult.Failure -> {
+            handles.host.setAttribute(
+                "data-kadre-touch-interaction",
+                "install-failure:${installed.reason.encoding()}",
+            )
+            return
+        }
+    }
+    registration.outcomes.collect { outcome ->
+        handles.host.setAttribute("data-kadre-touch-interaction", outcome.encoding())
+    }
+}
+
+/**
+ * The drop scenarios: the fixture is the host of the drag.
+ *
+ * Before any Kadre call it builds what the element will be handed — a drag source of its own and
+ * the `DataTransfer` of the drag, carrying one file item and one text item of the host's data — and
+ * installs the four drag-step commands the specs drive. No test builds the drag: the steps are the
+ * host's own (the roadmap exit gate, exactly as the phase-4 popup is), and what the specs command
+ * is which step the host performs, not what the drag carries.
+ *
+ * The accepting variant installs the interaction handler a real application would: every
+ * `DropEntered` the seam dispatches in-frame is answered with the `AcceptDrop` of that offer. The
+ * rejecting variant installs nothing, which is the "handler absent" arm of the seam: the offers it
+ * presents die rejected and the browser keeps the default of the drag it was having.
+ */
+private fun dropScenario(accepting: Boolean) {
+    val prepared = prepareDropDrag()
+    val host = createHost("drop")
+    val parentScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    val handles = InputHandles(host)
+    val registry = DropOfferRegistry()
+    parentScope.launch { InputObservation(host).install(parentScope, handles.surface.await()) }
+    val drop = DropObservation(host, parentScope, registry)
+    parentScope.launch { drop.install(handles.surface.await()) }
+    parentScope.installDropCommands(handles, prepared, drop)
+    if (accepting) parentScope.launch { installDropHandler(handles, registry) }
+    val attached = host.attachKadre(parentScope) {
+        handles.surface.complete(checkNotNull(primarySurface.value))
+        awaitCancellation()
+    }
+    host.setAttribute("data-kadre-attach", describeAttach(attached))
+    if (attached is KadreResult.Success) {
+        handles.session.complete(attached.value)
+        observeSession(attached.value, "drop", parentScope)
+    }
+}
+
+/** The drag the host prepared before any Kadre call of its drop scenario. */
+private class PreparedDropDrag(val store: DataTransfer)
+
+/**
+ * Prepares the drag the host will perform: its own source element and the drag data store whose
+ * items are the host's own data — a 16-byte file and a string of plain text. It must run before any
+ * Kadre call of its scenario.
+ */
+private fun prepareDropDrag(): PreparedDropDrag {
+    (document.createElement("div") as HTMLElement).also { source ->
+        source.setAttribute("data-kadre-drop-source", "kadre-drop.txt")
+        document.body!!.appendChild(source)
+    }
+    return PreparedDropDrag(jsPreparedDragStore())
+}
+
+/** The drag data store the host builds for the drag it performs: one file item, one text item. */
+private fun jsPreparedDragStore(): DataTransfer = js(
+    """(function () {
+        const store = new DataTransfer();
+        store.items.add(new File(["kadre-drop-bytes"], "kadre-drop.txt", { type: "text/plain" }));
+        store.items.add("kadre-drop-text", "text/plain");
+        return store;
+    })()""",
+)
+
+/** One step of the host's drag: a real `DragEvent` of the host's own store, at the position named. */
+private fun jsDragEvent(type: String, store: DataTransfer, x: Double, y: Double): DragEvent = js(
+    "new DragEvent(type, { dataTransfer: store, clientX: x, clientY: y, bubbles: true, cancelable: true, composed: true })",
+)
+
+/** One drag step the fixture performs: the command that asks for it, the event and its position. */
+private class DragStep(val command: String, val type: String, val name: String, val x: Double, val y: Double)
+
+/** The drag steps of the host, in the order the specs drive them, with their surface positions. */
+private val dragSteps = listOf(
+    DragStep(command = "kadre-drag-enter", type = "dragenter", name = "enter", x = 60.0, y = 40.0),
+    DragStep(command = "kadre-drag-over", type = "dragover", name = "over", x = 70.0, y = 50.0),
+    DragStep(command = "kadre-drag-leave", type = "dragleave", name = "leave", x = 70.0, y = 50.0),
+    DragStep(command = "kadre-drag-drop", type = "drop", name = "drop", x = 80.0, y = 60.0),
+)
+
+/**
+ * The drop commands: the four drag steps the host performs, then the claim, read and close of the
+ * transfer a performed drop leaves claimable, and the session stop of the teardown scenario.
+ *
+ * Every step records the browser's own answer about its default (`event.defaultPrevented`, read on
+ * the very event the host dispatched), which is the D-D3 claim made observable: a default is
+ * prevented for an offer the surface holds and for nothing else.
+ */
+private fun CoroutineScope.installDropCommands(
+    handles: InputHandles,
+    prepared: PreparedDropDrag,
+    drop: DropObservation,
+) {
+    val host = handles.host
+    val defaults = mutableListOf<String>()
+    dragSteps.forEach { step ->
+        installCommand(step.command) {
+            val box = host.getBoundingClientRect()
+            val event = jsDragEvent(step.type, prepared.store, box.left + step.x, box.top + step.y)
+            host.dispatchEvent(event)
+            defaults += "${step.name}=${if (event.defaultPrevented) "prevented" else "kept"}"
+            host.setAttribute("data-kadre-drop-default", defaults.joinToString(";"))
+        }
+    }
+    var transfer: DropTransfer? = null
+    val reads = mutableListOf<String>()
+    installCommand("kadre-drop-claim") {
+        when (val claimed = drop.awaitClaimable().claimTransfer()) {
+            is KadreResult.Success -> {
+                transfer = claimed.value
+                host.setAttribute("data-kadre-drop-claim", "claimed")
+                host.setAttribute(
+                    "data-kadre-drop-transfer",
+                    claimed.value.items.joinToString(";") { it.encoded() },
+                )
+            }
+
+            is KadreResult.Failure -> host.setAttribute(
+                "data-kadre-drop-claim",
+                "failure:${claimed.reason.encoding()}",
+            )
+        }
+    }
+    installCommand("kadre-drop-claim-second") {
+        val second = drop.awaitClaimable().claimTransfer()
+        host.setAttribute(
+            "data-kadre-drop-claim-second",
+            when (second) {
+                is KadreResult.Success -> "unexpected-success"
+                is KadreResult.Failure -> "failure:${second.reason.encoding()}"
+            },
+        )
+    }
+    installCommand("kadre-drop-read") {
+        val current = transfer
+        reads += when (current) {
+            null -> "no-transfer"
+            else -> current.readItems()
+        }
+        host.setAttribute("data-kadre-drop-read", reads.joinToString(";"))
+    }
+    installCommand("kadre-drop-read-bounded") {
+        // The bounded refusal: a read whose budget is below the item's known size is refused before
+        // any byte moves, with the failure that names the item and the budget it was handed.
+        val current = transfer
+        val encoding = when (current) {
+            null -> "no-transfer"
+            else -> when (val read = current.items[0].collectBytes(maxBytes = 4) { }) {
+                is KadreResult.Success -> "unexpected-success"
+                is KadreResult.Failure -> "failure:${read.reason.encoding()}"
+            }
+        }
+        host.setAttribute("data-kadre-drop-read-bounded", encoding)
+    }
+    installCommand("kadre-drop-close-transfer") {
+        transfer?.close()
+        host.setAttribute("data-kadre-drop-transfer-closed", "closed")
+    }
+    installCommand("kadre-stop-drop") {
+        handles.session.await().requestStop()
+    }
+}
+
+/** Reads every item of one claimed transfer, bounded to the session's own chunk size. */
+private suspend fun DropTransfer.readItems(): String {
+    val reads = mutableListOf<String>()
+    items.forEachIndexed { index, item ->
+        val chunks = mutableListOf<String>()
+        val read = item.collectBytes(maxBytes = 64) { chunk -> chunks += chunk.decodeToString() }
+        reads += when (read) {
+            is KadreResult.Success -> "$index=${chunks.joinToString("|")}"
+            is KadreResult.Failure -> "$index=failure:${read.reason.encoding()}"
+        }
+    }
+    return reads.joinToString(",")
+}
+
+/**
+ * Installs the drop handler once the surface exists, and records the outcomes it produced.
+ *
+ * The handler is the application's own decision point: every `DropEntered` the seam dispatches
+ * inside the drag's DOM frame is answered with the `AcceptDrop` of that very offer — the synchronous
+ * commitment D-D2 describes — and the outcome the engine published for it is recorded with the offer
+ * it committed, which is what ties the interaction lane's answer to the offer the input stream
+ * carries.
+ */
+@OptIn(DelicateKadreApi::class)
+private suspend fun installDropHandler(handles: InputHandles, registry: DropOfferRegistry) {
+    val surface = handles.surface.await()
+    val registration = when (
+        val installed = surface.installInteractionHandler(
+            InteractionHandler { context, event ->
+                if (event is InteractionEvent.DropEntered) {
+                    context.request(InteractionAction.AcceptDrop(event.offer.id))
+                }
+            },
+        )
+    ) {
+        is KadreResult.Success -> {
+            handles.host.setAttribute("data-kadre-drop-armed", "true")
+            installed.value
+        }
+
+        is KadreResult.Failure -> {
+            handles.host.setAttribute(
+                "data-kadre-drop-armed",
+                "install-failure:${installed.reason.encoding()}",
+            )
+            return
+        }
+    }
+    registration.outcomes.collect { outcome ->
+        handles.host.setAttribute("data-kadre-drop-interaction", outcome.dropEncoding(registry))
+    }
+}
+
+/** The offer identities of one drop scenario: opaque ids mapped to the ordinals the specs read. */
+private class DropOfferRegistry {
+    private val ordinals = HashMap<DropOfferId, Int>()
+
+    /** The ordinal of [id], minted at its first observation and never reused. */
+    fun ordinalOf(id: DropOfferId): Int = ordinals.getOrPut(id) { ordinals.size }
+
+    /** The ordinal of an offer the interaction outcomes name back, if this scenario saw it. */
+    fun ordinalOrNull(id: DropOfferId): Int? = ordinals[id]
+}
+
+/**
+ * The drop observation of one scenario: the offers the input stream presented, each with the state
+ * the runtime published for it, and the offer a performed drop left claimable.
+ *
+ * The offer objects arrive on the stream's own `DropEntered`/`Dropped` events — the public model,
+ * not a fixture channel — and their state flows are the runtime's own publication of the offer
+ * lifecycle, collected into one attribute per offer, named by the ordinal its id was minted.
+ */
+private class DropObservation(
+    private val host: HTMLElement,
+    private val scope: CoroutineScope,
+    private val registry: DropOfferRegistry,
+) {
+    private val claimable = CompletableDeferred<DropOffer>()
+
+    /** The offer a performed drop left claimable, resolved when its `Dropped` event was observed. */
+    suspend fun awaitClaimable(): DropOffer = claimable.await()
+
+    fun install(surface: HostSurface) {
+        scope.launch {
+            surface.input.events.collect { event ->
+                when (event) {
+                    is InputEvent.DropEntered -> observe(event.offer)
+                    is InputEvent.Dropped -> {
+                        observe(event.offer)
+                        claimable.complete(event.offer)
+                    }
+
+                    else -> Unit
+                }
+            }
+        }
+    }
+
+    private fun observe(offer: DropOffer) {
+        val ordinal = registry.ordinalOf(offer.id)
+        scope.launch {
+            offer.state.collect { state ->
+                host.setAttribute("data-kadre-drop-offer-$ordinal", state.encoded())
+            }
+        }
+    }
+}
+
+/** One offer state, as the specs read it. */
+private fun DropOfferState.encoded(): String = when (this) {
+    DropOfferState.Presented -> "presented"
+    DropOfferState.Accepted -> "accepted"
+    DropOfferState.TransferAvailable -> "transfer-available"
+    DropOfferState.Claimed -> "claimed"
+    is DropOfferState.Terminated -> "terminated:${reason.encoded()}"
+}
+
+/** One offer termination, as the specs read it. */
+private fun DropOfferTerminationReason.encoded(): String = when (this) {
+    DropOfferTerminationReason.Rejected -> "rejected"
+    DropOfferTerminationReason.LeftSurface -> "left-surface"
+    DropOfferTerminationReason.OfferExpired -> "offer-expired"
+    DropOfferTerminationReason.ClaimTimedOut -> "claim-timed-out"
+    DropOfferTerminationReason.OwnerClosed -> "owner-closed"
+    is DropOfferTerminationReason.Failed -> "failed:${failure.encoding()}"
+}
+
+/** One item descriptor, as the specs read it: kind, canonical mimes, name and size, or their `none`. */
+private fun DropItemDescriptor.encoded(): String =
+    "${kind.name.lowercase()}:${mimeTypes.joinToString("+")}:${displayName ?: "none"}:" +
+        "${sizeBytes?.toString() ?: "none"}"
+
+/** One claimed item, as the specs read it: its descriptor with the read mode it honours. */
+private fun DroppedItem.encoded(): String = "${descriptor.encoded()}:${readMode.name.lowercase()}"
+
+/** The terminal outcome of one drop interaction request, with the offer it committed. */
+private fun InteractionActionOutcome.dropEncoding(registry: DropOfferRegistry): String = when (this) {
+    is InteractionActionOutcome.Committed -> when (val offer = dropOfferId) {
+        null -> "committed"
+        else -> "committed#${registry.ordinalOrNull(offer)}"
+    }
+
+    is InteractionActionOutcome.Rejected -> "rejected:${failure.encoding()}"
+    is InteractionActionOutcome.Expired -> "expired"
+    is InteractionActionOutcome.OwnerClosed -> "owner-closed"
+}
+
+/**
+ * The element kinds the v1 text contract addresses: the fixture prepares one of these per scenario,
+ * and the element is the attached host itself, because the element IS the surface's text document
+ * on this target (D-X2, D-X3).
+ */
+private enum class WebTextKind(val tag: String, val element: String) {
+    SingleLine("text-input", "input"),
+    Multiline("text-area", "textarea"),
+}
+
+/** The document the fixture host writes on its editable element before any Kadre call. */
+private const val KADRE_TEXT_DOCUMENT: String = "kadre"
+
+/** The snapshot the fixture's write-back commands apply, one revision ahead of the accepted one. */
+private const val KADRE_TEXT_WRITTEN: String = "kadre-written"
+
+/**
+ * The text-input scenarios: the host prepares the editable element — its document and selection —
+ * before any Kadre call (the roadmap exit gate, as the phase-4 popup is), then opens sessions on
+ * the fixture's own commands and encodes what the sessions published as `data-kadre-text-*`
+ * attributes of the element: the open's answer, the session state, the observation journal, and the
+ * write-backs the fixture asks for.
+ */
+private fun textInputScenario(singleLine: Boolean) {
+    val kind = if (singleLine) WebTextKind.SingleLine else WebTextKind.Multiline
+    val host = prepareEditableHost(kind)
+    createFocusOutside()
+    val parentScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    val handles = TextHandles(host, kind)
+    parentScope.launch { InputObservation(host).install(parentScope, handles.surface.await()) }
+    parentScope.installCommand("kadre-text-open") {
+        val surface = handles.surface.await()
+        host.setAttribute("data-kadre-text-events", "")
+        when (val opened = surface.input.openTextInput(handles.config())) {
+            is KadreResult.Success -> {
+                handles.session = CompletableDeferred<TextInputSession>().also { it.complete(opened.value) }
+                host.setAttribute("data-kadre-text-open", "success")
+                observeTextInput(host, parentScope, opened.value)
+            }
+
+            is KadreResult.Failure -> host.setAttribute(
+                "data-kadre-text-open",
+                "failure:${opened.reason.encoding()}",
+            )
+        }
+    }
+    parentScope.installCommand("kadre-text-open-second") {
+        val surface = handles.surface.await()
+        val second = surface.input.openTextInput(handles.config())
+        host.setAttribute(
+            "data-kadre-text-open-second",
+            when (second) {
+                is KadreResult.Success -> "unexpected-success"
+                is KadreResult.Failure -> "failure:${second.reason.encoding()}"
+            },
+        )
+    }
+    parentScope.installCommand("kadre-text-close") {
+        handles.session.await().close()
+    }
+    parentScope.installCommand("kadre-text-writeback-current") {
+        val session = handles.session.await()
+        val revision = TextDocumentRevision(currentRevision(session) + 1L)
+        val result = session.updateSurroundingText(
+            KADRE_TEXT_WRITTEN,
+            TextRange(KADRE_TEXT_WRITTEN.length, KADRE_TEXT_WRITTEN.length),
+            revision,
+        )
+        host.setAttribute("data-kadre-text-writeback-current", result.encoded())
+    }
+    parentScope.installCommand("kadre-text-writeback-stale") {
+        val session = handles.session.await()
+        val revision = TextDocumentRevision((currentRevision(session) - 1L).coerceAtLeast(0L))
+        val result = session.updateSurroundingText(
+            KADRE_TEXT_WRITTEN,
+            TextRange(KADRE_TEXT_WRITTEN.length, KADRE_TEXT_WRITTEN.length),
+            revision,
+        )
+        host.setAttribute("data-kadre-text-writeback-stale", result.encoded())
+    }
+    val attached = host.attachKadre(parentScope) {
+        handles.surface.complete(checkNotNull(primarySurface.value))
+        awaitCancellation()
+    }
+    host.setAttribute("data-kadre-attach", describeAttach(attached))
+    if (attached is KadreResult.Success) observeSession(attached.value, kind.tag, parentScope)
+}
+
+/**
+ * Prepares the editable element of one text scenario: the element the session will observe and the
+ * write-back will write is the attached host itself, and the document it shows with the selection
+ * it starts from are the host's to prepare before any Kadre call.
+ */
+private fun prepareEditableHost(kind: WebTextKind): HTMLElement =
+    (document.createElement(kind.element) as HTMLElement).also { element ->
+        element.setAttribute("data-kadre-host", kind.tag)
+        element.style.width = "320px"
+        element.style.height = if (kind == WebTextKind.Multiline) "120px" else "32px"
+        jsSetEditableValue(element, KADRE_TEXT_DOCUMENT)
+        document.body!!.appendChild(element)
+        jsSetEditableSelection(element, 0, 0)
+    }
+
+/** The handles of one text scenario: the surface the application block publishes and its session. */
+private class TextHandles(val host: HTMLElement, val kind: WebTextKind) {
+    val surface: CompletableDeferred<HostSurface> = CompletableDeferred()
+    var session: CompletableDeferred<TextInputSession> = CompletableDeferred()
+
+    /** The config of one open, read from the document the element shows the moment it is asked. */
+    fun config(): TextInputConfig {
+        val text = jsEditableValue(host)
+        return TextInputConfig(
+            purpose = TextInputPurpose.Text,
+            action = TextInputAction.Send,
+            multiline = kind == WebTextKind.Multiline,
+            surroundingText = text,
+            selection = TextRange(jsEditableSelectionStart(host), jsEditableSelectionEnd(host)),
+            documentRevision = TextDocumentRevision(0),
+        )
+    }
+}
+
+/** The accepted revision of one session, as the session's own state publishes it. */
+private fun currentRevision(session: TextInputSession): Long = when (val state = session.state.value) {
+    is TextInputState.Active -> state.documentRevision.value
+    is TextInputState.Suspended -> state.documentRevision.value
+    TextInputState.Closed -> 0L
+}
+
+/** Publishes one session's state and observation journal as attributes of the element. */
+private fun observeTextInput(host: HTMLElement, scope: CoroutineScope, session: TextInputSession) {
+    val events = mutableListOf<String>()
+    scope.launch {
+        session.state.collect { state -> host.setAttribute("data-kadre-text-state", state.encoded()) }
+    }
+    scope.launch {
+        session.events.collect { event ->
+            events += event.encoded()
+            host.setAttribute("data-kadre-text-events", events.joinToString(";"))
+        }
+    }
+}
+
+/** One session state, as the specs read it: the revision it carries and the composition it holds. */
+private fun TextInputState.encoded(): String = when (this) {
+    is TextInputState.Active -> "active:rev=${documentRevision.value}:composing=${composingRange.encoded()}"
+    is TextInputState.Suspended -> "suspended:rev=${documentRevision.value}:composing=${composingRange.encoded()}"
+    TextInputState.Closed -> "closed"
+}
+
+/** One text range, as the specs read it: `(start,end)` in UTF-16 code units, or `none`. */
+private fun TextRange?.encoded(): String = when (this) {
+    null -> "none"
+    else -> "($startUtf16,$endExclusiveUtf16)"
+}
+
+/** One text observation, as the specs read it: the edit it names at the revision it was stamped. */
+private fun TextInputEvent.encoded(): String = when (this) {
+    is TextInputEvent.Replace -> "replace:(${range.startUtf16},${range.endExclusiveUtf16})" +
+        "=${text.quotedPayload()}:rev=${baseRevision.value}"
+
+    is TextInputEvent.SelectionChanged -> "selection:(${selection.startUtf16},${selection.endExclusiveUtf16})" +
+        ":rev=${baseRevision.value}"
+
+    is TextInputEvent.CompositionChanged -> {
+        val span = range
+        when (span) {
+            null -> "composition:end:rev=${baseRevision.value}"
+            else -> "composition:(${span.startUtf16},${span.endExclusiveUtf16})=${text.quotedPayload()}" +
+                ":sel=${selection.encoded()}:rev=${baseRevision.value}"
+        }
+    }
+
+    is TextInputEvent.Action -> "action:${action.name.lowercase()}:rev=${baseRevision.value}"
+}
+
+/** One text payload, quoted and flattened for an attribute: the newline of a multiline edit is escaped. */
+private fun String.quotedPayload(): String = "\"${replace("\n", "\\n")}\""
+
+/** One write-back result, as the specs read it: applied, or the failure the runtime answered. */
+private fun KadreResult<Unit>.encoded(): String = when (this) {
+    is KadreResult.Success -> "applied"
+    is KadreResult.Failure -> reason.encoding()
+}
+
+/** The value of the element the fixture itself created and knows the kind of. */
+private fun jsEditableValue(element: HTMLElement): String = js("element.value")
+
+/** The element's live selection start, the offset the shadow starts from. */
+private fun jsEditableSelectionStart(element: HTMLElement): Int = js("element.selectionStart")
+
+/** The element's live selection end, the offset the shadow starts from. */
+private fun jsEditableSelectionEnd(element: HTMLElement): Int = js("element.selectionEnd")
+
+/** Writes the document the element shows, the host's own preparation of its editable element. */
+private fun jsSetEditableValue(element: HTMLElement, value: String): Unit = js("element.value = value")
+
+/** Places the element's selection, the host's own preparation of its editable element. */
+private fun jsSetEditableSelection(element: HTMLElement, start: Int, end: Int): Unit =
+    js("element.setSelectionRange(start, end)")
 
 /**
  * Publishes one input scenario's observations as attributes of the host, from the surface's own
@@ -1157,12 +1760,15 @@ private fun SurfaceInputState.encoded(): String =
         " pointers=[${pointers.joinToString(",") { it.encoded() }}]" +
         " touches=${touches.size}"
 
-/** The derived input capabilities: the feature availabilities and the gesture constraint set. */
+/** The derived input capabilities: the feature availabilities and the capability constraint sets. */
 private fun InputCapabilities.encoded(): String =
     "keyboard=${keyboard.encoded()}" +
         " pointer=${pointer.encoded()}" +
         " touch=${touch.encoded()}" +
-        " gestures=${gestures.encoded()}"
+        " gestures=${gestures.encoded()}" +
+        " dragAndDrop=${dragAndDrop.encoded()}" +
+        " textInput=${textInput.encoded()}" +
+        " rawInput=${rawInput.encoded()}"
 
 private fun FeatureAvailability.encoded(): String = when (this) {
     FeatureAvailability.Available -> "available"
@@ -1175,6 +1781,12 @@ private fun FeatureAvailability.encoded(): String = when (this) {
 private fun Capability<Set<GestureKind>>.encoded(): String = when (this) {
     is Capability.Unsupported -> "unsupported:${failure.operation.name.lowercase()}"
     is Capability.Supported -> "supported[${constraints.map { it.name }.sorted().joinToString("+")}]"
+}
+
+/** The unit capabilities, as the specs read them: supported, or the operation they refuse. */
+private fun Capability<Unit>.encoded(): String = when (this) {
+    is Capability.Unsupported -> "unsupported:${failure.operation.name.lowercase()}"
+    is Capability.Supported -> "supported"
 }
 
 private fun PointerState.encoded(): String =
@@ -1235,6 +1847,19 @@ private fun InputEvent.encoded(): String = when (this) {
     is InputEvent.PointerLeft -> "leave:${kind.name.lowercase()}:rev=${stateRevision.value}"
 
     is InputEvent.Scrolled -> "scroll:${delta.encoded()}:rev=${stateRevision.value}"
+
+    is InputEvent.TouchChanged -> "touch:${phase.name.lowercase()}@${position.encoded()}" +
+        ":rev=${stateRevision.value}"
+
+    is InputEvent.DropEntered -> "drop:entered:items=[${offer.items.joinToString(",") { it.encoded() }}]" +
+        ":@${position.encoded()}:rev=${stateRevision.value}"
+
+    is InputEvent.DropMoved -> "drop:moved@${position.encoded()}:rev=${stateRevision.value}"
+
+    is InputEvent.DropExited -> "drop:exited:rev=${stateRevision.value}"
+
+    is InputEvent.Dropped -> "drop:performed:items=[${offer.items.joinToString(",") { it.encoded() }}]" +
+        ":@${position.encoded()}:rev=${stateRevision.value}"
 
     is InputEvent.StateReset -> "reset:${reason.name.replaceFirstChar(Char::lowercase)}:rev=${stateRevision.value}"
 
