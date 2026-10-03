@@ -286,9 +286,13 @@ internal class WebTextInputOwner(
             }
 
             "insertLineBreak", "insertParagraph" -> {
-                // The browser performs the line break this event describes (the suppression policy is
-                // the surface's, and under the default nothing is suppressed), so the text fact is
-                // reported as the Replace it is, and the AppKit action mapping follows it.
+                // The element kind is the host's boundary (D-X2): only a multiline element can perform
+                // the line break this event describes, so a single-line one reports nothing — an edit
+                // the browser cannot have performed is a lie about the document, and the submission
+                // action of a single-line element stays with the keydown. On a multiline element the
+                // text fact is reported as the Replace it is (the suppression policy is the surface's,
+                // and under the default nothing is suppressed), and the AppKit action mapping follows.
+                if (!multilineElement) return
                 val range = shadow.selection
                 if (shadow.replaceText(range, "\n")) {
                     publish(TextInputObservation.Replace(range, "\n", shadow.documentRevision))

@@ -294,6 +294,87 @@ class JsWebTextInputTest {
             harness.close()
         }
     }
+
+    @Test
+    fun aRealCancelledCompositionReportsTheRemovalAndTheTerminalEndWithoutACommit() {
+        val harness = JsTextHarness("input", surroundingText = "abc", selection = TextRange(3, 3))
+        try {
+            harness.open()
+            dispatchComposition(harness.element, "compositionstart", data = null)
+            dispatchComposition(harness.element, "compositionupdate", data = "かん")
+            // Échap: the browser cancelled — no commit ever happened, and the end event carries the
+            // empty final string of the withdrawn composition. A real CompositionEvent cannot carry
+            // a null `data` at all: Web IDL stringifies `null` to "null", so the empty string is the
+            // only honest shape a real DOM event can give a cancellation that changed nothing else.
+            dispatchComposition(harness.element, "compositionend", data = "")
+
+            val revision = TextDocumentRevision(7)
+            assertEquals(
+                listOf<TextInputObservation>(
+                    TextInputObservation.CompositionChanged(TextRange(3, 3), "", TextRange(0, 0), revision),
+                    TextInputObservation.CompositionChanged(TextRange(3, 3), "かん", TextRange(2, 2), revision),
+                    TextInputObservation.Replace(TextRange(3, 5), "", revision),
+                    TextInputObservation.CompositionChanged(null, "", null, revision),
+                ),
+                harness.observed,
+                "a cancellation is the browser's own removal of the composed text, reported as the " +
+                    "Replace it is, then the terminal observation ends the composition — and the " +
+                    "runtime that never accepted the composition refuses the removal by its own " +
+                    "range check, so the session keeps the document it always had",
+            )
+        } finally {
+            harness.close()
+        }
+    }
+
+    @Test
+    fun aTeardownDuringCompositionWithdrawsTheRealListenersAndTheLateCompositionIsNothing() {
+        val harness = JsTextHarness("input", surroundingText = "abc", selection = TextRange(3, 3))
+        try {
+            recordListenerRegistrations(harness.element)
+            val owner = harness.open()
+            dispatchComposition(harness.element, "compositionstart", data = null)
+            dispatchComposition(harness.element, "compositionupdate", data = "かん")
+            assertEquals(2, harness.observed.size, "the composition is in flight when the teardown arrives")
+
+            owner.close()
+            assertEquals(
+                "",
+                listenersWithoutRemoval(harness.element),
+                "the teardown withdraws every listener, with the composition mid-flight",
+            )
+
+            dispatchComposition(harness.element, "compositionupdate", data = "かんじ")
+            dispatchComposition(harness.element, "compositionend", data = "かんじ")
+            assertEquals(
+                2,
+                harness.observed.size,
+                "the late composition is nothing: the listeners are gone from the real element",
+            )
+        } finally {
+            harness.close()
+        }
+    }
+
+    @Test
+    fun aLineBreakBeforeinputOnARealSingleLineInputProducesNothing() {
+        val harness = JsTextHarness("input", surroundingText = "abc", selection = TextRange(3, 3))
+        try {
+            harness.open()
+            dispatchBeforeInput(harness.element, inputType = "insertLineBreak", data = null)
+            dispatchBeforeInput(harness.element, inputType = "insertParagraph", data = null)
+
+            assertEquals(
+                emptyList<TextInputObservation>(),
+                harness.observed,
+                "a single-line input cannot perform the line break the event describes: the element " +
+                    "kind is the host's boundary, and the port never reports an edit the browser did " +
+                    "not perform",
+            )
+        } finally {
+            harness.close()
+        }
+    }
 }
 
 /**

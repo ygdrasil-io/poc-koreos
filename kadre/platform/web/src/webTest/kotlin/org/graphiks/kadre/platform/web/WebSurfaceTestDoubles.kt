@@ -365,6 +365,13 @@ internal class FakeWebTextInputElementAccess : WebTextInputElementAccess {
     var installed: Boolean = false
         private set
 
+    /**
+     * What the next install answers; `true` is an element that refused its listeners — a browsing
+     * context that is being torn down refuses anything, the shape the DOM targets answer with an
+     * exception the port must contain.
+     */
+    var installThrows: Boolean = false
+
     /** How often the port withdrew its listeners; an owner close is the one site. */
     var withdrawals: Int = 0
         private set
@@ -394,6 +401,7 @@ internal class FakeWebTextInputElementAccess : WebTextInputElementAccess {
     var onWrite: (() -> Unit)? = null
 
     override fun install(callbacks: WebTextInputCallbacks) {
+        if (installThrows) throw IllegalStateException("the element refused its listeners")
         installed = true
         this.callbacks = callbacks
     }

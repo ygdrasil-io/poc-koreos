@@ -24,6 +24,10 @@ import org.graphiks.kadre.input.TextInputSession
 import org.graphiks.kadre.input.TextInputState
 import org.graphiks.kadre.input.TextRange
 import org.graphiks.kadre.internal.runtime.RuntimeFailureReporter
+import org.graphiks.kadre.internal.runtime.RuntimeProcessIds
+import org.graphiks.kadre.internal.runtime.TextInputDocumentCommand
+import org.graphiks.kadre.internal.runtime.TextInputOpenCommand
+import org.graphiks.kadre.internal.runtime.TextInputOwner
 import org.graphiks.kadre.policy.KadrePolicies
 import org.graphiks.kadre.surface.HostSurface
 import org.graphiks.kadre.surface.LogicalPoint
@@ -46,7 +50,9 @@ import kotlin.test.assertTrue
  *
  * The element is the [FakeWebTextInputElementAccess] double (the browser targets run their own suites
  * against real elements); the runtime session machine, the revision contract and the observation
- * stamping are the real ones this phase must not touch.
+ * stamping are the real ones this phase must not touch. The one exception is the port's own failure
+ * containment, driven on the bare [WebTextInputPort]: a listener whose observation callback throws
+ * has no surface-level shape, because the runtime's callback cannot be made to throw from outside.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class WebTextInputSurfaceTest {
@@ -493,25 +499,18 @@ class WebTextInputSurfaceTest {
                 config(surroundingText = "abc", selection = TextRange(3, 3), documentRevision = TextDocumentRevision(5)),
             ),
         ).value
+        val events = collect(session)
 
         harness.access.emitCompositionStart()
         harness.access.emitCompositionUpdate("かん")
         testScheduler.runCurrent()
         assertEquals(
-            TextRange(3, 3),
-            (session.state.value as TextInputState.Active).composingRange,
+            TextInputState.Active(TextDocumentRevision(5), TextRange(3, 3)),
+            session.state.value,
             "the composition is open before the focus moves",
         )
 
-        harness.port.deliverLifecycle(
-            WebLifecycleSnapshot(
-                connected = true,
-                inOriginDocument = true,
-                documentVisible = true,
-                browsingContextFocused = false,
-                subtreeFocused = false,
-            ),
-        )
+        harness.port.deliverLifecycle(focusSnapshot(focused = false))
         testScheduler.runCurrent()
         assertEquals(
             TextInputState.Suspended(TextDocumentRevision(5), TextRange(3, 3)),
@@ -519,24 +518,440 @@ class WebTextInputSurfaceTest {
             "a focus loss suspends the session without destroying the composition (DESIGN §10.3)",
         )
 
-        harness.port.deliverLifecycle(
-            WebLifecycleSnapshot(
-                connected = true,
-                inOriginDocument = true,
-                documentVisible = true,
-                browsingContextFocused = true,
-                subtreeFocused = true,
-            ),
-        )
+        harness.port.deliverLifecycle(focusSnapshot(focused = true))
         testScheduler.runCurrent()
         assertEquals(
             TextInputState.Active(TextDocumentRevision(5), TextRange(3, 3)),
             session.state.value,
             "a regained focus resumes the session with the composition it suspended",
         )
+
+        // The composition continues on its own terms: the application follows it in step, and the
+        // next update replaces the span the composition already holds — rebased to the accepted
+        // snapshot, never a reset back to an empty composition.
+        assertEquals(
+            KadreResult.Success(Unit),
+            session.updateSurroundingText("abcかん", TextRange(5, 5), TextDocumentRevision(6)),
+        )
+        harness.access.emitCompositionUpdate("かんじ")
+        testScheduler.runCurrent()
+        assertEquals(
+            listOf<TextInputEvent>(
+                TextInputEvent.CompositionChanged(TextRange(3, 3), "", TextRange(0, 0), TextDocumentRevision(5), events[0].stamp),
+                TextInputEvent.CompositionChanged(TextRange(3, 3), "かん", TextRange(2, 2), TextDocumentRevision(5), events[1].stamp),
+                TextInputEvent.CompositionChanged(TextRange(3, 5), "かんじ", TextRange(3, 3), TextDocumentRevision(6), events[2].stamp),
+            ),
+            events,
+            "the suspension and the resume published no event of their own and no synthetic reset: " +
+                "the resumed composition continues from the span the accepted snapshot rebased it to",
+        )
+
+        // And a focus lost again mid-composition suspends the composition the session now holds,
+        // still preserved, and hands it back the same way.
+        harness.port.deliverLifecycle(focusSnapshot(focused = false))
+        testScheduler.runCurrent()
+        assertEquals(
+            TextInputState.Suspended(TextDocumentRevision(6), TextRange(3, 5)),
+            session.state.value,
+            "a repeated focus loss suspends the composition the session now holds, still preserved",
+        )
+        harness.port.deliverLifecycle(focusSnapshot(focused = true))
+        testScheduler.runCurrent()
+        assertEquals(
+            TextInputState.Active(TextDocumentRevision(6), TextRange(3, 5)),
+            session.state.value,
+            "and the second resume hands it back the same way",
+        )
         session.close()
         harness.stop()
         testScheduler.runCurrent()
+    }
+
+    @Test
+    fun aCancelledCompositionEndsWithoutACommitLeavesNoCompositionBehind() = runTest {
+        val harness = TextInputHarness(this)
+        harness.start()
+        val session = assertIs<KadreResult.Success<TextInputSession>>(
+            harness.surface().input.openTextInput(
+                config(
+                    surroundingText = "abc",
+                    selection = TextRange(3, 3),
+                    documentRevision = TextDocumentRevision(5),
+                ),
+            ),
+        ).value
+        val events = collect(session)
+
+        harness.access.emitCompositionStart()
+        harness.access.emitCompositionUpdate("かん")
+        // Échap: the browser cancelled. The end event carries no data at all, and the application
+        // never accepted a snapshot in between — the composition ends without a commit.
+        harness.access.emitKeyDown("Escape")
+        harness.access.emitCompositionEnd(null)
+        testScheduler.runCurrent()
+
+        val revision = TextDocumentRevision(5)
+        assertEquals(
+            listOf<TextInputEvent>(
+                TextInputEvent.CompositionChanged(TextRange(3, 3), "", TextRange(0, 0), revision, events[0].stamp),
+                TextInputEvent.CompositionChanged(TextRange(3, 3), "かん", TextRange(2, 2), revision, events[1].stamp),
+                TextInputEvent.CompositionChanged(null, "", null, revision, events[2].stamp),
+            ),
+            events,
+            "a cancellation is the terminal composition observation and nothing else: no text fact is " +
+                "fabricated for the removal the browser performed itself, and Échap publishes no action",
+        )
+        assertEquals(
+            TextInputState.Active(TextDocumentRevision(5), null),
+            session.state.value,
+            "a cancelled composition leaves no composition behind: the session is active with none",
+        )
+        assertEquals(
+            KadreResult.Success(Unit),
+            session.updateSurroundingText("abc", TextRange(3, 3), TextDocumentRevision(6)),
+            "the session survives its cancellation: the next accepted write-back restores the " +
+                "element-and-shadow agreement",
+        )
+        assertEquals(
+            Triple("abc", 3, 3),
+            harness.access.writes.last(),
+            "the restoring write-back reached the element",
+        )
+        session.close()
+        harness.stop()
+        testScheduler.runCurrent()
+    }
+
+    /**
+     * The cancellation a real browser performs (Échap): the end event carries the empty final string
+     * of the withdrawn composition, so the port reports the removal the browser made — and the
+     * runtime that never accepted the composition refuses that removal by its own range check,
+     * without losing the terminal end.
+     */
+    @Test
+    fun aCancellationTheBrowserPerformedReportsTheRemovalTheRuntimeRefusesAndStillEndsClean() = runTest {
+        val harness = TextInputHarness(this)
+        harness.start()
+        val session = assertIs<KadreResult.Success<TextInputSession>>(
+            harness.surface().input.openTextInput(
+                config(
+                    surroundingText = "abc",
+                    selection = TextRange(3, 3),
+                    documentRevision = TextDocumentRevision(5),
+                ),
+            ),
+        ).value
+        val events = collect(session)
+
+        harness.access.emitCompositionStart()
+        harness.access.emitCompositionUpdate("かん")
+        harness.access.emitCompositionEnd("")
+        testScheduler.runCurrent()
+
+        assertEquals(
+            listOf<TextInputEvent>(
+                TextInputEvent.CompositionChanged(TextRange(3, 3), "", TextRange(0, 0), TextDocumentRevision(5), events[0].stamp),
+                TextInputEvent.CompositionChanged(TextRange(3, 3), "かん", TextRange(2, 2), TextDocumentRevision(5), events[1].stamp),
+                TextInputEvent.CompositionChanged(null, "", null, TextDocumentRevision(5), events[2].stamp),
+            ),
+            events,
+            "the removal the browser performed is an observation the runtime refuses — the range it " +
+                "names is not within the document the application still holds — and the end still " +
+                "terminates the composition: the session keeps the document it always had",
+        )
+        assertEquals(
+            TextInputState.Active(TextDocumentRevision(5), null),
+            session.state.value,
+            "a cancelled composition leaves no composition behind and no refused-fact scar",
+        )
+        assertEquals(
+            KadreResult.Success(Unit),
+            session.updateSurroundingText("abc!", TextRange(4, 4), TextDocumentRevision(6)),
+            "the application still writes its own document back, and the element agrees with it again",
+        )
+        assertEquals(
+            Triple("abc!", 4, 4),
+            harness.access.writes.last(),
+            "the write-back after the cancellation reached the element",
+        )
+        session.close()
+        harness.stop()
+        testScheduler.runCurrent()
+    }
+
+    @Test
+    fun twoWriteBacksAcrossConsecutiveRevisionsReachTheElementInOrder() = runTest {
+        val harness = TextInputHarness(this)
+        harness.start()
+        val access = harness.access
+        val session = assertIs<KadreResult.Success<TextInputSession>>(
+            harness.surface().input.openTextInput(
+                config(surroundingText = "hello", selection = TextRange(5, 5), documentRevision = TextDocumentRevision(7)),
+            ),
+        ).value
+
+        assertEquals(
+            KadreResult.Success(Unit),
+            session.updateSurroundingText("hello world", TextRange(11, 11), TextDocumentRevision(8)),
+        )
+        assertEquals(
+            KadreResult.Success(Unit),
+            session.updateSurroundingText("hello kadre", TextRange(5, 5), TextDocumentRevision(9)),
+            "the revision that follows an accepted one is admitted: the runtime serialises the " +
+                "write-backs across revisions n and n+1",
+        )
+        assertEquals(
+            listOf(Triple("hello world", 11, 11), Triple("hello kadre", 5, 5)),
+            access.writes,
+            "both accepted snapshots reached the element, in the order the revisions applied them",
+        )
+        assertEquals(
+            TextInputState.Active(TextDocumentRevision(9), null),
+            session.state.value,
+            "the session's revision is the last accepted one",
+        )
+        assertEquals(
+            KadreResult.Failure(KadreFailure.StaleRevision(9, 8)),
+            session.updateSurroundingText("hello world", TextRange(11, 11), TextDocumentRevision(8)),
+            "the earlier revision is stale once n+1 is accepted",
+        )
+        assertEquals(
+            2,
+            access.writes.size,
+            "the stale retry never reached the element",
+        )
+        session.close()
+        harness.stop()
+        testScheduler.runCurrent()
+    }
+
+    @Test
+    fun aStaleObservationFromAClosedSessionNeverReachesALaterSession() = runTest {
+        val harness = TextInputHarness(this)
+        harness.start()
+        val access = harness.access
+        val first = assertIs<KadreResult.Success<TextInputSession>>(
+            harness.surface().input.openTextInput(config(surroundingText = "hello", selection = TextRange(5, 5))),
+        ).value
+        val firstEvents = collect(first)
+        // The first session's own handlers, captured while it lived — what a port that defers its
+        // observations (the AppKit queue precedent) would still hold after the close.
+        val stale = checkNotNull(access.callbacks)
+
+        first.close()
+        testScheduler.runCurrent()
+        assertEquals(
+            TextInputState.Closed,
+            first.state.value,
+            "the first session is closed when the later one opens",
+        )
+
+        val second = assertIs<KadreResult.Success<TextInputSession>>(
+            harness.surface().input.openTextInput(config(surroundingText = "next", selection = TextRange(4, 4))),
+        ).value
+        val secondEvents = collect(second)
+
+        stale.onCompositionStart()
+        stale.onBeforeInput("insertText", "late")
+        stale.onKeyDown("Enter")
+        testScheduler.runCurrent()
+
+        assertEquals(
+            emptyList<TextInputEvent>(),
+            secondEvents,
+            "an observation the closed session's own channel still carries is rejected: the " +
+                "call-scoped holder of the runtime and the port's own guard route it to no later session",
+        )
+        assertEquals(
+            TextInputState.Active(TextDocumentRevision(0), null),
+            second.state.value,
+            "the later session is exactly what its own open built: the late observation touched nothing",
+        )
+        assertEquals(
+            emptyList<TextInputEvent>(),
+            firstEvents,
+            "and the first session published nothing of its own before it closed",
+        )
+        second.close()
+        harness.stop()
+        testScheduler.runCurrent()
+    }
+
+    @Test
+    fun aTeardownDuringCompositionClosesTheSessionAndDeliversNoLateComposition() = runTest {
+        val harness = TextInputHarness(this)
+        harness.start()
+        val access = harness.access
+        val session = assertIs<KadreResult.Success<TextInputSession>>(
+            harness.surface().input.openTextInput(
+                config(surroundingText = "abc", selection = TextRange(3, 3), documentRevision = TextDocumentRevision(5)),
+            ),
+        ).value
+        val events = collect(session)
+
+        access.emitCompositionStart()
+        access.emitCompositionUpdate("かん")
+        testScheduler.runCurrent()
+        assertEquals(
+            TextInputState.Active(TextDocumentRevision(5), TextRange(3, 3)),
+            session.state.value,
+            "the composition is in flight when the teardown arrives",
+        )
+        val stale = checkNotNull(access.callbacks)
+
+        harness.stop()
+        testScheduler.runCurrent()
+
+        assertEquals(
+            TextInputState.Closed,
+            session.state.value,
+            "the teardown closed a session that was composing",
+        )
+        assertTrue(
+            access.withdrawals >= 1,
+            "the teardown withdrew the listeners with the session",
+        )
+        stale.onCompositionUpdate("かんじ")
+        stale.onCompositionEnd("かんじ")
+        testScheduler.runCurrent()
+
+        assertEquals(
+            2,
+            events.size,
+            "the late composition is nothing: no callback survived the teardown",
+        )
+        assertEquals(
+            TextInputState.Closed,
+            session.state.value,
+            "and the closed state was never revisited",
+        )
+    }
+
+    @Test
+    fun aLineBreakBeforeinputOnASingleLineElementProducesNothingBecauseTheHostCannotPerformIt() = runTest {
+        val harness = TextInputHarness(this, kind = "input")
+        harness.start()
+        val access = harness.access
+        val session = assertIs<KadreResult.Success<TextInputSession>>(
+            harness.surface().input.openTextInput(
+                config(
+                    surroundingText = "abc",
+                    selection = TextRange(3, 3),
+                    multiline = true,
+                    action = TextInputAction.Done,
+                ),
+            ),
+        ).value
+        val events = collect(session)
+
+        access.emitBeforeInput("insertLineBreak", null)
+        access.emitBeforeInput("insertParagraph", null)
+        testScheduler.runCurrent()
+
+        assertEquals(
+            emptyList<TextInputEvent>(),
+            events,
+            "the element kind is the host's boundary: a single-line input cannot perform the line " +
+                "break such a beforeinput describes, so reporting one would lie about the document — " +
+                "multiline is the config's wish, the element kind is the fact (D-X2)",
+        )
+
+        access.emitKeyDown("Enter")
+        testScheduler.runCurrent()
+        assertEquals(
+            listOf<TextInputEvent>(TextInputEvent.Action(TextInputAction.Done, TextDocumentRevision(0), events[0].stamp)),
+            events,
+            "the submission key stays the single-line element's own fact, whatever the config's " +
+                "multiline wish",
+        )
+        session.close()
+        harness.stop()
+        testScheduler.runCurrent()
+    }
+
+    @Test
+    fun anInstallThatThrowsRefusesTheOpenWithTheSeamFailureAndLeavesNoSessionBehind() = runTest {
+        val harness = TextInputHarness(this)
+        harness.start()
+        val access = harness.access
+        access.installThrows = true
+
+        assertEquals(
+            KadreResult.Failure(
+                KadreFailure.PlatformFailure(KadrePlatform.Web, TEXT_INPUT_SEAM_DOMAIN, TEXT_INPUT_INSTALL_CODE),
+            ),
+            harness.surface().input.openTextInput(config()),
+            "an element that refused its listeners is the seam's own platform failure, never an " +
+                "exception thrown through the runtime's open call",
+        )
+        assertTrue(
+            access.withdrawals >= 1,
+            "whatever listeners the failed installation landed were withdrawn with the refused open",
+        )
+
+        access.installThrows = false
+        val session = assertIs<KadreResult.Success<TextInputSession>>(
+            harness.surface().input.openTextInput(config()),
+            "the refused open left no session behind: the same port admits a later one",
+        ).value
+        session.close()
+        harness.stop()
+        testScheduler.runCurrent()
+    }
+
+    /**
+     * The port-level containment of a listener's own failure: the observation path of a session is
+     * the one thing a broken application callback can poison, so the listener closes its owner
+     * instead of letting the exception escape — into the caller, which on a real target is the
+     * browser's dispatch and, with it, the page.
+     */
+    @Test
+    fun aThrowingObservationCallbackClosesTheOwnerAndNeverEscapesTheListener() = runTest {
+        val access = FakeWebTextInputElementAccess()
+        val port = WebTextInputPort(access)
+        val owner = assertIs<WebTextInputOwner>(
+            assertIs<KadreResult.Success<TextInputOwner>>(
+                port.open(
+                    TextInputOpenCommand(
+                        surfaceId = RuntimeProcessIds.nextSurfaceId(),
+                        config = TextInputConfig(surroundingText = "hello", selection = TextRange(5, 5)),
+                        onObservation = { error("the application's collector broke") },
+                    ),
+                ),
+            ).value,
+        )
+
+        access.emitBeforeInput("insertText", "x")
+        // Reaching this line at all is the containment: the exception the handler threw became the
+        // owner's close, never an exception thrown back into the caller.
+        assertTrue(
+            owner.isClosed,
+            "the failed handler closed its own owner: a shadow whose observation path broke can no " +
+                "longer be trusted with offsets",
+        )
+        assertTrue(
+            access.withdrawals >= 1,
+            "the closing owner withdrew the listeners it still had",
+        )
+        assertEquals(
+            KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.TextInputSession)),
+            port.updateDocument(
+                TextInputDocumentCommand(owner, "next", TextRange(0, 0), TextDocumentRevision(1)),
+            ),
+            "the session the failed listener served answers the closed failure from then on",
+        )
+        access.emitBeforeInput("insertText", "y")
+
+        assertIs<KadreResult.Success<TextInputOwner>>(
+            port.open(
+                TextInputOpenCommand(
+                    surfaceId = RuntimeProcessIds.nextSurfaceId(),
+                    config = TextInputConfig(surroundingText = "hello", selection = TextRange(5, 5)),
+                    onObservation = { true },
+                ),
+            ),
+        ).value.close()
+        // a later open on the same port succeeds: the failed owner left no session behind
     }
 
     @Test
@@ -599,11 +1014,22 @@ class WebTextInputSurfaceTest {
         selection: TextRange = TextRange(5, 5),
         documentRevision: TextDocumentRevision = TextDocumentRevision(0),
         action: TextInputAction = TextInputAction.Default,
+        multiline: Boolean = false,
     ): TextInputConfig = TextInputConfig(
         surroundingText = surroundingText,
         selection = selection,
         documentRevision = documentRevision,
         action = action,
+        multiline = multiline,
+    )
+
+    /** The lifecycle snapshot of a browsing context whose focus is [focused]. */
+    private fun focusSnapshot(focused: Boolean): WebLifecycleSnapshot = WebLifecycleSnapshot(
+        connected = true,
+        inOriginDocument = true,
+        documentVisible = true,
+        browsingContextFocused = focused,
+        subtreeFocused = focused,
     )
 
     /** Collects the session events of [session] into a list the case reads after `runCurrent`. */
