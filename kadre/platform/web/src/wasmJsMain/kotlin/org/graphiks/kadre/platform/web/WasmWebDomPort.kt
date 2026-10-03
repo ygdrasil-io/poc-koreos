@@ -345,6 +345,16 @@ internal class WasmWebDomPort(element: HTMLElement) : WebHostPort {
 
     override val stableIdentity: Any get() = checkNotNull(element)
     override val leasedElement: Any? get() = element
+
+    /**
+     * The text-input element access of the attached element, over the members of `<input>` and
+     * `<textarea>` the v1 contract writes and the events its sessions observe. It exists for as long
+     * as the port does; the listeners a session installs through it go with the session's own close,
+     * and the write-back it performs is the one write the contract allows on this element.
+     */
+    override val textInputElementAccess: WebTextInputElementAccess =
+        WasmWebTextInputElementAccess(checkNotNull(element))
+
     override val initialSnapshot: WebSurfaceMetrics = element.surfaceMetrics(originWindow?.devicePixelRatio ?: 1.0)
     override val initialLifecycleSnapshot: WebLifecycleSnapshot = lifecycleSnapshot(element)
 

@@ -54,7 +54,6 @@ import org.graphiks.kadre.internal.runtime.RuntimeSessionObserver
 import org.graphiks.kadre.internal.runtime.RuntimeSurfaceInput
 import org.graphiks.kadre.internal.runtime.RuntimeSynchronousInteraction
 import org.graphiks.kadre.internal.runtime.SurfaceStimulus
-import org.graphiks.kadre.internal.runtime.UnsupportedTextInputPort
 import org.graphiks.kadre.internal.runtime.admitField
 import org.graphiks.kadre.internal.runtime.fieldName
 import org.graphiks.kadre.internal.runtime.normaliseFieldFailure
@@ -374,6 +373,17 @@ internal interface WebHostPort {
      */
     val leasedElement: Any? get() = null
 
+    /**
+     * The text-input element access of the attached element, or `null` when this target has none.
+     *
+     * The surface builds its text port from it — a [WebTextInputPort] over the access, or over
+     * [WebTextInputElementAccess.None] when there is no element to lend — and the port's capability
+     * is structural either way (plan decision D-X2): the editability of the element is the host's
+     * boundary, and an element the v1 contract does not address opens a session that observes
+     * nothing. The default preserves the inert ports that have no element at all.
+     */
+    val textInputElementAccess: WebTextInputElementAccess? get() = null
+
     fun release()
 }
 
@@ -525,6 +535,12 @@ internal class WebHostSession(
                         activationWasActive = reduction.state.activation == ActivationState.Active
                         controller.updateLifecycle(reduction.state)
                         if (wasActive && !activationWasActive) deliverInput(WebInputStimulus.FocusLost)
+                        // The mirror of the loss above: a focus the surface regains resumes the text
+                        // session it suspended, with the composition it preserved — the reference
+                        // surface's `Focused → resumeTextInput` (`MinimalWindowSurface.kt:371-373`). A
+                        // session cannot exist before the surface does, so an early snapshot resumes
+                        // nothing and drops nothing.
+                        if (!wasActive && activationWasActive) surface?.resumeTextInputForFocusGain()
                     }
 
                     WebLifecycleReduction.Terminate -> {
@@ -842,7 +858,11 @@ private class WebHostSurface(
             deliveryPolicy = inputDeliveryPolicy,
             eventStampSource = source,
             eventCollectorGate = sessionAllocator.newGate(maxCollectorsPerFlow),
-            textInputPort = UnsupportedTextInputPort,
+            // The text port is structural: the capability says Supported from this moment on, and the
+            // editability of the element the target lends is the host's boundary the port observes
+            // rather than a promise it makes (D-X2). An element the v1 contract does not address —
+            // or the absence of one — opens sessions that simply produce no observations.
+            textInputPort = WebTextInputPort(port.textInputElementAccess ?: WebTextInputElementAccess.None),
             // Raw input is not activated in this phase, so the session's own port is not wired here;
             // the capability says so structurally instead of leaving the omission implicit.
             rawInputCoordinator = null,
@@ -1217,8 +1237,14 @@ private class WebHostSurface(
         pointerOwnership.observe(stimulus)
         when (stimulus) {
             // The reducer owns the neutral snapshot and the one reset it publishes, and it is the one
-            // transition that is not an input packet of its own.
-            WebInputStimulus.FocusLost -> surfaceInput.focusLost()
+            // transition that is not an input packet of its own. The focus loss is also the text
+            // session's own suspension, in the reference surface's order (`MinimalWindowSurface.kt:370-374`):
+            // the input snapshot is reset first, the session is suspended second, and a composition
+            // survives the suspension untouched.
+            WebInputStimulus.FocusLost -> {
+                surfaceInput.focusLost()
+                surfaceInput.suspendTextInput()
+            }
 
             // The drag's observations ride the offer the drop seam presented and a handler accepted:
             // the surface ties them to the runtime-issued offer id, and an observation that arrives
@@ -1233,6 +1259,22 @@ private class WebHostSurface(
         // capture, and the browser ends one with it on every arm but the activation-loss one (see
         // [reconcilePointerCapture] for that divergence).
         if (!pointerOwnership.isOwned) reconcilePointerCapture()
+    }
+
+    /**
+     * The surface's half of a focus the browsing context regained: the text session it suspended
+     * resumes, with the composition the suspension preserved.
+     *
+     * The mirror of the [WebInputStimulus.FocusLost] branch of [acceptInput], which suspends — the
+     * reference surface's own pair (`MinimalWindowSurface.kt:371-373`). A surface that stopped
+     * admitting resumes nothing: its sessions are already closed with its input, and a state the
+     * terminal transition published is not the suspension's to revisit. A surface whose session
+     * configuration has not installed has no session to resume either, so the call is a no-op there.
+     */
+    fun resumeTextInputForFocusGain() {
+        if (admissionClosed) return
+        if (!this::surfaceInput.isInitialized) return
+        surfaceInput.resumeTextInput()
     }
 
     /**

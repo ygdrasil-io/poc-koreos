@@ -218,8 +218,12 @@ class WebInputSurfaceTest {
         // of the observation this install belongs to (D-D1/D-D2), so the offers they present are the
         // reducer's to own from the install on — never earlier, never by a stimulus of its own.
         assertEquals(FeatureAvailability.Available, capabilities.dragAndDrop)
+        // Text input is declared by the same structural observation now that the session installs the
+        // port: the capability is structural (D-X2) — the editability of the element the target lends
+        // is the host's boundary the port observes, never a promise it makes — so a surface without an
+        // element, or with a non-editable one, opens sessions that simply produce no observations.
         assertEquals(
-            Capability.Unsupported(KadreFailure.Unsupported(KadreOperation.TextInput)),
+            Capability.Supported(Unit, FeatureAvailability.Available),
             capabilities.textInput,
         )
         assertEquals(
