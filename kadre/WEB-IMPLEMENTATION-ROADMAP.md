@@ -395,7 +395,7 @@ assumé du gate entre les tâches de code et le flip est résolu). Les touches r
 CDP `Input.dispatchTouchEvent` dans un contexte déclarant touch, la composition réelle par CDP
 `Input.imeSetComposition`, et les branches que Chromium ne produit pas restent synthétiques (le
 précédent D10). Différés/limites enregistrées : gestures sans recognizer (D-T2), `contenteditable` hors v1 (D-X3), `updateCursor` sans effet navigateur, deletes non computables
-sans observation, session runtime closeable par l’application après exception d’listener,
+sans observation, session runtime closeable par l’application après l’exception d’un listener,
 `byte-read` sur les items de taille inconnue, pas de drag-sortant. Les cas non automatisables —
 IME OS réel (candidats, commit, annulation Échap), clavier multi-layout, `touch-action` du host,
 `contenteditable`, drag OS réel hors headless — font l’objet du cahier manuel

@@ -585,11 +585,14 @@ private fun inputPointerCaptureScenario(): Unit {
 }
 
 /**
- * The touch boundary of this phase (D12): a real touch on a touch-enabled page, observed as nothing.
+ * The touch boundary of this phase (D12 as rewritten): a real touch on a touch-enabled page, now
+ * delivered.
  *
- * The spec drives `page.touchscreen` in a browsing context that declares touch, so the pointer events
- * the element receives are real ones; the port refuses the kind whole, so the surface publishes no
- * pointer, no touch and no event.
+ * The spec drives `page.touchscreen` in a browsing context that declares touch, so the contact the
+ * element receives is a real one, and it delivers through the common input observation every input
+ * of this file rides — the tap's two phases are the journal's only entries, and no pointer fact of
+ * any kind exists for it. What stays deferred is the gesture half (D-T2): the capability cell still
+ * promises no recognizer, and the touch delivery contract itself is BCK-004's.
  */
 private fun inputTouchDeferredScenario() = inputScenario("input-touch-deferred")
 
