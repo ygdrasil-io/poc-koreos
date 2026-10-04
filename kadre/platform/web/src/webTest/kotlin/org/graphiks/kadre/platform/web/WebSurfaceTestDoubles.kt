@@ -2,7 +2,9 @@ package org.graphiks.kadre.platform.web
 
 import org.graphiks.kadre.diagnostics.KadreFailure
 import org.graphiks.kadre.diagnostics.KadreResult
+import org.graphiks.kadre.internal.runtime.DropTransferSource
 import org.graphiks.kadre.internal.runtime.RuntimeSynchronousInteraction
+import org.graphiks.kadre.surface.LogicalPoint
 
 /**
  * The one host-port double every web surface test drives.
@@ -142,6 +144,13 @@ internal class RecordingWebHostPort(
         return if (failure == null) KadreResult.Success(Unit) else KadreResult.Failure(failure)
     }
 
+    /**
+     * The text-input element access the surface builds its text port from, or `null` when the case
+     * wants the port to have no element at all — the structural opening a real target without an
+     * editable element produces (plan decision D-X2).
+     */
+    override var textInputElementAccess: WebTextInputElementAccess? = null
+
     override fun installInteractionDispatcher(dispatcher: WebInteractionDispatcher) {
         check(interactionDispatcher == null) { "this port already installed an interaction dispatcher" }
         interactionDispatcher = dispatcher
@@ -267,6 +276,22 @@ internal class RecordingWebHostPort(
         inputObserver?.onPointerCaptureLost()
     }
 
+    /**
+     * Reports a drag entry the element just observed, as a real port does from its `dragenter`
+     * listener: the source the target snapshotted, and the position the event carried. The drop
+     * dispatch that follows is the surface's, synchronously inside this call.
+     */
+    fun deliverDropEntered(source: DropTransferSource, position: LogicalPoint) {
+        inputObserver?.onDropEntered(source, position)
+    }
+
+    /**
+     * Asks the channel the question a real port asks inside its `dragover`/`drop` listeners before
+     * it may drop their browser default: does the surface hold an active drop offer? The answer is
+     * what the journal of preventDefault calls a real target keeps would record.
+     */
+    fun holdsActiveDropOffer(): Boolean = inputObserver?.holdsActiveDropOffer() ?: false
+
     /** The browsing context is gone, as a detached or removed document reports it. */
     fun disconnectedSnapshot(): WebLifecycleSnapshot = WebLifecycleSnapshot(
         connected = false,
@@ -315,5 +340,106 @@ internal class RecordingWebHostPort(
         inputObserver = null
         interactionDispatcher = null
         element = null
+    }
+}
+
+/**
+ * The element double of the text-input seam: a pure Kotlin [WebTextInputElementAccess] a surface
+ * test drives instead of a browser.
+ *
+ * It records the one thing a real access performs — the listener installation at open, the listener
+ * withdrawal at close, and the value/selection writes the contract's write-back is made of — and it
+ * lets a case emit the browser facts the target glue reads from real events: a `beforeinput` with
+ * its `inputType` and `data`, a composition start, update or end with its `data`, and a submission
+ * key. No DOM type appears anywhere on it, which is the point: the surface and the port are proven
+ * against the very seam the browser targets implement.
+ */
+internal class FakeWebTextInputElementAccess : WebTextInputElementAccess {
+    /**
+     * The element kind the browser reports for the attached element: `input` or `textarea` for the
+     * elements the v1 contract addresses, anything else — or `null` — for one it does not.
+     */
+    override var kind: String? = "input"
+
+    /** Whether the port installed its observation listeners; an open on a non-editable kind does not. */
+    var installed: Boolean = false
+        private set
+
+    /**
+     * What the next install answers; `true` is an element that refused its listeners — a browsing
+     * context that is being torn down refuses anything, the shape the DOM targets answer with an
+     * exception the port must contain.
+     */
+    var installThrows: Boolean = false
+
+    /** How often the port withdrew its listeners; an owner close is the one site. */
+    var withdrawals: Int = 0
+        private set
+
+    /**
+     * Every document write the port asked of the element, as (text, selectionStart, selectionEnd).
+     *
+     * It is the observable the write-back cases read — and, since the runtime short-circuits an
+     * idempotent `updateSurroundingText` before the port is reached, also the proof that the
+     * same-revision same-payload call reached the element exactly once.
+     */
+    val writes: MutableList<Triple<String, Int, Int>> = mutableListOf()
+
+    /** What the next write answers; `false` is an element that refused (a gone browsing context). */
+    var writeSucceeds: Boolean = true
+
+    /**
+     * The callbacks the port installed, so a case can emit facts from the browser's side of the seam.
+     */
+    var callbacks: WebTextInputCallbacks? = null
+        private set
+
+    /**
+     * A re-entrancy hook, run inside the next write: a programmatic element write that makes the
+     * browser observe something (the shape the non-reconciliable commit case drives).
+     */
+    var onWrite: (() -> Unit)? = null
+
+    override fun install(callbacks: WebTextInputCallbacks) {
+        if (installThrows) throw IllegalStateException("the element refused its listeners")
+        installed = true
+        this.callbacks = callbacks
+    }
+
+    override fun withdraw() {
+        withdrawals += 1
+        callbacks = null
+    }
+
+    override fun writeDocument(text: String, selectionStart: Int, selectionEnd: Int): Boolean {
+        onWrite?.invoke()
+        onWrite = null
+        writes += Triple(text, selectionStart, selectionEnd)
+        return writeSucceeds
+    }
+
+    /** Emits one `beforeinput`, as the element's glue would read and forward one. */
+    fun emitBeforeInput(inputType: String?, data: String?) {
+        callbacks?.onBeforeInput?.invoke(inputType, data)
+    }
+
+    /** Emits one `compositionstart`. */
+    fun emitCompositionStart() {
+        callbacks?.onCompositionStart?.invoke()
+    }
+
+    /** Emits one `compositionupdate` with the composed text the browser reports. */
+    fun emitCompositionUpdate(data: String?) {
+        callbacks?.onCompositionUpdate?.invoke(data)
+    }
+
+    /** Emits one `compositionend`, with the final data the event carries (or none). */
+    fun emitCompositionEnd(data: String?) {
+        callbacks?.onCompositionEnd?.invoke(data)
+    }
+
+    /** Emits one `keydown` key name, as the element's glue would read one. */
+    fun emitKeyDown(key: String?) {
+        callbacks?.onKeyDown?.invoke(key)
     }
 }

@@ -6,9 +6,11 @@ import org.graphiks.kadre.diagnostics.KadreFailure
 import org.graphiks.kadre.diagnostics.KadrePlatform
 import org.graphiks.kadre.diagnostics.KadreResult
 import org.graphiks.kadre.input.PointerButtonState
+import org.graphiks.kadre.input.TouchPhase
 import org.graphiks.kadre.internal.runtime.RuntimeSynchronousInteraction
 import org.w3c.dom.AddEventListenerOptions
 import org.w3c.dom.Document
+import org.w3c.dom.DragEvent
 import org.w3c.dom.HTMLElement
 import org.w3c.dom.MutationObserver
 import org.w3c.dom.MutationObserverInit
@@ -69,6 +71,22 @@ internal class WasmWebDomPort(element: HTMLElement) : WebHostPort {
     private val pointerMotion: WebPointerMotion = WebPointerMotion()
 
     /**
+     * The touch contacts this element holds, keyed by the browser's own `pointerId`
+     * ([WebTouchContacts]): one stable identity per contact, minted at its `pointerdown` and retired
+     * at its `pointerup`/`pointercancel`, which is what the reducer's reference-keyed native-identity
+     * map requires and what keeps two simultaneous contacts two touches. The rule is shared with the
+     * JS port; only reading a `pointerId` is this target's.
+     */
+    private val touchContacts: WebTouchContacts = WebTouchContacts()
+
+    /**
+     * The touch identity of this element's interaction triggers ([WebTouchInteractions]): one
+     * `TouchStarted` trigger per touch `pointerdown`, dispatched before the ordinary stimulus of the
+     * same event (the AppKit order, `DESIGN.md:983-989`).
+     */
+    private val touchInteractions: WebTouchInteractions = WebTouchInteractions()
+
+    /**
      * The interaction dispatcher the surface installed with its session configuration, or `null`
      * before that moment and after [release].
      *
@@ -78,6 +96,18 @@ internal class WasmWebDomPort(element: HTMLElement) : WebHostPort {
      * the two cannot disagree about the event the element saw.
      */
     private var interactionDispatcher: WebInteractionDispatcher? = null
+
+    /**
+     * The drop snapshot this element's drag in flight presented, or `null` while no drag is in
+     * flight.
+     *
+     * It is the glue's own memory — the source's index-by-index entries — of what the browser
+     * reported at the entry, kept so the drop event can re-read its own data against it. The source
+     * it carries is the one the surface may have presented an offer from, retained by the runtime
+     * while the drag lasts; this field holds only the drop-time correlation, and it is replaced by
+     * the next entry and dropped with the leave or the drop that ends the drag.
+     */
+    private var dropSnapshot: WasmWebDropSnapshot? = null
 
     /**
      * The primitive emissions whose terminal listeners are still installed on the document.
@@ -196,17 +226,21 @@ internal class WasmWebDomPort(element: HTMLElement) : WebHostPort {
         safely { deliverPointerButton(wasmPointerEventOrNull(event), PointerButtonState.Released) }
     }
 
-    /** One `pointerleave` over the element and its whole subtree. */
+    /**
+     * One `pointerleave` over the element and its whole subtree. The type travels with the event so
+     * a touch contact's exit can be told from its cancellation: a leave carries no touch fact.
+     */
     private val pointerLeaveListener: (Event) -> Unit = { event ->
-        safely { deliverPointerLeft(wasmPointerEventOrNull(event)) }
+        safely { deliverPointerLeft(wasmPointerEventOrNull(event), "pointerleave") }
     }
 
     /**
-     * One `pointercancel`: the browser revoked the contact, so the pointer is reconciled by dropping
-     * it with everything it held, which is what the reducer's pointer exit does.
+     * One `pointercancel`: for a pointer, the browser revoked the contact, so the pointer is
+     * reconciled by dropping it with everything it held; for a touch contact, it is the contact's own
+     * `Cancelled`.
      */
     private val pointerCancelListener: (Event) -> Unit = { event ->
-        safely { deliverPointerLeft(wasmPointerEventOrNull(event)) }
+        safely { deliverPointerLeft(wasmPointerEventOrNull(event), "pointercancel") }
     }
 
     /**
@@ -217,8 +251,10 @@ internal class WasmWebDomPort(element: HTMLElement) : WebHostPort {
      * and only the browser knows when it ended. The report names no mode and interprets nothing: the
      * port read the browser's own event and says so.
      *
-     * Only the pointer this port holds is reported: a capture lost for a pointer this element never
-     * asked about is not a claim this surface ever made.
+     * Only a pointer the surface could ever hold is reported, which the kind gate states: a touch
+     * contact is not a pointer, this port never asks the browser to capture one, and the identity
+     * check below would refuse it anyway — the contact's own revocation travels the touch path as a
+     * `pointercancel`, never as a capture report.
      */
     private val lostPointerCaptureListener: (Event) -> Unit = { event ->
         safely {
@@ -253,8 +289,72 @@ internal class WasmWebDomPort(element: HTMLElement) : WebHostPort {
         }
     }
 
+    /**
+     * One `dragenter`: the drag's data store is snapshotted into the source the drop seam presents,
+     * and the entry is reported through the channel, synchronously, in this event's own callback —
+     * the frame the `DropEntered` interaction is dispatched in (D-D2).
+     *
+     * No default is dropped here: a `dragenter` has nothing of its own to prevent, and the element
+     * becomes a drop target only through the offer question the `dragover`/`drop` callbacks ask
+     * (D-D3). A store the browser hands as nothing read as nothing, and no entry is reported.
+     */
+    private val dragEnterListener: (Event) -> Unit = { event ->
+        safely {
+            wasmDragEventOrNull(event)?.let { drag -> deliverDragEntered(drag) }
+        }
+    }
+
+    /**
+     * One `dragover`: the drag's motion over the element, the entry re-made when no offer is held
+     * (D-D1's re-present rule — [deliverDragOver]), and the one question this event exists for —
+     * does the surface hold an offer this drag may complete? If it does, this event's default
+     * ("refuse this drop") is dropped: that is what makes the element a drop target at all, an
+     * activation of a target the surface owns and never a suppression of a page behaviour (D-D3).
+     * Without an offer nothing is dropped, whatever the policy says.
+     */
+    private val dragOverListener: (Event) -> Unit = { event ->
+        safely {
+            wasmDragEventOrNull(event)?.let { drag -> deliverDragOver(drag) }
+        }
+    }
+
+    /**
+     * One `dragleave`: the drag left the element's subtree, and the offer it carried ends with it.
+     * A leave has no default to drop, and none is asked about. The entry's snapshot goes with the
+     * leave: no later event of this drag can arrive on this element, so the handles the snapshot's
+     * payloads keep are dropped with the drag they belonged to.
+     */
+    private val dragLeaveListener: (Event) -> Unit = { _ ->
+        safely {
+            dropSnapshot = null
+            deliverInput(WebInputStimulus.DropExited)
+        }
+    }
+
+    /**
+     * One `drop`: the store's own data is re-read against the snapshot the entry presented — the
+     * handles the drag protected until now are the drop's to give — then the observation is
+     * delivered and the same offer question as the `dragover`'s is asked of this event: with an
+     * active offer, this event's default (the navigation to the dropped content) is dropped.
+     */
+    private val dropListener: (Event) -> Unit = { event ->
+        safely {
+            wasmDragEventOrNull(event)?.let { drag -> deliverDropPerformed(drag) }
+        }
+    }
+
     override val stableIdentity: Any get() = checkNotNull(element)
     override val leasedElement: Any? get() = element
+
+    /**
+     * The text-input element access of the attached element, over the members of `<input>` and
+     * `<textarea>` the v1 contract writes and the events its sessions observe. It exists for as long
+     * as the port does; the listeners a session installs through it go with the session's own close,
+     * and the write-back it performs is the one write the contract allows on this element.
+     */
+    override val textInputElementAccess: WebTextInputElementAccess =
+        WasmWebTextInputElementAccess(checkNotNull(element))
+
     override val initialSnapshot: WebSurfaceMetrics = element.surfaceMetrics(originWindow?.devicePixelRatio ?: 1.0)
     override val initialLifecycleSnapshot: WebLifecycleSnapshot = lifecycleSnapshot(element)
 
@@ -309,6 +409,10 @@ internal class WasmWebDomPort(element: HTMLElement) : WebHostPort {
         element?.addEventListener("pointercancel", pointerCancelListener)
         element?.addEventListener("lostpointercapture", lostPointerCaptureListener)
         element?.addEventListener("wheel", wheelListener, wheelListenerOptions)
+        element?.addEventListener("dragenter", dragEnterListener)
+        element?.addEventListener("dragover", dragOverListener)
+        element?.addEventListener("dragleave", dragLeaveListener)
+        element?.addEventListener("drop", dropListener)
     }
 
     /**
@@ -521,6 +625,10 @@ internal class WasmWebDomPort(element: HTMLElement) : WebHostPort {
         runCatching { element?.removeEventListener("pointercancel", pointerCancelListener) }
         runCatching { element?.removeEventListener("lostpointercapture", lostPointerCaptureListener) }
         runCatching { element?.removeEventListener("wheel", wheelListener, wheelListenerOptions) }
+        runCatching { element?.removeEventListener("dragenter", dragEnterListener) }
+        runCatching { element?.removeEventListener("dragover", dragOverListener) }
+        runCatching { element?.removeEventListener("dragleave", dragLeaveListener) }
+        runCatching { element?.removeEventListener("drop", dropListener) }
         // The terminal listeners of the primitives still awaiting the browser's answer are the last
         // bridges this port holds into the browsing context, and they go with the rest of them: a
         // late fullscreenchange or pointerlockchange must not answer an emission nobody is waiting
@@ -538,10 +646,15 @@ internal class WasmWebDomPort(element: HTMLElement) : WebHostPort {
         runCatching { resizeObserver?.disconnect() }
         // The scroll frontier owns a frame registration of its own, so it is cancelled with the other
         // per-element resources rather than left to fire for an element the port no longer holds, and
-        // both shared trackers forget what they observed of this element.
+        // the shared trackers forget what they observed of this element.
         runCatching { scrollFrame.close() }
         scrollBoundary.clear()
         pointerMotion.clear()
+        touchContacts.clear()
+        // The snapshot of a drag in flight is the drop seam's own resource: with the element gone,
+        // no drop can re-read its entries, and the source the runtime may still retain needs no
+        // second keeper.
+        dropSnapshot = null
         reconnectAnimationFrame?.let { animationFrame ->
             runCatching { originWindow?.cancelAnimationFrame(animationFrame) }
         }
@@ -647,7 +760,9 @@ internal class WasmWebDomPort(element: HTMLElement) : WebHostPort {
      * One pointer entry: the first observation of a pointer over the element's subtree.
      *
      * The entry records the position on the shared motion, so the first motion of the pointer
-     * measures from where it entered.
+     * measures from where it entered. A touch contact has no entry: a contact has no hover, its
+     * `pointerenter` carries no fact the touch model has a phase for, and delivering nothing here
+     * also keeps the contact out of the motion of the pointer this port does deliver.
      */
     private fun deliverPointerEntered(pointer: WasmPointerEvent?) {
         if (pointer == null) return
@@ -663,11 +778,13 @@ internal class WasmWebDomPort(element: HTMLElement) : WebHostPort {
      *
      * The DOM reports no delta for a `pointermove`, so the motion comes from the shared rule that
      * measures one observation against the last ([WebPointerMotion]); the runtime coalesces motions
-     * by summing deltas, which is why an incremental delta is the only one it can carry.
+     * by summing deltas, which is why an incremental delta is the only one it can carry. A touch
+     * contact's motion is not a pointer motion at all: it is routed to the touch path, where it
+     * moves the contact instead of the pointer.
      */
     private fun deliverPointerMoved(pointer: WasmPointerEvent?) {
         if (pointer == null) return
-        val kind = wasmPointerKind(pointer) ?: return
+        val kind = wasmPointerKind(pointer) ?: return deliverTouchContact(pointer, "pointermove")
         val current = element ?: return
         val position = wasmPointerPosition(current, pointer)
         val delta = pointerMotion.advance(position)
@@ -686,11 +803,18 @@ internal class WasmWebDomPort(element: HTMLElement) : WebHostPort {
      * One pointer-button transition, copied with its position, its pressure and its own kind.
      *
      * The transition moves the shared motion too, so a motion that follows it measures from the
-     * position the browser reported with it instead of repeating movement already reported.
+     * position the browser reported with it instead of repeating movement already reported. A touch
+     * contact's press and release are not button transitions: they are routed to the touch path as
+     * the contact's beginning and end, and the pointer's own bookkeeping — the motion and the held
+     * identity a capture request would name — is left exactly as it was.
      */
     private fun deliverPointerButton(pointer: WasmPointerEvent?, buttonState: PointerButtonState) {
         if (pointer == null) return
-        val kind = wasmPointerKind(pointer) ?: return
+        val kind = wasmPointerKind(pointer)
+            ?: return deliverTouchContact(
+                pointer,
+                if (buttonState == PointerButtonState.Pressed) "pointerdown" else "pointerup",
+            )
         val current = element ?: return
         val position = wasmPointerPosition(current, pointer)
         pointerMotion.record(position)
@@ -718,15 +842,14 @@ internal class WasmWebDomPort(element: HTMLElement) : WebHostPort {
      *
      * A cancellation is not a button release but a revocation of the contact, so it is delivered as
      * the exit the reducer reconciles the pointer with — the same member a leave uses, with the kind
-     * the browser reported for the pointer that went away. A touch pointer is refused here as it is
-     * everywhere else, because nothing of it was ever delivered and the surface declares touch
-     * unsupported, and the refusal comes first: a pointer this port does not deliver must not even
-     * disturb the motion of the one it does, which a touch exit reaching the same listener otherwise
-     * would by forgetting where the pointer was.
+     * the browser reported for the pointer that went away. A touch contact's exit belongs to the
+     * touch path: a `pointercancel` is the contact's own `Cancelled`, and a `pointerleave` carries no
+     * touch fact at all ([webTouchPhase] answers `null` for it and nothing is delivered) — neither
+     * disturbs the motion or the identity of the pointer this port does deliver.
      */
-    private fun deliverPointerLeft(pointer: WasmPointerEvent?) {
+    private fun deliverPointerLeft(pointer: WasmPointerEvent?, eventType: String) {
         if (pointer == null) return
-        val kind = wasmPointerKind(pointer) ?: return
+        val kind = wasmPointerKind(pointer) ?: return deliverTouchContact(pointer, eventType)
         pointerMotion.clear()
         // The pointer is gone from this element, cancelled or left, so there is no capture to ask for on
         // it any more — the browser ends one implicitly in both cases.
@@ -735,21 +858,124 @@ internal class WasmWebDomPort(element: HTMLElement) : WebHostPort {
     }
 
     /**
+     * One touch contact observation: the event the element saw, delivered on the contact's own lane.
+     *
+     * The phase is the event type's own fact through the shared mapping ([webTouchPhase]); the
+     * identity is the contact's own stable one, minted by [touchContacts] at the `pointerdown` the
+     * DOM's per-contact `pointerId` named and reused for every event of that contact. A contact the
+     * table does not hold — a move without a down, a duplicated down, an event after the end —
+     * delivers nothing, exactly as the reducer refuses the same shape.
+     */
+    private fun deliverTouchContact(pointer: WasmPointerEvent, eventType: String) {
+        val phase = webTouchPhase(eventType) ?: return
+        val current = element ?: return
+        val position = wasmPointerPosition(current, pointer)
+        val identity = when (phase) {
+            TouchPhase.Started -> touchContacts.begin(pointer.pointerId) ?: return
+            TouchPhase.Moved -> touchContacts.identity(pointer.pointerId) ?: return
+            TouchPhase.Ended, TouchPhase.Cancelled -> touchContacts.retire(pointer.pointerId) ?: return
+        }
+        deliverInput(
+            WebInputStimulus.TouchChanged(
+                nativeIdentity = identity,
+                phase = phase,
+                position = position,
+                pressure = wasmPointerPressure(pointer),
+            ),
+        )
+    }
+
+    /**
+     * One drag entry: the store snapshotted into the source the drop seam presents, and the entry
+     * reported through the channel in this very callback.
+     *
+     * The snapshot is kept for the drop's own re-read, replacing the one a previous drag left; a
+     * store the browser hands as nothing read as nothing, and no entry is reported — there is no
+     * source to present an offer from, and the browser keeps the default of the drag it was having.
+     */
+    private fun deliverDragEntered(drag: DragEvent) {
+        val current = element ?: return
+        val dataTransfer = runCatching { drag.dataTransfer }.getOrNull() ?: return
+        val snapshot = wasmDropSnapshot(dataTransfer) ?: return
+        dropSnapshot = snapshot
+        inputObserver?.onDropEntered(snapshot.source, wasmDropPosition(current, drag))
+    }
+
+    /**
+     * One drag over the element: the entry re-made when no offer is held (D-D1's re-present rule),
+     * the offer question asked of the state this event arrives on, the observation delivered, and
+     * the event's default dropped only on an active offer (D-D3).
+     *
+     * The re-present half is the parenthetical of D-D1 — the snapshot is built at the entry *and at
+     * every over without an active offer* — and it exists because the DOM's own bubbling spends
+     * offers behind the element's back: a move onto a child fires the child's `dragenter` before the
+     * parent's `dragleave`, so an ordinary nested target ends its own churn with no offer in hand,
+     * and a rejected offer leaves the same state behind. The over re-snapshots the store and
+     * re-presents through the very same seam a `dragenter` uses, so the handler decides again while
+     * this over is the event in hand and the element with children stays a drop target; the offer
+     * question is then asked of the state the re-presentation left — the acceptance the dispatch
+     * just committed is what it reads.
+     *
+     * The question's order stays load-bearing: the delivery of the observation can spend the offer
+     * it asks about — a `drop` does exactly that — and a default dropped for an offer the surface
+     * no longer holds would be a prevention nobody could name. It is asked of the very event in
+     * hand, inside its own callback, exactly as [suppressDefaultFor] is for the categories the
+     * policy governs; this one is not the policy's to answer, which is why it is a question of its
+     * own, answered by the surface that holds the offer.
+     */
+    private fun deliverDragOver(drag: DragEvent) {
+        val current = element ?: return
+        val observer = inputObserver ?: return
+        if (!observer.holdsActiveDropOffer()) deliverDragEntered(drag)
+        val activate = observer.holdsActiveDropOffer()
+        observer.onObservation(WebInputStimulus.DropMoved(wasmDropPosition(current, drag)))
+        if (activate) drag.preventDefault()
+    }
+
+    /**
+     * One drop on the element: the drop's own data re-read against the entry's snapshot, the offer
+     * question asked of the state the drop arrives on, the observation delivered — which spends the
+     * offer — and the navigation default dropped because the answer was yes.
+     */
+    private fun deliverDropPerformed(drag: DragEvent) {
+        val current = element ?: return
+        val observer = inputObserver ?: return
+        val snapshot = dropSnapshot
+        if (snapshot != null) {
+            runCatching { drag.dataTransfer }.getOrNull()?.let { dataTransfer ->
+                snapshot.attachDropData(dataTransfer)
+            }
+        }
+        val activate = observer.holdsActiveDropOffer()
+        dropSnapshot = null
+        observer.onObservation(WebInputStimulus.DropPerformed(wasmDropPosition(current, drag)))
+        if (activate) drag.preventDefault()
+    }
+
+    /**
      * The interaction trigger of one pointer press, dispatched synchronously, or nothing at all.
      *
      * The trigger is read with the very mappings the ordinary stimulus of the same event is read
      * with — kind, position, pressure, button — so the interaction and the observation cannot
      * disagree about the event the element saw, and the pressure reaches the interaction exactly as
-     * the model carries it, never narrowed. A pointer kind this phase refuses delivers no
-     * observation, so it dispatches no interaction either: the kind is the ordinary path's own gate.
-     * With no dispatcher installed — before the session configuration, or after [release] — there is
-     * nothing to invoke, and the ordinary stimulus continues as it always has.
+     * the model carries it, never narrowed. A touch contact triggers its own interaction
+     * (`TouchStarted`, D-T3) at the same point of the same listener: dispatched first, in this
+     * event's own callback, with the ordinary touch stimulus of the event following as it would
+     * have anyway. With no dispatcher installed — before the session configuration, or after
+     * [release] — there is nothing to invoke, and the ordinary stimulus continues as it always has.
      */
     private fun dispatchInteractionFor(pointer: WasmPointerEvent?) {
         val dispatcher = interactionDispatcher ?: return
         if (pointer == null) return
-        wasmPointerKind(pointer) ?: return
         val current = element ?: return
+        if (wasmPointerKind(pointer) == null) {
+            // Only a down that begins a contact triggers: the contact table is what the ordinary
+            // path reads right after, so a duplicated down dispatches no trigger and delivers no
+            // stimulus either — the two lanes cannot disagree about the event the element saw.
+            if (touchContacts.identity(pointer.pointerId) != null) return
+            dispatcher.dispatch(touchInteractions.started(wasmPointerPosition(current, pointer)))
+            return
+        }
         dispatcher.dispatch(
             RuntimeSynchronousInteraction.PointerPressed(
                 button = webPointerButton(pointer.button),
@@ -784,7 +1010,7 @@ internal class WasmWebDomPort(element: HTMLElement) : WebHostPort {
     }
 
     /**
-     * The one place this port can drop a browser default, and the only one.
+     * The one place this port can drop a browser default for the categories the policy governs.
      *
      * The port holds no policy: it hands the observation over and asks the same channel whether the
      * default action of the event that just carried it must be dropped, then applies that answer to
@@ -795,9 +1021,11 @@ internal class WasmWebDomPort(element: HTMLElement) : WebHostPort {
      *
      * Only the two listeners whose event has a page-level default route through it: the wheel, whose
      * default scrolls or zooms the browsing context, and the key press, whose scroll keys move the
-     * document. Every other listener delivers through [deliverInput] and ignores the answer. No
-     * listener of the document, the window or an ancestor calls this, and this file contains no other
-     * `preventDefault` anywhere.
+     * document. Every other listener delivers through [deliverInput] and ignores the answer — except
+     * the drag ones, whose `dragover`/`drop` defaults are dropped through the offer question of their
+     * own ([deliverDragOver], [deliverDropPerformed]), an activation of a target the surface holds
+     * and never a policy suppression. No listener of the document, the window or an ancestor drops a
+     * default, and these are the only three `preventDefault` sites of this file.
      */
     private fun suppressDefaultFor(event: Event, stimulus: WebInputStimulus) {
         if (deliverInput(stimulus)) event.preventDefault()

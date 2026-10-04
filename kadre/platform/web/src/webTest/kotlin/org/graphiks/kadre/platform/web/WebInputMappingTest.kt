@@ -10,6 +10,7 @@ import org.graphiks.kadre.input.PhysicalKey
 import org.graphiks.kadre.input.PointerButton
 import org.graphiks.kadre.input.PointerKind
 import org.graphiks.kadre.input.ScrollDelta
+import org.graphiks.kadre.input.TouchPhase
 import kotlin.math.PI
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -466,13 +467,14 @@ class WebInputMappingTest {
     // --- Pointer kinds ---------------------------------------------------------------------------
 
     @Test
-    fun theDeliveredPointerKindsAreTheMouseAndThePenAndTouchIsRefused() {
+    fun theDeliveredPointerKindsAreTheMouseAndThePenAndATouchContactIsNeverAPointer() {
         assertEquals(PointerKind.Mouse, webPointerKind("mouse"))
         assertEquals(PointerKind.Pen, webPointerKind("pen"))
-        // D12: touch belongs to the phase that installs its observers, so it must produce no stimulus
-        // at all. Refusing it here is what keeps the surface from claiming a capability it does not
-        // install, exactly as `DOM_DELTA_PAGE` is refused rather than converted (D9).
-        assertNull(webPointerKind("touch"), "a touch pointer is not delivered in this phase")
+        // A touch contact is not a pointer: the model has no `Touch` member of `PointerKind` and a
+        // contact must never become a `PointerState`. The `null` is the routing predicate the ports
+        // read — the event goes to the touch path of [webTouchPhase] and becomes a touch state, never
+        // a pointer observation of any kind.
+        assertNull(webPointerKind("touch"), "a touch contact is not a pointer, and never becomes one")
         // A kind the browser cannot name is the model's own `Unknown`: dropping the observation would
         // lose a motion the model can carry, and naming it a mouse would invent a device.
         assertEquals(PointerKind.Unknown, webPointerKind(""))
@@ -482,6 +484,28 @@ class WebInputMappingTest {
                 webPointerKind(pointerType),
                 "\"$pointerType\" is not a device this phase can name",
             )
+        }
+    }
+
+    // --- Touch phases ----------------------------------------------------------------------------
+
+    @Test
+    fun theTouchEventTypesOfAContactMapToTheirPhasesAndNoOtherTypeCarriesATouchFact() {
+        // The four pointer events a browser delivers for a touch contact are the four phases of the
+        // model, named by the event's own type. A mapping that routed `pointerleave` to `Cancelled`,
+        // or a `pointerdown` to anything but the contact's beginning, would fail here.
+        assertEquals(TouchPhase.Started, webTouchPhase("pointerdown"), "a down begins the contact")
+        assertEquals(TouchPhase.Moved, webTouchPhase("pointermove"), "a move moves it")
+        assertEquals(TouchPhase.Ended, webTouchPhase("pointerup"), "an up ends it")
+        assertEquals(TouchPhase.Cancelled, webTouchPhase("pointercancel"), "a revocation cancels it")
+        // The events of a contact that carry no touch fact answer `null` and deliver nothing: a
+        // contact has no hover, so its entry and leave are no phases of the model at all.
+        listOf("pointerenter", "pointerleave", "pointerover", "pointerout").forEach { eventType ->
+            assertNull(webTouchPhase(eventType), "\"$eventType\" carries no touch phase")
+        }
+        // And a hostile or foreign type is not a phase either — the function is total, never thrown on.
+        listOf("", "down", "touchstart", "touchend", "PointerDown", "pointerdown ").forEach { eventType ->
+            assertNull(webTouchPhase(eventType), "\"$eventType\" is not a touch event type")
         }
     }
 

@@ -1,5 +1,7 @@
 package org.graphiks.kadre.platform.web
 
+import org.graphiks.kadre.input.TouchId
+import org.graphiks.kadre.internal.runtime.RuntimeSynchronousInteraction
 import org.graphiks.kadre.surface.LogicalDelta
 import org.graphiks.kadre.surface.LogicalPoint
 
@@ -101,5 +103,83 @@ internal class WebPointerMotion {
     /** Forgets the previous position: the next observation has nothing to measure from. */
     fun clear() {
         previous = null
+    }
+}
+
+/**
+ * The contacts this port currently holds, keyed by the browser's own `pointerId`.
+ *
+ * A touch contact's stimulus carries a `nativeIdentity` the ordinary-input reducer keys by
+ * reference (`IdentityKeyedMap` — native identities, never value types), while the only identity
+ * the browser gives a contact is its `pointerId`, an integer value repeated on every event of the
+ * gesture. The table is the bridge between the two: it mints one stable identity object per contact
+ * at its `pointerdown` and hands the *same* reference back for every later event of that
+ * `pointerId`, so the reducer reads one contact, not one contact per event.
+ *
+ * The whole rule rests on one fact of the DOM, cited here where it is relied on: **a
+ * `pointerId` is stable for the lifetime of its contact** for a touch pointer — the browser
+ * guarantees it, and the table would otherwise re-key the gesture on every event. The table also
+ * mirrors the reducer's own contact lifetime: a contact begun twice under one `pointerId` is a
+ * duplicated `down` and answers nothing, a move of a contact never begun answers nothing, and a
+ * `pointerup`/`pointercancel` retires the identity, after which later events of that `pointerId`
+ * answer nothing — exactly the reductions the shared reducer performs for the same shapes.
+ *
+ * One instance per port, like [WebPointerMotion]: the element is the whole contact surface this
+ * table describes, and `clear` goes with the port's other per-element resets.
+ */
+internal class WebTouchContacts {
+    private val identitiesByPointerId = mutableMapOf<Int, Any>()
+
+    /**
+     * Opens a contact and answers its stable identity, or `null` when one is already active under
+     * this `pointerId` — a second `down` of a live contact is not a second contact.
+     */
+    fun begin(pointerId: Int): Any? {
+        if (identitiesByPointerId.containsKey(pointerId)) return null
+        val identity = Any()
+        identitiesByPointerId[pointerId] = identity
+        return identity
+    }
+
+    /** The identity of the active contact under [pointerId], or `null` when none is. */
+    fun identity(pointerId: Int): Any? = identitiesByPointerId[pointerId]
+
+    /**
+     * Closes the contact under [pointerId] and answers the identity it held, or `null` when no
+     * contact is active under it. The identity is never handed out again: the contact is over.
+     */
+    fun retire(pointerId: Int): Any? = identitiesByPointerId.remove(pointerId)
+
+    /** Forgets every contact: the port stopped reading the element, so none can be continued. */
+    fun clear() {
+        identitiesByPointerId.clear()
+    }
+}
+
+/**
+ * The touch identity of one interaction trigger.
+ *
+ * A touch `pointerdown` dispatches `RuntimeSynchronousInteraction.TouchStarted` to the installed
+ * handler, and the trigger carries a `TouchId` — an opaque value the Web target may not mint by
+ * inventing a number, but one it must supply, because the interaction is dispatched before the
+ * ordinary stimulus of the same event (the AppKit order, `DESIGN.md:983-989`) and nothing else has
+ * allocated an identity yet. This class allocates them one per dispatched trigger, monotonically,
+ * the way the reducer allocates its own contact identities for the ordinary path.
+ *
+ * The trigger's identity and the reducer's are two allocations of the same opaque type, made in two
+ * lanes, and nothing here claims they are the same value: the handler reads the trigger's identity
+ * from the interaction event it receives, the consumer of the input stream reads the reducer's from
+ * `InputEvent.TouchChanged`. What is promised is uniqueness within this surface's interaction lane —
+ * one trigger, one identity, never reused — which is the whole contract a trigger payload has.
+ */
+internal class WebTouchInteractions {
+    private var nextTouchId = 0L
+
+    /** Builds the `TouchStarted` trigger of one touch `pointerdown` at [position]. */
+    fun started(position: LogicalPoint): RuntimeSynchronousInteraction.TouchStarted {
+        check(nextTouchId != Long.MAX_VALUE) { "touch interaction identity space exhausted" }
+        val touchId = TouchId(nextTouchId)
+        nextTouchId += 1L
+        return RuntimeSynchronousInteraction.TouchStarted(touchId = touchId, position = position)
     }
 }

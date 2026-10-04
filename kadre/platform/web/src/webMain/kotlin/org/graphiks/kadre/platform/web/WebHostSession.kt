@@ -26,6 +26,7 @@ import org.graphiks.kadre.diagnostics.KadreOperation
 import org.graphiks.kadre.diagnostics.KadrePlatform
 import org.graphiks.kadre.diagnostics.KadreResourceKind
 import org.graphiks.kadre.diagnostics.KadreResult
+import org.graphiks.kadre.input.DropOfferId
 import org.graphiks.kadre.input.SurfaceInput
 import org.graphiks.kadre.interaction.InteractionAction
 import org.graphiks.kadre.interaction.InteractionContext
@@ -38,6 +39,7 @@ import org.graphiks.kadre.interaction.InteractionToken
 import org.graphiks.kadre.internal.runtime.NativeInteractionOutcome
 import org.graphiks.kadre.internal.runtime.KadreLaunchInfo
 import org.graphiks.kadre.internal.runtime.RawInputPort
+import org.graphiks.kadre.internal.runtime.DropTransferSource
 import org.graphiks.kadre.internal.runtime.RuntimeDropTransferBudget
 import org.graphiks.kadre.internal.runtime.RuntimeEventCollectorAllocator
 import org.graphiks.kadre.internal.runtime.RuntimeFailureReporter
@@ -52,7 +54,6 @@ import org.graphiks.kadre.internal.runtime.RuntimeSessionObserver
 import org.graphiks.kadre.internal.runtime.RuntimeSurfaceInput
 import org.graphiks.kadre.internal.runtime.RuntimeSynchronousInteraction
 import org.graphiks.kadre.internal.runtime.SurfaceStimulus
-import org.graphiks.kadre.internal.runtime.UnsupportedTextInputPort
 import org.graphiks.kadre.internal.runtime.admitField
 import org.graphiks.kadre.internal.runtime.fieldName
 import org.graphiks.kadre.internal.runtime.normaliseFieldFailure
@@ -69,6 +70,7 @@ import org.graphiks.kadre.surface.HostSurface
 import org.graphiks.kadre.surface.HitTestingMode
 import org.graphiks.kadre.surface.InputDefaultBehavior
 import org.graphiks.kadre.surface.LogicalInsets
+import org.graphiks.kadre.surface.LogicalPoint
 import org.graphiks.kadre.surface.PointerCaptureMode
 import org.graphiks.kadre.surface.PropertyChange
 import org.graphiks.kadre.surface.RejectedSurfaceField
@@ -171,6 +173,35 @@ internal fun interface WebInputObserver {
      * the one its consumer asked for, which is the conservative reading of a report nobody made.
      */
     fun onPointerCaptureLost() = Unit
+
+    /**
+     * Reports the drag entry the element observed, carrying the source the target snapshotted from
+     * the drag's own data and the position the event held (plan decision D-D2).
+     *
+     * This is the drop seam's entry half, and it is a report rather than an observation because what
+     * the surface does with it is not a reduction: it presents a runtime-owned offer and dispatches
+     * the `DropEntered` interaction synchronously, inside this very call — the frame the DOM
+     * callback that reported it is still in — so a handler may accept or refuse it while the entry
+     * is the event in hand, exactly as the reference surface does from its native callback. The
+     * source is the target's own snapshot ([DropTransferSource], Kotlin-only: no DOM handle ever
+     * crosses); the surface takes its ownership on presentation and closes it on every path that
+     * never presents one, so a report is never a leak.
+     *
+     * A channel that does not answer loses nothing: a surface that is never told a drag entered
+     * presents nothing, and the browser keeps the default of the drag it was having.
+     */
+    fun onDropEntered(source: DropTransferSource, position: LogicalPoint) = Unit
+
+    /**
+     * Whether the surface holds a drop offer the drag in hand may still complete.
+     *
+     * Asked synchronously, inside the `dragover`/`drop` callback that needs the answer: the browser
+     * default of those two events is "refuse this drop", and dropping it is how the element becomes
+     * a drop target at all (plan decision D-D3) — an activation of the target that holds an offer,
+     * never a suppression of a default the page would otherwise perform. The answer is `false` by
+     * default, so a channel that does not answer activates nothing: prevention is never implicit.
+     */
+    fun holdsActiveDropOffer(): Boolean = false
 }
 
 internal interface WebHostPort {
@@ -342,6 +373,17 @@ internal interface WebHostPort {
      */
     val leasedElement: Any? get() = null
 
+    /**
+     * The text-input element access of the attached element, or `null` when this target has none.
+     *
+     * The surface builds its text port from it — a [WebTextInputPort] over the access, or over
+     * [WebTextInputElementAccess.None] when there is no element to lend — and the port's capability
+     * is structural either way (plan decision D-X2): the editability of the element is the host's
+     * boundary, and an element the v1 contract does not address opens a session that observes
+     * nothing. The default preserves the inert ports that have no element at all.
+     */
+    val textInputElementAccess: WebTextInputElementAccess? get() = null
+
     fun release()
 }
 
@@ -454,6 +496,26 @@ internal class WebHostSession(
                 // one.
                 surface?.onPointerCaptureLost()
             }
+
+            override fun onDropEntered(source: DropTransferSource, position: LogicalPoint) {
+                val current = surface
+                if (current == null) {
+                    // The one window a drag entry can arrive unanswerable — the target's listeners
+                    // exist, the surface the offer would belong to does not. No offer is presented and
+                    // nothing retains the snapshot: the source is closed exactly as the runtime closes
+                    // the sources of offers it never presented, and the browser keeps the default of
+                    // the drag it was having.
+                    runCatching { source.close() }
+                    return
+                }
+                current.dispatchSynchronousDrop(source, position)
+            }
+
+            override fun holdsActiveDropOffer(): Boolean =
+                // The offer question is the surface's to answer: it is the one that presented the
+                // offer and the one that knows when the drag took it away. A surface that does not
+                // exist holds nothing, and a question asked of nothing activates nothing.
+                surface?.holdsActiveDropOffer() ?: false
         }
 
         val controller = createController(initialLifecycle, ownership, windowManager) { created ->
@@ -473,6 +535,12 @@ internal class WebHostSession(
                         activationWasActive = reduction.state.activation == ActivationState.Active
                         controller.updateLifecycle(reduction.state)
                         if (wasActive && !activationWasActive) deliverInput(WebInputStimulus.FocusLost)
+                        // The mirror of the loss above: a focus the surface regains resumes the text
+                        // session it suspended, with the composition it preserved — the reference
+                        // surface's `Focused → resumeTextInput` (`MinimalWindowSurface.kt:371-373`). A
+                        // session cannot exist before the surface does, so an early snapshot resumes
+                        // nothing and drops nothing.
+                        if (!wasActive && activationWasActive) surface?.resumeTextInputForFocusGain()
                     }
 
                     WebLifecycleReduction.Terminate -> {
@@ -678,6 +746,19 @@ private class WebHostSurface(
      * dropping it, when that request failed after the emission and no pending exists to complete).
      */
     private var interactionEmissionInFlight: WebInteractionEmission? = null
+
+    /**
+     * The offer of the drag this surface is holding, once a handler accepted it.
+     *
+     * It is the surface's own mirror of the reducer's one active offer — set when the drop seam's
+     * `AcceptDrop` committed, spent by the exit or the drop that ends the drag, and replaced by the
+     * next entry. It is what ties the drag's later observations to the runtime-issued offer the
+     * reducer demands, and it is the whole of the answer to [holdsActiveDropOffer]: the browser
+     * default of a `dragover`/`drop` is dropped for an offer the surface holds and for nothing else
+     * (plan decision D-D3). A surface that stopped admitting holds nothing, so the question and the
+     * deliveries answer through that gate first.
+     */
+    private var dropOfferId: DropOfferId? = null
     private var pendingRedraw: Boolean = false
 
     private var bufferedRedraws: Int = 0
@@ -777,17 +858,24 @@ private class WebHostSurface(
             deliveryPolicy = inputDeliveryPolicy,
             eventStampSource = source,
             eventCollectorGate = sessionAllocator.newGate(maxCollectorsPerFlow),
-            textInputPort = UnsupportedTextInputPort,
+            // The text port is structural: the capability says Supported from this moment on, and the
+            // editability of the element the target lends is the host's boundary the port observes
+            // rather than a promise it makes (D-X2). An element the v1 contract does not address —
+            // or the absence of one — opens sessions that simply produce no observations.
+            textInputPort = WebTextInputPort(port.textInputElementAccess ?: WebTextInputElementAccess.None),
             // Raw input is not activated in this phase, so the session's own port is not wired here;
             // the capability says so structurally instead of leaving the omission implicit.
             rawInputCoordinator = null,
             rawInputCapability = Capability.Unsupported(KadreFailure.Unsupported(KadreOperation.RawInputAccess)),
-            dragAndDropAvailable = false,
+            // Drag-and-drop is declared structurally, like the keyboard and the pointer: the drag
+            // listeners are part of the observation this installation belongs to, and the offers they
+            // present through the drop seam are the reducer's to own from that moment on.
+            dragAndDropAvailable = true,
             resources = resources,
             dropTransferBudget = RuntimeDropTransferBudget(resources.maxConcurrentDropTransfers),
-            // The scope is received deliberately and unused until drag-and-drop is activated in
-            // Phase 5.
-            dropTransferScope = null,
+            // The session's own scope is what keeps a claimed transfer's claim timeout alive after the
+            // stimulus that performed the drop is gone.
+            dropTransferScope = dropTransferScope,
             textInputEventCollectorGate = sessionAllocator.newGate(maxCollectorsPerFlow),
             // The reporter of diagnostics that are not session failures is the session's own failure
             // reporter, the one this host was built with; the session diagnostic channel feeds the
@@ -821,15 +909,17 @@ private class WebHostSurface(
         val pending = pendingStimuli.toList()
         pendingStimuli.clear()
         pending.forEach { publish(it, active) }
-        // The installation is structural and complete: keyboard and pointer observation exist from
-        // here on, and the capabilities may say so. Nothing of the kind is claimed earlier, and touch
-        // and gestures stay unsupported until a phase installs their observers.
+        // The installation is structural and complete: keyboard, pointer and touch observation exist
+        // from here on, and the capabilities may say so. The touch contacts ride on the very pointer
+        // listeners the ports installed, so there is no second installation to wait for. Gestures
+        // stay unsupported — no recognizer exists on this target (D-T2), and `gestureKinds` stays
+        // empty in the very observation that declares touch.
         surfaceInput.accept(
             SurfaceStimulus.InputObservationChanged(
                 surfaceId = id,
                 keyboardInstalled = true,
                 pointerInstalled = true,
-                touchInstalled = false,
+                touchInstalled = true,
                 gestureKinds = emptySet(),
             ),
         )
@@ -883,9 +973,10 @@ private class WebHostSurface(
      *
      * A surface that stopped admitting dispatches nothing: its listeners are on their way out with
      * the port's bridges, and an interaction on a closed surface is an authority nobody can honour.
-     * Touch is deliberately absent: no port of this target builds a `TouchStarted` trigger (the plan's
-     * recorded limits), so the branch exists to be refused rather than to classify a member that
-     * cannot arrive.
+     * A touch start is dispatched like the pointer and key triggers are — the port builds it from the
+     * touch `pointerdown` it already observes — and the ordinary touch stimulus of the same event is
+     * the port's own next step, unchanged: the interaction informs the handler, the ordinary path
+     * feeds the reducer, and neither stands in for the other.
      */
     private fun dispatchInteraction(trigger: RuntimeSynchronousInteraction) {
         if (admissionClosed) return
@@ -903,10 +994,86 @@ private class WebHostSurface(
                 active.stampSource(),
             )
 
-            is RuntimeSynchronousInteraction.TouchStarted -> return
+            is RuntimeSynchronousInteraction.TouchStarted -> InteractionEvent.TouchStarted(
+                trigger.touchId,
+                trigger.position,
+                active.stampSource(),
+            )
         }
         interaction.dispatch(event, advertisedInteractions, ::invokeNative)
     }
+
+    /**
+     * The drop seam's entry half: one drag entry the target reported, dispatched synchronously.
+     *
+     * It is the mirror of the reference surface's own `dispatchSynchronousDrop` (`MinimalWindowSurface.kt:398-441`),
+     * translated to the one callback frame every DOM event owns. The reducer presents the offer from
+     * the target's snapshot — one active offer, the previous one ended `LeftSurface`, the snapshot
+     * copied and bounded by the session's own resources — and, if one was presented, the
+     * `DropEntered` interaction is dispatched right here, inside the frame the `dragenter` callback
+     * is still in: the handler asks its single-use token for the `AcceptDrop` of that very offer, a
+     * `Now` action with no browser primitive behind it, and the commitment is the reducer's
+     * `acceptDrop` and nothing else. A handler that is absent, that refuses, that spends its token on
+     * another action or another offer leaves the offer terminal and rejected — the same "the input
+     * continues normally" the reference states — and the browser keeps the default of the drag it was
+     * having, because nothing activated this element as a drop target.
+     *
+     * The surface keeps the accepted offer's id ([dropOfferId]): the drag's later observations ride
+     * it, and the offer question the port asks is answered from it. The source is never leaked: an
+     * entry nobody could present — a surface that stopped admitting, or one whose session
+     * configuration has not installed — closes the snapshot it carried, and `presentDrop` closes it
+     * on every path that returns no offer.
+     */
+    fun dispatchSynchronousDrop(source: DropTransferSource, position: LogicalPoint) {
+        if (admissionClosed) {
+            runCatching { source.close() }
+            return
+        }
+        val interaction = interactionHandler
+        val active = configuration
+        if (interaction == null || active == null) {
+            runCatching { source.close() }
+            return
+        }
+        val stamp = active.stampSource()
+        val offer = surfaceInput.presentDrop(source, position, stamp) ?: return
+        var accepted = false
+        interaction.dispatch(
+            InteractionEvent.DropEntered(offer, position, stamp),
+            advertisedInteractions,
+        ) { action ->
+            when {
+                action !is InteractionAction.AcceptDrop ->
+                    NativeInteractionOutcome.Now(
+                        KadreResult.Failure(KadreFailure.Unsupported(KadreOperation.Interaction)),
+                    )
+
+                action.offerId != offer.id ->
+                    NativeInteractionOutcome.Now(KadreResult.Failure(KadreFailure.InvalidRequest("offerId")))
+
+                else -> when (val admitted = surfaceInput.acceptDrop(offer.id)) {
+                    is KadreResult.Failure -> NativeInteractionOutcome.Now(admitted)
+                    is KadreResult.Success -> {
+                        accepted = true
+                        dropOfferId = offer.id
+                        NativeInteractionOutcome.Now(KadreResult.Success(Unit))
+                    }
+                }
+            }
+        }
+        if (!accepted) surfaceInput.rejectDrop(offer.id)
+    }
+
+    /**
+     * Whether the surface holds a drop offer the drag in hand may still complete.
+     *
+     * This is the channel's answer to the question a port asks inside its `dragover`/`drop` callbacks
+     * before it may drop their browser default: the accepted offer of the drag this surface presented
+     * ([dropOfferId]), and nothing else. A surface that stopped admitting answers `false` — like
+     * every other question about the behaviour of a surface that owns nothing — and a default is
+     * never dropped on the strength of anything but an offer it holds.
+     */
+    fun holdsActiveDropOffer(): Boolean = !admissionClosed && dropOfferId != null
 
     /**
      * The one native step an admitted action takes, asked by the engine inside its callback frame.
@@ -916,13 +1083,20 @@ private class WebHostSurface(
      * browser API is ever asked for an action the surface does not support. The branch remains,
      * exhaustive, as the closed answer that keeps the function total.
      *
-     * The four web actions validate what the admission cannot see — a `LockPointer` mode this target
-     * does not take is refused here, still before any primitive call — and then emit their primitive
-     * through the port. What comes back decides the outcome's shape: an emission failure is
-     * synchronous ([NativeInteractionOutcome.Now]), an emitted primitive is deferred to the browser's
-     * terminal answer ([NativeInteractionOutcome.Deferred]), whose callback completes the pending
-     * with [refusalFailure] when the browser refused — a `committed = false` without a failure would
-     * be a rejection nobody could name.
+     * `AcceptDrop` is the one action with no browser primitive behind it, and it is answered from the
+     * reducer the drop seam presented its offer to: the offer id the action names is the reducer's
+     * authority, and a token that names an offer this surface does not hold is answered with the
+     * reducer's own refusal. It reaches here only from a dispatch this surface did not route through
+     * the drop seam — the seam's own dispatch validates the offer against the one it presented
+     * ([dispatchSynchronousDrop]) — so the reducer's answer is the whole of the step.
+     *
+     * The four primitive web actions validate what the admission cannot see — a `LockPointer` mode
+     * this target does not take is refused here, still before any primitive call — and then emit
+     * their primitive through the port. What comes back decides the outcome's shape: an emission
+     * failure is synchronous ([NativeInteractionOutcome.Now]), an emitted primitive is deferred to
+     * the browser's terminal answer ([NativeInteractionOutcome.Deferred]), whose callback completes
+     * the pending with [refusalFailure] when the browser refused — a `committed = false` without a
+     * failure would be a rejection nobody could name.
      */
     private fun invokeNative(action: InteractionAction): NativeInteractionOutcome = when (action) {
         is InteractionAction.EnterFullscreen -> emitWebPrimitive(WEB_FULLSCREEN_DOMAIN) { terminal ->
@@ -944,9 +1118,10 @@ private class WebHostSurface(
             port.exitPointerLock(terminal)
         }
 
+        is InteractionAction.AcceptDrop -> NativeInteractionOutcome.Now(surfaceInput.acceptDrop(action.offerId))
+
         InteractionAction.BeginWindowMove,
         is InteractionAction.BeginWindowResize,
-        is InteractionAction.AcceptDrop,
         is InteractionAction.OpenWindow,
         -> NativeInteractionOutcome.Now(
             KadreResult.Failure(KadreFailure.Unsupported(KadreOperation.Interaction)),
@@ -1062,14 +1237,44 @@ private class WebHostSurface(
         pointerOwnership.observe(stimulus)
         when (stimulus) {
             // The reducer owns the neutral snapshot and the one reset it publishes, and it is the one
-            // transition that is not an input packet of its own.
-            WebInputStimulus.FocusLost -> surfaceInput.focusLost()
+            // transition that is not an input packet of its own. The focus loss is also the text
+            // session's own suspension, in the reference surface's order (`MinimalWindowSurface.kt:370-374`):
+            // the input snapshot is reset first, the session is suspended second, and a composition
+            // survives the suspension untouched.
+            WebInputStimulus.FocusLost -> {
+                surfaceInput.focusLost()
+                surfaceInput.suspendTextInput()
+            }
+
+            // The drag's observations ride the offer the drop seam presented and a handler accepted:
+            // the surface ties them to the runtime-issued offer id, and an observation that arrives
+            // with no offer in hand is reduced by nothing — a drag the surface never accepted is one
+            // whose motion, exit and drop are nothing but the browser's.
+            is WebInputStimulus.DropMoved -> deliverDropMoved(stimulus.position)
+            WebInputStimulus.DropExited -> deliverDropExited()
+            is WebInputStimulus.DropPerformed -> deliverDropPerformed(stimulus.position)
             else -> surfaceInput.accept(stimulus.toSurfaceStimulus(id))
         }
         // The other half of the ownership rule: a pointer the surface no longer holds cannot carry a
         // capture, and the browser ends one with it on every arm but the activation-loss one (see
         // [reconcilePointerCapture] for that divergence).
         if (!pointerOwnership.isOwned) reconcilePointerCapture()
+    }
+
+    /**
+     * The surface's half of a focus the browsing context regained: the text session it suspended
+     * resumes, with the composition the suspension preserved.
+     *
+     * The mirror of the [WebInputStimulus.FocusLost] branch of [acceptInput], which suspends — the
+     * reference surface's own pair (`MinimalWindowSurface.kt:371-373`). A surface that stopped
+     * admitting resumes nothing: its sessions are already closed with its input, and a state the
+     * terminal transition published is not the suspension's to revisit. A surface whose session
+     * configuration has not installed has no session to resume either, so the call is a no-op there.
+     */
+    fun resumeTextInputForFocusGain() {
+        if (admissionClosed) return
+        if (!this::surfaceInput.isInitialized) return
+        surfaceInput.resumeTextInput()
     }
 
     /**
@@ -1466,6 +1671,38 @@ private class WebHostSurface(
         return shouldSuppress(webInputCategory(stimulus), mutableState.value.inputDefaultBehavior)
     }
 
+    /** Delivers one drag over the element to the reducer, tied to the offer the surface holds. */
+    private fun deliverDropMoved(position: LogicalPoint) {
+        val offerId = dropOfferId ?: return
+        surfaceInput.accept(
+            SurfaceStimulus.DropMoved(surfaceId = id, offerId = offerId, position = position),
+        )
+    }
+
+    /**
+     * Delivers the drag's exit: the offer the drag carried ends as the reducer's `LeftSurface`, and
+     * the surface stops holding it whatever the reducer answered — the element saw the leave, and
+     * there is no further event for that offer to arrive on.
+     */
+    private fun deliverDropExited() {
+        val offerId = dropOfferId ?: return
+        dropOfferId = null
+        surfaceInput.accept(SurfaceStimulus.DropExited(surfaceId = id, offerId = offerId))
+    }
+
+    /**
+     * Delivers the drop: the reducer makes the accepted offer's transfer claimable and publishes the
+     * drop the consumer observes. Like the exit, the offer is spent with the observation — the drag
+     * was completed, whatever became of the transfer it produced.
+     */
+    private fun deliverDropPerformed(position: LogicalPoint) {
+        val offerId = dropOfferId ?: return
+        dropOfferId = null
+        surfaceInput.accept(
+            SurfaceStimulus.DropPerformed(surfaceId = id, offerId = offerId, position = position),
+        )
+    }
+
     /**
      * The field of a `Clear` update, or `null` when no field was cleared.
      *
@@ -1599,8 +1836,11 @@ private class WebHostSurface(
         // The surface stops admitting, so it holds nothing: ownership is what a later capture would be
         // admitted on, and a closed surface answers `Closed` to that call anyway. The capture it
         // committed stays where it is — the terminal state is what the runtime publishes next, and the
-        // port releases the browser effect it holds with the element.
+        // port releases the browser effect it holds with the element. The offer it held goes with the
+        // rest: the reducer closes the offer and the transfers it produced at its own terminal
+        // transition, and the question a port would still ask is answered `false` from here on.
         pointerOwnership.clear()
+        dropOfferId = null
     }
 }
 
@@ -1678,6 +1918,19 @@ private fun WebInputStimulus.toSurfaceStimulus(surfaceId: SurfaceId): SurfaceSti
         surfaceId = surfaceId,
         kind = kind,
     )
+
+    is WebInputStimulus.TouchChanged -> SurfaceStimulus.TouchChanged(
+        surfaceId = surfaceId,
+        nativeIdentity = nativeIdentity,
+        phase = phase,
+        position = position,
+        pressure = pressure,
+    )
+
+    is WebInputStimulus.DropMoved,
+    WebInputStimulus.DropExited,
+    is WebInputStimulus.DropPerformed,
+    -> error("a drop observation is tied to the offer the surface holds, not mapped")
 
     is WebInputStimulus.Scrolled -> SurfaceStimulus.Scroll(
         surfaceId = surfaceId,

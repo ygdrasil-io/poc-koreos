@@ -6,6 +6,7 @@ import kotlinx.coroutines.test.runTest
 import org.graphiks.kadre.diagnostics.KadreResult
 import org.graphiks.kadre.input.PhysicalKey
 import org.graphiks.kadre.input.PointerButton
+import org.graphiks.kadre.input.TouchPhase
 import org.graphiks.kadre.internal.runtime.RuntimeSynchronousInteraction
 import org.graphiks.kadre.surface.LogicalPoint
 import org.w3c.dom.HTMLElement
@@ -401,7 +402,7 @@ class JsWebInteractionTest {
     }
 
     @Test
-    fun aTouchPressDispatchesNoInteractionAtAll() {
+    fun aTouchPressDispatchesTheTouchInteractionBeforeTheOrdinaryStimulus() {
         val harness = JsInteractionHarness()
         try {
             harness.installDispatcher()
@@ -415,10 +416,25 @@ class JsWebInteractionTest {
                 pointerType = "touch",
             )
 
-            assertTrue(
-                harness.triggers.isEmpty() && harness.observations.isEmpty(),
-                "a pointer kind the phase refuses delivers no observation and no interaction: " +
-                    "${harness.triggers} / ${harness.observations}",
+            assertEquals(
+                listOf("interaction", "observation"),
+                harness.journal,
+                "a touch press follows the same order as a pointer press: the interaction first, the " +
+                    "ordinary stimulus continuing normally afterwards",
+            )
+            val trigger = assertIs<RuntimeSynchronousInteraction.TouchStarted>(harness.triggers.single())
+            assertEquals(
+                LogicalPoint(7.0, 7.0),
+                trigger.position,
+                "the trigger reads the position the ordinary path reads",
+            )
+            val observed = assertIs<WebInputStimulus.TouchChanged>(harness.observations.single())
+            assertEquals(TouchPhase.Started, observed.phase, "the ordinary stimulus of the same event is the contact's start")
+            assertEquals(trigger.position, observed.position, "the same position mapping, once")
+            assertEquals(
+                0.5,
+                observed.pressure,
+                "the event's own pressure travels into the observation, as for any pointer event",
             )
         } finally {
             harness.close()

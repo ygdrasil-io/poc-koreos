@@ -9,6 +9,7 @@ import org.graphiks.kadre.input.KeyboardModifiers
 import org.graphiks.kadre.input.PenState
 import org.graphiks.kadre.input.PointerKind
 import org.graphiks.kadre.surface.LogicalPoint
+import org.w3c.dom.DragEvent
 import org.w3c.dom.HTMLElement
 import org.w3c.dom.Window
 import org.w3c.dom.events.Event
@@ -114,6 +115,17 @@ internal external fun wasmPointerEventOrNull(event: Event): WasmPointerEvent?
 internal external fun wasmWheelEventOrNull(event: Event): WasmWheelEvent?
 
 /**
+ * The borrowed event as a drag event, or `null` when it is not one.
+ *
+ * The drag events of the drop seam carry their store (`dataTransfer`) and the position the drag is
+ * at; the declared `DragEvent` binding carries both, so only the type of the borrowed event needs the
+ * JavaScript's own `instanceof` — the listener is registered for its own event type, and the check is
+ * kept because dropping a mismatched event beats reading fields off one.
+ */
+@JsFun("(event) => event instanceof DragEvent ? event : null")
+internal external fun wasmDragEventOrNull(event: Event): DragEvent?
+
+/**
  * The stimulus of one key event, read from a `keydown` or a `keyup`.
  *
  * [pressed] is the event type's own fact rather than a field of the event, because the DOM has no
@@ -139,12 +151,14 @@ internal fun wasmKeyStimulus(event: WasmKeyboardEvent, pressed: Boolean): WebInp
     )
 
 /**
- * The kind of the pointer that produced one pointer event, or `null` when this phase delivers no
- * stimulus for it.
+ * The kind of the pointer that produced one pointer event, or `null` when the event is not a pointer
+ * observation of this model at all.
  *
  * The kind comes from the browser's own `pointerType` through the shared core, so the port never
  * substitutes a device for the one the browser named: a pen that reported itself as a pen is
- * delivered as a pen, with the pen state it carries, and a touch pointer is refused whole (D12).
+ * delivered as a pen, with the pen state it carries. The `null` of a touch contact is the routing
+ * predicate of every delivery path: a contact is not a pointer, so it goes to the touch path
+ * ([webTouchPhase], the port's contact table) and never becomes a pointer observation.
  */
 internal fun wasmPointerKind(event: WasmPointerEvent): PointerKind? = webPointerKind(event.pointerType)
 

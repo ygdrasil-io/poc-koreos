@@ -10,6 +10,7 @@ import org.graphiks.kadre.input.PointerButton
 import org.graphiks.kadre.input.PointerButtonState
 import org.graphiks.kadre.input.PointerKind
 import org.graphiks.kadre.input.ScrollDelta
+import org.graphiks.kadre.input.TouchPhase
 import org.graphiks.kadre.surface.LogicalDelta
 import org.graphiks.kadre.surface.LogicalPoint
 
@@ -23,9 +24,14 @@ import org.graphiks.kadre.surface.LogicalPoint
  * `surfaceId` either: a stimulus describes what the element observed, and the surface it belongs to
  * is the one that received it.
  *
- * The union covers what this phase activates — keyboard, the mouse and pen pointers, scroll and the
- * loss of focus. Touch and gestures stay out of it, because their capabilities stay `Unsupported`
- * until a later phase installs the observers that would produce them.
+ * The union covers what this phase activates — keyboard, the mouse and pen pointers, touch contacts,
+ * scroll, the drop observations of a drag over the element, and the loss of focus. The touch
+ * contacts and the pointers stay disjoint, as the model keeps them: a contact is a [TouchChanged]
+ * and never a pointer member, and a pointer is never a contact. Gestures stay out of it, because
+ * this target publishes no gesture capability — no recognizer exists on the Web (D-T2), and a
+ * stimulus nothing can reduce is a fiction. The entry of a drag stays out of it too, for the same
+ * reason the runtime has no `DropEntered` stimulus: an offer is presented by a host call, and the
+ * entry travels the drop seam of [WebInputObserver] instead.
  *
  * The reference design is AppKit's `AppKitInput`, whose members these mirror, with the same
  * immutability rule: a borrowed native event never crosses the boundary.
@@ -53,8 +59,9 @@ internal sealed interface WebInputStimulus {
      *
      * [kind] is the kind the browser reported for the pointer that entered, and it is carried rather
      * than assumed: a `pointerType` of `pen` delivered as a mouse would be an approximation of a fact
-     * the browser stated, which the phase's exit gate forbids. A touch pointer produces no stimulus at
-     * all, because the surface declares touch unsupported until a later phase installs its observers.
+     * the browser stated, which the phase's exit gate forbids. A touch contact produces no pointer
+     * stimulus of any kind — it is not a pointer — so a contact's `pointerenter` delivers nothing at
+     * all: the entry a contact has no fact for, since a contact has no hover.
      */
     data class PointerEntered(
         val position: LogicalPoint,
@@ -84,6 +91,26 @@ internal sealed interface WebInputStimulus {
     ) : WebInputStimulus
 
     /**
+     * One touch contact observation, in the phase its own pointer event described.
+     *
+     * [nativeIdentity] is the identity of the contact the browser reported: one stable reference per
+     * contact, held by the port's contact table for the gesture's duration, which is what the shared
+     * reducer keys its own contact identities by. A contact is never a pointer — this member exists
+     * so the two stay disjoint — and its pressure is the one the event reported, dropped to `null`
+     * when it reported none the model can carry.
+     *
+     * A `pointercancel` the browser fires under a native scroll arrives here as
+     * `TouchPhase.Cancelled`, delivered as reported: the host owns `touch-action`, and a contact it
+     * let the browser revoke is not compensated.
+     */
+    data class TouchChanged(
+        val nativeIdentity: Any,
+        val phase: TouchPhase,
+        val position: LogicalPoint,
+        val pressure: Double?,
+    ) : WebInputStimulus
+
+    /**
      * The pointer left the element's subtree, or the browser cancelled it.
      *
      * A cancellation is the same fact for the reducer: the runtime drops the pointer of that kind
@@ -109,6 +136,36 @@ internal sealed interface WebInputStimulus {
             require(coalescingBoundary >= 0L) { "coalescingBoundary must be non-negative" }
         }
     }
+
+    /**
+     * One drag over the element, while a drag it presented an offer for is in flight.
+     *
+     * The offer it rides is the surface's own record — the one it presented and a handler accepted —
+     * so the reducer can tie the motion to the offer it still holds; a drag over an element with no
+     * active offer is delivered all the same and reduced by nothing, which is exactly what the model
+     * does with input no offer answers. This is not a `SurfaceStimulus.DropEntered` substitute: the
+     * entry itself travels the drop seam ([WebInputObserver.onDropEntered]) and never appears in
+     * this union, because the model presents an offer by a host call, not by a stimulus.
+     */
+    data class DropMoved(val position: LogicalPoint) : WebInputStimulus
+
+    /**
+     * The drag left the element's subtree, taking the offer it carried with it.
+     *
+     * The surface ties it to the offer it still holds and the reducer ends that offer — the drag
+     * that left can claim nothing.
+     */
+    data object DropExited : WebInputStimulus
+
+    /**
+     * The drag was dropped on the element.
+     *
+     * The position is the drop's own, and the surface ties the observation to the offer it holds:
+     * the reducer makes that offer's transfer claimable, which is the one moment the payload a read
+     * resolves is the browser's to give. A drop over an element with no active offer is delivered
+     * all the same and reduced by nothing.
+     */
+    data class DropPerformed(val position: LogicalPoint) : WebInputStimulus
 
     /**
      * The element's subtree, its browsing context, or the whole document stopped being active.

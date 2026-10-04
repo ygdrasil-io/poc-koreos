@@ -27,6 +27,8 @@ import org.graphiks.kadre.input.PhysicalKey
 import org.graphiks.kadre.input.PointerButton
 import org.graphiks.kadre.input.PointerButtonState
 import org.graphiks.kadre.input.PointerKind
+import org.graphiks.kadre.input.TouchId
+import org.graphiks.kadre.input.TouchPhase
 import org.graphiks.kadre.interaction.InteractionAction
 import org.graphiks.kadre.interaction.InteractionActionOutcome
 import org.graphiks.kadre.interaction.InteractionContext
@@ -65,7 +67,7 @@ import kotlin.test.assertTrue
 @OptIn(ExperimentalCoroutinesApi::class, DelicateKadreApi::class)
 class WebInteractionSurfaceTest {
     @Test
-    fun handlerInteractionsIsTheFourWebActionsOnceStructurallyInstalled() = runTest {
+    fun handlerInteractionsIsTheFiveWebActionsOnceStructurallyInstalled() = runTest {
         val harness = InteractionHarness(this)
         harness.start()
 
@@ -76,6 +78,7 @@ class WebInteractionSurfaceTest {
                     InteractionKind.ExitFullscreen,
                     InteractionKind.LockPointer,
                     InteractionKind.UnlockPointer,
+                    InteractionKind.AcceptDrop,
                 ),
                 FeatureAvailability.Available,
             ),
@@ -177,6 +180,55 @@ class WebInteractionSurfaceTest {
         assertTrue(
             surface.input.state.value.revision.value > revisionBefore,
             "the ordinary stimulus was still admitted, after the interaction",
+        )
+
+        registration.close()
+        harness.stop()
+        testScheduler.runCurrent()
+    }
+
+    @Test
+    fun aTouchStartIsDispatchedToTheHandlerBeforeTheOrdinaryStimulusItTriggers() = runTest {
+        val harness = InteractionHarness(this)
+        harness.start()
+        val surface = harness.surface()
+        val events = mutableListOf<InteractionEvent>()
+        val revisionsAtHandler = mutableListOf<Long>()
+        val registration = harness.installHandler { _, event ->
+            events += event
+            revisionsAtHandler += surface.input.state.value.revision.value
+        }
+
+        val revisionBefore = surface.input.state.value.revision.value
+        val triggerTouchId = TouchId(0L)
+        harness.port.deliverInteractionThenInput(
+            RuntimeSynchronousInteraction.TouchStarted(triggerTouchId, TOUCH_POINT),
+            WebInputStimulus.TouchChanged(
+                nativeIdentity = Any(),
+                phase = TouchPhase.Started,
+                position = TOUCH_POINT,
+                pressure = null,
+            ),
+        )
+        testScheduler.runCurrent()
+
+        assertEquals(
+            listOf("interaction", "observation"),
+            harness.port.deliveryJournal,
+            "a touch press follows the same order as every trigger: the interaction first",
+        )
+        val started = assertIs<InteractionEvent.TouchStarted>(events.single())
+        assertEquals(triggerTouchId, started.touchId, "the trigger's own identity is what the handler receives")
+        assertEquals(TOUCH_POINT, started.position)
+        assertEquals(
+            listOf(revisionBefore),
+            revisionsAtHandler,
+            "the handler ran before the ordinary touch stimulus moved the input state",
+        )
+        assertEquals(
+            1,
+            surface.input.state.value.touches.size,
+            "and the ordinary stimulus was still admitted, after the interaction",
         )
 
         registration.close()
@@ -485,6 +537,7 @@ class WebInteractionSurfaceTest {
 
     companion object {
         private val POINT = LogicalPoint(3.0, 4.0)
+        private val TOUCH_POINT = LogicalPoint(5.0, 6.0)
         private const val PRESSURE = 0.5
         private val KEY_TRIGGER = RuntimeSynchronousInteraction.KeyPressed(
             PhysicalKey.Code(usagePage = 0x07, usageId = 0x04),

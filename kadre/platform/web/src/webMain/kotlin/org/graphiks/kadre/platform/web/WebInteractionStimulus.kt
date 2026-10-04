@@ -20,18 +20,21 @@ import org.graphiks.kadre.surface.PointerCaptureMode
  * The interaction actions the web surface advertises once its session configuration installed.
  *
  * Written out member by member rather than derived from the enum — a capability is a promise, and a
- * promise is spelled out — and `webTest` pins the set against the post-attach snapshot. The four are
- * exactly the actions whose browser primitive and terminal callback can honour the public contract
- * (`DESIGN.md` §9.6, plan decision D3): fullscreen and pointer lock, in both directions. The window
- * actions are not among them — a browser element has no window to move or resize — and `AcceptDrop`
- * and `OpenWindow` belong to later phases and other seams; the admission refuses them before any
- * native call, so they never reach a browser API at all.
+ * promise is spelled out — and `webTest` pins the set against the post-attach snapshot. The five are
+ * exactly the actions whose browser primitive and terminal callback (the four of `DESIGN.md` §9.6,
+ * plan decision D3) or drop seam (D-D2) can honour the public contract: fullscreen and pointer lock,
+ * in both directions, and the `AcceptDrop` a handler's token spends on the offer a drag entry
+ * presented — a `Now` action that never asks the browser for a primitive, whose whole effect is the
+ * reducer's own `acceptDrop`. The window actions are not among them — a browser element has no
+ * window to move or resize — and `OpenWindow` belongs to a later phase and another seam; the
+ * admission refuses it before any native call, so it never reaches a browser API at all.
  */
 internal fun interactionActionsForWeb(): Set<InteractionKind> = setOf(
     InteractionKind.EnterFullscreen,
     InteractionKind.ExitFullscreen,
     InteractionKind.LockPointer,
     InteractionKind.UnlockPointer,
+    InteractionKind.AcceptDrop,
 )
 
 /**
