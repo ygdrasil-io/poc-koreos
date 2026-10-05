@@ -82,14 +82,20 @@ internal class WebDisplayPort(private val source: WebDisplaySource) : DisplayPor
     override suspend fun requestSnapshot(): KadreResult<DisplayPortSnapshot> = snapshotResult()
 
     /**
-     * Installs the session-runtime observer and re-emits the current answer on every source fire.
+     * Installs the session-runtime observer, publishes the current answer to it exactly once, and
+     * re-emits on every later source fire.
      *
      * One observer at a time: the runtime installs exactly one, and a second install replaces the
-     * first — the port withdraws the source subscription it had created for it and subscribes anew.
-     * Nothing else is closed silently: the `AutoCloseable` of a replaced install stays callable and
-     * merely becomes a no-op, and a close of a stale handle never unsubscribes the install that
-     * replaced it. The install itself publishes nothing; the runtime requests its initial inventory
-     * through [requestSnapshot], and the fires of the source drive everything after.
+     * first — the port withdraws the source subscription it had created for it and subscribes
+     * anew, and the replacement's own initial publication goes to the replacement's observer.
+     * Nothing else is closed silently: the `AutoCloseable` of a replaced install stays callable
+     * and merely becomes a no-op, and a close of a stale handle never unsubscribes the install
+     * that replaced it. The initial publication is the Phase 6 gate's own reading of
+     * `kadre/WEB-IMPLEMENTATION-ROADMAP.md`: a session that attached and did nothing must still
+     * state the exact inventory the gate mandates — never a generic `Unavailable` that only a
+     * browser event would lift — so the install delivers the current answer synchronously, or the
+     * honest failure of a viewport nobody can measure, and the fires of the source drive
+     * everything after.
      */
     override fun installSnapshotObserver(
         observer: (KadreResult<DisplayPortSnapshot>) -> Unit,
@@ -102,6 +108,10 @@ internal class WebDisplayPort(private val source: WebDisplaySource) : DisplayPor
             source.observe { emitCurrent() }.also { subscription = it }
         }
         replaced?.close()
+        // The install's own first push, outside the lock: the same answer a source fire would
+        // deliver, delivered exactly once, so the initial inventory never waits for an event the
+        // browsing context may never fire.
+        observer(snapshotResult())
         var withdrawn = false
         return AutoCloseable {
             val current = lock.withLock {

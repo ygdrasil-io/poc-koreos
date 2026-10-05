@@ -1920,12 +1920,13 @@ private fun SurfaceInputState.agreesWith(event: InputEvent): Boolean {
  * listener exists before the readiness flag, and every attribute a spec reads is a public value of
  * the model, never a fixture journal.
  *
- * A session's display manager starts from the `Unavailable` snapshot every manager is constructed
- * with, because no browser event has told it anything yet; the scenario's application asks for the
- * inventory through the manager's own public admission — `requestAccess()` — and the port answers
- * with the exact `HostViewport` fallback the gate mandates. Every later browser-delivered fact (a
- * `resize`, a device pixel ratio change through the resolution query) republishes through the
- * observer the manager installed itself, and the specs drive those browser facts for real.
+ * A plain attached session states its inventory unconditionally: the port's install publishes the
+ * current answer exactly once, so a scenario that only attached — nobody asked, nobody resized —
+ * already publishes the exact `HostViewport` fallback the gate mandates, and every later
+ * browser-delivered fact (a `resize`, a device pixel ratio change through the resolution query)
+ * republishes through the observer the manager installed itself. The `kadre-display-request`
+ * command drives the manager's public admission for the idempotence readback: an identical
+ * snapshot is answered `success` at the revision already published and republishes nothing.
  */
 
 /** The handles of the display scenario: the manager the application block publishes and its session. */
@@ -1950,15 +1951,23 @@ private fun displayScenario() {
         host.setAttribute("data-kadre-display-dom-count", document.getElementsByTagName("*").length.toString())
         host.setAttribute("data-kadre-display-dom-reads", domReads.toString())
     }
+    parentScope.installCommand("kadre-display-request") {
+        val requested = handles.displays.await().requestAccess()
+        host.setAttribute(
+            "data-kadre-display-request",
+            when (requested) {
+                is KadreResult.Success -> "success@${requested.value.revision.value}"
+                is KadreResult.Failure -> "failure:${requested.reason.encoding()}"
+            },
+        )
+    }
     parentScope.installCommand("kadre-stop-display") { handles.session.await().requestStop() }
     // The observation belongs to the scenario's own scope rather than to the application block, so
-    // the journal a spec reads across a close survives the session that produced it. The admission
-    // is asked once the observation is registered, so the initial publication is caught like every
-    // later one.
+    // the journal a spec reads across a close survives the session that produced it. The manager's
+    // state carries the inventory the install already published, so the plain collection below is
+    // the gate's whole observable for a session that did nothing but attach.
     parentScope.launch {
-        val displays = handles.displays.await()
-        DisplayObservation(host).install(parentScope, displays)
-        host.setAttribute("data-kadre-display-request", displays.requestAccess().admission())
+        DisplayObservation(host).install(parentScope, handles.displays.await())
     }
     val attached = host.attachKadre(parentScope) {
         handles.displays.complete(checkNotNull(displays))

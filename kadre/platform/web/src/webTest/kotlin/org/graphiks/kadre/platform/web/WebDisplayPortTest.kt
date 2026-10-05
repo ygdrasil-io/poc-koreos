@@ -71,23 +71,61 @@ class WebDisplayPortTest {
     }
 
     @Test
-    fun observerIsReInvokedOnSourceChange() = runTest {
+    fun installPublishesTheCurrentSnapshotOnceAndSourceFiresReEmit() = runTest {
         val source = FakeDisplaySource(WebViewportMetrics(1600, 900, 2.0, 24))
         val port = WebDisplayPort(source)
 
         val received = mutableListOf<KadreResult<DisplayPortSnapshot>>()
         port.installSnapshotObserver { received += it }
-        // The install subscribes; it does not publish. The runtime requests its initial inventory
-        // itself, and the port re-emits when the source fires.
-        assertEquals(0, received.size)
+        // The install's own first push: the current answer, exactly once — a session that attached
+        // and did nothing states the fallback the gate mandates, without waiting for a browser
+        // event that may never come.
+        assertEquals(1, received.size)
+        val initial = assertIs<KadreResult.Success<DisplayPortSnapshot>>(received.single()).value
+        assertEquals(PhysicalSize(3200, 1800), initial.displays.single().bounds.size)
+        assertEquals(2.0, initial.displays.single().scaleFactor)
 
         source.metrics = WebViewportMetrics(800, 600, 1.0, 24)
         source.listeners.single().invoke()
 
-        assertEquals(1, received.size)
-        val snapshot = assertIs<KadreResult.Success<DisplayPortSnapshot>>(received.single()).value
+        assertEquals(2, received.size)
+        val snapshot = assertIs<KadreResult.Success<DisplayPortSnapshot>>(received.last()).value
         assertEquals(PhysicalSize(800, 600), snapshot.displays.single().bounds.size)
         assertEquals(1.0, snapshot.displays.single().scaleFactor)
+    }
+
+    @Test
+    fun secondInstallPublishesToItsOwnObserverAndReplacesTheFirst() = runTest {
+        val source = FakeDisplaySource(WebViewportMetrics(1600, 900, 2.0, 24))
+        val port = WebDisplayPort(source)
+
+        val first = mutableListOf<KadreResult<DisplayPortSnapshot>>()
+        val firstHandle = port.installSnapshotObserver { first += it }
+        val second = mutableListOf<KadreResult<DisplayPortSnapshot>>()
+        val secondHandle = port.installSnapshotObserver { second += it }
+
+        // The replacement's own initial publication goes to the replacement's observer, exactly
+        // once; the replaced observer was answered its own install's push and nothing more.
+        assertEquals(1, first.size, "the first install was answered its own initial publication")
+        assertEquals(1, second.size)
+
+        source.metrics = WebViewportMetrics(800, 600, 1.0, 24)
+        source.listeners.single().invoke()
+        assertEquals(1, first.size, "a replaced install is answered nothing further")
+        assertEquals(2, second.size)
+        val snapshot = assertIs<KadreResult.Success<DisplayPortSnapshot>>(second.last()).value
+        assertEquals(PhysicalSize(800, 600), snapshot.displays.single().bounds.size)
+
+        // The stale handle stays callable and merely becomes a no-op: closing it never unsubscribes
+        // the install that replaced it, which keeps receiving the source's fires.
+        firstHandle.close()
+        source.metrics = WebViewportMetrics(640, 480, 1.0, 24)
+        source.listeners.single().invoke()
+        assertEquals(3, second.size)
+
+        // The live handle is the one that unsubscribes: no listener of the source survives it.
+        secondHandle.close()
+        assertTrue(source.listeners.isEmpty(), "the live handle withdrew the port's subscription")
     }
 
     @Test
@@ -100,9 +138,15 @@ class WebDisplayPortTest {
 
         val received = mutableListOf<KadreResult<DisplayPortSnapshot>>()
         port.installSnapshotObserver { received += it }
-        source.listeners.single().invoke()
+        // The install's own first push answers the failure a session with nothing to measure
+        // starts from — never a partial or empty inventory.
         assertEquals(1, received.size)
-        val observed = assertIs<KadreResult.Failure>(received.single())
+        val installed = assertIs<KadreResult.Failure>(received.single())
+        assertEquals(KadreFailure.TemporarilyUnavailable(retryable = true), installed.reason)
+
+        source.listeners.single().invoke()
+        assertEquals(2, received.size)
+        val observed = assertIs<KadreResult.Failure>(received.last())
         assertEquals(KadreFailure.TemporarilyUnavailable(retryable = true), observed.reason)
 
         // Invalid metrics are as good as missing ones — the port never derives a partial inventory
@@ -118,6 +162,7 @@ class WebDisplayPortTest {
 
         val received = mutableListOf<KadreResult<DisplayPortSnapshot>>()
         port.installSnapshotObserver { received += it }
+        assertEquals(1, received.size, "the install's own initial publication")
         val lateFire = source.listeners.single()
 
         port.close()
@@ -127,6 +172,6 @@ class WebDisplayPortTest {
         assertEquals(1, source.subscriptionCloses, "the source subscription is withdrawn exactly once")
         assertTrue(source.listeners.isEmpty(), "the port's own source subscription is gone")
         assertTrue(source.closed, "the port closes the source it owns")
-        assertEquals(0, received.size, "a late fire after close publishes nothing")
+        assertEquals(1, received.size, "a late fire after close publishes nothing")
     }
 }

@@ -33,6 +33,11 @@ function managerCell(revision) {
   return `rev=${revision}:enumerated:primary=0:displays=1:enumeration=supported`;
 }
 
+/** The journal after one more entry: the journal a spec reads may be empty before its first entry. */
+function journalGrown(before, entry) {
+  return before ? `${before};${entry}` : entry;
+}
+
 /** Reads the page's DOM node count through the fixture's own counter, waiting for the read. */
 async function domCount(page, host) {
   const reads = Number(await host.getAttribute('data-kadre-display-dom-reads'));
@@ -68,26 +73,32 @@ test('web-display-initial-hostviewport', async ({ page }) => {
   await loadScenario(page, 'display');
   const host = page.locator('[data-kadre-host="display"]');
 
-  // The exact shape the gate mandates: the inventory is the enumerated primary viewport — never
-  // Unavailable, never empty — the primary is one of the enumerated displays, and the enumeration
-  // capability is declared. A partial inventory, a second display or a generic unavailable all
-  // fail this one line.
-  await expect(host).toHaveAttribute('data-kadre-display-request', 'success');
+  // The gate's observable, for a plain attached session: nobody asked the manager for anything and
+  // no browser event has fired — the install's own publication is already the exact fallback
+  // shape: enumerated, one display, the primary among them, enumeration declared. Never
+  // Unavailable, never empty, never a second display.
   await expect(host).toHaveAttribute('data-kadre-display-manager', managerCell(1));
 
   // The primary display is the browsing context's own viewport, measured now.
   const cell = await displayCell(page);
   await expect.poll(async () => host.getAttribute('data-kadre-display-display')).toMatch(cell.pattern);
 
-  // The initial publication is one Added, stamped with the manager revision it belongs to.
-  await expect(host).toHaveAttribute('data-kadre-display-events', 'added@1');
+  // The initial publication is a state fact, not a late event: the page's own journal is empty.
+  await expect(host).toHaveAttribute('data-kadre-display-events', '');
+
+  // The public admission round-trips and is idempotent: the identical snapshot is answered at the
+  // revision already published, and nothing is republished.
+  await command(page, 'kadre-display-request');
+  await expect(host).toHaveAttribute('data-kadre-display-request', 'success@1');
+  await expect(host).toHaveAttribute('data-kadre-display-manager', managerCell(1));
+  await expect(host).toHaveAttribute('data-kadre-display-events', '');
 });
 
 test('web-display-resize-propagation', async ({ page }) => {
   await loadScenario(page, 'display');
   const host = page.locator('[data-kadre-host="display"]');
   await expect(host).toHaveAttribute('data-kadre-display-manager', managerCell(1));
-  await expect(host).toHaveAttribute('data-kadre-display-events', 'added@1');
+  await expect(host).toHaveAttribute('data-kadre-display-events', '');
   await settleQuietly(page);
   const journal = await host.getAttribute('data-kadre-display-events');
 
@@ -99,13 +110,16 @@ test('web-display-resize-propagation', async ({ page }) => {
   const first = await displayCell(page);
   await expect.poll(async () => host.getAttribute('data-kadre-display-display')).toMatch(first.pattern);
   await expect(host).toHaveAttribute('data-kadre-display-manager', managerCell(2));
-  await expect(host).toHaveAttribute('data-kadre-display-events', `${journal};changed@2`);
+  await expect(host).toHaveAttribute('data-kadre-display-events', journalGrown(journal, 'changed@2'));
 
   await page.setViewportSize({ width: 1024, height: 768 });
   const second = await displayCell(page);
   await expect.poll(async () => host.getAttribute('data-kadre-display-display')).toMatch(second.pattern);
   await expect(host).toHaveAttribute('data-kadre-display-manager', managerCell(3));
-  await expect(host).toHaveAttribute('data-kadre-display-events', `${journal};changed@2;changed@3`);
+  await expect(host).toHaveAttribute(
+    'data-kadre-display-events',
+    journalGrown(journalGrown(journal, 'changed@2'), 'changed@3'),
+  );
 });
 
 test('web-display-dpr-scale-factor', async ({ browser }) => {
@@ -116,7 +130,7 @@ test('web-display-dpr-scale-factor', async ({ browser }) => {
     await loadScenario(page, 'display');
     const host = page.locator('[data-kadre-host="display"]');
     await expect(host).toHaveAttribute('data-kadre-display-manager', managerCell(1));
-    await expect(host).toHaveAttribute('data-kadre-display-events', 'added@1');
+    await expect(host).toHaveAttribute('data-kadre-display-events', '');
     await settleQuietly(page);
     const journal = await host.getAttribute('data-kadre-display-events');
 
@@ -137,7 +151,7 @@ test('web-display-dpr-scale-factor', async ({ browser }) => {
     expect(doubled.metrics.dpr).toBe(2);
     await expect.poll(async () => host.getAttribute('data-kadre-display-display')).toMatch(doubled.pattern);
     await expect(host).toHaveAttribute('data-kadre-display-manager', managerCell(2));
-    await expect(host).toHaveAttribute('data-kadre-display-events', `${journal};changed@2`);
+    await expect(host).toHaveAttribute('data-kadre-display-events', journalGrown(journal, 'changed@2'));
 
     // And a second ratio change republishes again: the snapshot follows the browser's own fact,
     // not a one-shot observation.
@@ -151,7 +165,10 @@ test('web-display-dpr-scale-factor', async ({ browser }) => {
     expect(tripled.metrics.dpr).toBe(3);
     await expect.poll(async () => host.getAttribute('data-kadre-display-display')).toMatch(tripled.pattern);
     await expect(host).toHaveAttribute('data-kadre-display-manager', managerCell(3));
-    await expect(host).toHaveAttribute('data-kadre-display-events', `${journal};changed@2;changed@3`);
+    await expect(host).toHaveAttribute(
+      'data-kadre-display-events',
+      journalGrown(journalGrown(journal, 'changed@2'), 'changed@3'),
+    );
   } finally {
     await context.close();
   }
@@ -166,7 +183,7 @@ test('web-display-teardown-quiet', async ({ browser }) => {
     const host = page.locator('[data-kadre-host="display"]');
     const body = page.locator('body');
     await expect(host).toHaveAttribute('data-kadre-display-manager', managerCell(1));
-    await expect(host).toHaveAttribute('data-kadre-display-events', 'added@1');
+    await expect(host).toHaveAttribute('data-kadre-display-events', '');
 
     // A real close of the session: the manager dies with it, and the terminal state is the
     // barrier every later read is measured from.
