@@ -31,6 +31,12 @@ import org.graphiks.kadre.diagnostics.KadreOperation
 import org.graphiks.kadre.diagnostics.KadrePlatformApi
 import org.graphiks.kadre.diagnostics.KadreResourceKind
 import org.graphiks.kadre.diagnostics.KadreResult
+import org.graphiks.kadre.display.DisplayEvent
+import org.graphiks.kadre.display.DisplayInventory
+import org.graphiks.kadre.display.DisplayManager
+import org.graphiks.kadre.display.DisplayManagerState
+import org.graphiks.kadre.display.DisplayMode
+import org.graphiks.kadre.display.DisplayState
 import org.graphiks.kadre.input.DropItemDescriptor
 import org.graphiks.kadre.input.DropOffer
 import org.graphiks.kadre.input.DropOfferId
@@ -76,6 +82,7 @@ import org.graphiks.kadre.surface.HostSurface
 import org.graphiks.kadre.surface.InputDefaultBehavior
 import org.graphiks.kadre.surface.LogicalDelta
 import org.graphiks.kadre.surface.LogicalPoint
+import org.graphiks.kadre.surface.PhysicalRect
 import org.graphiks.kadre.surface.PointerCaptureMode
 import org.graphiks.kadre.surface.PropertyChange
 import org.graphiks.kadre.surface.SurfaceEvent
@@ -149,6 +156,7 @@ public fun main() {
         "shadow-late-reinsert" -> shadowLateReinsertScenario()
         "host-facade" -> hostFacadeScenario()
         "host-provider" -> hostProviderScenario()
+        "display" -> displayScenario()
         else -> phaseZeroScenario()
     }
     document.body!!.setAttribute("data-kadre-ready", "true")
@@ -1905,3 +1913,161 @@ private fun SurfaceInputState.agreesWith(event: InputEvent): Boolean {
         else -> true
     }
 }
+
+/**
+ * The Phase 6 display scenario: the browsing context's own display inventory, observed through the
+ * public `DisplayManager` the session publishes, on the `inputScenario` pattern — every command
+ * listener exists before the readiness flag, and every attribute a spec reads is a public value of
+ * the model, never a fixture journal.
+ *
+ * A session's display manager starts from the `Unavailable` snapshot every manager is constructed
+ * with, because no browser event has told it anything yet; the scenario's application asks for the
+ * inventory through the manager's own public admission — `requestAccess()` — and the port answers
+ * with the exact `HostViewport` fallback the gate mandates. Every later browser-delivered fact (a
+ * `resize`, a device pixel ratio change through the resolution query) republishes through the
+ * observer the manager installed itself, and the specs drive those browser facts for real.
+ */
+
+/** The handles of the display scenario: the manager the application block publishes and its session. */
+private class DisplayHandles(val host: HTMLElement) {
+    val displays: CompletableDeferred<DisplayManager> = CompletableDeferred()
+    val session: CompletableDeferred<KadreSession> = CompletableDeferred()
+}
+
+private fun displayScenario() {
+    val host = createHost("display")
+    val parentScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    val handles = DisplayHandles(host)
+    // The quiet sentinels of the teardown test are instrumented before any Kadre call, and their
+    // counters are page facts, not a display journal: the page counts every animation frame it is
+    // asked for — whoever asks — and the DOM node count is read on demand.
+    host.setAttribute("data-kadre-display-raf", "0")
+    host.setAttribute("data-kadre-display-dom-reads", "0")
+    jsInstallAnimationFrameCounter(host)
+    var domReads = 0
+    parentScope.installCommand("kadre-display-dom-count") {
+        domReads += 1
+        host.setAttribute("data-kadre-display-dom-count", document.getElementsByTagName("*").length.toString())
+        host.setAttribute("data-kadre-display-dom-reads", domReads.toString())
+    }
+    parentScope.installCommand("kadre-stop-display") { handles.session.await().requestStop() }
+    // The observation belongs to the scenario's own scope rather than to the application block, so
+    // the journal a spec reads across a close survives the session that produced it. The admission
+    // is asked once the observation is registered, so the initial publication is caught like every
+    // later one.
+    parentScope.launch {
+        val displays = handles.displays.await()
+        DisplayObservation(host).install(parentScope, displays)
+        host.setAttribute("data-kadre-display-request", displays.requestAccess().admission())
+    }
+    val attached = host.attachKadre(parentScope) {
+        handles.displays.complete(checkNotNull(displays))
+        awaitCancellation()
+    }
+    host.setAttribute("data-kadre-attach", describeAttach(attached))
+    if (attached is KadreResult.Success) {
+        handles.session.complete(attached.value)
+        observeSession(attached.value, "display", parentScope)
+    }
+}
+
+/**
+ * Publishes one display scenario's observations as attributes of the host, from the manager's own
+ * streams.
+ *
+ * Three facts are read, and each is a public value rather than a fixture journal:
+ *
+ * - `data-kadre-display-manager`: the whole `DisplayManagerState` — the manager revision, the
+ *   inventory shape with the primary's membership index among the enumerated displays, and the
+ *   enumeration capability;
+ * - `data-kadre-display-display`: the primary display's `DisplayState`, with the current mode's
+ *   membership index inside `modes` named explicitly;
+ * - `data-kadre-display-events`: every `DisplayEvent` the manager published, in order, each naming
+ *   the manager revision it was stamped with — so a spec can read both the payload and its order.
+ */
+private class DisplayObservation(private val host: HTMLElement) {
+    private val events: MutableList<String> = mutableListOf()
+
+    fun install(scope: CoroutineScope, displayManager: DisplayManager) {
+        host.setAttribute("data-kadre-display-events", "")
+        scope.launch {
+            displayManager.state.collect { state ->
+                host.setAttribute("data-kadre-display-manager", state.managerEncoding())
+                host.setAttribute("data-kadre-display-display", state.primaryDisplayEncoding())
+            }
+        }
+        // The event subscription is registered undispatched, so it exists by the time this call
+        // returns: an observation made before its collector registered would be delivered to nobody.
+        scope.launch(start = CoroutineStart.UNDISPATCHED) {
+            displayManager.events.collect { event ->
+                events += event.encoded()
+                host.setAttribute("data-kadre-display-events", events.joinToString(";"))
+            }
+        }
+    }
+}
+
+/** The whole display-manager state, as the specs read it. */
+private fun DisplayManagerState.managerEncoding(): String {
+    val shape = when (val inventory = this.inventory) {
+        is DisplayInventory.Enumerated -> {
+            val primary = inventory.displays.indexOfFirst { it === inventory.primary }
+            "enumerated:primary=${if (primary >= 0) primary.toString() else "none"}" +
+                ":displays=${inventory.displays.size}"
+        }
+
+        DisplayInventory.PermissionRequired -> "permission-required:primary=none:displays=0"
+        is DisplayInventory.PermissionDenied -> "permission-denied:primary=none:displays=0"
+        is DisplayInventory.Unavailable -> "unavailable:${inventory.failure.encoding()}"
+    }
+    return "rev=${revision.value}:$shape:enumeration=${capabilities.enumeration.encoded()}"
+}
+
+/** The primary display's state, as the specs read it, or `none` while nothing is enumerated. */
+private fun DisplayManagerState.primaryDisplayEncoding(): String = when (val inventory = inventory) {
+    is DisplayInventory.Enumerated -> inventory.primary?.state?.value?.displayEncoding() ?: "none"
+    else -> "none"
+}
+
+/** One display state, as the specs read it. */
+private fun DisplayState.displayEncoding(): String =
+    "type=${type.name}:connection=${connection.name.lowercase()}:name=${name ?: "none"}" +
+        ":bounds=${bounds.rectEncoding()}:workArea=${workArea?.rectEncoding() ?: "none"}" +
+        ":scale=${number(scaleFactor)}:modes=${modes.size}" +
+        ":current=${currentMode?.let(modes::indexOf)?.toString() ?: "none"}" +
+        ":mode=${currentMode.modeEncoding()}:rev=${revision.value}"
+
+/** One display mode, as the specs read it: physical size, refresh rate and bit depth, or `none`. */
+private fun DisplayMode?.modeEncoding(): String = when (this) {
+    null -> "none"
+    else -> "${physicalSize.width}x${physicalSize.height}:" +
+        "${refreshRateHz?.let(::number) ?: "none"}:${bitDepth?.toString() ?: "none"}"
+}
+
+/** One physical rect, as the specs read it: origin and size, in physical pixels. */
+private fun PhysicalRect.rectEncoding(): String = "${origin.x},${origin.y},${size.width},${size.height}"
+
+/** One published display event, with the manager revision it was stamped with. */
+private fun DisplayEvent.encoded(): String = when (this) {
+    is DisplayEvent.Added -> "added@${managerRevision.value}"
+    is DisplayEvent.Changed -> "changed@${managerRevision.value}"
+    is DisplayEvent.Removed -> "removed@${managerRevision.value}"
+}
+
+/**
+ * The page's own animation-frame counter: from this call on, every `requestAnimationFrame`
+ * registration the page makes — whoever asks for it — is counted on [element]. The teardown
+ * sentinel reads it as a page fact: a display path that polls keeps registering frames, and after
+ * the session is gone no page machinery is alive to excuse a single one.
+ */
+private fun jsInstallAnimationFrameCounter(element: HTMLElement): Unit = js(
+    """(function () {
+        let count = 0;
+        const registered = window.requestAnimationFrame.bind(window);
+        window.requestAnimationFrame = function (callback) {
+            count += 1;
+            element.setAttribute("data-kadre-display-raf", String(count));
+            return registered(callback);
+        };
+    })()""",
+)

@@ -21,6 +21,7 @@ export default defineConfig({
     'web-touch.spec.mjs',
     'web-drop.spec.mjs',
     'web-text-input.spec.mjs',
+    'web-display.spec.mjs',
   ],
   timeout: 30_000,
   retries: 0,

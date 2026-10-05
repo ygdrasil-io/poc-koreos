@@ -314,6 +314,27 @@ class ContractRegistryTest {
                         "web-drop-no-prevent-default-without-offer",
                     ),
                 ),
+                "BCK-007" to webContract(
+                    contractId = "BCK-007",
+                    status = ContractStatus.Active,
+                    source = "WEB-IMPLEMENTATION-ROADMAP.md#Phase 6 — Displays, devices, gamepads et permissions",
+                    subject = "web display inventory",
+                    risk = "partial inventory, invented multi-display, teardown leak",
+                    oracle = ContractOracle.O2,
+                    scenarios = listOf(
+                        "web-display-initial-hostviewport",
+                        "web-display-resize-propagation",
+                        "web-display-dpr-scale-factor",
+                        "web-display-teardown-quiet",
+                    ),
+                    conditionalCapabilities = listOf("DisplayManager.state"),
+                    sentinels = listOf(
+                        "web-display-exact-fallback",
+                        "web-display-single-display",
+                        "web-display-no-dom-creation",
+                        "web-display-no-polling",
+                    ),
+                ),
                 "INT-002" to webContract(
                     contractId = "INT-002",
                     status = ContractStatus.Active,
@@ -728,7 +749,7 @@ class ContractRegistryTest {
     private companion object {
         const val COMMIT = "0123456789abcdef0123456789abcdef01234567"
         val WEB_CONTRACT_IDS = setOf(
-            "BCK-001", "BCK-002", "BCK-003", "BCK-004", "BCK-005", "BCK-006",
+            "BCK-001", "BCK-002", "BCK-003", "BCK-004", "BCK-005", "BCK-006", "BCK-007",
             "INT-002", "INT-003", "INT-004",
         )
         val PLANNED_WEB_CONTRACT_IDS = setOf("BCK-001", "INT-003")
