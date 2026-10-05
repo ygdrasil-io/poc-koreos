@@ -80,14 +80,43 @@ private class JsDomGamepad(pad: JsGamepad) : WebDomGamepad {
 
 /**
  * The browser `GamepadHapticActuator` as this realization reads it: exactly the members the seam
- * copies, declared over the promise form `playEffect`/`reset` answer with. The promise's resolved
- * value (a `GamepadHapticsResult` on browsers that provide one) is never read — the synchronous
- * outcome is the seam's whole contract, and a rejection is reported, not mapped.
+ * copies, declared over the promise form `playEffect(type, effectParameters)` answers with. The
+ * promise's resolved value (a `GamepadHapticsResult` on browsers that provide one) is never read —
+ * the synchronous outcome is the seam's whole contract, and a rejection is reported, not mapped.
  */
 private external interface JsGamepadHapticActuator {
-    fun playEffect(type: String, durationMs: Int, strongMagnitude: Double, weakMagnitude: Double): Promise<Unit>
+    fun playEffect(type: String, effectParameters: JsGamepadEffectParameters): Promise<Unit>
     fun reset(): Promise<Unit>
 }
+
+/**
+ * The `effectParameters` dictionary the browser's own `playEffect` defines (`duration`,
+ * `strongMagnitude`, `weakMagnitude`, and the trigger-rumble members the dictionary carries when the
+ * browser does). The realization builds it; the browser reads it; nothing is read back.
+ */
+private external interface JsGamepadEffectParameters
+
+/**
+ * Builds the effectParameters dictionary. An omitted trigger magnitude is literally absent — the
+ * spread adds the member only where the model stated it, which WebIDL reads as "not present" — never
+ * a zero that would masquerade as a stated magnitude of none.
+ */
+private fun jsEffectParameters(
+    durationMs: Int,
+    strongMagnitude: Double,
+    weakMagnitude: Double,
+    leftTriggerMagnitude: Double?,
+    rightTriggerMagnitude: Double?,
+): JsGamepadEffectParameters =
+    js(
+        """({
+             duration: durationMs,
+             strongMagnitude: strongMagnitude,
+             weakMagnitude: weakMagnitude,
+             ...(leftTriggerMagnitude == null ? { } : { leftTriggerMagnitude: leftTriggerMagnitude }),
+             ...(rightTriggerMagnitude == null ? { } : { rightTriggerMagnitude: rightTriggerMagnitude })
+           })""",
+    )
 
 /**
  * Extracts the pad's haptic actuator, only where the browser's own members exist. Every access is
@@ -141,8 +170,17 @@ private fun jsRefusalCode(failure: Throwable): String {
 private class JsDomHapticActuator(private val actuator: JsGamepadHapticActuator) : WebDomHapticActuator {
     override val effects: List<String>? = jsDeclaredEffectTypes(actuator)
 
-    override fun playEffect(type: String, durationMs: Int, strongMagnitude: Double, weakMagnitude: Double): WebEffectLaunch =
-        launch { target -> target.playEffect(type, durationMs, strongMagnitude, weakMagnitude) }
+    override fun playEffect(
+        type: String,
+        durationMs: Int,
+        strongMagnitude: Double,
+        weakMagnitude: Double,
+        leftTriggerMagnitude: Double?,
+        rightTriggerMagnitude: Double?,
+    ): WebEffectLaunch {
+        val effectParameters = jsEffectParameters(durationMs, strongMagnitude, weakMagnitude, leftTriggerMagnitude, rightTriggerMagnitude)
+        return launch { target -> target.playEffect(type, effectParameters) }
+    }
 
     override fun reset(): WebEffectLaunch = launch { target -> target.reset() }
 

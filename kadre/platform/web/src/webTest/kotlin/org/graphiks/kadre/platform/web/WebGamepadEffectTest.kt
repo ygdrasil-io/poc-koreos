@@ -33,14 +33,28 @@ class WebGamepadEffectTest {
         var launchOutcome: WebEffectLaunch = WebEffectLaunch.Accepted,
         var resetOutcome: WebEffectLaunch = WebEffectLaunch.Accepted,
     ) : WebDomHapticActuator {
-        data class Launch(val type: String, val durationMs: Int, val strongMagnitude: Double, val weakMagnitude: Double)
+        data class Launch(
+            val type: String,
+            val durationMs: Int,
+            val strongMagnitude: Double,
+            val weakMagnitude: Double,
+            val leftTriggerMagnitude: Double?,
+            val rightTriggerMagnitude: Double?,
+        )
 
         val launches = mutableListOf<Launch>()
         var resets: Int = 0
             private set
 
-        override fun playEffect(type: String, durationMs: Int, strongMagnitude: Double, weakMagnitude: Double): WebEffectLaunch {
-            launches += Launch(type, durationMs, strongMagnitude, weakMagnitude)
+        override fun playEffect(
+            type: String,
+            durationMs: Int,
+            strongMagnitude: Double,
+            weakMagnitude: Double,
+            leftTriggerMagnitude: Double?,
+            rightTriggerMagnitude: Double?,
+        ): WebEffectLaunch {
+            launches += Launch(type, durationMs, strongMagnitude, weakMagnitude, leftTriggerMagnitude, rightTriggerMagnitude)
             return launchOutcome
         }
 
@@ -93,7 +107,7 @@ class WebGamepadEffectTest {
         assertNull(probedSupported.constraints.maximumDuration, "the browser clamps durations; the constraint records no bound")
         assertEquals(FeatureAvailability.Available, probedSupported.availability)
         assertEquals(
-            listOf(FakeActuator.Launch("dual-rumble", 0, 0.0, 0.0)),
+            listOf(FakeActuator.Launch("dual-rumble", 0, 0.0, 0.0, null, null)),
             undeclared.launches,
             "exactly one zero-duration, zero-magnitude probe",
         )
@@ -107,6 +121,15 @@ class WebGamepadEffectTest {
             "the declared dual-rumble actuator advertises the same dual-rumble-only capability",
         )
         assertEquals(0, declared.launches.size, "a declared list answers without a launch")
+    }
+
+    @Test
+    fun `probe-refused actuator advertises nothing`() {
+        val actuator = FakeActuator(effects = null, launchOutcome = WebEffectLaunch.Refused("NotSupportedError"))
+        val capabilities = WebGamepadEffects.capabilities(FakeDomGamepad(hapticActuator = actuator), actuator, secureContext = true)
+        val unsupported = assertIs<Capability.Unsupported>(capabilities.effects)
+        assertEquals(KadreFailure.Unsupported(KadreOperation.GamepadEffect), unsupported.failure)
+        assertEquals(1, actuator.launches.size, "the probe is the only launch the probing ever makes")
     }
 
     @Test
@@ -154,7 +177,7 @@ class WebGamepadEffectTest {
         )
         assertIs<KadreResult.Success<GamepadPortEffect>>(started)
         assertEquals(
-            listOf(FakeActuator.Launch("dual-rumble", 500, 1.0, 0.25)),
+            listOf(FakeActuator.Launch("dual-rumble", 500, 1.0, 0.25, null, null)),
             actuator.launches,
             "type, duration and magnitudes pass through verbatim",
         )
@@ -166,6 +189,32 @@ class WebGamepadEffectTest {
             actuator,
         )
         assertEquals(1, actuator.launches.last().durationMs, "a sub-millisecond duration reads at least one millisecond")
+    }
+
+    @Test
+    fun `trigger rumble launch carries its trigger magnitudes and dual rumble omits them`() {
+        val actuator = FakeActuator(effects = listOf("dual-rumble", "trigger-rumble"))
+        WebGamepadEffects.startEffect(
+            0L,
+            GamepadEffect.TriggerRumble(strong = 0.5, weak = 0.25, leftTrigger = 0.9, rightTrigger = 0.1, duration = 200.milliseconds),
+            actuator,
+        )
+        assertEquals(
+            listOf(FakeActuator.Launch("trigger-rumble", 200, 0.5, 0.25, 0.9, 0.1)),
+            actuator.launches,
+            "the distinctive trigger magnitudes reach the actuator's dictionary, not just the main motors",
+        )
+
+        WebGamepadEffects.startEffect(
+            0L,
+            GamepadEffect.DualRumble(strong = 1.0, weak = 1.0, duration = 100.milliseconds),
+            actuator,
+        )
+        assertEquals(
+            FakeActuator.Launch("dual-rumble", 100, 1.0, 1.0, null, null),
+            actuator.launches.last(),
+            "a dual rumble states no trigger magnitudes: the members are omitted, never zeroed",
+        )
     }
 
     @Test

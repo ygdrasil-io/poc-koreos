@@ -19,10 +19,13 @@ import kotlin.time.Duration
  * The web's gamepad effect rules, in the role of the AppKit broker's capability construction: what
  * one pad's haptic actuator may promise, and what starting one effect maps onto.
  *
- * **The only primitive there is, is dual-rumble.** The browser's `vibrationActuator` accepts
- * `playEffect("dual-rumble", ...)` (Chrome; on newer Chromium the `GamepadHapticActuator` itself) and
- * nothing else this model can express: `LocalizedHaptic` has no browser primitive at all and is never
- * advertised, never launched — `startEffect` refuses it before any actuator is consulted. What the
+ * **The primitive the browser ships is dual-rumble.** The browser's `vibrationActuator` accepts
+ * `playEffect("dual-rumble", ...)` (Chrome; on newer Chromium the `GamepadHapticActuator` itself);
+ * `LocalizedHaptic` has no browser primitive at all and is never advertised, never launched —
+ * `startEffect` refuses it before any actuator is consulted. A browser that declares
+ * `trigger-rumble` in its own `effects` list gets that kind advertised and launched as itself, its
+ * trigger magnitudes riding the seam into the effectParameters dictionary — an advertised kind is
+ * never launched as a lesser one. What the
  * capability advertises is the browser's own word: the actuator's declared `effects` list when the
  * browser declares one, and otherwise one zero-duration, zero-magnitude probe (`playEffect` with
  * duration 0 is side-effect-free per spec) — a probe result frozen at connection, exactly like the
@@ -95,7 +98,15 @@ internal object WebGamepadEffects {
             is GamepadEffect.LocalizedHaptic -> KadreResult.Failure(KadreFailure.InvalidRequest("effect"))
             is GamepadEffect.TriggerRumble ->
                 if (TRIGGER_RUMBLE in actuator.effects.orEmpty()) {
-                    launch(actuator, TRIGGER_RUMBLE, effect.duration, effect.strong, effect.weak)
+                    launch(
+                        actuator,
+                        TRIGGER_RUMBLE,
+                        effect.duration,
+                        effect.strong,
+                        effect.weak,
+                        leftTriggerMagnitude = effect.leftTrigger,
+                        rightTriggerMagnitude = effect.rightTrigger,
+                    )
                 } else {
                     KadreResult.Failure(KadreFailure.InvalidRequest("effect"))
                 }
@@ -103,7 +114,15 @@ internal object WebGamepadEffects {
             is GamepadEffect.DualRumble -> {
                 val declared = actuator.effects
                 if (declared == null || DUAL_RUMBLE in declared) {
-                    launch(actuator, DUAL_RUMBLE, effect.duration, effect.strong, effect.weak)
+                    launch(
+                        actuator,
+                        DUAL_RUMBLE,
+                        effect.duration,
+                        effect.strong,
+                        effect.weak,
+                        leftTriggerMagnitude = null,
+                        rightTriggerMagnitude = null,
+                    )
                 } else {
                     KadreResult.Failure(KadreFailure.InvalidRequest("effect"))
                 }
@@ -122,7 +141,14 @@ internal object WebGamepadEffects {
 
     /** The side-effect-free probe: a zero-duration, zero-magnitude dual-rumble the browser only accepts or refuses. */
     private fun probeAccepts(actuator: WebDomHapticActuator): Boolean =
-        actuator.playEffect(DUAL_RUMBLE, durationMs = 0, strongMagnitude = 0.0, weakMagnitude = 0.0) is WebEffectLaunch.Accepted
+        actuator.playEffect(
+            DUAL_RUMBLE,
+            durationMs = 0,
+            strongMagnitude = 0.0,
+            weakMagnitude = 0.0,
+            leftTriggerMagnitude = null,
+            rightTriggerMagnitude = null,
+        ) is WebEffectLaunch.Accepted
 
     private fun launch(
         actuator: WebDomHapticActuator,
@@ -130,7 +156,18 @@ internal object WebGamepadEffects {
         duration: Duration,
         strongMagnitude: Double,
         weakMagnitude: Double,
-    ): KadreResult<GamepadPortEffect> = when (val outcome = actuator.playEffect(type, durationMs(duration), strongMagnitude, weakMagnitude)) {
+        leftTriggerMagnitude: Double?,
+        rightTriggerMagnitude: Double?,
+    ): KadreResult<GamepadPortEffect> = when (
+        val outcome = actuator.playEffect(
+            type,
+            durationMs(duration),
+            strongMagnitude,
+            weakMagnitude,
+            leftTriggerMagnitude,
+            rightTriggerMagnitude,
+        )
+    ) {
         is WebEffectLaunch.Accepted -> KadreResult.Success(WebGamepadEffect(actuator))
         is WebEffectLaunch.Refused -> KadreResult.Failure(platformFailure("refused"))
     }
@@ -152,6 +189,11 @@ internal object WebGamepadEffects {
  * page-global because the effect path is (one page, one broker, one set of actuators); the session
  * wiring installs the runtime's own reporter at attach, and the last wiring owns the page's reports —
  * a recorded limit, the price of a rejection that lands in the target realization that made the call.
+ *
+ * Lifecycle, stated plainly: the initial reporter is a no-op — until the wiring sets one, reports go
+ * nowhere (an effect cannot start before a session attaches, so nothing is lost in practice) — and
+ * the holder is never unset on session close; closing a session leaves the last wired reporter in
+ * place, because the holder is the page's, not the session's.
  */
 internal object WebGamepadEffectReporting {
     var reporter: RuntimeFailureReporter = RuntimeFailureReporter { }

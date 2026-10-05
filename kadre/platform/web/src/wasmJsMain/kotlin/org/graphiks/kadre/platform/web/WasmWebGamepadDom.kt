@@ -75,20 +75,27 @@ internal external fun wasmHapticEffectTypes(actuator: JsAny): JsArray<JsString>?
 /**
  * One effect launch, with the try/catch where the browser's own answer lives.
  *
- * The call reaching the browser and handing back its promise is the whole synchronous contract, so
- * the snippet attaches the rejection reporting itself — [onRejected] receives the rejection reason
- * when (and only when) the promise later rejects — and answers `null` for an accepted call. A
- * refusal before any promise existed (the member vanished, the engine rejected the call outright,
- * the promise form itself was not there) answers the browser's own exception name, or `refused` when
- * it offers none.
+ * The snippet builds the `effectParameters` dictionary the browser's own `playEffect(type,
+ * effectParameters)` defines — duration and the two magnitudes always, each trigger magnitude only
+ * where its presence flag says the model stated one, so an omitted member is literally absent (never
+ * a zero masquerading as a stated magnitude). The call reaching the browser and handing back its
+ * promise is the whole synchronous contract, so the snippet attaches the rejection reporting itself —
+ * [onRejected] receives the rejection reason when (and only when) the promise later rejects — and
+ * answers `null` for an accepted call. A refusal before any promise existed (the member vanished, the
+ * engine rejected the call outright, the promise form itself was not there) answers the browser's own
+ * exception name, or `refused` when it offers none.
  */
-@JsFun("(actuator, type, durationMs, strongMagnitude, weakMagnitude, onRejected) => { try { actuator.playEffect(type, durationMs, strongMagnitude, weakMagnitude).catch(onRejected); return null; } catch (error) { return (error !== null && error !== undefined && typeof error.name === 'string' && error.name.length > 0) ? error.name : 'refused'; } }")
+@JsFun("(actuator, type, durationMs, strongMagnitude, weakMagnitude, hasLeftTrigger, leftTriggerMagnitude, hasRightTrigger, rightTriggerMagnitude, onRejected) => { try { const effectParameters = { duration: durationMs, strongMagnitude: strongMagnitude, weakMagnitude: weakMagnitude }; if (hasLeftTrigger) { effectParameters.leftTriggerMagnitude = leftTriggerMagnitude; } if (hasRightTrigger) { effectParameters.rightTriggerMagnitude = rightTriggerMagnitude; } actuator.playEffect(type, effectParameters).catch(onRejected); return null; } catch (error) { return (error !== null && error !== undefined && typeof error.name === 'string' && error.name.length > 0) ? error.name : 'refused'; } }")
 internal external fun wasmLaunchHapticEffect(
     actuator: JsAny,
     type: String,
     durationMs: Int,
     strongMagnitude: Double,
     weakMagnitude: Double,
+    hasLeftTriggerMagnitude: Boolean,
+    leftTriggerMagnitude: Double,
+    hasRightTriggerMagnitude: Boolean,
+    rightTriggerMagnitude: Double,
     onRejected: (JsAny?) -> Unit,
 ): JsString?
 
@@ -128,8 +135,28 @@ private class WasmDomHapticActuator(private val actuator: JsAny) : WebDomHapticA
     override val effects: List<String>? = wasmHapticEffectTypes(actuator)
         ?.let { declared -> List(declared.length) { index -> declared[index]?.toString() }.filterNotNull() }
 
-    override fun playEffect(type: String, durationMs: Int, strongMagnitude: Double, weakMagnitude: Double): WebEffectLaunch =
-        when (val refusal = wasmLaunchHapticEffect(actuator, type, durationMs, strongMagnitude, weakMagnitude, ::reportRejection)) {
+    override fun playEffect(
+        type: String,
+        durationMs: Int,
+        strongMagnitude: Double,
+        weakMagnitude: Double,
+        leftTriggerMagnitude: Double?,
+        rightTriggerMagnitude: Double?,
+    ): WebEffectLaunch =
+        when (
+            val refusal = wasmLaunchHapticEffect(
+                actuator,
+                type,
+                durationMs,
+                strongMagnitude,
+                weakMagnitude,
+                hasLeftTriggerMagnitude = leftTriggerMagnitude != null,
+                leftTriggerMagnitude = leftTriggerMagnitude ?: 0.0,
+                hasRightTriggerMagnitude = rightTriggerMagnitude != null,
+                rightTriggerMagnitude = rightTriggerMagnitude ?: 0.0,
+                onRejected = ::reportRejection,
+            )
+        ) {
             null -> WebEffectLaunch.Accepted
             else -> WebEffectLaunch.Refused(refusal.toString())
         }

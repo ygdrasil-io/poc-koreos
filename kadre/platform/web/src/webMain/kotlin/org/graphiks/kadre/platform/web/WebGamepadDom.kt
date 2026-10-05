@@ -46,7 +46,22 @@ internal interface WebDomGamepad {
 internal interface WebDomHapticActuator {
     /** Effect type identifiers the browser reports/accepts, e.g. ["dual-rumble"]; null when undeclared. */
     val effects: List<String>?
-    fun playEffect(type: String, durationMs: Int, strongMagnitude: Double, weakMagnitude: Double): WebEffectLaunch
+
+    /**
+     * Launches [type] for [durationMs] with the magnitudes the browser's `effectParameters` dictionary
+     * carries. [leftTriggerMagnitude]/[rightTriggerMagnitude] are the trigger-rumble dictionary
+     * members: `null` omits them from the dictionary (the member is absent, never zero), so a
+     * dual-rumble launch states none and a trigger-rumble launch carries its own.
+     */
+    fun playEffect(
+        type: String,
+        durationMs: Int,
+        strongMagnitude: Double,
+        weakMagnitude: Double,
+        leftTriggerMagnitude: Double?,
+        rightTriggerMagnitude: Double?,
+    ): WebEffectLaunch
+
     fun reset(): WebEffectLaunch
 }
 
