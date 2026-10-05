@@ -408,6 +408,7 @@ internal interface WebElementLeasePort {
 internal class WebHostSession(
     private val port: WebHostPort,
     private val registry: WebHostRegistry = WebHostRegistry.shared,
+    private val gamepads: WebGamepadHub = WebGamepadHub.shared,
     private val failureReporter: RuntimeFailureReporter = RuntimeFailureReporter { },
 ) {
     /**
@@ -595,6 +596,11 @@ internal class WebHostSession(
         // once here so both controller paths hand the runtime the same session-scoped port, closed
         // with the session components it is given to.
         val displayPort = WebDisplayPort(hostDisplaySource())
+        // The browsing context's own gamepad inventory, as the page-global broker's projection
+        // reads it: the physical pads are the page's, the projection is this session's. Opened once
+        // here so both controller paths hand the runtime the same session-scoped port, closed with
+        // the session components it is given to.
+        val gamepadPort = gamepads.openPort()
         return when (windows) {
             // No provider, no seam: this session keeps the construction it has always had, byte for byte.
             null -> RuntimeHostController.withPrimarySurface(
@@ -612,6 +618,7 @@ internal class WebHostSession(
                     RuntimePrimarySurface(surface, surface::detach)
                 },
                 displayPort = displayPort,
+                gamepadPort = gamepadPort,
             )
 
             else -> RuntimeHostController.withComponents(
@@ -634,6 +641,7 @@ internal class WebHostSession(
                         windows = windows,
                         primarySurface = RuntimePrimarySurface(surface, surface::detach),
                         displayPort = displayPort,
+                        gamepadPort = gamepadPort,
                     )
                 },
             )
