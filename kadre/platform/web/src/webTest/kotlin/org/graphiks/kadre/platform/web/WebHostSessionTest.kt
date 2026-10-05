@@ -21,6 +21,7 @@ import org.graphiks.kadre.diagnostics.KadreOperation
 import org.graphiks.kadre.diagnostics.KadrePlatform
 import org.graphiks.kadre.diagnostics.KadreResourceKind
 import org.graphiks.kadre.diagnostics.KadreResult
+import org.graphiks.kadre.internal.runtime.GamepadPortEvent
 import org.graphiks.kadre.policy.KadrePolicies
 import org.graphiks.kadre.surface.LogicalSize
 import org.graphiks.kadre.surface.PhysicalSize
@@ -31,6 +32,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
+import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.seconds
 
 class WebHostSessionTest {
@@ -322,6 +324,80 @@ class WebHostSessionTest {
     }
 
     @Test
+    fun ownershipReleaseAfterAttachFailureStopsTheGamepadPoll() {
+        val dom = CountingGamepadDom()
+        val frames = CountingFrameScheduler()
+        val hub = WebGamepadHub(dom, frames)
+        val ownership = WebHostOwnership(
+            RecordingPort(Any(), snapshot()),
+            assertIs<KadreResult.Success<WebHostReservation>>(WebHostRegistry().reserve(Any())).value,
+        )
+        val gamepadPort = hub.openPort()
+        val events = mutableListOf<GamepadPortEvent>()
+        gamepadPort.installObserver { events += it }
+        ownership.observeGamepadPort(gamepadPort)
+
+        ownership.releaseAfterAttachFailure()
+
+        // The opened port was the only holder of the gamepad projection a failed attach would have
+        // orphaned, so the release funnel closes it like every other resource: the poll is withdrawn
+        // with the port and nothing can be delivered through the projection again.
+        assertEquals(2, dom.registrationCloses, "both connect listeners are withdrawn")
+        assertEquals(0, dom.listenerCount())
+        assertEquals(0, frames.pendingCount(), "no pending frame survives the release")
+        assertEquals(1, frames.cancels, "the one pending frame is cancelled exactly once")
+        assertTrue(hub.gamepads(gamepadPort).isEmpty(), "the closed port projects nothing")
+        assertEquals(0, events.size, "no delivery reaches the closed port's observer")
+    }
+
+    @Test
+    fun attachFailureStopsTheHubPollingAndACleanStopStopsItAgainExactlyOnce() = runTest {
+        val registry = WebHostRegistry()
+        val identity = Any()
+        val dom = CountingGamepadDom()
+        val frames = CountingFrameScheduler()
+        val hub = WebGamepadHub(dom, frames)
+        val failingPort = RecordingPort(
+            stableIdentity = identity,
+            initialLifecycleSnapshot = snapshot(),
+            lifecycleInstallationFailure = IllegalStateException("install"),
+        )
+
+        assertEquals(
+            KadreResult.Failure(
+                KadreFailure.PlatformFailure(KadrePlatform.Web, "web-host", "lifecycle-install-failed"),
+            ),
+            WebHostSession(failingPort, registry, gamepads = hub).attach(this, factory(), KadrePolicies.Default),
+        )
+        assertEquals(1, failingPort.releases)
+        // The eager open used to orphan the gamepad port on every attach-failure branch: the port was
+        // captured only by a factory closure that never ran, so the page-global hub kept polling —
+        // two listeners and one re-armed frame per retry, for a session that never existed.
+        assertEquals(2, dom.registrationCloses, "the failed attach withdraws both connect listeners")
+        assertEquals(0, dom.listenerCount())
+        assertEquals(0, frames.pendingCount(), "the failed attach cancels the pending frame")
+        assertEquals(1, frames.cancels)
+
+        // A retry on the same hub opens a fresh port — nothing was closed permanently — and the
+        // clean stop of that session stops the poll again: no zombie survives either ending.
+        val session = successful(
+            WebHostSession(RecordingPort(identity, snapshot()), registry, gamepads = hub).attach(
+                this,
+                factory(),
+                KadrePolicies.Default,
+            ),
+        )
+        assertEquals(4, dom.registrations, "the retry re-registers both listeners on the same hub")
+        assertEquals(1, frames.pendingCount())
+        session.requestStop()
+        testScheduler.runCurrent()
+        assertEquals(4, dom.registrationCloses, "the clean stop withdraws the listeners again")
+        assertEquals(0, dom.listenerCount())
+        assertEquals(0, frames.pendingCount(), "no poll survives the clean stop")
+        assertEquals(2, frames.cancels)
+    }
+
+    @Test
     fun manualDisconnectedSessionPublishesAttachedBackgroundInactiveLifecycle() = runTest {
         val scopeReady = CompletableDeferred<KadreScope>()
         val port = RecordingPort(Any(), snapshot(connected = false))
@@ -416,5 +492,61 @@ class WebHostSessionTest {
     private class EqualityCollidingIdentity {
         override fun equals(other: Any?): Boolean = other is EqualityCollidingIdentity
         override fun hashCode(): Int = 1
+    }
+
+    /** The gamepad seam, counted: everything the hub registers, polls and withdraws is visible here. */
+    private class CountingGamepadDom : WebGamepadDom {
+        var pads: List<WebDomGamepad?> = emptyList()
+        var polls: Int = 0
+            private set
+        var registrations: Int = 0
+            private set
+        var registrationCloses: Int = 0
+            private set
+        override val secureContext: Boolean = true
+        private val appeared = mutableListOf<() -> Unit>()
+        private val disappeared = mutableListOf<() -> Unit>()
+
+        override fun getGamepads(): List<WebDomGamepad?> {
+            polls += 1
+            return pads
+        }
+
+        override fun onGamepadAppeared(listener: () -> Unit): AutoCloseable = register(listener, appeared)
+
+        override fun onGamepadDisappeared(listener: () -> Unit): AutoCloseable = register(listener, disappeared)
+
+        override fun close() = Unit
+
+        fun listenerCount(): Int = appeared.size + disappeared.size
+
+        private fun register(listener: () -> Unit, into: MutableList<() -> Unit>): AutoCloseable {
+            registrations += 1
+            into += listener
+            return AutoCloseable {
+                registrationCloses += 1
+                into.remove(listener)
+            }
+        }
+    }
+
+    /** The frame cadence by hand, counted: the one pending frame the hub may hold at any moment. */
+    private class CountingFrameScheduler : WebFrameScheduler {
+        var schedules: Int = 0
+            private set
+        var cancels: Int = 0
+            private set
+        private var pending: (() -> Unit)? = null
+
+        override fun schedule(frame: () -> Unit): AutoCloseable {
+            schedules += 1
+            pending = frame
+            return AutoCloseable {
+                cancels += 1
+                if (pending === frame) pending = null
+            }
+        }
+
+        fun pendingCount(): Int = if (pending == null) 0 else 1
     }
 }

@@ -58,6 +58,11 @@ internal class WebGamepadHub(
     private val dom: WebGamepadDom,
     private val frames: WebFrameScheduler,
 ) : AutoCloseable {
+    // Browser calls do run inside this lock — a new pad's connection-time capability probe and an
+    // effect's launch and reset are DOM calls made under `withLock` — and that is acceptable here
+    // because the hub's targets are single-threaded: the lock never suspends, the DOM seam's
+    // realizations never re-enter the hub, and each call answers synchronously, so the
+    // "delivered outside" rule protects observers from reordering, never the browser from re-entry.
     private val lock = RuntimeLock()
     private val pads = linkedMapOf<Int, HubPad>()
     private val ports = linkedSetOf<WebGamepadPort>()

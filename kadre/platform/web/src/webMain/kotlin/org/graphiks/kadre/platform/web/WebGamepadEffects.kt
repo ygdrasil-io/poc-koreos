@@ -37,7 +37,10 @@ import kotlin.time.Duration
  * that later rejects has no honest synchronous outcome — it is reported on
  * [WebGamepadEffectReporting]'s reporter and nothing pretends the effect stopped or failed here.
  * A `Refused` launch is the one honest platform failure (`refused`), the phase-4 rule: the browser's
- * own exception name is its business, not a Kadre failure code.
+ * own exception name is its business, not a Kadre failure code. That honesty is the launch's alone,
+ * and the asymmetry with the stop is deliberate — an owner's `requestStop` propagates the browser's
+ * own code, because the stop's verdict travels into the effect session's terminal state, which has
+ * no launch constant to preserve.
  */
 internal object WebGamepadEffects {
     private const val EFFECT_DOMAIN = "gamepad-effect"

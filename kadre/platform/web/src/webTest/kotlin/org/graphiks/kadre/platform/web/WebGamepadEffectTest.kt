@@ -1,22 +1,38 @@
 package org.graphiks.kadre.platform.web
 
+import kotlinx.coroutines.test.runTest
+import org.graphiks.kadre.application.ActivationState
+import org.graphiks.kadre.application.AttachmentState
+import org.graphiks.kadre.application.EventStamp
+import org.graphiks.kadre.application.LifecycleState
+import org.graphiks.kadre.application.SessionInstant
+import org.graphiks.kadre.application.SessionSequence
+import org.graphiks.kadre.application.VisibilityState
 import org.graphiks.kadre.diagnostics.Capability
 import org.graphiks.kadre.diagnostics.FeatureAvailability
 import org.graphiks.kadre.diagnostics.KadreFailure
 import org.graphiks.kadre.diagnostics.KadreOperation
 import org.graphiks.kadre.diagnostics.KadrePlatform
 import org.graphiks.kadre.diagnostics.KadreResult
+import org.graphiks.kadre.input.DeviceInventory
 import org.graphiks.kadre.input.GamepadEffect
 import org.graphiks.kadre.input.GamepadEffectConstraints
 import org.graphiks.kadre.input.GamepadEffectKind
+import org.graphiks.kadre.input.GamepadEffectOutcome
+import org.graphiks.kadre.input.GamepadEffectSession
+import org.graphiks.kadre.input.GamepadEffectState
 import org.graphiks.kadre.input.GamepadHapticLocality
 import org.graphiks.kadre.internal.runtime.GamepadPortEffect
+import org.graphiks.kadre.internal.runtime.RuntimeEventCollectorAllocator
+import org.graphiks.kadre.internal.runtime.RuntimeGamepadManager
+import org.graphiks.kadre.policy.GamepadRouting
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertNull
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.microseconds
+import kotlin.time.Duration.Companion.nanoseconds
 
 /**
  * The browser's haptic actuator is the one effect primitive the web has, and it speaks only
@@ -297,5 +313,57 @@ class WebGamepadEffectTest {
         assertEquals(KadreResult.Success(Unit), owner.requestStop(), "a stop after the revocation is a no-op success")
         owner.close()
         assertEquals(1, actuator.resets, "exactly once, whatever the order of revocation, stop and close")
+    }
+
+    @Test
+    fun `a refused reset fails the stop with the browser word and terminates the session failed`() = runTest {
+        val actuator = FakeActuator(
+            effects = listOf("dual-rumble"),
+            resetOutcome = WebEffectLaunch.Refused("InvalidStateError"),
+        )
+        val dom = FakeGamepadDom(pads = listOf(FakeDomGamepad(index = 0, hapticActuator = actuator)))
+        val port = WebGamepadHub(dom, UnanimatedFrames()).openPort()
+        assertEquals(listOf(0L), port.gamepads.map { it.key }, "the pad connected in the first poll")
+
+        // The owner's stop keeps the browser's own word — the deliberate asymmetry with the launch,
+        // whose refusal folds into the one honest `refused` constant:
+        val owner = assertIs<KadreResult.Success<GamepadPortEffect>>(
+            port.startEffect(0L, GamepadEffect.DualRumble(strong = 1.0, weak = 1.0, duration = 500.milliseconds)),
+        ).value
+        assertEquals(
+            KadreFailure.PlatformFailure(KadrePlatform.Web, "gamepad-effect", "InvalidStateError"),
+            assertIs<KadreResult.Failure>(owner.requestStop()).reason,
+            "the stop propagates the browser's own refusal code, never the launch's constant",
+        )
+        assertEquals(KadreResult.Success(Unit), owner.requestStop(), "a stop after the refused one is the quiet no-op")
+
+        // And through the runtime, the real owner path: the public effect session terminates Failed
+        // with exactly the reason the refused reset returned.
+        val manager = RuntimeGamepadManager(
+            port = port,
+            inputPort = null,
+            eventStampSource = { EventStamp(SessionSequence(0), SessionInstant(0.nanoseconds), null) },
+            collectorAllocator = RuntimeEventCollectorAllocator(4),
+            maxCollectorsPerFlow = 1,
+            effectScope = this,
+            maxConcurrentEffects = 4,
+            gamepadRouting = GamepadRouting.AllForegroundSessions,
+            initialLifecycleState = LifecycleState(AttachmentState.Attached, VisibilityState.Foreground, ActivationState.Active),
+        )
+        val gamepad = assertIs<DeviceInventory.Enumerated>(manager.state.value.inventory).gamepads.single()
+        val session = assertIs<KadreResult.Success<GamepadEffectSession>>(
+            gamepad.playEffect(GamepadEffect.DualRumble(strong = 1.0, weak = 1.0, duration = 500.milliseconds)),
+        ).value
+        session.requestStop()
+        assertEquals(
+            GamepadEffectState.Terminated(
+                GamepadEffectOutcome.Failed(
+                    KadreFailure.PlatformFailure(KadrePlatform.Web, "gamepad-effect", "InvalidStateError"),
+                ),
+            ),
+            session.state.value,
+            "the refused reset terminates the effect session Failed with the browser's own word",
+        )
+        manager.close()
     }
 }

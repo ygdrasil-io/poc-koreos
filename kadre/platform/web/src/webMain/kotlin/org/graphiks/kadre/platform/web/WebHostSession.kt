@@ -599,14 +599,20 @@ internal class WebHostSession(
         // The browsing context's own gamepad inventory, as the page-global broker's projection
         // reads it: the physical pads are the page's, the projection is this session's. Opened once
         // here so both controller paths hand the runtime the same session-scoped port, closed with
-        // the session components it is given to. The wiring also hands the page-global effect path
+        // the session components it is given to — and registered with the ownership before any
+        // failing step can run, so an attach that never reaches a factory closes it too and the
+        // page-global poll stops with it. The wiring also hands the page-global effect path
         // this session's reporter — an effect promise that rejects lands in the target realization
         // that made the call, where no per-session reference reaches; the last wiring owns the
         // page's effect reports (a recorded limit, stated on the holder).
         WebGamepadEffectReporting.reporter = failureReporter
         val gamepadPort = gamepads.openPort()
+        ownership.observeGamepadPort(gamepadPort)
         return when (windows) {
-            // No provider, no seam: this session keeps the construction it has always had, byte for byte.
+            // No provider, no seam: the branch keeps the no-window-provider construction it has
+            // always had, the phase-6 display and gamepad ports forwarded through it exactly as
+            // through the components path — additive runtime parameters, null-defaulted in the
+            // runtime's own signatures, that change nothing about the provider-less shape.
             null -> RuntimeHostController.withPrimarySurface(
                 platform = KadrePlatform.Web,
                 initialLifecycleState = initialLifecycle,
@@ -653,13 +659,14 @@ internal class WebHostSession(
     }
 }
 
-private class WebHostOwnership(
+internal class WebHostOwnership(
     private val port: WebHostPort,
     private val reservation: WebHostReservation,
 ) {
     private var portReleased: Boolean = false
     private var reservationReleased: Boolean = false
     private var revokeAdmission: (() -> Unit)? = null
+    private var gamepadPort: WebGamepadPort? = null
 
     /**
      * Registers the surface this ownership closes the target's bridges for.
@@ -669,6 +676,19 @@ private class WebHostOwnership(
      */
     fun observeSurface(revokeAdmission: () -> Unit) {
         this.revokeAdmission = revokeAdmission
+    }
+
+    /**
+     * Registers the gamepad projection [createController] opened, so every release path closes it.
+     *
+     * The port is opened before any of the attach steps that can fail, and until it is registered
+     * here it is captured only by a controller factory closure that a failed attach never runs —
+     * the one opened resource `releaseAfterAttachFailure` could not reach. Registration precedes
+     * every release (it happens inside [createController], before a controller exists to revoke
+     * anything), so there is no already-released case to answer here.
+     */
+    fun observeGamepadPort(gamepadPort: WebGamepadPort) {
+        this.gamepadPort = gamepadPort
     }
 
     fun releaseAfterAttachFailure() {
@@ -683,6 +703,11 @@ private class WebHostOwnership(
         // stops admitting first: a cooperative stop releases the port while the runtime still has to
         // close the surface, and a frame registered before that must not be able to fire in between.
         runCatching { revokeAdmission?.invoke() }
+        // The gamepad projection the controller opened, closed on every release path — this funnel
+        // included, so a failed attach cannot orphan it and leave the page-global broker polling
+        // for a session that never existed. The close is idempotent: the hub's own is, and the
+        // runtime's components close may close the same port again on a clean stop.
+        runCatching { gamepadPort?.close() }
         runCatching { port.release() }
     }
 
