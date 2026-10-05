@@ -588,46 +588,56 @@ internal class WebHostSession(
         ownership: WebHostOwnership,
         windows: WebHostWindowManager?,
         onSurfaceCreated: (WebHostSurface) -> Unit,
-    ): RuntimeHostController = when (windows) {
-        // No provider, no seam: this session keeps the construction it has always had, byte for byte.
-        null -> RuntimeHostController.withPrimarySurface(
-            platform = KadrePlatform.Web,
-            initialLifecycleState = initialLifecycle,
-            sessionRevocationHandler = RuntimeSessionRevocationHandler { ownership.releasePort() },
-            sessionObserver = RuntimeSessionObserver { _, _ -> ownership.releaseReservation() },
-            failureReporter = failureReporter,
-            primarySurfaceFactory = { id ->
-                val surface = WebHostSurface(id, port, ownership, failureReporter)
-                // The ownership releases the target's bridges before the runtime closes the surface, so
-                // it has to be able to stop the surface from admitting anything new in between.
-                ownership.observeSurface(surface::onOwnershipRevoked)
-                onSurfaceCreated(surface)
-                RuntimePrimarySurface(surface, surface::detach)
-            },
-        )
+    ): RuntimeHostController {
+        // The browsing context's own display inventory, whatever sits behind its window: a browser
+        // enumerates no displays, so the gate mandates exactly one inventory — the primary viewport
+        // published as a HostViewport display — and this port is how the session states it. Built
+        // once here so both controller paths hand the runtime the same session-scoped port, closed
+        // with the session components it is given to.
+        val displayPort = WebDisplayPort(hostDisplaySource())
+        return when (windows) {
+            // No provider, no seam: this session keeps the construction it has always had, byte for byte.
+            null -> RuntimeHostController.withPrimarySurface(
+                platform = KadrePlatform.Web,
+                initialLifecycleState = initialLifecycle,
+                sessionRevocationHandler = RuntimeSessionRevocationHandler { ownership.releasePort() },
+                sessionObserver = RuntimeSessionObserver { _, _ -> ownership.releaseReservation() },
+                failureReporter = failureReporter,
+                primarySurfaceFactory = { id ->
+                    val surface = WebHostSurface(id, port, ownership, failureReporter)
+                    // The ownership releases the target's bridges before the runtime closes the surface, so
+                    // it has to be able to stop the surface from admitting anything new in between.
+                    ownership.observeSurface(surface::onOwnershipRevoked)
+                    onSurfaceCreated(surface)
+                    RuntimePrimarySurface(surface, surface::detach)
+                },
+                displayPort = displayPort,
+            )
 
-        else -> RuntimeHostController.withComponents(
-            platform = KadrePlatform.Web,
-            initialLifecycleState = initialLifecycle,
-            sessionRevocationHandler = RuntimeSessionRevocationHandler { ownership.releasePort() },
-            sessionObserver = RuntimeSessionObserver { _, _ ->
-                // The session is gone: the manager is closed with it, so a late `requestWindow` from
-                // a consumer still holding the scope is refused instead of opening a session for a
-                // host that no longer exists.
-                windows.close()
-                ownership.releaseReservation()
-            },
-            failureReporter = failureReporter,
-            componentsFactory = { _, _ ->
-                val surface = WebHostSurface(RuntimeProcessIds.nextSurfaceId(), port, ownership, failureReporter)
-                ownership.observeSurface(surface::onOwnershipRevoked)
-                onSurfaceCreated(surface)
-                RuntimeSessionComponents(
-                    windows = windows,
-                    primarySurface = RuntimePrimarySurface(surface, surface::detach),
-                )
-            },
-        )
+            else -> RuntimeHostController.withComponents(
+                platform = KadrePlatform.Web,
+                initialLifecycleState = initialLifecycle,
+                sessionRevocationHandler = RuntimeSessionRevocationHandler { ownership.releasePort() },
+                sessionObserver = RuntimeSessionObserver { _, _ ->
+                    // The session is gone: the manager is closed with it, so a late `requestWindow` from
+                    // a consumer still holding the scope is refused instead of opening a session for a
+                    // host that no longer exists.
+                    windows.close()
+                    ownership.releaseReservation()
+                },
+                failureReporter = failureReporter,
+                componentsFactory = { _, _ ->
+                    val surface = WebHostSurface(RuntimeProcessIds.nextSurfaceId(), port, ownership, failureReporter)
+                    ownership.observeSurface(surface::onOwnershipRevoked)
+                    onSurfaceCreated(surface)
+                    RuntimeSessionComponents(
+                        windows = windows,
+                        primarySurface = RuntimePrimarySurface(surface, surface::detach),
+                        displayPort = displayPort,
+                    )
+                },
+            )
+        }
     }
 }
 
