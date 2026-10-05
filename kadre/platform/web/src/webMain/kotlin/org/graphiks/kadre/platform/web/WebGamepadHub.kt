@@ -30,11 +30,15 @@ import org.graphiks.kadre.policy.GamepadRouting
  * all, which is why a resume diffs against the last *observed* values — nothing was observed in
  * between, and nothing pretends otherwise.
  *
- * **The diff is against the last observed pad, per DOM index.** The browser's array positions are
- * the DOM gamepad indices and its nulls are the absent ones, so a poll maps the connected pads
- * against the table: a new index is a connection (descriptor frozen from that very poll — a
- * reconnect is a new connection and freezes a fresh descriptor), a changed reading is a state
- * change, a vanished index a disconnection. Holes produce nothing. Every lifecycle fact fans out to
+ * **The diff is against the last observed canonical state, per DOM index.** The browser's array
+ * positions are the DOM gamepad indices and its nulls are the absent ones, so a poll maps the
+ * connected pads against the table: a new index is a connection (descriptor frozen from that very
+ * poll — a reconnect is a new connection and freezes a fresh descriptor), a reading that changes
+ * the pad's canonical state is a state change, a vanished index a disconnection. The comparison is
+ * against the canonical state — what the model publishes — never the raw readings, which need not
+ * equal themselves: a hostile pad (persistent `NaN`, over-window values, signed zeros) publishes
+ * exactly the events its canonical states differ by, never a per-frame stream of no-ops. Holes
+ * produce nothing. Every lifecycle fact fans out to
  * every open port, suspended ones included (the AppKit precedent: lifecycle is always fanned); a
  * state change fans out only to routed ports, because a suspended projection publishes neutral
  * controls and a real reading would contradict the snapshot it sits beside.
@@ -126,11 +130,18 @@ internal class WebGamepadHub(
 
     /** Closes [port] with the hub. Idempotent; a hub-closed port closes again as nothing. */
     internal fun closePort(port: WebGamepadPort) {
-        lock.withLock {
-            if (!ports.remove(port)) return
+        val deliveries = lock.withLock {
+            if (!ports.remove(port)) return@withLock emptyList()
             port.closeFromHubLocked()
+            // The port that left may have been the one the active-session arbitration had elected:
+            // the survivors re-arbitrate before anything could observe the gap, exactly as they do
+            // for an updateRouting — a port whose derived routing changed hears one RoutingChanged
+            // per pad, so its observer and its snapshot can never disagree about what it is.
+            val deliveries = reconcileRoutingLocked()
             if (ports.isEmpty()) stopPollingLocked()
+            deliveries
         }
+        deliver(deliveries)
     }
 
     /**
@@ -171,23 +182,33 @@ internal class WebGamepadHub(
             val existing = pads[pad.index]
             if (existing == null) {
                 // Frozen here: one connection, one descriptor, whatever the pad later reports.
-                val fresh = HubPad(key = pad.index, descriptor = WebGamepadMapping.descriptor(pad), last = pad)
+                val descriptor = WebGamepadMapping.descriptor(pad)
+                val fresh = HubPad(
+                    key = pad.index,
+                    descriptor = descriptor,
+                    lastState = WebGamepadMapping.state(pad, descriptor),
+                )
                 pads[pad.index] = fresh
                 ports.forEach { port ->
                     val observer = port.observerLocked() ?: return@forEach
                     deliveries += HubDelivery(observer, GamepadPortEvent.Connected(sourceForLocked(port, fresh)))
                 }
-            } else if (pad.buttonValues != existing.last.buttonValues || pad.axisValues != existing.last.axisValues) {
-                // Recorded whether anyone is routed or not: a suspended session that resumes must
-                // find the values the pad reads now, not the ones it read when it was suspended.
-                existing.last = pad
-                ports.forEach { port ->
-                    val observer = port.observerLocked() ?: return@forEach
-                    if (!routedLocked(port)) return@forEach
-                    deliveries += HubDelivery(
-                        observer,
-                        GamepadPortEvent.StateChanged(pad.index.toLong(), WebGamepadMapping.state(pad, existing.descriptor)),
-                    )
+            } else {
+                // The diff is against the canonical state — the one the model publishes — never the
+                // raw readings: a reading the canonicalization maps onto the state already
+                // published (a NaN that need not equal itself, an over-window value, a signed zero)
+                // is not a change, and a hostile pad must never stream no-op events.
+                val next = WebGamepadMapping.state(pad, existing.descriptor)
+                if (next != existing.lastState) {
+                    // Recorded whether anyone is routed or not: a suspended session that resumes
+                    // must find the values the pad reads now, not the ones it read when it was
+                    // suspended.
+                    existing.lastState = next
+                    ports.forEach { port ->
+                        val observer = port.observerLocked() ?: return@forEach
+                        if (!routedLocked(port)) return@forEach
+                        deliveries += HubDelivery(observer, GamepadPortEvent.StateChanged(pad.index.toLong(), next))
+                    }
                 }
             }
         }
@@ -227,13 +248,9 @@ internal class WebGamepadHub(
         capabilities = STUB_CAPABILITIES,
     )
 
-    /** The routed pad publishes what it reads; the suspended one publishes neutral, always. */
+    /** The routed pad publishes the state it last observed; the suspended one, neutral, always. */
     private fun stateForLocked(routing: GamepadRoutingState, pad: HubPad): GamepadState =
-        if (routing == GamepadRoutingState.Routed) {
-            WebGamepadMapping.state(pad.last, pad.descriptor)
-        } else {
-            WebGamepadMapping.neutralState(pad.descriptor)
-        }
+        if (routing == GamepadRoutingState.Routed) pad.lastState else WebGamepadMapping.neutralState(pad.descriptor)
 
     /** The routing state [port]'s context derives, mirroring the AppKit broker's rule verbatim. */
     private fun routingForLocked(port: WebGamepadPort): GamepadRoutingState =
@@ -285,11 +302,15 @@ internal class WebGamepadHub(
 
     private data class HubDelivery(val observer: (GamepadPortEvent) -> Unit, val event: GamepadPortEvent)
 
-    /** One connected pad: the descriptor frozen at connection and the last poll observed. */
+    /**
+     * One connected pad: the descriptor frozen at connection and the canonical state of the last
+     * poll observed — the diff's base and the routed projection's state, so the snapshot and the
+     * events always speak of the same reading.
+     */
     private class HubPad(
         val key: Int,
         val descriptor: GamepadDescriptor,
-        var last: WebDomGamepad,
+        var lastState: GamepadState,
     )
 }
 

@@ -116,6 +116,12 @@ class WebGamepadHubTest {
         effectOwnership = DeviceEffectOwnership.ExclusivePerPhysicalDevice,
     )
 
+    private fun activeOnly(): GamepadPortRouting = GamepadPortRouting(
+        policy = GamepadRouting.ActiveSessionOnly,
+        foregroundActive = true,
+        effectOwnership = DeviceEffectOwnership.ExclusivePerPhysicalDevice,
+    )
+
     @Test
     fun `poll loop runs only while a port is open`() {
         val harness = Harness()
@@ -312,6 +318,89 @@ class WebGamepadHubTest {
         assertEquals(GamepadRoutingState.Routed, resumed.routing)
         assertEquals(0.25, resumed.state.buttons[6].value)
         assertEquals(0.25, port.gamepads.single().state.buttons[6].value, "the snapshot carries the recorded reading")
+    }
+
+    @Test
+    fun `closing the routed port re-arbitrates the surviving one`() {
+        val harness = Harness()
+        val first = harness.hub.openPort()
+        first.updateRouting(activeOnly())
+        val second = harness.hub.openPort()
+        // The same eligible context as the first port: the survivor is suspended only by the
+        // arbitration's order, so the first port leaving must promote it.
+        second.updateRouting(activeOnly())
+        val firstEvents = mutableListOf<GamepadPortEvent>()
+        val secondEvents = mutableListOf<GamepadPortEvent>()
+        first.installObserver { firstEvents += it }
+        second.installObserver { secondEvents += it }
+
+        harness.dom.pads = listOf(FakeDomGamepad(index = 0, buttonValues = List(17) { if (it == 1) 1.0 else 0.0 }))
+        harness.tick()
+        // Both ports opened with the same eligible context; the active-session arbitration elected
+        // the first, so the survivor is suspended while the first is routed.
+        val firstConnected = assertIs<GamepadPortEvent.Connected>(firstEvents.single())
+        assertEquals(GamepadRoutingState.Routed, firstConnected.gamepad.routing)
+        assertEquals(1.0, firstConnected.gamepad.state.buttons[1].value)
+        val secondConnected = assertIs<GamepadPortEvent.Connected>(secondEvents.single())
+        assertEquals(GamepadRoutingState.Suspended, secondConnected.gamepad.routing)
+        assertEquals(0.0, secondConnected.gamepad.state.buttons[1].value)
+        assertEquals(GamepadRoutingState.Suspended, second.gamepads.single().routing)
+
+        first.close()
+        // The elected port left: the survivor re-arbitrates, hears one RoutingChanged with the
+        // fresh recorded state, and its snapshot agrees with its events again.
+        assertEquals(2, secondEvents.size, "the survivor hears the re-arbitration as one RoutingChanged")
+        val changed = assertIs<GamepadPortEvent.RoutingChanged>(secondEvents[1])
+        assertEquals(0L, changed.key)
+        assertEquals(GamepadRoutingState.Routed, changed.routing)
+        assertEquals(1.0, changed.state.buttons[1].value)
+        assertEquals(GamepadRoutingState.Routed, second.gamepads.single().routing)
+        assertEquals(1.0, second.gamepads.single().state.buttons[1].value)
+        assertEquals(1, firstEvents.size, "the closed port hears nothing of the re-arbitration")
+    }
+
+    @Test
+    fun `hostile readings never stream no-op state changes`() {
+        val harness = Harness()
+        val port = harness.hub.openPort()
+        port.updateRouting(routed())
+        val events = mutableListOf<GamepadPortEvent>()
+        port.installObserver { events += it }
+
+        harness.dom.pads = listOf(FakeDomGamepad(index = 0, buttonValues = List(17) { if (it == 3) 1.0 else 0.0 }))
+        harness.tick()
+        assertIs<GamepadPortEvent.Connected>(events.single())
+
+        // The pad starts reporting NaN on every control — a reading that need not equal itself:
+        harness.dom.pads = listOf(FakeDomGamepad(index = 0, buttonValues = List(17) { Double.NaN }))
+        harness.tick()
+        assertEquals(2, events.size, "exactly one neutralizing StateChanged for the hostile reading")
+        val neutralized = assertIs<GamepadPortEvent.StateChanged>(events[1])
+        assertEquals(0.0, neutralized.state.buttons[3].value)
+        assertEquals(false, neutralized.state.buttons[3].pressed)
+        // The same hostile reading frame after frame canonicalizes to the state already published:
+        harness.tick()
+        harness.tick()
+        assertEquals(2, events.size, "never a per-frame stream of identical canonical states")
+
+        // An over-window transition that canonicalizes identically (1.5 and 2.0 both read 1.0):
+        harness.dom.pads = listOf(FakeDomGamepad(index = 0, buttonValues = List(17) { if (it == 3) 1.5 else 0.0 }))
+        harness.tick()
+        assertEquals(3, events.size, "1.5 is a real model change away from the neutral state")
+        harness.dom.pads = listOf(FakeDomGamepad(index = 0, buttonValues = List(17) { if (it == 3) 2.0 else 0.0 }))
+        harness.tick()
+        assertEquals(3, events.size, "2.0 canonicalizes to the state 1.5 already published")
+
+        // And a signed-zero flip on an axis canonicalizes to the zero already published:
+        harness.dom.pads = listOf(
+            FakeDomGamepad(
+                index = 0,
+                buttonValues = List(17) { if (it == 3) 2.0 else 0.0 },
+                axisValues = listOf(-0.0, 0.0, 0.0, 0.0),
+            ),
+        )
+        harness.tick()
+        assertEquals(3, events.size, "-0.0 canonicalizes to the +0.0 already published")
     }
 
     @Test
