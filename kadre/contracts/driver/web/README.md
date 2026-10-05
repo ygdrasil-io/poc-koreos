@@ -12,8 +12,12 @@ Run both targets from the repository root:
 rtk ./gradlew :kadre:contracts:driver:web:jsBrowserSmoke :kadre:contracts:driver:web:wasmJsBrowserSmoke --rerun-tasks
 ```
 
-Eleven target-specific Playwright suites run in Chromium and emit target-specific
-JUnit results:
+Fourteen target-specific Playwright suites run in Chromium, across two Playwright
+projects of one invocation — the regular browser, and a second browser whose host
+resolution maps the fixture's insecure name onto the same local server so the page
+is served over plain http on a non-localhost host (the insecure-context project, see
+[web-gamepad-effects.spec.mjs](playwright/web-gamepad-effects.spec.mjs) below) —
+and emit target-specific JUnit results:
 
 - [web-phase0.spec.mjs](playwright/web-phase0.spec.mjs) proves the baseline the
   other suites assume: an existing host attaches through the public API, the
@@ -80,15 +84,41 @@ JUnit results:
   session;
 - [web-typescript.spec.mjs](playwright/web-typescript.spec.mjs) proves the
   published `@kadre/host` facade, driven by the same TypeScript consumer that
-  `kadre/consumers/typescript` type-checks.
+  `kadre/consumers/typescript` type-checks;
+- [web-display.spec.mjs](playwright/web-display.spec.mjs) proves the four display
+  scenarios of `BCK-007`: the `HostViewport` inventory the manager publishes when
+  the session configuration installs — enumerated, one display, the primary among
+  them, never `Unavailable`, never a second display — the physical bounds that
+  follow a real browser-delivered resize at the browsing context's own device
+  pixel ratio, the republished snapshot when the ratio itself changes at the same
+  CSS size, and the teardown that leaves no further event, no republished
+  snapshot, no animation-frame registration and no created node behind;
+- [web-devices.spec.mjs](playwright/web-devices.spec.mjs) proves the six
+  device-inventory scenarios of `BCK-008` against the synthetic gamepad source the
+  fixture installs (Chromium cannot inject a real pad, the D10 precedent): the
+  honest empty inventory before any pad exists, the connected pad added with its
+  own standard-mapping descriptor, the per-animation-frame state poll, the neutral
+  snapshot a disconnected pad leaves, the suspended session whose routing stays
+  neutral, and the session close that publishes nothing further;
+- [web-gamepad-effects.spec.mjs](playwright/web-gamepad-effects.spec.mjs) proves
+  the five gamepad-effect scenarios of `BCK-009`: the dual-rumble effect delivered
+  onto the pad's `vibrationActuator`, the stop that resets it, the unsupported
+  effect kind refused before any actuator call, the insecure context whose effects
+  capability stays unavailable, and the raw-input admission the web platform never
+  offers. The insecure-context scenario runs only in the second Playwright
+  project, so this suite appears twice in the JUnit report — four tests in the
+  regular project and the insecure-context scenario alone in the insecure one;
+  the testcase identity `classname#name` keeps every mapped identity unique.
 
 Playwright diagnostics are removed after a successful smoke; they are preserved
 on a failure or interruption. Every identity of
 [contracts/evidence.tsv](contracts/evidence.tsv) names what it maps: the four
 surface scenarios, the two lease scenarios, the twelve input scenarios, the
 seven provider scenarios of `BCK-001`, the eight touch scenarios of `BCK-004`,
-the nine text-input scenarios of `BCK-005`, the ten drop scenarios of `BCK-006`
-and the five facade scenarios of
+the nine text-input scenarios of `BCK-005`, the ten drop scenarios of `BCK-006`,
+the four display scenarios of `BCK-007`, the six device-inventory scenarios of
+`BCK-008`, the five gamepad-effect scenarios of `BCK-009` and the five facade
+scenarios of
 `INT-003` are titled with the evidence id they carry, so a JUnit
 `testcase/@name` maps to them without interpretation; the phase 1 lifecycle
 suites keep their descriptive titles, pre-dating that rule, and their rows in
