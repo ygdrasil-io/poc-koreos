@@ -27,6 +27,7 @@ class WebGamepadHubTest {
         override val mapping: String? = "standard",
         override val buttonValues: List<Double> = List(17) { 0.0 },
         override val axisValues: List<Double> = List(4) { 0.0 },
+        override val hapticActuator: WebDomHapticActuator? = null,
     ) : WebDomGamepad
 
     /** The scripted poll: the test stages the array the browser would answer, holes included. */
@@ -36,6 +37,7 @@ class WebGamepadHubTest {
         var registrations = 0
         var registrationCloses = 0
         var closeCalls = 0
+        override val secureContext: Boolean = true
         private val appeared = mutableListOf<() -> Unit>()
         private val disappeared = mutableListOf<() -> Unit>()
 

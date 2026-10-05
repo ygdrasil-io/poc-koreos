@@ -1,12 +1,14 @@
 package org.graphiks.kadre.platform.web
 
-import org.graphiks.kadre.diagnostics.Capability
 import org.graphiks.kadre.diagnostics.KadreFailure
-import org.graphiks.kadre.diagnostics.KadreOperation
+import org.graphiks.kadre.diagnostics.KadreResourceKind
+import org.graphiks.kadre.diagnostics.KadreResult
 import org.graphiks.kadre.input.GamepadCapabilities
 import org.graphiks.kadre.input.GamepadDescriptor
+import org.graphiks.kadre.input.GamepadEffect
 import org.graphiks.kadre.input.GamepadRoutingState
 import org.graphiks.kadre.input.GamepadState
+import org.graphiks.kadre.internal.runtime.GamepadPortEffect
 import org.graphiks.kadre.internal.runtime.GamepadPortEvent
 import org.graphiks.kadre.internal.runtime.GamepadPortGamepad
 import org.graphiks.kadre.internal.runtime.GamepadPortRouting
@@ -67,13 +69,6 @@ internal class WebGamepadHub(
     internal companion object {
         /** The one broker of this page, over the browsing context the module runs in. */
         val shared: WebGamepadHub = WebGamepadHub(webGamepadDom(), webFrameScheduler())
-
-        /**
-         * The capabilities of Task 3's projection: no effect is startable through it yet — Task 4's
-         * probe replaces this with what the browser's actuators actually answer.
-         */
-        val STUB_CAPABILITIES: GamepadCapabilities =
-            GamepadCapabilities(Capability.Unsupported(KadreFailure.Unsupported(KadreOperation.GamepadEffect)))
     }
 
     /**
@@ -128,11 +123,19 @@ internal class WebGamepadHub(
         deliver(deliveries)
     }
 
-    /** Closes [port] with the hub. Idempotent; a hub-closed port closes again as nothing. */
+    /**
+     * Closes [port] with the hub. Idempotent; a hub-closed port closes again as nothing.
+     *
+     * A port that closed while one of its effects ran revokes every owner it still holds — the
+     * runtime is terminating the session (the `ParentSessionStopping` terminal), and an effect whose
+     * session is gone stops here, once, with every later stop or close of the revoked owner a quiet
+     * no-op.
+     */
     internal fun closePort(port: WebGamepadPort) {
         val deliveries = lock.withLock {
             if (!ports.remove(port)) return@withLock emptyList()
             port.closeFromHubLocked()
+            port.revokeEffectsLocked()
             // The port that left may have been the one the active-session arbitration had elected:
             // the survivors re-arbitrate before anything could observe the gap, exactly as they do
             // for an updateRouting — a port whose derived routing changed hears one RoutingChanged
@@ -146,13 +149,17 @@ internal class WebGamepadHub(
 
     /**
      * Closes every open port, stops the poll, closes the dom seam this hub owns. Idempotent: every
-     * later call, like every late connection announcement, publishes nothing.
+     * later call, like every late connection announcement, publishes nothing. Every port's effect
+     * owners are revoked, exactly as a per-port close revokes them.
      */
     override fun close() {
         val owned = lock.withLock {
             if (closed) return
             closed = true
-            ports.forEach(WebGamepadPort::closeFromHubLocked)
+            ports.forEach { port ->
+                port.closeFromHubLocked()
+                port.revokeEffectsLocked()
+            }
             ports.clear()
             stopPollingLocked()
             dom
@@ -181,12 +188,16 @@ internal class WebGamepadHub(
             observed += pad.index
             val existing = pads[pad.index]
             if (existing == null) {
-                // Frozen here: one connection, one descriptor, whatever the pad later reports.
+                // Frozen here: one connection, one descriptor — and one effect capability, probed
+                // from the actuator this very poll reports (or the honest Unsupported of one it does
+                // not). A reconnect is a new connection and freezes fresh facts of its own.
                 val descriptor = WebGamepadMapping.descriptor(pad)
                 val fresh = HubPad(
                     key = pad.index,
                     descriptor = descriptor,
                     lastState = WebGamepadMapping.state(pad, descriptor),
+                    hapticActuator = pad.hapticActuator,
+                    capabilities = WebGamepadEffects.capabilities(pad, pad.hapticActuator, dom.secureContext),
                 )
                 pads[pad.index] = fresh
                 ports.forEach { port ->
@@ -245,8 +256,29 @@ internal class WebGamepadHub(
         descriptor = pad.descriptor,
         state = stateForLocked(routingForLocked(port), pad),
         routing = routingForLocked(port),
-        capabilities = STUB_CAPABILITIES,
+        capabilities = pad.capabilities,
     )
+
+    /**
+     * Starts one already-admitted effect for the pad [key] names, through [port].
+     *
+     * The rules are `WebGamepadEffects`'s (the browser's actuator, the honest preconditions); the hub
+     * contributes only what ownership requires: the port must be open, the pad must still be
+     * connected, and a launched owner is recorded against the port so a close while it runs revokes
+     * it — an effect cannot outlive the session projection that asked for it.
+     */
+    internal fun startEffect(port: WebGamepadPort, key: Long, effect: GamepadEffect): KadreResult<GamepadPortEffect> = lock.withLock {
+        if (closed || !port.isOpenLocked()) {
+            return@withLock KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.Gamepad))
+        }
+        val pad = pads[key.toInt()] ?: return@withLock KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.Gamepad))
+        val started = WebGamepadEffects.startEffect(pad.key.toLong(), effect, pad.hapticActuator)
+        if (started is KadreResult.Success) {
+            // The only owner WebGamepadEffects constructs is the web one.
+            port.attachEffectLocked(started.value as WebGamepadEffect)
+        }
+        started
+    }
 
     /** The routed pad publishes the state it last observed; the suspended one, neutral, always. */
     private fun stateForLocked(routing: GamepadRoutingState, pad: HubPad): GamepadState =
@@ -303,14 +335,18 @@ internal class WebGamepadHub(
     private data class HubDelivery(val observer: (GamepadPortEvent) -> Unit, val event: GamepadPortEvent)
 
     /**
-     * One connected pad: the descriptor frozen at connection and the canonical state of the last
+     * One connected pad: the descriptor and effect capability frozen at connection (the capability
+     * probed once, from the actuator this connection reported) and the canonical state of the last
      * poll observed — the diff's base and the routed projection's state, so the snapshot and the
-     * events always speak of the same reading.
+     * events always speak of the same reading. The actuator is frozen with them: effects launch onto
+     * the actuator the connection offered, never onto one a later poll happens to wrap.
      */
     private class HubPad(
         val key: Int,
         val descriptor: GamepadDescriptor,
         var lastState: GamepadState,
+        val hapticActuator: WebDomHapticActuator?,
+        val capabilities: GamepadCapabilities,
     )
 }
 

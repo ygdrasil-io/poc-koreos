@@ -599,7 +599,11 @@ internal class WebHostSession(
         // The browsing context's own gamepad inventory, as the page-global broker's projection
         // reads it: the physical pads are the page's, the projection is this session's. Opened once
         // here so both controller paths hand the runtime the same session-scoped port, closed with
-        // the session components it is given to.
+        // the session components it is given to. The wiring also hands the page-global effect path
+        // this session's reporter — an effect promise that rejects lands in the target realization
+        // that made the call, where no per-session reference reaches; the last wiring owns the
+        // page's effect reports (a recorded limit, stated on the holder).
+        WebGamepadEffectReporting.reporter = failureReporter
         val gamepadPort = gamepads.openPort()
         return when (windows) {
             // No provider, no seam: this session keeps the construction it has always had, byte for byte.

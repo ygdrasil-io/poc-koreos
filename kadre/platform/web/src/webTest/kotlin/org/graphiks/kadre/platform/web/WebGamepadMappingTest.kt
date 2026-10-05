@@ -25,6 +25,7 @@ class WebGamepadMappingTest {
         override val mapping: String? = "standard",
         override val buttonValues: List<Double> = List(STANDARD_BUTTON_COUNT) { 0.0 },
         override val axisValues: List<Double> = List(STANDARD_AXIS_COUNT) { 0.0 },
+        override val hapticActuator: WebDomHapticActuator? = null,
     ) : WebDomGamepad
 
     private fun pad(

@@ -1,7 +1,5 @@
 package org.graphiks.kadre.platform.web
 
-import org.graphiks.kadre.diagnostics.KadreFailure
-import org.graphiks.kadre.diagnostics.KadreResourceKind
 import org.graphiks.kadre.diagnostics.KadreResult
 import org.graphiks.kadre.input.GamepadEffect
 import org.graphiks.kadre.input.GamepadRoutingState
@@ -14,18 +12,21 @@ import org.graphiks.kadre.internal.runtime.GamepadPortRouting
 /**
  * One session's projection of the page's gamepads, through [WebGamepadHub] — the web form of the
  * AppKit broker's port. Nothing is stored here but the session's own context (its observer, its
- * routing, and the routing each observer has already been told about): every snapshot derives live
- * from the hub's table through this port's routing, so a snapshot can never disagree with the
- * events beside it — the hub updates its table before it delivers anything.
+ * routing, the routing each observer has already been told about, and the effect owners it has
+ * launched): every snapshot derives live from the hub's table through this port's routing, so a
+ * snapshot can never disagree with the events beside it — the hub updates its table before it
+ * delivers anything.
  *
- * `startEffect` is Task 4's: until the effect probe and owner exist, the honest answer to an effect
- * request is the closed resource, never a promise the browser did not make.
+ * `startEffect` forwards to the hub, which applies `WebGamepadEffects`'s rules onto the pad's own
+ * actuator and records the launched owner here, so a close while the effect runs revokes it: an
+ * effect cannot outlive the session projection that asked for it.
  */
 internal class WebGamepadPort(private val hub: WebGamepadHub) : GamepadPort {
     private var closed: Boolean = false
     private var observer: ((GamepadPortEvent) -> Unit)? = null
     private var routing: GamepadPortRouting? = null
     private var projectedRouting: GamepadRoutingState? = null
+    private val activeEffects = linkedSetOf<WebGamepadEffect>()
 
     override val gamepads: List<GamepadPortGamepad>
         get() = hub.gamepads(this)
@@ -38,13 +39,25 @@ internal class WebGamepadPort(private val hub: WebGamepadHub) : GamepadPort {
     }
 
     override fun startEffect(key: Long, effect: GamepadEffect): KadreResult<GamepadPortEffect> =
-        KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.Gamepad))
+        hub.startEffect(this, key, effect)
 
     override fun close() {
         hub.closePort(this)
     }
 
     internal fun isOpenLocked(): Boolean = !closed
+
+    /** Records one launched owner against this port, under the hub's lock, for the close revocation. */
+    internal fun attachEffectLocked(effect: WebGamepadEffect) {
+        activeEffects.add(effect)
+    }
+
+    /** Revokes every owner this port still holds: one stop each, exactly once, verdicts unread. */
+    internal fun revokeEffectsLocked() {
+        val owners = activeEffects.toList()
+        activeEffects.clear()
+        owners.forEach(WebGamepadEffect::revoke)
+    }
 
     internal fun installObserverLocked(observer: (GamepadPortEvent) -> Unit): AutoCloseable {
         check(this.observer == null) { "the web gamepad port observer is already installed" }

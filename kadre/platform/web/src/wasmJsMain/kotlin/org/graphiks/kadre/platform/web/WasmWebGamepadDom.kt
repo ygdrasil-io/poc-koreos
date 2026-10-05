@@ -6,6 +6,7 @@ import kotlin.js.ExperimentalWasmJsInterop
 import kotlin.js.JsAny
 import kotlin.js.JsArray
 import kotlin.js.JsNumber
+import kotlin.js.JsString
 import kotlinx.browser.window
 import org.w3c.dom.Window
 import org.w3c.dom.events.Event
@@ -56,6 +57,53 @@ internal external fun wasmAddNavigatorGamepadListener(navigator: JsAny, type: St
 @JsFun("(navigator, type, listener) => { if (typeof navigator.removeEventListener === 'function') { navigator.removeEventListener(type, listener); } }")
 internal external fun wasmRemoveNavigatorGamepadListener(navigator: JsAny, type: String, listener: () -> Unit)
 
+/**
+ * The pad's haptic actuator and its members, absent de kotlinx-browser 0.5.0 — the gap these
+ * `@JsFun` helpers read, the way `wasmRequestPointerLock` reads the pointer-lock members the same
+ * bindings do not declare. Every access is guarded inside the snippet because the actuator is
+ * optional (`vibrationActuator` is absent on Firefox/WebKit; on newer Chromium the
+ * `GamepadHapticActuator` itself fills the role): a browser without the members answers `null`, and
+ * a null actuator is an honest Unsupported capability, not a guessed one.
+ */
+@JsFun("(pad) => (pad.vibrationActuator !== null && pad.vibrationActuator !== undefined && typeof pad.vibrationActuator.playEffect === 'function') ? pad.vibrationActuator : null")
+internal external fun wasmVibrationActuator(pad: JsAny): JsAny?
+
+/** The actuator's own declaration of what it accepts, where it is an array; `null` is "undeclared". */
+@JsFun("(actuator) => Array.isArray(actuator.effects) ? actuator.effects : null")
+internal external fun wasmHapticEffectTypes(actuator: JsAny): JsArray<JsString>?
+
+/**
+ * One effect launch, with the try/catch where the browser's own answer lives.
+ *
+ * The call reaching the browser and handing back its promise is the whole synchronous contract, so
+ * the snippet attaches the rejection reporting itself — [onRejected] receives the rejection reason
+ * when (and only when) the promise later rejects — and answers `null` for an accepted call. A
+ * refusal before any promise existed (the member vanished, the engine rejected the call outright,
+ * the promise form itself was not there) answers the browser's own exception name, or `refused` when
+ * it offers none.
+ */
+@JsFun("(actuator, type, durationMs, strongMagnitude, weakMagnitude, onRejected) => { try { actuator.playEffect(type, durationMs, strongMagnitude, weakMagnitude).catch(onRejected); return null; } catch (error) { return (error !== null && error !== undefined && typeof error.name === 'string' && error.name.length > 0) ? error.name : 'refused'; } }")
+internal external fun wasmLaunchHapticEffect(
+    actuator: JsAny,
+    type: String,
+    durationMs: Int,
+    strongMagnitude: Double,
+    weakMagnitude: Double,
+    onRejected: (JsAny?) -> Unit,
+): JsString?
+
+/** One actuator reset, with the same guarded shape as [wasmLaunchHapticEffect]. */
+@JsFun("(actuator, onRejected) => { try { actuator.reset().catch(onRejected); return null; } catch (error) { return (error !== null && error !== undefined && typeof error.name === 'string' && error.name.length > 0) ? error.name : 'refused'; } }")
+internal external fun wasmResetHapticActuator(actuator: JsAny, onRejected: (JsAny?) -> Unit): JsString?
+
+/** The rejection reason as text: the browser's own message, whatever object it rejected with. */
+@JsFun("(reason) => { if (reason === null || reason === undefined) return 'the browser rejected an effect promise with no reason'; if (typeof reason.message === 'string' && reason.message.length > 0) return reason.message; return String(reason); }")
+internal external fun wasmEffectRejectionText(reason: JsAny?): String
+
+/** Whether the browsing context is a secure context — the browser's own word, guarded like every member. */
+@JsFun("(context) => context.isSecureContext === true")
+internal external fun wasmIsSecureContext(context: Window): Boolean
+
 /** One poll's copy of one browser pad; the borrowed object stays behind the seam. */
 private class WasmDomGamepad(pad: WasmGamepad) : WebDomGamepad {
     override val index: Int = pad.index
@@ -64,6 +112,37 @@ private class WasmDomGamepad(pad: WasmGamepad) : WebDomGamepad {
     override val mapping: String? = pad.mapping
     override val buttonValues: List<Double> = List(pad.buttons.length) { index -> pad.buttons[index]?.value ?: 0.0 }
     override val axisValues: List<Double> = List(pad.axes.length) { index -> pad.axes[index]?.toDouble() ?: 0.0 }
+    override val hapticActuator: WebDomHapticActuator? = wasmVibrationActuator(pad)?.let(::WasmDomHapticActuator)
+}
+
+/**
+ * One pad's haptic actuator as the browser answers it.
+ *
+ * The verdicts are the synchronous ones the launch helpers answer (`null` — the call reached the
+ * browser and its promise is watched; a name — the browser refused before any promise existed). A
+ * promise that rejects later is reported on the wiring's reporter as an exception carrying the
+ * browser's own reason text — Kotlin/Wasm hands a rejection over as a `JsAny`, not a `Throwable`, so
+ * the text is what crosses honestly — and nothing pretends the effect stopped or failed there.
+ */
+private class WasmDomHapticActuator(private val actuator: JsAny) : WebDomHapticActuator {
+    override val effects: List<String>? = wasmHapticEffectTypes(actuator)
+        ?.let { declared -> List(declared.length) { index -> declared[index]?.toString() }.filterNotNull() }
+
+    override fun playEffect(type: String, durationMs: Int, strongMagnitude: Double, weakMagnitude: Double): WebEffectLaunch =
+        when (val refusal = wasmLaunchHapticEffect(actuator, type, durationMs, strongMagnitude, weakMagnitude, ::reportRejection)) {
+            null -> WebEffectLaunch.Accepted
+            else -> WebEffectLaunch.Refused(refusal.toString())
+        }
+
+    override fun reset(): WebEffectLaunch =
+        when (val refusal = wasmResetHapticActuator(actuator, ::reportRejection)) {
+            null -> WebEffectLaunch.Accepted
+            else -> WebEffectLaunch.Refused(refusal.toString())
+        }
+
+    private fun reportRejection(reason: JsAny?) {
+        WebGamepadEffectReporting.reporter.report(RuntimeException(wasmEffectRejectionText(reason)))
+    }
 }
 
 /**
@@ -82,6 +161,9 @@ internal class WasmWebGamepadDom(private val browsingWindow: Window = window) : 
     private val navigator: JsAny = browsingWindow.navigator
     private val registrations = mutableListOf<AutoCloseable>()
     private var closed: Boolean = false
+
+    override val secureContext: Boolean
+        get() = wasmIsSecureContext(browsingWindow)
 
     override fun getGamepads(): List<WebDomGamepad?> {
         if (closed) return emptyList()

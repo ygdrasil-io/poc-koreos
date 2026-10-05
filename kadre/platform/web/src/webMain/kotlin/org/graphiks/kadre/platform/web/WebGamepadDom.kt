@@ -18,6 +18,42 @@ internal interface WebDomGamepad {
     val mapping: String?
     val buttonValues: List<Double>
     val axisValues: List<Double>
+
+    /**
+     * The pad's haptic actuator, as the browser reports it; `null` where the browser offers none.
+     *
+     * Realizations extract the actuator only where the browser's own members exist (`vibrationActuator`
+     * with a callable `playEffect` — Chrome, and newer Chromium's `GamepadHapticActuator` itself): a
+     * browser without the member yields `null`, and a `null` actuator is an honest `Unsupported`
+     * effect capability, never a guessed one.
+     */
+    val hapticActuator: WebDomHapticActuator?
+}
+
+/**
+ * One pad's haptic actuator, structurally — the browser's `vibrationActuator` as the seam reads it.
+ *
+ * [effects] is the browser's own declaration of the effect types the actuator accepts (newer
+ * Chromium's `GamepadHapticActuator.effects`, e.g. `["dual-rumble"]`); `null` when the browser
+ * declares nothing, in which case the caller probes once. [playEffect] and [reset] answer with the
+ * SYNCHRONOUS outcome of the call only — the browser's real answer is a promise, whose rejection
+ * nobody can turn back into a synchronous verdict and which is reported, not mapped:
+ *
+ * - `Accepted` — the call reached the browser and handed back its promise.
+ * - `Refused(code)` — the browser refused the call before any promise existed; `code` is the
+ *   browser's own name for why (a DOM exception name, or `refused` when it offers none).
+ */
+internal interface WebDomHapticActuator {
+    /** Effect type identifiers the browser reports/accepts, e.g. ["dual-rumble"]; null when undeclared. */
+    val effects: List<String>?
+    fun playEffect(type: String, durationMs: Int, strongMagnitude: Double, weakMagnitude: Double): WebEffectLaunch
+    fun reset(): WebEffectLaunch
+}
+
+/** The synchronous result of calling into the browser: call accepted, or refused with a reason code. */
+internal sealed interface WebEffectLaunch {
+    data object Accepted : WebEffectLaunch
+    data class Refused(val code: String) : WebEffectLaunch
 }
 
 /**
@@ -41,6 +77,13 @@ internal interface WebGamepadDom : AutoCloseable {
 
     /** Disconnection notifications, registered like [onGamepadAppeared]'s. */
     fun onGamepadDisappeared(listener: () -> Unit): AutoCloseable
+
+    /**
+     * Whether the browsing context is a secure context (`window.isSecureContext`). The Gamepad API
+     * itself works anywhere, but the page's own fact is what the effect capability is probed against:
+     * the hub reads this once per pad connection and freezes the verdict into the pad's capabilities.
+     */
+    val secureContext: Boolean
 }
 
 /**

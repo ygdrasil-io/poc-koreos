@@ -3,6 +3,7 @@ package org.graphiks.kadre.platform.web
 import kotlinx.browser.window
 import org.w3c.dom.Window
 import org.w3c.dom.events.Event
+import kotlin.js.Promise
 
 /**
  * The browser `Gamepad` as this realization reads it, which no Kotlin/JS DOM SDK binding declares —
@@ -11,7 +12,9 @@ import org.w3c.dom.events.Event
  * cannot be read by accident. `mapping` is nullable because a browser may omit it; the buttons
  * array is dense (the DOM always answers with one button object per control) while the pads array
  * of [JsGamepadNavigator.getGamepads] is not — its entries are nullable, and the nulls are the
- * holes Chromium leaves at the indices of absent gamepads.
+ * holes Chromium leaves at the indices of absent gamepads. The haptic actuator is *not* declared
+ * here on purpose: it is absent on Firefox/WebKit, and a declared member would be read unguarded —
+ * the extraction below checks the browser's own members instead.
  */
 private external interface JsGamepad {
     val index: Int
@@ -72,6 +75,84 @@ private class JsDomGamepad(pad: JsGamepad) : WebDomGamepad {
     override val mapping: String? = pad.mapping
     override val buttonValues: List<Double> = pad.buttons.map { it.value }
     override val axisValues: List<Double> = pad.axes.map { it }
+    override val hapticActuator: WebDomHapticActuator? = jsVibrationActuator(pad)?.let(::JsDomHapticActuator)
+}
+
+/**
+ * The browser `GamepadHapticActuator` as this realization reads it: exactly the members the seam
+ * copies, declared over the promise form `playEffect`/`reset` answer with. The promise's resolved
+ * value (a `GamepadHapticsResult` on browsers that provide one) is never read — the synchronous
+ * outcome is the seam's whole contract, and a rejection is reported, not mapped.
+ */
+private external interface JsGamepadHapticActuator {
+    fun playEffect(type: String, durationMs: Int, strongMagnitude: Double, weakMagnitude: Double): Promise<Unit>
+    fun reset(): Promise<Unit>
+}
+
+/**
+ * Extracts the pad's haptic actuator, only where the browser's own members exist. Every access is
+ * guarded because the actuator is optional (`vibrationActuator` is absent on Firefox/WebKit) and on
+ * newer Chromium the `GamepadHapticActuator` itself fills the role — either way, the browser object
+ * that answers is the one `playEffect` can be called on; anything else is `null`, and a null
+ * actuator is an honest Unsupported capability, not a guessed one.
+ */
+private fun jsVibrationActuator(pad: JsGamepad): JsGamepadHapticActuator? =
+    if (js(
+            "pad.vibrationActuator !== undefined && pad.vibrationActuator !== null && " +
+                "typeof pad.vibrationActuator.playEffect === 'function'",
+        ).unsafeCast<Boolean>()
+    ) {
+        js("pad.vibrationActuator").unsafeCast<JsGamepadHapticActuator>()
+    } else {
+        null
+    }
+
+/**
+ * Reads the actuator's own declaration of what it accepts (`GamepadHapticActuator.effects` on newer
+ * Chromium), only where it is an array; anything else — absent, a non-array, an older Chromium — is
+ * "undeclared", and the caller probes once instead of guessing.
+ */
+private fun jsDeclaredEffectTypes(actuator: JsGamepadHapticActuator): List<String>? =
+    if (js("Array.isArray(actuator.effects)").unsafeCast<Boolean>()) {
+        js("actuator.effects").unsafeCast<Array<String>>().toList()
+    } else {
+        null
+    }
+
+/** Whether the browsing context is a secure context — the browser's own word, guarded like every member. */
+private fun jsIsSecureContext(context: Window): Boolean =
+    js("context.isSecureContext === true").unsafeCast<Boolean>()
+
+/** The browser's own name for a synchronous refusal, as far as one is offered; `refused` otherwise. */
+private fun jsRefusalCode(failure: Throwable): String {
+    val candidate = failure.asDynamic().name as? String ?: return "refused"
+    return if (candidate.isNotEmpty() && candidate.all { it.code in 0x21..0x7e }) candidate else "refused"
+}
+
+/**
+ * One pad's haptic actuator as the browser answers it.
+ *
+ * `playEffect` and `reset` hand back a promise; the seam's verdict is the synchronous outcome only —
+ * the call reached the browser (`Accepted`) or it was refused before any promise existed
+ * (`Refused`), e.g. the member vanished or the engine rejected the call outright. Every promise gets
+ * a `catch` that reports the rejection on the wiring's reporter: a promise that rejects later has no
+ * honest synchronous outcome left, so it becomes a report and nothing pretends otherwise.
+ */
+private class JsDomHapticActuator(private val actuator: JsGamepadHapticActuator) : WebDomHapticActuator {
+    override val effects: List<String>? = jsDeclaredEffectTypes(actuator)
+
+    override fun playEffect(type: String, durationMs: Int, strongMagnitude: Double, weakMagnitude: Double): WebEffectLaunch =
+        launch { target -> target.playEffect(type, durationMs, strongMagnitude, weakMagnitude) }
+
+    override fun reset(): WebEffectLaunch = launch { target -> target.reset() }
+
+    private fun launch(call: (JsGamepadHapticActuator) -> Promise<Unit>): WebEffectLaunch =
+        try {
+            call(actuator).catch { reason -> WebGamepadEffectReporting.reporter.report(reason) }
+            WebEffectLaunch.Accepted
+        } catch (failure: Throwable) {
+            WebEffectLaunch.Refused(jsRefusalCode(failure))
+        }
 }
 
 /**
@@ -89,6 +170,9 @@ internal class JsWebGamepadDom(private val browsingWindow: Window = window) : We
     private val navigator: JsGamepadNavigator = browsingWindow.navigator.unsafeCast<JsGamepadNavigator>()
     private val registrations = mutableListOf<AutoCloseable>()
     private var closed: Boolean = false
+
+    override val secureContext: Boolean
+        get() = jsIsSecureContext(browsingWindow)
 
     override fun getGamepads(): List<WebDomGamepad?> {
         if (closed) return emptyList()
