@@ -19,6 +19,12 @@ La phase 5 réécrit les trois lignes d’input que ses contrats livrent — `to
 events (`BCK-004`), `textInput` sur un port à document-shadow (`BCK-005`), `dragAndDrop` sur le
 seam de drop synchrone (`BCK-006`) — et réécrit la ligne `gestures`, dont l’absence de
 recognizer devient une limite enregistrée plutôt qu’un différé de phase (§2, §3.9-3.11).
+La phase 6 ajoute les quatre lignes du bas que ses contrats livrent : l’inventaire d’affichage
+dont le fallback `HostViewport` est la forme exacte et inconditionnelle (`BCK-007`),
+l’inventaire devices/gamepads sondé depuis le poll du navigateur (`BCK-008`), les effets
+gamepad et leurs préconditions honnêtes (`BCK-009`), et la ligne `platformAccess` de surface,
+dont la lease `withWebElement` de la phase 2 est la preuve (§2, quatre lignes du bas ;
+§3.12-3.14) — la ligne `rawInput`, déjà présente, gagne son scénario navigateur de non-appel.
 
 Deux remarques de périmètre, pour que la lecture des lignes soit exacte. Les trois premiers
 features, `drag-and-drop`, `IME`/`text input` et `raw input` sont des lignes de la matrice de
@@ -98,7 +104,7 @@ registre est donc la révision du navigateur ; l’OS n’y entre pas.
 | `InputCapabilities.gestures` | `js`, `wasmJs` | idem | `none` | `none` — `gestureKinds = emptySet()` dans l’observation même qui déclare le touch (`WebHostSession.kt:912-925`) ; aucun recognizer n’existe sur ce target (D-T2), limite enregistrée et non un différé | `Capability.Unsupported(KadreFailure.Unsupported(KadreOperation.GestureInput))`, y compris sur le bras terminal d’overflow, qui ne transforme pas un `Capability.Unsupported` en `Unavailable` (`RuntimeSurfaceInput.kt:1478-1482`) | `web-touch-capability-structural` (l’attribut `data-kadre-input-caps` vaut `gestures=unsupported:gestureinput`, cellule publique entière réassertée par chaque scénario de `web-touch.spec.mjs`, `web-drop.spec.mjs` et `web-text-input.spec.mjs`), sentinelle `web-touch-no-gesture-claim` ; `WebInputSurfaceTest.keyboardAndPointerAreDeclaredOnlyByTheSurfaceOwnStructuralObservation` |
 | `InputCapabilities.dragAndDrop` | `js`, `wasmJs` | idem | `none` | `none` — les listeners `dragenter`/`dragover`/`dragleave`/`drop` sont posés sur l’élément attaché à l’installation (`JsWebDomPort.kt:402-405`, `WasmWebDomPort.kt:412-415`), et l’offre qu’un `dragenter` présente l’est par le seam synchrone `onDropEntered` (§3.11) | `FeatureAvailability.Unsupported` (snapshot d’avant installation, `RuntimeSurfaceInput.kt:1455-1469` — `dragAndDropAvailable = true` est passé au reducer à la même installation structurelle, `WebHostSession.kt:873`) ; `FeatureAvailability.Unavailable(SourceOverflow(InputSource))` sur le bras terminal d’overflow (section 2.1) | `web-drop-presented-single-active`, `web-drop-accept-synchronous`, `web-drop-rejected-without-handler`, `web-drop-moved-after-accept`, `web-drop-exit-terminates`, `web-drop-performed-claimable`, `web-drop-claim-single-winner`, `web-drop-read-bounded-copy`, `web-drop-teardown-closes`, `web-drop-no-data-transfer-leak`, sentinelles `web-drop-no-partial-offer`, `web-drop-no-fabricated-mime`, `web-drop-no-prevent-default-without-offer` ; `WebDropSurfaceTest`, `WebDropMappingTest`, `JsWebDropTest`/`WasmWebDropTest` |
 | `InputCapabilities.textInput` | `js`, `wasmJs` | idem | `none` | `none` — `WebTextInputPort` est construit par la session configuration (`WebHostSession.kt:865`) et sa capability est structurelle (`Capability.Supported`, `WebTextInputPort.kt:114`, D-X2) : l’éditabilité de l’élément est la frontière du host, et un élément hors du périmètre v1 (`<input>`/`<textarea>`, D-X3) ouvre des sessions qui n’observent rien (§3.10) | `Capability.Unsupported(KadreFailure.Unsupported(KadreOperation.TextInput))` : l’état par défaut d’avant installation (`TextInputPort.kt:91`, composé par `unsupportedInputState`, `RuntimeSurfaceInput.kt:1442-1453` — l’`input` du surface n’est lisible qu’à partir de la construction du reducer, `WebHostSession.kt:856-885`) et la re-position sur le bras terminal d’overflow (`RuntimeSurfaceInput.kt:1481`) ; une seconde ouverture pendant une session vivante est `AlreadyInUse(TextInputSession)` (`RuntimeSurfaceInput.kt:119-134`, `WebTextInputPort.kt:120`) | `web-text-open-single-session`, `web-text-replace-event`, `web-text-composition-lifecycle`, `web-text-composition-cancelled`, `web-text-focus-suspends`, `web-text-stale-revision`, `web-text-writeback-sync`, `web-text-action-submit`, `web-text-teardown-closes`, sentinelles `web-text-no-dom-leak`, `web-text-anti-stale-revision`, `web-text-no-content-synthesis`, `web-text-no-implicit-session` ; `WebTextInputSurfaceTest`, `JsWebTextInputTest`/`WasmWebTextInputTest` |
-| `InputCapabilities.rawInput` | `js`, `wasmJs` | idem | `none` | `none` — `rawInputCoordinator = null` et la capability sont posés au même endroit (`WebHostSession.kt:868-869`) | `Capability.Unsupported(KadreFailure.Unsupported(KadreOperation.RawInputAccess))`, inchangé sur le bras terminal d’overflow (`RuntimeSurfaceInput.kt:1482`) | `WebInputSurfaceTest.keyboardAndPointerAreDeclaredOnlyByTheSurfaceOwnStructuralObservation` |
+| `InputCapabilities.rawInput` | `js`, `wasmJs` | idem | `none` | `none` — `rawInputCoordinator = null` et la capability sont posés au même endroit (`WebHostSession.kt:868-869`) ; la requête `requestRawInput` est refusée avant d’installer le moindre listener — le scénario navigateur compte les registrations `EventTarget` de la page autour de la requête et le delta est zéro | `Capability.Unsupported(KadreFailure.Unsupported(KadreOperation.RawInputAccess))`, inchangé sur le bras terminal d’overflow (`RuntimeSurfaceInput.kt:1482`) | `web-gamepad-raw-input-unsupported`, sentinelle `web-gamepad-raw-no-listener` (BCK-009) ; `WebInputSurfaceTest.keyboardAndPointerAreDeclaredOnlyByTheSurfaceOwnStructuralObservation` |
 | `SurfaceCapabilities.cursor` et `SurfaceCapabilities.customCursor` | `js`, `wasmJs` | idem | `none` | `none` — aucun chemin de commit n’existe et `clear` est refusé avant admission (`WebHostSession.kt:1714-1721`) | `Capability.Unsupported(KadreFailure.Unsupported(KadreOperation.UpdateSurface))` : snapshot attaché par `webSurfaceCapabilities()` (`WebHostSession.kt:1984`, `:1985`), snapshot terminal par `unsupportedSurfaceCapabilities()` (`SurfaceAdmission.kt:21-22`, publié à `WebHostSession.kt:1772` et `:1810`) | `WebInputSurfaceTest.theInputDefaultBehaviorCapabilityIsTheWholeEnumAndTheOtherFieldsStayUnsupported` (snapshot attaché, `:595-597`) ; le porteur du snapshot terminal est `unsupportedSurfaceCapabilities()` (`SurfaceAdmission.kt:20-29`), dont la même règle est asservie pour un autre champ par le même test (`:606-610`) |
 | `SurfaceCapabilities.pointerCapture` | `js`, `wasmJs` | idem | `none` | `none` — `Confined` exige en plus un pointeur que la surface détient déjà, sinon rejet `InteractionRequired(Missing)` | `Capability.Unsupported(KadreFailure.Unsupported(KadreOperation.UpdateSurface))` au snapshot terminal (la surface attachée publie `Supported({None, Confined}, Available)`) | `web-input-pointer-capture` ; `JsWebPointerCaptureTest`/`WasmWebPointerCaptureTest`, `WebInputSurfaceTest.thePointerCaptureCapabilityIsNoneAndConfinedAndLockedIsProvablyOutside` |
 | `SurfaceCapabilities.hitTesting` | `js`, `wasmJs` | idem | `none` | `none` — aucun chemin de commit | `Capability.Unsupported(KadreFailure.Unsupported(KadreOperation.UpdateSurface))` | `WebInputSurfaceTest.theInputDefaultBehaviorCapabilityIsTheWholeEnumAndTheOtherFieldsStayUnsupported` |
@@ -107,6 +113,10 @@ registre est donc la révision du navigateur ; l’OS n’y entre pas.
 | `SurfaceCapabilities.armedInteractions` | `js`, `wasmJs` | idem | `none` | `none` | `Capability.Unsupported(KadreFailure.Unsupported(KadreOperation.ArmInteraction))` dans **tous** les snapshots, attaché comme terminal (`WebHostSession.kt:1996`, `SurfaceAdmission.kt:27`) — aucune plateforme n’implémente le chemin armé et le token du handler est la seule autorité d’interaction de ce target | `WebInteractionSurfaceTest.armedInteractionsRemainsUnsupported` |
 | `WindowManagerCapabilities.requestWindow` | `js`, `wasmJs` | idem | `none` | `none` — la capability est décidée une fois à la construction du manager, par la seule présence d’un provider (`WebHostWindowManager.kt:207-214`) | sans provider, la session garde le `UnsupportedWindowManager` à l’identique : `Capability.Unsupported(KadreFailure.Unsupported(KadreOperation.RequestWindow))` (`UnsupportedManagers.kt:57`) et toute requête est un `WindowRequest` déjà terminal `Rejected(Unsupported(RequestWindow))` (`UnsupportedManagers.kt:63-71`) ; avec provider, `Supported({OpenedInNewSession}, Available)` — `OpenedHere` n’est jamais promis, Web n’exerce aucun chemin de commit | `web-no-implicit-window` (sans provider, inchangé) ; `web-window-provider-new-session`, `web-window-provider-same-context`, `web-window-provider-no-context`, `web-window-provider-invalid-element`, `web-window-provider-invalid-scope`, `web-window-provider-owned-element`, `web-window-provider-callback-failure`, sentinelles `web-provider-no-same-document-window`, `web-provider-owned-element-rejected` ; `WebHostWindowManagerTest` |
 | `InteractionContext.request` (échelle d’admission) | `js`, `wasmJs` | idem | `none` | `none` — l’échelle est celle du handler commun, identique sur les trois cibles (`RuntimeInteractionHandler.kt:214-222`) | hors frame valide : `InteractionRequired(Expired)` ; frame d’une autre surface : `InteractionRequired(WrongSurface)` ; token déjà consommé : `InteractionRequired(Consumed)` ; action hors ensemble publié : `Unsupported(KadreOperation.Interaction)` — refusée *avant* `invokeNative`, donc sans aucun appel navigateur (l’admission du moteur commun, `RuntimeInteractionHandler.kt:214-222` ; la branche exhaustive de secours de `invokeNative`, `WebHostSession.kt:1123-1128`) ; registration fermée pendant l’appel natif : `Closed(KadreResourceKind.Interaction)` (`:225-227` et `:252-256`/`:283-285`, garde partagée des chemins `Now` et `Deferred`) ; budget différé épuisé : `ResourceLimitExceeded(KadreResourceKind.Interaction, maxPendingInteractionRequests)` (`:286-306`) ; les champs admis sont exactement ceux d’`OPERATION-CONTRACTS.md` §1.1, `LockPointer` exigeant `PointerCaptureMode.Locked`, tout autre mode valant `InvalidRequest("action.mode")` (`WebInteractionStimulus.kt:53-58`) ; un `AcceptDrop` dont l’`offerId` n’est pas l’offre que le seam a présentée est `InvalidRequest("offerId")` (`WebHostSession.kt:1051-1052`) | `WebInteractionSurfaceTest.aRetainedContextIsRefusedExpiredAfterTheHandlerReturns`, `.lockPointerRefusesEveryModeButLockedAsInvalidActionMode`, `.anUnsupportedActionNeverTouchesTheBrowser`, `.pendingRequestsRespectMaxPendingInteractionRequests`, `.terminationAbandonsDeferredRequestsWithClosedInteraction` ; `RuntimeInteractionHandlerCommonTest.requestRefusesWithClosedWhenTheRegistrationClosesDuringTheNativeCall`, `.deferredAdmissionRefusesWithClosedWhenTheRegistrationClosesDuringTheNativeCall`, `.pendingBudgetExceededRefusesWithResourceLimit`, `.duplicateRetainedExpiredAndUnsupportedRequestsFailWithoutCallingNativeCode`, `.retainedContextIsWrongSurfaceDuringAnotherSurfaceCallback` |
+| `DisplayManager.state` (inventaire d’affichage) | `js`, `wasmJs` | idem | `js` : `Window.matchMedia`, `MediaQueryList` et `window.screen.colorDepth` des déclarations DOM de la stdlib-js ; `wasmJs` : les mêmes membres de `kotlinx-browser`, qui les déclare tous | `none` — le port est construit et observé à l’installation de la session (`WebHostSession.kt:593-598`, observateur installé par le runtime, `RuntimeDisplayManager.kt:65-66`) et l’installation pousse l’inventaire exact une première fois, sans attendre un événement navigateur (`WebDisplayPort.kt:100-128`) ; les feux suivants sont le `resize` de la fenêtre et la requête de résolution du dpr (`JsWebDisplaySource.kt:54-93`, miroir Wasm) | `DisplayInventory.Unavailable(TemporarilyUnavailable(retryable = true))` quand le viewport est inmesurable (dpr non fini ou non positif, tailles non positives), retiré au premier feu mesurable — jamais un inventaire partiel, jamais vide, jamais un second display : le fallback publié est exactement `Enumerated(primary = viewport, displays = listOf(viewport))` avec `DisplayType.HostViewport` (`WebDisplayPort.kt:170-196`) | `web-display-initial-hostviewport`, `web-display-resize-propagation`, `web-display-dpr-scale-factor`, `web-display-teardown-quiet`, sentinelles `web-display-exact-fallback`, `web-display-single-display`, `web-display-no-dom-creation`, `web-display-no-polling` (BCK-007) ; `WebDisplayPortTest` |
+| `DeviceManager.state` (inventaire devices et gamepads, observation) | `js`, `wasmJs` | idem | `js` : les externals `JsGamepad`/`JsGamepadNavigator` que `JsWebGamepadDom.kt:19-43` déclare lui-même — aucune liaison SDK n’existe pour la Gamepad API ; `wasmJs` : les mêmes externals en `JsAny`/`@JsFun` (`WasmWebGamepadDom.kt:11-13` — kotlinx-browser 0.5.0 ne déclare rien de la Gamepad API) | `none` pour l’inventaire : `navigator.getGamepads()` est la seule source d’état, lue par le hub partagé de la page à la cadence des animation frames tant qu’au moins un port de session est ouvert (`WebGamepadHub.kt:82-96`, `:304-329`), et l’inventaire publié est toujours `Enumerated` — énuméré et vide là où le navigateur n’expose rien (un page insecure réelle n’expose aucun pad, `getGamepads` étant secure-context-only) ; les événements `gamepadconnected`/`gamepaddisconnected` ne déclenchent qu’une re-lecture immédiate | `DeviceInventory.Enumerated(devices = [], gamepads = …)` — la liste `devices` reste vide (le navigateur n’offre aucune primitive d’inventaire de périphériques génériques, rien n’est fabriqué) et la liste `gamepads` est celle que le poll rapporte, trous compris sans pad fantôme ni renumérotation (`WebGamepadHub.kt:183-234`) ; il n’existe pas d’état `Unsupported` de ce manager sur ce target | `web-gamepad-empty-inventory-honest`, `web-gamepad-connect-added`, `web-gamepad-state-poll`, `web-gamepad-disconnect-neutral`, `web-gamepad-routing-suspended-neutral`, `web-gamepad-session-close-quiet`, sentinelles `web-gamepad-no-phantom`, `web-gamepad-descriptor-exact`, `web-gamepad-no-fabricated-devices`, `web-gamepad-teardown-quiet` (BCK-008) ; `WebGamepadHubTest`, `WebGamepadMappingTest` |
+| `Gamepad.playEffect` (effets gamepad) | `js`, `wasmJs` | idem | `js` : les externals `JsGamepadHapticActuator`/`JsGamepadEffectParameters` du même fichier (`JsWebGamepadDom.kt:87-119`) — le dictionnaire WebIDL `effectParameters` est construit par le target ; `wasmJs` : les `@JsFun` gardés du même seam (`WasmWebGamepadDom.kt:47-80`) | la capability du pad est gelée par connexion depuis trois préconditions (`WebGamepadEffects.kt:63-80`) : le secure context du browsing context (`window.isSecureContext`), l’actuateur `vibrationActuator` que cette connexion offre (`null` là où le navigateur n’en a pas — Firefox/WebKit), et la liste `effects` que l’actuateur déclare elle-même, sondée par un dual-rumble de durée nulle quand elle ne l’est pas | `Capability.Unsupported(KadreFailure.Unsupported(KadreOperation.GamepadEffect))` sur chacune des trois préconditions manquantes (contexte insecure, actuateur absent, aucun genre annoncé ou sonde refusée) ; un genre non annoncé — `LocalizedHaptic` toujours — est refusé `InvalidRequest("effect")` avant tout appel d’actuateur ; un pad déconnecté refuse `Closed(Gamepad)` avant tout appel ; un lancement que le navigateur refuse est `PlatformFailure(Web, "gamepad-effect", "refused")` ; `maximumDuration = null` — le navigateur serre la borne (`WebGamepadEffects.kt:74-79`, `:95-131`) | `web-gamepad-effect-dual-rumble`, `web-gamepad-effect-stop`, `web-gamepad-effect-unsupported-kind`, `web-gamepad-effect-insecure-context`, sentinelles `web-gamepad-no-implicit-prompt`, `web-gamepad-no-localized-haptic`, `web-gamepad-effect-once` (BCK-009) ; `WebGamepadEffectTest` |
+| `SurfaceCapabilities.platformAccess` | `js`, `wasmJs` | idem | `none` | `none` — la capability est structurelle : la surface attachée la publie `Supported` (`WebHostSession.kt:2019`) et la lease `withWebElement` est le contrat de l’élément — bornée, non réentrante, admise tant que la surface admet (§6.3 de `BACKEND-CAPABILITIES.md`, ligne 239) | `Capability.Unsupported(KadreFailure.Unsupported(KadreOperation.PlatformSurfaceAccess))` au snapshot terminal (`SurfaceAdmission.kt:28`) ; dans la fenêtre de révocation d’ownership une lease est déjà refusée tandis que la capability lit encore `Supported` (limite de la phase 2, enregistrée au README du driver) | `web-element-lease`, `web-element-lease-boundary`, `web-element-lease-close-order`, `web-element-lease-concurrent-close` (`INT-004`, `web-surface.spec.mjs`) ; `WebElementLeaseTest`, `JsWebElementLeaseTest`/`WasmWebElementLeaseTest` |
 
 Les availabilities d’entrée sont déclarées par une seule transition structurelle, à la fin de
 `installSessionConfiguration` (`WebHostSession.kt:912-925`) : `keyboardInstalled = true`,
@@ -128,9 +138,9 @@ Aux quatre sentinelles rattachées à une ligne ci-dessus s’ajoute la cinquiè
 `web-input-post-terminal-stimulus`, qui garde la lane d’une surface terminale : l’input réel livré
 après la fermeture ne publie ni état, ni événement, ni reset (`web-input-terminal-closed`).
 
-Les quatre lignes du bas du registre sont celles de la phase 4. La première particularité de
-lecture : le scénario navigateur de l’interaction, `web-interaction-fullscreen`, **n’est pas** une
-preuve de contrat — il ne figure dans aucun `evidenceId` de `BCK-001` ; la suite
+Les lignes d’interaction et de fenêtre du registre sont celles de la phase 4. La première
+particularité de lecture : le scénario navigateur de l’interaction, `web-interaction-fullscreen`,
+**n’est pas** une preuve de contrat — il ne figure dans aucun `evidenceId` de `BCK-001` ; la suite
 `web-interaction.spec.mjs` clique réellement le host et n’asserte que l’ensemble fermé des
 outcomes honnêtes — `committed`, ou `rejected:platformFailure:web:fullscreen:refused` — en
 enregistrant celui que ce Chromium a observé dans son propre journal d’exécution
@@ -139,6 +149,21 @@ enregistrant celui que ce Chromium a observé dans son propre journal d’exécu
 particularité : `WindowManagerCapabilities.requestWindow` n’est pas une capability de surface mais
 de manager, décidée à la construction de la session — c’est la seule ligne du registre dont l’état
 dépend d’un choix du host fait *avant* toute installation (`WebHostSession.kt:415-423`).
+
+Les quatre lignes du bas du registre sont celles de la phase 6, et leur lecture partage deux
+faits. D’abord, elles sont portées par des managers que toute session possède (`Application.displays`,
+`Application.devices`), et leur publication est structurelle au même titre que celle de l’input :
+le port d’affichage est construit et observé à l’installation de la session
+(`WebHostSession.kt:593-598`), le port gamepad est ouvert au même endroit (`:607`) et son hub
+partagé démarre son poll à cette ouverture, et `platformAccess` est publiée `Supported` par la
+surface attachée (`:2019`). Ensuite, aucune de ces lignes ne dépend d’une permission : la
+colonne `runtime gate` ne vaut pas `none` pour `Gamepad.playEffect` que parce que le secure
+context, l’actuateur et la déclaration de l’actuateur sont des préconditions **par pad**, gelées
+dans la capability que le manager publie — jamais une gate que Kadre évaluerait en dehors de
+l’inventaire. Le scénario insecure-context de `BCK-009` court dans le second projet Playwright
+(`--host-resolver-rules=MAP insecure.kadre.invalid 127.0.0.1`, page servie en http simple sur un
+nom non-localhost) et n’asserte que des observables : `isSecureContext` faux, le pad découvert,
+les effets `Unsupported`, zéro prompt — l’article §3.14 porte le détail.
 
 ### 2.1 Le bras terminal d’overflow : la seconde valeur d’absence des capabilities passives
 
@@ -640,11 +665,187 @@ en fait :
    `web-drop-close-exactly-once` asservissent. Kadre n’est jamais la *source* d’un drag : seuls
    les drops entrants sont reçus.
 
+### 3.12 L’inventaire d’affichage : le fallback exact, et ce que le navigateur ne donne pas
+
+1. **L’énumération multi-display n’est jamais tentée — le fallback est inconditionnel.** Aucun
+   navigateur n’énumère les écrans derrière sa fenêtre, et la primitive qui le promet — la Window
+   Management API (`navigator.getScreenDetails`) — n’est appelée **aucune fois** dans les sources
+   des deux targets, du runtime et du consumer : elle exige une permission à prompt (que le
+   registre ne déclenche jamais implicitement), ne vit qu’au top-level du browsing context et
+   reste inégale d’un moteur à l’autre. La gate de la roadmap n’admet donc aucune improvisation :
+   l’inventaire d’une session attachée est exactement
+   `DisplayInventory.Enumerated(primary = viewport, displays = listOf(viewport))` avec
+   `DisplayType.HostViewport` (`WebDisplayPort.kt:170-196`) — jamais un inventaire vide, jamais un
+   `Unavailable` générique, jamais un second display. La source synthétique des contrats
+   empoisonne d’ailleurs `navigator.getScreenDetails` pour enregistrer tout appel (`gamepad-stub.mjs:122-127`),
+   et la sentinelle `web-gamepad-no-implicit-prompt` asserte que son registre reste vide.
+2. **Le snapshot est poussé à l’installation de l’observateur.** `installSnapshotObserver`
+   délivre la réponse courante exactement une fois, hors du lock, au moment de l’install
+   (`WebDisplayPort.kt:111-114`) — « so the initial inventory never waits for an event the
+   browsing context may never fire » — et les feux suivants de la source re-publient. Une session
+   qui s’est attachée sans rien demander ni redimensionner a donc déjà l’inventaire exact à la
+   révision 1 du manager et un journal d’événements vide : c’est ce que `web-display-initial-hostviewport`
+   asserte (`data-kadre-display-manager` = `rev=1:enumerated:primary=0:displays=1:enumeration=supported`,
+   journal vide, `requestAccess` rejoué idempotent à la même révision). Un second install
+   remplace le premier — le port retire l’abonnement créé pour l’ancien et pousse la réponse
+   courante au nouvel observateur — et un handle d’install remplacé reste appelable en no-op
+   (`WebDisplayPort.kt:100-128`, épinglé par `WebDisplayPortTest`).
+3. **La mesure, et ses unités.** La source lit les quatre faits du browsing context :
+   `innerWidth`/`innerHeight` (le viewport CSS), `devicePixelRatio` et `screen.colorDepth`
+   (`JsWebDisplaySource.kt:25-36`, miroir Wasm). Le port en tire : `bounds` et `workArea` — la
+   même boîte, le layout viewport en pixels physiques `round(w·dpr) × round(h·dpr)`
+   (`WebDisplayPort.kt:171-183`), `scaleFactor` = `devicePixelRatio`, `bitDepth` =
+   `screen.colorDepth`, et **un seul mode** de la même taille physique dont
+   `refreshRateHz` vaut `null` : le navigateur n’offre aucune primitive de refresh rate que le
+   modèle publie honnêtement, et la valeur n’est jamais devinée.
+4. **L’observation d’un dpr seul passe par une requête de résolution ré-enregistrée à chaque
+   feu.** Un listener `MediaQueryList` `(resolution: <dpr>dppx)` ne survit qu’à un changement de
+   ratio ; la source retire la requête qui a feu, ré-enregistre pour le nouveau ratio *avant* de
+   livrer l’observation, puis notifie (`JsWebDisplaySource.kt:70-83`). Le dpr est en outre relu à
+   chaque mesure (`:25-36`), la posture de la phase 2 : un navigateur qui ne tirerait jamais la
+   requête échantillonnerait le ratio au prochain `resize`. Le scénario
+   `web-display-dpr-scale-factor` pilote deux changements de ratio par émulation CDP à taille CSS
+   constante et asserte une re-publication exacte par changement.
+5. **Un viewport inmesurable est un échec, pas une approximation.** Un dpr non fini ou non
+   positif, des tailles non positives — filtrées par la source, re-filtrées par le port — répondent
+   `TemporarilyUnavailable(retryable = true)`, de `requestSnapshot` comme par l’observateur, et le
+   runtime retire l’inventaire échoué (`RuntimeDisplayManager.publishUnavailableLocked`) : « the
+   honest state of a viewport nobody can measure right now », jamais un partiel.
+6. **Le teardown meurt avec la session.** La fermeture du port désabonne la source et la ferme ;
+   `web-display-teardown-quiet` asserte, après un vrai `requestStop`, qu’aucun resize ni
+   changement d’émulation suivant ne publie plus rien — pas d’événement, pas de snapshot
+   re-publié, pas un seul enregistrement d’animation frame (sentinelle `web-display-no-polling`)
+   et pas un nœud créé (sentinelle `web-display-no-dom-creation`).
+
+### 3.13 Devices et gamepads : le poll est la seule source d’état
+
+1. **La découverte est poll-driven.** `navigator.getGamepads()` est la seule source d’état que la
+   spec donne ; les événements DOM `gamepadconnected`/`gamepaddisconnected` ne portent aucune
+   donnée de pad et signifient une chose — relire maintenant. Le hub partagé de la page
+   (`WebGamepadHub`, le frère Web du broker AppKit) enregistre les deux listeners **au niveau de
+   la fenêtre partout, et au niveau du navigator seulement là où le navigateur l’accepte** : le
+   navigator de Chromium n’est pas une event target (relevé 2026-10-05,
+   `navigator.addEventListener` y est `undefined` tandis que `getGamepads` est une fonction,
+   `JsWebGamepadDom.kt:36-59`), et un target qui refuse l’écoute n’est pas une erreur — un indice
+   manqué coûte une frame de latence, pas le poll.
+2. **La boucle de poll ne tourne que tant qu’un port de session est ouvert.** La première
+   ouverture de port démarre la boucle et lit une première fois, immédiatement — un pad que le
+   navigateur rapporte déjà est dans le tout premier snapshot du runtime, sans événement — et la
+   dernière fermeture annule la frame en attente et retire les listeners
+   (`WebGamepadHub.kt:82-96`, `:321-329`). Exactement une animation frame est en attente à la
+   fois ; un page caché ne tire pas de frames et ne lit donc pas du tout.
+3. **Le diff est par index DOM, contre le dernier état canonique observé.** Un nouvel index est
+   une connexion dont le descripteur est gelé depuis ce très poll (une reconnexion est une
+   nouvelle connexion et gèle un descripteur frais) ; une lecture qui change l’état canonique est
+   un `StateChanged` ; un index disparu une déconnexion. Les trous du poll n’inventent rien —
+   `web-gamepad-no-phantom` asserte qu’un index absent ne produit ni pad fantôme ni
+   renumérotation — et un pad hostile (NaN persistants, valeurs hors fenêtre, zéros signés) ne
+   publie que les événements que ses états canoniques diffèrent, jamais un flot de no-ops
+   (`web-gamepad-state-poll`).
+4. **Le cycle de vie va à tous les ports, l’état aux seuls routés.** Connexion, déconnexion et
+   routage sont diffusés à chaque port ouvert, suspendus compris (le précédent AppKit : le cycle
+   de vie est toujours diffusé) ; un changement d’état ne va qu’aux ports routés, parce qu’une projection
+   suspendue publie des contrôles neutres et qu’une vraie lecture contredirait le snapshot
+   qu’elle porte (`WebGamepadHub.kt:203-233`). Le routage est celui du broker AppKit verbatim :
+   foreground-actif + policy (`AllForegroundSessions`, ou l’arbitrage `ActiveSessionOnly`), une
+   suspension publie le neutre et enregistre les vraies lectures pour la reprise, qui livre ce
+   que le pad lit maintenant (`web-gamepad-routing-suspended-neutral`).
+5. **Le descripteur est le mot du navigateur.** `mapping == "standard"` nomme les 17 boutons et
+   4 axes du layout standard en ordre DOM ; tout autre mot — chaîne vide, mot vendor, membre
+   absent — ne promet rien, et chaque contrôle devient un code natif au compte que le pad rapporte
+   (`WebGamepadMapping.kt:55-63`). L’état s’apparie positionnellement au descripteur et est
+   canonisé vers les fenêtres du modèle — une lecture hors fenêtre est bornée, une non-finie lit
+   neutre, la pression est décidée depuis la lecture brute, avant tout bornage (`:71-79`) — la règle
+   asservie par `WebGamepadMappingTest` et `web-gamepad-descriptor-exact`.
+6. **Les devices génériques : une liste vide honnête.** Le navigateur n’offre aucune primitive
+   d’inventaire de périphériques d’entrée génériques ; `DeviceInventory.Enumerated(devices = [],
+   gamepads = …)` est donc honnête avec sa liste `devices` vide, et rien n’est fabriqué pour la
+   remplir — l’inventaire complet et vide est la forme exacte de « rien à énumérer »
+   (`BACKEND-CAPABILITIES.md` §5).
+7. **Le secure context, et la branche défensive par pad.** `getGamepads` n’est exposé qu’en
+   secure context : un page insecure réelle n’expose aucun pad et l’inventaire reste énuméré,
+   vide et complet. Le port d’effets garde une branche par pad — un pad qui atteindrait un poll
+   insecure (la source synthétique du projet `chromium-insecure`, précisément) publie
+   `Capability.Unsupported(KadreFailure.Unsupported(KadreOperation.GamepadEffect))` pour ses
+   effets (`WebGamepadEffects.kt:63-66`) — branche défensive, non observable sur du vrai
+   matériel, dont le scénario asserte les observables (§3.14, item 8).
+8. **Le teardown.** La fermeture du port révoque les owners d’effets qu’il tient, re-arbitre les
+   survivants avant que quiconque voie le trou, et la dernière fermeture arrête le poll —
+   `web-gamepad-session-close-quiet` asserte qu’aucun événement, aucune re-publication d’inventaire
+   et pas une seule animation frame ne suivent un `requestStop` de la session, quelles que soient
+   les mutations de pads que le page continue d’effectuer (sentinelle `web-gamepad-teardown-quiet`).
+
+### 3.14 Les effets gamepad : la primitive du navigateur, et les préconditions honnêtes
+
+1. **La primitive est `vibrationActuator.playEffect`, sur la forme du dictionnaire WebIDL.** Le
+   lancement construit le dictionnaire `effectParameters` que le `playEffect(type,
+   effectParameters)` du navigateur lit — `duration`, `strongMagnitude`, `weakMagnitude`
+   toujours, et les membres `leftTriggerMagnitude`/`rightTriggerMagnitude` du trigger-rumble
+   seulement là où le modèle en a un : un membre omis est littéralement absent (le spread ne
+   l’écrit pas), jamais un zéro qui masquerait une magnitude énoncée
+   (`JsWebGamepadDom.kt:104-119` ; miroir Wasm). La valeur résolue de la promesse n’est jamais
+   lue — le verdict synchrone est tout le contrat.
+2. **Les genres annoncés sont le mot de l’actuateur.** La liste `effects` que l’actuateur déclare
+   (`GamepadHapticActuator.effects` du Chromium récent, p.ex. `["dual-rumble"]`) nomme ce qui est
+   annoncé ; un actuateur qui ne déclare rien est sondé **une fois par connexion** par un
+   dual-rumble de durée nulle et de magnitude nulle — sans effet de bord selon la spec — dont la
+   réponse est gelée dans la capability du pad, exactement comme le descripteur
+   (`WebGamepadEffects.kt:134-151`). Une sonde qui refuse — le coin épinglé par
+   `WebGamepadEffectTest` — ne laisse rien annoncer : la capability est `Unsupported`.
+3. **`LocalizedHaptic` n’est jamais annoncé, jamais lancé.** Le navigateur n’a aucune primitive
+   pour les haptics localisés ; le genre est refusé `InvalidRequest("effect")` avant que tout
+   actuateur soit consulté (`WebGamepadEffects.kt:98`), et la sentinelle
+   `web-gamepad-no-localized-haptic` asserte que la cellule reste `Unsupported` sur ce genre.
+   **`TriggerRumble` passe quand le navigateur le déclare**, ses magnitudes
+   `leftTrigger`/`rightTrigger` portées par le seam jusque dans le dictionnaire
+   (`:99-112`, le fix `d12a62be`) ; un `trigger-rumble` que l’actuateur n’a jamais déclaré est
+   refusé exactement comme un genre non annoncé (`web-gamepad-effect-unsupported-kind`).
+4. **`maximumDuration` reste `null`** : le navigateur serre lui-même la borne, et la contrainte
+   n’enregistre aucune limite qu’elle n’a pas mesurée (`WebGamepadEffects.kt:76`). La durée
+   transmise est celle que le navigateur lit : millisecondes entières, au moins une, au plus un
+   `Int` (`:176-177`).
+5. **Le verdict synchrone est tout le contrat, et le rejet asynchrone est rapporté.** Un
+   `Accepted` signifie que l’appel a atteint le navigateur et lui a remis sa promesse ; un
+   `Refused` signifie que le navigateur a refusé avant toute promesse, porté
+   `PlatformFailure(Web, "gamepad-effect", "refused")` pour `playEffect` et par le mot du
+   navigateur pour un `reset` (`:153-173`, `WebGamepadEffect.requestStop`). Une promesse qui
+   rejette *ensuite* n’a aucun outcome synchrone honnête : chaque promesse porte un `catch` qui
+   la rapporte sur le reporter de failures du wiring (`WebGamepadEffectReporting`,
+   `JsWebGamepadDom.kt:187-194`) — aucun changement d’état, aucune failure mappée sur un outcome
+   déjà répondu. Limite enregistrée : le holder du reporter est global au page — le dernier
+   wiring installé possède les rapports du page — parce qu’un rejet atterrit dans la réalisation
+   target qui a fait l’appel, où aucune référence par session n’atteint.
+6. **Un pad déconnecté refuse avant tout appel d’actuateur ; un pad suspendu lance.** Le hub
+   résout le pad et refuse `Closed(Gamepad)` avant de toucher l’actuateur quand le port ou le pad
+   n’est plus là (`WebGamepadHub.kt:270-281`) — `web-gamepad-effect-stop` asserte le refus et
+   zéro appel après une vraie disparition du pad. Un pad **connecté mais suspendu** (routing
+   suspendu) lance son effet : la sémantique livrée est celle d’AppKit — un effet est une action
+   initiée par l’application, pas une livraison d’input — et aucun précondition de routage
+   n’existe ni chez AppKit ni ici (décision de la phase, enregistrée).
+7. **Un owner par lancement, un stop, exactement une fois.** L’owner créé à l’`Accepted` doit au
+   runtime un reset unique ; tout stop, close ou révocation ultérieur est un no-op silencieux qui
+   ne touche plus l’actuateur (`WebGamepadEffect.kt:216-252`), et la sentinelle
+   `web-gamepad-effect-once` asserte qu’un stop ne relance ni ne re-reset. Un port fermé pendant
+   qu’un effet tourne révoque ses owners — le reset unique de la révocation rapporte un refus au
+   reporter, son caller étant le teardown. Limite enregistrée : le navigateur arrête lui-même un
+   effet dont la durée s’est écoulée ou dont le pad s’est déconnecté ; un stop tardif est le
+   reset d’un actuateur déjà silencieux, inoffensif selon la spec.
+8. **Les préconditions manquantes produisent l’état prévu, jamais un prompt.** Le scénario
+   insecure-context (`chromium-insecure`, `--host-resolver-rules=MAP insecure.kadre.invalid
+   127.0.0.1`) asserte les observables : `isSecureContext` faux, le pad découvert et décrit
+   normalement, sa capability d’effets `unsupported:gamepadeffect`, la requête répondue
+   `failure:unsupported:gamepadeffect`, et le registre des APIs à prompt de la source synthétique
+   — `permissions.request`, `getScreenDetails`, `requestMIDIAccess`, `share`,
+   `Notification.requestPermission` — vide (sentinelle `web-gamepad-no-implicit-prompt`), comme
+   les appels d’actuateur.
+
 ## 4. Portée restante au regard de §8
 
 Ce registre couvre les features du domaine input que les phases 3 et 5 bornent ou activent, les
-quatre champs de `SurfaceUpdate`, puis les features d’interaction et de fenêtre que la phase 4
-livre (§2, quatre lignes du bas ; §3.7-3.8). Le **verrouillage de pointeur quitte la portée
+quatre champs de `SurfaceUpdate`, les features d’interaction et de fenêtre que la phase 4
+livre (§2, lignes interaction/fenêtres ; §3.7-3.8), puis les features displays, devices,
+gamepads et `platformAccess` que la phase 6 livre (§2, quatre lignes du bas ; §3.12-3.14). Le
+**verrouillage de pointeur quitte la portée
 restante de l’input** : `InteractionAction.LockPointer` est désormais une action publiée et
 prouvée de ce target (§3.7), et la réserve D13 de la phase 3 ne vaut plus que pour le champ
 `SurfaceUpdate.pointerCapture`, où `Locked` reste refusé `Unsupported(UpdateSurface)` — le verrou
@@ -653,20 +854,34 @@ quittent à leur tour la portée restante** : la phase 5 les produit (§2, §3.9
 limites enregistrées que ses contrats portent — gestures `Unsupported(GestureInput)` sans
 recognizer (D-T2, que `BACKEND-CAPABILITIES.md:133` autorise explicitement), text input borné à
 `<input>`/`<textarea>` en v1 (D-X3), `updateCursor` sans effet navigateur, lectures de drop sans
-faille de limite sur les items de taille inconnue (§3.10-3.11). Les lignes restantes de la
-matrice de `BACKEND-CAPABILITIES.md` §4 — `gamepad observation`, `effets gamepad`, les trois
-cibles de capture (`HostChoice`, `Source`, `Surface`), raw input, et les deux lignes
-`platformAccess` — ne sont pas produites ici : ces phases n’en activent aucune et rien dans ce
-document ne les modifie. §8 rappelle qu’« une ligne manquante empêche l’adapter d’être déclaré
-supporté » : ces lignes restent donc à produire avant toute déclaration « supported » de
-l’adapter Web, sans que cette phase les rouvre.
+faille de limite sur les items de taille inconnue (§3.10-3.11).
+
+La **phase 6 vide à son tour le reste de sa liste** : l’inventaire d’affichage est le fallback
+exact `HostViewport`, inconditionnel et poussé à l’install (§2, §3.12) ; l’observation
+devices/gamepads est le poll `getGamepads()`, l’inventaire toujours énuméré et la liste
+`devices` honnêtement vide (§2, §3.13) ; les effets gamepad sont gouvernés par la capability
+gelée par connexion (§2, §3.14) ; `rawInput` — déjà une ligne du §2 — gagne son scénario
+navigateur de non-appel, `web-gamepad-raw-input-unsupported`, qui lit la cellule de capability et
+compte zéro registration d’`EventTarget` autour de la requête. Les **deux lignes `platformAccess`
+quittent aussi la liste, vérifiées à leur état livré** : la ligne de surface vaut
+`G, withWebElement` dans la matrice normative (`BACKEND-CAPABILITIES.md` §4, ligne 79) et dans
+les deux façades — la lease est prouvée par les quatre scénarios `web-element-lease-*` de
+`INT-004` depuis la phase 2 (§2) — et la ligne de fenêtre vaut « — (aucune `Window`) » : le host
+Web n’ouvre jamais de `Window` (§3 de `BACKEND-CAPABILITIES.md`, `WindowManagerState.windows`
+reste vide), la cellule normative elle-même enregistre qu’il n’y a rien à produire, et la phase 4
+ne l’a pas changée. Les lignes restantes de la matrice de `BACKEND-CAPABILITIES.md` §4 — les
+trois cibles de capture (`HostChoice`, `Source`, `Surface`) — ne sont pas produites ici : la
+phase 7 les porte et rien dans ce document ne les modifie. §8 rappelle qu’« une ligne manquante
+empêche l’adapter d’être déclaré supporté » : ces lignes restent donc à produire avant toute
+déclaration « supported » de l’adapter Web, sans que cette phase les rouvre.
 
 ## 5. Références
 
 - [Contrats des adapters et matrice de capabilities](../BACKEND-CAPABILITIES.md) — mandat §8, matrice §4, points d’attachement Web §6.3
 - [Design Kadre](../DESIGN.md) — §15.3 (input ordinaire Web), §10.3 (IME), §10.4 (drag-and-drop), §9.6 (interactions transitoires)
-- [Registre des contrats](../contracts/registry/contracts.tsv) — lignes `BCK-003`/`BCK-004`/`BCK-006` (sources `DESIGN.md#15.3`/`#10.4`) et `BCK-001`/`BCK-005`/`INT-003` (sources `DESIGN.md#15.3`, `#10.3` et `INTEROP-EXPORTS.md#6`, preuves `js`/`wasmJs`)
+- [Registre des contrats](../contracts/registry/contracts.tsv) — lignes `BCK-003`/`BCK-004`/`BCK-006` (sources `DESIGN.md#15.3`/`#10.4`) et `BCK-001`/`BCK-005`/`INT-003` (sources `DESIGN.md#15.3`, `#10.3` et `INTEROP-EXPORTS.md#6`, preuves `js`/`wasmJs`) ; lignes `BCK-007`/`BCK-008`/`BCK-009` de la phase 6 (source `WEB-IMPLEMENTATION-ROADMAP.md#Phase 6`, preuves `js`/`wasmJs`)
 - [Charte manuelle Web Phase 3](../contracts/driver/web/manual/phase-3-input.md) — frontières non déterministes que ce registre ne prétend pas couvrir
 - [Charte manuelle Web Phase 4](../contracts/driver/web/manual/phase-4-interactions.md) — preuves plein écran et pointer lock sur vrai écran, popup réelle
 - [Charte manuelle Web Phase 5](../contracts/driver/web/manual/phase-5-text-input.md) — IME OS réel, annulation de composition, `touch-action` du host, contenteditable, drop hors headless
-- [Driver navigateur Web](../contracts/driver/web/README.md) — limites des phases 3 à 5 et tables de disponibilité publiées
+- [Charte manuelle Web Phase 6](../contracts/driver/web/manual/phase-6-displays-devices.md) — gamepad réel (connexion OS, rumble réel, porte de confidentialité de Chromium), multi-display réel, matrice insecure-context au-delà du faux hostname, `vibrationActuator` sur Firefox/WebKit
+- [Driver navigateur Web](../contracts/driver/web/README.md) — limites des phases 3 à 6 et tables de disponibilité publiées

@@ -71,8 +71,8 @@ Toutes les lignes possèdent les managers communs `windows`, `displays`, `device
 | drag-and-drop | C | C | C | C, `Available` après installation | C | C | C | C |
 | IME / text input | C | C | C | C, `Supported` à l’installation | C | C | C | C |
 | raw input | C | C | C | N(RawInputAccess) | C | C | C | C |
-| gamepad observation | C | C | C | C | C | C | C | C |
-| effets gamepad | C | C | C | C | C | C | C | C |
+| gamepad observation | C | C | C | G, sondée (§6.3) | C | C | C | C |
+| effets gamepad | C | C | C | G, gouvernée (§6.3) | C | C | C | C |
 | capture target `HostChoice` | C | C | C | C | C | C | C | C |
 | capture target `Source` | C | C | C | N(CaptureOpen) si inventaire interdit | C | C | C | C |
 | capture target `Surface` | C | C | C | C | C | C | C | C |
@@ -84,9 +84,48 @@ listen-only lorsque le check de version et Input Monitoring le permettent :
 `Supported(RequiresPermission(InputMonitoring))`, `Supported(Available)` ou
 `Supported(Unavailable(PermissionDenied(RawInput)))` selon le readback courant.
 Les autres adapters conservent `Unsupported(RawInputAccess)` tant qu’ils ne
-fournissent pas leur bridge et son contrat de permission. Tous les adapters
+fournissent pas leur bridge et son contrat de permission. Sur Web, la décision
+est livrée et prouvée : la capability reste
+`Unsupported(RawInputAccess)` dans tous les états et le scénario
+`web-gamepad-raw-input-unsupported` est le contrat de non-appel natif de la
+ligne — la cellule de capability relue et zéro registration d’`EventTarget` sur
+la page autour de la requête. Tous les adapters
 doivent appliquer les budgets par accès, sans injecter ces événements dans
 `SurfaceInput.events`.
+
+Sur Web, `gamepad observation` vaut `G, sondée` : chaque session attachée
+possède le manager et son inventaire toujours `Enumerated`, diff par index DOM
+du poll `navigator.getGamepads()` — la seule source d’état que la spec donne,
+lu à la cadence des animation frames tant qu’au moins un port de session est
+ouvert, les événements DOM `gamepadconnected`/`gamepaddisconnected` (écoutés à
+la fenêtre partout, au navigator seulement là où le navigateur l’accepte — le
+navigator de Chromium n’est pas une event target) ne déclenchant qu’une
+re-lecture immédiate. Un page insecure réel n’expose aucun pad
+(`getGamepads` est secure-context-only) : l’inventaire reste énuméré, vide et
+complet — jamais `Unavailable` déguisé. La liste `devices` reste vide parce que
+le navigateur n’offre aucune primitive d’inventaire de périphériques
+génériques, et rien n’est fabriqué. La porte de confidentialité de Chromium —
+les pads réels invisibles à `getGamepads()` tant que l’utilisateur n’a pas
+interagi avec la page — n’est pas contournée : elle fait partie des faits que
+le poll rapporte, et sa preuve sur du vrai matériel (connexion/déconnexion par
+l’OS, rumble réel) est l’affaire du cahier manuel
+`kadre/contracts/driver/web/manual/phase-6-displays-devices.md` ; les preuves
+de contrat utilisent la source synthétique scriptable (précédent D10),
+stipulé dans les entêtes des specs. `effets gamepad` vaut `G, gouvernée` : le
+chemin d’effet est garanti pour chaque pad, et la capability gelée par connexion
+dit exactement ce que ce pad peut — les genres annoncés sont ceux de la liste
+`effects` de l’actuateur propre du pad, sondés par un dual-rumble de durée nulle
+quand le navigateur ne déclare rien ; `LocalizedHaptic` n’est jamais annoncé
+(aucune primitive navigateur) ; `TriggerRumble` est porté avec ses magnitudes de
+gâchette quand le navigateur le déclare ; `maximumDuration` reste `null` (le
+navigateur serre lui-même la borne). Un lancement accepté a remis sa promesse au
+navigateur, et une promesse qui rejette ensuite est rapportée sur le reporter de
+failures, jamais représentée synchronement ; un pad déconnecté refuse
+`Closed(Gamepad)` avant tout appel d’actuateur, un pad connecté mais suspendu
+lance son effet (sémantique livrée alignée AppKit : un effet est une action
+initiée par l’application, pas une livraison d’input). Ce qui varie par pad
+(actuateur, secure context) est écrit dans la capability du pad elle-même,
+jamais deviné hors d’elle.
 
 L’inventaire AppKit utilise l’association publique `NSScreen.CGDirectDisplayID`,
 introduite par macOS 26. Avant cette version, `DisplayCapabilities.enumeration`
@@ -247,6 +286,49 @@ L’overload direct est mono-session, place `application` en dernier paramètre 
 **Interactions.** La surface installe le moteur d’interaction commun du runtime — le même que la référence, sans token-machine propre au Web — et publie `SurfaceCapabilities.handlerInteractions = Supported({EnterFullscreen, ExitFullscreen, LockPointer, UnlockPointer}, Available)` au même moment structural que l’installation ordinaire de l’input, `armedInteractions` restant `Unsupported(ArmInteraction)` dans tous les états. Le dispatch part des listeners `pointerdown`/`keydown`, synchronement, avant l’admission du stimulus ordinaire : le handler s’exécute dans le callback DOM même, la frame dont la transient activation est l’autorité de ces opérations. Le token est single-use et expire au retour du callback — un contexte retenu reçoit `InteractionRequired(Expired)`, un callback imbriqué d’une autre surface `WrongSurface`, un second `request` du même callback `Consumed` — et une action hors de l’ensemble publié est refusée `Unsupported(Interaction)` avant tout appel navigateur. Les primitives fullscreen et pointer lock sont émises dans cette frame et leur outcome terminal est publié aux callbacks du navigateur : `fullscreenchange`/`pointerlockchange` confirment `Committed`, et un refus — `fullscreenerror`, `pointerlockerror`, promesse rejetée, ou une émission impossible — porte le seul code que le DOM expose, `PlatformFailure(Web, "fullscreen"|"pointer-lock", "refused")`, sans discrimination de raison. Chaque requête différée occupe le budget `maxPendingInteractionRequests` jusqu’à son callback terminal ; aucun timeout synthétique ne la termine, et la terminaison de la surface abandonne chaque pending avec `Closed(Interaction)`. Une fermeture de la registration pendant l’appel natif refuse la requête `Closed(Interaction)` sur les deux chemins. `LockPointer` n’admet que `PointerCaptureMode.Locked` ; tout autre mode est `InvalidRequest("action.mode")` avant toute primitive. `InteractionAction.OpenWindow` reste `Unsupported` sur Web même avec provider (`DESIGN.md:1933`). Kadre ne lit pas `navigator.userActivation` : les événements appariés sont déjà des événements *trusted* porteurs d’activation, et un refus réel du navigateur se manifeste comme l’outcome `Rejected` ci-dessus — le navigateur reste l’arbitre de ses primitives. `PointerCaptureMode.Locked` reste hors de `SurfaceCapabilities.pointerCapture`, où le verrou n’est jamais un champ.
 
 **Fenêtres.** Sans provider, `requestWindow` reste un `WindowRequest` déjà terminal `Rejected(Unsupported(RequestWindow))`, inchangé. Avec un `WebWindowProvider`, `WindowManagerCapabilities.requestWindow` vaut `Supported({OpenedInNewSession}, Available)` — `OpenedHere` n’est jamais promis — et la requête admise est résolue synchronement : le provider reçoit une copie du `WindowSpec`, y compris les octets de l’icône, et son host est validé par l’échelle d’`OPERATION-CONTRACTS.md` §4 — ordre livré : `InvalidRequest("element")` (élément déconnecté sous `StopWhenDetached`), puis `InvalidRequest("element.ownerDocument")` (`defaultView` nul ou égal au contexte d’origine), puis `InvalidRequest("parentScope")`, puis `ParentScopeCancelled`, ce dernier ne décrivant que la scope du nouveau host. Une exception du callback devient `PlatformFailure(Web, "WebWindowProvider", "callback-exception")` et une failure retournée hors de l’ensemble fermé le même domain avec le code `"invalid-failure"` — des outcomes de la requête admise, jamais des failures de l’appel `requestWindow`. La session enfant passe par le chemin d’attach ordinaire : même factory, même policy, registre global d’ownership partagé — un élément possédé par une session vivante produit `Busy(Host)` — et launch context `AdditionalHostRequested` portant l’`originatingRequestId` de la requête ; la fermeture du requester n’atteint jamais l’enfant, dont la scope n’est jamais un descendant de la sienne. Divergence enregistrée de comptage : la requête terminale tient son créneau `maxPendingWindowRequests` jusqu’au `close()` de son requester — là où la référence évict au handoff — parce qu’un provider synchrone publie l’outcome avant que le caller voie la requête, et que seule cette lecture rend `Limit(WindowRequest)` exécutable ; `cancel()` répond `AlreadyTerminated`, `await()` ne suspend pas et `close()` ne fait que libérer le créneau.
+
+**Displays.** Aucun navigateur n’énumère les écrans derrière sa fenêtre, et la primitive qui le
+prometrait — la Window Management API (`navigator.getScreenDetails`) — n’est appelée aucune fois
+par cet adapter : elle exige une permission à prompt (qu’aucune énumération ni readback ne
+déclenche implicitement), ne vit qu’au top-level du browsing context et reste inégale d’un moteur
+à l’autre. La forme obligatoire de la §5 est donc livrée par son second bras, inconditionnel pour
+toute session attachée : `Enumerated(primary = viewport, displays = listOf(viewport))` avec
+`DisplayType.HostViewport`, mesuré depuis les quatre faits que le browsing context expose
+(`innerWidth`/`innerHeight`/`devicePixelRatio`/`screen.colorDepth`) et publié par l’install de
+l’observateur du manager — une session qui s’est attachée sans rien demander a déjà l’inventaire
+exact, jamais un inventaire vide, jamais un second display. `bounds` et work area valent le
+layout viewport en pixels physiques `round(w·dpr) × round(h·dpr)`, `scaleFactor` vaut le
+`devicePixelRatio` et `bitDepth` le `screen.colorDepth` ; `refreshRateHz` n’est jamais publié
+(aucune primitive honnête) et l’inventaire porte un seul mode de la même taille physique.
+Un `resize` et une requête de résolution `(resolution: <dpr>dppx)` ré-enregistrée à chaque feu
+republishent le snapshot ; le dpr est relu à chaque mesure, si bien qu’un navigateur qui ne
+tirerait jamais la requête échantillonnerait le ratio au prochain `resize`. Un viewport
+inmesurable répond `TemporarilyUnavailable(retryable)` et le runtime retire l’inventaire échoué.
+La preuve est `BCK-007` (quatre scénarios et quatre sentinelles par target,
+`playwright/web-display.spec.mjs`).
+
+**Devices et gamepads.** L’inventaire publié est toujours
+`DeviceInventory.Enumerated(devices = [], gamepads = …)` : la liste `devices` reste vide parce
+que le navigateur n’offre aucune primitive d’inventaire de périphériques d’entrée génériques et
+rien n’est fabriqué pour la remplir ; la liste `gamepads` est le diff par index DOM du poll
+`navigator.getGamepads()` — trous compris sans pad fantôme ni renumérotation, descripteur gelé à
+la connexion depuis le mot `mapping` du navigateur (`"standard"` nomme les 17 boutons et 4 axes
+du layout standard en ordre DOM, tout autre mot ne promet rien et produit des contrôles natifs au
+compte rapporté), état apparié positionnellement et canonisé vers les fenêtres du modèle, un pad
+hostile ne publiant que les événements que ses états canoniques diffèrent. La boucle de poll —
+une animation frame en attente à la fois — ne tourne que tant qu’au moins un port de session est
+ouvert ; la dernière fermeture annule la frame et retire les listeners, et un page caché ne lit
+pas du tout. Le routage suit le broker AppKit : foreground-actif + policy, une projection
+suspendue publie le neutre et enregistre les vraies lectures pour la reprise, qui livre ce que le
+pad lit maintenant. Les effets sont gouvernés par la capability gelée par connexion décrite à la
+ligne `effets gamepad` ci-dessus (§4) ; un pad déconnecté refuse `Closed(Gamepad)` avant tout
+appel d’actuateur, un pad connecté mais suspendu lance son effet. La preuve est `BCK-008`
+(inventaire, connexions, poll, déconnexion, routage, teardown — six scénarios et quatre
+sentinelles par target, `playwright/web-devices.spec.mjs`) et `BCK-009` pour les effets et leurs
+préconditions (cinq scénarios et quatre sentinelles par target,
+`playwright/web-gamepad-effects.spec.mjs`, dont le scénario insecure-context du second projet
+Playwright, `--host-resolver-rules=MAP insecure.kadre.invalid 127.0.0.1`, qui n’asserte que des
+observables : `isSecureContext` faux, pad découvert, effets `Unsupported`, zéro prompt).
 
 ### 6.4 Desktop (`org.graphiks.kadre.platform.desktop`)
 
