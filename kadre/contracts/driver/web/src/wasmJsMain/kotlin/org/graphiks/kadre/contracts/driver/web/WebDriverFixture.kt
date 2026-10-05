@@ -44,7 +44,25 @@ import org.graphiks.kadre.input.DropOfferState
 import org.graphiks.kadre.input.DropOfferTerminationReason
 import org.graphiks.kadre.input.DropTransfer
 import org.graphiks.kadre.input.DroppedItem
+import org.graphiks.kadre.input.DeviceInventory
+import org.graphiks.kadre.input.DeviceLifecycleEvent
+import org.graphiks.kadre.input.DeviceManager
+import org.graphiks.kadre.input.DeviceManagerState
 import org.graphiks.kadre.input.GestureKind
+import org.graphiks.kadre.input.Gamepad
+import org.graphiks.kadre.input.GamepadAxis
+import org.graphiks.kadre.input.GamepadButton
+import org.graphiks.kadre.input.GamepadDescriptor
+import org.graphiks.kadre.input.GamepadEffect
+import org.graphiks.kadre.input.GamepadEffectConstraints
+import org.graphiks.kadre.input.GamepadEffectOutcome
+import org.graphiks.kadre.input.GamepadEffectSession
+import org.graphiks.kadre.input.GamepadEffectState
+import org.graphiks.kadre.input.GamepadEvent
+import org.graphiks.kadre.input.GamepadHapticLocality
+import org.graphiks.kadre.input.GamepadId
+import org.graphiks.kadre.input.GamepadSnapshot
+import org.graphiks.kadre.input.GamepadState
 import org.graphiks.kadre.input.InputCapabilities
 import org.graphiks.kadre.input.InputEvent
 import org.graphiks.kadre.input.KeyState
@@ -101,6 +119,7 @@ import org.w3c.dom.HTMLElement
 import kotlin.coroutines.CoroutineContext
 import kotlin.coroutines.EmptyCoroutineContext
 import kotlin.js.unsafeCast
+import kotlin.time.Duration.Companion.milliseconds
 
 /**
  * Runs the scenario named by the query string and then publishes the readiness flag the specs wait on.
@@ -157,6 +176,8 @@ public fun main() {
         "host-facade" -> hostFacadeScenario()
         "host-provider" -> hostProviderScenario()
         "display" -> displayScenario()
+        "devices" -> devicesScenario()
+        "gamepad-effects" -> gamepadEffectsScenario()
         else -> phaseZeroScenario()
     }
     document.body!!.setAttribute("data-kadre-ready", "true")
@@ -1944,7 +1965,7 @@ private fun displayScenario() {
     // asked for — whoever asks — and the DOM node count is read on demand.
     host.setAttribute("data-kadre-display-raf", "0")
     host.setAttribute("data-kadre-display-dom-reads", "0")
-    jsInstallAnimationFrameCounter(host)
+    jsInstallAnimationFrameCounter(host, "data-kadre-display-raf")
     var domReads = 0
     parentScope.installCommand("kadre-display-dom-count") {
         domReads += 1
@@ -2065,18 +2086,299 @@ private fun DisplayEvent.encoded(): String = when (this) {
 
 /**
  * The page's own animation-frame counter: from this call on, every `requestAnimationFrame`
- * registration the page makes — whoever asks for it — is counted on [element]. The teardown
- * sentinel reads it as a page fact: a display path that polls keeps registering frames, and after
- * the session is gone no page machinery is alive to excuse a single one.
+ * registration the page makes — whoever asks for it — is counted on [element] under the attribute
+ * named [attribute]. The teardown sentinels read it as a page fact: a display path that polls, or a
+ * gamepad hub that never stopped, keeps registering frames, and after the session is gone no page
+ * machinery is alive to excuse a single one.
  */
-private fun jsInstallAnimationFrameCounter(element: HTMLElement): Unit = js(
+private fun jsInstallAnimationFrameCounter(element: HTMLElement, attribute: String): Unit = js(
     """(function () {
         let count = 0;
         const registered = window.requestAnimationFrame.bind(window);
         window.requestAnimationFrame = function (callback) {
             count += 1;
-            element.setAttribute("data-kadre-display-raf", String(count));
+            element.setAttribute(attribute, String(count));
             return registered(callback);
         };
     })()""",
 )
+
+/**
+ * The Phase 6 device scenarios: the browsing context's gamepad inventory, its routing and its
+ * haptic effects, observed through the public `DeviceManager` and the `Gamepad` handles it
+ * enumerates, on the display scenario's pattern — every command listener exists before the
+ * readiness flag, and every attribute a spec reads is a public value of the model, never a fixture
+ * journal.
+ *
+ * The pads themselves are the page's to provide: the specs inject scriptable pads through the
+ * synthetic source their header describes (Chromium cannot inject a real gamepad, and the hub polls
+ * `navigator.getGamepads()`, so the patched poll IS the browser's answer). The fixture only
+ * observes what the runtime publishes about whatever that poll reports.
+ */
+
+/** The handles of a device scenario: the manager, the session, the surface and the first gamepad. */
+private class DeviceHandles(val host: HTMLElement) {
+    val devices: CompletableDeferred<DeviceManager> = CompletableDeferred()
+    val session: CompletableDeferred<KadreSession> = CompletableDeferred()
+    val surface: CompletableDeferred<HostSurface> = CompletableDeferred()
+    val firstGamepad: CompletableDeferred<Gamepad> = CompletableDeferred()
+    val effect: CompletableDeferred<GamepadEffectSession> = CompletableDeferred()
+}
+
+/**
+ * The device inventory scenario: the manager's state and events, and each enumerated pad's own
+ * snapshot and event journal, published as the spec reads them — plus the teardown sentinel's
+ * animation-frame counter, a page fact installed before any Kadre call.
+ */
+private fun devicesScenario() {
+    val host = createHost("devices")
+    val parentScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    val handles = DeviceHandles(host)
+    host.setAttribute("data-kadre-devices-raf", "0")
+    jsInstallAnimationFrameCounter(host, "data-kadre-devices-raf")
+    parentScope.installCommand("kadre-stop-devices") { handles.session.await().requestStop() }
+    parentScope.launch { DeviceObservation(host, parentScope).install(handles.devices.await()) }
+    val attached = host.attachKadre(parentScope) {
+        handles.devices.complete(checkNotNull(devices))
+        awaitCancellation()
+    }
+    host.setAttribute("data-kadre-attach", describeAttach(attached))
+    if (attached is KadreResult.Success) {
+        handles.session.complete(attached.value)
+        observeSession(attached.value, "devices", parentScope)
+    }
+}
+
+/**
+ * The gamepad effects scenario: the same inventory observation, the input capability readback the
+ * raw-input spec reads, and the commands that play the three effect kinds on the first enumerated
+ * pad, stop the effect that was admitted, and ask for the raw input this target cannot give.
+ */
+@OptIn(DelicateKadreApi::class)
+private fun gamepadEffectsScenario() {
+    val host = createHost("gamepad-effects")
+    val parentScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    val handles = DeviceHandles(host)
+    host.setAttribute("data-kadre-gamepad-effect", "none")
+    host.setAttribute("data-kadre-gamepad-effect-result", "none")
+    parentScope.launch { DeviceObservation(host, parentScope).install(handles.devices.await()) }
+    parentScope.launch { InputObservation(host).install(parentScope, handles.surface.await()) }
+    parentScope.launch {
+        handles.devices.await().state.collect { state ->
+            val gamepad = (state.inventory as? DeviceInventory.Enumerated)?.gamepads?.firstOrNull()
+            if (gamepad != null && !handles.firstGamepad.isCompleted) handles.firstGamepad.complete(gamepad)
+        }
+    }
+    parentScope.installCommand("kadre-gamepad-play-dual-rumble") {
+        handles.play(parentScope) {
+            GamepadEffect.DualRumble(strong = 0.75, weak = 0.25, duration = 5_000.milliseconds)
+        }
+    }
+    parentScope.installCommand("kadre-gamepad-play-trigger") {
+        handles.play(parentScope) {
+            GamepadEffect.TriggerRumble(
+                strong = 0.5,
+                weak = 0.5,
+                leftTrigger = 0.75,
+                rightTrigger = 0.75,
+                duration = 5_000.milliseconds,
+            )
+        }
+    }
+    parentScope.installCommand("kadre-gamepad-play-localized") {
+        handles.play(parentScope) {
+            GamepadEffect.LocalizedHaptic(
+                locality = GamepadHapticLocality.LeftHandle,
+                intensity = 0.5,
+                duration = 5_000.milliseconds,
+            )
+        }
+    }
+    parentScope.installCommand("kadre-gamepad-stop-effect") { handles.effect.await().requestStop() }
+    parentScope.installCommand("kadre-gamepad-raw-input") {
+        host.setAttribute("data-kadre-gamepad-raw", handles.surface.await().input.requestRawInput().admission())
+    }
+    val attached = host.attachKadre(parentScope) {
+        handles.devices.complete(checkNotNull(devices))
+        handles.surface.complete(checkNotNull(primarySurface.value))
+        awaitCancellation()
+    }
+    host.setAttribute("data-kadre-attach", describeAttach(attached))
+    if (attached is KadreResult.Success) {
+        handles.session.complete(attached.value)
+        observeSession(attached.value, "gamepad-effects", parentScope)
+    }
+}
+
+/**
+ * Plays one effect on the first enumerated gamepad and observes the session the request returns:
+ * the result cell names the admission's answer, the effect cell follows the session's own state
+ * flow, and an admitted session is parked where the stop command finds it.
+ */
+private suspend fun DeviceHandles.play(scope: CoroutineScope, build: () -> GamepadEffect) {
+    when (val started = firstGamepad.await().playEffect(build())) {
+        is KadreResult.Success -> {
+            host.setAttribute("data-kadre-gamepad-effect-result", "success")
+            host.setAttribute("data-kadre-gamepad-effect", started.value.state.value.encoded())
+            scope.launch {
+                started.value.state.collect { state ->
+                    host.setAttribute("data-kadre-gamepad-effect", state.encoded())
+                }
+            }
+            effect.complete(started.value)
+        }
+
+        is KadreResult.Failure -> host.setAttribute(
+            "data-kadre-gamepad-effect-result",
+            "failure:${started.reason.encoding()}",
+        )
+    }
+}
+
+/**
+ * Publishes one device scenario's observations as attributes of the host, from the manager's own
+ * streams and from the gamepad handles it enumerates.
+ *
+ * Four facts are read, and each is a public value rather than a fixture journal:
+ *
+ * - `data-kadre-devices-manager`: the whole `DeviceManagerState` — the manager revision and the
+ *   inventory shape, the device and gamepad counts the runtime enumerated;
+ * - `data-kadre-devices-events`: every `DeviceLifecycleEvent` in order, each naming the manager
+ *   revision it was stamped with and the ordinal its gamepad carries;
+ * - `data-kadre-gamepad-<ordinal>`: each enumerated pad's whole `GamepadSnapshot`;
+ * - `data-kadre-gamepad-<ordinal>-events`: every `GamepadEvent` that pad published, in order.
+ */
+private class DeviceObservation(
+    private val host: HTMLElement,
+    private val scope: CoroutineScope,
+) {
+    private val events = mutableListOf<String>()
+    private val ordinals = HashMap<GamepadId, Int>()
+    private val observed = HashSet<GamepadId>()
+
+    fun install(deviceManager: DeviceManager) {
+        host.setAttribute("data-kadre-devices-events", "")
+        host.setAttribute("data-kadre-devices-manager", deviceManager.state.value.managerEncoding())
+        scope.launch {
+            deviceManager.state.collect { state ->
+                host.setAttribute("data-kadre-devices-manager", state.managerEncoding())
+                enumeratedGamepads(state).forEach(::observe)
+            }
+        }
+        // The event subscription is registered undispatched, so it exists by the time this call
+        // returns: an observation made before its collector registered would be delivered to nobody.
+        scope.launch(start = CoroutineStart.UNDISPATCHED) {
+            deviceManager.events.collect { event ->
+                events += event.encoded(::ordinalOf)
+                host.setAttribute("data-kadre-devices-events", events.joinToString(";"))
+                (event as? DeviceLifecycleEvent.GamepadAdded)?.let { observe(it.gamepad) }
+            }
+        }
+    }
+
+    private fun enumeratedGamepads(state: DeviceManagerState): List<Gamepad> =
+        (state.inventory as? DeviceInventory.Enumerated)?.gamepads ?: emptyList()
+
+    /** Starts one pad's observation, once per pad: the ordinal is minted at its first observation. */
+    private fun observe(gamepad: Gamepad) {
+        if (!observed.add(gamepad.id)) return
+        val ordinal = ordinalOf(gamepad.id)
+        host.setAttribute("data-kadre-gamepad-$ordinal", gamepad.state.value.encoded())
+        scope.launch {
+            gamepad.state.collect { snapshot ->
+                host.setAttribute("data-kadre-gamepad-$ordinal", snapshot.encoded())
+            }
+        }
+        scope.launch(start = CoroutineStart.UNDISPATCHED) {
+            val padEvents = mutableListOf<String>()
+            host.setAttribute("data-kadre-gamepad-$ordinal-events", "")
+            gamepad.events.collect { event ->
+                padEvents += event.encoded()
+                host.setAttribute("data-kadre-gamepad-$ordinal-events", padEvents.joinToString(";"))
+            }
+        }
+    }
+
+    private fun ordinalOf(id: GamepadId): Int = ordinals.getOrPut(id) { ordinals.size }
+}
+
+/** The whole device-manager state, as the specs read it. */
+private fun DeviceManagerState.managerEncoding(): String {
+    val shape = when (val inventory = this.inventory) {
+        is DeviceInventory.Enumerated ->
+            "enumerated:devices=${inventory.devices.size}:gamepads=${inventory.gamepads.size}"
+
+        DeviceInventory.Unsupported -> "unsupported:devices=0:gamepads=0"
+        is DeviceInventory.Unavailable -> "unavailable:${inventory.failure.encoding()}:devices=0:gamepads=0"
+    }
+    return "rev=${revision.value}:$shape"
+}
+
+/** One device lifecycle event, with the manager revision it was stamped with. */
+private fun DeviceLifecycleEvent.encoded(ordinalOf: (GamepadId) -> Int): String = when (this) {
+    is DeviceLifecycleEvent.DeviceAdded -> "device-added@${managerRevision.value}"
+    is DeviceLifecycleEvent.DeviceRemoved -> "device-removed@${managerRevision.value}"
+    is DeviceLifecycleEvent.GamepadAdded -> "added:g${ordinalOf(gamepad.id)}@${managerRevision.value}"
+    is DeviceLifecycleEvent.GamepadRemoved -> "removed:g${ordinalOf(gamepadId)}@${managerRevision.value}"
+}
+
+/** One gamepad snapshot, as the specs read it. */
+private fun GamepadSnapshot.encoded(): String =
+    "descriptor=${descriptor.encoded()}:connection=${connection.name.lowercase()}" +
+        ":routing=${routing.name.lowercase()}:controls=${controls.encoded()}" +
+        ":effects=${capabilities.effects.encoded()}:rev=${revision.value}"
+
+/** One gamepad descriptor, as the specs read it: the browser's own word for the layout. */
+private fun GamepadDescriptor.encoded(): String =
+    "name=${name ?: "none"}:mapping=${mapping.name.lowercase()}" +
+        ":buttons=[${buttons.joinToString(",") { it.encoded() }}]" +
+        ":axes=[${axes.joinToString(",") { it.encoded() }}]"
+
+/** One gamepad control code: the standard layout's own, or the native code a non-standard pad reports. */
+private fun GamepadButton.encoded(): String = when (this) {
+    is GamepadButton.Other -> "other:$nativeCode"
+    else -> toString().replaceFirstChar(Char::lowercase)
+}
+
+private fun GamepadAxis.encoded(): String = when (this) {
+    is GamepadAxis.Other -> "other:$nativeCode"
+    else -> toString().replaceFirstChar(Char::lowercase)
+}
+
+/** One gamepad reading set, as the specs read it: each control's value, with its press marker. */
+private fun GamepadState.encoded(): String =
+    "buttons=[${buttons.joinToString(",") { "${it.button.encoded()}=${number(it.value)}${if (it.pressed) "*" else ""}" }}]" +
+        ":axes=[${axes.joinToString(",") { "${it.axis.encoded()}=${number(it.value)}" }}]"
+
+/** The effects capability of one pad, as the specs read it. */
+private fun Capability<GamepadEffectConstraints>.encoded(): String = when (this) {
+    is Capability.Unsupported -> "unsupported:${failure.operation.name.lowercase()}"
+    is Capability.Supported ->
+        "supported[kinds=${constraints.kinds.map { it.name }.sorted().joinToString("+")}]" +
+            (constraints.maximumDuration?.let { duration -> ":maxMs=${duration.inWholeMilliseconds}" } ?: "")
+}
+
+/** One published gamepad event, with the state revision it was stamped with. */
+private fun GamepadEvent.encoded(): String = when (this) {
+    is GamepadEvent.ButtonChanged ->
+        "button:${value.button.encoded()}=${number(value.value)}${if (value.pressed) "*" else ""}:rev=${revision.value}"
+
+    is GamepadEvent.AxisChanged -> "axis:${value.axis.encoded()}=${number(value.value)}:rev=${revision.value}"
+    is GamepadEvent.RoutingSuspended -> "suspended:rev=${revision.value}"
+    is GamepadEvent.RoutingResumed -> "resumed:rev=${revision.value}"
+}
+
+/** One effect state, as the specs read it. */
+private fun GamepadEffectState.encoded(): String = when (this) {
+    GamepadEffectState.Starting -> "starting"
+    GamepadEffectState.Playing -> "playing"
+    GamepadEffectState.Stopping -> "stopping"
+    is GamepadEffectState.Terminated -> "terminated:${outcome.encoded()}"
+}
+
+/** One effect terminal outcome, as the specs read it. */
+private fun GamepadEffectOutcome.encoded(): String = when (this) {
+    GamepadEffectOutcome.Completed -> "completed"
+    is GamepadEffectOutcome.Stopped -> "stopped:${reason.name.lowercase()}"
+    is GamepadEffectOutcome.Failed -> "failed:${failure.encoding()}"
+}
