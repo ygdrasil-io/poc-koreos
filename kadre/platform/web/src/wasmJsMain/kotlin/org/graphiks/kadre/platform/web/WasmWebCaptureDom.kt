@@ -209,6 +209,13 @@ internal external fun wasmColorSpaceFullRange(colorSpace: JsAny): Boolean?
 internal external fun wasmFrameAllocationSize(frame: JsAny, format: JsString?): Double
 
 /**
+ * Decision 8's crop: `new VideoFrame(frame, { visibleRect })` — the new independent frame the
+ * constructor builds from the source frame and the rect.
+ */
+@JsFun("(frame, x, y, width, height) => new VideoFrame(frame, { visibleRect: { x: x, y: y, width: width, height: height } })")
+internal external fun wasmCropFrame(frame: JsAny, x: Int, y: Int, width: Int, height: Int): JsAny
+
+/**
  * The whole-frame copy: a buffer sized by the browser's own `allocationSize` for the same options,
  * the copy awaited, and the buffer-plus-layout pair handed back for the Kotlin-side slicing.
  */
@@ -364,6 +371,14 @@ private class WasmWebFrameReadable(private val readable: JsAny) : WebFrameReadab
  */
 private class WasmWebVideoFrame(private val frame: JsAny) : WebVideoFrame {
     override val shape: WebVideoFrameShape = wasmFrameShape(frame)
+
+    override fun cropTo(rect: WebVisibleRect): WebVideoFrame = try {
+        WasmWebVideoFrame(wasmCropFrame(frame, rect.x, rect.y, rect.width, rect.height))
+    } catch (refused: Throwable) {
+        // The seam's contract: a browser refusal crosses as the pipe exception carrying the
+        // browser's own error name — never as a raw Throwable.
+        throw WebCapturePipeException(wasmPipeCode(refused))
+    }
 
     override fun allocationSize(format: String?): Long = try {
         wasmFrameAllocationSize(frame, format?.toJsString()).toLong()

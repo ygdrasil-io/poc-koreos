@@ -111,6 +111,9 @@ class WebCaptureStreamTest {
             return allocationSizeBytes
         }
 
+        override fun cropTo(rect: WebVisibleRect): WebVideoFrame =
+            error("no crop is staged in the HostChoice tests: its admission refuses a region")
+
         override suspend fun copyTo(format: String?): List<WebPlaneBytes> {
             copyCount += 1
             copyFormats += format

@@ -26,6 +26,7 @@ import org.graphiks.kadre.internal.runtime.CapturePortSourceKey
 import org.graphiks.kadre.internal.runtime.CapturePortTarget
 import org.graphiks.kadre.internal.runtime.RuntimeLock
 import org.graphiks.kadre.internal.runtime.withLock
+import org.graphiks.kadre.surface.SurfaceId
 import kotlin.coroutines.CoroutineContext
 
 /** The failure domain of the capability probe's picker refusals, carrying the documented causes. */
@@ -36,6 +37,9 @@ private const val PERMISSION_DOMAIN = "capture-permission"
 
 /** The detached source namespace of a host-picker reservation — the browser granted exactly one stream. */
 private const val HOST_PICKER_SOURCE_NAMESPACE = "web-host-picker"
+
+/** The detached source namespace of a surface reservation — the primary canvas's own stream. */
+private const val SURFACE_SOURCE_NAMESPACE = "web-surface"
 
 /**
  * The web capture control plane: one honest snapshot of what this browsing context can promise
@@ -69,9 +73,14 @@ private const val HOST_PICKER_SOURCE_NAMESPACE = "web-host-picker"
  *
  * **`reserve` refuses `Source` structurally** (decision 2) — with zero seam interaction, before
  * anything browser-facing — and routes `HostChoice` through the picker and the frame pump
- * ([WebHostChoiceReservation], decision 5's hints travelling with the request): region is refused
+ * ([WebTrackReservation], decision 5's hints travelling with the request): region is refused
  * before the picker in the AppKit admission form, the picked track reserves, and the pump produces
- * the bounded frames. The `Surface` row is Task 4's declared stub; the `Source` row is permanent.
+ * the bounded frames. `Surface` routes through the session's own registered primary surface: the
+ * id is resolved against the registration the session performed when the surface was created (the
+ * runtime's admission checks only the capability, so the id is the port's to resolve), the lent
+ * canvas is streamed through the same pump with the canvas-sourced rulings (decision 6's
+ * `Premultiplied` alpha, decision 8's region crop), and a foreign id is refused in the runtime's
+ * own unresolvable-target form with zero seam interaction. The `Source` row is permanent.
  *
  * The port is session-scoped: the runtime installs exactly one observer and closes the port with
  * the session components, which closes the seam with it.
@@ -85,6 +94,7 @@ internal class WebCapturePort(
     private var closed = false
     private var observer: ((KadreResult<CapturePortSnapshot>) -> Unit)? = null
     private var nextReservationKeyValue = 0L
+    private var primarySurfaceId: SurfaceId? = null
 
     /** The capability truth table of decision 5, probed once — presence-based, never guessed. */
     private val probedCapabilities: CaptureCapabilities = probeCapabilities()
@@ -98,6 +108,22 @@ internal class WebCapturePort(
     init {
         // The readback is the one construction fact that settles late; the settled answer republishes.
         dom.readDisplayCapturePermission(::acceptReadback)
+    }
+
+    /**
+     * Registers the session's primary surface — the one surface this port can honestly capture —
+     * as the AppKit capture registry registers its session's surfaces at window creation. The
+     * runtime's own admission forwards a surface id without checking it, so this registration is
+     * the only fact the port's `Surface` route can resolve an id against; a port whose session
+     * registered nothing refuses every surface reservation rather than guess.
+     */
+    internal fun registerPrimarySurface(id: SurfaceId) {
+        lock.withLock {
+            check(primarySurfaceId == null || primarySurfaceId == id) {
+                "the primary surface is registered once per capture port"
+            }
+            primarySurfaceId = id
+        }
     }
 
     override suspend fun requestPermission(scope: CapturePermissionScope): KadreResult<CapturePortSnapshot> {
@@ -149,13 +175,86 @@ internal class WebCapturePort(
             // structurally — here, before any picker — with nothing reserved and nothing asked.
             is CapturePortTarget.Source -> KadreResult.Failure(KadreFailure.Unsupported(KadreOperation.CaptureOpen))
 
-            // Task 4's declared stub: routed through the canvas stream when the surface task lands.
-            is CapturePortTarget.Surface -> KadreResult.Failure(KadreFailure.Unsupported(KadreOperation.CaptureOpen))
+            // The session's own primary surface: the attach element's canvas, streamed through the
+            // same pump the host choice uses (no picker, no consent — the element is the source).
+            is CapturePortTarget.Surface -> surfaceReservation(target.id, request)
 
             // The host choice: admission, then the picker, then the reservation (no frame production
             // — the pump is the reservation's own start).
             CapturePortTarget.HostChoice -> hostChoiceReservation(request)
         }
+    }
+
+    /**
+     * The `Surface` admission and reservation, in order:
+     *
+     * 1. **The id must be the session's own registered primary surface.** The runtime's admission
+     *    checks only the capability and forwards the id untouched, so this check is the port's,
+     *    and its form mirrors the runtime's own unresolvable-target refusal —
+     *    `InvalidRequest("request.target")`, the shape [RuntimeCaptureManager.sourceAdmission]
+     *    answers for an id its inventory does not name and the AppKit reference answers for an
+     *    unknown surface. The refusal is structural: not one seam interaction, and no canvas
+     *    stream is ever started behind it.
+     * 2. **The canvas backstop.** When the attach element is not a canvas, the frozen capability
+     *    already said `Unsupported(CaptureOpen)` (cause: surface-not-a-canvas) and the runtime's
+     *    own admission refuses on it before the port is reached. A reserve that reaches the port
+     *    through any other path refuses with the SAME failure — the consistent verdict, never a
+     *    different one.
+     * 3. **The browser effect runs once.** `captureStream()` on the lent canvas is the one
+     *    browser-facing act of the surface open; its refusals are contained (the seam carries no
+     *    error channel) as a platform failure in the stream domain, and a port that cannot pump
+     *    releases the stream it just started rather than reserve frames it cannot produce.
+     * 4. **The request is carried honestly.** The effective cursor mode is `Hidden` — the frozen
+     *    capability advertises nothing else, and a canvas stream composites no cursor; whatever
+     *    the host drew into the pixels travels in them. Formats and cadence keep decision 6's
+     *    rules; the region, when carried, is decision 8's crop, staged by the reservation.
+     */
+    private suspend fun surfaceReservation(
+        id: SurfaceId,
+        request: CaptureRequest,
+    ): KadreResult<CapturePortReservation> {
+        val registered = lock.withLock { primarySurfaceId }
+        if (registered != id) {
+            return KadreResult.Failure(KadreFailure.InvalidRequest("request.target"))
+        }
+        val canvas = dom.canvasForSurface()
+            ?: return KadreResult.Failure(KadreFailure.Unsupported(KadreOperation.CaptureOpen))
+        val track = try {
+            canvas.captureStream()
+        } catch (_: Throwable) {
+            // The seam carries no error channel for the canvas stream's own refusals (a tainted or
+            // zero-sized canvas); the containment is the honest generic word, not an invented code.
+            return KadreResult.Failure(
+                KadreFailure.PlatformFailure(KadrePlatform.Web, STREAM_DOMAIN, "canvas-stream-refused"),
+            )
+        }
+        val factory = dom.processorFactory()
+        if (factory == null) {
+            // Never a live capture behind a port that cannot pump: the stream the canvas just
+            // started is released exactly as the discard flow releases a picked one.
+            track.stop()
+            track.close()
+            return KadreResult.Failure(KadreFailure.Unsupported(KadreOperation.CaptureCollectFrames))
+        }
+        val keyValue = lock.withLock {
+            val value = nextReservationKeyValue
+            nextReservationKeyValue += 1L
+            value
+        }
+        return KadreResult.Success(
+            WebSurfaceReservation(
+                source = CapturePortSource(
+                    key = CapturePortSourceKey(SURFACE_SOURCE_NAMESPACE, keyValue),
+                    kind = CaptureSourceKind.HostSurface,
+                    name = null,
+                    size = null,
+                ),
+                track = track,
+                factory = factory,
+                request = request.copy(cursorMode = CaptureCursorMode.Hidden),
+                loopContext = captureLoopContext,
+            ),
+        )
     }
 
     /**
@@ -201,7 +300,7 @@ internal class WebCapturePort(
                         value
                     }
                     KadreResult.Success(
-                        WebHostChoiceReservation(
+                        WebTrackReservation(
                             source = CapturePortSource(
                                 key = CapturePortSourceKey(HOST_PICKER_SOURCE_NAMESPACE, keyValue),
                                 kind = CaptureSourceKind.Display,

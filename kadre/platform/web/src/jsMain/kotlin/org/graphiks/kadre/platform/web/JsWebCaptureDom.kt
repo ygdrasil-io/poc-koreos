@@ -237,6 +237,14 @@ private class JsWebFrameReadable(private val readable: dynamic) : WebFrameReadab
 private class JsWebVideoFrame(private val frame: dynamic) : WebVideoFrame {
     override val shape: WebVideoFrameShape = jsVideoFrameShape(frame)
 
+    override fun cropTo(rect: WebVisibleRect): WebVideoFrame = try {
+        JsWebVideoFrame(jsCropFrame(frame, rect.x, rect.y, rect.width, rect.height))
+    } catch (refused: Throwable) {
+        // The seam's contract: a browser refusal crosses as the pipe exception carrying the
+        // browser's own error name — never as a raw Throwable.
+        throw WebCapturePipeException(jsRejectionCode(refused))
+    }
+
     override fun allocationSize(format: String?): Long = try {
         jsFrameAllocationSize(frame, format).unsafeCast<Number>().toLong()
     } catch (refused: Throwable) {
@@ -345,6 +353,14 @@ private fun jsReadableRead(reader: dynamic, onChunk: (dynamic) -> Unit, onFailed
 /** The browser's own byte count for a whole-frame copy in [format] — the frame's own when `null`. */
 private fun jsFrameAllocationSize(frame: dynamic, format: String?): Number =
     js("frame.allocationSize(format == null ? {} : { format: format })")
+
+/**
+ * Decision 8's crop: `new VideoFrame(frame, { visibleRect })` — the new independent frame the
+ * constructor builds from the source frame and the rect. `VideoFrame` is the constructor's global
+ * name; the rect's members are the snippet's free identifiers.
+ */
+private fun jsCropFrame(frame: dynamic, x: Int, y: Int, width: Int, height: Int): dynamic =
+    js("new VideoFrame(frame, { visibleRect: { x: x, y: y, width: width, height: height } })")
 
 /**
  * The whole-frame copy: a buffer sized by the browser's own `allocationSize` for the same options,

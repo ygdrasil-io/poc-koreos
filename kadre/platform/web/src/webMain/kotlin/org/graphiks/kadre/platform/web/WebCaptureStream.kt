@@ -37,10 +37,10 @@ import kotlin.coroutines.CoroutineContext
 import kotlin.time.Duration
 
 /** The failure domain of the frame pipe: every processor/read/copy refusal of the running stream. */
-private const val STREAM_DOMAIN = "capture-stream"
+internal const val STREAM_DOMAIN = "capture-stream"
 
 /**
- * The `HostChoice` frame pump (plan decision 6): one [WebFrameReadable] read at a time, each
+ * The web capture frame pump (plan decision 6): one [WebFrameReadable] read at a time, each
  * VideoFrame bounded by [start]'s `maxFrameBytes` — the browser's own `allocationSize` is read
  * before any buffer exists — copied once into Kotlin-owned plane bytes, and handed to the listener
  * as a detached [CapturePortFrame].
@@ -71,12 +71,20 @@ private const val STREAM_DOMAIN = "capture-stream"
  * `BackendFallback` diagnostic **before** the frame it concerns is delivered. The runtime's stream
  * SPI carries no diagnostics channel from backend to session, so the journal is observable here,
  * on the web layer that performed the conversion.
+ *
+ * The pump serves both web sources — the picked display track ([WebTrackReservation], `HostChoice`)
+ * and the primary canvas's own stream ([WebSurfaceReservation], `Surface`). What differs travels as
+ * constructor facts: [canvasSourced] turns the Rgba8 alpha answer into `Premultiplied` (decision 6 —
+ * the canvas's own compositing, vs the browser's silence for a display frame), and a
+ * [CaptureRequest.region] arrives already staged (decision 8 — the readable upstream crops, so the
+ * configuration's size is the cropped size and the configuration itself names the region).
  */
 internal class WebCapturePump(
     private val readable: WebFrameReadable,
     private val track: WebDomVideoTrack,
     private val request: CaptureRequest,
     private val loopContext: CoroutineContext = Dispatchers.Default,
+    private val canvasSourced: Boolean = false,
 ) {
     private val lock = RuntimeLock()
     private var listener: CapturePortStreamListener? = null
@@ -357,12 +365,13 @@ internal class WebCapturePump(
         size = PhysicalSize(shape.width, shape.height),
         format = plan.format,
         colorEncoding = WebCaptureMapping.colorEncoding(shape),
-        alphaMode = WebCaptureMapping.alphaMode(plan.format, canvasSourced = false),
+        alphaMode = WebCaptureMapping.alphaMode(plan.format, canvasSourced),
         orientation = CaptureOrientation.Upright,
         cadence = CaptureCadence.Unknown,
-        // HostChoice never crops: the browser picks its own bounds, and the admission refused a
-        // region before the picker was ever launched.
-        region = null,
+        // The region is the request's own: a Surface's crop (decision 8 — the readable upstream
+        // already crops, so the size above is the cropped size), and none for a HostChoice, whose
+        // admission refused a region before the picker was ever launched.
+        region = request.region,
         cursorMode = request.cursorMode,
     )
 
@@ -458,16 +467,25 @@ private class WebCaptureStream(private val pump: WebCapturePump) : CapturePortSt
 }
 
 /**
- * The `HostChoice` reservation: the picked track, the pump primitive probed at reserve, and the
- * request the hints travelled with. Reserving started no frame production — [start] builds the
- * processor's reader and launches the pump; [close] releases the stream state exactly once however
- * far the reservation got, and a never-started reservation never leaks a live capture.
+ * The one reservation machinery over a granted track, whichever web source granted it: the picked
+ * display track of the host picker (`HostChoice`) or the primary canvas's own `captureStream`
+ * track (`Surface`, [WebSurfaceReservation]). Reserving started no frame production — [start]
+ * builds the processor's reader, stages the request's region crop when one is carried (decision
+ * 8's `Surface` ruling; a `HostChoice` request never carries a region, its admission refused one
+ * before the picker), and launches the pump; [close] releases the stream state exactly once
+ * however far the reservation got, and a never-started reservation never leaks a live capture.
+ *
+ * [canvasSourced] is the surface's flag alone: it turns the pump's Rgba8 alpha answer into
+ * `Premultiplied` (decision 6 — the canvas's own compositing). The class is open only for that
+ * subclass, which fixes the flag and names the surface vertical; the machinery is shared, never
+ * duplicated.
  */
-internal class WebHostChoiceReservation(
+open internal class WebTrackReservation(
     override val source: CapturePortSource,
     private val track: WebDomVideoTrack,
     private val factory: WebTrackProcessorFactory,
     private val request: CaptureRequest,
+    private val canvasSourced: Boolean = false,
     private val loopContext: CoroutineContext = Dispatchers.Default,
 ) : CapturePortReservation {
     private val lock = RuntimeLock()
@@ -491,7 +509,7 @@ internal class WebHostChoiceReservation(
         }
         if (admission != null) return admission
 
-        val readable = try {
+        val upstream = try {
             factory.processorFor(track)
         } catch (_: Throwable) {
             // The browser refused the processor for this track: the pipe was never built.
@@ -499,7 +517,10 @@ internal class WebHostChoiceReservation(
                 KadreFailure.PlatformFailure(KadrePlatform.Web, STREAM_DOMAIN, "track-processor-refused"),
             )
         }
-        val ownedPump = WebCapturePump(readable, track, request, loopContext)
+        // Decision 8: the crop is staged between the reader and the pump, so every frame the pump
+        // sees is already the visible-rect frame and the bound bounds the cropped frame.
+        val readable = request.region?.let { WebCroppedFrameReadable(upstream, it) } ?: upstream
+        val ownedPump = WebCapturePump(readable, track, request, loopContext, canvasSourced)
         lock.withLock { pump = ownedPump }
         return ownedPump.start(listener, maxFrameBytes)
     }

@@ -2,6 +2,7 @@ package org.graphiks.kadre.platform.web
 
 import org.graphiks.kadre.capture.AlphaMode
 import org.graphiks.kadre.capture.CaptureCursorMode
+import org.graphiks.kadre.capture.CaptureRegion
 import org.graphiks.kadre.capture.ColorEncoding
 import org.graphiks.kadre.capture.ColorPrimaries
 import org.graphiks.kadre.capture.ColorRange
@@ -75,6 +76,18 @@ internal object WebCaptureMapping {
 
     /** The copyTo format word a conversion to [format] asks for; `null` is the frame's own format. */
     fun conversionWord(format: PixelFormat): String? = CONVERSION_WORDS[format]
+
+    /**
+     * Decision 8's crop rect: the request's region as the browser's `visibleRect` dictionary
+     * shape — the origin and the extent, copied structurally, nothing read back.
+     */
+    fun visibleRect(region: CaptureRegion): WebVisibleRect =
+        WebVisibleRect(
+            x = region.rect.origin.x,
+            y = region.rect.origin.y,
+            width = region.rect.size.width,
+            height = region.rect.size.height,
+        )
 
     /**
      * The frame's color words, Unknown-safe: a frame with no `colorSpace` maps to the AppKit

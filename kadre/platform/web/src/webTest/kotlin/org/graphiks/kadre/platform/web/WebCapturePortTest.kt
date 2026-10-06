@@ -473,19 +473,24 @@ class WebCapturePortTest {
     }
 
     @Test
-    fun reserveOfSurfaceRemainsADeclaredStubUntilTheStreamingTask() = runTest {
+    fun reserveOfSurfaceRefusesAnUnregisteredIdWithZeroSeamInteraction() = runTest {
+        // Task 4 routed the Surface row: the port resolves a target id against the registration
+        // its session performed for the primary surface. A port whose session registered nothing —
+        // as this one did not — refuses every id in the runtime's own unresolvable-target form,
+        // before lending the canvas, and with not one seam interaction beyond the construction
+        // probe. The streaming vertical itself is pinned by WebCaptureSurfaceTest.
         val dom = RecordingCaptureDom()
         val port = WebCapturePort(dom, primarySurfaceElementIsCanvas = true)
         val atConstruction = dom.interactions.toList()
 
         assertEquals(
-            KadreResult.Failure(KadreFailure.Unsupported(KadreOperation.CaptureOpen)),
+            KadreResult.Failure(KadreFailure.InvalidRequest("request.target")),
             port.reserve(CapturePortTarget.Surface(RuntimeProcessIds.nextSurfaceId()), CaptureRequest()),
-            "Task 4 replaces this stub with the surface reservation",
+            "an unregistered id names no surface this port can honestly capture",
         )
-        assertEquals(atConstruction, dom.interactions, "the declared stub touches no seam member either")
+        assertEquals(atConstruction, dom.interactions, "the refusal touches no seam member")
         assertFalse(dom.interactions.contains("pickDisplayMedia"))
-        // Task 3 routed HostChoice through the picker — its behaviour is pinned by WebCaptureStreamTest.
+        assertFalse(dom.interactions.contains("canvasForSurface"), "the canvas is never lent behind a refused id")
     }
 
     // -- (f) the observation channel and the idempotent close ---------------------------------------------

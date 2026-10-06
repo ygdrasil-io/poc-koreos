@@ -632,6 +632,9 @@ internal class WebHostSession(
                 failureReporter = failureReporter,
                 primarySurfaceFactory = { id ->
                     val surface = WebHostSurface(id, port, ownership, failureReporter)
+                    // The capture port's Surface route resolves a target id against this session's
+                    // own primary surface — the one surface the attach element's canvas belongs to.
+                    capturePort.registerPrimarySurface(id)
                     // The ownership releases the target's bridges before the runtime closes the surface, so
                     // it has to be able to stop the surface from admitting anything new in between.
                     ownership.observeSurface(surface::onOwnershipRevoked)
@@ -657,6 +660,9 @@ internal class WebHostSession(
                 failureReporter = failureReporter,
                 componentsFactory = { _, _ ->
                     val surface = WebHostSurface(RuntimeProcessIds.nextSurfaceId(), port, ownership, failureReporter)
+                    // The same registration the direct-attachment path performs: the components
+                    // path's primary surface is the capture port's own Surface resolution.
+                    capturePort.registerPrimarySurface(surface.id)
                     ownership.observeSurface(surface::onOwnershipRevoked)
                     onSurfaceCreated(surface)
                     RuntimeSessionComponents(

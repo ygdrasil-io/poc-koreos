@@ -51,6 +51,19 @@ internal interface WebDomVideoTrack : AutoCloseable {
 }
 
 /**
+ * One crop rect as the seam holds it — the browser's `visibleRect` dictionary, copied structurally.
+ * The values are the request's own [org.graphiks.kadre.capture.CaptureRegion] as decision 8 stages
+ * it; whether the browser accepts the rect against the frame it is applied to is the browser's own
+ * answer, delivered as any other pipe refusal.
+ */
+internal data class WebVisibleRect(
+    val x: Int,
+    val y: Int,
+    val width: Int,
+    val height: Int,
+)
+
+/**
  * One VideoFrame the reader delivered, as the seam holds it. [close] performs the browser's own
  * frame release — the handle is the caller's from the moment [WebFrameRead.Frame] lands, and the
  * bytes [copyTo] produces are Kotlin-owned copies, never a view of the frame's own buffers.
@@ -58,6 +71,16 @@ internal interface WebDomVideoTrack : AutoCloseable {
 internal interface WebVideoFrame : AutoCloseable {
     /** The frame's structural shape, read once as the seam took the handle. */
     val shape: WebVideoFrameShape
+
+    /**
+     * Stages decision 8's crop: `new VideoFrame(frame, { visibleRect })` — a new independent frame
+     * holding exactly [rect]'s pixels. The caller owns both handles from the moment this returns:
+     * the crop frame is the one to copy and then close, and the original handle stays the caller's
+     * to release (the crop constructor clones, so the original can be closed immediately). A
+     * browser refusal — a rect outside the frame's bounds, a closed frame — throws
+     * [WebCapturePipeException] with the browser's own error name.
+     */
+    fun cropTo(rect: WebVisibleRect): WebVideoFrame
 
     /**
      * The browser's own byte count for a whole-frame copy in [format] — `null` for the frame's own
