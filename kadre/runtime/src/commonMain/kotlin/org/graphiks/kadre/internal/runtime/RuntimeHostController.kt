@@ -379,6 +379,9 @@ public class RuntimeHostController private constructor(
             sessionStopHandler: RuntimeSessionStopHandler = RuntimeSessionStopHandler { null },
             sessionObserver: RuntimeSessionObserver = RuntimeSessionObserver { _, _ -> },
             primarySurfaceFactory: (SurfaceId) -> RuntimePrimarySurface,
+            displayPort: DisplayPort? = null,
+            gamepadPort: GamepadPort? = null,
+            inputDevicePort: InputDevicePort? = null,
         ): RuntimeHostController = RuntimeHostController(
             platform = platform,
             initialLifecycleState = initialLifecycleState,
@@ -392,6 +395,9 @@ public class RuntimeHostController private constructor(
                 RuntimeSessionComponents(
                     windows = UnsupportedWindowManager(RuntimeProcessIds::nextWindowRequestId),
                     primarySurface = primarySurfaceFactory(RuntimeProcessIds.nextSurfaceId()),
+                    displayPort = displayPort,
+                    gamepadPort = gamepadPort,
+                    inputDevicePort = inputDevicePort,
                 )
             },
         )

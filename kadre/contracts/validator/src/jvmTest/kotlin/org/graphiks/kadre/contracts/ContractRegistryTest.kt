@@ -314,6 +314,72 @@ class ContractRegistryTest {
                         "web-drop-no-prevent-default-without-offer",
                     ),
                 ),
+                "BCK-007" to webContract(
+                    contractId = "BCK-007",
+                    status = ContractStatus.Active,
+                    source = "WEB-IMPLEMENTATION-ROADMAP.md#Phase 6 — Displays, devices, gamepads et permissions",
+                    subject = "web display inventory",
+                    risk = "partial inventory, invented multi-display, teardown leak",
+                    oracle = ContractOracle.O2,
+                    scenarios = listOf(
+                        "web-display-initial-hostviewport",
+                        "web-display-resize-propagation",
+                        "web-display-dpr-scale-factor",
+                        "web-display-teardown-quiet",
+                    ),
+                    conditionalCapabilities = listOf("DisplayManager.state"),
+                    sentinels = listOf(
+                        "web-display-exact-fallback",
+                        "web-display-single-display",
+                        "web-display-no-dom-creation",
+                        "web-display-no-polling",
+                    ),
+                ),
+                "BCK-008" to webContract(
+                    contractId = "BCK-008",
+                    status = ContractStatus.Active,
+                    source = "WEB-IMPLEMENTATION-ROADMAP.md#Phase 6 — Displays, devices, gamepads et permissions",
+                    subject = "web device/gamepad inventory+routing",
+                    risk = "phantom or fabricated devices, invented descriptor, suspended state leak or teardown poll",
+                    oracle = ContractOracle.O2,
+                    scenarios = listOf(
+                        "web-gamepad-empty-inventory-honest",
+                        "web-gamepad-connect-added",
+                        "web-gamepad-state-poll",
+                        "web-gamepad-disconnect-neutral",
+                        "web-gamepad-routing-suspended-neutral",
+                        "web-gamepad-session-close-quiet",
+                    ),
+                    conditionalCapabilities = listOf("DeviceManager.state"),
+                    sentinels = listOf(
+                        "web-gamepad-no-phantom",
+                        "web-gamepad-descriptor-exact",
+                        "web-gamepad-no-fabricated-devices",
+                        "web-gamepad-teardown-quiet",
+                    ),
+                ),
+                "BCK-009" to webContract(
+                    contractId = "BCK-009",
+                    status = ContractStatus.Active,
+                    source = "WEB-IMPLEMENTATION-ROADMAP.md#Phase 6 — Displays, devices, gamepads et permissions",
+                    subject = "web gamepad effects and preconditions",
+                    risk = "ungoverned effect launch, fabricated capability, implicit permission prompt or raw channel leak",
+                    oracle = ContractOracle.O2,
+                    scenarios = listOf(
+                        "web-gamepad-effect-dual-rumble",
+                        "web-gamepad-effect-stop",
+                        "web-gamepad-effect-unsupported-kind",
+                        "web-gamepad-effect-insecure-context",
+                        "web-gamepad-raw-input-unsupported",
+                    ),
+                    conditionalCapabilities = listOf("Gamepad.playEffect"),
+                    sentinels = listOf(
+                        "web-gamepad-no-implicit-prompt",
+                        "web-gamepad-no-localized-haptic",
+                        "web-gamepad-effect-once",
+                        "web-gamepad-raw-no-listener",
+                    ),
+                ),
                 "INT-002" to webContract(
                     contractId = "INT-002",
                     status = ContractStatus.Active,
@@ -728,7 +794,7 @@ class ContractRegistryTest {
     private companion object {
         const val COMMIT = "0123456789abcdef0123456789abcdef01234567"
         val WEB_CONTRACT_IDS = setOf(
-            "BCK-001", "BCK-002", "BCK-003", "BCK-004", "BCK-005", "BCK-006",
+            "BCK-001", "BCK-002", "BCK-003", "BCK-004", "BCK-005", "BCK-006", "BCK-007", "BCK-008", "BCK-009",
             "INT-002", "INT-003", "INT-004",
         )
         val PLANNED_WEB_CONTRACT_IDS = setOf("BCK-001", "INT-003")

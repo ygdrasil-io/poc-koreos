@@ -12,8 +12,12 @@ Run both targets from the repository root:
 rtk ./gradlew :kadre:contracts:driver:web:jsBrowserSmoke :kadre:contracts:driver:web:wasmJsBrowserSmoke --rerun-tasks
 ```
 
-Eleven target-specific Playwright suites run in Chromium and emit target-specific
-JUnit results:
+Fourteen target-specific Playwright suites run in Chromium, across two Playwright
+projects of one invocation — the regular browser, and a second browser whose host
+resolution maps the fixture's insecure name onto the same local server so the page
+is served over plain http on a non-localhost host (the insecure-context project, see
+[web-gamepad-effects.spec.mjs](playwright/web-gamepad-effects.spec.mjs) below) —
+and emit target-specific JUnit results:
 
 - [web-phase0.spec.mjs](playwright/web-phase0.spec.mjs) proves the baseline the
   other suites assume: an existing host attaches through the public API, the
@@ -80,15 +84,41 @@ JUnit results:
   session;
 - [web-typescript.spec.mjs](playwright/web-typescript.spec.mjs) proves the
   published `@kadre/host` facade, driven by the same TypeScript consumer that
-  `kadre/consumers/typescript` type-checks.
+  `kadre/consumers/typescript` type-checks;
+- [web-display.spec.mjs](playwright/web-display.spec.mjs) proves the four display
+  scenarios of `BCK-007`: the `HostViewport` inventory the manager publishes when
+  the session configuration installs — enumerated, one display, the primary among
+  them, never `Unavailable`, never a second display — the physical bounds that
+  follow a real browser-delivered resize at the browsing context's own device
+  pixel ratio, the republished snapshot when the ratio itself changes at the same
+  CSS size, and the teardown that leaves no further event, no republished
+  snapshot, no animation-frame registration and no created node behind;
+- [web-devices.spec.mjs](playwright/web-devices.spec.mjs) proves the six
+  device-inventory scenarios of `BCK-008` against the synthetic gamepad source the
+  fixture installs (Chromium cannot inject a real pad, the D10 precedent): the
+  honest empty inventory before any pad exists, the connected pad added with its
+  own standard-mapping descriptor, the per-animation-frame state poll, the neutral
+  snapshot a disconnected pad leaves, the suspended session whose routing stays
+  neutral, and the session close that publishes nothing further;
+- [web-gamepad-effects.spec.mjs](playwright/web-gamepad-effects.spec.mjs) proves
+  the five gamepad-effect scenarios of `BCK-009`: the dual-rumble effect delivered
+  onto the pad's `vibrationActuator`, the stop that resets it, the unsupported
+  effect kind refused before any actuator call, the insecure context whose effects
+  capability stays unavailable, and the raw-input admission the web platform never
+  offers. The insecure-context scenario runs only in the second Playwright
+  project, so this suite appears twice in the JUnit report — four tests in the
+  regular project and the insecure-context scenario alone in the insecure one;
+  the testcase identity `classname#name` keeps every mapped identity unique.
 
 Playwright diagnostics are removed after a successful smoke; they are preserved
 on a failure or interruption. Every identity of
 [contracts/evidence.tsv](contracts/evidence.tsv) names what it maps: the four
 surface scenarios, the two lease scenarios, the twelve input scenarios, the
 seven provider scenarios of `BCK-001`, the eight touch scenarios of `BCK-004`,
-the nine text-input scenarios of `BCK-005`, the ten drop scenarios of `BCK-006`
-and the five facade scenarios of
+the nine text-input scenarios of `BCK-005`, the ten drop scenarios of `BCK-006`,
+the four display scenarios of `BCK-007`, the six device-inventory scenarios of
+`BCK-008`, the five gamepad-effect scenarios of `BCK-009` and the five facade
+scenarios of
 `INT-003` are titled with the evidence id they carry, so a JUnit
 `testcase/@name` maps to them without interpretation; the phase 1 lifecycle
 suites keep their descriptive titles, pre-dating that rule, and their rows in
@@ -135,6 +165,129 @@ The two Gradle tasks `:kadre:contracts:validator:validateJsBrowserContractEviden
 and `...:validateWasmJsBrowserContractEvidence` read those documents against the
 same registry, the same mapping and the same JUnit report; they are part of
 `:kadre:contracts:validator:check`.
+
+## Phase 6 displays, devices and gamepad limits
+
+These are the real boundaries of the delivered phase, not defects. The normative
+statement of the phase is the phase-6 section of
+[kadre/WEB-IMPLEMENTATION-ROADMAP.md](../../../WEB-IMPLEMENTATION-ROADMAP.md)
+and the adapter register `kadre/capabilities/web.md` §3.12-3.14, which each
+statement below cites. The three active contracts of this phase are `BCK-007`
+(display inventory), `BCK-008` (device/gamepad inventory and routing) and
+`BCK-009` (gamepad effects and preconditions):
+
+- **no multi-display enumeration, ever.** No browser enumerates the displays
+  behind its window, and the one that promises to — the Window Management API
+  (`navigator.getScreenDetails`) — is deliberately **never called**: it is a
+  prompt-forbidding permission gate (no enumeration or readback may trigger a
+  permission prompt), it lives only at the top level of the browsing context,
+  and it is inconsistent across engines. The inventory of an attached session
+  is therefore exactly `Enumerated(primary = viewport, displays = listOf(viewport))`
+  with `DisplayType.HostViewport` — the gate's mandated fallback, unconditional,
+  pushed at the observer's install so a session that attached and did nothing
+  already states it (`WebDisplayPort.kt:100-128`). Never an empty inventory,
+  never a generic `Unavailable`, never a second display; `web-display-exact-fallback`
+  and `web-display-single-display` pin the shape. The synthetic source of the
+  specs poisons `navigator.getScreenDetails` to record any call
+  (`gamepad-stub.mjs:122-127`), and the no-implicit-prompt sentinel asserts the
+  record stays empty;
+- **`refreshRateHz` is never published** (recorded limit): the browser offers
+  no honest refresh-rate primitive, so the single mode carries `refreshRateHz =
+  null` and the value is never guessed. `bitDepth` is `screen.colorDepth`,
+  bounds and work area are the layout viewport in physical pixels —
+  `round(w·dpr) × round(h·dpr)` — and `scaleFactor` is the browsing context's
+  `devicePixelRatio` (`WebDisplayPort.kt:170-196`);
+- **dpr-only changes ride a resolution media query re-registered on each fire.**
+  A `(resolution: <dpr>dppx)` listener survives exactly one ratio change, so the
+  source withdraws the fired query, re-registers for the new ratio before
+  delivering the observation, and only then notifies (`JsWebDisplaySource.kt:70-83`).
+  The dpr is also re-read at every measurement — the phase-2 posture — so a
+  browser that never fires the query samples the ratio at the next resize;
+- **gamepad discovery is poll-driven.** `navigator.getGamepads()` is the only
+  state source the spec gives; the DOM `gamepadconnected`/`gamepaddisconnected`
+  events carry no pad data and mean one thing — poll again now. The listeners
+  are registered at the window everywhere and at the navigator only where the
+  browser accepts listeners there (Chromium's navigator is **not** an event
+  target — probed 2026-10-05, `navigator.addEventListener` is `undefined` there
+  while `getGamepads` is a function, `JsWebGamepadDom.kt:36-59`); a target that
+  refuses the registration is not an error, a missed hint costs one frame. The
+  rAF poll loop runs only while at least one session port is open — the first
+  open starts it and polls once immediately, the last close cancels the pending
+  frame and withdraws the listeners — and a hidden page fires no frames, so it
+  polls not at all (`WebGamepadHub.kt:82-96`, `:304-329`);
+- **the Chromium privacy gate is not exercised by these smokes** (recorded
+  limit): real pads stay invisible to `getGamepads()` until the user interacts
+  with the page, and no CDP channel injects a real pad into a headless browser.
+  The contract evidence therefore uses the scriptable `getGamepads` stub the
+  fixture installs — the D10 synthetic-source precedent, stated in the spec
+  headers (`gamepad-stub.mjs`, `web-devices.spec.mjs:5-14`) — and no scenario
+  claims the gate. Real hardware (OS connect/disconnect, actual rumble, the
+  privacy gate itself) is the material of
+  [phase-6-displays-devices.md](manual/phase-6-displays-devices.md);
+- **secure context.** `getGamepads` is secure-context-only: a real insecure page
+  exposes **no pads at all**, and the published inventory stays enumerated,
+  empty and complete — the honest answer, never a fabricated device. The
+  per-pad effects branch that answers
+  `Capability.Unsupported(KadreFailure.Unsupported(KadreOperation.GamepadEffect))`
+  in an insecure context is defensive — a pad present in an insecure context is
+  only reachable through the synthetic source, which is precisely how the
+  contract reaches it. The insecure-context scenario runs only in the dedicated
+  `chromium-insecure` Playwright project
+  (`--host-resolver-rules=MAP insecure.kadre.invalid 127.0.0.1`, the page served
+  over plain http on a non-localhost name) and asserts observables only:
+  `isSecureContext` false, the pad discovered and described normally, the
+  effects capability unsupported, and the prompting APIs' record empty
+  (`web-gamepad-effect-insecure-context`);
+- **the effect preconditions are per pad, frozen at connection.** The advertised
+  kinds are the actuator's own `effects` list; an actuator that declares nothing
+  is probed once per connection with a zero-duration, zero-magnitude dual-rumble
+  (side-effect-free per spec), and a probe that refuses advertises nothing —
+  the capability is `Unsupported` (`WebGamepadEffects.kt:134-151`). `LocalizedHaptic`
+  is never advertised, never launched (no browser primitive); `TriggerRumble`
+  rides only when the browser declares it, its `leftTrigger`/`rightTrigger`
+  magnitudes carried into the `effectParameters` dictionary — an omitted member
+  is literally absent, never a zero. `maximumDuration` stays `null` (the browser
+  clamps). A promise that rejects after an accepted call has no honest
+  synchronous outcome: it is recorded on the failure reporter
+  (`WebGamepadEffectReporting` — a page-global holder, the last wiring owns the
+  page's reports), and nothing pretends the effect stopped or failed there. A
+  disconnected pad refuses `Closed(Gamepad)` before any actuator call, while a
+  connected-but-suspended pad's effect **launches** — the delivered semantics
+  match AppKit: an effect is an app-initiated action, not input delivery;
+- **raw input stays `Unsupported(RawInputAccess)` with a non-call scenario.**
+  `web-gamepad-raw-input-unsupported` reads the capability cell
+  (`rawInput=unsupported:rawinputaccess`), issues the refused request, and reads
+  the page's own `EventTarget` registration counter around it — the delta is
+  zero, so a raw channel never installs itself on request (sentinel
+  `web-gamepad-raw-no-listener`);
+- **generic input devices: the browser exposes no device inventory primitive**
+  (recorded limit), so `DeviceInventory.Enumerated(devices = [], gamepads = …)`
+  is honest with an empty devices list and nothing is fabricated for it
+  (`BACKEND-CAPABILITIES.md` §5 blesses the complete-and-empty reading).
+
+### Published phase 6 availability
+
+The canonical JSON of `BCK-007`, `BCK-008` and `BCK-009` carries the same empty
+`capabilities.initial` / `capabilities.transitions` arrays as every other
+browser contract, so this table is the availability record of the phase — it
+names what an attached web session really publishes, and the scenario or test
+next to each row is what asserts it:
+
+| API | Published value | Asserted by |
+| --- | --- | --- |
+| `DisplayManager.state` | `DisplayInventory.Enumerated(primary = viewport, displays = listOf(viewport))` with `DisplayType.HostViewport`, published at the observer's install — manager revision 1, empty event journal, an idempotent `requestAccess` re-answering at the same revision; `Unavailable(TemporarilyUnavailable(retryable))` only while the viewport is unmeasurable | `web-display-initial-hostviewport`; sentinels `web-display-exact-fallback`, `web-display-single-display` |
+| the display snapshot facts | bounds/workArea `round(w·dpr) × round(h·dpr)`, `scaleFactor` = `devicePixelRatio`, `bitDepth` = `screen.colorDepth`, `refreshRateHz` = null, one mode of the same physical size | `web-display-initial-hostviewport`, `web-display-resize-propagation`, `web-display-dpr-scale-factor` |
+| the display changes | exactly one republish per resize or dpr change that moves the measurement, one `DisplayEvent.Changed` per publication; a second event that measured the same viewport publishes nothing | `web-display-resize-propagation`, `web-display-dpr-scale-factor` |
+| the display teardown | the session's close leaves no further event, no republished snapshot, no animation-frame registration and no created node | `web-display-teardown-quiet`; sentinels `web-display-no-dom-creation`, `web-display-no-polling` |
+| `DeviceManager.state` | `DeviceInventory.Enumerated(devices = [], gamepads = …)` in every state — enumerated and honest where the poll reports nothing, at the manager revision the change published | `web-gamepad-empty-inventory-honest`; sentinels `web-gamepad-no-fabricated-devices`, `web-gamepad-no-phantom` |
+| the gamepad lifecycle | one `GamepadAdded`/`GamepadRemoved` per manager revision; the descriptor frozen at connection from the pad's own mapping word (standard = the 17 buttons/4 axes in DOM order, anything else = native controls at the reported count); holes invent nothing | `web-gamepad-connect-added`, `web-gamepad-disconnect-neutral`, `web-gamepad-no-phantom`; sentinel `web-gamepad-descriptor-exact` |
+| the state poll | one per-frame diff against the last observed canonical state; hostile no-op readings publish nothing; one `ButtonChanged`/`AxisChanged` per real change, stamped with the one state revision | `web-gamepad-state-poll` |
+| the routing | a suspended projection publishes neutral controls and records real readings for later; the resume delivers the reading the pad reads now; the manager inventory does not move on a routing change | `web-gamepad-routing-suspended-neutral` |
+| the gamepad teardown | the session's close publishes nothing further; the poll died with the last port it served | `web-gamepad-session-close-quiet`; sentinel `web-gamepad-teardown-quiet` |
+| `Gamepad.playEffect` | `Supported(kinds = the actuator's own word, localizedHaptics = null, maximumDuration = null)` when the frozen connection-time probe or declaration admits; `Capability.Unsupported(Unsupported(GamepadEffect))` on an insecure context, a missing actuator, or nothing advertised | `web-gamepad-effect-dual-rumble`, `web-gamepad-effect-unsupported-kind`, `web-gamepad-effect-insecure-context` |
+| the effect stop | exactly one `reset` of the actuator; a disconnected pad refuses `Closed(Gamepad)` before any actuator call; every later stop is a quiet no-op | `web-gamepad-effect-stop`; sentinel `web-gamepad-effect-once` |
+| `requestRawInput` | refused `Unsupported(RawInputAccess)`; zero `EventTarget` registrations across the request | `web-gamepad-raw-input-unsupported`; sentinel `web-gamepad-raw-no-listener` |
+| the implicit-prompt record | empty across every scenario: the stub's `permissions.request`, `getScreenDetails`, `requestMIDIAccess`, `share` and `Notification.requestPermission` canaries are never touched | sentinel `web-gamepad-no-implicit-prompt` |
 
 ## Phase 3 input limits
 
@@ -536,7 +689,13 @@ automated smokes:
   (activation, candidates, commit, mid-composition `Esc` cancellation), a real
   multi-layout keyboard, the host's own `touch-action`, the `contenteditable`
   element the v1 text-input contract does not address, and a real OS drag into
-  the element, which headless automation cannot stage.
+  the element, which headless automation cannot stage;
+- [phase-6-displays-devices.md](manual/phase-6-displays-devices.md) covers the
+  real hardware gamepad (OS connect/disconnect, actual rumble, Chromium's
+  privacy gate that headless cannot stage), the real multi-display setup the
+  adapter deliberately does not enumerate (the Window Management API documented
+  as unsupported), the insecure-context matrix beyond the fake-hostname trick,
+  and the `vibrationActuator` behaviour of Firefox/WebKit.
 
 They are informative, they do not create validator evidence, and they do not
 change contract status.

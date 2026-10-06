@@ -408,6 +408,7 @@ internal interface WebElementLeasePort {
 internal class WebHostSession(
     private val port: WebHostPort,
     private val registry: WebHostRegistry = WebHostRegistry.shared,
+    private val gamepads: WebGamepadHub = WebGamepadHub.shared,
     private val failureReporter: RuntimeFailureReporter = RuntimeFailureReporter { },
 ) {
     /**
@@ -588,56 +589,84 @@ internal class WebHostSession(
         ownership: WebHostOwnership,
         windows: WebHostWindowManager?,
         onSurfaceCreated: (WebHostSurface) -> Unit,
-    ): RuntimeHostController = when (windows) {
-        // No provider, no seam: this session keeps the construction it has always had, byte for byte.
-        null -> RuntimeHostController.withPrimarySurface(
-            platform = KadrePlatform.Web,
-            initialLifecycleState = initialLifecycle,
-            sessionRevocationHandler = RuntimeSessionRevocationHandler { ownership.releasePort() },
-            sessionObserver = RuntimeSessionObserver { _, _ -> ownership.releaseReservation() },
-            failureReporter = failureReporter,
-            primarySurfaceFactory = { id ->
-                val surface = WebHostSurface(id, port, ownership, failureReporter)
-                // The ownership releases the target's bridges before the runtime closes the surface, so
-                // it has to be able to stop the surface from admitting anything new in between.
-                ownership.observeSurface(surface::onOwnershipRevoked)
-                onSurfaceCreated(surface)
-                RuntimePrimarySurface(surface, surface::detach)
-            },
-        )
+    ): RuntimeHostController {
+        // The browsing context's own display inventory, whatever sits behind its window: a browser
+        // enumerates no displays, so the gate mandates exactly one inventory — the primary viewport
+        // published as a HostViewport display — and this port is how the session states it. Built
+        // once here so both controller paths hand the runtime the same session-scoped port, closed
+        // with the session components it is given to.
+        val displayPort = WebDisplayPort(hostDisplaySource())
+        // The browsing context's own gamepad inventory, as the page-global broker's projection
+        // reads it: the physical pads are the page's, the projection is this session's. Opened once
+        // here so both controller paths hand the runtime the same session-scoped port, closed with
+        // the session components it is given to — and registered with the ownership before any
+        // failing step can run, so an attach that never reaches a factory closes it too and the
+        // page-global poll stops with it. The wiring also hands the page-global effect path
+        // this session's reporter — an effect promise that rejects lands in the target realization
+        // that made the call, where no per-session reference reaches; the last wiring owns the
+        // page's effect reports (a recorded limit, stated on the holder).
+        WebGamepadEffectReporting.reporter = failureReporter
+        val gamepadPort = gamepads.openPort()
+        ownership.observeGamepadPort(gamepadPort)
+        return when (windows) {
+            // No provider, no seam: the branch keeps the no-window-provider construction it has
+            // always had, the phase-6 display and gamepad ports forwarded through it exactly as
+            // through the components path — additive runtime parameters, null-defaulted in the
+            // runtime's own signatures, that change nothing about the provider-less shape.
+            null -> RuntimeHostController.withPrimarySurface(
+                platform = KadrePlatform.Web,
+                initialLifecycleState = initialLifecycle,
+                sessionRevocationHandler = RuntimeSessionRevocationHandler { ownership.releasePort() },
+                sessionObserver = RuntimeSessionObserver { _, _ -> ownership.releaseReservation() },
+                failureReporter = failureReporter,
+                primarySurfaceFactory = { id ->
+                    val surface = WebHostSurface(id, port, ownership, failureReporter)
+                    // The ownership releases the target's bridges before the runtime closes the surface, so
+                    // it has to be able to stop the surface from admitting anything new in between.
+                    ownership.observeSurface(surface::onOwnershipRevoked)
+                    onSurfaceCreated(surface)
+                    RuntimePrimarySurface(surface, surface::detach)
+                },
+                displayPort = displayPort,
+                gamepadPort = gamepadPort,
+            )
 
-        else -> RuntimeHostController.withComponents(
-            platform = KadrePlatform.Web,
-            initialLifecycleState = initialLifecycle,
-            sessionRevocationHandler = RuntimeSessionRevocationHandler { ownership.releasePort() },
-            sessionObserver = RuntimeSessionObserver { _, _ ->
-                // The session is gone: the manager is closed with it, so a late `requestWindow` from
-                // a consumer still holding the scope is refused instead of opening a session for a
-                // host that no longer exists.
-                windows.close()
-                ownership.releaseReservation()
-            },
-            failureReporter = failureReporter,
-            componentsFactory = { _, _ ->
-                val surface = WebHostSurface(RuntimeProcessIds.nextSurfaceId(), port, ownership, failureReporter)
-                ownership.observeSurface(surface::onOwnershipRevoked)
-                onSurfaceCreated(surface)
-                RuntimeSessionComponents(
-                    windows = windows,
-                    primarySurface = RuntimePrimarySurface(surface, surface::detach),
-                )
-            },
-        )
+            else -> RuntimeHostController.withComponents(
+                platform = KadrePlatform.Web,
+                initialLifecycleState = initialLifecycle,
+                sessionRevocationHandler = RuntimeSessionRevocationHandler { ownership.releasePort() },
+                sessionObserver = RuntimeSessionObserver { _, _ ->
+                    // The session is gone: the manager is closed with it, so a late `requestWindow` from
+                    // a consumer still holding the scope is refused instead of opening a session for a
+                    // host that no longer exists.
+                    windows.close()
+                    ownership.releaseReservation()
+                },
+                failureReporter = failureReporter,
+                componentsFactory = { _, _ ->
+                    val surface = WebHostSurface(RuntimeProcessIds.nextSurfaceId(), port, ownership, failureReporter)
+                    ownership.observeSurface(surface::onOwnershipRevoked)
+                    onSurfaceCreated(surface)
+                    RuntimeSessionComponents(
+                        windows = windows,
+                        primarySurface = RuntimePrimarySurface(surface, surface::detach),
+                        displayPort = displayPort,
+                        gamepadPort = gamepadPort,
+                    )
+                },
+            )
+        }
     }
 }
 
-private class WebHostOwnership(
+internal class WebHostOwnership(
     private val port: WebHostPort,
     private val reservation: WebHostReservation,
 ) {
     private var portReleased: Boolean = false
     private var reservationReleased: Boolean = false
     private var revokeAdmission: (() -> Unit)? = null
+    private var gamepadPort: WebGamepadPort? = null
 
     /**
      * Registers the surface this ownership closes the target's bridges for.
@@ -647,6 +676,19 @@ private class WebHostOwnership(
      */
     fun observeSurface(revokeAdmission: () -> Unit) {
         this.revokeAdmission = revokeAdmission
+    }
+
+    /**
+     * Registers the gamepad projection [createController] opened, so every release path closes it.
+     *
+     * The port is opened before any of the attach steps that can fail, and until it is registered
+     * here it is captured only by a controller factory closure that a failed attach never runs —
+     * the one opened resource `releaseAfterAttachFailure` could not reach. Registration precedes
+     * every release (it happens inside [createController], before a controller exists to revoke
+     * anything), so there is no already-released case to answer here.
+     */
+    fun observeGamepadPort(gamepadPort: WebGamepadPort) {
+        this.gamepadPort = gamepadPort
     }
 
     fun releaseAfterAttachFailure() {
@@ -661,6 +703,11 @@ private class WebHostOwnership(
         // stops admitting first: a cooperative stop releases the port while the runtime still has to
         // close the surface, and a frame registered before that must not be able to fire in between.
         runCatching { revokeAdmission?.invoke() }
+        // The gamepad projection the controller opened, closed on every release path — this funnel
+        // included, so a failed attach cannot orphan it and leave the page-global broker polling
+        // for a session that never existed. The close is idempotent: the hub's own is, and the
+        // runtime's components close may close the same port again on a clean stop.
+        runCatching { gamepadPort?.close() }
         runCatching { port.release() }
     }
 

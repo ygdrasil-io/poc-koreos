@@ -431,6 +431,66 @@ Rendre les managers communs honnêtes face aux APIs navigateur hétérogènes, p
 - hot-plug, révocation, déconnexion et fin de session libèrent leurs subscriptions et effets ;
 - une capability impossible à standardiser est documentée `Unsupported` et reçoit un scénario de non-appel natif.
 
+#### État (5 octobre 2026)
+
+Livré sur les deux targets. Le runtime n’expose que le passage de ports minimal qu’exigeait la phase :
+`withPrimarySurface`/`withComponents` acceptent des ports optionnels display, gamepad et
+input-device (eb8bd1f2), sans autre delta runtime. **Displays** : `WebDisplayPort` mesure le
+viewport du browsing context (`innerWidth`/`innerHeight`/`devicePixelRatio`/`screen.colorDepth`,
+via un seam `WebDisplaySource` par target) et publie, inconditionnellement pour toute session
+attachée, exactement `DisplayInventory.Enumerated(primary = viewport, displays = listOf(viewport))`
+avec `DisplayType.HostViewport` — bounds/workArea `round(w·dpr) × round(h·dpr)`, `scaleFactor` =
+dpr, `bitDepth` = `colorDepth`, `refreshRateHz` jamais publié (aucune primitive honnête) — ;
+la Window Management API (`getScreenDetails`) n’est appelée **aucune fois** (porte à prompt,
+top-level-only, inégale entre moteurs) et le snapshot est poussé à l’install de l’observateur,
+si bien qu’une session attachée sans rien demander a déjà l’inventaire exact (f50502de) ; un
+`resize` et une requête de résolution `(resolution: <dpr>dppx)` ré-enregistrée à chaque feu
+republishent, le dpr étant relu à chaque mesure (posture phase 2), et un viewport inmesurable
+répond `TemporarilyUnavailable(retryable)` avec retrait de l’inventaire. **Devices et gamepads** :
+le hub partagé de la page (`WebGamepadHub`, frère du broker AppKit) fait le diff par index DOM du poll
+`navigator.getGamepads()` — la seule source d’état, les événements `gamepadconnected`/
+`gamepaddisconnected` (écoutés à la fenêtre partout, au navigator là où le navigateur l’accepte :
+le navigator de Chromium n’est pas une event target, relevé 2026-10-05) ne déclenchant qu’une
+re-lecture — à la cadence des animation frames tant qu’au moins un port de session est ouvert ;
+descripteur gelé à la connexion depuis le mot `mapping` du navigateur (standard = 17 boutons/4
+axes, sinon contrôles natifs au compte rapporté), état canonisé vers les fenêtres du modèle
+(NaN → neutre, bornage, pression depuis la lecture brute), trous sans pad fantôme, diff contre
+l’état canonique (un pad hostile ne publie pas un flot de no-ops), routage AppKit (suspension publie le
+neutre et enregistre pour la reprise), inventaire toujours `DeviceInventory.Enumerated(devices = [],
+gamepads = …)` — la liste devices honnêtement vide, le navigateur n’offrant aucune primitive
+d’inventaire générique. **Effets** : `WebGamepadEffects` gèle par connexion la capability du pad —
+genres annoncés depuis la liste `effects` de l’actuateur, sondés par un dual-rumble de durée nulle
+quand elle n’est pas déclarée ; `LocalizedHaptic` jamais (aucune primitive) ; `TriggerRumble` porté
+avec ses magnitudes de gâchette quand le navigateur le déclare (d12a62be) ; `maximumDuration = null`
+(le navigateur serre) ; verdict synchrone seulement — une promesse qui rejette après un appel accepté
+est rapportée sur le reporter de failures (holder global au page, dernier wiring propriétaire),
+jamais représentée synchronement — ; un pad déconnecté refuse `Closed(Gamepad)` avant tout appel
+d’actuateur, un pad connecté mais suspendu lance son effet (sémantique AppKit : un effet est une
+action initiée par l’application) ; un port fermé révoque ses owners d’effets et re-arbitre les
+survivants. **Secure context** : `getGamepads` est secure-context-only — un page insecure réel
+n’expose aucun pad et l’inventaire reste énuméré, vide et complet ; la branche par pad
+`Unsupported(GamepadEffect)` est défensive, atteinte par la source synthétique du projet
+`chromium-insecure` (`--host-resolver-rules=MAP insecure.kadre.invalid 127.0.0.1`) dont le
+scénario n’asserte que des observables (`isSecureContext` faux, pad découvert, effets
+`Unsupported`, zéro prompt). Sont actifs en preuve : `BCK-007` (inventaire HostViewport, 4
+scénarios + 4 sentinelles), `BCK-008` (inventaire devices/gamepads et routage, 6 + 4) et
+`BCK-009` (effets et préconditions, 5 + 4) sur les deux targets — evidence JSON+JUnit corrélée
+par `kadre/contracts/driver/web/contracts/evidence.tsv`, validateur vert à la HEAD de livraison
+et mutation « prove-it-can-fail » enregistrée (918d91ba) ; raw input reste
+`Unsupported(RawInputAccess)` avec son scénario de non-appel natif (`web-gamepad-raw-input-unsupported` :
+cellule de capability relue, zéro registration d’`EventTarget` autour de la requête). La porte de
+confidentialité de Chromium (pads réels invisibles avant activation), le matériel réel
+(connexion OS, rumble réel), le multi-display réel (l’API Window Management documentée non
+supportée), la matrice insecure-context au-delà du faux hostname et le `vibrationActuator` de
+Firefox/WebKit font l’objet du cahier manuel `kadre/contracts/driver/web/manual/phase-6-displays-devices.md` ;
+limites et table de disponibilité dans `kadre/contracts/driver/web/README.md` (§Phase 6) ;
+registre des capabilities réécrit dans `kadre/capabilities/web.md` (§2, quatre lignes du bas ;
+§3.12-3.14 ; §4 — ne restent à produire que les trois cibles de capture de la phase 7) ;
+matrice et points d’attachement dans `kadre/BACKEND-CAPABILITIES.md` §4/§6.3 ; preuves par
+target : `kadre/contracts/driver/web/build/contract-evidence/<target>/contract-evidence/browser/chromium/BCK-007.json`,
+`…/BCK-008.json`, `…/BCK-009.json`, validées contre le rapport JUnit du même smoke et rejouées
+par `:kadre:contracts:validator:check`.
+
 ### Phase 7 — Capture, permissions et frames
 
 #### Objectif

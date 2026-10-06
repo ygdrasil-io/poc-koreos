@@ -21,6 +21,9 @@ export default defineConfig({
     'web-touch.spec.mjs',
     'web-drop.spec.mjs',
     'web-text-input.spec.mjs',
+    'web-display.spec.mjs',
+    'web-devices.spec.mjs',
+    'web-gamepad-effects.spec.mjs',
   ],
   timeout: 30_000,
   retries: 0,
@@ -31,4 +34,26 @@ export default defineConfig({
     headless: true,
     trace: 'retain-on-failure',
   },
+  // Two projects, one invocation: the regular suite in the browser the smokes have always run, and
+  // the insecure-context scenario alone in a browser whose host resolution maps the fixture's
+  // insecure name onto the same local server, so the page is served over plain http on a
+  // non-localhost host and the browsing context itself is not a secure context. The split keeps the
+  // regular projects untouched: no other test runs with the argument, and the insecure scenario
+  // never runs without it (its navigation could not resolve anywhere else).
+  projects: [
+    {
+      name: 'chromium',
+      grepInvert: [/web-gamepad-effect-insecure-context/],
+    },
+    {
+      name: 'chromium-insecure',
+      testMatch: ['web-gamepad-effects.spec.mjs'],
+      grep: [/web-gamepad-effect-insecure-context/],
+      use: {
+        launchOptions: {
+          args: ['--host-resolver-rules=MAP insecure.kadre.invalid 127.0.0.1'],
+        },
+      },
+    },
+  ],
 });
