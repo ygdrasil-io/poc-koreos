@@ -380,6 +380,27 @@ class ContractRegistryTest {
                         "web-gamepad-raw-no-listener",
                     ),
                 ),
+                "BCK-010" to webContract(
+                    contractId = "BCK-010",
+                    status = ContractStatus.Active,
+                    source = "WEB-IMPLEMENTATION-ROADMAP.md#Phase 7",
+                    subject = "web capture control plane",
+                    risk = "implicit permission prompt, fabricated source inventory, divergent scope cells or false capability claim",
+                    oracle = ContractOracle.O2,
+                    scenarios = listOf(
+                        "web-capture-initial-honest",
+                        "web-capture-readback-no-prompt",
+                        "web-capture-source-refused-before-picker",
+                        "web-capture-insecure-unsupported",
+                    ),
+                    conditionalCapabilities = listOf("CaptureManager.state"),
+                    sentinels = listOf(
+                        "web-capture-no-implicit-prompt",
+                        "web-capture-no-fabricated-sources",
+                        "web-capture-no-picker-at-readback",
+                        "web-capture-window-mirrors-screen",
+                    ),
+                ),
                 "INT-002" to webContract(
                     contractId = "INT-002",
                     status = ContractStatus.Active,
@@ -794,7 +815,7 @@ class ContractRegistryTest {
     private companion object {
         const val COMMIT = "0123456789abcdef0123456789abcdef01234567"
         val WEB_CONTRACT_IDS = setOf(
-            "BCK-001", "BCK-002", "BCK-003", "BCK-004", "BCK-005", "BCK-006", "BCK-007", "BCK-008", "BCK-009",
+            "BCK-001", "BCK-002", "BCK-003", "BCK-004", "BCK-005", "BCK-006", "BCK-007", "BCK-008", "BCK-009", "BCK-010",
             "INT-002", "INT-003", "INT-004",
         )
         val PLANNED_WEB_CONTRACT_IDS = setOf("BCK-001", "INT-003")

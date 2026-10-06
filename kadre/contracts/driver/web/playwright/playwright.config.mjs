@@ -24,6 +24,7 @@ export default defineConfig({
     'web-display.spec.mjs',
     'web-devices.spec.mjs',
     'web-gamepad-effects.spec.mjs',
+    'web-capture.spec.mjs',
   ],
   timeout: 30_000,
   retries: 0,
@@ -43,12 +44,12 @@ export default defineConfig({
   projects: [
     {
       name: 'chromium',
-      grepInvert: [/web-gamepad-effect-insecure-context/],
+      grepInvert: [/web-gamepad-effect-insecure-context/, /web-capture-insecure-unsupported/],
     },
     {
       name: 'chromium-insecure',
-      testMatch: ['web-gamepad-effects.spec.mjs'],
-      grep: [/web-gamepad-effect-insecure-context/],
+      testMatch: ['web-gamepad-effects.spec.mjs', 'web-capture.spec.mjs'],
+      grep: [/web-gamepad-effect-insecure-context/, /web-capture-insecure-unsupported/],
       use: {
         launchOptions: {
           args: ['--host-resolver-rules=MAP insecure.kadre.invalid 127.0.0.1'],
