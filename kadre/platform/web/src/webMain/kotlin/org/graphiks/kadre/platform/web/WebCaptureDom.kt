@@ -34,21 +34,103 @@ internal sealed interface WebDisplayMediaPick {
  *
  * [stop] is the browser's own effect: it ends the track and releases the capture it carried. The
  * inherited [close] releases the seam handle, and a realization's close stops the track too if the
- * caller never did — a discarded pick never leaks a live capture. The track's own end notification
- * (the browser revoking the source) rides a listener the streaming task adds to this seam; the
- * control plane of this task needs only the release.
+ * caller never did — a discarded pick never leaks a live capture. [addEndedListener] hears the
+ * track's own end — the browser revoking the source ("Stop sharing"), which the DOM signals only
+ * as the `ended` event, never as a failed read.
  */
 internal interface WebDomVideoTrack : AutoCloseable {
     /** Performs the browser's own track stop, exactly once per track. */
     fun stop()
+
+    /**
+     * Hears the track's own end — the browser revoking the capture, not the caller's [stop] (the
+     * DOM never fires `ended` for a stopped track, which is exactly how the two terminations stay
+     * distinguishable). Registered before the first read; may fire at most once.
+     */
+    fun addEndedListener(listener: () -> Unit)
 }
 
 /**
- * The per-track frame reader the streaming task pumps. Presence-carrier only at this phase: the
- * processor constructor's existence is what the capability probe reads, and the pump surface the
- * streaming task consumes is shaped there, on top of the readable this object wraps.
+ * One VideoFrame the reader delivered, as the seam holds it. [close] performs the browser's own
+ * frame release — the handle is the caller's from the moment [WebFrameRead.Frame] lands, and the
+ * bytes [copyTo] produces are Kotlin-owned copies, never a view of the frame's own buffers.
  */
-internal interface WebFrameReadable
+internal interface WebVideoFrame : AutoCloseable {
+    /** The frame's structural shape, read once as the seam took the handle. */
+    val shape: WebVideoFrameShape
+
+    /**
+     * The browser's own byte count for a whole-frame copy in [format] — `null` for the frame's own
+     * format — computed before any buffer exists, which is what makes the frame bound checkable
+     * before a single byte is allocated.
+     */
+    fun allocationSize(format: String?): Long
+
+    /**
+     * Copies every plane of the frame's visible rect into a fresh Kotlin-owned byte array and
+     * reports each plane's row stride as the browser wrote it — the tightly-packed stride when the
+     * browser reports none, which is what a default copy is by definition. One copy per frame; a
+     * browser refusal throws [WebCapturePipeException] with the browser's own error name.
+     */
+    suspend fun copyTo(format: String?): List<WebPlaneBytes>
+
+    override fun close()
+}
+
+/** The structural facts of one [WebVideoFrame], copied out of the browser's own properties. */
+internal class WebVideoFrameShape(
+    /** The browser's format word (`"RGBA"`, `"I420"`, …) — `null` when the frame says none. */
+    val format: String?,
+    /** The visible rect's dimensions — the pixels a default copy produces. */
+    val width: Int,
+    val height: Int,
+    /** The presentation timestamp in microseconds; `null` when the frame says none. */
+    val timestampUs: Long?,
+    /** The frame duration in microseconds; `null` when the browser does not say. */
+    val durationUs: Long?,
+    /** The frame's color words — `null` when the browser exposes no `colorSpace` at all. */
+    val colorSpace: WebColorSpaceShape?,
+)
+
+/** The `VideoFrame.colorSpace` words, copied structurally; every member may be the browser's null. */
+internal class WebColorSpaceShape(
+    val primaries: String?,
+    val transfer: String?,
+    val matrix: String?,
+    val fullRange: Boolean?,
+)
+
+/** One copied plane: the browser's own row stride and the fresh Kotlin-owned bytes it wrote. */
+internal class WebPlaneBytes(val rowStride: Int, val bytes: ByteArray)
+
+/** The one answer a read produces: a frame handle, the stream's end, or the browser's error name. */
+internal sealed interface WebFrameRead {
+    data class Frame(val frame: WebVideoFrame) : WebFrameRead
+
+    /** The readable ended — the browser stopped producing frames (the track's own end included). */
+    data object Ended : WebFrameRead
+
+    /** The readable failed; the code is the browser's own error name. */
+    data class Failed(val code: String) : WebFrameRead
+}
+
+/** A frame-pipe refusal carrying the browser's own error name, for the caller to map. */
+internal class WebCapturePipeException(val code: String) : Exception()
+
+/**
+ * The per-track frame reader the streaming task pumps: one read at a time over the processor's
+ * readable, each read answering exactly one [WebFrameRead]. [close] cancels the pending read and
+ * releases the reader — exactly once, from any path that reaches it. A read whose waiter is gone
+ * (the caller stopped or was cancelled while the browser was already delivering) discards the
+ * chunk it would have answered: a frame nobody will pump is the browser's handle to close, not a
+ * Kotlin leak — the realization owns that discard.
+ */
+internal interface WebFrameReadable : AutoCloseable {
+    /** Awaits the next frame, the stream's end, or its failure. One read in flight at a time. */
+    suspend fun read(): WebFrameRead
+
+    override fun close()
+}
 
 /**
  * Builds the frame reader for one granted track. Present iff the browsing context ships the

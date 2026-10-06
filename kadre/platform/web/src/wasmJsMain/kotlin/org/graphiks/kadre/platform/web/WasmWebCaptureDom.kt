@@ -4,9 +4,16 @@ package org.graphiks.kadre.platform.web
 
 import kotlin.js.ExperimentalWasmJsInterop
 import kotlin.js.JsAny
+import kotlin.js.JsNumber
 import kotlin.js.JsString
+import kotlin.js.Promise
+import kotlin.js.toJsString
 import kotlinx.browser.window
+import kotlinx.coroutines.await
 import kotlinx.coroutines.suspendCancellableCoroutine
+import org.graphiks.kadre.surface.PhysicalSize
+import org.khronos.webgl.Int8Array
+import org.khronos.webgl.get
 import org.w3c.dom.HTMLElement
 import org.w3c.dom.Window
 
@@ -110,6 +117,128 @@ internal external fun wasmMakeTrackProcessor(context: Window, track: JsAny): JsA
 @JsFun("(processor) => processor.readable")
 internal external fun wasmProcessorReadable(processor: JsAny): JsAny
 
+// -- the frame pump's pipe: reads, shapes, copies — the same gap the pointer-lock externals fill -----
+
+/** Hears the track's own end — the browser's revocation, never the caller's stop. */
+@JsFun("(track, listener) => track.addEventListener('ended', () => listener())")
+internal external fun wasmTrackAddEndedListener(track: JsAny, listener: () -> Unit)
+
+/** The reader behind a processor's readable stream. */
+@JsFun("(readable) => readable.getReader()")
+internal external fun wasmReaderOf(readable: JsAny): JsAny
+
+/** Cancels a reader — the release for a pump that stopped reading; its pending read unwinds. */
+@JsFun("(reader) => { reader.cancel(); }")
+internal external fun wasmCancelReader(reader: JsAny)
+
+/** One read over the readable: the chunk (done-flag included), or the rejection. */
+@JsFun(
+    "(reader, onChunk, onFailed) => { " +
+        "reader.read().then((result) => onChunk(result), (failure) => onFailed(failure)); }",
+)
+internal external fun wasmReadableRead(reader: JsAny, onChunk: (JsAny) -> Unit, onFailed: (JsAny) -> Unit)
+
+/** Whether one read chunk was the stream's end rather than a frame. */
+@JsFun("(result) => result.done === true")
+internal external fun wasmReadIsDone(result: JsAny): Boolean
+
+/** The frame of one read chunk. */
+@JsFun("(result) => result.value")
+internal external fun wasmReadValue(result: JsAny): JsAny
+
+/** Closes the frame of a chunk whose waiter is gone — the seam's documented discard. */
+@JsFun(
+    "(result) => { if (result.done !== true && result.value !== null && result.value !== undefined) { result.value.close(); } }",
+)
+internal external fun wasmDiscardChunk(result: JsAny)
+
+/** The browser's error name for a rejected read, or `refused` when it offers none. */
+@JsFun(
+    "(failure) => (failure !== null && failure !== undefined && typeof failure.name === 'string' && " +
+        "failure.name.length > 0) ? failure.name : 'refused'",
+)
+internal external fun wasmFailureName(failure: JsAny): JsString
+
+private fun wasmRejectionCode(failure: JsAny): String = wasmFailureName(failure).toString()
+
+/** The frame's format word, or `null` when it says none. */
+@JsFun("(frame) => (frame.format === undefined || frame.format === null) ? null : frame.format")
+internal external fun wasmFrameFormat(frame: JsAny): JsString?
+
+@JsFun("(frame) => frame.visibleWidth")
+internal external fun wasmFrameWidth(frame: JsAny): Double
+
+@JsFun("(frame) => frame.visibleHeight")
+internal external fun wasmFrameHeight(frame: JsAny): Double
+
+/** The presentation timestamp in microseconds, or `null` when the frame says none. */
+@JsFun("(frame) => (frame.timestamp === undefined || frame.timestamp === null) ? null : frame.timestamp")
+internal external fun wasmFrameTimestamp(frame: JsAny): JsAny?
+
+/** The frame duration in microseconds, or `null` when the browser does not say. */
+@JsFun("(frame) => (frame.duration === undefined || frame.duration === null) ? null : frame.duration")
+internal external fun wasmFrameDuration(frame: JsAny): JsAny?
+
+/** The frame's color words object, or `null` when the browser exposes none. */
+@JsFun("(frame) => (frame.colorSpace === undefined || frame.colorSpace === null) ? null : frame.colorSpace")
+internal external fun wasmFrameColorSpace(frame: JsAny): JsAny?
+
+/** One color word of the frame's `colorSpace`, by name, or `null`. */
+@JsFun("(colorSpace, name) => (colorSpace[name] === undefined || colorSpace[name] === null) ? null : colorSpace[name]")
+internal external fun wasmColorSpaceWord(colorSpace: JsAny, name: String): JsAny?
+
+/** The frame's full-range flag, or `null` when the browser does not say. */
+@JsFun(
+    "(colorSpace) => (colorSpace === null || colorSpace === undefined || " +
+        "typeof colorSpace.fullRange !== 'boolean') ? null : colorSpace.fullRange",
+)
+internal external fun wasmColorSpaceFullRange(colorSpace: JsAny): Boolean?
+
+/** The browser's own byte count for a whole-frame copy in [format] — the frame's own when `null`. */
+@JsFun("(frame, format) => frame.allocationSize(format === null ? {} : { format: format })")
+internal external fun wasmFrameAllocationSize(frame: JsAny, format: JsString?): Double
+
+/**
+ * The whole-frame copy: a buffer sized by the browser's own `allocationSize` for the same options,
+ * the copy awaited, and the buffer-plus-layout pair handed back for the Kotlin-side slicing.
+ */
+@JsFun(
+    "(frame, format) => { " +
+        "const options = format === null ? {} : { format: format }; " +
+        "const buffer = new ArrayBuffer(frame.allocationSize(options)); " +
+        "return frame.copyTo(buffer, options).then((layout) => ({ buffer: buffer, layout: layout })); }",
+)
+internal external fun wasmFrameCopy(frame: JsAny, format: JsString?): Promise<JsAny?>
+
+@JsFun("(result) => result.buffer")
+internal external fun wasmCopyBuffer(result: JsAny): JsAny
+
+@JsFun("(result) => result.layout")
+internal external fun wasmCopyLayout(result: JsAny): JsAny
+
+/** The byte view of one copied buffer, the way its contents are read byte by byte. */
+@JsFun("(buffer) => new Int8Array(buffer)")
+internal external fun wasmCopyView(buffer: JsAny): Int8Array
+
+@JsFun("(layout) => layout.length")
+internal external fun wasmLayoutCount(layout: JsAny): Int
+
+@JsFun("(layout, index) => layout[index].destinationOffset")
+internal external fun wasmLayoutOffset(layout: JsAny, index: Int): Double
+
+@JsFun("(layout, index) => layout[index].copyBytes")
+internal external fun wasmLayoutBytes(layout: JsAny, index: Int): Double
+
+/** The browser's reported stride of one copied plane, or -1 when the layout entry carries none. */
+@JsFun(
+    "(layout, index) => (layout[index] !== null && layout[index] !== undefined && " +
+        "typeof layout[index].stride === 'number') ? layout[index].stride : -1",
+)
+internal external fun wasmLayoutStride(layout: JsAny, index: Int): Double
+
+@JsFun("(frame) => frame.close()")
+internal external fun wasmFrameClose(frame: JsAny)
+
 /**
  * The attach element as a canvas, kind-checked by the JavaScript's own `instanceof` inside the
  * snippet — the one place where Kotlin/Wasm and JavaScript meet — so a Kotlin test double or any
@@ -130,6 +259,10 @@ private class WasmDomVideoTrack(private val stream: JsAny, internal val track: J
         if (stopped) return
         stopped = true
         wasmStopTrack(track)
+    }
+
+    override fun addEndedListener(listener: () -> Unit) {
+        wasmTrackAddEndedListener(track, listener)
     }
 
     override fun close() {
@@ -165,8 +298,116 @@ private class WasmTrackProcessorFactory(private val context: Window) : WebTrackP
     }
 }
 
-/** The reader the streaming task pumps; it wraps the processor's readable until then. */
-private class WasmWebFrameReadable(internal val readable: JsAny) : WebFrameReadable
+/** The reader of the processor's readable: one read at a time, released exactly once. */
+private class WasmWebFrameReadable(private val readable: JsAny) : WebFrameReadable {
+    private var reader: JsAny? = null
+    private var released = false
+
+    override suspend fun read(): WebFrameRead = suspendCancellableCoroutine { continuation ->
+        val currentReader = ensureReader()
+        wasmReadableRead(
+            currentReader,
+            onChunk = { result ->
+                if (continuation.isActive) {
+                    val answer = if (wasmReadIsDone(result)) {
+                        WebFrameRead.Ended
+                    } else {
+                        WebFrameRead.Frame(WasmWebVideoFrame(wasmReadValue(result)))
+                    }
+                    continuation.resume(answer) { _, _, _ -> }
+                } else {
+                    // The waiter is gone (stop or cancellation mid-delivery): the frame nobody
+                    // will pump is the browser's handle to close, not a Kotlin leak.
+                    wasmDiscardChunk(result)
+                }
+            },
+            onFailed = { failure ->
+                if (continuation.isActive) {
+                    continuation.resume(WebFrameRead.Failed(wasmFailureName(failure).toString())) { _, _, _ -> }
+                }
+            },
+        )
+        // The read cancelled from the Kotlin side ends the stream's reader — the browser's own
+        // release for a pump that stopped reading mid-frame.
+        continuation.invokeOnCancellation { release() }
+    }
+
+    override fun close() = release()
+
+    private fun ensureReader(): JsAny {
+        if (released) error("the frame reader is released")
+        return reader ?: wasmReaderOf(readable).also { reader = it }
+    }
+
+    private fun release() {
+        if (released) return
+        released = true
+        reader?.let(::wasmCancelReader)
+    }
+}
+
+/**
+ * One VideoFrame handle: the shape read once as the handle was taken, the browser's own
+ * `allocationSize` for the bound check, and one whole-frame `copyTo` into fresh Kotlin-owned
+ * planes. A default copy is tightly packed, so a plane the browser reports no stride for is the
+ * tightly-packed stride of the copy's own format word; a reported stride is taken as the truth.
+ */
+private class WasmWebVideoFrame(private val frame: JsAny) : WebVideoFrame {
+    override val shape: WebVideoFrameShape = wasmFrameShape(frame)
+
+    override fun allocationSize(format: String?): Long =
+        wasmFrameAllocationSize(frame, format?.toJsString()).toDouble().toLong()
+
+    override suspend fun copyTo(format: String?): List<WebPlaneBytes> {
+        // The awaited type is stated: the await extension's parameter is inferred from it.
+        val result: JsAny = wasmFrameCopy(frame, format?.toJsString()).await()
+        val view = wasmCopyView(wasmCopyBuffer(result))
+        val bytes = ByteArray(view.length) { index -> view[index] }
+        val layout = wasmCopyLayout(result)
+        val copyWord = format ?: shape.format ?: throw WebCapturePipeException("unknown-plane-word")
+        return List(wasmLayoutCount(layout)) { index ->
+            val offset = wasmLayoutOffset(layout, index).toInt()
+            val copyBytes = wasmLayoutBytes(layout, index).toInt()
+            val reported = wasmLayoutStride(layout, index)
+            WebPlaneBytes(
+                rowStride = if (reported >= 0) reported.toInt() else tightRowStride(copyWord, index),
+                bytes = bytes.copyOfRange(offset, offset + copyBytes),
+            )
+        }
+    }
+
+    override fun close() {
+        wasmFrameClose(frame)
+    }
+
+    private fun tightRowStride(copyWord: String, planeIndex: Int): Int {
+        val model = WebCaptureMapping.portableFormat(copyWord)
+            ?: throw WebCapturePipeException("unknown-plane-word")
+        return WebCaptureMapping.planeLayouts(model, PhysicalSize(shape.width, shape.height))[planeIndex].rowStride
+    }
+}
+
+/** The structural shape of one VideoFrame, copied out of the browser's own properties. */
+private fun wasmFrameShape(frame: JsAny): WebVideoFrameShape {
+    val colorSpace = wasmFrameColorSpace(frame)
+    return WebVideoFrameShape(
+        format = wasmFrameFormat(frame)?.toString(),
+        width = wasmFrameWidth(frame).toInt(),
+        height = wasmFrameHeight(frame).toInt(),
+        timestampUs = wasmFrameTimestamp(frame)?.toNumber()?.toLong(),
+        durationUs = wasmFrameDuration(frame)?.toNumber()?.toLong(),
+        colorSpace = colorSpace?.let {
+            WebColorSpaceShape(
+                primaries = wasmColorSpaceWord(it, "primaries")?.toString(),
+                transfer = wasmColorSpaceWord(it, "transfer")?.toString(),
+                matrix = wasmColorSpaceWord(it, "matrix")?.toString(),
+                fullRange = wasmColorSpaceFullRange(it),
+            )
+        },
+    )
+}
+
+private fun JsAny.toNumber(): Double = unsafeCast<JsNumber>().toDouble()
 
 /**
  * The capture seam of the browsing context, read through the window this target borrowed. The

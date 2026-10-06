@@ -59,10 +59,17 @@ class WebCapturePortTest {
         override fun close() {
             closeCount += 1
         }
+
+        override fun addEndedListener(listener: () -> Unit) {
+            // No discard-flow test hears an end; the streaming tests script their own track double.
+        }
     }
 
     private class RecordingProcessorFactory : WebTrackProcessorFactory {
-        override fun processorFor(track: WebDomVideoTrack): WebFrameReadable = object : WebFrameReadable {}
+        override fun processorFor(track: WebDomVideoTrack): WebFrameReadable = object : WebFrameReadable {
+            override suspend fun read(): WebFrameRead = error("no frame is scripted in the control-plane tests")
+            override fun close() = Unit
+        }
     }
 
     /**
@@ -466,23 +473,19 @@ class WebCapturePortTest {
     }
 
     @Test
-    fun reserveOfHostChoiceAndSurfaceAreDeclaredStubsUntilTheStreamingTasks() = runTest {
+    fun reserveOfSurfaceRemainsADeclaredStubUntilTheStreamingTask() = runTest {
         val dom = RecordingCaptureDom()
         val port = WebCapturePort(dom, primarySurfaceElementIsCanvas = true)
         val atConstruction = dom.interactions.toList()
 
         assertEquals(
             KadreResult.Failure(KadreFailure.Unsupported(KadreOperation.CaptureOpen)),
-            port.reserve(CapturePortTarget.HostChoice, CaptureRequest()),
-            "Task 3 replaces this stub with the host-choice reservation",
-        )
-        assertEquals(
-            KadreResult.Failure(KadreFailure.Unsupported(KadreOperation.CaptureOpen)),
             port.reserve(CapturePortTarget.Surface(RuntimeProcessIds.nextSurfaceId()), CaptureRequest()),
             "Task 4 replaces this stub with the surface reservation",
         )
-        assertEquals(atConstruction, dom.interactions, "the declared stubs touch no seam member either")
+        assertEquals(atConstruction, dom.interactions, "the declared stub touches no seam member either")
         assertFalse(dom.interactions.contains("pickDisplayMedia"))
+        // Task 3 routed HostChoice through the picker — its behaviour is pinned by WebCaptureStreamTest.
     }
 
     // -- (f) the observation channel and the idempotent close ---------------------------------------------

@@ -1,10 +1,12 @@
 package org.graphiks.kadre.platform.web
 
+import kotlinx.coroutines.Dispatchers
 import org.graphiks.kadre.capture.CaptureCapabilities
 import org.graphiks.kadre.capture.CaptureCursorMode
 import org.graphiks.kadre.capture.CapturePermissionScope
 import org.graphiks.kadre.capture.CapturePermissionState
 import org.graphiks.kadre.capture.CaptureRequest
+import org.graphiks.kadre.capture.CaptureSourceKind
 import org.graphiks.kadre.capture.CaptureTargetConstraints
 import org.graphiks.kadre.capture.PixelFormat
 import org.graphiks.kadre.diagnostics.Capability
@@ -18,16 +20,22 @@ import org.graphiks.kadre.input.PermissionState
 import org.graphiks.kadre.internal.runtime.CapturePort
 import org.graphiks.kadre.internal.runtime.CapturePortReservation
 import org.graphiks.kadre.internal.runtime.CapturePortSnapshot
+import org.graphiks.kadre.internal.runtime.CapturePortSource
 import org.graphiks.kadre.internal.runtime.CapturePortSources
+import org.graphiks.kadre.internal.runtime.CapturePortSourceKey
 import org.graphiks.kadre.internal.runtime.CapturePortTarget
 import org.graphiks.kadre.internal.runtime.RuntimeLock
 import org.graphiks.kadre.internal.runtime.withLock
+import kotlin.coroutines.CoroutineContext
 
 /** The failure domain of the capability probe's picker refusals, carrying the documented causes. */
 private const val CAPABILITY_DOMAIN = "capture-capability"
 
 /** The failure domain the plan's decision 4 names for every consent-flow error that is not one of its table rows. */
 private const val PERMISSION_DOMAIN = "capture-permission"
+
+/** The detached source namespace of a host-picker reservation — the browser granted exactly one stream. */
+private const val HOST_PICKER_SOURCE_NAMESPACE = "web-host-picker"
 
 /**
  * The web capture control plane: one honest snapshot of what this browsing context can promise
@@ -60,8 +68,10 @@ private const val PERMISSION_DOMAIN = "capture-permission"
  * whose targeted permission is unresolved, and the manager publishes the persistent rows itself.
  *
  * **`reserve` refuses `Source` structurally** (decision 2) — with zero seam interaction, before
- * anything browser-facing — and answers `HostChoice`/`Surface` with declared `Unsupported` stubs:
- * Tasks 3 and 4 replace those two rows with the real reservations; the `Source` row is permanent.
+ * anything browser-facing — and routes `HostChoice` through the picker and the frame pump
+ * ([WebHostChoiceReservation], decision 5's hints travelling with the request): region is refused
+ * before the picker in the AppKit admission form, the picked track reserves, and the pump produces
+ * the bounded frames. The `Surface` row is Task 4's declared stub; the `Source` row is permanent.
  *
  * The port is session-scoped: the runtime installs exactly one observer and closes the port with
  * the session components, which closes the seam with it.
@@ -69,10 +79,12 @@ private const val PERMISSION_DOMAIN = "capture-permission"
 internal class WebCapturePort(
     private val dom: WebCaptureDom,
     private val primarySurfaceElementIsCanvas: Boolean,
+    private val captureLoopContext: CoroutineContext = Dispatchers.Default,
 ) : CapturePort {
     private val lock = RuntimeLock()
     private var closed = false
     private var observer: ((KadreResult<CapturePortSnapshot>) -> Unit)? = null
+    private var nextReservationKeyValue = 0L
 
     /** The capability truth table of decision 5, probed once — presence-based, never guessed. */
     private val probedCapabilities: CaptureCapabilities = probeCapabilities()
@@ -137,10 +149,86 @@ internal class WebCapturePort(
             // structurally — here, before any picker — with nothing reserved and nothing asked.
             is CapturePortTarget.Source -> KadreResult.Failure(KadreFailure.Unsupported(KadreOperation.CaptureOpen))
 
-            // Declared stubs. Task 3 routes HostChoice through the picker and the frame pump; Task 4
-            // routes Surface through the canvas stream. Both replace the refusal; neither exists yet.
-            CapturePortTarget.HostChoice -> KadreResult.Failure(KadreFailure.Unsupported(KadreOperation.CaptureOpen))
+            // Task 4's declared stub: routed through the canvas stream when the surface task lands.
             is CapturePortTarget.Surface -> KadreResult.Failure(KadreFailure.Unsupported(KadreOperation.CaptureOpen))
+
+            // The host choice: admission, then the picker, then the reservation (no frame production
+            // — the pump is the reservation's own start).
+            CapturePortTarget.HostChoice -> hostChoiceReservation(request)
+        }
+    }
+
+    /**
+     * The `HostChoice` admission and reservation, in order:
+     *
+     * 1. **Region is refused before anything browser-facing** — the browser picks its own bounds,
+     *    so a region request is the AppKit admission refusal form (`Unsupported(CaptureOpen)`),
+     *    with the staged pick untouched.
+     * 2. **The picker runs with the request's hints** (decision 5): the cursor mode as the
+     *    browser's `cursor` word, the minimum frame interval as the reciprocal `frameRate` cap —
+     *    hints the browser may ignore, never promises.
+     * 3. **A picked track reserves.** The pump primitive is probed once; without it the pick is
+     *    released and the port refuses rather than reserving frames it cannot pump. The detached
+     *    source describes exactly what the browser granted and nothing more: a display-capture
+     *    stream of unknown bounds under one consent.
+     * 4. **A refusal maps at reserve**: the dismissed picker (or the missing activation — the
+     *    browser answers both `NotAllowedError`) is the AppKit-mirrored user cancellation of the
+     *    open; `NotFoundError` is the retryable no-source answer; anything else is a platform
+     *    failure in the consent domain, carrying the browser's own error name.
+     */
+    private suspend fun hostChoiceReservation(request: CaptureRequest): KadreResult<CapturePortReservation> {
+        if (request.region != null) {
+            return KadreResult.Failure(KadreFailure.Unsupported(KadreOperation.CaptureOpen))
+        }
+        return when (
+            val pick = dom.pickDisplayMedia(
+                cursorHint = WebCaptureMapping.cursorHint(request.cursorMode),
+                frameRateHint = WebCaptureMapping.frameRateHint(request.minimumFrameInterval),
+            )
+        ) {
+            is WebDisplayMediaPick.Picked -> {
+                val factory = dom.processorFactory()
+                if (factory == null) {
+                    // The discard flow: the browser effect once, the handle release once — the same
+                    // release requestPermission performs, never a live capture behind a lost pick.
+                    pick.track.stop()
+                    pick.track.close()
+                    KadreResult.Failure(KadreFailure.Unsupported(KadreOperation.CaptureCollectFrames))
+                } else {
+                    val keyValue = lock.withLock {
+                        val value = nextReservationKeyValue
+                        nextReservationKeyValue += 1L
+                        value
+                    }
+                    KadreResult.Success(
+                        WebHostChoiceReservation(
+                            source = CapturePortSource(
+                                key = CapturePortSourceKey(HOST_PICKER_SOURCE_NAMESPACE, keyValue),
+                                kind = CaptureSourceKind.Display,
+                                name = null,
+                                size = null,
+                            ),
+                            track = pick.track,
+                            factory = factory,
+                            request = request,
+                            loopContext = captureLoopContext,
+                        ),
+                    )
+                }
+            }
+
+            is WebDisplayMediaPick.Refused -> when (pick.code) {
+                "NotAllowedError", "AbortError" ->
+                    KadreResult.Failure(KadreFailure.UserCancelled(KadreOperation.CaptureOpen))
+
+                "NotFoundError" ->
+                    KadreResult.Failure(KadreFailure.TemporarilyUnavailable(retryable = true))
+
+                else ->
+                    KadreResult.Failure(
+                        KadreFailure.PlatformFailure(KadrePlatform.Web, PERMISSION_DOMAIN, pick.code),
+                    )
+            }
         }
     }
 

@@ -1,7 +1,11 @@
 package org.graphiks.kadre.platform.web
 
 import kotlinx.browser.window
+import kotlinx.coroutines.await
 import kotlinx.coroutines.suspendCancellableCoroutine
+import org.graphiks.kadre.surface.PhysicalSize
+import org.khronos.webgl.Int8Array
+import org.khronos.webgl.get
 import org.w3c.dom.HTMLCanvasElement
 import org.w3c.dom.Window
 import org.w3c.dom.mediacapture.MediaStream
@@ -138,6 +142,10 @@ private class JsDomVideoTrack(private val stream: MediaStream, internal val trac
         track.stop()
     }
 
+    override fun addEndedListener(listener: () -> Unit) {
+        jsTrackAddEndedListener(track, listener)
+    }
+
     override fun close() {
         if (closed) return
         closed = true
@@ -167,8 +175,188 @@ private class JsTrackProcessorFactory(private val context: Window) : WebTrackPro
     }
 }
 
-/** The reader the streaming task pumps; it wraps the processor's readable until then. */
-private class JsWebFrameReadable(val readable: dynamic) : WebFrameReadable
+/**
+ * The reader the streaming task pumps: one read at a time over the processor's readable, each
+ * answering a frame handle, the stream's end, or the browser's own error name. [close] cancels the
+ * reader exactly once — the release every stop path funnels into.
+ */
+private class JsWebFrameReadable(private val readable: dynamic) : WebFrameReadable {
+    private var reader: dynamic = null
+    private var released = false
+
+    override suspend fun read(): WebFrameRead = suspendCancellableCoroutine { continuation ->
+        val currentReader = ensureReader()
+        jsReadableRead(
+            currentReader,
+            onChunk = { chunk ->
+                if (continuation.isActive) {
+                    continuation.resume(jsReadAnswer(chunk)) { _, _, _ -> }
+                } else {
+                    // The waiter is gone (stop or cancellation mid-delivery): the frame nobody
+                    // will pump is the browser's handle to close, not a Kotlin leak.
+                    jsDiscardChunk(chunk)
+                }
+            },
+            onFailed = { failure ->
+                if (continuation.isActive) {
+                    continuation.resume(WebFrameRead.Failed(jsRejectionCode(failure))) { _, _, _ -> }
+                }
+            },
+        )
+        // The read cancelled from the Kotlin side ends the stream's reader — the browser's own
+        // release for a pump that stopped reading mid-frame.
+        continuation.invokeOnCancellation { release() }
+    }
+
+    override fun close() = release()
+
+    private fun ensureReader(): dynamic {
+        if (released) error("the frame reader is released")
+        val existing = reader
+        if (existing != null) return existing
+        // A dynamic receiver makes `also`-style lambdas dynamic too: plain statements, no `it`.
+        val created = jsReaderOf(readable)
+        reader = created
+        return created
+    }
+
+    private fun release() {
+        if (released) return
+        released = true
+        val owned = reader
+        if (owned != null) jsCancelReader(owned)
+    }
+}
+
+/**
+ * One VideoFrame handle: the shape read once as the handle was taken, the browser's own
+ * `allocationSize` for the bound check, and one whole-frame `copyTo` into fresh Kotlin-owned
+ * planes. A default copy is tightly packed, so the browser's reported plane strides are the
+ * tightly-packed strides of the copy's own format word; a reported stride is taken as the truth.
+ */
+private class JsWebVideoFrame(private val frame: dynamic) : WebVideoFrame {
+    override val shape: WebVideoFrameShape = jsVideoFrameShape(frame)
+
+    override fun allocationSize(format: String?): Long =
+        jsFrameAllocationSize(frame, format).unsafeCast<Number>().toLong()
+
+    override suspend fun copyTo(format: String?): List<WebPlaneBytes> {
+        val result = jsFrameCopy(frame, format).await()
+        val view = jsCopyView(js("result.buffer"))
+        val bytes = ByteArray(view.length) { index -> view[index] }
+        val layout = js("result.layout")
+        val count = js("layout.length").unsafeCast<Number>().toInt()
+        return List(count) { index ->
+            val offset = js("layout[index].destinationOffset").unsafeCast<Number>().toInt()
+            val copyBytes = js("layout[index].copyBytes").unsafeCast<Number>().toInt()
+            WebPlaneBytes(
+                rowStride = jsPlaneRowStride(layout, index, copyWord = format ?: shape.format, shape),
+                bytes = bytes.copyOfRange(offset, offset + copyBytes),
+            )
+        }
+    }
+
+    override fun close() {
+        jsFrameClose(frame)
+    }
+}
+
+/** The read answer of one reader chunk, mapped structurally; `done` is the stream's end. */
+private fun jsReadAnswer(chunk: dynamic): WebFrameRead =
+    if (js("chunk.done === true").unsafeCast<Boolean>()) {
+        WebFrameRead.Ended
+    } else {
+        WebFrameRead.Frame(JsWebVideoFrame(js("chunk.value")))
+    }
+
+/** Closes the frame of a chunk whose waiter is gone — the seam's documented discard. */
+private fun jsDiscardChunk(chunk: dynamic) {
+    js("if (chunk.done !== true && chunk.value !== null && chunk.value !== undefined) chunk.value.close()")
+}
+
+/** The row stride of one copied plane: the browser's word when it reports one, the tight one otherwise. */
+private fun jsPlaneRowStride(layout: dynamic, index: Int, copyWord: String?, shape: WebVideoFrameShape): Int {
+    val reported = jsReportedStride(layout, index)
+    if (reported >= 0) return reported
+    val model = copyWord?.let(WebCaptureMapping::portableFormat)
+        ?: throw WebCapturePipeException("unknown-plane-word")
+    return WebCaptureMapping.planeLayouts(model, PhysicalSize(shape.width, shape.height))[index].rowStride
+}
+
+/** The browser's own reported stride, or -1 when the layout entry carries none. */
+private fun jsReportedStride(layout: dynamic, index: Int): Int =
+    js("(layout[index] !== null && layout[index] !== undefined && typeof layout[index].stride === 'number') ? layout[index].stride : -1")
+        .unsafeCast<Number>().toInt()
+
+/** The structural shape of one VideoFrame, copied out of the browser's own properties. */
+private fun jsVideoFrameShape(frame: dynamic): WebVideoFrameShape = WebVideoFrameShape(
+    format = jsOptionalString(js("frame.format")),
+    width = js("frame.visibleWidth").unsafeCast<Number>().toInt(),
+    height = js("frame.visibleHeight").unsafeCast<Number>().toInt(),
+    timestampUs = jsOptionalNumber(js("frame.timestamp")),
+    durationUs = jsOptionalNumber(js("frame.duration")),
+    colorSpace = jsOptionalColorSpace(js("frame.colorSpace")),
+)
+
+/** The frame's color words, or `null` when the browser exposes no `colorSpace` at all. */
+private fun jsOptionalColorSpace(colorSpace: dynamic): WebColorSpaceShape? =
+    if (js("colorSpace === null || colorSpace === undefined").unsafeCast<Boolean>()) {
+        null
+    } else {
+        WebColorSpaceShape(
+            primaries = jsOptionalString(js("colorSpace.primaries")),
+            transfer = jsOptionalString(js("colorSpace.transfer")),
+            matrix = jsOptionalString(js("colorSpace.matrix")),
+            fullRange = jsOptionalBoolean(js("colorSpace.fullRange")),
+        )
+    }
+
+/** A browser word that may be absent; `undefined` and `null` are the same silence here. */
+private fun jsOptionalString(value: dynamic): String? =
+    if (js("value === null || value === undefined").unsafeCast<Boolean>()) null else value.unsafeCast<String>()
+
+private fun jsOptionalNumber(value: dynamic): Long? =
+    if (js("value === null || value === undefined").unsafeCast<Boolean>()) null else value.unsafeCast<Number>().toLong()
+
+private fun jsOptionalBoolean(value: dynamic): Boolean? =
+    if (js("value === null || value === undefined").unsafeCast<Boolean>()) null else value.unsafeCast<Boolean>()
+
+private fun jsReaderOf(readable: dynamic): dynamic = js("readable.getReader()")
+
+private fun jsCancelReader(reader: dynamic) {
+    js("reader.cancel()")
+}
+
+/** One read over the processor's readable: the chunk (done-flag included) or the rejection. */
+private fun jsReadableRead(reader: dynamic, onChunk: (dynamic) -> Unit, onFailed: (dynamic) -> Unit) {
+    js("reader.read().then(function (result) { onChunk(result); }, function (failure) { onFailed(failure); })")
+}
+
+/** The browser's own byte count for a whole-frame copy in [format] — the frame's own when `null`. */
+private fun jsFrameAllocationSize(frame: dynamic, format: String?): Number =
+    js("frame.allocationSize(format == null ? {} : { format: format })")
+
+/**
+ * The whole-frame copy: a buffer sized by the browser's own `allocationSize` for the same options,
+ * the copy awaited, and the buffer-plus-layout pair handed back for the Kotlin-side slicing.
+ */
+private fun jsFrameCopy(frame: dynamic, format: String?): Promise<dynamic> = js(
+    """(function () {
+         var options = format == null ? {} : { format: format };
+         var buffer = new ArrayBuffer(frame.allocationSize(options));
+         return frame.copyTo(buffer, options).then(function (layout) { return { buffer: buffer, layout: layout }; });
+       })()""",
+)
+
+private fun jsCopyView(buffer: dynamic): Int8Array = js("new Int8Array(buffer)")
+
+private fun jsFrameClose(frame: dynamic) {
+    js("frame.close()")
+}
+
+private fun jsTrackAddEndedListener(track: MediaStreamTrack, listener: () -> Unit) {
+    js("track.addEventListener('ended', listener)")
+}
 
 /** Whether the browsing context is a secure context — the browser's own word. */
 private fun jsCaptureIsSecureContext(context: Window): Boolean =
