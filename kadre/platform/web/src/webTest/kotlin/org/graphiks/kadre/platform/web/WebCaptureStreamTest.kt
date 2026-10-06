@@ -95,6 +95,8 @@ class WebCaptureStreamTest {
         override val shape: WebVideoFrameShape,
         private val allocationSizeBytes: Long,
         private val copyResult: List<WebPlaneBytes>,
+        private val allocationFailure: WebCapturePipeException? = null,
+        private val copyFailure: WebCapturePipeException? = null,
     ) : WebVideoFrame {
         var copyCount = 0
             private set
@@ -105,12 +107,14 @@ class WebCaptureStreamTest {
 
         override fun allocationSize(format: String?): Long {
             allocationFormats += format
+            allocationFailure?.let { throw it }
             return allocationSizeBytes
         }
 
         override suspend fun copyTo(format: String?): List<WebPlaneBytes> {
             copyCount += 1
             copyFormats += format
+            copyFailure?.let { throw it }
             return copyResult
         }
 
@@ -269,13 +273,15 @@ class WebCaptureStreamTest {
         WebPlaneBytes(rowStride = 2, bytes = ByteArray(4) { (it + 20).toByte() }),
     )
 
-    /** Stages one 4x4 RGBA frame as the readable's next answer. */
+    /** Stages one 4x4 RGBA frame as the readable's next answer, optionally with a scripted refusal. */
     private fun ScriptedReadable.frame(
         frameShape: WebVideoFrameShape = shape(),
         allocationSizeBytes: Long = 64L,
         planes: List<WebPlaneBytes> = rgbaPlanes(),
+        allocationFailure: WebCapturePipeException? = null,
+        copyFailure: WebCapturePipeException? = null,
     ): ScriptedFrame {
-        val frame = ScriptedFrame(frameShape, allocationSizeBytes, planes)
+        val frame = ScriptedFrame(frameShape, allocationSizeBytes, planes, allocationFailure, copyFailure)
         queue(WebFrameRead.Frame(frame))
         return frame
     }
@@ -450,6 +456,108 @@ class WebCaptureStreamTest {
         assertEquals(1, readable.closeCount, "the failed start releases the reservation's stream state")
         assertEquals(1, track.stopCount)
         assertEquals(1, track.closeCount)
+    }
+
+    // -- pipe refusals: the browser's own error name survives every normalization --------------------------
+
+    @Test
+    fun allocationRejectionFailsStartWithTheBrowserCode() = runTest {
+        val track = ScriptedTrack()
+        val readable = ScriptedReadable()
+        val refused = readable.frame(
+            allocationSizeBytes = 64L,
+            allocationFailure = WebCapturePipeException("NotReadableError"),
+        )
+        val pump = WebCapturePump(readable, track, CaptureRequest(), dispatcher())
+        val listener = RecordingListener(diagnostics = { pump.diagnostics })
+
+        val result = pump.start(listener, maxFrameBytes = 4096L)
+        assertEquals(
+            KadreResult.Failure(
+                KadreFailure.PlatformFailure(KadrePlatform.Web, "capture-stream", "NotReadableError"),
+            ),
+            result,
+            "the browser's own error name survives the normalization — not the generic pump code",
+        )
+        assertTrue(listener.events.isEmpty(), "no callback escapes a failed start")
+        assertEquals(0, refused.copyCount, "the rejected size is never followed by a copy")
+        assertEquals(1, refused.closeCount, "the browser frame is released, not leaked")
+        assertEquals(1, readable.closeCount)
+        assertEquals(1, track.stopCount)
+        assertEquals(1, track.closeCount)
+    }
+
+    @Test
+    fun allocationRejectionTerminatesWithTheBrowserCode() = runTest {
+        val track = ScriptedTrack()
+        val readable = ScriptedReadable()
+        readable.frame()
+        val pump = WebCapturePump(readable, track, CaptureRequest(), dispatcher())
+        val listener = RecordingListener(diagnostics = { pump.diagnostics })
+
+        pump.start(listener, maxFrameBytes = 4096L).started()
+        testScheduler.runCurrent()
+        assertEquals(listOf("frame"), listener.events)
+
+        val refused = ScriptedFrame(
+            shape(),
+            allocationSizeBytes = 64L,
+            copyResult = rgbaPlanes(),
+            allocationFailure = WebCapturePipeException("NotReadableError"),
+        )
+        readable.offer(WebFrameRead.Frame(refused))
+        testScheduler.runCurrent()
+
+        assertEquals(listOf("frame", "terminated"), listener.events)
+        assertEquals(
+            CapturePortTermination.Outcome(
+                CaptureOutcome.Failed(
+                    KadreFailure.PlatformFailure(KadrePlatform.Web, "capture-stream", "NotReadableError"),
+                ),
+            ),
+            listener.terminations.single(),
+        )
+        assertEquals(0, refused.copyCount, "the size that refused is never copied")
+        assertEquals(1, refused.closeCount, "the refused frame is released, not leaked")
+        assertEquals(1, readable.closeCount)
+        assertEquals(1, track.stopCount)
+    }
+
+    @Test
+    fun copyRejectionTerminatesWithTheBrowserCode() = runTest {
+        val track = ScriptedTrack()
+        val readable = ScriptedReadable()
+        readable.frame()
+        val pump = WebCapturePump(readable, track, CaptureRequest(), dispatcher())
+        val listener = RecordingListener(diagnostics = { pump.diagnostics })
+
+        pump.start(listener, maxFrameBytes = 4096L).started()
+        testScheduler.runCurrent()
+        assertEquals(listOf("frame"), listener.events)
+
+        val refused = ScriptedFrame(
+            shape(),
+            allocationSizeBytes = 64L,
+            copyResult = rgbaPlanes(),
+            copyFailure = WebCapturePipeException("EncodingError"),
+        )
+        readable.offer(WebFrameRead.Frame(refused))
+        testScheduler.runCurrent()
+
+        assertEquals(listOf("frame", "terminated"), listener.events)
+        assertEquals(
+            CapturePortTermination.Outcome(
+                CaptureOutcome.Failed(
+                    KadreFailure.PlatformFailure(KadrePlatform.Web, "capture-stream", "EncodingError"),
+                ),
+            ),
+            listener.terminations.single(),
+        )
+        assertEquals(1, refused.copyCount, "the copy ran and was refused by the browser")
+        assertEquals(1, refused.closeCount, "the refused frame's handle is released")
+        assertEquals(1, listener.frames.size, "the refused frame was never delivered")
+        assertEquals(1, readable.closeCount)
+        assertEquals(1, track.stopCount)
     }
 
     // -- review focus 5: a cancelled start releases the reservation's stream exactly once -----------------

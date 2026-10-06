@@ -4,6 +4,7 @@ package org.graphiks.kadre.platform.web
 
 import kotlin.js.ExperimentalWasmJsInterop
 import kotlin.js.JsAny
+import kotlin.js.JsException
 import kotlin.js.JsNumber
 import kotlin.js.JsString
 import kotlin.js.Promise
@@ -160,6 +161,15 @@ internal external fun wasmDiscardChunk(result: JsAny)
 internal external fun wasmFailureName(failure: JsAny): JsString
 
 private fun wasmRejectionCode(failure: JsAny): String = wasmFailureName(failure).toString()
+
+/**
+ * The browser's own error name behind a JS throw. JavaScript exceptions are signalled to Wasm as
+ * [JsException] carrying the thrown value; anything else is a throw the browser did not name.
+ */
+private fun wasmPipeCode(refused: Throwable): String = when (val value = (refused as? JsException)?.thrownValue) {
+    null -> "refused"
+    else -> wasmFailureName(value).toString()
+}
 
 /** The frame's format word, or `null` when it says none. */
 @JsFun("(frame) => (frame.format === undefined || frame.format === null) ? null : frame.format")
@@ -355,12 +365,21 @@ private class WasmWebFrameReadable(private val readable: JsAny) : WebFrameReadab
 private class WasmWebVideoFrame(private val frame: JsAny) : WebVideoFrame {
     override val shape: WebVideoFrameShape = wasmFrameShape(frame)
 
-    override fun allocationSize(format: String?): Long =
-        wasmFrameAllocationSize(frame, format?.toJsString()).toDouble().toLong()
+    override fun allocationSize(format: String?): Long = try {
+        wasmFrameAllocationSize(frame, format?.toJsString()).toLong()
+    } catch (refused: Throwable) {
+        // The seam's contract: a browser refusal crosses as the pipe exception carrying the
+        // browser's own error name — never as a raw Throwable.
+        throw WebCapturePipeException(wasmPipeCode(refused))
+    }
 
     override suspend fun copyTo(format: String?): List<WebPlaneBytes> {
-        // The awaited type is stated: the await extension's parameter is inferred from it.
-        val result: JsAny = wasmFrameCopy(frame, format?.toJsString()).await()
+        val result: JsAny = try {
+            wasmFrameCopy(frame, format?.toJsString()).await()
+        } catch (refused: Throwable) {
+            // A rejected `copyTo` promise is the browser's refusal: same normalization as above.
+            throw WebCapturePipeException(wasmPipeCode(refused))
+        }
         val view = wasmCopyView(wasmCopyBuffer(result))
         val bytes = ByteArray(view.length) { index -> view[index] }
         val layout = wasmCopyLayout(result)

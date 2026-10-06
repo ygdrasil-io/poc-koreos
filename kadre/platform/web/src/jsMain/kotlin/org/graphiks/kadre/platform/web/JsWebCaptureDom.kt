@@ -237,11 +237,21 @@ private class JsWebFrameReadable(private val readable: dynamic) : WebFrameReadab
 private class JsWebVideoFrame(private val frame: dynamic) : WebVideoFrame {
     override val shape: WebVideoFrameShape = jsVideoFrameShape(frame)
 
-    override fun allocationSize(format: String?): Long =
+    override fun allocationSize(format: String?): Long = try {
         jsFrameAllocationSize(frame, format).unsafeCast<Number>().toLong()
+    } catch (refused: Throwable) {
+        // The seam's contract: a browser refusal crosses as the pipe exception carrying the
+        // browser's own error name — never as a raw Throwable.
+        throw WebCapturePipeException(jsRejectionCode(refused))
+    }
 
     override suspend fun copyTo(format: String?): List<WebPlaneBytes> {
-        val result = jsFrameCopy(frame, format).await()
+        val result = try {
+            jsFrameCopy(frame, format).await()
+        } catch (refused: Throwable) {
+            // A rejected `copyTo` promise is the browser's refusal: same normalization as above.
+            throw WebCapturePipeException(jsRejectionCode(refused))
+        }
         val view = jsCopyView(js("result.buffer"))
         val bytes = ByteArray(view.length) { index -> view[index] }
         val layout = js("result.layout")

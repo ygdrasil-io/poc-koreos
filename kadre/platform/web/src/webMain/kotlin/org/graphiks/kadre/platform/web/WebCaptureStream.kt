@@ -143,6 +143,10 @@ internal class WebCapturePump(
             release()
             throw cancellation
         } catch (refused: WebCapturePipeException) {
+            // Defensive only — through the seam's contract this catch cannot fire: a read delivers
+            // its refusal as WebFrameRead.Failed and never throws. It stands so a realization bug
+            // cannot breach the port→session error model with a raw Throwable (the runtime session
+            // catches only CancellationException around reservation.start).
             release()
             return failedStart(refused.code)
         }
