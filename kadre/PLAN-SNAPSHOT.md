@@ -415,6 +415,8 @@ rtk scripts/test-android-device-selection.sh
 
 ## Chantier 7 — Migration UIKit, scènes iOS et SwiftUI
 
+Roadmap détaillée : [Implémentation iOS, iPadOS et tvOS](IOS-IMPLEMENTATION-ROADMAP.md), fondée sur l’architecture actuelle sous `kadre/`, avec le parcours focus/télécommande et les preuves spécifiques à Apple TV.
+
 ### But
 
 Aligner Kadre sur le lifecycle multi-scène UIKit.
