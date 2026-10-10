@@ -87,7 +87,13 @@ internal class AndroidHostSurface(
      * Le terminal unique, posé une fois par [close] — jamais déduit de l'état publié : le
      * binding publie l'instantané détaché canonique AVANT le terminal, et le terminal doit
      * quand même courir sa séquence (capabilities, fin du flux d'événements) une fois.
+     *
+     * Volatile : écrit sous [lock] par [close] et [publishMetrics], mais lu hors verrou par
+     * [admissionFailure] (appelée sous verrou par [apply]/[requestRedraw]) et par
+     * [installSessionConfiguration] (l'attach, thread principal) — la visibilité croisée
+     * thread est portée par le modificateur, pas par la chance.
      */
+    @Volatile
     private var detached: Boolean = false
 
     private val mutableState = MutableStateFlow(initialState)
@@ -97,7 +103,8 @@ internal class AndroidHostSurface(
      * Le flux borné des observations : au plus 64 événements en attente de collecte, les plus
      * anciens abandonnés au débordement — un observateur lent ne peut ni bloquer la surface ni
      * lui faire perdre la mémoire (le miroir de la surface web, à sa capacité près). Task 2
-     * émet ici ; en Task 1 le flux reste vide jusqu'au terminal.
+     * émet ici les événements typés des publications métriques ; Task 3 y émet
+     * `RedrawRequested` à la frame.
      */
     private val mutableEvents = MutableSharedFlow<SurfaceEvent>(
         replay = 0,
@@ -149,8 +156,13 @@ internal class AndroidHostSurface(
      *    révision non plus. Rien de posé → `Applied(current)` ; un champ posé →
      *    `PartiallyApplied(current, rejected)`. Jamais une failure externe `Unsupported` pour
      *    l'update entier : le rejet est PAR CHAMP, dans la liste du succès.
+     *
+     * Toute la décision tient sous [RuntimeLock] — le miroir de la surface de phase 0
+     * (`RuntimeHostSurface.kt:48-62`) : la garde de révision relit l'état publié et le verdict
+     * le rend, ils doivent voir le même instantané que [close]/[publishMetrics] écrivent. Le
+     * corps est non suspendant, le verrou n'est donc jamais tenu à travers une suspension.
      */
-    override suspend fun apply(update: SurfaceUpdate): KadreResult<SurfaceUpdateOutcome> {
+    override suspend fun apply(update: SurfaceUpdate): KadreResult<SurfaceUpdateOutcome> = lock.withLock {
         admissionFailure()?.let { return it }
         update.expectedRevision?.let { expected ->
             val currentRevision = mutableState.value.revision
@@ -199,7 +211,7 @@ internal class AndroidHostSurface(
         // Aucun commit : l'état rendu est l'instantané courant, révision intacte — demander la
         // valeur déjà en effet serait admis et répondue `Applied` de la même façon.
         val current = mutableState.value
-        return KadreResult.Success(
+        KadreResult.Success(
             if (rejected.isEmpty()) {
                 SurfaceUpdateOutcome.Applied(current)
             } else {
@@ -210,12 +222,15 @@ internal class AndroidHostSurface(
 
     /**
      * La demande de redessin, branche on-row de la phase 2 : la porte d'admission, puis
-     * `Unsupported(RequestRedraw)`. Task 3 remplace ce corps par le scheduler (le test normatif
-     * admet explicitement les deux formes `Success`/`Unsupported` pour traverser le swap).
+     * `Unsupported(RequestRedraw)` — le tout sous [RuntimeLock] (le miroir de la surface de
+     * phase 0, `RuntimeHostSurface.kt:48-62`). Task 3 remplace ce corps par le scheduler (le
+     * test normatif admet explicitement les deux formes `Success`/`Unsupported` pour traverser
+     * le swap) ; Tasks 2-3 partagent des états ([publishMetrics], scheduler) vivant sous le
+     * même verrou, la décision entière y tient donc déjà.
      */
-    override fun requestRedraw(): KadreResult<Unit> {
+    override fun requestRedraw(): KadreResult<Unit> = lock.withLock {
         admissionFailure()?.let { return it }
-        return KadreResult.Failure(KadreFailure.Unsupported(KadreOperation.RequestRedraw))
+        KadreResult.Failure(KadreFailure.Unsupported(KadreOperation.RequestRedraw))
     }
 
     /**
@@ -285,21 +300,35 @@ internal class AndroidHostSurface(
     /**
      * Publie une observation du host dans l'état de la surface — la même publication que la
      * surface interne de la phase 0, tenue courante : la révision ne bouge que pour un état qui
-     * bouge réellement, et une publication qui suit la fermeture (ou l'état détaché déjà publié
-     * par le binding) est absorbée exactement comme le fait `close`.
+     * bouge réellement (invariant P1 : même instance, révision = marqueur de changement), et
+     * une publication qui suit la fermeture (ou l'état détaché déjà publié par le binding) est
+     * absorbée exactement comme le fait `close`.
      *
-     * En Task 1 la publication est muette : elle est une observation d'état, pas un stimulus.
-     * Task 2 choisit l'événement typé correspondant et l'émet sur [events] avec le stamp de
-     * session ([stampSource]).
+     * Task 2 : l'événement typé. [eventFor] — quand il est fourni (le branchement métriques ;
+     * les publications lifecycle du binding restent muettes avec le défaut `null`) — construit
+     * l'événement depuis l'état AVANT, l'état publié et le stamp de session ([stampSource]). La
+     * publication reste muette tant que la configuration de session n'est pas installée (un
+     * `EventStamp` inventé ici serait une seconde séquence concurrente de celle de la session)
+     * et quand l'état n'a pas bougé. Le stamp est pris et l'événement émis SOUS le verrou :
+     * l'ordre du flux d'événements est l'ordre des stamps, lui-même l'ordre des publications.
+     * L'émission est `tryEmit` sur le flux borné (jamais bloquante, drop documenté au
+     * débordement — un drop sous policy n'est pas une failure annoncée, miroir web).
      */
-    internal fun publishMetrics(update: (SurfaceState) -> SurfaceState) {
+    internal fun publishMetrics(
+        update: (SurfaceState) -> SurfaceState,
+        eventFor: ((before: SurfaceState, published: SurfaceState, stamp: EventStamp) -> SurfaceEvent)? = null,
+    ) {
         lock.withLock {
             val current = mutableState.value
             if (detached || current.attachment == SurfaceAttachmentState.Detached) return
             val next = update(current)
             if (next == current) return
             check(current.revision.value < Long.MAX_VALUE) { "surface revision space exhausted" }
-            mutableState.value = next.copy(revision = SurfaceRevision(current.revision.value + 1L))
+            val published = next.copy(revision = SurfaceRevision(current.revision.value + 1L))
+            mutableState.value = published
+            val source = stampSource ?: return
+            val stamp = source()
+            eventFor?.invoke(current, published, stamp)?.let { mutableEvents.tryEmit(it) }
         }
     }
 

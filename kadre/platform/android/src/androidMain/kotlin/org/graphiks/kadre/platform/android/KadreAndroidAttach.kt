@@ -436,7 +436,10 @@ internal object AndroidHostSession {
      */
     private fun publish(snapshot: AndroidHostSnapshot, sessionSurface: SessionSurface) {
         val surface = sessionSurface.surface ?: return
-        surface.publishMetrics { current ->
+        // Publication muette (pas d'eventFor) : les publications lifecycle sont des observations
+        // d'état du binding, pas des stimuli — Task 2 n'émet des événements typés que pour les
+        // observations métriques du réducteur.
+        surface.publishMetrics(update = { current ->
             current.copy(
                 attachment = if (snapshot.attachment) {
                     SurfaceAttachmentState.Attached
@@ -446,7 +449,7 @@ internal object AndroidHostSession {
                 visibility = if (snapshot.foreground) SurfaceVisibility.Visible else SurfaceVisibility.Hidden,
                 focus = if (snapshot.active) SurfaceFocus.Focused else SurfaceFocus.Unfocused,
             )
-        }
+        })
     }
 
     /** L'état lifecycle du runtime pour un instantané — initial ET publications (RUN-004). */
