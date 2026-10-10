@@ -12,7 +12,12 @@ permissions:
 jobs:
   uikit-ios-simulator:
     name: uikit-ios-simulator
-    runs-on: macos-26
+    # Image publique en preview (actions/runner-images#14404 : Xcode 27 préinstallé sur
+    # macOS 27) — choisie car macos-26 livre au mieux Xcode 26.6 / runtimes 26.x, et la
+    # roadmap interdit de dégrader silencieusement les destinations (iOS/tvOS 27.0).
+    # Quirk connu du preview (Metal Toolchain possiblement absente) : sans effet sur cette
+    # gate. Toute instabilité apparaît en job rouge à diagnostiquer, jamais en skip.
+    runs-on: xcode-27
     timeout-minutes: 15
 
     steps:
@@ -45,7 +50,12 @@ jobs:
 
   uikit-tvos-simulator:
     name: uikit-tvos-simulator
-    runs-on: macos-26
+    # Image publique en preview (actions/runner-images#14404 : Xcode 27 préinstallé sur
+    # macOS 27) — choisie car macos-26 livre au mieux Xcode 26.6 / runtimes 26.x, et la
+    # roadmap interdit de dégrader silencieusement les destinations (iOS/tvOS 27.0).
+    # Quirk connu du preview (Metal Toolchain possiblement absente) : sans effet sur cette
+    # gate. Toute instabilité apparaît en job rouge à diagnostiquer, jamais en skip.
+    runs-on: xcode-27
     timeout-minutes: 15
 
     steps:
