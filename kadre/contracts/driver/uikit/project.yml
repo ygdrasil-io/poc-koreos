@@ -28,7 +28,7 @@ targets:
       properties:
         UILaunchStoryboardName: ""
         UIApplicationSceneManifest:
-          UIApplicationSupportsMultipleScenes: false
+          UIApplicationSupportsMultipleScenes: true
           UISceneConfigurations:
             UIWindowSceneSessionRoleApplication:
               - UISceneConfigurationName: default
@@ -61,6 +61,7 @@ targets:
     platform: iOS
     sources:
       - path: tests/Shared
+      - path: tests/Ios
     settings:
       base:
         FRAMEWORK_SEARCH_PATHS: "$(inherited) $(SRCROOT)/../../../platform/uikit/build/bin/iosSimulatorArm64/debugFramework"
