@@ -1,0 +1,6 @@
+contractId	target	kind	evidenceId	testClass	testName
+AND-001	android	scenario	android-consumer-session-start	org.graphiks.kadre.consumer.KadreConsumerSessionTest	androidConsumerSessionStart
+AND-001	android	scenario	android-consumer-session-stop-cleanup	org.graphiks.kadre.consumer.KadreConsumerSessionTest	androidConsumerSessionStopCleanup
+AND-001	android	scenario	android-consumer-double-attach-rejected	org.graphiks.kadre.consumer.KadreConsumerSessionTest	androidConsumerDoubleAttachRejected
+AND-001	android	sentinel	android-stop-no-resurrection	org.graphiks.kadre.consumer.KadreConsumerSessionTest	androidConsumerDoubleAttachRejected
+AND-001	android	sentinel	android-double-attach-single-owner	org.graphiks.kadre.consumer.KadreConsumerSessionTest	androidConsumerDoubleAttachRejected
