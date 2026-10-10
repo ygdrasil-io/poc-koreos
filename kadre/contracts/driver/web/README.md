@@ -226,7 +226,7 @@ project set plus the two insecure and five capture-session scenarios).
 Discovery-run outcomes behind the table: Firefox js 77/102, Firefox wasmJs
 75/102, WebKit js (macOS) 80/102, WebKit wasmJs (macOS) 80/102, WebKit js
 (Linux container) 82/102 — every failure in every run falls in the excluded
-classes above or is one of the two named flakes below. Confirmation runs with
+classes above or is one of the three named flakes below. Confirmation runs with
 the Chromium project's own exclusion set (95 scenarios) leave exactly the
 catalogued failures: Firefox 18 (js) and 19 (wasmJs, one flake), WebKit 15 on
 each target. The flake census: `a duplicate attach is rejected without another
@@ -237,7 +237,12 @@ failure of the wasmJs targets on both engines (3/3 each, cumulative container
 runs; Chromium's timing hides it), which is why it is a recorded wasmJs-only
 exclusion of both nightly engines, not a flake (see the per-engine smoke
 section below); `web-input-default-behavior` on macOS WebKit passed standalone
-but failed in five of six in-suite runs.
+but failed in five of six in-suite runs; `web-typescript-consumer` on WebKit
+wasmJs failed two of the four phase-8 container runs — non-deterministic,
+deliberately unexcluded (a flake is not an exclusion), and expected to
+occasionally redden the nightly on that same combination until the
+publication-aware-attach follow-up retires it (the same scenario's publication
+race on Firefox wasmJs is the finding below).
 
 ### Probed engine facts
 
