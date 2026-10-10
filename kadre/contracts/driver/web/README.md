@@ -12,12 +12,16 @@ Run both targets from the repository root:
 rtk ./gradlew :kadre:contracts:driver:web:jsBrowserSmoke :kadre:contracts:driver:web:wasmJsBrowserSmoke --rerun-tasks
 ```
 
-Fourteen target-specific Playwright suites run in Chromium, across two Playwright
-projects of one invocation — the regular browser, and a second browser whose host
-resolution maps the fixture's insecure name onto the same local server so the page
-is served over plain http on a non-localhost host (the insecure-context project, see
-[web-gamepad-effects.spec.mjs](playwright/web-gamepad-effects.spec.mjs) below) —
-and emit target-specific JUnit results:
+Fifteen target-specific Playwright suites run in Chromium, across three Playwright
+projects of one invocation — the regular browser; the insecure-context project, a
+browser whose host resolution maps the fixture's insecure name onto the same local
+server so the page is served over plain http on a non-localhost host (see
+[web-gamepad-effects.spec.mjs](playwright/web-gamepad-effects.spec.mjs) and
+[web-capture.spec.mjs](playwright/web-capture.spec.mjs) below); and the capture
+project, a browser launched with Chromium's own capture-test consent arguments and
+the only one the `BCK-011` capture-session scenarios run in (see
+[web-capture.spec.mjs](playwright/web-capture.spec.mjs) below) — and emit
+target-specific JUnit results:
 
 - [web-phase0.spec.mjs](playwright/web-phase0.spec.mjs) proves the baseline the
   other suites assume: an existing host attaches through the public API, the
@@ -105,10 +109,26 @@ and emit target-specific JUnit results:
   onto the pad's `vibrationActuator`, the stop that resets it, the unsupported
   effect kind refused before any actuator call, the insecure context whose effects
   capability stays unavailable, and the raw-input admission the web platform never
-  offers. The insecure-context scenario runs only in the second Playwright
-  project, so this suite appears twice in the JUnit report — four tests in the
+  offers. The insecure-context scenario runs only in the insecure-context
+  Playwright project, so this suite appears twice in the JUnit report — four tests in the
   regular project and the insecure-context scenario alone in the insecure one;
-  the testcase identity `classname#name` keeps every mapped identity unique.
+  the testcase identity `classname#name` keeps every mapped identity unique;
+- [web-capture.spec.mjs](playwright/web-capture.spec.mjs) proves the four
+  control-plane scenarios of `BCK-010` — the frozen attach snapshot whose sources
+  name the host picker and nothing else, the settled `display-capture` readback
+  that touches no prompting API, the open refused before any picker, and the
+  insecure context whose capture capabilities stay unsupported — and the five
+  session scenarios of `BCK-011`: the host-choice session whose consent is a real
+  click and whose delivered frames carry the published configuration's size and
+  format, the configuration journal entry that precedes the first frame, the
+  bounded frame collection, the exactly-once stop, and the canvas surface session
+  that streams the region-carrying open without any consent call. The
+  insecure-context scenario runs only in the insecure project; the five session
+  scenarios run only in the capture project, whose launch arguments
+  (`--auto-select-desktop-capture-source=screen`, `--use-fake-ui-for-media-stream`,
+  `--use-fake-device-for-media-stream`) let the browser answer its own
+  `getDisplayMedia` consent, the substitution the probe recorded in the spec
+  header; the other three control-plane scenarios run in the regular project.
 
 Playwright diagnostics are removed after a successful smoke; they are preserved
 on a failure or interruption. Every identity of
@@ -117,7 +137,8 @@ surface scenarios, the two lease scenarios, the twelve input scenarios, the
 seven provider scenarios of `BCK-001`, the eight touch scenarios of `BCK-004`,
 the nine text-input scenarios of `BCK-005`, the ten drop scenarios of `BCK-006`,
 the four display scenarios of `BCK-007`, the six device-inventory scenarios of
-`BCK-008`, the five gamepad-effect scenarios of `BCK-009` and the five facade
+`BCK-008`, the five gamepad-effect scenarios of `BCK-009`, the four control-plane
+and five session scenarios of `BCK-010` and `BCK-011` and the five facade
 scenarios of
 `INT-003` are titled with the evidence id they carry, so a JUnit
 `testcase/@name` maps to them without interpretation; the phase 1 lifecycle
