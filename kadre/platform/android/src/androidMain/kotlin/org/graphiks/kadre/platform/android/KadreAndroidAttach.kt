@@ -65,10 +65,10 @@ public fun attachKadre(
     val field = validateAttachPreconditions(
         isMainThread = Looper.myLooper() == Looper.getMainLooper(),
         isAttachedToWindow = view.isAttachedToWindow,
-        alreadyClaimed = AndroidViewOwnership.isClaimed(view),
+        alreadyClaimed = AndroidLegacyViewOwnership.isClaimed(view),
     )
     check(field == null) { "attachKadre precondition violated (field: $field)" }
-    check(AndroidViewOwnership.claim(view)) { "view is already claimed by an active session (field: view)" }
+    check(AndroidLegacyViewOwnership.claim(view)) { "view is already claimed by an active session (field: view)" }
     val state = AndroidAttachState()
     check(state.tryClaim(view)) { "view is already claimed by an active session (field: view)" }
     // La construction de session exacte est alignée sur WebHostSession.kt (runtime internals
@@ -103,7 +103,7 @@ public class KadreAndroidViewSession internal constructor(
         stopped = true
         bridge.teardown()
         session.close()
-        AndroidViewOwnership.release(view)
+        AndroidLegacyViewOwnership.release(view)
     }
 
     override fun close(): Unit = stop()
@@ -138,7 +138,7 @@ private fun createViewSession(
         // Terminaison : la session qui se termine libère l'ownership process-wide de la
         // View — le pendant de `ownership.releaseReservation()`, même sans `stop()` du
         // consommateur. Les doubles libérations sont absorbées par l'idempotence.
-        sessionObserver = RuntimeSessionObserver { _, _ -> AndroidViewOwnership.release(view) },
+        sessionObserver = RuntimeSessionObserver { _, _ -> AndroidLegacyViewOwnership.release(view) },
         primarySurfaceFactory = { id ->
             val surface = RuntimeHostSurface(id, initialSurfaceState(view))
             RuntimePrimarySurface(surface, surface::close)
@@ -160,7 +160,7 @@ private fun createViewSession(
             // Rejet post-admission (parentScope sans Job actif ou annulé, hôte fermé) :
             // zéro résidu — les ponts et l'ownership sont libérés AVANT l'exception.
             bridge.teardown()
-            AndroidViewOwnership.release(view)
+            AndroidLegacyViewOwnership.release(view)
             throw IllegalStateException(
                 "attachKadre could not start the session (${attached.reason})",
             )

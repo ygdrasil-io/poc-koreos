@@ -44,8 +44,12 @@ internal fun validateAttachPreconditions(
     else -> null
 }
 
-/** Registre d'ownership process-wide, indexé par identité de View (roadmap §3.2). */
-internal object AndroidViewOwnership {
+/**
+ * Registre d'ownership mono-identité de phase 0, indexé par identité de View (roadmap §3.2).
+ * Renommé en phase 1 pour céder le nom `AndroidViewOwnership` au registre à double identité
+ * (`AndroidViewOwnership.kt`) ; remplacé avec l'API phase 0 en Task 5.
+ */
+internal object AndroidLegacyViewOwnership {
     private val owners = java.util.concurrent.ConcurrentHashMap<Any, Unit>()
 
     fun claim(view: Any): Boolean = owners.putIfAbsent(view, Unit) == null

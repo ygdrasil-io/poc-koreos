@@ -48,12 +48,12 @@ class AndroidAttachStateTest {
     @Test
     fun ownershipRegistryReclaimsAfterRelease() {
         val view = Any()
-        assertTrue(AndroidViewOwnership.claim(view))
-        assertTrue(AndroidViewOwnership.isClaimed(view))
-        assertFalse(AndroidViewOwnership.claim(view)) // cross-sessions : un seul propriétaire
-        assertTrue(AndroidViewOwnership.release(view))
-        assertFalse(AndroidViewOwnership.isClaimed(view))
-        assertTrue(AndroidViewOwnership.claim(view)) // libéré, re-attach possible
-        AndroidViewOwnership.release(view)
+        assertTrue(AndroidLegacyViewOwnership.claim(view))
+        assertTrue(AndroidLegacyViewOwnership.isClaimed(view))
+        assertFalse(AndroidLegacyViewOwnership.claim(view)) // cross-sessions : un seul propriétaire
+        assertTrue(AndroidLegacyViewOwnership.release(view))
+        assertFalse(AndroidLegacyViewOwnership.isClaimed(view))
+        assertTrue(AndroidLegacyViewOwnership.claim(view)) // libéré, re-attach possible
+        AndroidLegacyViewOwnership.release(view)
     }
 }
