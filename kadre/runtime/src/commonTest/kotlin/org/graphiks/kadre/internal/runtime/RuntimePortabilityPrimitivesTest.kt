@@ -72,16 +72,34 @@ class RuntimePortabilityPrimitivesTest {
         assertFalse(Error("ordinary error").isLinkageFailure())
         assertFalse(LinkageProbe.original.isLinkageFailure())
 
-        // A class initialiser that fails is the portable stand-in for a linkage-level failure:
-        // the JVM surfaces its own linkage error wrapping the original failure, while js/wasmJs,
-        // which have no `LinkageError` type at all, surface the original ordinary exception.
+        // A class initialiser that fails is the portable stand-in for a linkage-level failure,
+        // and each family surfaces it in its own way:
+        // - the JVM wraps the original failure in its own `LinkageError`, which classifies true;
+        // - js/wasmJs, which have no `LinkageError` type at all, surface the original ordinary
+        //   exception, which classifies false;
+        // - Kotlin/Native wraps the original failure in its own initialiser-failure wrapper
+        //   (`kotlin.native.internal.FileFailedToInitializeException`, an `Error` whose cause is
+        //   the original). It is an initialisation failure, not a linkage failure — the code it
+        //   ran was present and simply threw — so the native actual classifies it false, exactly
+        //   like js/wasmJs, instead of widening to "an Error".
         val surfaced = assertNotNull(runCatching { LinkageProbe.FailingInitialiser.toString() }.exceptionOrNull())
 
         if (surfaced === LinkageProbe.original) {
             assertFalse(surfaced.isLinkageFailure(), "a target without LinkageError reports false for everything")
         } else {
-            assertTrue(surfaced.isLinkageFailure(), "the JVM classifies its own linkage error as a linkage failure")
-            assertTrue(surfaced.cause === LinkageProbe.original)
+            assertTrue(surfaced.cause === LinkageProbe.original, "the target's own wrapper must carry the original as its cause")
+            // On the JVM the wrapper is `ExceptionInInitializerError` (a `LinkageError` subclass —
+            // or a bare `LinkageError` depending on how the initialiser fails), which classifies
+            // true. Kotlin/Native's wrapper is `FileFailedToInitializeException`, an
+            // initialisation failure — not a linkage failure — and classifies false.
+            if (surfaced::class.simpleName in setOf("LinkageError", "ExceptionInInitializerError")) {
+                assertTrue(surfaced.isLinkageFailure(), "the JVM classifies its own linkage error as a linkage failure")
+            } else {
+                assertFalse(
+                    surfaced.isLinkageFailure(),
+                    "a non-JVM wrapper (native's initialiser-failure error) is not a linkage failure and must classify false",
+                )
+            }
         }
     }
 

@@ -300,7 +300,7 @@ Toutes les PR exécutent le gate sans `paths-ignore`. Les jobs partent en parall
 | `common-contracts` | modèle fake, policies, properties PR et sentinelles | 5 min |
 | `web-contracts` | JS et Wasm dans un vrai browser, même IDs de scénario | 8 min |
 | `android-contracts` | host tests + émulateur, lifecycle/view/input minimal réel | 8 min |
-| `uikit-contracts` | Kotlin/Native + simulateur booté, scene/lifecycle/surface | 8 min |
+| `uikit-contracts` | Kotlin/Native + simulateur booté, scene/lifecycle/surface ; en place dès la phase 0 : deux jobs simulateur indépendants (iOS 27.0, tvOS 27.0) ; compilation et liaison des slices appareil iosArm64/tvosArm64 | 8 min |
 | `appkit-contracts` | attach/run-loop/window sur runner macOS | 8 min |
 | `linux-contracts` | X11 et Wayland sur glibc et musl | 8 min |
 | `windows-contracts` | Win32 message loop/window/input sur runner Windows | 8 min |

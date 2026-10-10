@@ -94,6 +94,8 @@ Le bytecode brut des fonctions `suspend` et extensions Kotlin n’est pas une su
 
 ## 5. Swift — module source `KadreHost`
 
+Le module `KadreHost` cible iOS/iPadOS et tvOS ; les slices d’appareil et de simulateur des deux familles sont distinctes (assemblage et consumers : phase 3).
+
 ```swift
 public enum KadreIosHost {
     public static func attach(
@@ -418,7 +420,7 @@ Ces extensions sont Kotlin-only. Aucun pointer/adresse n’apparaît dans Swift,
 | Kotlin common | application coroutine utilisant lifecycle, surface, window, input et capture fake |
 | Java Android | attach, observer state, request stop, await `CompletionStage`, inspect failure |
 | Java Desktop | run standalone et inspect outcome |
-| Swift UIKit | attach une factory Kotlin, observer state, `awaitTermination`, cancellation du waiter |
+| Swift UIKit | attach une factory Kotlin, observer state, `awaitTermination`, cancellation du waiter (iOS et tvOS) |
 | SwiftUI | wrapper `UIViewControllerRepresentable` possédant l’host controller, sans layout Kadre |
 | TypeScript JS | attach élément, subscribe/unsubscribe, stop, await outcome, exhaustive switch failure |
 | TypeScript Wasm | même fichier source consumer que JS |
