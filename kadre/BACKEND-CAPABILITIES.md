@@ -73,9 +73,9 @@ Toutes les lignes possèdent les managers communs `windows`, `displays`, `device
 | raw input | C | C | C | N(RawInputAccess) | C | C | C | C |
 | gamepad observation | C | C | C | G, sondée (§6.3) | C | C | C | C |
 | effets gamepad | C | C | C | G, gouvernée (§6.3) | C | C | C | C |
-| capture target `HostChoice` | C | C | C | C | C | C | C | C |
-| capture target `Source` | C | C | C | N(CaptureOpen) si inventaire interdit | C | C | C | C |
-| capture target `Surface` | C | C | C | C | C | C | C | C |
+| capture target `HostChoice` | C | C | C | C, picker du navigateur derrière un consentement explicite (§6.3) | C | C | C | C |
+| capture target `Source` | C | C | C | N(CaptureOpen), refusée avant tout picker (§6.3) | C | C | C | C |
+| capture target `Surface` | C | C | C | C, canvas de la surface primaire, sans consentement (§6.3) | C | C | C | C |
 | `SurfaceCapabilities.platformAccess` | G, `withAndroidView` | G, `withAndroidView` | G, `withUIKitView` | G, `withWebElement` | N(PlatformSurfaceAccess) | N(PlatformSurfaceAccess) | N(PlatformSurfaceAccess) | N(PlatformSurfaceAccess) |
 | `WindowCapabilities.platformAccess` | N(PlatformWindowAccess) | — (aucune `Window`) | N(PlatformWindowAccess) | — (aucune `Window`) | G, `withDesktopHandle` | G, `withDesktopHandle` | G, `withDesktopHandle` | G, `withDesktopHandle` |
 
@@ -167,7 +167,7 @@ sur le `notificationCenter` de ce `NSWorkspace`, puis relayée sur le main threa
 avant toute lecture AppKit. Si une composante ne peut pas être lue, elle vaut
 `Unknown` et aucune valeur n’est devinée.
 
-L’absence de `Window` sur Android View ou sur le host Web initial ne ferme pas sa surface et ne fabrique aucune `WindowCapabilities`. `WindowManagerState.windows` reste vide ; Android publie `requestWindow = Unsupported(RequestWindow)`, tandis que Web suit son provider. `N(CaptureOpen)` pour `CaptureTarget.Source` n’interdit pas `HostChoice`; `sourceEnumeration`, `hostPicker` et les capabilities de target décrivent séparément ces chemins.
+L’absence de `Window` sur Android View ou sur le host Web initial ne ferme pas sa surface et ne fabrique aucune `WindowCapabilities`. `WindowManagerState.windows` reste vide ; Android publie `requestWindow = Unsupported(RequestWindow)`, tandis que Web suit son provider. `N(CaptureOpen)` pour `CaptureTarget.Source` n’interdit pas `HostChoice`; `sourceEnumeration`, `hostPicker` et les capabilities de target décrivent séparément ces chemins. Sur Web, la décision est livrée et prouvée : les sources sont toujours `CaptureSources.HostPickerOnly` — aucun navigateur n’énumère les surfaces capturables avant un consentement, et rien n’est inventé à la place — si bien que la cible `Source` est refusée `Unsupported(CaptureOpen)` avant tout picker, sans interaction navigateur ; les trois cibles de capture de la colonne Web portent leurs conditions exactes en §6.3 et leur registre en `capabilities/web.md` §2/§3.15-3.16.
 
 Les gestures sont des observations host-native ou des recognizers installés explicitement par l’adapter. Kadre ne promet aucun recognizer logiciel universel. Un adapter peut supporter pointer/touch tout en publiant gestures `Unsupported`.
 
@@ -329,6 +329,56 @@ préconditions (cinq scénarios et quatre sentinelles par target,
 `playwright/web-gamepad-effects.spec.mjs`, dont le scénario insecure-context du second projet
 Playwright, `--host-resolver-rules=MAP insecure.kadre.invalid 127.0.0.1`, qui n’asserte que des
 observables : `isSecureContext` faux, pad découvert, effets `Unsupported`, zéro prompt).
+
+**Capture.** Le plan de contrôle publié est l’instantané honnête du browsing context, sondé une
+fois à la construction de la session — secure context, présence de `getDisplayMedia` et du
+`MediaStreamTrackProcessor`, genre canvas de l’élément attaché — et la lecture de permission
+`permissions.query({ name: "display-capture" })` (qui ne prompte jamais) est le seul fait qui
+s’installe tard : l’instantané initial porte la cellule transitoire
+`Unavailable(Unsupported(CapturePermission))` des deux scopes jusqu’au règlement de la promesse,
+puis **une** republication porte la réponse installée. **Les sources sont toujours
+`CaptureSources.HostPickerOnly`** : aucun navigateur n’énumère les surfaces capturables avant un
+consentement, `sourceEnumeration` reste `Supported(Unit, Available)` dans tous les états en le
+disant, `refreshSources` est un no-op qui ne touche aucune mécanique de consentement, et la
+cible `Source` est structurellement `N(CaptureOpen)` — refusée avant tout picker, sans
+interaction navigateur, un `CaptureSourceId` restant opaque au runtime et inconstruisible sur ce
+target. **La cible `HostChoice`** vaut `C` sous ses conditions : les cellules screen et window
+sont le miroir exact l’une de l’autre — un consentement unique gouverne ce que le picker offre,
+il n’y a aucune garantie de fenêtre distincte — le picker n’est lancé que par l’open explicite
+de l’application avec les hints de la requête (`cursor`, plafond `frameRate` : des hints que le
+navigateur peut ignorer), une requête à région est refusée `Unsupported(CaptureOpen)` avant tout
+picker (le navigateur choisit ses propres bornes), et un picker congédié répond
+`UserCancelled(CaptureOpen)`, l’absence de source `TemporarilyUnavailable(retryable)`, tout
+autre refus une `PlatformFailure(Web, "capture-permission", <nom du navigateur>)`.
+**`requestPermission(scope)` est le seul chemin de consentement explicite** : les deux scopes
+courent le même `getDisplayMedia` dont le flux ramassé est arrêté immédiatement — le verdict
+seul est gardé, le navigateur confondant consentement et choix de source. **La cible `Surface`**
+vaut `C` sur le canvas de la surface primaire : sans picker et sans consentement
+(`captureStream()` est l’unique effet navigateur), formats `{Rgba8}`, curseur effectif `Hidden`,
+`region = Available` — le crop `new VideoFrame(frame, { visibleRect })` est produit avant la
+vérification de borne, si bien que la borne et la configuration portent la frame rognetée — et
+un id étranger à la surface enregistrée est refusé `InvalidRequest("request.target")` sans
+interaction navigateur. **Les sessions** sont pompées par la primitive `MediaStreamTrackProcessor`
+seule — aucun élément vidéo, aucun canvas de traitement, aucune création DOM — ; la
+configuration effective est dérivée de la première frame et publiée avant tout frame, la cadence
+reste `Unknown` (aucune primitive honnête), et la borne `maxFrameBytes` est lue dans
+l’`allocationSize` du navigateur **avant toute copie** — une frame au-delà est fermée sans copie
+et termine le flux `ResourceLimitExceeded(CaptureBuffer, bound)`. **Les terminaisons sont fermées
+et exactement une fois** : le stop demandé répond `Stopped(Requested)`, la fin externe du track
+— le « Stop sharing » du navigateur, que le DOM ne signale que comme fin de track — répond
+`SourceCompleted` (le stop-reason `PermissionRevoked` n’a aucun déclencheur navigateur distinct,
+limite documentée), un refus du pipe répond `Failed(PlatformFailure(Web, "capture-stream",
+<nom du navigateur>))` ; aucune frame n’est réémise après le stop et aucun objet stream, track,
+reader ou frame ne survit à la fin de session. **La caméra est hors de la v1** : aucun chemin
+`getUserMedia` n’existe — une sémantique de surface distincte que le même flow navigateur ne
+fournit pas — et la fonction reste canarisée, jamais appelée. La preuve est `BCK-010` (plan de
+contrôle : quatre scénarios et quatre sentinelles par target, `playwright/web-capture.spec.mjs`,
+dont le scénario insecure-context du second projet) et `BCK-011` (sessions et frames : cinq
+scénarios et quatre sentinelles par target, même suite, le seul projet `chromium-capture` portant
+les scénarios de session sous le trio d’arguments de consentement sanctionné de Chromium — la
+posture exacte de la preuve est enregistrée dans l’entête de la spec ; le vrai picker et les
+vrais pixels sont l’affaire du cahier manuel `kadre/contracts/driver/web/manual/phase-7-capture.md`) ;
+`capabilities/web.md` §3.15-3.16 porte le détail et les limites enregistrées.
 
 ### 6.4 Desktop (`org.graphiks.kadre.platform.desktop`)
 

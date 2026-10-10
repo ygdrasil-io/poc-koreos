@@ -187,6 +187,164 @@ and `...:validateWasmJsBrowserContractEvidence` read those documents against the
 same registry, the same mapping and the same JUnit report; they are part of
 `:kadre:contracts:validator:check`.
 
+## Phase 7 capture limits
+
+These are the real boundaries of the delivered phase, not defects. The normative
+statement of the phase is the phase-7 section of
+[kadre/WEB-IMPLEMENTATION-ROADMAP.md](../../../WEB-IMPLEMENTATION-ROADMAP.md)
+and the adapter register `kadre/capabilities/web.md` §3.15-3.16, which each
+statement below cites. The two active contracts of this phase are `BCK-010`
+(the capture control plane) and `BCK-011` (capture sessions and frames):
+
+- **no source enumeration, ever.** No browser exposes a pre-consent inventory
+  of capturable surfaces, and none is invented: the published sources are
+  always `CaptureSources.HostPickerOnly` (`WebCapturePort.kt:459-463`), the
+  `sourceEnumeration` capability says so unconditionally in every state — an
+  insecure context included — and `refreshSources()` is an honest no-op that
+  returns the current snapshot object without reaching the consent machinery
+  (`WebCapturePort.kt:161-166`). The Window Management API the display
+  inventory already refuses (phase-6 limits above) is not called here either;
+  a single pick outside the explicit request path is a scenario failure
+  (`web-capture-readback-no-prompt`; sentinels `web-capture-no-implicit-prompt`
+  and `web-capture-no-picker-at-readback`);
+- **`CaptureTarget.Source` is structurally `Unsupported(CaptureOpen)`.** The
+  port's reserve refuses a source target before anything browser-facing — zero
+  seam interaction, nothing reserved, nothing asked
+  (`WebCapturePort.kt:174-176`) — and the row is permanent: no source ever
+  exists to target, because no inventory ever exists. A `CaptureSourceId` is
+  runtime-opaque and unconstructible from this driver (the constructor is
+  internal to the foundation module), and the runtime's own admission answers
+  `InvalidRequest("request.target")` for an id its inventory does not name.
+  The scenario that pins the refusal-before-any-picker gate in the browser
+  stages the one refused open this driver can build — a region-carrying
+  request (`web-capture-source-refused-before-picker`) — and the
+  `Source` row itself is pinned by the platform's unit tests on both targets
+  (`WebCapturePortTest.reserveOfAnInventorySourceIsRefusedWithZeroSeamInteraction`),
+  with the register row carrying the `N(CaptureOpen)` cell;
+- **permissions: one readback, one mirror, one explicit consent path.** The
+  permission state comes from a single `permissions.query({ name:
+  "display-capture" })` — a query that never prompts; the window state
+  **mirrors** the screen state, because one browser consent governs whatever
+  its picker offered and no distinct window guarantee exists
+  (`WebCapturePort.kt:459-463`; sentinel `web-capture-window-mirrors-screen`).
+  The browser's query is promise-based, so the initial snapshot carries the
+  transient `Unavailable(Unsupported(CapturePermission))` on both scopes until
+  the settled answer republishes the snapshot exactly once — the runtime
+  dedupes identical snapshots, and an observer installed after settlement sees
+  the current answer (`WebCapturePort.kt:108-111`, `:334-345`). An insecure
+  context publishes `Unavailable` permission cells alongside the
+  `secure-context` capability causes, still mirrored. `requestPermission(scope)`
+  is the **only** explicit consent path, and both scopes run the same flow:
+  one `getDisplayMedia` whose picked stream is stopped immediately — the
+  browser conflates consent with picking, so the verdict is kept and the
+  stream never is (the discard flow, `WebCapturePort.kt:129-159`);
+- **the pump is `MediaStreamTrackProcessor`-only, and it creates no DOM.** The
+  frame reader is built from the granted track's processor and its `readable`
+  is read one read at a time; no video element, no processing canvas, no node
+  of any kind exists on this path. Browsers that lack the primitive, or ship
+  it differently, are the material of the nightly runs and
+  [the manual charter](manual/phase-7-capture.md) — the capability probe
+  reports the absence honestly and the register declares one engine. Two
+  probed Chromium facts travel with the reader: the shipped `copyTo`
+  PlaneLayout entries are `{offset, stride}` where the spec names
+  `{destinationOffset, copyBytes}`, so the readers try the spec words first
+  and take the shipped ones otherwise (tolerant readers, probed on the pinned
+  Chromium 148, `JsWebCaptureDom.kt:304-335`); and the visible size of a frame
+  is spelled `displayWidth`/`displayHeight` — there is no
+  `visibleWidth`/`visibleHeight` on a `VideoFrame`, and the browser-level
+  contract caught a reader of those absent words (`JsWebCaptureDom.kt:341-344`);
+- **the frame bound is read before any copy, and it is terminal.** The
+  browser's own `allocationSize` for the same options is read before a buffer
+  exists; a frame past `maxFrameBytes` is closed without ever being copied —
+  the first frame fails the start, a running frame terminates the stream —
+  with `ResourceLimitExceeded(CaptureBuffer, maxFrameBytes)`
+  (`WebCaptureStream.kt:170-185`, `:274-283`). No frame is re-emitted after
+  the stop: a read already in flight when the stop lands is released, never
+  delivered, and the counters and journal freeze at the terminal fact
+  (`web-capture-no-frame-after-stop`). No stream, track, reader or frame
+  object survives session end — the stub reads the browser's own `readyState`
+  to prove it (`web-capture-stop-exactly-once`; sentinels
+  `web-capture-track-stop-immediate`, `web-capture-no-stream-leak`). The
+  browser's error names surface verbatim through the `capture-stream` platform
+  failures (`WebCapturePipeException`, the normalization commit `db1f9d2d`);
+- **cadence is `Unknown`, and the picker words are hints.** The browser offers
+  no honest cadence primitive, so the configuration carries
+  `CaptureCadence.Unknown` and no `refreshRateHz`-like promise is ever made;
+  `minimumFrameInterval` travels only as the picker's `frameRate` cap hint and
+  the cursor mode only as the `cursor` hint — words the browser may ignore,
+  each omitted hint literally absent from the constraints dictionary
+  (`WebCaptureMapping.kt:150-161`, `JsWebCaptureDom.kt:453-460`);
+- **revocation is a track end, nothing more distinct.** Browsers signal
+  "Stop sharing" only as the granted track's `ended` event, so the closed
+  outcome of a revocation is `CaptureOutcome.SourceCompleted`; the model's
+  `PermissionRevoked` stop reason has no distinct browser trigger, and that is
+  a documented limit, not a synonym invented for it
+  (`WebCaptureDom.kt:45-51`, `WebCaptureStream.kt:408-410`);
+- **the camera is out of v1.** There is no `getUserMedia` camera path: a
+  camera is a distinct surface semantics the same browser flow does not
+  provide, and the decision is recorded rather than left implicit. The
+  function stays canaried — the stub records any call under any name, and no
+  scenario touches it; the platform sources contain zero `getUserMedia`
+  occurrences;
+- **region belongs to the surface alone.** A region-carrying `HostChoice`
+  open is refused at admission — the AppKit-form refusal
+  `Unsupported(CaptureOpen)` — before any picker, because the browser picks
+  its own bounds; the surface capability is the one web target whose
+  `region = Available` is real: the crop `new VideoFrame(frame, { visibleRect
+  })` is staged between the reader and the pump, so the shape read, the bound
+  check and the copy all bind the cropped frame, and the published
+  configuration names the cropped size and the region itself
+  (`WebCaptureSurface.kt:54-74`, `WebCaptureStream.kt:520-522`);
+- **session-level diagnostics carry the runtime-synthesized `FrameDropped`
+  only — `BackendFallback` has no SPI channel.** A native format word outside
+  the promised three is converted through `copyTo`'s format option, and the
+  conversion is recorded as a `CaptureDiagnostic.BackendFallback` **before**
+  the frame it concerns — on the web pump's own diagnostics surface
+  (`WebCapturePump.diagnostics`, the repo's first `BackendFallback` producer),
+  not in the session's flow, because the stream SPI carries no
+  backend-to-session diagnostics channel. The delivered shape is recorded as
+  such: the conversion is bounded, announced in the effective configuration,
+  and nothing claims it was delivered in the requested format
+  (`WebCaptureStreamTest.conversionRequestRecordsBackendFallbackBeforeTheFrame`);
+- **the session evidence's posture is the real consent path with the
+  browser's own test source** (recorded limit). The probe that decided it, on
+  this exact pinned Playwright and its Chromium 148 headless build, is stated
+  in the spec header: `context.grantPermissions(['display-capture'])` is gone
+  from Playwright 1.60's protocol mapping, `--auto-select-desktop-capture-source`
+  alone is refused `NotSupportedError`, and a real compositor capture is
+  refused headless on this platform. Under the sanctioned flag trio the
+  browser answers its own `getDisplayMedia` — the fake UI replacing the
+  interactive picker and Chromium's synthetic screen source standing in for
+  the compositor — while everything else is the browser's real machinery:
+  the consent call, the granted track, the processor pipe, the delivered
+  `VideoFrame`s and the track stop. The real picker UX and the real pixels
+  are the material of
+  [phase-7-capture.md](manual/phase-7-capture.md), the phase-6 gamepad
+  precedent restated for the consent flow.
+
+### Published phase 7 availability
+
+The canonical JSON of `BCK-010` and `BCK-011` carries the same empty
+`capabilities.initial` / `capabilities.transitions` arrays as every other
+browser contract, so this table is the availability record of the phase — it
+names what an attached web session really publishes, and the scenario or test
+next to each row is what asserts it:
+
+| API | Published value | Asserted by |
+| --- | --- | --- |
+| `CaptureManager.state.sources` | `CaptureSources.HostPickerOnly` in every state — insecure context included; `refreshSources` re-answers the current snapshot at the current revision without touching the browser | `web-capture-initial-honest`; sentinel `web-capture-no-fabricated-sources` |
+| `CaptureCapabilities.sourceEnumeration` | `Supported(Unit, Available)` in every state | `web-capture-initial-honest` |
+| `CaptureCapabilities.hostPicker` | `Available` on a secure context with `getDisplayMedia`; `Unavailable(PlatformFailure(Web, "capture-capability", …))` with the `secure-context` then `no-get-display-media` causes otherwise — never `Unsupported` | `web-capture-insecure-unsupported`; `WebCapturePortTest.insecureContextUnsupportedEverywhereWithSecureContextCauseOnThePicker`, `.missingGetDisplayMediaUnsupportedWithNoGetDisplayMediaCauseOnThePicker` |
+| `CaptureCapabilities.screen` / `.window` | `Supported(constraints, Available)` from the frozen probe — formats `{Rgba8, I420, Nv12}`, cursor `{Hidden, Embedded, EmbeddedWhenAvailable}`, region `Unsupported` — the window cell mirroring the screen cell word for word; `Unsupported(CaptureOpen)` on a missing precondition | `web-capture-initial-honest`, `web-capture-insecure-unsupported`; sentinel `web-capture-window-mirrors-screen` |
+| `CaptureCapabilities.surface` | `Supported({formats = Rgba8, cursor = Hidden, region = Available}, Available)` on a canvas attach element under the same preconditions; `Unsupported(CaptureOpen)` otherwise | `web-capture-initial-honest`, `web-capture-surface-canvas-stream` |
+| `CapturePermissionState` | both scopes mirrored: the settled `display-capture` readback word (`granted`/`denied:canRequestAgain=true`/`notDetermined`) or the transient `Unavailable(Unsupported(CapturePermission))` until settlement — exactly one republish | `web-capture-readback-no-prompt` (the mirrored settled cells, one query, revision 1); sentinel `web-capture-window-mirrors-screen` |
+| the implicit-prompt record | empty across attach, readback, refresh and refusal: the canaries' `getDisplayMedia`, `getUserMedia`, `permissions.request`, `getScreenDetails`, `requestMIDIAccess` and `Notification.requestPermission` are never touched; the readback spy counts exactly one `permissions.query` | `web-capture-readback-no-prompt`, `web-capture-source-refused-before-picker`; sentinel `web-capture-no-implicit-prompt` |
+| `CaptureManager.open` on `Source` / region | `Unsupported(CaptureOpen)` — the source target refused at the port with zero seam interaction and never constructible from the driver; the region-carrying open refused before any picker | `web-capture-source-refused-before-picker`; `WebCapturePortTest.reserveOfAnInventorySourceIsRefusedWithZeroSeamInteraction`, `WebCaptureStreamTest.hostChoiceRegionIsRefusedBeforeAnyPicker` |
+| the `HostChoice` session | one explicit consent (`getDisplayMedia` exactly once, from a real click), `Streaming` at configuration revision 0, frames agreeing with the published configuration's size and format, the journal entry preceding the first frame | `web-capture-hostchoice-stream`, `web-capture-configuration-before-frame`; sentinel `web-capture-config-precedes-frame` |
+| the frame bound | a `maxFrameBytes` below the first frame's `allocationSize` fails the start before any copy and terminates the session `Failed(ResourceLimitExceeded(CaptureBuffer, bound))`, zero frames delivered, the pick released | `web-capture-frames-bounded` |
+| the stop | exactly once: `Stopped(Requested)` published once, the track stopped once and read `ended` by the time the outcome lands, a second stop inert, no consent machinery running again | `web-capture-stop-exactly-once`; sentinels `web-capture-track-stop-immediate`, `web-capture-no-stream-leak`, `web-capture-no-frame-after-stop` |
+| the `Surface` session | open without any consent call, the region-carrying request streaming the cropped `32x32:Rgba8` configuration, the canvas track released like any other | `web-capture-surface-canvas-stream` |
+
 ## Phase 6 displays, devices and gamepad limits
 
 These are the real boundaries of the delivered phase, not defects. The normative
@@ -716,7 +874,15 @@ automated smokes:
   privacy gate that headless cannot stage), the real multi-display setup the
   adapter deliberately does not enumerate (the Window Management API documented
   as unsupported), the insecure-context matrix beyond the fake-hostname trick,
-  and the `vibrationActuator` behaviour of Firefox/WebKit.
+  and the `vibrationActuator` behaviour of Firefox/WebKit;
+- [phase-7-capture.md](manual/phase-7-capture.md) covers the real consent flow
+  the capture scenarios only reach through the browser's own test arguments:
+  the real picker (dialog, source thumbnails, the user's own choice), the real
+  screen/window/tab pixels including cursor behaviour, the macOS
+  screen-recording permission interplay with the browser's consent, the
+  "Stop sharing" bar the track-end revocation rides, the
+  `MediaStreamTrackProcessor` and consent behaviour of Firefox/WebKit, and the
+  camera-out-of-v1 confirmation.
 
 They are informative, they do not create validator evidence, and they do not
 change contract status.

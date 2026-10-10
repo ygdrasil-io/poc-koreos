@@ -514,6 +514,74 @@ Intégrer les primitives de capture Web sans masquer leurs contraintes de sécur
 - les frames ne sont pas réémises après stop et ne laissent aucun objet DOM/stream accessible à une session terminée ;
 - les capacités dépendant d’un vrai écran, d’une permission ou d’un navigateur particulier sont complétées par une preuve nightly et un cahier manuel, jamais par un skip en CI PR.
 
+#### État (10 octobre 2026)
+
+Livré sur les deux targets. Le runtime n’expose que le passage de port minimal qu’exigeait la
+phase : `withPrimarySurface` accepte un port capture optionnel (f1c43e60), additif et
+null-defaulté, sans autre delta runtime. **Plan de contrôle** : `WebCapturePort` sonde une fois
+à la construction le secure context, la présence de `getDisplayMedia` et celle du
+`MediaStreamTrackProcessor`, et le genre canvas de l’élément attaché, et gèle les capabilities
+dans l’instantané (dd983233) — sources **toujours** `CaptureSources.HostPickerOnly` (aucun
+navigateur n’énumère les surfaces capturables avant un consentement, `getScreenDetails` jamais
+appelée, `refreshSources` no-op honnête sans un appel seam), `sourceEnumeration` inconditionnelle,
+cellules screen et window miroirs exacts l’une de l’autre (un consentement unique gouverne ce
+que le picker offre), picker `Unavailable` avec la cause `secure-context`/`no-get-display-media`
+en `PlatformFailure(Web, "capture-capability", …)` ; la lecture de permission est le seul
+`permissions.query({ name: "display-capture" })` — jamais un prompt — dont la réponse tardive
+republish l’instantané exactement une fois après l’état transitoire
+`Unavailable(Unsupported(CapturePermission))` ; `requestPermission` est le seul chemin de
+consentement explicite, les deux scopes y courent le même `getDisplayMedia` au flux arrêté
+immédiatement (le discard flow — le navigateur confond consentement et choix), et la cible
+`Source` est refusée `Unsupported(CaptureOpen)` avant tout picker, sans interaction seam,
+`CaptureSourceId` restant opaque et inconstruisible sur ce target. **Sessions et frames** : la
+pompe n’a qu’une primitive — `MediaStreamTrackProcessor`, aucune création DOM, aucun élément
+vidéo ni canvas de traitement (29f6b19a) — lit une frame à la fois, dérive la configuration
+effective de la première et la publie avant tout frame, cadence `Unknown`, et lit la borne
+`maxFrameBytes` dans l’`allocationSize` du navigateur **avant toute copie** — au-delà, la frame
+est fermée sans copie et le flux termine `ResourceLimitExceeded(CaptureBuffer, bound)` ; les
+refus du pipe portent le nom d’erreur du navigateur verbatim dans
+`PlatformFailure(Web, "capture-stream", …)` (db1f9d2d), les terminaisons sont exactement une
+fois — stop demandé `Stopped(Requested)`, fin externe du track (« Stop sharing » que le DOM ne
+signale que comme `ended`) `SourceCompleted`, le stop-reason `PermissionRevoked` sans
+déclencheur navigateur distinct (limite documentée) — aucune frame n’est réémise après le stop
+et aucun objet stream/track/reader/frame ne survit à la session ; la lecture des layouts
+tolère la divergence livrée de Chromium (`copyTo` PlaneLayout `{offset, stride}` contre les
+mots de la spec `{destinationOffset, copyBytes}`, lecteurs tolérants, relevé sur le Chromium
+148 épinglé) et les dimensions visibles d’une frame sont lues `displayWidth`/`displayHeight`
+(fix pris par le contrat navigateur). **Surface** : le canvas de la surface primaire enregistrée
+est le seul id résolvable — un id étranger répond `InvalidRequest("request.target")` sans
+interaction seam — et son open est sans consentement (`captureStream()` seul effet navigateur),
+formats `{Rgba8}`, curseur effectif `Hidden`, `region = Available` avec le crop
+`new VideoFrame(frame, { visibleRect })` produit avant la vérification de borne
+(acce8f64) ; une requête à région sur `HostChoice` reste refusée à l’admission avant tout
+picker. **Caméra hors v1** : aucun chemin `getUserMedia` — sémantique de surface distincte que
+le même flow navigateur ne fournit pas —, la fonction restant canarisée, jamais appelée.
+**Diagnostics** : la conversion de format hors des trois promis est enregistrée
+`BackendFallback` avant la frame qu’elle concerne sur la surface propre de la pompe Web
+(`WebCapturePump.diagnostics`, premier producteur du dépôt) — le SPI ne porte aucun canal de
+diagnostics backend→session, et les diagnostics de session ne portent que le `FrameDropped`
+synthétisé par le runtime (limite de forme livrée). Sont actifs en preuve : `BCK-010` (plan de
+contrôle, 4 scénarios + 4 sentinelles) et `BCK-011` (sessions et frames, 5 + 4) sur les deux
+targets (3dca8a28, e00c0c88, 0b5bb557) — evidence JSON+JUnit corrélée par
+`kadre/contracts/driver/web/contracts/evidence.tsv`, les scénarios de session courants dans le
+troisième projet Playwright `chromium-capture` sous le trio d’arguments de consentement
+sanctionné de Chromium (`--auto-select-desktop-capture-source=screen`,
+`--use-fake-ui-for-media-stream`, `--use-fake-device-for-media-stream` ; la sonde de la tâche 6
+et la posture qu’elle a décidée sont enregistrées dans l’entête de `web-capture.spec.mjs` :
+le vrai consentement et le vrai pipe, la source d’écran synthétique du navigateur à la place
+des vrais pixels) et rejouées par `:kadre:contracts:validator:check`. Le vrai picker (dialogue,
+vignettes, choix), les vrais pixels écran/fenêtre/onglet et le curseur, l’interplay permission
+d’enregistrement macOS/consentement, la barre « Stop sharing », le comportement
+Firefox/WebKit et la confirmation caméra-hors-v1 font l’objet du cahier manuel
+`kadre/contracts/driver/web/manual/phase-7-capture.md` ; limites et table de disponibilité dans
+`kadre/contracts/driver/web/README.md` (§Phase 7) ; registre des capabilities réécrit dans
+`kadre/capabilities/web.md` (§2, cinq lignes du bas ; §3.15-3.16 ; §4 — les trois cibles de
+capture quittent la liste restante, ne reste non livré que le signal de pression mémoire, propriété
+de l’audit de la phase 8) ; matrice et points d’attachement dans
+`kadre/BACKEND-CAPABILITIES.md` §4/§6.3 ; preuves par target :
+`kadre/contracts/driver/web/build/contract-evidence/<target>/contract-evidence/browser/chromium/BCK-010.json`,
+`…/BCK-011.json`, validées contre le rapport JUnit du même smoke.
+
 ### Phase 8 — Fermeture Web : compatibilité, CI et exploitation
 
 #### Objectif
