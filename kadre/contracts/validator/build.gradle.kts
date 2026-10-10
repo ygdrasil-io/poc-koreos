@@ -365,6 +365,7 @@ val generateUikitContractEvidence by tasks.registering {
     description = "Generates and validates evidence for every active UIKit simulator contract."
     dependsOn(uikitContractEvidenceTasks)
     dependsOn(uikitContractValidateTasks)
+}
 
 val androidContractIds = listOf("AND-001")
 val androidContractRegistry = rootProject.file("kadre/contracts/registry/contracts.tsv")
