@@ -55,6 +55,9 @@ class AndroidHostSurfaceTest {
     private fun surface(): AndroidHostSurface = AndroidHostSurface(
         id = RuntimeProcessIds.nextSurfaceId(),
         initialState = initialSurfaceStateForTest(),
+        // Clock inerte : la surface de CE test n'est jamais dessinée — le scheduler (Task 3)
+        // reçoit une couture SDK qui ne touche jamais le Choreographer en host test.
+        frameClock = { InertFrameClock },
     )
 
     @Test
@@ -197,3 +200,9 @@ private fun initialSurfaceStateForTest(): SurfaceState = SurfaceState(
     inputDefaultBehavior = InputDefaultBehavior.HostDefault,
     revision = SurfaceRevision(0L),
 )
+
+/** La clock inerte du test : les frames y sont posées et n'y courent jamais (aucun SDK). */
+private object InertFrameClock : AndroidRedrawScheduler.FrameClock {
+    override fun schedule(frame: () -> Unit) = Unit
+    override fun cancel() = Unit
+}

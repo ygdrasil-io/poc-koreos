@@ -77,11 +77,25 @@ import org.graphiks.kadre.surface.SurfaceUpdateOutcome
 internal class AndroidHostSurface(
     override val id: SurfaceId,
     initialState: SurfaceState,
+    private val frameClock: () -> AndroidRedrawScheduler.FrameClock = { ChoreographerFrameClock() },
 ) : HostSurface,
     RuntimePrimarySurfaceConfiguration,
     AutoCloseable {
 
     private val lock = RuntimeLock()
+
+    /**
+     * Le scheduler de redraw de Task 3 — construit paresseusement : la factory de clock n'est
+     * jamais invoquée à la construction (aucun appel SDK au constructeur — les host tests qui
+     * injectent une clock manuelle ne touchent jamais le Choreographer, et une surface fermée
+     * sans avoir jamais demandé de redraw non plus). Toutes ses entrées vivent sous [lock] :
+     * [requestRedraw] y appelle `request`, [close] y appelle `cancel`, et le corps de frame
+     * ([emitRedrawFrame]) le prend à son tour — le coalescing est donc ordonné par le même
+     * verrou que les publications.
+     */
+    private val redrawScheduler by lazy {
+        AndroidRedrawScheduler(frameClock(), ::emitRedrawFrame)
+    }
 
     /**
      * Le terminal unique, posé une fois par [close] — jamais déduit de l'état publié : le
@@ -221,16 +235,17 @@ internal class AndroidHostSurface(
     }
 
     /**
-     * La demande de redessin, branche on-row de la phase 2 : la porte d'admission, puis
-     * `Unsupported(RequestRedraw)` — le tout sous [RuntimeLock] (le miroir de la surface de
-     * phase 0, `RuntimeHostSurface.kt:48-62`). Task 3 remplace ce corps par le scheduler (le
-     * test normatif admet explicitement les deux formes `Success`/`Unsupported` pour traverser
-     * le swap) ; Tasks 2-3 partagent des états ([publishMetrics], scheduler) vivant sous le
-     * même verrou, la décision entière y tient donc déjà.
+     * La demande de redessin coalescée (Task 3) : la porte d'admission sous [RuntimeLock],
+     * puis la demande au scheduler — au plus une frame en attente, les demandes qui la
+     * rejoignent sont admises (`Success(Unit)`), le coalescing décide du reste. Le callback de
+     * frame ([emitRedrawFrame]) émettra UN `RedrawRequested` à la frame. `request` ne peut
+     * répondre faux que si le scheduler a été annulé — c'est-à-dire au terminal, que la porte
+     * d'admission vient déjà de filtrer : un faux ici est une erreur de programmation criante.
      */
     override fun requestRedraw(): KadreResult<Unit> = lock.withLock {
         admissionFailure()?.let { return it }
-        KadreResult.Failure(KadreFailure.Unsupported(KadreOperation.RequestRedraw))
+        check(redrawScheduler.request()) { "the redraw scheduler was cancelled while the surface admits" }
+        KadreResult.Success(Unit)
     }
 
     /**
@@ -270,19 +285,23 @@ internal class AndroidHostSurface(
      * `surface::close`) et idempotent :
      *
      * 1. le drapeau terminal est posé sous le verrou — toute admission suivante répond `Closed` ;
-     * 2. les capabilities deviennent indisponibles AVANT la publication de l'état détaché (« les
+     * 2. le scheduler de redraw est annulé sous le même verrou — plus jamais de callback de
+     *    frame après le retour (zombie interdit ; [emitRedrawFrame] garde en plus son propre
+     *    garde terminal pour un corps de frame que la course du SDK aurait déçu) ;
+     * 3. les capabilities deviennent indisponibles AVANT la publication de l'état détaché (« les
      *    capabilities indisponibles au plus tard au détached » — un consommateur ne peut jamais
      *    lire une promesse sur un état déjà détaché) ;
-     * 3. l'état détaché est publié — sauf s'il l'est déjà : le binding publie l'instantané
+     * 4. l'état détaché est publié — sauf s'il l'est déjà : le binding publie l'instantané
      *    détaché canonique AVANT le terminal, et la révision est le marqueur d'un changement
      *    d'état, pas d'un appel (la règle de la référence, celle de la phase 0) ;
-     * 4. le flux d'événements se termine — les collecteurs en cours reçoivent la fin, les
+     * 5. le flux d'événements se termine — les collecteurs en cours reçoivent la fin, les
      *    collecteurs suivants voient un flux déjà terminé.
      */
     override fun close() {
         lock.withLock {
             if (detached) return
             detached = true
+            redrawScheduler.cancel()
             // Les capabilities d'abord : indisponibles au plus tard au détached, ici avant.
             mutableCapabilities.value = unsupportedSurfaceCapabilities()
             val current = mutableState.value
@@ -329,6 +348,24 @@ internal class AndroidHostSurface(
             val source = stampSource ?: return
             val stamp = source()
             eventFor?.invoke(current, published, stamp)?.let { mutableEvents.tryEmit(it) }
+        }
+    }
+
+    /**
+     * Le corps de frame du scheduler (Task 3) : UN `RedrawRequested` par frame, portant la
+     * révision courante et le stamp de session, émis SOUS le verrou (l'ordre du flux
+     * d'événements est l'ordre des stamps, lui-même l'ordre des frames). Double garde terminal :
+     * le scheduler est annulé par [close], et un corps de frame que la course du SDK aurait
+     * déçu après le terminal est absorbé ici — aucun événement ne peut suivre le terminal.
+     * Muette tant que la configuration de session n'est pas installée (pas de stamp inventé).
+     */
+    private fun emitRedrawFrame() {
+        lock.withLock {
+            if (detached) return
+            val source = stampSource ?: return
+            mutableEvents.tryEmit(
+                SurfaceEvent.RedrawRequested(mutableState.value.revision, source()),
+            )
         }
     }
 
