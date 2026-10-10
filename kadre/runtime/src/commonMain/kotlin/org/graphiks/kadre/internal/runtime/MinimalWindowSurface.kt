@@ -10,7 +10,6 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import java.util.concurrent.locks.ReentrantLock
 import org.graphiks.kadre.application.EventDeliverySpan
 import org.graphiks.kadre.application.EventStamp
 import org.graphiks.kadre.diagnostics.Capability
@@ -113,7 +112,7 @@ internal class RuntimeWindowSurface(
     ),
     private val sessionFailureHandler: (KadreFailure) -> Unit = {},
 ) : HostSurface {
-    private val lock = Any()
+    private val lock = RuntimeLock()
     private val updateMutex = Mutex()
     private var currentState = initialState(initialSnapshot)
     private var redrawTicket: SurfaceRedrawGeneration? = null
@@ -166,12 +165,10 @@ internal class RuntimeWindowSurface(
                 maxPendingInteractionRequests = resources.maxPendingInteractionRequests,
             )
         }
-    private val interactionDispatchLock = ReentrantLock()
-    private val interactionDispatchAvailable = interactionDispatchLock.newCondition()
+    private val interactionDispatchLock = RuntimeLock()
     private var interactionDispatchActive = false
-    private var interactionDispatchThread: Thread? = null
     private val deferredNestedInteractions = ArrayDeque<DeferredInteraction>()
-    private val eventSubscribersLock = Any()
+    private val eventSubscribersLock = RuntimeLock()
     private val eventSubscribers = linkedMapOf<SurfaceEventSubscriber, RuntimeEventCollectorLease>()
     private var eventsTerminal: FlowTerminal? = null
 
@@ -202,7 +199,7 @@ internal class RuntimeWindowSurface(
     @OptIn(DelicateKadreApi::class)
     override fun installInteractionHandler(
         handler: InteractionHandler,
-    ): KadreResult<InteractionRegistration> = synchronized(lock) {
+    ): KadreResult<InteractionRegistration> = lock.withLock {
         if (currentState.attachment == SurfaceAttachmentState.Detached) {
             KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.Surface))
         } else {
@@ -219,7 +216,7 @@ internal class RuntimeWindowSurface(
 
     override fun requestRedraw(): KadreResult<Unit> {
         var admittedTicket: SurfaceRedrawGeneration? = null
-        val immediate = synchronized(lock) {
+        val immediate = lock.withLock {
             when {
                 currentState.attachment == SurfaceAttachmentState.Detached ->
                     KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.Surface))
@@ -241,8 +238,8 @@ internal class RuntimeWindowSurface(
             commandPort.requestRedraw(SurfaceRedrawCommand(id, checkNotNull(admittedTicket)))
         } catch (cause: Exception) {
             portFailure("redraw-exception", cause)
-        } catch (cause: LinkageError) {
-            portFailure("redraw-exception", cause)
+        } catch (cause: Throwable) {
+            if (cause.isLinkageFailure()) portFailure("redraw-exception", cause) else throw cause
         }
         var adapterFailure: KadreFailure.PlatformFailure? = null
         val outcome = when (portOutcome) {
@@ -254,7 +251,7 @@ internal class RuntimeWindowSurface(
             }
         }
         if (outcome is KadreResult.Failure) {
-            synchronized(lock) {
+            lock.withLock {
                 if (redrawTicket == admittedTicket) redrawTicket = null
             }
         }
@@ -262,27 +259,27 @@ internal class RuntimeWindowSurface(
         return outcome
     }
 
-    override suspend fun apply(update: SurfaceUpdate): KadreResult<SurfaceUpdateOutcome> = updateMutex.withLock {
-        val admission = synchronized(lock) {
+    override suspend fun apply(update: SurfaceUpdate): KadreResult<SurfaceUpdateOutcome> = updateMutex.withLock surfaceApply@{
+        val admission = lock.withLock {
             if (currentState.attachment == SurfaceAttachmentState.Detached) {
-                return@withLock KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.Surface))
+                return@surfaceApply KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.Surface))
             }
             update.expectedRevision?.let { expected ->
                 if (expected != currentState.revision) {
-                    return@withLock KadreResult.Failure(
+                    return@surfaceApply KadreResult.Failure(
                         KadreFailure.StaleRevision(expected.value, currentState.revision.value),
                     )
                 }
             }
             invalidClearField(update)?.let { field ->
-                return@withLock KadreResult.Failure(KadreFailure.InvalidRequest(field))
+                return@surfaceApply KadreResult.Failure(KadreFailure.InvalidRequest(field))
             }
             prepareUpdateLocked(update)
         }
         if (admission.command == null) {
             val snapshot = currentStateSnapshot()
             publishStateAtLeast(snapshot)
-            return@withLock successfulUpdateOutcome(snapshot, admission.rejected)
+            return@surfaceApply successfulUpdateOutcome(snapshot, admission.rejected)
         }
 
         val portResult = try {
@@ -291,23 +288,23 @@ internal class RuntimeWindowSurface(
             throw cause
         } catch (cause: Exception) {
             portFailure("update-exception", cause)
-        } catch (cause: LinkageError) {
-            portFailure("update-exception", cause)
+        } catch (cause: Throwable) {
+            if (cause.isLinkageFailure()) portFailure("update-exception", cause) else throw cause
         }
         val backend = when (val result = portResult) {
             is KadreResult.Failure -> {
                 val normalised = normaliseUpdateFailure(result.reason)
                 normalised.adapterFailure?.let(::reportAdapterFailure)
-                return@withLock KadreResult.Failure(normalised.failure)
+                return@surfaceApply KadreResult.Failure(normalised.failure)
             }
             is KadreResult.Success -> result.value
         }
 
         var stateToPublish: SurfaceState? = null
         var adapterFailures: List<KadreFailure.PlatformFailure> = emptyList()
-        val result = synchronized(lock) {
+        val result = lock.withLock {
             if (currentState.attachment == SurfaceAttachmentState.Detached) {
-                return@synchronized KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.Surface))
+                return@withLock KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.Surface))
             }
             val committed = commitUpdateLocked(admission, backend)
             if (committed.state != currentState) {
@@ -326,7 +323,7 @@ internal class RuntimeWindowSurface(
         if (stimulus.surfaceId != id) return false
         if (stimulus is SurfaceStimulus.Detached) return detach()
         if (stimulus.isInputStimulus()) {
-            return synchronized(lock) {
+            return lock.withLock {
                 currentState.attachment != SurfaceAttachmentState.Detached && surfaceInput.accept(stimulus)
             }
         }
@@ -334,8 +331,8 @@ internal class RuntimeWindowSurface(
         var admission: PublicationAdmission? = null
         var resetInputForFocusLoss = false
         var textInputFocus: SurfaceFocus? = null
-        val accepted = synchronized(lock) {
-            if (currentState.attachment == SurfaceAttachmentState.Detached) return@synchronized false
+        val accepted = lock.withLock {
+            if (currentState.attachment == SurfaceAttachmentState.Detached) return@withLock false
             val publication = when (stimulus) {
                 is SurfaceStimulus.MetricsChanged -> metricsPublicationLocked(stimulus.metrics)
                 is SurfaceStimulus.FocusChanged -> focusPublicationLocked(stimulus.focus).also { publication ->
@@ -363,7 +360,7 @@ internal class RuntimeWindowSurface(
                 is SurfaceStimulus.DropPerformed,
                 -> error("input stimuli are handled before surface publication")
                 is SurfaceStimulus.Detached -> error("handled before lock")
-            } ?: return@synchronized false
+            } ?: return@withLock false
             admission = enqueuePublicationLocked(publication)
             true
         }
@@ -446,56 +443,29 @@ internal class RuntimeWindowSurface(
         supported: Set<InteractionKind>,
         invokeNative: (InteractionAction) -> KadreResult<Unit>,
     ) {
-        interactionDispatchLock.lock()
-        val dispatchHandler = try {
-            while (interactionDispatchActive && interactionDispatchThread !== Thread.currentThread()) {
-                interactionDispatchAvailable.await()
-            }
-            if (interactionDispatchActive) {
-                false
-            } else {
-                interactionDispatchActive = true
-                interactionDispatchThread = Thread.currentThread()
-                true
-            }
-        } finally {
-            interactionDispatchLock.unlock()
-        }
         val admitted = eventFactory(stamp)
         val stamped = admitted.event
-        if (dispatchHandler) {
-            try {
-                interactionHandler?.dispatch(stamped, supported) { action ->
-                    NativeInteractionOutcome.Now(invokeNative(action))
-                }
-            } finally {
-                surfaceInput.acceptInteraction(stamped, admitted.pointerPressure)
-                while (true) {
-                    val nested = interactionDispatchLock.run {
-                        lock()
-                        try {
-                            deferredNestedInteractions.removeFirstOrNull()
-                        } finally {
-                            unlock()
-                        }
-                    } ?: break
-                    surfaceInput.acceptInteraction(nested.event, nested.pointerPressure)
-                }
-                interactionDispatchLock.lock()
-                try {
-                    interactionDispatchActive = false
-                    interactionDispatchThread = null
-                    interactionDispatchAvailable.signalAll()
-                } finally {
-                    interactionDispatchLock.unlock()
-                }
-            }
-        } else {
-            interactionDispatchLock.lock()
-            try {
+        interactionDispatchLock.withLock {
+            if (interactionDispatchActive) {
+                // Re-entry while this thread holds the dispatch: the mutex is exclusive, so an
+                // active dispatch observed inside the critical section can only be this thread's
+                // outer dispatch — defer instead of re-entering the handler, and the outer
+                // dispatch drains the queue after its handler returns.
                 deferredNestedInteractions += admitted
-            } finally {
-                interactionDispatchLock.unlock()
+            } else {
+                interactionDispatchActive = true
+                try {
+                    interactionHandler?.dispatch(stamped, supported) { action ->
+                        NativeInteractionOutcome.Now(invokeNative(action))
+                    }
+                } finally {
+                    surfaceInput.acceptInteraction(stamped, admitted.pointerPressure)
+                    while (true) {
+                        val nested = deferredNestedInteractions.removeFirstOrNull() ?: break
+                        surfaceInput.acceptInteraction(nested.event, nested.pointerPressure)
+                    }
+                    interactionDispatchActive = false
+                }
             }
         }
     }
@@ -519,8 +489,8 @@ internal class RuntimeWindowSurface(
 
     internal fun detach(): Boolean {
         var admission: PublicationAdmission? = null
-        val detached = synchronized(lock) {
-            if (currentState.attachment == SurfaceAttachmentState.Detached) return@synchronized false
+        val detached = lock.withLock {
+            if (currentState.attachment == SurfaceAttachmentState.Detached) return@withLock false
             admission = terminaliseLocked(failure = null, failSession = false)
             true
         }
@@ -753,7 +723,7 @@ internal class RuntimeWindowSurface(
 
     private fun drainPublications() {
         while (true) {
-            val publication = synchronized(lock) {
+            val publication = lock.withLock {
                 publications.poll() ?: terminalPublication?.also { terminalPublication = null } ?: run {
                     publicationDrainActive = false
                     return
@@ -770,7 +740,7 @@ internal class RuntimeWindowSurface(
     }
 
     private fun publishEvent(event: SurfaceEvent) {
-        val subscribers = synchronized(eventSubscribersLock) {
+        val subscribers = eventSubscribersLock.withLock {
             if (eventsTerminal != null) emptyList() else eventSubscribers.keys.toList()
         }
         var closeSource = false
@@ -789,7 +759,7 @@ internal class RuntimeWindowSurface(
     }
 
     private fun closeEvents(failure: KadreFailure?) {
-        val subscribers = synchronized(eventSubscribersLock) {
+        val subscribers = eventSubscribersLock.withLock {
             if (eventsTerminal != null) return
             eventsTerminal = failure?.let(FlowTerminal::Failed) ?: FlowTerminal.Closed
             eventSubscribers.keys.toList()
@@ -798,7 +768,7 @@ internal class RuntimeWindowSurface(
     }
 
     private fun registerEventSubscriber(subscriber: SurfaceEventSubscriber): SubscriberRegistration =
-        synchronized(eventSubscribersLock) {
+        eventSubscribersLock.withLock {
             when (val terminal = eventsTerminal) {
                 FlowTerminal.Closed -> SubscriberRegistration.Closed
                 is FlowTerminal.Failed -> SubscriberRegistration.Failed(terminal.failure)
@@ -813,7 +783,7 @@ internal class RuntimeWindowSurface(
         }
 
     private fun unregisterEventSubscriber(subscriber: SurfaceEventSubscriber) {
-        val lease = synchronized(eventSubscribersLock) { eventSubscribers.remove(subscriber) }
+        val lease = eventSubscribersLock.withLock { eventSubscribers.remove(subscriber) }
         lease?.close()
         subscriber.dispose()
     }
@@ -863,7 +833,7 @@ internal class RuntimeWindowSurface(
     }
 
     private fun closeFromDeliveryOverflow(failSession: Boolean) {
-        val admission = synchronized(lock) {
+        val admission = lock.withLock {
             if (currentState.attachment == SurfaceAttachmentState.Detached) return
             terminaliseLocked(
                 failure = KadreFailure.SourceOverflow(KadreResourceKind.Surface),
@@ -878,12 +848,12 @@ internal class RuntimeWindowSurface(
             sessionFailureHandler(failure)
         } catch (cause: Exception) {
             safeReport(cause)
-        } catch (cause: LinkageError) {
-            safeReport(cause)
+        } catch (cause: Throwable) {
+            if (cause.isLinkageFailure()) safeReport(cause) else throw cause
         }
     }
 
-    private fun currentStateSnapshot(): SurfaceState = synchronized(lock) { currentState }
+    private fun currentStateSnapshot(): SurfaceState = lock.withLock { currentState }
 
     private fun publishStateAtLeast(snapshot: SurfaceState) {
         while (true) {
@@ -935,8 +905,12 @@ internal class RuntimeWindowSurface(
             failureReporter.report(cause)
         } catch (_: Exception) {
             // Diagnostics cannot destabilise the surface command boundary.
-        } catch (_: LinkageError) {
-            // Diagnostics cannot destabilise the surface command boundary.
+        } catch (cause: Throwable) {
+            if (cause.isLinkageFailure()) {
+                // Diagnostics cannot destabilise the surface command boundary.
+            } else {
+                throw cause
+            }
         }
     }
 
@@ -1101,7 +1075,7 @@ private sealed interface SubscriberTerminal {
 private class SurfaceEventSubscriber(
     private val policy: WindowDeliveryPolicy,
 ) {
-    private val lock = Any()
+    private val lock = RuntimeLock()
     private val signal = Channel<Unit>(capacity = 1)
     private val scheduler = BoundedSurfaceScheduler(
         discreteCapacity = policy.discreteEvents.collectorCapacity,
@@ -1114,7 +1088,7 @@ private class SurfaceEventSubscriber(
     private var terminal: SubscriberTerminal? = null
 
     fun offer(event: SurfaceEvent): SubscriberOfferResult {
-        val result = synchronized(lock) {
+        val result = lock.withLock {
             if (terminal != null) return SubscriberOfferResult.Accepted
             when (val offered = scheduler.offer(event)) {
                 QueueOfferResult.Accepted -> SubscriberOfferResult.Accepted
@@ -1148,7 +1122,7 @@ private class SurfaceEventSubscriber(
 
     suspend fun next(): SurfaceEvent? {
         while (true) {
-            val terminalSnapshot = synchronized(lock) {
+            val terminalSnapshot = lock.withLock {
                 scheduler.poll()?.let { return it }
                 terminal
             }
@@ -1161,7 +1135,7 @@ private class SurfaceEventSubscriber(
     }
 
     fun terminate(cause: Throwable?, drain: Boolean) {
-        synchronized(lock) {
+        lock.withLock {
             if (terminal != null) return
             if (!drain) scheduler.clear()
             terminal = cause?.let(SubscriberTerminal::Failed) ?: SubscriberTerminal.Closed
@@ -1170,7 +1144,7 @@ private class SurfaceEventSubscriber(
     }
 
     fun dispose() {
-        synchronized(lock) { scheduler.clear() }
+        lock.withLock { scheduler.clear() }
         signal.cancel()
     }
 }
