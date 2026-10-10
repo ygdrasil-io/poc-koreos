@@ -48,7 +48,7 @@ class AndroidHostLifecyclePropagationTest {
         var detached = false
         val published = mutableListOf<LifecycleState>()
         val runtime: (LifecycleState) -> Unit = { state ->
-            check(!detached) { "host is detached" } // le require de `updateLifecycle`
+            require(!detached) { "host is detached" } // le require RÉEL de `updateLifecycle` (IAE)
             published += state
         }
         // Une publication ordinaire atteint le runtime.

@@ -353,9 +353,13 @@ internal object AndroidHostSession {
     internal fun propagateToRuntime(snapshot: AndroidHostSnapshot, update: (LifecycleState) -> Unit) {
         try {
             update(lifecycleStateOf(snapshot))
-        } catch (cause: IllegalStateException) {
-            // Le require(!detached) du runtime : le terminal a déjà gagné — absorbé, la
-            // session est déjà en route vers `Stopped(HostDetached)`.
+        } catch (cause: IllegalArgumentException) {
+            // Le require(!detached) du runtime — `updateLifecycle` jette
+            // IllegalArgumentException, pas IllegalStateException : le terminal a déjà gagné,
+            // absorbé, la session est déjà en route vers `Stopped(HostDetached)`. Aucune
+            // autre exception n'est absorbée ici : un échec inattendu du chemin de mise à
+            // jour reste un diagnostic (il atteint le wrapper never-throw de §3.3, sans
+            // jamais masquer la course post-detach sous le mauvais type).
         }
     }
 
