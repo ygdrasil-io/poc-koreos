@@ -150,6 +150,170 @@ evidence at all: `platform:web`'s packaging check verifies that the two shim
 bodies are shared and reconciles the shipped declarations against the curated
 contract at build time.
 
+## Engine coverage
+
+This section is the factual record of the Firefox/WebKit probe of 2026-10-10.
+Nothing here is aspiration: every cell below is backed by a real run of the
+suite through the same machinery the Chromium smoke uses — the same Gradle-built
+distributions and host roots, served by the same runner, one run at a time. The
+probe drove the engines through local throwaway copies of the config and the
+runner (never committed): a config whose projects mirror the Chromium project's
+routing with the engine selected by an environment variable, and a runner copy
+that reads the engine from the same variable and skips the canonical-evidence
+generation, so a probe run cannot pollute the Chromium evidence tree. The
+matrix names what was observed, and the classes it names are the ones the
+follow-up tasks consume:
+
+- **CDP-instrumented** — the scenario drives the browser through
+  `context.newCDPSession`, which Playwright answers
+  `CDP session is only available in Chromium` on both other engines (probed);
+- **Chromium-flags-dependent** — the scenario needs a Chromium launch argument
+  with no counterpart on the other engine (the insecure-context host mapping);
+- **engine-missing-primitive** — the browser does not ship the web platform
+  primitive the scenario's machinery is built on;
+- **other-named** — a real engine divergence, named per finding below.
+
+Platforms and builds, stated because they bound every claim: the pinned
+Playwright 1.60.0 revisions are Chromium 148.0.7778 (the smoke's own engine,
+148.0.7778.96 on this macOS), WebKit build 2287 (`browser.version()` reports
+`26.4`) and Firefox build 1522 (Firefox 150.0.2). **The pinned Firefox build
+cannot start on this machine's macOS (27.0.1)**: it spins at ~99% CPU with the
+main thread inside `CTFontDescriptorCreateMatchingFontDescriptors` (a `sample`
+of the process names the loop), the Juggler pipe never connects, and every
+launch — headless, headed, with sandbox-disabling environment or WebRender
+preferences — times out; the cached firefox-1538 build hangs identically and
+Playwright 1.64's firefox-1555 exits at once with `Could not find profile
+folder`. Every Firefox cell below was therefore probed inside the pinned
+driver's own container image `mcr.microsoft.com/playwright:v1.60.0-noble`
+(Linux, same firefox-1522 build, which launches normally), while WebKit was
+probed natively on the macOS and cross-checked in the same container — the one
+platform divergence that cross-check surfaced is named in the matrix.
+
+### The engine × suite matrix
+
+`RUNS` means every scenario of the suite that the engine can honestly stage
+passed on both Kotlin targets in the probe runs; a suite with excluded
+scenarios says so and names them. Counts are from the full no-exclusion
+discovery runs (102 scenarios per engine per target, mirroring the Chromium
+project set plus the two insecure and five capture-session scenarios).
+
+| Suite | Firefox (container Linux) | WebKit (macOS native) |
+| --- | --- | --- |
+| web-phase0 | RUNS | RUNS |
+| web-lifecycle | RUNS | RUNS |
+| web-surface | RUNS | RUNS |
+| web-input | RUNS (12/12 both targets) | RUNS except `web-input-pointer-multi` (other-named, macOS-only) and `web-input-default-behavior` (other-named, macOS-only) |
+| web-interaction | RUNS | RUNS |
+| web-window-provider | RUNS (popups granted; `window.open` non-null, probed) | RUNS (same probe) |
+| web-host-facade | RUNS | RUNS |
+| web-touch | EXCLUDE the seven CDP-driven scenarios (CDP-instrumented: `Input.dispatchTouchEvent`); `web-touch-capability-structural` RUNS | same |
+| web-drop | RUNS | RUNS |
+| web-text-input | EXCLUDE `web-text-composition-lifecycle` (CDP-instrumented: `Input.imeSetComposition`) **and** the five `keyboard.insertText`-driven scenarios (other-named, below); the other three RUNS | EXCLUDE `web-text-composition-lifecycle` (CDP-instrumented); the other eight RUNS |
+| web-display | EXCLUDE `web-display-dpr-scale-factor` and `web-display-teardown-quiet` (CDP-instrumented: `Emulation.setDeviceMetricsOverride`); the other two RUNS | same |
+| web-devices | RUNS | RUNS |
+| web-gamepad-effects | RUNS all five — the insecure-context scenario included, via the Firefox host-mapping preference (below) | RUNS the four regular scenarios; EXCLUDE `web-gamepad-effect-insecure-context` (Chromium-flags-dependent: no WebKit counterpart to `--host-resolver-rules`, probed) |
+| web-capture | EXCLUDE the whole suite (engine-missing-primitive, below) | same |
+| web-typescript | RUNS on js; EXCLUDE on wasmJs (other-named: the publication race, below) | RUNS both targets |
+
+Discovery-run outcomes behind the table: Firefox js 77/102, Firefox wasmJs
+75/102, WebKit js (macOS) 80/102, WebKit wasmJs (macOS) 80/102, WebKit js
+(Linux container) 82/102 — every failure in every run falls in the excluded
+classes above or is one of the two named flakes below. Confirmation runs with
+the Chromium project's own exclusion set (95 scenarios) leave exactly the
+catalogued failures: Firefox 18 (js) and 19 (wasmJs, one flake), WebKit 15 on
+each target. The flake census: `a duplicate attach is rejected without another
+DOM observer or listener` failed once per engine on wasmJs and passed on every
+isolated re-run (the init-script counting race the smoke's watchdog family
+already knows); `web-input-default-behavior` on macOS WebKit passed standalone
+but failed in five of six in-suite runs.
+
+### Probed engine facts
+
+Stated per engine, probed directly on a served `http://127.0.0.1` page (an
+`about:blank` probe understates secure-context APIs — `navigator.mediaDevices`
+is absent there on both engines):
+
+| fact | Firefox 150.0.2 | WebKit 26.4 |
+| --- | --- | --- |
+| `context.newCDPSession` | throws (`only available in Chromium`) | same |
+| `MediaStreamTrackProcessor` | `undefined` | `undefined` |
+| `VideoFrame`, `canvas.captureStream` | present, present | present, present |
+| `navigator.mediaDevices.getDisplayMedia` | present; outside a user gesture refused `InvalidStateError` (`requires transient activation`) | present; refused `InvalidStateError` (`must be called from a user gesture handler`) |
+| `permissions.query({name:'display-capture'})` | rejected `TypeError` (not a valid permission name) | rejected `NotSupportedError` |
+| `navigator.getGamepads` / `GamepadHapticActuator` | present / present | present / present |
+| `Gamepad.prototype.vibrationActuator` | absent | present |
+| Chromium capture flag trio as launch args | browser launches; flags inert (session scenarios fail identically) | same |
+| `--host-resolver-rules` as a launch arg | inert (`NS_ERROR_UNKNOWN_HOST` for the mapped name) | inert (`A server with the specified hostname could not be found`) |
+
+### The named findings
+
+- **the capture suite is engine-missing-primitive on both engines.** The frame
+  pump is `MediaStreamTrackProcessor`-only, and neither engine ships it (probed
+  `typeof` on both), so the port freezes `screen`, `window` and `surface`
+  capabilities at `unsupported:captureopen` — the received attributes of the
+  failing control-plane scenarios show exactly that cell — and every session
+  scenario, the canvas surface session included, fails before any frame. The
+  permission readback cannot settle either (`permissions.query` rejects the
+  `display-capture` name on both), so the three control-plane scenarios fail at
+  their settled-mirror precondition with the transient
+  `unavailable:unsupported:capturepermission` cells. The Chromium consent-test
+  flag trio is accepted-but-inert on both engines, and both refuse
+  `getDisplayMedia` without a user gesture, so no launch-argument substitution
+  exists on either engine for the consent path either.
+- **Firefox routes `keyboard.insertText` through its composition pipeline.**
+  The five text-input scenarios that stage one text arrival without a
+  composition (`open-single-session`, `replace-event`, `focus-suspends`,
+  `writeback-sync`, `teardown-closes`) receive
+  `composition:(0,0)=""`/`composition:(0,0)="X"`/`composition:end` journals on
+  Firefox where Chromium and WebKit publish `replace:(0,0)="X"` — the same
+  Playwright API drives the browser's own IME path there. This is an honest
+  engine divergence in the stimulus, not a runtime defect; the affected
+  scenarios are exclusion candidates on Firefox until the driver gains an
+  engine-neutral insertion route or Firefox changes its pipeline.
+- **the Firefox insecure-context route exists and works.** The Chromium
+  insecure project's `--host-resolver-rules` has no Firefox launch-arg
+  counterpart (inert, probed), but the preference
+  `network.dns.localDomains = insecure.kadre.invalid` maps the fixture's
+  insecure name onto the same local server: probed at the API level and then
+  through the runner, **both insecure-context scenarios pass on Firefox**
+  (`web-gamepad-effect-insecure-context` and `web-capture-insecure-unsupported`,
+  probed on both Kotlin targets) with `isSecureContext` false. One probe fact
+  matters for whoever
+  wires this: on Playwright 1.60 the test runner silently ignores a
+  `use`-level `firefoxUserPrefs` — the preference must sit inside
+  `use.launchOptions.firefoxUserPrefs` to reach the browser (both placements
+  were probed; only the nested one works). WebKit has neither a launch argument
+  nor a preference system: its two insecure scenarios stay
+  Chromium-flags-dependent exclusions.
+- **`web-input-pointer-multi` fails deterministically on macOS WebKit only.**
+  After the synthetic pen merge the real mouse release publishes nothing on
+  macOS WebKit — the surface state stays frozen at the pen's entry
+  (`pointers=[pen#@(60,40):pen]`, revisions stop) — although WebKit does
+  deliver the trusted `pointerup` (probed with an instrumented page: the event
+  log shows `pointerup:id=1:type=mouse:buttons=0` arriving). macOS WebKit also
+  omits the trailing `pointermove` with `buttons=1` after a secondary-button
+  release that Chromium sends. The same scenario passes on Firefox and on
+  Linux WebKit (the container cross-check ran the input suite 12/12), so the
+  divergence is a macOS-WebKit input-pipeline behaviour the single-pointer
+  merge (D11) does not absorb.
+- **`web-input-default-behavior`'s HostDefault arm has no macOS WebKit
+  counterpart.** The arm asserts the browser's own default (`scrollY > 20`
+  after an `ArrowDown` on a focused host); macOS WebKit left the document at
+  `scrollY` 0 in five of six in-suite runs (a minimal standalone probe with a
+  focused element and a tall body also scrolled 0), passing standalone and on
+  Linux WebKit. The SuppressWhenPossible arms are unaffected (they assert the
+  scroll does not happen).
+- **`web-typescript-consumer` loses a publication race on Firefox wasmJs.**
+  Firefox evaluates the deferred consumer module before the asynchronously
+  instantiated Wasm bundle has published its bindings, so the shim honestly
+  reports `missing-application-factory` — observed in three of four Firefox
+  wasmJs runs (discovery, isolated re-runs), passing once; js, both WebKit
+  targets and Chromium are unaffected. The shim's documented contract ("the
+  application must publish before it calls `KadreWeb.attach`") makes this an
+  honest failure, and the race is an exclusion candidate on Firefox wasmJs or
+  a candidate for a publication-aware attach in a later phase — recorded here
+  so Task 2 can choose with the facts.
+
 ## Contract evidence
 
 The smoke is also the producer of the canonical browser evidence of
