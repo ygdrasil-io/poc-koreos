@@ -33,8 +33,13 @@ public data class KadreUikitObservation(
 public object KadreUikitProbe {
     @OptIn(ExperimentalForeignApi::class)
     public fun observe(window: UIWindow, view: UIView): KadreUikitObservation {
+        // Preuve O3 (driver Xcode, 2026-10-10) : `===` ne traverse PAS le pont Kotlin/ObjC.
+        // Pour la même instance UIWindow reçue du host, le pont produit deux wrappers Kotlin
+        // distincts (=== false) alors que hashCode coïncide et isEqual(window) est true.
+        // L'identité Objective-C se compare donc via NSObject.isEqual (égalité de pointeur).
+        val observedWindow: UIWindow? = view.window
         val membership =
-            if (view.window === window) KadreUikitWindowMembership.Attached
+            if (observedWindow != null && observedWindow.isEqual(window)) KadreUikitWindowMembership.Attached
             else KadreUikitWindowMembership.Detached
         val sceneConnected = window.windowScene != null
         // CGRect n'expose pas width/height : ce sont les champs de son CGSize (`size`). Sous
