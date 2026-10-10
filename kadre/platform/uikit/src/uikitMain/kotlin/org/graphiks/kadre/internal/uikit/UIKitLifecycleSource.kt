@@ -48,6 +48,9 @@ internal class UIKitLifecycleSource(internal val scene: UIWindowScene) {
             val fromScene = (notification?.`object` as? NSObjectProtocol)?.isEqual(scene) == true
             if (fromScene) onEvent(notificationName)
         }
+        // Fenêtre de réservation du token : un block déjà en file entre l'installation et cet
+        // enregistrement serait routé normalement (et non en tardif). Sans risque réel : dans le
+        // flux d'attach, installation et close sont uniquement sur la file principale.
         lock.withLock { tokens = tokens + token }
     }
 

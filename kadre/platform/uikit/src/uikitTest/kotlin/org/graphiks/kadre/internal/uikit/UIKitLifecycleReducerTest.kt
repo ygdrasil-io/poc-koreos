@@ -56,4 +56,31 @@ class UIKitLifecycleReducerTest {
             ),
         )
     }
+
+    @Test
+    fun transitionsAreAbsoluteAssignmentsNotLatches() {
+        // Mapping normatif ABSOLU : chaque branche assigne les DEUX axes, elle ne modifie pas
+        // seulement le sien. Une implémentation qui ferait snapshot.copy(axe = ...) est tuée ici :
+        // depuis (Background, Inactive), DidActivate doit donner (Foreground, Active) — la version
+        // « latch » donnerait (Background, Active), interdit par l'invariant de LifecycleState
+        // (« background lifecycle must be inactive »).
+        val background = UIKitLifecycleSnapshot(VisibilityState.Background, ActivationState.Inactive)
+
+        val activated = UIKitLifecycleReducer.reduce(platform.UIKit.UISceneDidActivateNotification!!, background)!!
+        assertEquals(UIKitLifecycleSnapshot(VisibilityState.Foreground, ActivationState.Active), activated)
+
+        val deactivated = UIKitLifecycleReducer.reduce(platform.UIKit.UISceneWillDeactivateNotification!!, background)!!
+        assertEquals(UIKitLifecycleSnapshot(VisibilityState.Foreground, ActivationState.Inactive), deactivated)
+
+        // WillEnterForeground depuis (Foreground, Active) retombe sur (Foreground, Inactive) —
+        // pas un no-op qui préserverait l'activation.
+        val reactivated = UIKitLifecycleReducer.reduce(
+            platform.UIKit.UISceneWillEnterForegroundNotification!!,
+            UIKitLifecycleSnapshot(VisibilityState.Foreground, ActivationState.Active),
+        )!!
+        assertEquals(UIKitLifecycleSnapshot(VisibilityState.Foreground, ActivationState.Inactive), reactivated)
+
+        val backgrounded = UIKitLifecycleReducer.reduce(platform.UIKit.UISceneDidEnterBackgroundNotification!!, background)!!
+        assertEquals(UIKitLifecycleSnapshot(VisibilityState.Background, ActivationState.Inactive), backgrounded)
+    }
 }

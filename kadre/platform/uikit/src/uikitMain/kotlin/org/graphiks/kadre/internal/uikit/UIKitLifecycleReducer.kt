@@ -46,9 +46,16 @@ internal object UIKitLifecycleReducer {
 
     fun reduce(notificationName: String, snapshot: UIKitLifecycleSnapshot): UIKitLifecycleSnapshot? =
         when (notificationName) {
-            UISceneWillEnterForegroundNotification -> snapshot.copy(visibility = VisibilityState.Foreground)
-            UISceneDidActivateNotification -> snapshot.copy(activation = ActivationState.Active)
-            UISceneWillDeactivateNotification -> snapshot.copy(activation = ActivationState.Inactive)
+            // Assignation ABSOLUE : chaque branche construit le snapshot complet visé, sans
+            // préserver l'axe non visé (snapshot.copy latcherait un état incohérent — ex.
+            // DidActivate depuis (Background, Inactive) donnerait (Background, Active), ce que
+            // l'invariant de LifecycleState interdit).
+            UISceneWillEnterForegroundNotification ->
+                UIKitLifecycleSnapshot(VisibilityState.Foreground, ActivationState.Inactive)
+            UISceneDidActivateNotification ->
+                UIKitLifecycleSnapshot(VisibilityState.Foreground, ActivationState.Active)
+            UISceneWillDeactivateNotification ->
+                UIKitLifecycleSnapshot(VisibilityState.Foreground, ActivationState.Inactive)
             UISceneDidEnterBackgroundNotification ->
                 UIKitLifecycleSnapshot(VisibilityState.Background, ActivationState.Inactive)
             else -> null
