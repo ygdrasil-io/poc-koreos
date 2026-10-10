@@ -15,4 +15,20 @@ else
 fi
 
 cd "$(dirname "$0")/.."
-timeout 900 ./gradlew :kadre:contracts:validator:androidContractsCheck --console=plain
+# `timeout` est GNU-only (absent du macOS stock) : watchdog portable — gradle en arrière-plan,
+# attente bornée à 900 s, SIGTERM à l'expiration (code 124, même sémantique que GNU timeout ;
+# le daemon Gradle, comme sous GNU timeout, survit au client tué).
+./gradlew :kadre:contracts:validator:androidContractsCheck --console=plain &
+gradle_pid=$!
+elapsed=0
+while kill -0 "$gradle_pid" 2>/dev/null; do
+  if [ "$elapsed" -ge 900 ]; then
+    kill "$gradle_pid" 2>/dev/null
+    wait "$gradle_pid" 2>/dev/null || true
+    echo "test-kadre-android-contracts: gradle timed out after 900s" >&2
+    exit 124
+  fi
+  sleep 5
+  elapsed=$((elapsed + 5))
+done
+wait "$gradle_pid"
