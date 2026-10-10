@@ -1,7 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 # Orchestration locale du gate Android (phase 0). Le branchement CI est la phase 10.
-SERIAL="${2:-}"
+# Serial : forme documentée `--serial <serial>` (roadmap) ou argument positionnel
+# (README du driver) ; sans argument, l'auto-détection adb reste inchangée.
+if [ "${1:-}" = "--serial" ]; then
+  SERIAL="${2:-}"
+else
+  SERIAL="${1:-}"
+fi
 export ANDROID_HOME="${ANDROID_HOME:-$HOME/Library/Android/sdk}"
 ADB="$ANDROID_HOME/platform-tools/adb"
 

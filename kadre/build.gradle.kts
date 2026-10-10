@@ -55,6 +55,8 @@ tasks.named("check") {
     dependsOn(":kadre:backend:appkit:check")
     dependsOn(":kadre:platform:desktop:check")
     dependsOn(":kadre:platform:web:check")
+    // pin : le contrat de thread phase 0 (AndroidAttachStateTest) tourne à chaque check local
+    dependsOn(":kadre:platform:android:check")
     dependsOn(":kadre:runtime:check")
     dependsOn("validateKotlinConsumer")
     dependsOn("validateJavaConsumer")
