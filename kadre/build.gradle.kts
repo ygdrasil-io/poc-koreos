@@ -1,13 +1,24 @@
 @file:OptIn(org.jetbrains.kotlin.gradle.ExperimentalWasmDsl::class)
 
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+
 plugins {
     id("org.jetbrains.kotlin.multiplatform")
+    id("com.android.kotlin.multiplatform.library")
     id("maven-publish")
 }
 
 kotlin {
     applyDefaultHierarchyTemplate()
     jvmToolchain(25)
+    android {
+        compileSdk = 35
+        minSdk = 24
+        namespace = "org.graphiks.kadre"
+        compilerOptions {
+            jvmTarget.set(JvmTarget.JVM_17)
+        }
+    }
     jvm()
     js { browser() }
     wasmJs { browser() }
@@ -16,6 +27,9 @@ kotlin {
     sourceSets {
         commonMain.dependencies {
             api(project(":kadre:foundation"))
+        }
+        androidMain.dependencies {
+            api(project(":kadre:platform:android"))
         }
         jvmMain.dependencies {
             api(project(":kadre:platform:desktop"))
@@ -26,6 +40,12 @@ kotlin {
         wasmJsMain.dependencies {
             api(project(":kadre:platform:web"))
         }
+        jvmTest.dependencies {
+            implementation(kotlin("test"))
+            // Parseur du test de pureté (voir AndroidVariantPurityTest) : Json.parseToJsonElement
+            // ne nécessite pas le plugin de sérialisation, juste le runtime.
+            implementation(libs.kotlinx.serialization.json)
+        }
     }
 }
 
@@ -35,11 +55,15 @@ tasks.named("check") {
     dependsOn(":kadre:backend:appkit:check")
     dependsOn(":kadre:platform:desktop:check")
     dependsOn(":kadre:platform:web:check")
+    // pin : le contrat de thread phase 0 (AndroidAttachStateTest) tourne à chaque check local
+    dependsOn(":kadre:platform:android:check")
     dependsOn(":kadre:runtime:check")
     dependsOn("validateKotlinConsumer")
     dependsOn("validateJavaConsumer")
     dependsOn("validateWebKotlinConsumer")
     dependsOn("validateTypeScriptConsumer")
+    // pin : la pureté est vérifiée à chaque check local avec les artefacts publiés
+    dependsOn("jvmTest")
 }
 
 val contractTestRepository = rootProject.layout.buildDirectory.dir("kadre-contract-repository")
@@ -50,6 +74,7 @@ val contractPublications = tasks.register("publishContractArtifacts") {
     dependsOn(":kadre:platform:desktop:publishAllPublicationsToContractTestRepository")
     dependsOn(":kadre:platform:web:publishAllPublicationsToContractTestRepository")
     dependsOn(":kadre:runtime:publishAllPublicationsToContractTestRepository")
+    dependsOn(":kadre:platform:android:publishAllPublicationsToContractTestRepository")
 }
 
 tasks.register<GradleBuild>("validateKotlinConsumer") {
@@ -90,6 +115,12 @@ tasks.register<GradleBuild>("validateTypeScriptConsumer") {
         "kadreRepository" to contractTestRepository.get().asFile.absolutePath,
         "kadreVersion" to project.version.toString(),
     )
+}
+
+tasks.named<Test>("jvmTest") {
+    systemProperty("kadreContractRepository", rootProject.layout.buildDirectory.dir("kadre-contract-repository").get().asFile.absolutePath)
+    systemProperty("kadreVersion", project.version.toString())
+    dependsOn("publishContractArtifacts")
 }
 
 /**
