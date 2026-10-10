@@ -125,6 +125,23 @@ class AndroidSurfaceMetricsTest {
     }
 
     @Test
+    fun generationIsReadableToPairTheBindingObservations() {
+        val reducer = AndroidSurfaceMetricsReducer(initialSurfaceStateForMetricsTest())
+        // Le compteur démarre à 0 et appartient au réducteur ; le binding le LIT pour
+        // étiqueter ses observations — pas de miroir fragile en lockstep (carry T2+3, m3).
+        assertEquals(0L, reducer.generation)
+        reducer.supersedeGeneration()
+        assertEquals(1L, reducer.generation)
+
+        // Une observation étiquetée avec la génération LUE du réducteur est admise.
+        assertTrue(
+            reducer.onObservation(
+                observation(width = 999, height = 999, generation = reducer.generation),
+            ) is AndroidSurfaceChange.Metrics,
+        )
+    }
+
+    @Test
     fun missingObservationsKeepUnknown() {
         // À l'initial : thème Unknown, visibilité/focus posés par l'instantané de la couture.
         val initial = initialSurfaceStateForMetricsTest()

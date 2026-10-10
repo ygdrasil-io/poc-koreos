@@ -145,6 +145,9 @@ internal fun androidSurfaceEvent(
  * génération suivante, en pas jumelés. Une observation dont la génération n'est pas la
  * courante est [AndroidSurfaceChange.Stale] : rejetée, état inchangé (le callback tardif d'une
  * ressource remplacée ne publie jamais).
+ *
+ * Contrat de thread : le réducteur appartient au binding, qui le possède et ne l'appelle que
+ * depuis le thread principal Android ([onObservation], [supersedeGeneration] inclus).
  */
 internal class AndroidSurfaceMetricsReducer(initial: SurfaceState) {
     private var state: SurfaceState = initial
@@ -152,6 +155,13 @@ internal class AndroidSurfaceMetricsReducer(initial: SurfaceState) {
 
     /** L'état courant du réducteur — le miroir de ce qu'il a publié. */
     public val currentState: SurfaceState get() = state
+
+    /**
+     * La génération courante — l'étiqette que le binding LIT pour étiqueter ses observations
+     * après une recréation de ressource : le jumelage se fait sur cette lecture, jamais sur un
+     * miroir du compteur maintenu en lockstep à côté du réducteur.
+     */
+    public val generation: Long get() = currentGeneration
 
     /**
      * Applique l'observation si sa génération est courante ; retourne la décision. La révision

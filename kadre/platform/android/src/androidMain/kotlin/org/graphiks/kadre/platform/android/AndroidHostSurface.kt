@@ -2,6 +2,7 @@ package org.graphiks.kadre.platform.android
 
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -11,6 +12,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.channelFlow
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.graphiks.kadre.application.EventStamp
 import org.graphiks.kadre.diagnostics.Capability
 import org.graphiks.kadre.diagnostics.DelicateKadreApi
@@ -59,8 +61,8 @@ import org.graphiks.kadre.surface.SurfaceUpdateOutcome
  * `state`/`capabilities`/`events`, un `apply` conforme à sa ligne §3 — aucun champ supporté en
  * phase 2, la ligne n'admets donc jamais un champ et ne sort jamais une failure externe pour
  * l'update entier — et un `requestRedraw` dont Task 3 branchera le scheduling à la place de la
- * branche on-row. Task 4 ajoutera `: AndroidViewLeasePort` à cette déclaration (port défini en
- * Task 4). La View n'est jamais exposée ici.
+ * branche on-row. Task 4 a ajouté `: AndroidViewLeasePort` à cette déclaration : la View du host
+ * n'est exposée qu'au block du bail ([withAndroidView], double opt-in), jamais ailleurs.
  *
  * La source des stamps est celle de la session : comme la surface web, cette surface reçoit la
  * configuration de session par [RuntimePrimarySurfaceConfiguration.installSessionConfiguration],
@@ -78,8 +80,11 @@ internal class AndroidHostSurface(
     override val id: SurfaceId,
     initialState: SurfaceState,
     private val frameClock: () -> AndroidRedrawScheduler.FrameClock = { ChoreographerFrameClock() },
+    private val hostThread: AndroidHostThreadDispatch = AndroidMainThreadDispatch,
+    private val leasedView: () -> Any? = { null },
 ) : HostSurface,
     RuntimePrimarySurfaceConfiguration,
+    AndroidViewLeasePort,
     AutoCloseable {
 
     private val lock = RuntimeLock()
@@ -102,13 +107,20 @@ internal class AndroidHostSurface(
      * binding publie l'instantané détaché canonique AVANT le terminal, et le terminal doit
      * quand même courir sa séquence (capabilities, fin du flux d'événements) une fois.
      *
-     * Volatile : écrit sous [lock] par [close] et [publishMetrics], mais lu hors verrou par
-     * [admissionFailure] (appelée sous verrou par [apply]/[requestRedraw]) et par
-     * [installSessionConfiguration] (l'attach, thread principal) — la visibilité croisée
-     * thread est portée par le modificateur, pas par la chance.
+     * Volatile : écrit sous [lock] par [close] seul — [publishMetrics] ne fait que le lire, sous
+     * le même verrou — mais lu hors verrou par [installSessionConfiguration] (l'attach, thread
+     * principal) — la visibilité croisée thread est portée par le modificateur, pas par la
+     * chance.
      */
     @Volatile
     private var detached: Boolean = false
+
+    /**
+     * Le bail unique en vol, sous [lock] : vrai entre l'admission d'un lease ([lease]) et la fin
+     * du block qu'il a admis — retour, exception ou cancellation. Un second bail pendant ce
+     * créneau répond `TemporarilyUnavailable(retryable = true)` sans invoquer son block.
+     */
+    private var leaseHeld: Boolean = false
 
     private val mutableState = MutableStateFlow(initialState)
     private val mutableCapabilities = MutableStateFlow(unsupportedSurfaceCapabilities())
@@ -249,6 +261,50 @@ internal class AndroidHostSurface(
     }
 
     /**
+     * Le bail d'accès natif (Task 4) : prête la View du host pour la durée de [block], et pas
+     * plus. Les portes, dans l'ordre du miroir web (`WebHostSession.lease`) :
+     *
+     * 1. l'admission d'abord — une surface terminale (ou dont l'état publié est déjà détaché)
+     *    répond `Closed(Surface)` sans invoquer [block] ; elle gagne sur la garde de
+     *    réentrance : un bail après close n'est jamais re-tentable, le décrire retryable serait
+     *    un mensonge ;
+     * 2. le bail unique — un bail commencé pendant qu'un autre est en vol répond
+     *    `TemporarilyUnavailable(retryable = true)`, [block] jamais invoqué : se rentrer dedans
+     *    est une erreur de programmation, pas une contre-pression ;
+     * 3. la View est relue à CHAQUE bail (la source [leasedView], jamais capturée avec la
+     *    surface) — un host parti ne prête rien : `Closed(Surface)`, le miroir du port web ;
+     * 4. le block tourne sur le thread host (le principal Android) : inline si l'appelant y est
+     *    déjà, sinon dispatché ([hostThread]) — et l'invocation DÉMARRÉE est enveloppée de
+     *    `NonCancellable` : un callback commencé s'achève même si la coroutine appelante est
+     *    annulée pendant lui, et la cancellation se manifeste chez l'appelant après (le
+     *    transfert retourne une `CancellationException` ; le chemin inline, sans point de
+     *    suspension entre l'admission et la première instruction du block, laisse l'appelant
+     *    déjà annulé l'observer au prochain point de suspension — un appelant annulé AVANT
+     *    l'admission n'invoque rien, le `withLock` rejette d'abord).
+     *
+     * L'exception applicative du block se propage TELLE QUELLE — jamais enveloppée en
+     * `KadreFailure` (la taxonomie n'admets pas ce mensonge) — et le `finally` rend le bail sur
+     * tous les chemins : un bail suivant réussit après un block lançant comme après un block
+     * annulé. La View n'est retenue par personne après le retour du block.
+     */
+    override suspend fun <R> lease(block: suspend (Any) -> R): KadreResult<R> {
+        lock.withLock {
+            admissionFailure()?.let { return it }
+            if (leaseHeld) return KadreResult.Failure(KadreFailure.TemporarilyUnavailable(retryable = true))
+            leaseHeld = true
+        }
+        try {
+            val view = leasedView()
+                ?: return KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.Surface))
+            return hostThread.dispatch {
+                KadreResult.Success(withContext(NonCancellable) { block(view) })
+            }
+        } finally {
+            lock.withLock { leaseHeld = false }
+        }
+    }
+
+    /**
      * Installe la configuration de session que cette surface publie.
      *
      * La source des stamps est la seule valeur dont Task 1 a besoin — les neuf autres paramètres
@@ -277,6 +333,24 @@ internal class AndroidHostSurface(
         if (detached) return
         check(stampSource == null) { "the session configuration was already installed" }
         stampSource = source
+    }
+
+    /**
+     * L'installation de l'observation et du scheduling (la couture du binding, Task 5) — le
+     * moment où les capabilities deviennent honnêtes : le snapshot par défaut, toutes refus,
+     * cède la place au snapshot [androidSurfaceCapabilities] qui annonce ce que la surface fait
+     * désormais — `platformAccess` `Supported`, la rangée Android de `capabilities/android.md`
+     * §Phase 2 (metrics + redraw + l'accès natif borné). Idempotent : la même annonce republiée
+     * est absorbée par le StateFlow.
+     *
+     * « Jamais après la révocation » : une installation qui suit [close] est absorbée — les
+     * capabilities sont indisponibles au plus tard au détached, et rien ne les ressuscite.
+     */
+    internal fun observationInstalled() {
+        lock.withLock {
+            if (detached) return
+            mutableCapabilities.value = androidSurfaceCapabilities()
+        }
     }
 
     /**
@@ -401,6 +475,19 @@ private fun PropertyChange<*>.requireRefused(property: SurfaceProperty) {
         "${property.fieldName} arrived admitted, but the android surface has no commit for it"
     }
 }
+
+/**
+ * Le snapshot honnête d'une surface Android observée : les refus de la phase 2
+ * ([unsupportedSurfaceCapabilities]) avec l'annonce d'installation — `platformAccess` `Supported`
+ * (la rangée Android de `capabilities/android.md` §Phase 2, qui couvre ensemble les métriques
+ * publiées, le redraw coalescé et l'accès natif borné du bail). Publié par
+ * [AndroidHostSurface.observationInstalled] quand l'observation et le scheduling vivent, retiré
+ * au terminal ([AndroidHostSurface.close]) — jamais après.
+ */
+private fun androidSurfaceCapabilities(): SurfaceCapabilities =
+    unsupportedSurfaceCapabilities().copy(
+        platformAccess = Capability.Supported(Unit, FeatureAvailability.Available),
+    )
 
 /**
  * L'entrée d'une surface sans entrée — la copie de l'objet privé de la surface interne de la
