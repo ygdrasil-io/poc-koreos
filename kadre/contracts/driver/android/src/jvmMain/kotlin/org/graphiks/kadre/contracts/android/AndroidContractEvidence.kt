@@ -33,9 +33,10 @@ fun main(args: Array<String>) {
     val mapping = File(args[5])
     val commit = args[6]
 
-    // Phase 0 : AND-001 est l'unique contrat de target `android` ; le générateur rejette de toute
-    // façon un registre/mapping qui ne déclarerait pas exactement ce couple.
-    val contractId = "AND-001"
+    // Phase 1 : les deux contrats actifs de target `android` — un JSON canonique par contrat,
+    // depuis le MÊME XML connecté copié ci-dessous (le générateur rejette de toute façon un
+    // registre/mapping qui ne déclarerait pas exactement ces couples).
+    val contractIds = listOf("AND-001", "AND-002")
     val target = "android"
     val adapter = "android-emulator"
 
@@ -75,27 +76,29 @@ fun main(args: Array<String>) {
 
     // Génération des JSON canoniques : mêmes classes que les producteurs runtime/AppKit du
     // validateur (registre, mapping, répertoires JUnit, sortie, commit, contractId, target, adapter).
-    val output = File(targetEvidence, "$contractId.json")
-    invokeGenerateContractEvidence(
-        registry = registry.absolutePath,
-        mapping = mapping.absolutePath,
-        junitDirectories = targetJunit.absolutePath,
-        output = output.absolutePath,
-        commit = commit,
-        contractId = contractId,
-        target = target,
-        adapter = adapter,
-    )
-
-    // Copie à l'emplacement du gate JUnit (`validateContractEvidence`).
-    val gateOutput = File(File(gateDir, "contract-evidence"), "$contractId.json")
-    gateOutput.parentFile.mkdirs()
-    output.copyTo(gateOutput, overwrite = true)
+    // Un document par contrat, puis la copie à l'emplacement du gate JUnit
+    // (`validateContractEvidence` lit `<racine>/contract-evidence/<contractId>.json`).
+    for (contractId in contractIds) {
+        val output = File(targetEvidence, "$contractId.json")
+        invokeGenerateContractEvidence(
+            registry = registry.absolutePath,
+            mapping = mapping.absolutePath,
+            junitDirectories = targetJunit.absolutePath,
+            output = output.absolutePath,
+            commit = commit,
+            contractId = contractId,
+            target = target,
+            adapter = adapter,
+        )
+        val gateOutput = File(File(gateDir, "contract-evidence"), "$contractId.json")
+        gateOutput.parentFile.mkdirs()
+        output.copyTo(gateOutput, overwrite = true)
+    }
 
     // La liste des moteurs réellement producteurs, consommée par le gate du validateur.
     File(evidenceDir, "engines.txt").writeText(engine)
     println("android evidence engine: $engine")
-    println("android evidence artifact: ${output.path}")
+    println("android evidence artifacts: ${contractIds.joinToString(separator = ", ") { "$it.json" }} under ${File(evidenceDir, engine).path}")
 }
 
 /**
