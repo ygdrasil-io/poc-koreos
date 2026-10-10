@@ -1,38 +1,81 @@
+import org.gradle.api.tasks.testing.Test
+import org.jetbrains.kotlin.gradle.tasks.KotlinJvmCompile
+
 plugins {
-    kotlin("jvm")
-    application
+    kotlin("multiplatform")
     alias(libs.plugins.compose.compiler)
     alias(libs.plugins.compose.multiplatform)
 }
 
 kotlin {
     jvmToolchain(25)
+
+    // Opt-ins portées par le code partagé (ui/ compose) : les mêmes marqueurs existent
+    // dans les artefacts compose jvm et wasmJs. L'opt-in kffi reste propre au JVM —
+    // le marqueur n'existe pas sur la classe-path wasm.
     compilerOptions {
         freeCompilerArgs.addAll(
             "-opt-in=androidx.compose.ui.InternalComposeUiApi",
             "-opt-in=androidx.compose.ui.ExperimentalComposeUiApi",
             "-opt-in=androidx.compose.material3.ExperimentalMaterial3Api",
-            "-opt-in=org.graphiks.kffi.objc.PlatformAvailability",
+            // Les atomiques communes du portage (TourStore, ActionDispatcher).
+            "-opt-in=kotlin.concurrent.atomics.ExperimentalAtomicApi",
         )
+    }
+
+    jvm {
+        // Le DSL « JVM binaries » remplace le plugin `application` (incompatible avec le
+        // plugin multiplateforme en KGP 2.4) : il enregistre la tâche run (JavaExec) et la
+        // distribution — le flux de lancement desktop reste le même.
+        binaries {
+            executable {
+                mainClass.set("org.graphiks.kadre.samples.desktour.DeskTourMainKt")
+                // État de départ inchangé du sample : `-XstartOnFirstThread` est spécifique
+                // macOS — la démo desktop vise cette plateforme, le flux jvm ne change pas.
+                applicationDefaultJvmArgs.set(
+                    listOf(
+                        "-XstartOnFirstThread",
+                        "--enable-native-access=ALL-UNNAMED",
+                    ),
+                )
+            }
+        }
+    }
+
+    wasmJs {
+        browser()
+        // Le binaire navigateur (wasmJsBrowserDistribution) est ce que l'hôte web
+        // servira ; le host lui-même est la tâche 3.
+        binaries.executable()
+    }
+
+    sourceSets {
+        commonMain.dependencies {
+            implementation(project(":kadre"))
+            implementation(libs.kotlinx.coroutines.core)
+        }
+        commonTest.dependencies {
+            implementation(kotlin("test"))
+            implementation(libs.kotlinx.coroutines.test)
+        }
+        jvmMain.dependencies {
+            implementation(libs.kffi.objc)
+            implementation(compose.desktop.currentOs)
+            implementation(compose.material3)
+        }
+        wasmJsMain.dependencies {
+            // Les mêmes accès que la sonde a compilés et exécutés (PROBE-NOTES.md).
+            implementation(compose.runtime)
+            implementation(compose.ui)
+            implementation(compose.material3)
+        }
     }
 }
 
-tasks.test { useJUnitPlatform() }
+tasks.named<Test>("jvmTest") { useJUnitPlatform() }
 
-application {
-    mainClass.set("org.graphiks.kadre.samples.desktour.DeskTourMainKt")
-    applicationDefaultJvmArgs = listOf(
-        "-XstartOnFirstThread",
-        "--enable-native-access=ALL-UNNAMED",
-    )
-}
-
-dependencies {
-    implementation(project(":kadre"))
-    implementation(libs.kotlinx.coroutines.core)
-    implementation(libs.kffi.objc)
-    implementation(compose.desktop.currentOs)
-    implementation(compose.material3)
-    testImplementation(kotlin("test"))
-    testImplementation(libs.kotlinx.coroutines.test)
+// L'opt-in kffi (pont AppKit) reste propre aux compilations JVM : le marqueur
+// `org.graphiks.kffi.objc.PlatformAvailability` n'existe pas sur la classe-path wasm.
+tasks.withType<KotlinJvmCompile>().configureEach {
+    compilerOptions.freeCompilerArgs.add("-opt-in=org.graphiks.kffi.objc.PlatformAvailability")
 }

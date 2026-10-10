@@ -11,13 +11,20 @@ Compose ni AppKit : `core` porte l’état, le journal et les présentations, `u
 porte Compose, `appkit` porte le bridge de rendu. Un test de frontière refuse
 tout import `org.graphiks.kadre.internal.*` dans le sample.
 
+Le module est multiplateforme (jvm + wasmJs) : `core` et `ui` vivent dans
+`commonMain` (partagés, compilés pour les deux cibles), le host bureau
+(`DeskTourMain`, `appkit`, les notes en fenêtres Kadre) dans `jvmMain`. Les
+notes passent par le contrat `NoteWindowHost` : le bureau l’implémente avec des
+fenêtres Kadre, le host web (à venir) l’implémentera avec des divs du document
+et leurs viewports Compose — voir `PROBE-NOTES.md`, correction 2.
+
 ## Lancer
 
 ```bash
-./gradlew :kadre:samples:desk-tour:run
+./gradlew :kadre:samples:desk-tour:runJvm
 ```
 
-Le binaire est aussi installable (`:kadre:samples:desk-tour:installDist`) ; il
+Le binaire est aussi installable (`:kadre:samples:desk-tour:installJvmDist`) ; il
 démarre alors avec `build/install/desk-tour/bin/desk-tour`. La démo demande
 `-XstartOnFirstThread`, déjà fourni par la tâche.
 
@@ -98,7 +105,7 @@ Le tiroir rappelle aussi les entrées du journal et leur statut.
 ## Tests
 
 ```bash
-./gradlew :kadre:samples:desk-tour:test
+./gradlew :kadre:samples:desk-tour:jvmTest
 ```
 
 116 tests couvrent la réduction du store, la corrélation du dispatcher, les
