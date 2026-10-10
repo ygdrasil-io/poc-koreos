@@ -1082,9 +1082,13 @@ browser version is not an input to the automated smoke.
 
 ## Manual browser charter
 
-Two charters supplement the automated suites with browser behaviour that
-headless automation cannot claim reliably, and neither replaces the JS and Wasm
-automated smokes:
+Seven charters supplement the automated suites with browser behaviour that
+headless automation cannot claim reliably, and none replaces the JS or Wasm
+automated smokes. [INDEX.md](manual/INDEX.md) consolidates them by the six
+host-owned frontiers of the Phase 8 gate — navigation/bfcache, real focus,
+user activation, a host-prepared popup, permissions and hardware — citing
+every covering procedure verbatim; its verification found no uncovered
+frontier:
 
 - [phase-1-lifecycle.md](manual/phase-1-lifecycle.md) covers a real back-forward
   cache traversal, browser-level focus, and host owned open/closed Shadow DOM;
