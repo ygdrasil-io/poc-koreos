@@ -106,6 +106,7 @@ async function runBrowserSmoke(argumentsList) {
       env: {
         ...process.env,
         KADRE_FIXTURE_URL: `${server.url}/index.html`,
+        KADRE_SMOKE_TARGET: target,
         KADRE_JUNIT_OUTPUT: junitOutput,
         KADRE_PLAYWRIGHT_OUTPUT_DIR: playwrightOutput,
       },
@@ -715,8 +716,8 @@ async function findFiles(directory, matches) {
  * the document is parsed and publishes its bindings and factory key. The import map and the module
  * script that runs the TypeScript scenario live in the head: the map is registered before the first
  * module resolves, and every element the page owns exists before the fixture records its DOM
- * baseline. `@kadre/host` resolves to the published package's shim, served straight from the consumer
- * root, and every other scenario leaves the package unloaded.
+ * baseline. `@kadre/host` resolves to the published package's shim, served straight from the unpacked
+ * published archive the consumer root holds, and every other scenario leaves the package unloaded.
  */
 function fixturePage(entryScript) {
   const imports = { '@kadre/host': SHIM_MODULE };
