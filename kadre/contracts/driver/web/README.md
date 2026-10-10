@@ -34,7 +34,10 @@ target-specific JUnit results:
 - [web-lifecycle.spec.mjs](playwright/web-lifecycle.spec.mjs) proves the
   attachment lifecycle: ownership, detach/reinsert, cross-document transfer,
   Shadow DOM observation, `Manual` reconnection, focus and visibility reduction,
-  `pagehide`, and the absence of Kadre-created DOM or a primary window;
+  `pagehide`, the absence of Kadre-created DOM or a primary window, and the
+  memory-pressure capability cell of the phase 8 closure — the bare structural
+  `unsupported` re-read across a focus/visibility exercise with no host signal
+  ever appearing (`web-memory-pressure-unsupported`);
 - [web-surface.spec.mjs](playwright/web-surface.spec.mjs) proves the host
   surface: the size and scale readback published from the element's own layout
   box and the browsing context's device pixel ratio, the per-animation-frame
@@ -395,6 +398,31 @@ The two Gradle tasks `:kadre:contracts:validator:validateJsBrowserContractEviden
 and `...:validateWasmJsBrowserContractEvidence` read those documents against the
 same registry, the same mapping and the same JUnit report; they are part of
 `:kadre:contracts:validator:check`.
+
+## Phase 8 lifecycle memory-pressure limits
+
+These are the real boundaries of the delivered phase, not defects:
+
+- the browsing context exposes no memory-pressure primitive at all — no event, no
+  callback, no observable to poll. `performance.memory` is a Chromium-only,
+  non-standard heap readback the two targets never call, the `memory` device
+  metric is a budget rather than a signal, and `measureUserAgentSpecificMemory`
+  is cross-origin-isolation-locked and measures attribution, not pressure. The
+  session therefore publishes the bare structural `Unsupported` and never a
+  cause-carrying `Unavailable(PlatformFailure)`: there is no browser API whose
+  failure could be reported, and inventing one to fill the snapshot is what
+  `BACKEND-CAPABILITIES.md` §1 forbids for a passive field;
+- the absence is structural, not observed: admitting a `HostSignal.MemoryPressure`
+  requires the capability cell to read `Available` (`RuntimeLifecycle.kt`), so a
+  session that publishes `Unsupported` cannot emit one, and no web code does — no
+  poll, no timer and no memory observer exists on this target, so there is
+  nothing to stop and nothing that outlives the session.
+
+### Published phase 8 availability
+
+| API | Published value | Asserted by |
+| --- | --- | --- |
+| `LifecycleCapabilities.memoryPressure` | `FeatureAvailability.Unsupported` in every state of the session — the one value this field ever takes on this target, passed explicitly by `WebHostSession` to both controller constructions (`WEB_LIFECYCLE_CAPABILITIES`) | `web-memory-pressure-unsupported` reads the cell `data-kadre-memory-pressure` from the real facade after focus, blur and a hidden document, and the sentinel `web-memory-no-fabricated-signal` watches the host-signal attribute that any signal would set; `WebMemoryPressureCapabilityTest.memoryPressureIsTheBareStructuralUnsupportedEveryStateOfTheSession`, `.noMemoryPressureSignalIsEverEmittedAcrossALifecycleExercise` re-read the cell after every transition of a full exercise up to the terminal pagehide |
 
 ## Phase 7 capture limits
 

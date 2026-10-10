@@ -14,6 +14,7 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import org.graphiks.kadre.application.HostSignal
 import org.graphiks.kadre.application.KadreApplication
 import org.graphiks.kadre.application.KadreApplicationFactory
 import org.graphiks.kadre.application.KadreLaunchContext
@@ -162,6 +163,7 @@ public fun main() {
         "duplicate" -> duplicateScenario()
         "focus" -> focusScenario()
         "pagehide" -> attachScenario("pagehide")
+        "memory-pressure" -> memoryPressureScenario()
         "host-owned" -> hostOwnedScenario()
         "identity-no-expando" -> identityNoExpandoScenario()
         "surface-metrics" -> surfaceMetricsScenario()
@@ -212,6 +214,35 @@ private fun initialDisconnectedScenario() {
 private fun attachScenario(key: String) {
     val host = createHost(key)
     document.body!!.setAttribute("data-kadre-attach", describeAttach(attachAndObserve(host, key)))
+}
+
+/**
+ * The memory-pressure scenario of the phase 8 closure: the same observation [attachAndObserve]
+ * carries, plus the two cells its spec reads — the lifecycle capability the session opened with,
+ * and the one attribute a host signal would set the moment it is emitted, whatever its kind.
+ *
+ * The capability is read once because it never moves: memory pressure is structurally absent on
+ * this target, so the cell is the whole honest claim, and the exercise the spec drives around it
+ * (focus, blur, hidden document) can only re-find it. The signal watcher exists so the absence is
+ * observable: a fabricated pressure watch would have to publish a `HostSignal` — the runtime
+ * admits one only when the capability says `Available` — and this attribute is where it would
+ * appear.
+ */
+private fun memoryPressureScenario() {
+    val host = createHost("memory-pressure")
+    val parentScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    val attached = host.attachKadre(parentScope) {
+        host.setAttribute("data-kadre-memory-pressure", lifecycle.capabilities.value.memoryPressure.encoded())
+        launch {
+            lifecycle.state.collect { state -> host.setAttribute("data-kadre-lifecycle", state.encoded()) }
+        }
+        launch {
+            lifecycle.signals.collect { signal -> host.setAttribute("data-kadre-host-signal", signal.encoded()) }
+        }
+        awaitCancellation()
+    }
+    host.setAttribute("data-kadre-attach", describeAttach(attached))
+    if (attached is KadreResult.Success) observeSession(attached.value, "memory-pressure", parentScope)
 }
 
 private fun manualReconnectScenario() {
@@ -1057,6 +1088,11 @@ private fun describeAttach(result: KadreResult<KadreSession>): String = when (re
 
 private fun LifecycleState.encoded(): String =
     "${attachment.toString().lowercase()}-${visibility.toString().lowercase()}-${activation.toString().lowercase()}"
+
+/** The one host signal the model declares, as the memory-pressure spec would read it. */
+private fun HostSignal.encoded(): String = when (this) {
+    is HostSignal.MemoryPressure -> "memory-pressure:${level.toString().lowercase()}"
+}
 
 private fun SessionOutcome.encoded(): String = when (this) {
     is SessionOutcome.Stopped -> reason.toString().replaceFirstChar(Char::lowercase).replace("D", "-d")

@@ -281,3 +281,30 @@ test('attach creates no DOM and exposes no primary Window', async ({ page }) => 
   await expect(body).toHaveAttribute('data-kadre-window-caps', 'unsupported:requestwindow');
   await expect(body).toHaveAttribute('data-kadre-request-window', 'unsupported');
 });
+
+test('web-memory-pressure-unsupported', async ({ page }) => {
+  await loadScenario(page, 'memory-pressure');
+  const host = page.locator('[data-kadre-host="memory-pressure"]');
+
+  // The capability cell a live session publishes through the real facade: memory pressure is
+  // structurally absent on this target — no browser primitive exists — so the bare `unsupported`
+  // is the whole honest claim, and no cause-carrying failure is invented to fill the snapshot.
+  await expect(host).toHaveAttribute('data-kadre-attach', 'success');
+  await expect(host).toHaveAttribute('data-kadre-memory-pressure', 'unsupported');
+
+  // The non-invention half: the full focus/visibility exercise the browsing context can deliver
+  // without navigation, and the host-signal attribute — set by the fixture the moment any signal
+  // is emitted, whatever its kind — never appears. A fabricated pressure watch would have to
+  // publish here; the capability cell it would need first is the one asserted above.
+  await host.focus();
+  await expect(host).toHaveAttribute('data-kadre-lifecycle', 'attached-foreground-active');
+  await host.blur();
+  await expect(host).toHaveAttribute('data-kadre-lifecycle', 'attached-foreground-inactive');
+  await page.evaluate(() => {
+    Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'hidden' });
+    document.dispatchEvent(new Event('visibilitychange'));
+  });
+  await expect(host).toHaveAttribute('data-kadre-lifecycle', 'attached-background-inactive');
+  await expect(host).toHaveAttribute('data-kadre-memory-pressure', 'unsupported');
+  await expect(host).not.toHaveAttribute('data-kadre-host-signal');
+});
