@@ -364,3 +364,10 @@ browserEngineExclusionFiles.keys.sorted().forEach { engine ->
         }
     }
 }
+
+// The registry exact-set test reads contracts.tsv at runtime (repositoryFile), so a registry edit
+// alone left jvmTest UP-TO-DATE and reported a green that a fresh CI run disproved (PR #438's
+// first red). Declaring the registry as a test input makes the stale-green impossible.
+tasks.named<Test>("jvmTest") {
+    inputs.file(rootProject.file("kadre/contracts/registry/contracts.tsv"))
+}
