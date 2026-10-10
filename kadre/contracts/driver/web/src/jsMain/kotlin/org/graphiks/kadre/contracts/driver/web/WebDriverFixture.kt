@@ -23,6 +23,19 @@ import org.graphiks.kadre.application.KadreSession
 import org.graphiks.kadre.application.LifecycleState
 import org.graphiks.kadre.application.SessionOutcome
 import org.graphiks.kadre.application.SessionState
+import org.graphiks.kadre.capture.CaptureEvent
+import org.graphiks.kadre.capture.CaptureFrame
+import org.graphiks.kadre.capture.CaptureManager
+import org.graphiks.kadre.capture.CaptureOutcome
+import org.graphiks.kadre.capture.CapturePermissionState
+import org.graphiks.kadre.capture.CaptureRegion
+import org.graphiks.kadre.capture.CaptureRequest
+import org.graphiks.kadre.capture.CaptureSession
+import org.graphiks.kadre.capture.CaptureSessionState
+import org.graphiks.kadre.capture.CaptureSources
+import org.graphiks.kadre.capture.CaptureTarget
+import org.graphiks.kadre.capture.CaptureTargetConstraints
+import org.graphiks.kadre.capture.PixelFormat
 import org.graphiks.kadre.diagnostics.Capability
 import org.graphiks.kadre.diagnostics.DelicateKadreApi
 import org.graphiks.kadre.diagnostics.FeatureAvailability
@@ -70,6 +83,7 @@ import org.graphiks.kadre.input.LogicalKey
 import org.graphiks.kadre.input.PhysicalKey
 import org.graphiks.kadre.input.PointerButton
 import org.graphiks.kadre.input.PointerButtonState
+import org.graphiks.kadre.input.PermissionState
 import org.graphiks.kadre.input.PointerState
 import org.graphiks.kadre.input.ScrollDelta
 import org.graphiks.kadre.input.SurfaceInputState
@@ -100,7 +114,9 @@ import org.graphiks.kadre.surface.HostSurface
 import org.graphiks.kadre.surface.InputDefaultBehavior
 import org.graphiks.kadre.surface.LogicalDelta
 import org.graphiks.kadre.surface.LogicalPoint
+import org.graphiks.kadre.surface.PhysicalPoint
 import org.graphiks.kadre.surface.PhysicalRect
+import org.graphiks.kadre.surface.PhysicalSize
 import org.graphiks.kadre.surface.PointerCaptureMode
 import org.graphiks.kadre.surface.PropertyChange
 import org.graphiks.kadre.surface.SurfaceEvent
@@ -115,6 +131,7 @@ import org.graphiks.kadre.window.WindowRequestOutcome
 import org.graphiks.kadre.window.WindowSpec
 import org.w3c.dom.DataTransfer
 import org.w3c.dom.DragEvent
+import org.w3c.dom.HTMLCanvasElement
 import org.w3c.dom.HTMLElement
 import kotlin.coroutines.CoroutineContext
 import kotlin.coroutines.EmptyCoroutineContext
@@ -178,6 +195,9 @@ public fun main() {
         "display" -> displayScenario()
         "devices" -> devicesScenario()
         "gamepad-effects" -> gamepadEffectsScenario()
+        "capture" -> captureScenario()
+        "capture-session" -> captureSessionScenario(maxBufferedFrameBytes = null)
+        "capture-bounded" -> captureSessionScenario(maxBufferedFrameBytes = 1_024L)
         else -> phaseZeroScenario()
     }
     document.body!!.setAttribute("data-kadre-ready", "true")
@@ -2381,4 +2401,385 @@ private fun GamepadEffectOutcome.encoded(): String = when (this) {
     GamepadEffectOutcome.Completed -> "completed"
     is GamepadEffectOutcome.Stopped -> "stopped:${reason.name.lowercase()}"
     is GamepadEffectOutcome.Failed -> "failed:${failure.encoding()}"
+}
+
+/**
+ * The Phase 7 capture scenarios: the capture control plane of the phase's first contract, on the
+ * display/device pattern — every command listener exists before the readiness flag, and every
+ * attribute a spec reads is a public value of the model (`CaptureManagerState` and the results of
+ * the manager's own operations), never a fixture journal.
+ *
+ * The host is a real `<canvas>` element: the port freezes the surface capability from the canvas
+ * kind of the attach element, so the control-plane scenario pins the supported `surface` row as
+ * the browser really freezes it. No capture runs in this scenario — the control plane is
+ * readback-only, and the picker itself belongs to the session scenarios.
+ *
+ * The prompting-API canaries are the specs' (the canary module their header describes). The
+ * fixture's own flows — attach, readback settlement, refresh and the refused open — never touch a
+ * prompting API, so an empty canary record is the page's own fact, not the fixture's restraint.
+ */
+
+/** The handles of a capture scenario: the manager and the session the application block owns. */
+private class CaptureHandles(val host: HTMLElement) {
+    val capture: CompletableDeferred<CaptureManager> = CompletableDeferred()
+    val session: CompletableDeferred<KadreSession> = CompletableDeferred()
+}
+
+/**
+ * The capture control-plane scenario: the manager's whole state published as the spec reads it,
+ * the honest refresh the specs drive for the no-prompt proof, and the structurally refused open
+ * the source-refusal spec drives.
+ */
+private fun captureScenario() {
+    val host = createCanvasHost("capture")
+    val parentScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    val handles = CaptureHandles(host)
+    // The observation belongs to the scenario's own scope rather than to the application block, on
+    // the display scenario's pattern: the manager's state is published as it changes, whatever
+    // microtask the readback settlement rides.
+    parentScope.launch { CaptureObservation(host).install(parentScope, handles.capture.await()) }
+    parentScope.installCommand("kadre-capture-refresh") {
+        val refreshed = handles.capture.await().refreshSources()
+        host.setAttribute(
+            "data-kadre-capture-refresh",
+            when (refreshed) {
+                is KadreResult.Success -> "success@${refreshed.value.revision.value}"
+                is KadreResult.Failure -> "failure:${refreshed.reason.encoding()}"
+            },
+        )
+    }
+    parentScope.installCommand("kadre-capture-open-region") {
+        // The open the control plane refuses before any picker (the phase's exit gate): a request
+        // that carries a region. The browser picks its own bounds, so the port refuses a region
+        // carrying request structurally — `Unsupported(CaptureOpen)` — with the picker untouched.
+        // (The brief's literal drive, a `CaptureTarget.Source` request, is not constructible from
+        // this module — the source id's constructor is internal — and the runtime's own admission
+        // refuses source targets before the port is ever reached; the port's Source row is pinned
+        // by the platform's unit tests. This command stages the one refused-before-any-picker open
+        // the public facade can carry, and its failure cell is the pinned one.)
+        val request = CaptureRequest(
+            region = CaptureRegion(PhysicalRect(PhysicalPoint(0, 0), PhysicalSize(64, 64))),
+        )
+        when (val opened = handles.capture.await().open(request)) {
+            is KadreResult.Success -> {
+                // A refusal turned success is the mutation the spec kills; the fixture still
+                // releases what it would otherwise have left running.
+                opened.value.requestStop()
+                host.setAttribute("data-kadre-capture-open", "success")
+            }
+
+            is KadreResult.Failure -> host.setAttribute(
+                "data-kadre-capture-open",
+                "failure:${opened.reason.encoding()}",
+            )
+        }
+    }
+    val attached = host.attachKadre(parentScope) {
+        handles.capture.complete(checkNotNull(capture))
+        awaitCancellation()
+    }
+    host.setAttribute("data-kadre-attach", describeAttach(attached))
+    if (attached is KadreResult.Success) {
+        handles.session.complete(attached.value)
+        observeSession(attached.value, "capture", parentScope)
+    }
+}
+
+/**
+ * Publishes one capture scenario's observations as attributes of the host, from the manager's own
+ * state stream. Eight facts are read, and each is a public value rather than a fixture journal:
+ *
+ * - `data-kadre-capture-revision`: the manager revision the state was published at;
+ * - `data-kadre-capture-permissions`: both scopes' permission states, as the model mirrors them;
+ * - `data-kadre-capture-sources`: the inventory shape — `hostPickerOnly` on the web, never an
+ *   enumerated list the browser did not consent to;
+ * - `data-kadre-capture-capabilities-screen` / `-window` / `-surface`: the three target
+ *   capabilities with the constraint sets frozen at attach;
+ * - `data-kadre-capture-enumeration`: the enumeration capability;
+ * - `data-kadre-capture-host-picker`: the picker's availability, carrying its cause when this
+ *   browsing context cannot offer one.
+ */
+private class CaptureObservation(private val host: HTMLElement) {
+    fun install(scope: CoroutineScope, captureManager: CaptureManager) {
+        scope.launch {
+            captureManager.state.collect { state ->
+                host.setAttribute("data-kadre-capture-revision", state.revision.value.toString())
+                host.setAttribute("data-kadre-capture-permissions", state.permissions.encoded())
+                host.setAttribute("data-kadre-capture-sources", state.sources.encoded())
+                host.setAttribute("data-kadre-capture-capabilities-screen", state.capabilities.screen.encoded())
+                host.setAttribute("data-kadre-capture-capabilities-window", state.capabilities.window.encoded())
+                host.setAttribute("data-kadre-capture-capabilities-surface", state.capabilities.surface.encoded())
+                host.setAttribute("data-kadre-capture-enumeration", state.capabilities.sourceEnumeration.encoded())
+                host.setAttribute("data-kadre-capture-host-picker", state.capabilities.hostPicker.captureEncoded())
+            }
+        }
+    }
+}
+
+/** A canvas host element: the attach element whose canvas kind the capture port freezes at attach. */
+private fun createCanvasHost(id: String): HTMLElement =
+    (document.createElement("canvas") as HTMLCanvasElement).also { host ->
+        host.setAttribute("data-kadre-host", id)
+        host.tabIndex = 0
+        host.style.width = "320px"
+        host.style.height = "180px"
+        document.body!!.appendChild(host)
+    }
+
+/**
+ * The Phase 7 capture session scenarios: a real consented stream opened, pumped and stopped in this
+ * browsing context, on the display scenario's pattern — every command listener exists before the
+ * readiness flag, and every attribute a spec reads is a public value of the model
+ * (`CaptureSessionState`, the `CaptureEvent` journal, the frames `collectFrames` delivers, the
+ * collect request's own answer), never a fixture journal of private state. The manager's control
+ * plane is published by the same `CaptureObservation` the control-plane scenario uses, so a session
+ * scenario can pin what the browser froze before anything was opened.
+ *
+ * The host is the canvas attach element itself: the Surface open resolves its id against the
+ * registration the session performed, and the fixture paints the canvas on a timer, because a
+ * canvas stream delivers on paint — an unpainted canvas has no first frame to pump. What the specs
+ * assert about frames is structure only (sizes, formats, revisions, counts): the pixels are not a
+ * contract.
+ *
+ * The host-choice open lives behind a real button, because the consent flow is a user gesture: the
+ * spec's real click is the activation the open asks for. The `chromium-capture` project's launch
+ * arguments answer that consent the browser's own sanctioned test way (the spec header records the
+ * probe): the interactive picker is replaced by the browser's synthetic screen source, and the
+ * frames that flow are real VideoFrames of the real pipe — the real picker and the real compositor
+ * pixels belong to the manual charter.
+ *
+ * [maxBufferedFrameBytes], when given, is the session's own `maxBufferedBytesPerSession` capture
+ * policy, small enough that the very first frame of the granted source cannot fit — which is what
+ * drives the oversized-frame terminal (`ResourceLimitExceeded`) the bounded scenario pins.
+ */
+private fun captureSessionScenario(maxBufferedFrameBytes: Long?) {
+    val host = createCanvasHost("capture-session")
+    val parentScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    val handles = CaptureSessionHandles(host)
+    // The empty counters are published first, on the input observation's pattern: a spec that
+    // drives an open which never streams still reads values the fixture really produced.
+    host.setAttribute("data-kadre-capture-frames", "0")
+    host.setAttribute("data-kadre-capture-frame-facts", "")
+    host.setAttribute("data-kadre-capture-session-events", "")
+    jsStartCanvasPainter(host, "data-kadre-capture-paints")
+    // The host-choice open behind a real button: the click IS the user activation, so no document
+    // command of this scenario can open the picker without the gesture the consent asks for.
+    val openButton = (document.createElement("button") as HTMLElement).also { button ->
+        button.setAttribute("data-kadre-capture-open-button", "host-choice")
+        button.textContent = "open host-choice capture"
+        button.style.width = "240px"
+        button.style.height = "32px"
+        document.body!!.appendChild(button)
+    }
+    openButton.addEventListener("click", { parentScope.launch { handles.openHostChoice() } })
+    parentScope.installCommand("kadre-capture-open-surface") { handles.openSurface() }
+    parentScope.installCommand("kadre-capture-collect") {
+        val session = handles.opened.await()
+        val collected = session.collectFrames { frame -> handles.onFrame(session, frame) }
+        host.setAttribute(
+            "data-kadre-capture-collect",
+            when (collected) {
+                is KadreResult.Success -> "success"
+                is KadreResult.Failure -> "failure:${collected.reason.encoding()}"
+            },
+        )
+    }
+    parentScope.installCommand("kadre-capture-stop") { handles.opened.await().requestStop() }
+    // The manager readback (the control-plane observation) and the session's own streams. The
+    // subscriptions are registered undispatched, so they exist before this call returns — an event
+    // or a state published after the open is delivered to a collector that was already there.
+    parentScope.launch { CaptureObservation(host).install(parentScope, handles.capture.await()) }
+    parentScope.launch(start = CoroutineStart.UNDISPATCHED) {
+        val session = handles.opened.await()
+        session.events.collect { event -> handles.onEvent(event) }
+    }
+    parentScope.launch(start = CoroutineStart.UNDISPATCHED) {
+        val session = handles.opened.await()
+        session.state.collect { state ->
+            host.setAttribute("data-kadre-capture-session-state", state.stateEncoding())
+            if (state is CaptureSessionState.Terminated) {
+                host.setAttribute("data-kadre-capture-outcome", state.outcome.outcomeEncoding())
+            }
+        }
+    }
+    val policy = maxBufferedFrameBytes
+        ?.let { bytes ->
+            KadrePolicies.Default.copy(
+                capture = KadrePolicies.Default.capture.copy(maxBufferedBytesPerSession = bytes),
+            )
+        }
+        ?: KadrePolicies.Default
+    val attached = host.attachKadre(parentScope, policy = policy) {
+        handles.capture.complete(checkNotNull(capture))
+        handles.surface.complete(checkNotNull(primarySurface.value))
+        awaitCancellation()
+    }
+    host.setAttribute("data-kadre-attach", describeAttach(attached))
+}
+
+/**
+ * The handles of a capture session scenario: the managers and the surface the application block
+ * publishes, the session an open handed over, and the journals the session's own streams write.
+ */
+private class CaptureSessionHandles(val host: HTMLElement) {
+    val capture: CompletableDeferred<CaptureManager> = CompletableDeferred()
+    val surface: CompletableDeferred<HostSurface> = CompletableDeferred()
+    val opened: CompletableDeferred<CaptureSession> = CompletableDeferred()
+
+    private val eventJournal = mutableListOf<String>()
+    private val frameFacts = mutableListOf<String>()
+    private var frames = 0
+
+    /** The host-choice open: the one explicit request path, driven by the button's click. */
+    suspend fun openHostChoice() {
+        recordOpen("data-kadre-capture-open", capture.await().open(CaptureRequest()))
+    }
+
+    /**
+     * The Surface open: the session's own primary surface, cropped to the region the surface alone
+     * may carry — the browser picks a screen's own bounds, but the canvas's bounds are real.
+     */
+    suspend fun openSurface() {
+        val request = CaptureRequest(
+            target = CaptureTarget.Surface(surface.await().id),
+            region = CaptureRegion(PhysicalRect(PhysicalPoint(0, 0), PhysicalSize(32, 32))),
+        )
+        recordOpen("data-kadre-capture-open-surface", capture.await().open(request))
+    }
+
+    private fun recordOpen(attribute: String, result: KadreResult<CaptureSession>) {
+        when (result) {
+            is KadreResult.Success -> {
+                opened.complete(result.value)
+                host.setAttribute(attribute, "success")
+            }
+
+            is KadreResult.Failure -> host.setAttribute(attribute, "failure:${result.reason.encoding()}")
+        }
+    }
+
+    /**
+     * One delivered frame: the counter, the structural facts (size, format, the configuration
+     * revision the frame itself names) and — for the first frame only — the session state read at
+     * that very moment, which is what makes the configuration-before-frame ordering an observation
+     * rather than an assertion.
+     */
+    fun onFrame(session: CaptureSession, frame: CaptureFrame) {
+        frames += 1
+        if (frames == 1) {
+            host.setAttribute("data-kadre-capture-first-frame", session.state.value.stateEncoding())
+        }
+        if (frameFacts.size < 32) {
+            frameFacts += "${frame.size.width}x${frame.size.height}:${frame.format.encoded()}" +
+                ":rev=${frame.configurationRevision.value}"
+        }
+        host.setAttribute("data-kadre-capture-frames", frames.toString())
+        host.setAttribute("data-kadre-capture-frame-facts", frameFacts.joinToString(";"))
+    }
+
+    /** One published event, appended to the journal the ordering sentinel reads. */
+    fun onEvent(event: CaptureEvent) {
+        eventJournal += event.eventEncoding()
+        host.setAttribute("data-kadre-capture-session-events", eventJournal.joinToString(";"))
+    }
+}
+
+/**
+ * The canvas painter: paints the fixture's own canvas on a timer, because a canvas stream delivers
+ * on paint and an unpainted canvas has no frame to pump. The counter the element carries is the
+ * page's own paint count — a structure fact, never a content claim.
+ */
+private fun jsStartCanvasPainter(element: HTMLElement, attribute: String): Unit = js(
+    """(function () {
+        var context = element.getContext('2d');
+        var paints = 0;
+        window.setInterval(function () {
+            paints += 1;
+            context.fillStyle = paints % 2 === 0 ? '#402060' : '#602040';
+            context.fillRect(0, 0, element.width, element.height);
+            element.setAttribute(attribute, String(paints));
+        }, 33);
+    })()""",
+)
+
+/** One capture session state, as the specs read it. */
+private fun CaptureSessionState.stateEncoding(): String = when (this) {
+    CaptureSessionState.Ready -> "ready"
+    is CaptureSessionState.Streaming -> "streaming:rev=${configuration.revision.value}"
+    CaptureSessionState.Stopping -> "stopping"
+    is CaptureSessionState.Terminated -> "terminated:${outcome.outcomeEncoding()}"
+}
+
+/** One capture terminal outcome, as the specs read it. */
+private fun CaptureOutcome.outcomeEncoding(): String = when (this) {
+    CaptureOutcome.SourceCompleted -> "completed"
+    is CaptureOutcome.Stopped -> "stopped:${reason.name.lowercase()}"
+    is CaptureOutcome.Failed -> "failed:${failure.encoding()}"
+}
+
+/** One published capture event, with the configuration it names. */
+private fun CaptureEvent.eventEncoding(): String = when (this) {
+    is CaptureEvent.StreamingStarted -> "streaming-started@rev=${configuration.revision.value}" +
+        ":size=${configuration.size.width}x${configuration.size.height}" +
+        ":format=${configuration.format.encoded()}"
+
+    is CaptureEvent.Reconfigured -> "reconfigured@rev=${configuration.revision.value}" +
+        ":size=${configuration.size.width}x${configuration.size.height}" +
+        ":format=${configuration.format.encoded()}"
+
+    is CaptureEvent.Paused -> "paused:${reason?.encoding() ?: "none"}"
+
+    is CaptureEvent.Resumed -> "resumed@rev=${configuration.revision.value}" +
+        ":size=${configuration.size.width}x${configuration.size.height}" +
+        ":format=${configuration.format.encoded()}"
+}
+
+/** The two mirrored permission states, as the specs read them. */
+private fun CapturePermissionState.encoded(): String =
+    "screen=${screen.encoded()}:window=${window.encoded()}"
+
+/** One permission state, as the specs read it. */
+private fun PermissionState.encoded(): String = when (this) {
+    PermissionState.Granted -> "granted"
+    PermissionState.NotDetermined -> "notDetermined"
+    is PermissionState.Denied -> "denied:canRequestAgain=$canRequestAgain"
+    PermissionState.Restricted -> "restricted"
+    is PermissionState.Unavailable -> "unavailable:${failure.encoding()}"
+}
+
+/** The capture inventory shape, as the specs read it. */
+private fun CaptureSources.encoded(): String = when (this) {
+    CaptureSources.HostPickerOnly -> "hostPickerOnly"
+    is CaptureSources.Enumerated -> "enumerated:n=${values.size}"
+    is CaptureSources.PermissionRequired -> "permissionRequired:${required.joinToString("+") { it.name }}"
+    is CaptureSources.Unavailable -> "unavailable:${failure.encoding()}"
+}
+
+/** One capture target capability, as the specs read it: the frozen constraint set, then availability. */
+private fun Capability<CaptureTargetConstraints>.encoded(): String = when (this) {
+    is Capability.Unsupported -> "unsupported:${failure.operation.name.lowercase()}"
+    is Capability.Supported ->
+        "supported[formats=${constraints.formats.map { it.encoded() }.sorted().joinToString("+")}" +
+            ":cursor=${constraints.cursorModes.map { it.name }.sorted().joinToString("+")}" +
+            ":region=${constraints.region.captureEncoded()}]" +
+            ":${availability.captureEncoded()}"
+}
+
+/** One capture availability, as the specs read it — the unavailable row carries its own cause. */
+private fun FeatureAvailability.captureEncoded(): String = when (this) {
+    FeatureAvailability.Available -> "available"
+    FeatureAvailability.Unsupported -> "unsupported"
+    is FeatureAvailability.RequiresPermission -> "requiresPermission:${permission.name}"
+    is FeatureAvailability.RequiresInteraction -> "requiresInteraction"
+    is FeatureAvailability.Unavailable -> "unavailable:${failure.encoding()}"
+}
+
+/** One pixel format, as the specs read it: the model's own name for the word it publishes. */
+private fun PixelFormat.encoded(): String = when (this) {
+    PixelFormat.Rgba8 -> "Rgba8"
+    PixelFormat.Bgra8 -> "Bgra8"
+    PixelFormat.Bgrx8 -> "Bgrx8"
+    PixelFormat.Nv12 -> "Nv12"
+    PixelFormat.I420 -> "I420"
+    is PixelFormat.Opaque -> "Opaque:$code"
 }

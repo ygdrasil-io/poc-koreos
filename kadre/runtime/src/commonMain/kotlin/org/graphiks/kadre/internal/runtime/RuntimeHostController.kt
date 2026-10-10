@@ -382,6 +382,7 @@ public class RuntimeHostController private constructor(
             displayPort: DisplayPort? = null,
             gamepadPort: GamepadPort? = null,
             inputDevicePort: InputDevicePort? = null,
+            capturePort: CapturePort? = null,
         ): RuntimeHostController = RuntimeHostController(
             platform = platform,
             initialLifecycleState = initialLifecycleState,
@@ -398,6 +399,7 @@ public class RuntimeHostController private constructor(
                     displayPort = displayPort,
                     gamepadPort = gamepadPort,
                     inputDevicePort = inputDevicePort,
+                    capturePort = capturePort,
                 )
             },
         )

@@ -25,6 +25,13 @@ l’inventaire devices/gamepads sondé depuis le poll du navigateur (`BCK-008`),
 gamepad et leurs préconditions honnêtes (`BCK-009`), et la ligne `platformAccess` de surface,
 dont la lease `withWebElement` de la phase 2 est la preuve (§2, quatre lignes du bas ;
 §3.12-3.14) — la ligne `rawInput`, déjà présente, gagne son scénario navigateur de non-appel.
+La phase 7 ajoute les cinq lignes de **capture** que ses contrats livrent : les cibles
+`HostChoice` (le picker du navigateur derrière un consentement explicite) et `Surface` (le
+canvas de la surface primaire, sans consentement), la cible `Source` refusée structurellement
+avant tout picker, et les deux capabilities d’inventaire qui disent ce que ce browsing context
+sait — `sourceEnumeration` inconditionnelle sur un inventaire toujours `HostPickerOnly`,
+`hostPicker` pilotée par le secure context et la présence de la primitive (`BCK-010`/`BCK-011` ;
+§2, cinq lignes du bas ; §3.15-3.16).
 
 Deux remarques de périmètre, pour que la lecture des lignes soit exacte. Les trois premiers
 features, `drag-and-drop`, `IME`/`text input` et `raw input` sont des lignes de la matrice de
@@ -117,6 +124,11 @@ registre est donc la révision du navigateur ; l’OS n’y entre pas.
 | `DeviceManager.state` (inventaire devices et gamepads, observation) | `js`, `wasmJs` | idem | `js` : les externals `JsGamepad`/`JsGamepadNavigator` que `JsWebGamepadDom.kt:19-43` déclare lui-même — aucune liaison SDK n’existe pour la Gamepad API ; `wasmJs` : les mêmes externals en `JsAny`/`@JsFun` (`WasmWebGamepadDom.kt:11-13` — kotlinx-browser 0.5.0 ne déclare rien de la Gamepad API) | `none` pour l’inventaire : `navigator.getGamepads()` est la seule source d’état, lue par le hub partagé de la page à la cadence des animation frames tant qu’au moins un port de session est ouvert (`WebGamepadHub.kt:82-96`, `:304-329`), et l’inventaire publié est toujours `Enumerated` — énuméré et vide là où le navigateur n’expose rien (un page insecure réelle n’expose aucun pad, `getGamepads` étant secure-context-only) ; les événements `gamepadconnected`/`gamepaddisconnected` ne déclenchent qu’une re-lecture immédiate | `DeviceInventory.Enumerated(devices = [], gamepads = …)` — la liste `devices` reste vide (le navigateur n’offre aucune primitive d’inventaire de périphériques génériques, rien n’est fabriqué) et la liste `gamepads` est celle que le poll rapporte, trous compris sans pad fantôme ni renumérotation (`WebGamepadHub.kt:183-234`) ; il n’existe pas d’état `Unsupported` de ce manager sur ce target | `web-gamepad-empty-inventory-honest`, `web-gamepad-connect-added`, `web-gamepad-state-poll`, `web-gamepad-disconnect-neutral`, `web-gamepad-routing-suspended-neutral`, `web-gamepad-session-close-quiet`, sentinelles `web-gamepad-no-phantom`, `web-gamepad-descriptor-exact`, `web-gamepad-no-fabricated-devices`, `web-gamepad-teardown-quiet` (BCK-008) ; `WebGamepadHubTest`, `WebGamepadMappingTest` |
 | `Gamepad.playEffect` (effets gamepad) | `js`, `wasmJs` | idem | `js` : les externals `JsGamepadHapticActuator`/`JsGamepadEffectParameters` du même fichier (`JsWebGamepadDom.kt:87-119`) — le dictionnaire WebIDL `effectParameters` est construit par le target ; `wasmJs` : les `@JsFun` gardés du même seam (`WasmWebGamepadDom.kt:47-80`) | la capability du pad est gelée par connexion depuis trois préconditions (`WebGamepadEffects.kt:63-80`) : le secure context du browsing context (`window.isSecureContext`), l’actuateur `vibrationActuator` que cette connexion offre (`null` là où le navigateur n’en a pas — Firefox/WebKit), et la liste `effects` que l’actuateur déclare elle-même, sondée par un dual-rumble de durée nulle quand elle ne l’est pas | `Capability.Unsupported(KadreFailure.Unsupported(KadreOperation.GamepadEffect))` sur chacune des trois préconditions manquantes (contexte insecure, actuateur absent, aucun genre annoncé ou sonde refusée) ; un genre non annoncé — `LocalizedHaptic` toujours — est refusé `InvalidRequest("effect")` avant tout appel d’actuateur ; un pad déconnecté refuse `Closed(Gamepad)` avant tout appel ; un lancement que le navigateur refuse est `PlatformFailure(Web, "gamepad-effect", "refused")` ; `maximumDuration = null` — le navigateur serre la borne (`WebGamepadEffects.kt:74-79`, `:95-131`) | `web-gamepad-effect-dual-rumble`, `web-gamepad-effect-stop`, `web-gamepad-effect-unsupported-kind`, `web-gamepad-effect-insecure-context`, sentinelles `web-gamepad-no-implicit-prompt`, `web-gamepad-no-localized-haptic`, `web-gamepad-effect-once` (BCK-009) ; `WebGamepadEffectTest` |
 | `SurfaceCapabilities.platformAccess` | `js`, `wasmJs` | idem | `none` | `none` — la capability est structurelle : la surface attachée la publie `Supported` (`WebHostSession.kt:2019`) et la lease `withWebElement` est le contrat de l’élément — bornée, non réentrante, admise tant que la surface admet (§6.3 de `BACKEND-CAPABILITIES.md`, ligne 239) | `Capability.Unsupported(KadreFailure.Unsupported(KadreOperation.PlatformSurfaceAccess))` au snapshot terminal (`SurfaceAdmission.kt:28`) ; dans la fenêtre de révocation d’ownership une lease est déjà refusée tandis que la capability lit encore `Supported` (limite de la phase 2, enregistrée au README du driver) | `web-element-lease`, `web-element-lease-boundary`, `web-element-lease-close-order`, `web-element-lease-concurrent-close` (`INT-004`, `web-surface.spec.mjs`) ; `WebElementLeaseTest`, `JsWebElementLeaseTest`/`WasmWebElementLeaseTest` |
+| `CaptureCapabilities.screen` et `CaptureCapabilities.window` (cible `HostChoice`) | `js`, `wasmJs` | idem | `js` : `MediaStream`/`MediaStreamTrack` des déclarations kotlinx-browser 0.5.0, le reste de la chaîne — Permissions API, `getDisplayMedia`, `MediaStreamTrackProcessor` — déclaré par la réalisation elle-même, snippets `js()` à garde `typeof` (`JsWebCaptureDom.kt:33-40`, `:422-434`, `:483-485`) ; `wasmJs` : les mêmes lectures en `@JsFun` (`WasmWebCaptureDom.kt:17-46`) | les trois préconditions sondées une fois à la construction et gelées dans la capability — le secure context, la présence de `getDisplayMedia`, celle du `MediaStreamTrackProcessor` (`WebCapturePort.kt:387-409`) ; le consentement lui-même n’est demandé que par l’open explicite de l’application, jamais par la publication de la capability | `Capability.Unsupported(KadreFailure.Unsupported(KadreOperation.CaptureOpen))` sur chacune des trois préconditions manquantes (`WebCapturePort.kt:391-394`) ; la cellule `window` est le miroir exact de la cellule `screen` (`:429-433`) — un consentement navigateur unique gouverne ce que son picker offre, il n’existe aucune garantie de fenêtre distincte | `web-capture-initial-honest`, `web-capture-insecure-unsupported` (BCK-010) ; les scénarios de session `web-capture-hostchoice-stream`, `web-capture-configuration-before-frame`, `web-capture-frames-bounded`, `web-capture-stop-exactly-once` (BCK-011, projet `chromium-capture`) ; `WebCapturePortTest.insecureContextUnsupportedEverywhereWithSecureContextCauseOnThePicker`, `.missingGetDisplayMediaUnsupportedWithNoGetDisplayMediaCauseOnThePicker`, `.missingTrackProcessorUnsupportedWhileThePickerStaysAvailable`, `WebCaptureStreamTest.hostChoiceReserveRoutesToThePickedSourceAndStreams` |
+| `CaptureCapabilities.surface` (cible `Surface`) | `js`, `wasmJs` | idem | le même seam que la cible `HostChoice`, plus la lecture `instanceof HTMLCanvasElement` de l’élément attaché (`JsWebCaptureDom.kt:505-508`, miroir `@JsFun` Wasm) | les trois mêmes préconditions que `HostChoice` plus le genre canvas de l’élément attaché, sondés à la même construction (`WebCapturePort.kt:410-427`) ; l’open lui-même est sans consentement — `captureStream()` sur le canvas est l’unique effet navigateur (`:222-230`) | `Capability.Unsupported(KadreFailure.Unsupported(KadreOperation.CaptureOpen))` quand une précondition manque, le non-canvas compris (`:414-415` — le même code que la capability gelée, jamais un autre) ; un id étranger à la surface primaire enregistrée est refusé `InvalidRequest("request.target")` avant tout appel navigateur (`:216-219`) | `web-capture-surface-canvas-stream` (BCK-011, projet `chromium-capture`) ; `WebCaptureSurfaceTest.canvasSurfaceReservesStreamsAndAnswersPremultipliedAlphaOnTheRgba8Path`, `.foreignSurfaceIdIsRefusedInTheRuntimeOwnUnresolvableTargetFormWithoutTouchingTheSeam`, `.nonCanvasSurfaceRefusesWithTheFrozenCapabilityCauseAsTheConsistentBackstop`, `WebCapturePortTest.reserveOfSurfaceRefusesAnUnregisteredIdWithZeroSeamInteraction` |
+| `CaptureCapabilities.sourceEnumeration` | `js`, `wasmJs` | idem | `none` | `none` — la capability est inconditionnelle : elle dit ce que le navigateur sait, pas ce qu’il cache, et l’état du browsing context ne la retire pas | il n’y en a pas : `Capability.Supported(Unit, FeatureAvailability.Available)` dans tous les états, contexte insecure compris (`WebCapturePort.kt:437`) ; les sources publiées sont toujours `CaptureSources.HostPickerOnly` (`:459-463`) — aucun navigateur n’énumère les surfaces capturables avant un consentement, rien n’est inventé à la place — et `refreshSources` est le no-op honnête qui rend l’instantané courant sans un seul appel seam (`:161-166`), donc jamais de prompt | `web-capture-initial-honest` (cellules `data-kadre-capture-sources` = `hostPickerOnly` et `data-kadre-capture-enumeration` = `supported`) ; sentinelles `web-capture-no-fabricated-sources`, `web-capture-no-implicit-prompt` ; `WebCapturePortTest.refreshSourcesReturnsTheSameSnapshotWithoutTouchingThePicker` |
+| `CaptureCapabilities.hostPicker` | `js`, `wasmJs` | idem | `none` | le secure context, puis la présence de `getDisplayMedia` — la forme `FeatureAvailability.Unavailable` porte la cause en code de failure (`PlatformFailure(Web, "capture-capability", …)`, causes `"secure-context"` puis `"no-get-display-media"`, `WebCapturePort.kt:438-448`) | `FeatureAvailability.Unavailable(KadreFailure.PlatformFailure(KadrePlatform.Web, "capture-capability", <cause>))` sur ces deux états du browsing context — jamais `Unsupported` : un picker absent est un état du contexte, pas une absence structurelle de l’adapter — et `FeatureAvailability.Available` sinon | `web-capture-insecure-unsupported` (cellule `unavailable:platformFailure:web:capture-capability:secure-context`) ; `WebCapturePortTest.insecureContextUnsupportedEverywhereWithSecureContextCauseOnThePicker`, `.missingGetDisplayMediaUnsupportedWithNoGetDisplayMediaCauseOnThePicker` |
+| `CaptureTarget.Source` (cible `Source` de la matrice) | `js`, `wasmJs` | idem | `none` | `none` — le refus est structurel et ne dépend d’aucun état du browsing context | `KadreFailure.Unsupported(KadreOperation.CaptureOpen)` au reserve du port, avant toute interaction seam — zéro appel navigateur, rien réservé, rien demandé (`WebCapturePort.kt:174-176`, `WebCapturePortTest.reserveOfAnInventorySourceIsRefusedWithZeroSeamInteraction`) ; depuis le driver, la demande est de toute façon inconstruisible — le constructeur de `CaptureSourceId` est interne à la foundation et aucun inventaire `Enumerated` n’existe sur ce target, l’admission du runtime répondant `InvalidRequest("request.target")` (`RuntimeCaptureManager.kt:287-307`) | sentinelle `web-capture-no-fabricated-sources` (aucun inventaire inventé ne rend une cible `Source` résolvable) ; scénario `web-capture-source-refused-before-picker` (le même entonnoir d’admission, région comprise, refusé avant tout picker) ; `WebCapturePortTest.reserveOfAnInventorySourceIsRefusedWithZeroSeamInteraction` |
 
 Les availabilities d’entrée sont déclarées par une seule transition structurelle, à la fin de
 `installSessionConfiguration` (`WebHostSession.kt:912-925`) : `keyboardInstalled = true`,
@@ -839,6 +851,224 @@ en fait :
    `Notification.requestPermission` — vide (sentinelle `web-gamepad-no-implicit-prompt`), comme
    les appels d’actuateur.
 
+Les cinq lignes de capture du registre sont celles de la phase 7, et leur lecture partage
+trois faits. D’abord, la sonde est **fondée sur la présence et figée une fois** : le secure
+context, la présence de `getDisplayMedia` et celle du `MediaStreamTrackProcessor`, et le genre
+canvas de l’élément attaché sont lus à la construction du port (`WebHostSession.kt:615-622`)
+et gèlent les capabilities du snapshot — un browsing context qui n’offre pas une primitive
+publie l’`Unsupported` exact de cette absence, jamais une capacité devinée. Ensuite, la
+**lecture de permission est le seul fait de construction qui s’installe tard** : le query
+promise-based du navigateur n’a pas de forme synchrone, si bien que l’instantané initial porte
+la cellule transitoire `Unavailable(Unsupported(CapturePermission))` des deux scopes jusqu’à
+ce que la réponse installée republish le snapshot — une seule republication, le runtime
+dédoublonnant les instantanés identiques (`WebCapturePort.kt:102-111`, `:369-374`). Enfin, les
+**effets navigateur du plan de contrôle tiennent dans deux appels explicites** — le pick du
+consentement et le `captureStream()` du canvas — : les canaris de la source synthétique
+(`capture-stub.mjs`) enregistrent toute autre API à prompt, et les scénarios de `BCK-010`
+assertent le registre vide autour de la lecture, du refresh et du refus. La preuve de session
+de `BCK-011` court dans le troisième projet Playwright (`chromium-capture`), dont les
+arguments de lancement sont le trio sanctionné de Chromium pour les tests de capture — la
+posture exacte est enregistrée dans l’entête de `web-capture.spec.mjs` et reprise au §3.16 ;
+le vrai picker et les vrais pixels sont l’affaire du cahier manuel
+(`manual/phase-7-capture.md`).
+
+### 3.15 Le plan de contrôle de capture : l’inventaire honnête, la lecture de permission et les refus
+
+1. **Aucune énumération de sources, jamais.** Aucun navigateur n’expose d’inventaire des
+   surfaces capturables avant un consentement, et l’adapter n’en fabrique aucun : les sources
+   publiées sont **toujours** `CaptureSources.HostPickerOnly` (`WebCapturePort.kt:459-463`),
+   la capability `sourceEnumeration` le dit inconditionnellement (`:437`), et
+   `refreshSources` est le no-op honnête qui rend l’objet instantané courant — readback et
+   capabilities compris — sans atteindre la moindre mécanique de consentement (`:161-166`).
+   La Window Management API (`getScreenDetails`), déjà écartée par l’inventaire d’affichage
+   (§3.12, item 1), n’est pas davantage appelée ici : l’inventaire de capture n’a pas de
+   forme pré-consentement à imiter. La mutation que le contrat tue est un prompt pendant la
+   lecture ou le refresh : un seul pick hors du chemin de requête explicite est un échec de
+   scénario (`web-capture-readback-no-prompt`, sentinelles `web-capture-no-implicit-prompt`
+   et `web-capture-no-picker-at-readback`).
+2. **La sonde est fondée sur la présence, et le secure context ferme tout.** Le secure
+   context est le premier rung de chaque chaîne de capabilities : un contexte insecure publie
+   `Capability.Unsupported(Unsupported(CaptureOpen))` sur les trois cibles et
+   `Unavailable(PlatformFailure(Web, "capture-capability", "secure-context"))` sur le picker
+   (`WebCapturePort.kt:391-394`, `:411-415`, `:439-441`) — l’état prévu, jamais un prompt,
+   le scénario `web-capture-insecure-unsupported` n’assertant que des observables. Les deux
+   autres rungs sont la présence de `getDisplayMedia` (cause `"no-get-display-media"`) et
+   celle du `MediaStreamTrackProcessor` (`WebCapturePortTest`
+   `.missingGetDisplayMediaUnsupportedWithNoGetDisplayMediaCauseOnThePicker`,
+   `.missingTrackProcessorUnsupportedWhileThePickerStaysAvailable` — le picker, lui, reste
+   disponible sans pompe : c’est la pompe qui manque, pas le consentement).
+3. **La lecture de permission est la seule, et elle ne prompte jamais.** L’état de permission
+   vient d’un unique `permissions.query({ name: "display-capture" })` — une requête qui par
+   spec ne prompte pas (`JsWebCaptureDom.kt:436-438`, miroir Wasm) ; les trois mots de
+   `PermissionStatus.state` (`granted`, `denied`, `prompt`) se mappent structurellement, et
+   toute autre réponse — API absente, nom inconnu, query rejetée — vaut
+   `PermissionState.Unavailable(KadreFailure.Unsupported(KadreOperation.CapturePermission))`
+   (`WebCapturePort.kt:476-481`). **L’état de fenêtre reflète l’état d’écran** : la scope
+   `window` n’a aucun fait navigateur propre — un consentement unique gouverne ce que le
+   picker a offert — donc les deux cellules sont toujours le miroir l’une de l’autre
+   (`CapturePermissionState(permissions, permissions)`, `:459-463` ; sentinelles
+   `web-capture-window-mirrors-screen`), et aucune garantie distincte de fenêtre n’est
+   publiée. L’instantané initial porte la cellule transitoire
+   `Unavailable(Unsupported(CapturePermission))` jusqu’au règlement de la promesse, puis
+   **une** republication porte la réponse installée — le runtime dédoublonne les
+   instantanés identiques, et un observateur installé après coup reçoit la réponse courante
+   (`WebCapturePort.kt:108-111`, `:334-345`, `WebCapturePortTest`
+   `.observerInstalledAfterTheReadbackSeesTheCurrentSnapshot`).
+4. **`requestPermission` est le seul chemin de consentement explicite, et les deux scopes
+   courent le même flow.** Le navigateur confond consentement et choix de source : une
+   requête de permission est donc un `getDisplayMedia` dont le flux ramassé est arrêté
+   immédiatement — le verdict seul est gardé, jamais le stream (`WebCapturePort.kt:129-159`).
+   Le ramassage tenu répond `Granted` aux deux scopes ; `NotAllowedError`/`AbortError`
+   répondent `Denied(canRequestAgain = true)` ; `NotFoundError` est la
+   `TemporarilyUnavailable(retryable)` d’un navigateur sans source à offrir ; tout autre code
+   est une `PlatformFailure(Web, "capture-permission", <nom du navigateur>)` — et ces lignes
+   de failure **répondent une failure** plutôt qu’un snapshot : le runtime refuse de son côté
+   une permission « réussie » qui laisserait la permission visée non résolue. Les mots de
+   prévisualisation du picker ne sont la promesse de personne : le flux abandonné ne state
+   aucun hint (`:131-136`).
+5. **La cible `Source` est refusée structurellement, et l’id est opaque.** Le reserve du port
+   répond `Unsupported(CaptureOpen)` à un `CapturePortTarget.Source` avant quoi que ce soit
+   de navigateur-facing — zéro interaction seam, rien de réservé, rien de demandé
+   (`WebCapturePort.kt:174-176`, `WebCapturePortTest.reserveOfAnInventorySourceIsRefusedWithZeroSeamInteraction`)
+   — et la ligne est permanente : il n’existe jamais de source à cibler, puisqu’il n’existe
+   jamais d’inventaire. `CaptureSourceId` est opaque au runtime et inconstruisible depuis le
+   driver (constructeur interne à la foundation) ; l’admission du runtime, elle, répond
+   `InvalidRequest("request.target")` à un id que l’inventaire ne nomme pas
+   (`RuntimeCaptureManager.kt:287-307`). Le scénario navigateur
+   `web-capture-source-refused-before-picker` prouve le même entonnoir d’admission avec la
+   demande refusée que ce driver peut construire — une open à région — et la sentinelle
+   `web-capture-no-fabricated-sources` épie tout inventaire qui rendrait une cible
+   résolvable.
+6. **L’admission `HostChoice` refuse la région avant tout picker, puis passe les hints au
+   navigateur.** Le navigateur choisit ses propres bornes : une requête à région est refusée
+   `Unsupported(CaptureOpen)` — la forme d’admission AppKit — avant que le picker ne soit
+   lancé (`WebCapturePort.kt:279-281`). Le picker emporte les hints de la requête : le mode
+   curseur en mot `cursor` du navigateur (`never`/`always`/`motion`,
+   `WebCaptureMapping.kt:150-154`) et l’intervalle minimal de frame en plafond `frameRate`
+   réciproque (`:160-161`) — des **hints que le navigateur peut ignorer**, jamais des
+   promesses, chaque hint omis étant littéralement absent du dictionnaire
+   (`JsWebCaptureDom.kt:453-460`). Le refus du picker se mappe au reserve : la picker
+   congédié (ou l’activation manquante — le navigateur répond les deux `NotAllowedError`)
+   est l’annulation utilisateur `UserCancelled(CaptureOpen)` ; `NotFoundError` la
+   temporaire retryable ; tout autre code une `PlatformFailure(Web, "capture-permission",
+   <nom>)` portant le nom d’erreur du navigateur verbatim (`:319-330`,
+   `WebCaptureStreamTest.hostChoicePickerRefusalsMapAtReserve`, `.pickerCancelFailsReserve`).
+7. **La cible `Surface` résout l’id contre la seule surface enregistrée, et son open est
+   sans consentement.** La session enregistre sa surface primaire à sa création — le
+   registre est unique par port (`WebHostSession.kt:637`, `:665`,
+   `WebCapturePort.kt:120-127`) — et un id étranger est refusé
+   `InvalidRequest("request.target")`, la forme du runtime pour une cible irrésolvable,
+   sans une interaction seam (`:216-219`). L’élément attaché est relu vivant à chaque
+   sonde et le genre canvas est lû par le `instanceof` du navigateur (`JsWebCaptureDom.kt:505-508`)
+   ; le backstop d’un élément non-canvas répond le même `Unsupported(CaptureOpen)` que la
+   capability gelée (`WebCapturePort.kt:220-221`,
+   `WebCaptureSurfaceTest.nonCanvasSurfaceRefusesWithTheFrozenCapabilityCauseAsTheConsistentBackstop`).
+   `captureStream()` est l’unique effet navigateur (`:223`) ; un port sans pompe libère le
+   flux que le canvas vient de démarrer plutôt que de réserver des frames qu’il ne peut pas
+   produire (`:231-238`), et le curseur effectif est `Hidden` — un canvas ne composite
+   aucun curseur, ce que l’hôte a dessiné dans les pixels voyage avec eux (`:254`).
+8. **La caméra est hors de la v1.** Il n’existe aucun chemin `getUserMedia` : la caméra est
+   une sémantique de surface distincte que le même flow navigateur ne fournit pas, et la
+   fonction reste canarisée — la source synthétique enregistre tout appel, et aucun
+   scénario n’y touche sous aucun nom (`capture-stub.mjs`, zéro occurrence de `getUserMedia`
+   dans les sources des deux targets). Ce hors-périmètre est une décision enregistrée, pas
+   une absence provisoire.
+
+### 3.16 Les sessions et les frames : la pompe `MediaStreamTrackProcessor`, la borne et les terminaisons
+
+1. **La pompe n’a qu’une primitive, et elle ne crée aucun DOM.** Le lecteur de frames est
+   construit depuis le `MediaStreamTrackProcessor` du track accordé — forme dictionnaire de
+   la spec d’abord, forme positionnelle des premiers Chromium derrière (`JsWebCaptureDom.kt:491-496`)
+   — et sa `readable` est lue un read à la fois (`:183-229`). Aucun élément vidéo, aucun
+   canvas de traitement, aucun nœud : le seam ne crée rien, il lit le pipe que le navigateur
+   pose. Les moteurs qui n’ont pas la primitive, ou qui la déclarent autrement, publient la
+   capability `Unsupported(CaptureOpen)` correspondante (§3.15, item 2) ; leur comportement
+   réel est le matériel du nightly et du cahier manuel
+   (`manual/phase-7-capture.md`, procédure 5), jamais une déclaration de ce registre.
+2. **La lecture des layouts tolère la divergence livrée de Chromium.** La spec de
+   `VideoFrame.copyTo` nomme les entrées de PlaneLayout `{destinationOffset, copyBytes}` ; le
+   Chromium épinglé (148) livre `{offset, stride}` — relevé sur ce navigateur, que les
+   lecteurs tolérants du seam essaient les mots de la spec d’abord, puis le mot livré
+   (`JsWebCaptureDom.kt:304-335`) ; le row stride rapporté est pris pour vérité, le stride
+   serré par défaut n’ayant valeur que d’absence (`:295-301`). Le nom des dimensions visibles
+   d’une frame est `VideoFrame.displayWidth`/`displayHeight` — il n’existe pas de
+   `visibleWidth`/`visibleHeight` sur une frame, et le contrat navigateur a pris un lecteur
+   de ces mots absents : le fix livré lit les vrais (`:341-344`).
+3. **La configuration précède les frames, et la cadence reste `Unknown`.** Le navigateur ne
+   dit rien d’honnête sur la taille ou le format avant une frame : le start lit la première,
+   en dérive la configuration complète (révision 0) et la publie **avant** tout frame ; une
+   frame ultérieure de taille ou de format livré différents publie
+   `CaptureEvent.Reconfigured` une révision en avance — la discipline du runtime — avant la
+   frame qui la porte (`WebCaptureStream.kt:134-196`, `:253-262`,
+   `WebCaptureStreamTest.configurationPrecedesFramesAndReconfigurationPrecedesItsFrame`).
+   `CaptureCadence.Unknown` est la seule valeur honnête : le navigateur n’offre aucune
+   primitive de cadence, aucun équivalent de `refreshRateHz` n’est promis, et
+   `minimumFrameInterval` ne voyage que comme le hint `frameRate` de l’admission (§3.15,
+   item 6), jamais comme une garantie de rythme. Les timestamps suivent le mot du navigateur,
+   les silences compris (`WebCaptureMapping.kt:167-172`).
+4. **La borne se lit avant toute copie, et elle est terminale.** Le `allocationSize` du
+   navigateur pour les mêmes options est lu avant qu’un buffer existe ; une frame au-delà de
+   `maxFrameBytes` est fermée sans copie — la première fait échouer le start, une frame
+   courante termine le flux — avec
+   `ResourceLimitExceeded(KadreResourceKind.CaptureBuffer, maxFrameBytes)`
+   (`WebCaptureStream.kt:170-185`, `:274-283`) ; l’invariant never-copy est structurel,
+   l’appel de copie étant derrière la vérification sur chaque chemin
+   (`WebCaptureStreamTest.oversizedFrameFailsBeforeCopy`,
+   `.oversizedFirstFrameFailsStartBeforeCopy`). Les refus du pipe — allocation, read, copie,
+   crop — portent le **nom d’erreur du navigateur verbatim** dans
+   `PlatformFailure(Web, "capture-stream", <code>)` (`:446-447`,
+   `WebCapturePipeException`, `WebCaptureDom.kt:141`), le containment normalisant tout
+   `Throwable` de seam en cette forme (`db1f9d2d`).
+5. **Les terminaisons sont exactement une fois, et chacune a son outcome fermé.** Le stop
+   demandé par l’application — le `close()` du stream inclus — arrête reader puis track et
+   répond `Stopped(Requested)` ; la fin externe du track — le « Stop sharing » du navigateur,
+   que le DOM ne signale que par l’événement `ended`, enregistré avant le premier read —
+   répond `SourceCompleted` ; un refus du pipe répond
+   `Failed(PlatformFailure(Web, "capture-stream", <code>))` ; le premier fait gagne et
+   chaque chemin de libération funne dans une release idempotente — reader, track stop,
+   handle seam (`WebCaptureStream.kt:199-201`, `:220-222`, `:408-410`, `:415-434`). Une
+   suspension annulée pendant le premier read libère l’état de flux exactement une fois
+   avant de surface (`:148-152`), et un start échoué ne dit rien au listener (`:441-444`).
+6. **La révocation est une fin de track, rien de plus distinct.** Les navigateurs signalent
+   « Stop sharing » uniquement comme la fin du track accordé : `CaptureOutcome.SourceCompleted`
+   est l’outcome fermé de la révocation, et le stop-reason `PermissionRevoked` du modèle
+   n’a aucun déclencheur navigateur distinct — la limite est documentée ici, jamais
+   contournée par un synonyme inventé (`WebCaptureDom.kt:45-51`,
+   `WebCaptureStreamTest.trackEndedExternallyCompletesSource`,
+   `.trackEndedExternallyCompletesTheSurfaceSource`).
+7. **Rien ne survit à la session, et rien n’est réémis après le stop.** Un read déjà en
+   vol quand le stop atterrit est libéré, jamais délivré — la frame dont personne ne
+   voulait est le handle du navigateur à fermer, pas une fuite Kotlin (`:234-237`,
+   `:299-301`) ; le journal et les compteurs gèlent à la terminaison
+   (`web-capture-no-frame-after-stop`), et aucun objet stream, track, reader ou frame ne
+   survit à la fin de session — le comptage du stub le lit dans le `readyState` du
+   navigateur lui-même (`web-capture-stop-exactly-once`, sentinelle
+   `web-capture-no-stream-leak`, `web-capture-track-stop-immediate` ; la fermeture du port
+   va avec les composants de session, `WebHostSession.kt:721-742`).
+8. **La conversion de format est enregistrée sur la surface de diagnostics du Web, pas au
+   niveau session.** Un mot natif hors des trois promis (`Rgba8`, `I420`, `Nv12`,
+   `WebCaptureMapping.kt:46`) est converti par l’option `format` de `copyTo` vers la première
+   préférence promise, sinon `Rgba8` (`:70-75`), et la conversion est enregistrée
+   `CaptureDiagnostic.BackendFallback` **avant** la frame qu’elle concerne, une fois par
+   paire distincte (`WebCaptureStream.kt:264`, `:378-394`). Le SPI du stream ne porte aucun
+   canal de diagnostics du backend vers la session : le journal est observable sur la
+   propriété `WebCapturePump.diagnostics` — la couche Web qui a fait la conversion, premier
+   producteur de `BackendFallback` du dépôt — et les diagnostics de session ne portent que le
+   `FrameDropped` synthétisé par le runtime (`RuntimeCaptureSession.kt:177`). C’est une
+   limite enregistrée de forme livrée, pas un trou : la conversion est bornée, annoncée dans
+   la configuration effective, et nul ne prétend l’avoir livrée au format demandé
+   (`WebCaptureStreamTest.conversionRequestRecordsBackendFallbackBeforeTheFrame`).
+9. **Le chemin Surface ajoute deux rulings au même pipe.** Le Rgba8 d’une source canvas
+   répond `Premultiplied` — le compositing propre du canvas, là où le silence du navigateur
+   sur une frame display reste `Unknown` (`WebCaptureMapping.kt:143-147`) — et la région
+   demandée est le crop de décision 8 : `new VideoFrame(frame, { visibleRect })` est produit
+   entre le reader et la pompe, si bien que la forme lue, la borne et la copie portent toutes
+   sur la frame rognetée et que la configuration publie la taille rognetée et la région
+   elle-même (`WebCaptureSurface.kt:54-74`, `WebCaptureStream.kt:520-522`, `:371-375`). Les
+   deux handles ne se chevauchent jamais en vol : le constructeur du crop clone, l’original
+   est libéré dès que le crop existe — avant toute copie, exactement une fois, sur le succès
+   comme sur le refus du navigateur (`WebCaptureSurfaceTest.regionRequestStagesTheVisibleRectAndClosesTheCropFrameExactlyOnceAfterItsCopy`).
+
 ## 4. Portée restante au regard de §8
 
 Ce registre couvre les features du domaine input que les phases 3 et 5 bornent ou activent, les
@@ -869,19 +1099,35 @@ les deux façades — la lease est prouvée par les quatre scénarios `web-eleme
 `INT-004` depuis la phase 2 (§2) — et la ligne de fenêtre vaut « — (aucune `Window`) » : le host
 Web n’ouvre jamais de `Window` (§3 de `BACKEND-CAPABILITIES.md`, `WindowManagerState.windows`
 reste vide), la cellule normative elle-même enregistre qu’il n’y a rien à produire, et la phase 4
-ne l’a pas changée. Les lignes restantes de la matrice de `BACKEND-CAPABILITIES.md` §4 — les
-trois cibles de capture (`HostChoice`, `Source`, `Surface`) — ne sont pas produites ici : la
-phase 7 les porte et rien dans ce document ne les modifie. §8 rappelle qu’« une ligne manquante
-empêche l’adapter d’être déclaré supporté » : ces lignes restent donc à produire avant toute
-déclaration « supported » de l’adapter Web, sans que cette phase les rouvre.
+ne l’a pas changée.
+
+La **phase 7 produit à son tour les trois dernières lignes de capture que la phase 6 laissait à
+cette phase** : la cible `HostChoice` est le picker du navigateur derrière un consentement
+explicite, sous les trois préconditions sondées (§2, §3.15) ; la cible `Source` est
+structurellement `N(CaptureOpen)`, refusée avant tout picker, l’id étant opaque et
+inconstruisible sur ce target (§2, §3.15 item 5) ; la cible `Surface` est le canvas de la
+surface primaire, sans consentement, région-croppable (§2, §3.16 item 9). Les lignes restantes
+de la matrice de `BACKEND-CAPABILITIES.md` §4 sont dès lors toutes produites ou vérifiées à leur
+état livré pour ce target, à une seule exception vérifiée : le **signal de pression mémoire**
+(cellule Web `C`), qu’aucune phase de cet adapter n’a livré — zéro occurrence dans les sources
+des deux targets — et dont l’audit de la phase 8 (« auditer chaque API du catalogue applicable
+à Web et documenter `Supported`, `Unavailable` ou `Unsupported` avec son contrat et sa preuve »)
+est le propriétaire déclaré. Les lignes que les phases de ce registre couvrent — input,
+interactions et fenêtre, inventaires, gamepads, `platformAccess` et les trois cibles de
+capture — portent chacune leur ligne de registre ou leur statement de phase ci-dessus, et les
+lignes livrées avant la création du registre (`lifecycle`, `surface metrics`) portent les
+statements de leurs propres phases de la roadmap ; §8 rappelle qu’« une ligne manquante empêche
+l’adapter d’être déclaré supporté » : le signal de pression mémoire reste donc à produire avant
+toute déclaration « supported » de l’adapter Web, sans que cette phase le rouvre.
 
 ## 5. Références
 
 - [Contrats des adapters et matrice de capabilities](../BACKEND-CAPABILITIES.md) — mandat §8, matrice §4, points d’attachement Web §6.3
 - [Design Kadre](../DESIGN.md) — §15.3 (input ordinaire Web), §10.3 (IME), §10.4 (drag-and-drop), §9.6 (interactions transitoires)
-- [Registre des contrats](../contracts/registry/contracts.tsv) — lignes `BCK-003`/`BCK-004`/`BCK-006` (sources `DESIGN.md#15.3`/`#10.4`) et `BCK-001`/`BCK-005`/`INT-003` (sources `DESIGN.md#15.3`, `#10.3` et `INTEROP-EXPORTS.md#6`, preuves `js`/`wasmJs`) ; lignes `BCK-007`/`BCK-008`/`BCK-009` de la phase 6 (source `WEB-IMPLEMENTATION-ROADMAP.md#Phase 6`, preuves `js`/`wasmJs`)
+- [Registre des contrats](../contracts/registry/contracts.tsv) — lignes `BCK-003`/`BCK-004`/`BCK-006` (sources `DESIGN.md#15.3`/`#10.4`) et `BCK-001`/`BCK-005`/`INT-003` (sources `DESIGN.md#15.3`, `#10.3` et `INTEROP-EXPORTS.md#6`, preuves `js`/`wasmJs`) ; lignes `BCK-007`/`BCK-008`/`BCK-009` de la phase 6 (source `WEB-IMPLEMENTATION-ROADMAP.md#Phase 6`, preuves `js`/`wasmJs`) ; lignes `BCK-010`/`BCK-011` de la phase 7 (source `WEB-IMPLEMENTATION-ROADMAP.md#Phase 7`, preuves `js`/`wasmJs`)
 - [Charte manuelle Web Phase 3](../contracts/driver/web/manual/phase-3-input.md) — frontières non déterministes que ce registre ne prétend pas couvrir
 - [Charte manuelle Web Phase 4](../contracts/driver/web/manual/phase-4-interactions.md) — preuves plein écran et pointer lock sur vrai écran, popup réelle
 - [Charte manuelle Web Phase 5](../contracts/driver/web/manual/phase-5-text-input.md) — IME OS réel, annulation de composition, `touch-action` du host, contenteditable, drop hors headless
 - [Charte manuelle Web Phase 6](../contracts/driver/web/manual/phase-6-displays-devices.md) — gamepad réel (connexion OS, rumble réel, porte de confidentialité de Chromium), multi-display réel, matrice insecure-context au-delà du faux hostname, `vibrationActuator` sur Firefox/WebKit
-- [Driver navigateur Web](../contracts/driver/web/README.md) — limites des phases 3 à 6 et tables de disponibilité publiées
+- [Charte manuelle Web Phase 7](../contracts/driver/web/manual/phase-7-capture.md) — picker réel et vignettes de sources, pixels réels écran/fenêtre/onglet et comportement du curseur, interplay permission d’enregistrement macOS/consentement navigateur, barre « Stop sharing », comportement Firefox/WebKit, confirmation caméra hors v1
+- [Driver navigateur Web](../contracts/driver/web/README.md) — limites des phases 3 à 7 et tables de disponibilité publiées
