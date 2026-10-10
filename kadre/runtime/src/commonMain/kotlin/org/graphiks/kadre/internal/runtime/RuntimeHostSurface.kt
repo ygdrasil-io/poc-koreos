@@ -72,6 +72,26 @@ internal class RuntimeHostSurface(
             )
         }
     }
+
+    /**
+     * Publishes one host observation into the surface state — the same state the initial
+     * snapshot started, now kept current by the host's own lifecycle observations. The revision
+     * moves only when the state actually moved, and a closed (detached) surface absorbs every
+     * further publication exactly as [close] does.
+     *
+     * This carries no events: the minimal host surface has no event machinery, and the
+     * publication is a state observation, not a stimulus.
+     */
+    internal fun publish(update: (SurfaceState) -> SurfaceState) {
+        lock.withLock {
+            val current = mutableState.value
+            if (current.attachment == SurfaceAttachmentState.Detached) return
+            val next = update(current)
+            if (next == current) return
+            check(current.revision.value < Long.MAX_VALUE) { "surface revision space exhausted" }
+            mutableState.value = next.copy(revision = SurfaceRevision(current.revision.value + 1L))
+        }
+    }
 }
 
 private object UnsupportedHostSurfaceInput : SurfaceInput {

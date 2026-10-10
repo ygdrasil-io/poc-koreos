@@ -4,3 +4,11 @@ AND-001	android	scenario	android-consumer-session-stop-cleanup	org.graphiks.kadr
 AND-001	android	scenario	android-consumer-double-attach-rejected	org.graphiks.kadre.consumer.KadreConsumerSessionTest	androidConsumerDoubleAttachRejected
 AND-001	android	sentinel	android-stop-no-resurrection	org.graphiks.kadre.consumer.KadreConsumerSessionTest	androidConsumerDoubleAttachRejected
 AND-001	android	sentinel	android-double-attach-single-owner	org.graphiks.kadre.consumer.KadreConsumerSessionTest	androidConsumerDoubleAttachRejected
+AND-002	android	scenario	android-attach-decor-mismatch	org.graphiks.kadre.consumer.KadreConsumerAttachContractTest	androidAttachDecorMismatch
+AND-002	android	scenario	android-attach-cross-form-conflict	org.graphiks.kadre.consumer.KadreConsumerAttachContractTest	androidAttachCrossFormConflict
+AND-002	android	scenario	android-attach-parent-cancelled	org.graphiks.kadre.consumer.KadreConsumerAttachContractTest	androidAttachParentCancelled
+AND-002	android	scenario	android-attach-surviving-scope	org.graphiks.kadre.consumer.KadreConsumerAttachContractTest	androidAttachSurvivingScope
+AND-002	android	scenario	android-attach-detach-reparent	org.graphiks.kadre.consumer.KadreConsumerAttachContractTest	androidAttachDetachReparent
+AND-002	android	scenario	android-attach-recreation-isolation	org.graphiks.kadre.consumer.KadreConsumerAttachContractTest	androidAttachRecreationIsolation
+AND-002	android	sentinel	android-attach-rollback-restores-state	org.graphiks.kadre.consumer.KadreConsumerAttachContractTest	androidAttachParentCancelled
+AND-002	android	sentinel	android-attach-isolation-per-identity	org.graphiks.kadre.consumer.KadreConsumerAttachContractTest	androidAttachRecreationIsolation

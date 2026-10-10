@@ -44,6 +44,10 @@ kotlin {
         androidMain.dependencies {
             api(project(":kadre:foundation"))
             implementation(project(":kadre:runtime"))
+            // Phase 1 (§15.1) : Activity/Lifecycle SDK types exposés dans les signatures
+            // publiques des quatre overloads `attachKadre` — donc `api`, pas `implementation`.
+            api(libs.androidx.activity.ktx)
+            api(libs.androidx.lifecycle.runtime.ktx)
         }
         commonTest.dependencies {
             implementation(kotlin("test"))
