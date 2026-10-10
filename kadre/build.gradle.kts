@@ -11,6 +11,10 @@ kotlin {
     jvm()
     js { browser() }
     wasmJs { browser() }
+    iosArm64()
+    iosSimulatorArm64()
+    tvosArm64()
+    tvosSimulatorArm64()
     explicitApi()
 
     sourceSets {
@@ -25,6 +29,9 @@ kotlin {
         }
         wasmJsMain.dependencies {
             api(project(":kadre:platform:web"))
+        }
+        appleMain.dependencies {
+            api(project(":kadre:platform:uikit"))
         }
     }
 }
