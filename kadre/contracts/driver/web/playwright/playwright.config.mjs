@@ -21,6 +21,71 @@ if (!junitOutput || !outputDir) {
 const captureSessionScenarios =
   /web-capture-(hostchoice-stream|configuration-before-frame|frames-bounded|stop-exactly-once|surface-canvas-stream)/;
 
+//
+// The nightly engines of the roadmap's section 3.8 — Firefox and WebKit. Every exclusion below is
+// a recorded engine fact of the probe matrix in the README's "Engine coverage" section (the
+// 2026-10-10 probe, pinned Playwright 1.60.0: Firefox 150.0.2, WebKit 26.4), stated with its
+// cause; nothing is excluded "temporarily", no runtime skip exists anywhere, and a future engine
+// revision that ships the primitive restores a scenario by deleting its grep. The two macOS-WebKit
+// input divergences the probe catalogued (`web-input-pointer-multi`,
+// `web-input-default-behavior`) are deliberately NOT excluded: they pass on Linux WebKit, which is
+// what the nightly runs.
+//
+
+// CDP-instrumented, both engines: the scenario drives the browser through
+// `context.newCDPSession`, which Playwright answers `CDP session is only available in Chromium`
+// on Firefox and WebKit (probed) — the seven touch scenarios staged through
+// `Input.dispatchTouchEvent`, the two display scenarios through
+// `Emulation.setDeviceMetricsOverride`, and the text-input composition lifecycle through
+// `Input.imeSetComposition`. The CDP-free scenarios of the same suites
+// (`web-touch-capability-structural`, `web-display-initial-hostviewport`,
+// `web-display-resize-propagation`, the other eight text-input scenarios on WebKit) run.
+const cdpTouchScenarios =
+  /web-touch-(started|ended|cancelled|multi-contact|interaction-trigger|focus-loss-clears|no-pointer-alias)/;
+const cdpDisplayScenarios = /web-display-(dpr-scale-factor|teardown-quiet)/;
+const cdpTextInputScenarios = /web-text-composition-lifecycle/;
+
+// Engine-missing-primitive, both engines: the capture frame pump is
+// `MediaStreamTrackProcessor`-only and neither engine ships it (probed `typeof` on both), the
+// permission readback cannot settle (`permissions.query` rejects the `display-capture` name on
+// both) and the Chromium consent-test flag trio is accepted-but-inert — the whole suite, control
+// plane and sessions alike.
+const captureSuite = /web-capture/;
+
+// Other-named, Firefox only: `keyboard.insertText` routes through the Firefox composition
+// pipeline, so the five scenarios that stage one text arrival without a composition receive
+// `composition:…` journals where Chromium and WebKit publish `replace:…` journals (probed) — an
+// honest engine divergence in the stimulus, not a runtime defect. The three scenarios the suite
+// keeps (cancelled, stale-revision, action-submit) stage no such arrival.
+const firefoxCompositionPipelineScenarios =
+  /web-text-(open-single-session|replace-event|focus-suspends|writeback-sync|teardown-closes)/;
+
+// Other-named, Firefox wasmJs only: the publication race — Firefox evaluates the deferred
+// consumer module before the asynchronously instantiated Wasm bundle has published its bindings,
+// and the shim honestly reports `missing-application-factory` (three of four probe runs; js, both
+// WebKit targets and Chromium are unaffected). A Playwright project cannot grep by Kotlin target,
+// so the exclusion lives on the `firefox-wasm` project alone and the js run keeps the suite
+// through `firefox-js`: the launch selects the project per engine AND target, which is the exact
+// shape of the finding — engine firefox, target wasmJs, never the whole engine.
+const firefoxWasmPublicationRace = /web-typescript-consumer/;
+
+// Chromium-flags-dependent, WebKit only: the insecure-context scenario needs the fixture's
+// insecure name mapped onto the local server, and WebKit has neither a launch argument nor a
+// preference system for that (probed; Firefox uses `network.dns.localDomains`, below).
+const webkitNoInsecureRoute = /web-gamepad-effect-insecure-context/;
+
+// The Firefox route for the insecure name. The preference names a host no other scenario
+// navigates, so the regular suite observes nothing from it — and the insecure-context scenario
+// RUNS on Firefox (probed on both Kotlin targets), it is not excluded. It must sit inside
+// `use.launchOptions.firefoxUserPrefs`: Playwright 1.60 silently ignores a `use`-level
+// `firefoxUserPrefs` (probed twice — only the nested placement reaches the browser).
+const firefoxLaunch = {
+  browserName: 'firefox',
+  launchOptions: {
+    firefoxUserPrefs: { 'network.dns.localDomains': 'insecure.kadre.invalid' },
+  },
+};
+
 export default defineConfig({
   testDir: '.',
   testMatch: [
@@ -84,6 +149,43 @@ export default defineConfig({
           args: ['--host-resolver-rules=MAP insecure.kadre.invalid 127.0.0.1'],
         },
       },
+    },
+    // The Firefox projects, one per Kotlin target — the wasmJs-only TypeScript exclusion above is
+    // the single difference between them. Nothing here is launched by the PR gate: the launch
+    // script selects `firefox-js` or `firefox-wasm` only for a run whose engine is firefox.
+    {
+      name: 'firefox-js',
+      use: { ...firefoxLaunch },
+      grepInvert: [
+        cdpTouchScenarios,
+        cdpDisplayScenarios,
+        cdpTextInputScenarios,
+        firefoxCompositionPipelineScenarios,
+        captureSuite,
+      ],
+    },
+    {
+      name: 'firefox-wasm',
+      use: { ...firefoxLaunch },
+      grepInvert: [
+        cdpTouchScenarios,
+        cdpDisplayScenarios,
+        cdpTextInputScenarios,
+        firefoxCompositionPipelineScenarios,
+        captureSuite,
+        firefoxWasmPublicationRace,
+      ],
+    },
+    {
+      name: 'webkit',
+      use: { browserName: 'webkit' },
+      grepInvert: [
+        cdpTouchScenarios,
+        cdpDisplayScenarios,
+        cdpTextInputScenarios,
+        captureSuite,
+        webkitNoInsecureRoute,
+      ],
     },
   ],
 });

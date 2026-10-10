@@ -18,7 +18,7 @@ import test from 'node:test';
 
 const runner = resolve(dirname(fileURLToPath(import.meta.url)), 'run-browser-smoke.mjs');
 const signalExitCodes = { SIGINT: 130, SIGTERM: 143 };
-const validJunit = '<?xml version="1.0"?><testsuites tests="1" failures="0" errors="0" skipped="0"><testsuite name="web" tests="1" failures="0" errors="0" skipped="0"><testcase name="attaches" classname="web-phase0"/></testsuite></testsuites>';
+const validJunit = '<?xml version="1.0"?><testsuites tests="1" failures="0" errors="0" skipped="0"><testsuite name="web" tests="1" failures="0" errors="0" skipped="0" time="0.001"><testcase name="attaches" classname="web-phase0"/></testsuite></testsuites>';
 /**
  * A hermetic registry and mapping.
  *
@@ -30,21 +30,125 @@ const validJunit = '<?xml version="1.0"?><testsuites tests="1" failures="0" erro
 const fixtureRegistryHeader =
   'contractId\tstatus\tsource\tsubject\trisk\toracle\tscenarios\trequiredTargets\tconditionalCapabilities\tsentinels\tretirementRef\n';
 const fixtureMappingHeader = 'contractId\ttarget\tkind\tevidenceId\ttestClass\ttestName\n';
+/** One active browser contract the evidence-generation tests map onto the valid JUnit fixture. */
+const fixtureContractRow = 'TST-001\tactive\tprobe\tprobe\tprobe\tO1\tdemo-scenario\tjs,wasmJs\t-\t-\t-\n';
+const fixtureMappingRow = 'TST-001\tjs\tscenario\tdemo-scenario\tweb-phase0\tattaches\n';
 
-test('launch construction uses a shell for the Windows Playwright cmd shim only', async () => {
+test('launch construction routes each engine to its own Playwright projects', async () => {
   const { createPlaywrightLaunch } = await import('./browser-smoke-launch.mjs');
   const baseOptions = { cwd: '/work', stdio: 'inherit' };
+  const configArguments = ['test', '--config', 'playwright/playwright.config.mjs'];
 
-  assert.deepEqual(createPlaywrightLaunch('win32', baseOptions), {
-    argumentsList: ['test', '--config', 'playwright/playwright.config.mjs'],
-    command: 'node_modules/.bin/playwright.cmd',
-    options: { ...baseOptions, detached: false, shell: true },
+  // Chromium names exactly the three projects a no-argument invocation ran before the other
+  // engines existed — the PR gate's routing, now explicit — on both Kotlin targets.
+  const chromiumProjects = ['--project=chromium', '--project=chromium-capture', '--project=chromium-insecure'];
+  for (const target of ['js', 'wasmJs']) {
+    assert.deepEqual(
+      createPlaywrightLaunch('linux', baseOptions, 'chromium', target).argumentsList,
+      [...configArguments, ...chromiumProjects],
+    );
+  }
+  // Firefox carries the one target-dependent exclusion (the wasmJs-only TypeScript publication
+  // race), so its project is split per Kotlin target; WebKit needs no split.
+  assert.deepEqual(
+    createPlaywrightLaunch('linux', baseOptions, 'firefox', 'js').argumentsList,
+    [...configArguments, '--project=firefox-js'],
+  );
+  assert.deepEqual(
+    createPlaywrightLaunch('linux', baseOptions, 'firefox', 'wasmJs').argumentsList,
+    [...configArguments, '--project=firefox-wasm'],
+  );
+  assert.deepEqual(
+    createPlaywrightLaunch('linux', baseOptions, 'webkit', 'js').argumentsList,
+    [...configArguments, '--project=webkit'],
+  );
+  assert.throws(
+    () => createPlaywrightLaunch('linux', baseOptions, 'opera', 'js'),
+    /unsupported browser engine: opera/,
+  );
+
+  const windows = createPlaywrightLaunch('win32', baseOptions, 'chromium', 'js');
+  assert.equal(windows.command, 'node_modules/.bin/playwright.cmd');
+  assert.deepEqual(windows.options, { ...baseOptions, detached: false, shell: true });
+  const posix = createPlaywrightLaunch('linux', baseOptions, 'webkit', 'js');
+  assert.equal(posix.command, 'node_modules/.bin/playwright');
+  assert.deepEqual(posix.options, { ...baseOptions, detached: true });
+});
+
+test('the engine of the run lands in the evidence execution descriptor', { timeout: 20_000 }, async (context) => {
+  const fixture = await createFixture('evidence-engine', validJunit, {
+    registryRows: fixtureContractRow,
+    mappingRows: fixtureMappingRow,
   });
-  assert.deepEqual(createPlaywrightLaunch('linux', baseOptions), {
-    argumentsList: ['test', '--config', 'playwright/playwright.config.mjs'],
-    command: 'node_modules/.bin/playwright',
-    options: { ...baseOptions, detached: true },
-  });
+  context.after(() => fixture.dispose());
+
+  const result = await runSmoke(fixture).completion;
+
+  assert.equal(normalizedExitStatus(result), 0, result.stderr);
+  const artifact = join(fixture.evidence, 'contract-evidence', 'browser', 'chromium', 'TST-001.json');
+  const document = JSON.parse(await readFile(artifact, 'utf8'));
+  assert.equal(document.execution.engine, 'chromium');
+  assert.match(document.execution.version, /^\d/, 'the version of the launched pinned engine');
+  // The diagnostics of the same run are scoped to the same engine: exactly one durable
+  // quarantine, under the engine's own diagnostics directory.
+  const quarantines = await diagnosticQuarantines(fixture);
+  assert.equal(quarantines.length, 1, `expected one engine-scoped quarantine, found ${quarantines.join(', ')}`);
+  await assertCompleteDiagnostics(quarantines[0], 0);
+});
+
+test('an unsupported engine fails fast with a closed error', { timeout: 10_000 }, async (context) => {
+  const fixture = await createFixture('unsupported-engine');
+  context.after(() => fixture.dispose());
+
+  const fromArgument = await runSmoke(fixture, ['--engine=opera']).completion;
+  assert.notEqual(normalizedExitStatus(fromArgument), 0, 'an unsupported --engine was accepted');
+  assert.match(
+    fromArgument.stderr,
+    /unsupported browser engine: opera \(expected one of chromium, firefox, webkit\)/,
+    fromArgument.stderr,
+  );
+  // The failure is closed: nothing of the run — report, diagnostics — was created.
+  await assert.rejects(access(join(fixture.evidence, 'diagnostics', 'playwright'), fsConstants.F_OK), { code: 'ENOENT' });
+  await assert.rejects(access(join(fixture.evidence, 'test-results', 'browser'), fsConstants.F_OK), { code: 'ENOENT' });
+});
+
+test('KADRE_BROWSER_ENGINE names the engine and --engine overrides it', { timeout: 10_000 }, async (context) => {
+  const fixture = await createFixture('engine-from-environment');
+  context.after(() => fixture.dispose());
+
+  // The environment alone routes the run: the JUnit report lands in the webkit scope.
+  const fromEnvironment = await runSmoke(fixture, [], 'js', { KADRE_BROWSER_ENGINE: 'webkit' }).completion;
+  assert.equal(normalizedExitStatus(fromEnvironment), 0, fromEnvironment.stderr);
+  await access(join(fixture.evidence, 'test-results', 'browser', 'webkit', 'TEST-web-phase0.xml'), fsConstants.F_OK);
+
+  // The argument wins over the environment, including when only the argument is valid.
+  const overridden = await runSmoke(fixture, ['--engine=chromium'], 'js', { KADRE_BROWSER_ENGINE: 'opera' }).completion;
+  assert.equal(normalizedExitStatus(overridden), 0, overridden.stderr);
+  await access(join(fixture.evidence, 'test-results', 'browser', 'chromium', 'TEST-web-phase0.xml'), fsConstants.F_OK);
+
+  const unsupported = await runSmoke(fixture, [], 'js', { KADRE_BROWSER_ENGINE: 'opera' }).completion;
+  assert.notEqual(normalizedExitStatus(unsupported), 0, 'an unsupported KADRE_BROWSER_ENGINE was accepted');
+  assert.match(unsupported.stderr, /unsupported browser engine: opera/, unsupported.stderr);
+});
+
+test('the JUnit and diagnostics layouts are scoped to the run engine', { timeout: 10_000 }, async (context) => {
+  const fixture = await createFixture(
+    'report',
+    '<testsuites tests="0" failures="0" errors="0" skipped="0"></testsuites>',
+    { engine: 'webkit' },
+  );
+  context.after(() => fixture.dispose());
+
+  const result = await runSmoke(fixture, ['--engine=webkit']).completion;
+
+  assert.notEqual(normalizedExitStatus(result), 0, 'an empty JUnit report was accepted');
+  assert.match(result.stderr, /at least one testsuite/, result.stderr);
+  // The report and the retained diagnostics sit under the webkit engine's own directories…
+  await access(join(fixture.evidence, 'test-results', 'browser', 'webkit', 'TEST-web-phase0.xml'), fsConstants.F_OK);
+  assert.equal(await readFile(fixture.diagnosticMarker, 'utf8'), 'diagnostic evidence');
+  // …and no other engine's directory exists beside them.
+  assert.deepEqual(await readdir(join(fixture.evidence, 'test-results', 'browser')), ['webkit']);
+  assert.deepEqual(await readdir(join(fixture.evidence, 'diagnostics', 'playwright')), ['webkit']);
 });
 
 for (const signal of ['SIGINT', 'SIGTERM']) {
@@ -287,7 +391,12 @@ for (const [name, report, expectedError] of [
   });
 }
 
-async function createFixture(scenario, junit = validJunit) {
+async function createFixture(scenario, junit = validJunit, {
+  engine = 'chromium',
+  environment = {},
+  registryRows = '',
+  mappingRows = '',
+} = {}) {
   const root = await mkdtemp(join(tmpdir(), 'kadre-browser-runner-'));
   const distribution = join(root, 'distribution');
   const evidence = join(root, 'evidence');
@@ -315,19 +424,22 @@ async function createFixture(scenario, junit = validJunit) {
   const queryResponse = join(root, 'query-response.html');
   const hostResponse = join(root, 'host-response.mjs');
   const kotlinModuleResponse = join(root, 'kotlin-module-response.mjs');
-  const diagnostics = join(evidence, 'diagnostics', 'playwright');
+  // Every diagnostics artifact of one run sits under the engine's own directory — the run output,
+  // the preserved copy and the durable quarantines — so one engine's run cannot touch another's.
+  const engineDiagnostics = join(evidence, 'diagnostics', 'playwright', engine);
+  const diagnostics = join(engineDiagnostics, 'output');
   const diagnosticsParent = dirname(diagnostics);
   const diagnosticTraceDirectory = join(diagnostics, 'trace');
   const diagnosticMarker = join(diagnosticTraceDirectory, 'trace.txt');
-  const preservedDiagnostics = join(evidence, 'diagnostics', 'playwright-preserved');
+  const preservedDiagnostics = join(engineDiagnostics, 'output-preserved');
   const preservedDiagnosticTraceDirectory = join(preservedDiagnostics, 'trace');
   const preservedDiagnosticMarker = join(preservedDiagnosticTraceDirectory, 'trace.txt');
 
   await mkdir(distribution, { recursive: true });
   await mkdir(host, { recursive: true });
   await mkdir(binDirectory, { recursive: true });
-  await writeFile(contracts, fixtureRegistryHeader);
-  await writeFile(mapping, fixtureMappingHeader);
+  await writeFile(contracts, fixtureRegistryHeader + registryRows);
+  await writeFile(mapping, fixtureMappingHeader + mappingRows);
   await writeFile(join(distribution, 'fixture.js'), 'globalThis.kadreFixture = true;\n');
   await writeFile(join(host, 'index.mjs'), 'export const KadreWeb = {};\n');
   await writeFile(join(host, 'kadre-platform-web.js'), 'globalThis["org.graphiks.kadre:web"] = {};\n');
@@ -363,6 +475,7 @@ async function createFixture(scenario, junit = validJunit) {
     diagnostics,
     diagnosticsParent,
     distribution,
+    engineDiagnostics,
     evidence,
     host,
     kotlinModuleResponse,
@@ -421,6 +534,7 @@ async function createFixture(scenario, junit = validJunit) {
       KADRE_RUNNER_TEST_KOTLIN_MODULE_RESPONSE: kotlinModuleResponse,
       KADRE_RUNNER_TEST_DIAGNOSTIC_COMMIT_SIGNAL_OBSERVED: diagnosticCommitSignalObserved,
       KADRE_RUNNER_TEST_SCENARIO: scenario,
+      ...environment,
       ...([
         'partial-quarantine-failure',
         'signal-after-diagnostic-commit',
@@ -432,7 +546,7 @@ async function createFixture(scenario, junit = validJunit) {
   };
 }
 
-function runSmoke(fixture, extraArguments = [], target = 'js') {
+function runSmoke(fixture, extraArguments = [], target = 'js', extraEnvironment = {}) {
   return spawnRunner(fixture, [
     `--target=${target}`,
     `--distribution=${fixture.distribution}`,
@@ -441,16 +555,16 @@ function runSmoke(fixture, extraArguments = [], target = 'js') {
     `--contracts=${fixture.contracts}`,
     `--mapping=${fixture.mapping}`,
     ...extraArguments,
-  ]);
+  ], extraEnvironment);
 }
 
-function spawnRunner(fixture, argumentsList) {
+function spawnRunner(fixture, argumentsList, extraEnvironment = {}) {
   const child = spawn(process.execPath, [
     runner,
     ...argumentsList,
   ], {
     cwd: fixture.root,
-    env: { ...process.env, ...fixture.environment },
+    env: { ...process.env, ...fixture.environment, ...extraEnvironment },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   let stdout = '';
@@ -684,7 +798,7 @@ if (process.env.KADRE_RUNNER_TEST_DIAGNOSTIC_COMMIT_SIGNAL_OBSERVED) {
 fileSystem.rename = async (source, destination) => {
   const result = await rename(source, destination);
   if (process.env.KADRE_RUNNER_TEST_SCENARIO === 'signal-before-diagnostic-commit'
-      && basename(destination) === 'playwright-preserved') {
+      && basename(destination) === 'output-preserved') {
     writeFileSync(process.env.KADRE_RUNNER_TEST_DIAGNOSTIC_PRESERVATION_STARTED, 'started');
     const deadline = Date.now() + 10_000;
     while (!existsSync(process.env.KADRE_RUNNER_TEST_DIAGNOSTIC_PRESERVATION_RELEASE)) {
