@@ -45,7 +45,13 @@ def parse_nodes(document):
         node_type = node.get("nodeType", "")
         name = node.get("name", "")
         if node_type == "Test Case":
-            result = node.get("result", "").lower()
+            raw_result = node.get("result", "")
+            result = raw_result.lower()
+            if result not in ("passed", "failed", "skipped"):
+                raise ValueError(
+                    f"résultat XCTest inattendu « {raw_result} » pour le cas « {name} » — "
+                    "refus de le compter comme Passed (politique never-false-green)"
+                )
             seconds = node.get("durationInSeconds")
             duration = f"{float(seconds):.6f}" if seconds is not None else "0.000000"
             message = messages_of(node) if result in ("failed", "skipped") else ""

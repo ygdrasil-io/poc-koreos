@@ -143,7 +143,7 @@ Le graphe respecte les invariants suivants :
 
 Cette table ferme la topologie, pas le calendrier. Une target ou une intégration réservée n’est ni créée ni publiée avant de posséder une implémentation utile.
 
-Sur les targets Kotlin/Native, le `commonMain` de `runtime` consomme des déclarations `internal` de `foundation` : la compilation native exige donc le câblage des friend-modules (`-Xfriend-modules` en `freeCompilerArgs` des tasks `KotlinNativeCompile`, la propriété `friendPaths` n’y existant pas en KGP 2.4.20) ; la sonde de la phase 0 a établi ce caractère obligatoire — sans ce câblage, la résolution échoue (44 erreurs d’accès sur la sonde iOS).
+Sur les targets Kotlin/Native, le `commonMain` de `runtime` consomme des déclarations `internal` de `foundation` : la compilation native exige donc le câblage des friend-modules (`-friend-modules` en `freeCompilerArgs` des tasks `KotlinNativeCompile`, la propriété `friendPaths` n’y existant pas en KGP 2.4.20) ; la sonde de la phase 0 a établi ce caractère obligatoire — sans ce câblage, la résolution échoue (44 erreurs d’accès sur la sonde iOS).
 
 ## 6. Publications et visibilité
 
