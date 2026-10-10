@@ -280,3 +280,87 @@ tasks.named("check") {
     dependsOn(generateRuntimeContractEvidence)
     dependsOn(browserContractEvidenceTasks)
 }
+
+//
+// The nightly-engine validation invocations: one per engine of the roadmap's section 3.8 beyond the
+// PR gate's Chromium. Each subtracts the engine's recorded exclusion file
+// (`kadre/contracts/driver/web/contracts/engine-exclusions/<engine>.tsv`) from the expected contract
+// set — the same data the engine's smoke feeds its evidence producer — and validates against that
+// engine's own evidence root. The PR path above is untouched: `check` runs Chromium with no
+// exclusions and every active web contract expected; these tasks are the nightly workflow's to
+// invoke.
+//
+
+/** The nightly engines' exclusion files: `contractId[tab]target(js|wasmJs|*)[tab]cause`, `#` comments. */
+val browserEngineExclusionFiles = mapOf(
+    "firefox" to rootProject.file("kadre/contracts/driver/web/contracts/engine-exclusions/firefox.tsv"),
+    "webkit" to rootProject.file("kadre/contracts/driver/web/contracts/engine-exclusions/webkit.tsv"),
+)
+val browserEngineExclusionHeader = "contractId\ttarget\tcause"
+
+/** The contract ids one engine's exclusion file removes from the expected set of `target`. */
+fun engineExcludedContractIds(engine: String, target: String): List<String> {
+    val file = requireNotNull(browserEngineExclusionFiles[engine]) { "unknown nightly browser engine: $engine" }
+    val rows = file.readLines()
+        .map(String::trimEnd)
+        .filter { it.isNotEmpty() && !it.startsWith("#") }
+    require(rows.firstOrNull() == browserEngineExclusionHeader) {
+        "invalid engine exclusion header in $file"
+    }
+    val excluded = mutableListOf<String>()
+    for (row in rows.drop(1)) {
+        val columns = row.split('\t')
+        require(columns.size == 3 && columns[2].isNotBlank()) {
+            "invalid engine exclusion row in $file: $row"
+        }
+        require(columns[0] in webContractIds) {
+            "engine exclusion file for $engine names a contract outside the browser gate: ${columns[0]}"
+        }
+        if (columns[1] == target || columns[1] == "*") {
+            require(columns[0] !in excluded) {
+                "duplicate engine exclusion in $file: ${columns[0]} for $target"
+            }
+            excluded += columns[0]
+        }
+    }
+    return excluded
+}
+
+browserEngineExclusionFiles.keys.sorted().forEach { engine ->
+    listOf("js", "wasmJs").forEach { target ->
+        val engineName = engine.replaceFirstChar(Char::uppercase)
+        val targetName = target.replaceFirstChar(Char::uppercase)
+        val exclusionsFile = browserEngineExclusionFiles.getValue(engine)
+        val excludedContractIds = engineExcludedContractIds(engine, target)
+        val expectedContractIds = webContractIds - excludedContractIds.toSet()
+        val artifactDirectory = rootProject.file("kadre/contracts/driver/web/build/contract-evidence/$engine/$target")
+        tasks.register<JavaExec>("validate${engineName}${targetName}BrowserContractEvidence") {
+            group = "verification"
+            description = "Validates the $target browser contract evidence artifacts the $engineName nightly expects."
+            dependsOn("jvmMainClasses")
+            dependsOn(":kadre:contracts:driver:web:${engine}${targetName}BrowserSmoke")
+            classpath(jvmMain.output.allOutputs, jvmMain.runtimeDependencyFiles)
+            mainClass.set("org.graphiks.kadre.contracts.ValidateContractEvidenceKt")
+            args(
+                browserContractRegistry.absolutePath,
+                browserContractMappings.joinToString(separator = ",") { it.absolutePath },
+                contractEvidenceCommit.get(),
+                target,
+                engine,
+                expectedContractIds.joinToString(separator = ","),
+                artifactDirectory.absolutePath,
+                "test-results/browser/{engine}",
+            )
+            inputs.file(browserContractRegistry)
+            inputs.files(browserContractMappings)
+            inputs.files(fileTree(artifactDirectory))
+            inputs.file(exclusionsFile)
+            inputs.property("contractCommit", contractEvidenceCommit)
+            inputs.property("contractTarget", target)
+            inputs.property("contractExecutions", engine)
+            inputs.property("contractGateIds", expectedContractIds)
+            inputs.property("kadreEngineContractExclusions", excludedContractIds)
+            inputs.property("junitReportRelativeDirectories", listOf("test-results/browser/{engine}"))
+        }
+    }
+}

@@ -69,6 +69,17 @@ const firefoxCompositionPipelineScenarios =
 // shape of the finding — engine firefox, target wasmJs, never the whole engine.
 const firefoxWasmPublicationRace = /web-typescript-consumer/;
 
+// Other-named, Firefox wasmJs only: the duplicate-attach admission-race scenario reads the
+// fixture's MutationObserver/focusin counters immediately after goto, before the asynchronously
+// instantiated wasm fixture attaches on Firefox — failed 3/3 in-suite in the Task-2 container
+// runs while passing isolated and on js, the same Firefox-deferred-instantiation family as the
+// publication race above. The follow-up is a data-kadre-ready wait before counting; until then
+// the exclusion is recorded at the contract level in
+// contracts/engine-exclusions/firefox.tsv (BCK-001/wasmJs) and this grep is its test-level
+// mirror — one test carrying three BCK-001 rows (web-attach-detach-admission-race,
+// web-attach-same-element-busy and the web-host-single-owner sentinel).
+const firefoxWasmDuplicateAttachRace = /a duplicate attach is rejected/;
+
 // Chromium-flags-dependent, WebKit only: the insecure-context scenario needs the fixture's
 // insecure name mapped onto the local server, and WebKit has neither a launch argument nor a
 // preference system for that (probed; Firefox uses `network.dns.localDomains`, below).
@@ -174,6 +185,7 @@ export default defineConfig({
         firefoxCompositionPipelineScenarios,
         captureSuite,
         firefoxWasmPublicationRace,
+        firefoxWasmDuplicateAttachRace,
       ],
     },
     {

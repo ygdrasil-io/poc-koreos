@@ -51,6 +51,7 @@ async function runBrowserSmoke(argumentsList) {
   const consumer = argumentsByName.get('--consumer');
   const contracts = argumentsByName.get('--contracts');
   const mapping = argumentsByName.get('--mapping');
+  const engineExclusions = argumentsByName.get('--engine-exclusions');
   const commit = argumentsByName.get('--commit');
   const timeoutMilliseconds = parseTimeout(argumentsByName.get('--timeout-ms'));
   const engine = parseEngine(argumentsByName.get('--engine'), process.env);
@@ -73,6 +74,9 @@ async function runBrowserSmoke(argumentsList) {
   }
   if (!existsSync(mapping)) {
     throw new Error(`missing contract evidence mapping: ${mapping}`);
+  }
+  if (engineExclusions !== undefined && !existsSync(engineExclusions)) {
+    throw new Error(`missing engine contract exclusions: ${engineExclusions}`);
   }
 
   const locations = browserEvidenceLocations(evidence, engine);
@@ -130,6 +134,7 @@ async function runBrowserSmoke(argumentsList) {
           commit,
           registryPath: contracts,
           mappingPath: mapping,
+          exclusionsPath: engineExclusions,
         });
         for (const artifact of artifacts) console.log(`browser contract evidence: ${artifact}`);
         if (!coordinator.hasTerminalReason()) businessSucceeded = true;

@@ -12,6 +12,11 @@ Run both targets from the repository root:
 rtk ./gradlew :kadre:contracts:driver:web:jsBrowserSmoke :kadre:contracts:driver:web:wasmJsBrowserSmoke --rerun-tasks
 ```
 
+The `npm test` convenience script runs the three Chromium projects alone — the same
+`--project` selection the launch routing passes for the Chromium smokes; the Firefox
+and WebKit projects run only through the per-engine Gradle smokes of the
+[Engine coverage](#engine-coverage) section, never through a bare `playwright test`.
+
 Fifteen target-specific Playwright suites run in Chromium, across three Playwright
 projects of one invocation — the regular browser; the insecure-context project, a
 browser whose host resolution maps the fixture's insecure name onto the same local
@@ -313,6 +318,42 @@ is absent there on both engines):
   honest failure, and the race is an exclusion candidate on Firefox wasmJs or
   a candidate for a publication-aware attach in a later phase — recorded here
   so Task 2 can choose with the facts.
+
+### The per-engine smokes and their recorded exclusions
+
+The matrix above drives two layers that must agree, engine by engine:
+
+- the **test level** — the `grepInvert` lists of the Firefox and WebKit
+  Playwright projects in
+  [playwright.config.mjs](playwright/playwright.config.mjs), each with its cause
+  comment (this is what keeps an engine from *running* a scenario it cannot
+  honestly stage);
+- the **contract level** — the exclusion files
+  [contracts/engine-exclusions/firefox.tsv](contracts/engine-exclusions/firefox.tsv)
+  and [webkit.tsv](contracts/engine-exclusions/webkit.tsv), one row per
+  contract and target (`contractId`, target `js`/`wasmJs`/`*`, cause): this is
+  what the *evidence* machinery subtracts. The granularity is the contract —
+  a canonical JSON must carry every declared scenario and sentinel of its
+  contract, so a contract with even one excluded test produces no engine
+  evidence at all; the scenarios of that contract which do run stay visible in
+  the nightly's JUnit report, and a contract returns to the engine's expected
+  set by deleting its row when the engine ships the primitive.
+
+The Gradle smokes of the nightly are
+`firefoxJsBrowserSmoke`/`firefoxWasmJsBrowserSmoke`/`webkitJsBrowserSmoke`/`webkitWasmJsBrowserSmoke`
+— the same runner and distributions as the Chromium smokes, plus `--engine=<name>`
+and `--engine-exclusions=<engine>.tsv`; their evidence lands under
+`build/contract-evidence/<engine>/<target>/`. The validator's matching tasks
+(`validateFirefoxJsBrowserContractEvidence` and siblings) subtract the same
+file from their expected contract set.
+
+The two layers cannot drift apart silently, in either direction: a test the
+config excludes whose contract is still expected fails the smoke's evidence
+completeness (the error names the contract and the engine), and an exclusion
+row whose mapping the run fully covers — every mapped testcase ran and passed —
+is refused outright, because it would silently drop producible evidence. Both
+rules are unit-tested in
+[run-browser-smoke.test.mjs](playwright/run-browser-smoke.test.mjs).
 
 ## Contract evidence
 

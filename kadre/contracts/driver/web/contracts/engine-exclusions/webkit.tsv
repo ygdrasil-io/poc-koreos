@@ -1,0 +1,21 @@
+# The canonical web browser contracts WebKit is not expected to evidence, one row per contract
+# and target: contractId, target (js, wasmJs or *), cause. Every cause restates a recorded fact of
+# the README's "Engine coverage" probe (2026-10-10, pinned Playwright 1.60.0 / WebKit 26.4).
+#
+# The granularity is the CONTRACT, not the scenario: a contract's canonical JSON must carry every
+# declared scenario and sentinel of the registry, so a contract with even one excluded test
+# produces NO WebKit evidence at all — the scenarios that do run are covered by the same nightly
+# run's JUnit report and can return by deleting the row once the engine ships the primitive. The
+# consumer of this file is the evidence producer (the run's expected mapping subset) and the
+# validator's per-engine invocation (its expected contract set); a test excluded by the Playwright
+# config whose contract is missing here fails the smoke, and a row whose mapping the run fully
+# covers is refused — the two directions cannot drift apart silently. The TEST-level exclusion
+# greps live in playwright/playwright.config.mjs (the webkit project); this file is their
+# CONTRACT-level mirror.
+contractId	target	cause
+BCK-004	*	CDP-instrumented: the seven touch contact scenarios stage through Input.dispatchTouchEvent, which Playwright answers is only available in Chromium
+BCK-005	*	CDP-instrumented: web-text-composition-lifecycle stages through Input.imeSetComposition; the other eight scenarios run
+BCK-007	*	CDP-instrumented: web-display-dpr-scale-factor and web-display-teardown-quiet stage through Emulation.setDeviceMetricsOverride
+BCK-009	*	Chromium-flags-dependent: the insecure-context scenario has no WebKit counterpart to the host-mapping launch argument (probed: neither an argument nor a preference system)
+BCK-010	*	engine-missing-primitive: MediaStreamTrackProcessor is absent and the display-capture permission readback never settles (permissions.query rejects the name), so every control-plane scenario fails
+BCK-011	*	engine-missing-primitive: the capture frame pump is MediaStreamTrackProcessor-only, which WebKit does not ship

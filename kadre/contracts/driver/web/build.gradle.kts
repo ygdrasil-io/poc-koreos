@@ -148,3 +148,53 @@ registerBrowserSmoke(
 )
 registerHostPage(target = "js", packageTask = ":kadre:platform:web:jsHostPackage")
 registerHostPage(target = "wasmJs", packageTask = ":kadre:platform:web:wasmJsHostPackage")
+
+/**
+ * The nightly-engine smokes of the roadmap's section 3.8: same runner, same distributions, one
+ * engine and its recorded contract exclusions.
+ *
+ * The engine reaches the runner as one more `--name=value` argument (`--engine=<name>`, which the
+ * launch turns into that engine's `--project` selection — firefox-js vs firefox-wasm by target),
+ * and the engine's exclusion file (`contracts/engine-exclusions/<engine>.tsv`) reaches the evidence
+ * producer, which subtracts it from the mapping the run must cover; the validator's per-engine
+ * tasks subtract the same file from their expected contract set. The evidence root carries the
+ * engine segment, so the four tasks' `outputs.dir` never overlap the Chromium smokes' — or each
+ * other's.
+ */
+fun registerEngineBrowserSmoke(engine: String, target: String, distributionTask: String, hostPageTask: String) {
+    val engineName = engine.replaceFirstChar(Char::uppercase)
+    val targetName = target.replaceFirstChar(Char::uppercase)
+    val exclusionsFile = layout.projectDirectory.file("contracts/engine-exclusions/$engine.tsv").asFile
+    val engineEvidence = browserSmokeOutput.map { it.dir("$engine/$target") }
+    tasks.register<Exec>("${engine}${targetName}BrowserSmoke") {
+        group = "verification"
+        description = "Runs the $target public Web attach smoke in $engineName with its recorded contract exclusions."
+        dependsOn(browserSmokeRunnerTest, installPlaywright, distributionTask, hostPageTask)
+        workingDir(projectDir)
+        commandLine(
+            "node",
+            "playwright/run-browser-smoke.mjs",
+            "--target=$target",
+            "--engine=$engine",
+            "--distribution=${layout.buildDirectory.dir("dist/$target/productionExecutable").get().asFile.absolutePath}",
+            "--evidence=${engineEvidence.get().asFile.absolutePath}",
+            "--consumer=${layout.buildDirectory.dir("dist/$target/host").get().asFile.absolutePath}",
+            "--contracts=${contractRegistry.absolutePath}",
+            "--mapping=${contractMapping.asFile.absolutePath}",
+            "--engine-exclusions=${exclusionsFile.absolutePath}",
+            "--commit=${contractEvidenceCommit.get()}",
+        )
+        inputs.files(playwrightPackage, playwrightLock, contractRegistry, contractMapping, exclusionsFile)
+        inputs.property("contractEvidenceCommit", contractEvidenceCommit)
+        inputs.property("browserEngine", engine)
+        inputs.dir(layout.projectDirectory.dir("playwright"))
+        inputs.dir(layout.buildDirectory.dir("dist/$target/productionExecutable"))
+        inputs.dir(layout.buildDirectory.dir("dist/$target/host"))
+        outputs.dir(engineEvidence)
+    }
+}
+
+registerEngineBrowserSmoke("firefox", "js", "jsBrowserDistribution", ":kadre:contracts:driver:web:jsHostPage")
+registerEngineBrowserSmoke("firefox", "wasmJs", "wasmJsBrowserDistribution", ":kadre:contracts:driver:web:wasmJsHostPage")
+registerEngineBrowserSmoke("webkit", "js", "jsBrowserDistribution", ":kadre:contracts:driver:web:jsHostPage")
+registerEngineBrowserSmoke("webkit", "wasmJs", "wasmJsBrowserDistribution", ":kadre:contracts:driver:web:wasmJsHostPage")
