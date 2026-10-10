@@ -15,10 +15,11 @@ import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
+import { generateContractEvidence } from './contract-evidence.mjs';
 
 const runner = resolve(dirname(fileURLToPath(import.meta.url)), 'run-browser-smoke.mjs');
 const signalExitCodes = { SIGINT: 130, SIGTERM: 143 };
-const validJunit = '<?xml version="1.0"?><testsuites tests="1" failures="0" errors="0" skipped="0"><testsuite name="web" tests="1" failures="0" errors="0" skipped="0"><testcase name="attaches" classname="web-phase0"/></testsuite></testsuites>';
+const validJunit = '<?xml version="1.0"?><testsuites tests="1" failures="0" errors="0" skipped="0"><testsuite name="web" tests="1" failures="0" errors="0" skipped="0" time="0.001"><testcase name="attaches" classname="web-phase0"/></testsuite></testsuites>';
 /**
  * A hermetic registry and mapping.
  *
@@ -30,21 +31,240 @@ const validJunit = '<?xml version="1.0"?><testsuites tests="1" failures="0" erro
 const fixtureRegistryHeader =
   'contractId\tstatus\tsource\tsubject\trisk\toracle\tscenarios\trequiredTargets\tconditionalCapabilities\tsentinels\tretirementRef\n';
 const fixtureMappingHeader = 'contractId\ttarget\tkind\tevidenceId\ttestClass\ttestName\n';
+/** One active browser contract the evidence-generation tests map onto the valid JUnit fixture. */
+const fixtureContractRow = 'TST-001\tactive\tprobe\tprobe\tprobe\tO1\tdemo-scenario\tjs,wasmJs\t-\t-\t-\n';
+const fixtureMappingRow = 'TST-001\tjs\tscenario\tdemo-scenario\tweb-phase0\tattaches\n';
+/** A second active contract whose mapped testcase the JUnit fixture omits: the excluded-contract material. */
+const fixtureSecondContractRow = 'TST-002\tactive\tprobe\tprobe\tprobe\tO1\tdemo-scenario\tjs,wasmJs\t-\t-\t-\n';
+const fixtureSecondMappingRow = 'TST-002\tjs\tscenario\tdemo-scenario\tweb-phase0\tabsent\n';
+const fixtureExclusionHeader = 'contractId\ttarget\tcause\n';
+const fixtureCommit = '0123456789abcdef0123456789abcdef01234567';
 
-test('launch construction uses a shell for the Windows Playwright cmd shim only', async () => {
+test('launch construction routes each engine to its own Playwright projects', async () => {
   const { createPlaywrightLaunch } = await import('./browser-smoke-launch.mjs');
   const baseOptions = { cwd: '/work', stdio: 'inherit' };
+  const configArguments = ['test', '--config', 'playwright/playwright.config.mjs'];
 
-  assert.deepEqual(createPlaywrightLaunch('win32', baseOptions), {
-    argumentsList: ['test', '--config', 'playwright/playwright.config.mjs'],
-    command: 'node_modules/.bin/playwright.cmd',
-    options: { ...baseOptions, detached: false, shell: true },
+  // Chromium names exactly the three projects a no-argument invocation ran before the other
+  // engines existed — the PR gate's routing, now explicit — on both Kotlin targets.
+  const chromiumProjects = ['--project=chromium', '--project=chromium-capture', '--project=chromium-insecure'];
+  for (const target of ['js', 'wasmJs']) {
+    assert.deepEqual(
+      createPlaywrightLaunch('linux', baseOptions, 'chromium', target).argumentsList,
+      [...configArguments, ...chromiumProjects],
+    );
+  }
+  // Firefox and WebKit each carry one target-dependent exclusion (the wasmJs-only TypeScript
+  // publication race on Firefox; the wasmJs-only duplicate-attach admission race on both), so
+  // each engine's project is split per Kotlin target and the js run keeps the test through the
+  // -js project.
+  assert.deepEqual(
+    createPlaywrightLaunch('linux', baseOptions, 'firefox', 'js').argumentsList,
+    [...configArguments, '--project=firefox-js'],
+  );
+  assert.deepEqual(
+    createPlaywrightLaunch('linux', baseOptions, 'firefox', 'wasmJs').argumentsList,
+    [...configArguments, '--project=firefox-wasm'],
+  );
+  assert.deepEqual(
+    createPlaywrightLaunch('linux', baseOptions, 'webkit', 'js').argumentsList,
+    [...configArguments, '--project=webkit-js'],
+  );
+  assert.deepEqual(
+    createPlaywrightLaunch('linux', baseOptions, 'webkit', 'wasmJs').argumentsList,
+    [...configArguments, '--project=webkit-wasm'],
+  );
+  assert.throws(
+    () => createPlaywrightLaunch('linux', baseOptions, 'opera', 'js'),
+    /unsupported browser engine: opera/,
+  );
+
+  const windows = createPlaywrightLaunch('win32', baseOptions, 'chromium', 'js');
+  assert.equal(windows.command, 'node_modules/.bin/playwright.cmd');
+  assert.deepEqual(windows.options, { ...baseOptions, detached: false, shell: true });
+  const posix = createPlaywrightLaunch('linux', baseOptions, 'webkit', 'js');
+  assert.equal(posix.command, 'node_modules/.bin/playwright');
+  assert.deepEqual(posix.options, { ...baseOptions, detached: true });
+});
+
+test('the engine of the run lands in the evidence execution descriptor', { timeout: 20_000 }, async (context) => {
+  const fixture = await createFixture('evidence-engine', validJunit, {
+    registryRows: fixtureContractRow,
+    mappingRows: fixtureMappingRow,
   });
-  assert.deepEqual(createPlaywrightLaunch('linux', baseOptions), {
-    argumentsList: ['test', '--config', 'playwright/playwright.config.mjs'],
-    command: 'node_modules/.bin/playwright',
-    options: { ...baseOptions, detached: true },
+  context.after(() => fixture.dispose());
+
+  const result = await runSmoke(fixture).completion;
+
+  assert.equal(normalizedExitStatus(result), 0, result.stderr);
+  const artifact = join(fixture.evidence, 'contract-evidence', 'browser', 'chromium', 'TST-001.json');
+  const document = JSON.parse(await readFile(artifact, 'utf8'));
+  assert.equal(document.execution.engine, 'chromium');
+  assert.match(document.execution.version, /^\d/, 'the version of the launched pinned engine');
+  // The diagnostics of the same run are scoped to the same engine: exactly one durable
+  // quarantine, under the engine's own diagnostics directory.
+  const quarantines = await diagnosticQuarantines(fixture);
+  assert.equal(quarantines.length, 1, `expected one engine-scoped quarantine, found ${quarantines.join(', ')}`);
+  await assertCompleteDiagnostics(quarantines[0], 0);
+});
+
+test('--engine-exclusions feeds the producer of the run', { timeout: 20_000 }, async (context) => {
+  const fixture = await createFixture('engine-exclusions', validJunit, {
+    registryRows: fixtureContractRow,
+    mappingRows: fixtureMappingRow,
+    exclusionRows: 'TST-001\tjs\tengine-missing-primitive: probe cause\n',
   });
+  context.after(() => fixture.dispose());
+
+  // The one mapped testcase ran and passed, so excluding its contract would silently drop
+  // producible evidence: the producer must refuse, naming the contract and the engine.
+  const result = await runSmoke(fixture, [`--engine-exclusions=${fixture.exclusions}`]).completion;
+
+  assert.notEqual(normalizedExitStatus(result), 0, 'an exclusion of a fully covered contract was accepted');
+  assert.match(
+    result.stderr,
+    /exclusion drops fully covered evidence: every mapped testcase of TST-001\[js\] ran and passed on chromium/,
+    result.stderr,
+  );
+});
+
+test('an engine exclusion matching the run target skips the excluded contract', async (context) => {
+  const fixture = await createProducerFixture({
+    registryRows: fixtureContractRow + fixtureSecondContractRow,
+    mappingRows: fixtureMappingRow + fixtureSecondMappingRow,
+    exclusionRows: 'TST-002\tjs\tCDP-instrumented: probe cause\n',
+  });
+  context.after(() => fixture.dispose());
+
+  const written = await fixture.produce();
+
+  assert.deepEqual(written, [fixture.artifact('TST-001')]);
+  await assert.rejects(access(fixture.artifact('TST-002'), fsConstants.F_OK), { code: 'ENOENT' });
+});
+
+test('a wildcard engine exclusion applies to every target', async (context) => {
+  const fixture = await createProducerFixture({
+    registryRows: fixtureContractRow + fixtureSecondContractRow,
+    mappingRows: fixtureMappingRow + fixtureSecondMappingRow,
+    exclusionRows: 'TST-002\t*\tCDP-instrumented: probe cause\n',
+  });
+  context.after(() => fixture.dispose());
+
+  const written = await fixture.produce();
+
+  assert.deepEqual(written, [fixture.artifact('TST-001')]);
+  await assert.rejects(access(fixture.artifact('TST-002'), fsConstants.F_OK), { code: 'ENOENT' });
+});
+
+test('an engine exclusion scoped to the other target does not silence this run', async (context) => {
+  const fixture = await createProducerFixture({
+    registryRows: fixtureContractRow + fixtureSecondContractRow,
+    mappingRows: fixtureMappingRow + fixtureSecondMappingRow,
+    exclusionRows: 'TST-002\twasmJs\tCDP-instrumented: probe cause\n',
+  });
+  context.after(() => fixture.dispose());
+
+  await assert.rejects(
+    fixture.produce('js', 'firefox'),
+    /mapped testcase is missing: web-phase0#absent \(TST-002\[js\] on firefox\)/,
+  );
+});
+
+test('an engine exclusion naming a contract the run does not produce is refused', async (context) => {
+  const fixture = await createProducerFixture({
+    registryRows: fixtureContractRow + 'TST-003\tactive\tprobe\tprobe\tprobe\tO1\tdemo-scenario\tjs\t-\t-\t-\n',
+    mappingRows: fixtureMappingRow + 'TST-001\twasmJs\tscenario\tdemo-scenario\tweb-phase0\tattaches\n',
+    exclusionRows: 'TST-003\t*\tCDP-instrumented: probe cause\n',
+  });
+  context.after(() => fixture.dispose());
+
+  await assert.rejects(
+    fixture.produce('wasmJs', 'firefox'),
+    /exclusion names a contract that is not active on this target: TST-003 \(wasmJs on firefox\)/,
+  );
+});
+
+test('an exclusion for a contract the run fully covers is refused', async (context) => {
+  const fixture = await createProducerFixture({
+    exclusionRows: 'TST-001\tjs\tengine-missing-primitive: probe cause\n',
+  });
+  context.after(() => fixture.dispose());
+
+  await assert.rejects(
+    fixture.produce('js', 'webkit'),
+    /exclusion drops fully covered evidence: every mapped testcase of TST-001\[js\] ran and passed on webkit/,
+  );
+});
+
+test('exclusion files are validated before any evidence is written', async (context) => {
+  for (const [name, contents, expectedError] of [
+    ['header', 'contractId\twhy\n', /invalid engine contract exclusions header/],
+    ['column count', 'contractId\ttarget\tcause\nTST-001\tjs\n', /expected 3 columns/],
+    ['target', 'contractId\ttarget\tcause\nTST-001\tjvm\tcause\n', /target must be one of js, wasmJs, \*/],
+    // A whitespace-only cause cannot be reached: the shared TSV reader trimEnd's it away, so such a
+    // row fails as a column-count error instead — the blank-cause check below stays as the guard.
+    ['unknown contract', 'contractId\ttarget\tcause\nZZZ-999\tjs\tcause\n', /registry does not declare: ZZZ-999/],
+    ['duplicate row', 'contractId\ttarget\tcause\nTST-001\tjs\tone\nTST-001\tjs\ttwo\n', /duplicate exclusion: TST-001 for js/],
+  ]) {
+    const fixture = await createProducerFixture({ exclusionContents: contents });
+    context.after(() => fixture.dispose());
+    await assert.rejects(fixture.produce(), expectedError, `${name} exclusion row was accepted`);
+  }
+});
+
+test('an unsupported engine fails fast with a closed error', { timeout: 10_000 }, async (context) => {
+  const fixture = await createFixture('unsupported-engine');
+  context.after(() => fixture.dispose());
+
+  const fromArgument = await runSmoke(fixture, ['--engine=opera']).completion;
+  assert.notEqual(normalizedExitStatus(fromArgument), 0, 'an unsupported --engine was accepted');
+  assert.match(
+    fromArgument.stderr,
+    /unsupported browser engine: opera \(expected one of chromium, firefox, webkit\)/,
+    fromArgument.stderr,
+  );
+  // The failure is closed: nothing of the run — report, diagnostics — was created.
+  await assert.rejects(access(join(fixture.evidence, 'diagnostics', 'playwright'), fsConstants.F_OK), { code: 'ENOENT' });
+  await assert.rejects(access(join(fixture.evidence, 'test-results', 'browser'), fsConstants.F_OK), { code: 'ENOENT' });
+});
+
+test('KADRE_BROWSER_ENGINE names the engine and --engine overrides it', { timeout: 10_000 }, async (context) => {
+  const fixture = await createFixture('engine-from-environment');
+  context.after(() => fixture.dispose());
+
+  // The environment alone routes the run: the JUnit report lands in the webkit scope.
+  const fromEnvironment = await runSmoke(fixture, [], 'js', { KADRE_BROWSER_ENGINE: 'webkit' }).completion;
+  assert.equal(normalizedExitStatus(fromEnvironment), 0, fromEnvironment.stderr);
+  await access(join(fixture.evidence, 'test-results', 'browser', 'webkit', 'TEST-web-phase0.xml'), fsConstants.F_OK);
+
+  // The argument wins over the environment, including when only the argument is valid.
+  const overridden = await runSmoke(fixture, ['--engine=chromium'], 'js', { KADRE_BROWSER_ENGINE: 'opera' }).completion;
+  assert.equal(normalizedExitStatus(overridden), 0, overridden.stderr);
+  await access(join(fixture.evidence, 'test-results', 'browser', 'chromium', 'TEST-web-phase0.xml'), fsConstants.F_OK);
+
+  const unsupported = await runSmoke(fixture, [], 'js', { KADRE_BROWSER_ENGINE: 'opera' }).completion;
+  assert.notEqual(normalizedExitStatus(unsupported), 0, 'an unsupported KADRE_BROWSER_ENGINE was accepted');
+  assert.match(unsupported.stderr, /unsupported browser engine: opera/, unsupported.stderr);
+});
+
+test('the JUnit and diagnostics layouts are scoped to the run engine', { timeout: 10_000 }, async (context) => {
+  const fixture = await createFixture(
+    'report',
+    '<testsuites tests="0" failures="0" errors="0" skipped="0"></testsuites>',
+    { engine: 'webkit' },
+  );
+  context.after(() => fixture.dispose());
+
+  const result = await runSmoke(fixture, ['--engine=webkit']).completion;
+
+  assert.notEqual(normalizedExitStatus(result), 0, 'an empty JUnit report was accepted');
+  assert.match(result.stderr, /at least one testsuite/, result.stderr);
+  // The report and the retained diagnostics sit under the webkit engine's own directories…
+  await access(join(fixture.evidence, 'test-results', 'browser', 'webkit', 'TEST-web-phase0.xml'), fsConstants.F_OK);
+  assert.equal(await readFile(fixture.diagnosticMarker, 'utf8'), 'diagnostic evidence');
+  // …and no other engine's directory exists beside them.
+  assert.deepEqual(await readdir(join(fixture.evidence, 'test-results', 'browser')), ['webkit']);
+  assert.deepEqual(await readdir(join(fixture.evidence, 'diagnostics', 'playwright')), ['webkit']);
 });
 
 for (const signal of ['SIGINT', 'SIGTERM']) {
@@ -287,13 +507,20 @@ for (const [name, report, expectedError] of [
   });
 }
 
-async function createFixture(scenario, junit = validJunit) {
+async function createFixture(scenario, junit = validJunit, {
+  engine = 'chromium',
+  environment = {},
+  registryRows = '',
+  mappingRows = '',
+  exclusionRows = '',
+} = {}) {
   const root = await mkdtemp(join(tmpdir(), 'kadre-browser-runner-'));
   const distribution = join(root, 'distribution');
   const evidence = join(root, 'evidence');
   const host = join(root, 'host');
   const contracts = join(root, 'contracts.tsv');
   const mapping = join(root, 'evidence.tsv');
+  const exclusions = join(root, 'engine-exclusions.tsv');
   const binDirectory = join(root, 'node_modules', '.bin');
   const fakePlaywright = join(root, 'fake-playwright.cjs');
   const heldClient = join(root, 'held-client.cjs');
@@ -315,19 +542,23 @@ async function createFixture(scenario, junit = validJunit) {
   const queryResponse = join(root, 'query-response.html');
   const hostResponse = join(root, 'host-response.mjs');
   const kotlinModuleResponse = join(root, 'kotlin-module-response.mjs');
-  const diagnostics = join(evidence, 'diagnostics', 'playwright');
+  // Every diagnostics artifact of one run sits under the engine's own directory — the run output,
+  // the preserved copy and the durable quarantines — so one engine's run cannot touch another's.
+  const engineDiagnostics = join(evidence, 'diagnostics', 'playwright', engine);
+  const diagnostics = join(engineDiagnostics, 'output');
   const diagnosticsParent = dirname(diagnostics);
   const diagnosticTraceDirectory = join(diagnostics, 'trace');
   const diagnosticMarker = join(diagnosticTraceDirectory, 'trace.txt');
-  const preservedDiagnostics = join(evidence, 'diagnostics', 'playwright-preserved');
+  const preservedDiagnostics = join(engineDiagnostics, 'output-preserved');
   const preservedDiagnosticTraceDirectory = join(preservedDiagnostics, 'trace');
   const preservedDiagnosticMarker = join(preservedDiagnosticTraceDirectory, 'trace.txt');
 
   await mkdir(distribution, { recursive: true });
   await mkdir(host, { recursive: true });
   await mkdir(binDirectory, { recursive: true });
-  await writeFile(contracts, fixtureRegistryHeader);
-  await writeFile(mapping, fixtureMappingHeader);
+  await writeFile(contracts, fixtureRegistryHeader + registryRows);
+  await writeFile(mapping, fixtureMappingHeader + mappingRows);
+  if (exclusionRows !== '') await writeFile(exclusions, fixtureExclusionHeader + exclusionRows);
   await writeFile(join(distribution, 'fixture.js'), 'globalThis.kadreFixture = true;\n');
   await writeFile(join(host, 'index.mjs'), 'export const KadreWeb = {};\n');
   await writeFile(join(host, 'kadre-platform-web.js'), 'globalThis["org.graphiks.kadre:web"] = {};\n');
@@ -355,6 +586,7 @@ async function createFixture(scenario, junit = validJunit) {
     connectionClosed,
     connectionOpened,
     contracts,
+    exclusions,
     descendantPid,
     descendantReady,
     descendantTerminated,
@@ -363,6 +595,7 @@ async function createFixture(scenario, junit = validJunit) {
     diagnostics,
     diagnosticsParent,
     distribution,
+    engineDiagnostics,
     evidence,
     host,
     kotlinModuleResponse,
@@ -421,6 +654,7 @@ async function createFixture(scenario, junit = validJunit) {
       KADRE_RUNNER_TEST_KOTLIN_MODULE_RESPONSE: kotlinModuleResponse,
       KADRE_RUNNER_TEST_DIAGNOSTIC_COMMIT_SIGNAL_OBSERVED: diagnosticCommitSignalObserved,
       KADRE_RUNNER_TEST_SCENARIO: scenario,
+      ...environment,
       ...([
         'partial-quarantine-failure',
         'signal-after-diagnostic-commit',
@@ -432,7 +666,7 @@ async function createFixture(scenario, junit = validJunit) {
   };
 }
 
-function runSmoke(fixture, extraArguments = [], target = 'js') {
+function runSmoke(fixture, extraArguments = [], target = 'js', extraEnvironment = {}) {
   return spawnRunner(fixture, [
     `--target=${target}`,
     `--distribution=${fixture.distribution}`,
@@ -441,16 +675,16 @@ function runSmoke(fixture, extraArguments = [], target = 'js') {
     `--contracts=${fixture.contracts}`,
     `--mapping=${fixture.mapping}`,
     ...extraArguments,
-  ]);
+  ], extraEnvironment);
 }
 
-function spawnRunner(fixture, argumentsList) {
+function spawnRunner(fixture, argumentsList, extraEnvironment = {}) {
   const child = spawn(process.execPath, [
     runner,
     ...argumentsList,
   ], {
     cwd: fixture.root,
-    env: { ...process.env, ...fixture.environment },
+    env: { ...process.env, ...fixture.environment, ...extraEnvironment },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   let stdout = '';
@@ -492,6 +726,65 @@ function waitForFileWhileRunning(path, execution, timeout) {
       throw new Error(`runner exited before creating ${path}: ${result.stderr}`);
     }),
   ]);
+}
+
+/**
+ * A lean fixture for the evidence producer itself: registry, mapping, JUnit report and exclusion
+ * file in one temporary directory, with the version and commit supplied so no browser is launched
+ * and no repository is read — the exclusion semantics stay hermetic.
+ */
+async function createProducerFixture({
+  registryRows = fixtureContractRow,
+  mappingRows = fixtureMappingRow,
+  junitCases = [['web-phase0', 'attaches']],
+  exclusionRows = '',
+  exclusionContents = undefined,
+} = {}) {
+  const root = await mkdtemp(join(tmpdir(), 'kadre-contract-evidence-'));
+  const registry = join(root, 'registry.tsv');
+  const mapping = join(root, 'evidence.tsv');
+  const exclusions = join(root, 'engine-exclusions.tsv');
+  const junitDirectory = join(root, 'test-results', 'browser', 'firefox');
+  const outputDirectory = join(root, 'contract-evidence', 'browser', 'firefox');
+  const bundle = join(root, 'bundle.js');
+  await writeFile(registry, fixtureRegistryHeader + registryRows);
+  await writeFile(mapping, fixtureMappingHeader + mappingRows);
+  await writeFile(exclusions, exclusionContents ?? fixtureExclusionHeader + exclusionRows);
+  await mkdir(junitDirectory, { recursive: true });
+  await writeFile(join(junitDirectory, 'TEST-web-phase0.xml'), junitXml(junitCases));
+  await writeFile(bundle, 'export const kadre = true;\n');
+  return {
+    async dispose() {
+      await rm(root, { force: true, recursive: true });
+    },
+    artifact(contractId) {
+      return join(outputDirectory, `${contractId}.json`);
+    },
+    produce(target = 'js', engine = 'firefox') {
+      return generateContractEvidence({
+        target,
+        engine,
+        version: '150.0.2',
+        bundlePath: bundle,
+        junitDirectory,
+        outputDirectory,
+        commit: fixtureCommit,
+        registryPath: registry,
+        mappingPath: mapping,
+        exclusionsPath: exclusionContents !== undefined || exclusionRows !== '' ? exclusions : undefined,
+      });
+    },
+  };
+}
+
+/** One passing testcase per `[classname, name]` pair, in the JUnit shape the producer reads. */
+function junitXml(passedCases) {
+  const cases = passedCases.map(([classname, name]) => `<testcase name="${name}" classname="${classname}"/>`).join('');
+  const count = passedCases.length;
+  return '<?xml version="1.0"?>'
+    + `<testsuites tests="${count}" failures="0" errors="0" skipped="0">`
+    + `<testsuite name="web" tests="${count}" failures="0" errors="0" skipped="0" time="0.001">${cases}</testsuite>`
+    + '</testsuites>';
 }
 
 async function createObsoleteQuarantine(fixture) {
@@ -684,7 +977,7 @@ if (process.env.KADRE_RUNNER_TEST_DIAGNOSTIC_COMMIT_SIGNAL_OBSERVED) {
 fileSystem.rename = async (source, destination) => {
   const result = await rename(source, destination);
   if (process.env.KADRE_RUNNER_TEST_SCENARIO === 'signal-before-diagnostic-commit'
-      && basename(destination) === 'playwright-preserved') {
+      && basename(destination) === 'output-preserved') {
     writeFileSync(process.env.KADRE_RUNNER_TEST_DIAGNOSTIC_PRESERVATION_STARTED, 'started');
     const deadline = Date.now() + 10_000;
     while (!existsSync(process.env.KADRE_RUNNER_TEST_DIAGNOSTIC_PRESERVATION_RELEASE)) {

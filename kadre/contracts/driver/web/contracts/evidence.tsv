@@ -161,6 +161,7 @@ BCK-001	js	scenario	web-window-provider-callback-failure	web-window-provider.spe
 BCK-001	js	scenario	web-pagehide-admission-close	web-lifecycle.spec.mjs	persisted pagehide terminates immediately and pageshow cannot resurrect
 BCK-001	js	scenario	web-pagehide-navigation	web-lifecycle.spec.mjs	persisted pagehide terminates immediately and pageshow cannot resurrect
 BCK-001	js	scenario	web-pagehide-no-resurrection	web-lifecycle.spec.mjs	persisted pagehide terminates immediately and pageshow cannot resurrect
+BCK-001	js	scenario	web-memory-pressure-unsupported	web-lifecycle.spec.mjs	web-memory-pressure-unsupported
 BCK-001	js	sentinel	web-surface-never-window	web-lifecycle.spec.mjs	attach creates no DOM and exposes no primary Window
 BCK-001	js	sentinel	web-no-implicit-dom	web-lifecycle.spec.mjs	attach creates no DOM and exposes no primary Window
 BCK-001	js	sentinel	web-cross-session-isolation	web-lifecycle.spec.mjs	independent hosts terminate independently
@@ -170,6 +171,7 @@ BCK-001	js	sentinel	web-shadow-root-observation	web-lifecycle.spec.mjs	removing 
 BCK-001	js	sentinel	web-provider-no-same-document-window	web-window-provider.spec.mjs	web-window-provider-same-context
 BCK-001	js	sentinel	web-provider-owned-element-rejected	web-window-provider.spec.mjs	web-window-provider-owned-element
 BCK-001	js	sentinel	web-active-gate-requires-js-and-wasm	web-lifecycle.spec.mjs	a durable detach terminates the session
+BCK-001	js	sentinel	web-memory-no-fabricated-signal	web-lifecycle.spec.mjs	web-memory-pressure-unsupported
 INT-003	js	scenario	web-host-attach-failure	web-host-facade.spec.mjs	web-host-attach-failure
 INT-003	js	scenario	web-host-state-subscription	web-host-facade.spec.mjs	web-host-state-subscription
 INT-003	js	scenario	web-host-observer-exception	web-host-facade.spec.mjs	web-host-observer-exception
@@ -204,6 +206,7 @@ BCK-001	wasmJs	scenario	web-window-provider-callback-failure	web-window-provider
 BCK-001	wasmJs	scenario	web-pagehide-admission-close	web-lifecycle.spec.mjs	persisted pagehide terminates immediately and pageshow cannot resurrect
 BCK-001	wasmJs	scenario	web-pagehide-navigation	web-lifecycle.spec.mjs	persisted pagehide terminates immediately and pageshow cannot resurrect
 BCK-001	wasmJs	scenario	web-pagehide-no-resurrection	web-lifecycle.spec.mjs	persisted pagehide terminates immediately and pageshow cannot resurrect
+BCK-001	wasmJs	scenario	web-memory-pressure-unsupported	web-lifecycle.spec.mjs	web-memory-pressure-unsupported
 BCK-001	wasmJs	sentinel	web-surface-never-window	web-lifecycle.spec.mjs	attach creates no DOM and exposes no primary Window
 BCK-001	wasmJs	sentinel	web-no-implicit-dom	web-lifecycle.spec.mjs	attach creates no DOM and exposes no primary Window
 BCK-001	wasmJs	sentinel	web-cross-session-isolation	web-lifecycle.spec.mjs	independent hosts terminate independently
@@ -213,6 +216,7 @@ BCK-001	wasmJs	sentinel	web-shadow-root-observation	web-lifecycle.spec.mjs	remov
 BCK-001	wasmJs	sentinel	web-provider-no-same-document-window	web-window-provider.spec.mjs	web-window-provider-same-context
 BCK-001	wasmJs	sentinel	web-provider-owned-element-rejected	web-window-provider.spec.mjs	web-window-provider-owned-element
 BCK-001	wasmJs	sentinel	web-active-gate-requires-js-and-wasm	web-lifecycle.spec.mjs	a durable detach terminates the session
+BCK-001	wasmJs	sentinel	web-memory-no-fabricated-signal	web-lifecycle.spec.mjs	web-memory-pressure-unsupported
 INT-003	wasmJs	scenario	web-host-attach-failure	web-host-facade.spec.mjs	web-host-attach-failure
 INT-003	wasmJs	scenario	web-host-state-subscription	web-host-facade.spec.mjs	web-host-state-subscription
 INT-003	wasmJs	scenario	web-host-observer-exception	web-host-facade.spec.mjs	web-host-observer-exception

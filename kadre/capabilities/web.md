@@ -31,7 +31,11 @@ canvas de la surface primaire, sans consentement), la cible `Source` refusée st
 avant tout picker, et les deux capabilities d’inventaire qui disent ce que ce browsing context
 sait — `sourceEnumeration` inconditionnelle sur un inventaire toujours `HostPickerOnly`,
 `hostPicker` pilotée par le secure context et la présence de la primitive (`BCK-010`/`BCK-011` ;
-§2, cinq lignes du bas ; §3.15-3.16).
+§2, cinq lignes du bas ; §3.15-3.16). La phase 8 — clôture — livre la dernière ligne de la matrice
+que ce registre doit à §8 : le signal de pression mémoire, dont l’état livré est l’absence
+structurelle elle-même (`LifecycleCapabilities.memoryPressure = FeatureAvailability.Unsupported`
+dans tous les états, aucun signal jamais émis), avec sa paire `webTest` et son scénario navigateur
+`BCK-001` (§2, dernière ligne ; §3.17).
 
 Deux remarques de périmètre, pour que la lecture des lignes soit exacte. Les trois premiers
 features, `drag-and-drop`, `IME`/`text input` et `raw input` sont des lignes de la matrice de
@@ -78,8 +82,9 @@ registre est donc la révision du navigateur ; l’OS n’y entre pas.
   l’implémentait (`BACKEND-CAPABILITIES.md` §2, `:27` : un champ passif typé `FeatureAvailability`
   utilise `FeatureAvailability.Unsupported` pour l’absence structurelle, et
   `FeatureAvailability.Unavailable` pour une disponibilité pilotée à runtime — sur le Web, ce second
-  état n’est publié que par le bras **terminal** d’overflow d’ingress de la section 2.1, jamais par
-  une indisponibilité transitoire). Le snapshot **terminal** de `SurfaceCapabilities`
+  état n’est publié que par le bras **terminal** d’overflow d’ingress de la section 2.1 et par la
+  cellule `CaptureCapabilities.hostPicker` de la phase 7 (§2), jamais par une indisponibilité
+  transitoire d’input ni par la pression mémoire de la phase 8, dont l’absence est structurelle). Le snapshot **terminal** de `SurfaceCapabilities`
   est le snapshot tout-`Unsupported` partagé (`unsupportedSurfaceCapabilities()`,
   `SurfaceAdmission.kt:20`), donc un champ cette phase active redevient `Unsupported(UpdateSurface)`
   dès que la surface cesse d’admettre. Les quatre capabilities d’**input** passives du registre
@@ -129,6 +134,7 @@ registre est donc la révision du navigateur ; l’OS n’y entre pas.
 | `CaptureCapabilities.sourceEnumeration` | `js`, `wasmJs` | idem | `none` | `none` — la capability est inconditionnelle : elle dit ce que le navigateur sait, pas ce qu’il cache, et l’état du browsing context ne la retire pas | il n’y en a pas : `Capability.Supported(Unit, FeatureAvailability.Available)` dans tous les états, contexte insecure compris (`WebCapturePort.kt:437`) ; les sources publiées sont toujours `CaptureSources.HostPickerOnly` (`:459-463`) — aucun navigateur n’énumère les surfaces capturables avant un consentement, rien n’est inventé à la place — et `refreshSources` est le no-op honnête qui rend l’instantané courant sans un seul appel seam (`:161-166`), donc jamais de prompt | `web-capture-initial-honest` (cellules `data-kadre-capture-sources` = `hostPickerOnly` et `data-kadre-capture-enumeration` = `supported`) ; sentinelles `web-capture-no-fabricated-sources`, `web-capture-no-implicit-prompt` ; `WebCapturePortTest.refreshSourcesReturnsTheSameSnapshotWithoutTouchingThePicker` |
 | `CaptureCapabilities.hostPicker` | `js`, `wasmJs` | idem | `none` | le secure context, puis la présence de `getDisplayMedia` — la forme `FeatureAvailability.Unavailable` porte la cause en code de failure (`PlatformFailure(Web, "capture-capability", …)`, causes `"secure-context"` puis `"no-get-display-media"`, `WebCapturePort.kt:438-448`) | `FeatureAvailability.Unavailable(KadreFailure.PlatformFailure(KadrePlatform.Web, "capture-capability", <cause>))` sur ces deux états du browsing context — jamais `Unsupported` : un picker absent est un état du contexte, pas une absence structurelle de l’adapter — et `FeatureAvailability.Available` sinon | `web-capture-insecure-unsupported` (cellule `unavailable:platformFailure:web:capture-capability:secure-context`) ; `WebCapturePortTest.insecureContextUnsupportedEverywhereWithSecureContextCauseOnThePicker`, `.missingGetDisplayMediaUnsupportedWithNoGetDisplayMediaCauseOnThePicker` |
 | `CaptureTarget.Source` (cible `Source` de la matrice) | `js`, `wasmJs` | idem | `none` | `none` — le refus est structurel et ne dépend d’aucun état du browsing context | `KadreFailure.Unsupported(KadreOperation.CaptureOpen)` au reserve du port, avant toute interaction seam — zéro appel navigateur, rien réservé, rien demandé (`WebCapturePort.kt:174-176`, `WebCapturePortTest.reserveOfAnInventorySourceIsRefusedWithZeroSeamInteraction`) ; depuis le driver, la demande est de toute façon inconstruisible — le constructeur de `CaptureSourceId` est interne à la foundation et aucun inventaire `Enumerated` n’existe sur ce target, l’admission du runtime répondant `InvalidRequest("request.target")` (`RuntimeCaptureManager.kt:287-307`) | sentinelle `web-capture-no-fabricated-sources` (aucun inventaire inventé ne rend une cible `Source` résolvable) ; scénario `web-capture-source-refused-before-picker` (le même entonnoir d’admission, région comprise, refusé avant tout picker) ; `WebCapturePortTest.reserveOfAnInventorySourceIsRefusedWithZeroSeamInteraction` |
+| `LifecycleCapabilities.memoryPressure` | `js`, `wasmJs` | idem | `none` | `none` — l’absence est structurelle : aucun état du browsing context ne peut ni la créer ni la retirer (§3.17) | `FeatureAvailability.Unsupported` dans **tous** les états de la session — la valeur unique que ce champ publie jamais sur ce target (`WEB_LIFECYCLE_CAPABILITIES`, `WebHostSession.kt`, passée explicitement aux deux constructions du controller) ; jamais `Unavailable(PlatformFailure)` — il n’existe aucune primitive navigateur dont un échec pourrait être rapporté, et §1 de `BACKEND-CAPABILITIES.md` interdit d’en inventer une — et jamais `Available` : l’admission d’un `HostSignal.MemoryPressure` exige ce dernier état (`RuntimeLifecycle.kt:60`), et aucun poll, timer ni observateur de mémoire n’existe | scénario `web-memory-pressure-unsupported`, sentinelle `web-memory-no-fabricated-signal` (`BCK-001` : la cellule relue depuis la vraie façade après focus, blur et document caché, et aucun signal d’hôte apparu) ; `WebMemoryPressureCapabilityTest.memoryPressureIsTheBareStructuralUnsupportedEveryStateOfTheSession`, `.noMemoryPressureSignalIsEverEmittedAcrossALifecycleExercise` |
 
 Les availabilities d’entrée sont déclarées par une seule transition structurelle, à la fin de
 `installSessionConfiguration` (`WebHostSession.kt:912-925`) : `keyboardInstalled = true`,
@@ -1069,12 +1075,43 @@ le vrai picker et les vrais pixels sont l’affaire du cahier manuel
    est libéré dès que le crop existe — avant toute copie, exactement une fois, sur le succès
    comme sur le refus du navigateur (`WebCaptureSurfaceTest.regionRequestStagesTheVisibleRectAndClosesTheCropFrameExactlyOnceAfterItsCopy`).
 
+### 3.17 La pression mémoire : l’absence structurelle livrée comme état, pas comme délai
+
+1. **Aucune primitive n’existe, et aucune n’est fabriquée.** Le browsing context n’expose ni
+   événement, ni callback, ni observable de pression mémoire. Les trois plus proches objets du
+   navigateur ne sont pas des signaux de pression honnêtes : `performance.memory` est un readback
+   tas propre à Chromium, non standard, que les sources des deux targets n’appellent jamais ;
+   la métrique device `memory` est un budget, pas un signal ; et
+   `measureUserAgentSpecificMemory` est verrouillée par l’isolation cross-origin et mesure
+   l’attribution par document, pas la pression. La session publie donc
+   `LifecycleCapabilities.memoryPressure = FeatureAvailability.Unsupported` — passée
+   explicitement par `WebHostSession` aux deux constructions du controller
+   (`WEB_LIFECYCLE_CAPABILITIES`), l’état que la famille AppKit publie lorsque sa source native
+   est absente (`AppKitProcessBroker.memoryPressureAvailability`) ; `Unavailable(PlatformFailure)`
+   est réservé, chez AppKit, à une source qui existe et dont l’installation échoue — un état qu’un
+   browsing context sans primitive ne peut pas atteindre, et que §1 de `BACKEND-CAPABILITIES.md`
+   interdit d’inventer pour remplir un champ passif.
+2. **Le non-emploi est structurel, pas observé.** L’admission d’un `HostSignal.MemoryPressure`
+   exige que la cellule vaille `Available` (`RuntimeLifecycle.kt:60`,
+   `RuntimeHostController.kt:187`) : une session qui publie `Unsupported` ne peut pas en émettre,
+   et aucun code web n’en émet. Il n’existe aucun poll, aucun timer ni aucun observateur de
+   mémoire sur ce target — rien à arrêter, rien qui survive à la session. La preuve est double :
+   la paire `webTest` (`WebMemoryPressureCapabilityTest` — la cellule exacte re-lue après chaque
+   transition, et zéro signal à travers un exercice de lifecycle complet jusqu’au pagehide
+   terminal) et le scénario `BCK-001` `web-memory-pressure-unsupported` avec sa sentinelle
+   `web-memory-no-fabricated-signal`, qui relisent la cellule depuis la vraie façade
+   `attachKadre` après focus, blur et document caché, et constatent qu’aucun attribut de signal
+   d’hôte n’est jamais apparu. La cellule de la matrice §4 devient `N` : l’observation passive est
+   absente et aucun objet synthétique n’est publié pour la simuler.
+
 ## 4. Portée restante au regard de §8
 
 Ce registre couvre les features du domaine input que les phases 3 et 5 bornent ou activent, les
 quatre champs de `SurfaceUpdate`, les features d’interaction et de fenêtre que la phase 4
 livre (§2, lignes interaction/fenêtres ; §3.7-3.8), puis les features displays, devices,
-gamepads et `platformAccess` que la phase 6 livre (§2, quatre lignes du bas ; §3.12-3.14). Le
+gamepads et `platformAccess` que la phase 6 livre (§2, quatre lignes du bas ; §3.12-3.14), les
+cinq lignes de capture que la phase 7 livre (§2, §3.15-3.16), et la ligne de pression mémoire
+que la phase 8 clôt (§2, dernière ligne ; §3.17). Le
 **verrouillage de pointeur quitte la portée
 restante de l’input** : `InteractionAction.LockPointer` est désormais une action publiée et
 prouvée de ce target (§3.7), et la réserve D13 de la phase 3 ne vaut plus que pour le champ
@@ -1106,19 +1143,24 @@ cette phase** : la cible `HostChoice` est le picker du navigateur derrière un c
 explicite, sous les trois préconditions sondées (§2, §3.15) ; la cible `Source` est
 structurellement `N(CaptureOpen)`, refusée avant tout picker, l’id étant opaque et
 inconstruisible sur ce target (§2, §3.15 item 5) ; la cible `Surface` est le canvas de la
-surface primaire, sans consentement, région-croppable (§2, §3.16 item 9). Les lignes restantes
-de la matrice de `BACKEND-CAPABILITIES.md` §4 sont dès lors toutes produites ou vérifiées à leur
-état livré pour ce target, à une seule exception vérifiée : le **signal de pression mémoire**
-(cellule Web `C`), qu’aucune phase de cet adapter n’a livré — zéro occurrence dans les sources
-des deux targets — et dont l’audit de la phase 8 (« auditer chaque API du catalogue applicable
-à Web et documenter `Supported`, `Unavailable` ou `Unsupported` avec son contrat et sa preuve »)
-est le propriétaire déclaré. Les lignes que les phases de ce registre couvrent — input,
-interactions et fenêtre, inventaires, gamepads, `platformAccess` et les trois cibles de
-capture — portent chacune leur ligne de registre ou leur statement de phase ci-dessus, et les
-lignes livrées avant la création du registre (`lifecycle`, `surface metrics`) portent les
-statements de leurs propres phases de la roadmap ; §8 rappelle qu’« une ligne manquante empêche
-l’adapter d’être déclaré supporté » : le signal de pression mémoire reste donc à produire avant
-toute déclaration « supported » de l’adapter Web, sans que cette phase le rouvre.
+surface primaire, sans consentement, région-croppable (§2, §3.16 item 9).
+
+La **phase 8 — clôture — produit la dernière ligne qui restait** : le **signal de pression
+mémoire**, dont la matrice §4 portait encore la cellule `C` alors qu’aucune phase de cet adapter
+ne l’avait livrée, est désormais livré à son état honnête — la cellule normative devient `N`,
+l’observation passive absente, et la ligne de registre ci-dessus porte la valeur exacte publiée
+(`FeatureAvailability.Unsupported` dans tous les états), les faits de non-invention (§3.17) et
+les deux preuves (la paire `webTest` et le scénario `BCK-001`
+`web-memory-pressure-unsupported` avec sa sentinelle `web-memory-no-fabricated-signal`). Les
+lignes de la matrice de `BACKEND-CAPABILITIES.md` §4 sont dès lors **toutes produites ou
+vérifiées à leur état livré pour ce target** : les lignes que les phases de ce registre
+couvrent — input, interactions et fenêtre, inventaires, gamepads, `platformAccess` et les trois
+cibles de capture — portent chacune leur ligne de registre ou leur statement de phase ci-dessus,
+les lignes livrées avant la création du registre (`lifecycle`, `surface metrics`) portent les
+statements de leurs propres phases de la roadmap, et la dernière ligne en attente est fermée.
+§8 rappelle qu’« une ligne manquante empêche l’adapter d’être déclaré supporté » : la liste
+restante est vide, et la déclaration « supported » de l’adapter Web n’est plus bloquée par ce
+registre.
 
 ## 5. Références
 

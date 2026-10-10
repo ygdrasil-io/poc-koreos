@@ -15,6 +15,11 @@ const REGISTRY_HEADER =
 /** The mapping header of `contracts/evidence.tsv`, which the producer re-reads. */
 const MAPPING_HEADER = 'contractId\ttarget\tkind\tevidenceId\ttestClass\ttestName';
 
+/** The header of the per-engine exclusion files `contracts/engine-exclusions/<engine>.tsv`. */
+const EXCLUSION_HEADER = 'contractId\ttarget\tcause';
+/** The targets one exclusion row can scope a contract to; `*` covers both Kotlin targets. */
+const EXCLUSION_TARGETS = ['js', 'wasmJs', '*'];
+
 /**
  * The consumer of these documents is `ContractEvidence.readAndValidate`, which requires this exact
  * schema, field set and evidence identity — the shape `ContractEvidence.create` writes.
@@ -82,13 +87,22 @@ export async function resolveRepositoryCommit() {
 }
 
 /**
- * Writes one canonical JSON per active browser contract of `target`.
+ * Writes one canonical JSON per active browser contract of `target` that this engine evidences.
  *
  * The documents are built from the registry and the mapping file, never from the JUnit report titles:
  * a scenario the registry declares but no mapping row names is an error here rather than a silently
  * missing entry, and a mapped testcase that did not pass is an error rather than a `Passed` claim.
  * No JUnit report, Playwright launch or repository command is read when no active contract requires
  * this target.
+ *
+ * `exclusionsPath` names the engine's exclusion file (`contracts/engine-exclusions/<engine>.tsv`),
+ * the same data the validator's per-engine invocation subtracts from its expected set. The exclusion
+ * granularity is the contract: a contract excluded for this engine and target produces NO document —
+ * a partial document cannot exist, because the validator requires every declared scenario and
+ * sentinel of a contract in its artifact. Both directions of a stale exclusion fail instead of
+ * passing silently: an excluded test whose contract is still expected fails completeness naming the
+ * contract and the engine, and an exclusion whose mapping the run fully covers (every mapped
+ * testcase ran and passed) would silently drop producible evidence and is refused the same way.
  */
 export async function generateContractEvidence({
   target,
@@ -100,6 +114,7 @@ export async function generateContractEvidence({
   commit,
   registryPath,
   mappingPath,
+  exclusionsPath,
 }) {
   requireValue(target, 'target');
   requireValue(engine, 'engine');
@@ -110,8 +125,16 @@ export async function generateContractEvidence({
     throw new Error(`browser contract evidence requires one of ${EXPECTED_TARGETS.join(', ')}: ${target}`);
   }
 
-  const contracts = await readActiveContracts(registryPath, target);
+  const { contracts, registryIds } = await readRegistry(registryPath, target);
   if (contracts.length === 0) return [];
+  const exclusions = exclusionsPath === undefined
+    ? []
+    : await readEngineExclusions(exclusionsPath, registryIds);
+  const excluded = new Set(
+    exclusions
+      .filter((row) => row.target === target || row.target === '*')
+      .map((row) => row.contractId),
+  );
   const mappings = await readMappings(mappingPath);
   const junit = await readJUnitSummary(junitDirectory);
   const resolvedVersion = version ?? await resolveEngineVersion(engine);
@@ -120,6 +143,14 @@ export async function generateContractEvidence({
   if (!GIT_SHA.test(resolvedCommit)) throw new Error(`commit must be a Git SHA: ${resolvedCommit}`);
   const bundle = await hashBundle(bundlePath);
 
+  for (const contractId of excluded) {
+    if (!contracts.some((contract) => contract.contractId === contractId)) {
+      throw new Error(
+        `exclusion names a contract that is not active on this target: ${contractId} (${target} on ${engine})`,
+      );
+    }
+  }
+
   const written = [];
   for (const contract of contracts) {
     const targetMappings = mappings.filter(
@@ -127,13 +158,27 @@ export async function generateContractEvidence({
     );
     const mappingErrors = validateTargetMappings(contract, target, targetMappings);
     if (mappingErrors.length > 0) throw new Error(mappingErrors.join('\n'));
+    const where = `${contract.contractId}[${target}] on ${engine}`;
+    if (excluded.has(contract.contractId)) {
+      const fullyCovered = targetMappings.every((mapping) => {
+        const status = junit.cases.get(`${mapping.testClass}#${mapping.testName}`);
+        return status === 'passed';
+      });
+      if (fullyCovered) {
+        throw new Error(
+          `exclusion drops fully covered evidence: every mapped testcase of ${contract.contractId}[${target}] `
+            + `ran and passed on ${engine}; remove the exclusion row`,
+        );
+      }
+      continue;
+    }
     for (const mapping of targetMappings) {
       const status = junit.cases.get(`${mapping.testClass}#${mapping.testName}`);
       if (status === undefined) {
-        throw new Error(`mapped testcase is missing: ${mapping.testClass}#${mapping.testName}`);
+        throw new Error(`mapped testcase is missing: ${mapping.testClass}#${mapping.testName} (${where})`);
       }
       if (status !== 'passed') {
-        throw new Error(`mapped testcase did not pass: ${mapping.testClass}#${mapping.testName} (${status})`);
+        throw new Error(`mapped testcase did not pass: ${mapping.testClass}#${mapping.testName} (${status}) (${where})`);
       }
     }
     const document = {
@@ -200,25 +245,63 @@ function byIdentity(field) {
   };
 }
 
-/** The active contracts of the registry whose `requiredTargets` contain `target`. */
-async function readActiveContracts(registryPath, target) {
+/**
+ * The registry rows the producer reads: the active contracts whose `requiredTargets` contain
+ * `target`, and every declared contract id — the exclusion file is validated against the latter,
+ * so a row naming a contract the registry does not declare fails instead of being ignored.
+ */
+async function readRegistry(registryPath, target) {
   const rows = await readTable(registryPath, REGISTRY_HEADER, 'contract registry');
-  return rows
-    .map(({ columns, number }) => {
-      if (columns.length !== 11) throw new Error(`${registryPath} line ${number}: expected 11 columns`);
-      const [contractId, status, , , , oracle, scenarios, requiredTargets, , sentinels] = columns;
-      if (!CONTRACT_ID.test(contractId)) {
-        throw new Error(`${registryPath} line ${number}: invalid contractId: ${contractId}`);
-      }
-      if (status !== 'active') return null;
-      if (oracle === 'O4') throw new Error(`${contractId}: uses O4 and requires differential evidence`);
-      if (!EXPECTED_ORACLES.includes(oracle)) {
-        throw new Error(`${contractId}: must use oracle O1, O2 or O3`);
-      }
-      if (!list(requiredTargets).includes(target)) return null;
-      return { contractId, oracle, scenarios: list(scenarios), sentinels: list(sentinels) };
-    })
-    .filter((contract) => contract !== null);
+  const registryIds = new Set();
+  const contracts = [];
+  for (const { columns, number } of rows) {
+    if (columns.length !== 11) throw new Error(`${registryPath} line ${number}: expected 11 columns`);
+    const [contractId, status, , , , oracle, scenarios, requiredTargets, , sentinels] = columns;
+    if (!CONTRACT_ID.test(contractId)) {
+      throw new Error(`${registryPath} line ${number}: invalid contractId: ${contractId}`);
+    }
+    registryIds.add(contractId);
+    if (status !== 'active') continue;
+    if (oracle === 'O4') throw new Error(`${contractId}: uses O4 and requires differential evidence`);
+    if (!EXPECTED_ORACLES.includes(oracle)) {
+      throw new Error(`${contractId}: must use oracle O1, O2 or O3`);
+    }
+    if (list(requiredTargets).includes(target)) {
+      contracts.push({ contractId, oracle, scenarios: list(scenarios), sentinels: list(sentinels) });
+    }
+  }
+  return { contracts, registryIds };
+}
+
+/**
+ * The exclusion rows of one engine's file: `contractId[tab]target[tab]cause`, where the target is
+ * `js`, `wasmJs` or `*` and the cause is the recorded engine fact the row rests on. Every row must
+ * name a contract the registry declares; a row scoped to the other target is this run's silence,
+ * not this run's exclusion, and is simply not applied.
+ */
+async function readEngineExclusions(path, registryIds) {
+  const rows = await readTable(path, EXCLUSION_HEADER, 'engine contract exclusions');
+  const exclusions = [];
+  const seen = new Set();
+  for (const { columns, number } of rows) {
+    if (columns.length !== 3) throw new Error(`${path} line ${number}: expected 3 columns`);
+    const [contractId, target, cause] = columns;
+    if (!CONTRACT_ID.test(contractId)) {
+      throw new Error(`${path} line ${number}: invalid contractId: ${contractId}`);
+    }
+    if (!EXCLUSION_TARGETS.includes(target)) {
+      throw new Error(`${path} line ${number}: target must be one of ${EXCLUSION_TARGETS.join(', ')}: ${target}`);
+    }
+    if (cause.trim().length === 0) throw new Error(`${path} line ${number}: the cause must not be blank`);
+    const key = `${contractId}\t${target}`;
+    if (seen.has(key)) throw new Error(`${path} line ${number}: duplicate exclusion: ${contractId} for ${target}`);
+    seen.add(key);
+    if (!registryIds.has(contractId)) {
+      throw new Error(`${path} line ${number}: exclusion names a contract the registry does not declare: ${contractId}`);
+    }
+    exclusions.push({ contractId, target, cause });
+  }
+  return exclusions;
 }
 
 async function readMappings(mappingPath) {
@@ -457,6 +540,7 @@ export async function main(argumentsList) {
     commit: argumentsByName.get('--commit'),
     registryPath: argumentsByName.get('--contracts'),
     mappingPath: argumentsByName.get('--mapping'),
+    exclusionsPath: argumentsByName.get('--engine-exclusions'),
   });
   for (const artifact of written) console.log(`contract evidence: ${artifact}`);
 }
