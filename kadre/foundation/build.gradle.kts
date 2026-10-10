@@ -11,6 +11,10 @@ kotlin {
     jvm()
     js { browser() }
     wasmJs { browser() }
+    iosArm64()
+    iosSimulatorArm64()
+    tvosArm64()
+    tvosSimulatorArm64()
     explicitApi()
     compilerOptions {
         freeCompilerArgs.add("-Xconsistent-data-class-copy-visibility")
