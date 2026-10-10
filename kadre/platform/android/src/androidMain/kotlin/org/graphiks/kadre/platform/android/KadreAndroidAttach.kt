@@ -19,6 +19,7 @@ import org.graphiks.kadre.diagnostics.KadreFailure
 import org.graphiks.kadre.diagnostics.KadrePlatform
 import org.graphiks.kadre.diagnostics.KadreResourceKind
 import org.graphiks.kadre.diagnostics.KadreResult
+import org.graphiks.kadre.internal.runtime.RuntimeFailureReporter
 import org.graphiks.kadre.internal.runtime.RuntimeHostController
 import org.graphiks.kadre.internal.runtime.RuntimeHostSurface
 import org.graphiks.kadre.internal.runtime.RuntimePrimarySurface
@@ -177,10 +178,15 @@ private fun View.viewAttachRequest(
  *    réservation) puis `Failure(reason)` — plus jamais d'exception sur ce chemin (le gap de
  *    sûreté d'exception de la phase 0 est comblé).
  *
- * Le terminal du binding (view détachée, owner détruit) emprunte la proposition d'arrêt de
- * host du runtime : [RuntimeHostController.detach] publie l'état détaché et propose
- * `SessionOutcome.Stopped(SessionStopReason.HostDetached)` à la session — aucun chemin
- * parallèle n'est inventé. Les deux callbacks que le binding reçoit sont des wrappers
+ * Les publications ordinaires du réducteur deviennent l'état lifecycle du runtime
+ * (`RuntimeHostController.updateLifecycle`, RUN-004 — le modèle de la couture web) en plus
+ * de l'état de la surface ; la fenêtre post-detach est absorbée
+ * ([propagateToRuntime]). Le terminal du binding (view détachée, owner détruit) emprunte la
+ * proposition d'arrêt de host du runtime : [RuntimeHostController.detach] publie l'état
+ * détaché et propose `SessionOutcome.Stopped(SessionStopReason.HostDetached)` à la session —
+ * aucun chemin parallèle n'est inventé, et une proposition perdue est signalée sur le canal
+ * de diagnostic de la couture ([AndroidAttachDiagnostics]) plutôt qu'avalaée en silence.
+ * Les deux callbacks que le binding reçoit sont des wrappers
  * never-throw : un callback qui lance ne peut ni court-circuiter `onTerminal` ni remonter
  * dans la boucle lifecycle du host (roadmap §3.3 — les callbacks ordinaires ne suspendent
  * pas et ne lancent pas directement le code applicatif).
@@ -242,14 +248,16 @@ internal object AndroidHostSession {
                         primarySurface = RuntimePrimarySurface(surface, surface::close),
                     )
                 },
-                initialLifecycleState = initialLifecycleState(initial),
+                initialLifecycleState = lifecycleStateOf(initial),
+                failureReporter = AndroidAttachDiagnostics,
                 sessionObserver = RuntimeSessionObserver { _, _ -> reservation.release() },
             )
 
             AndroidAttachForm.View -> RuntimeHostController.withPrimarySurface(
                 platform = KadrePlatform.Android,
                 sessionRevocationHandler = RuntimeSessionRevocationHandler { _ -> binding?.teardown() },
-                initialLifecycleState = initialLifecycleState(initial),
+                initialLifecycleState = lifecycleStateOf(initial),
+                failureReporter = AndroidAttachDiagnostics,
                 sessionObserver = RuntimeSessionObserver { _, _ -> reservation.release() },
                 primarySurfaceFactory = { id ->
                     val surface = RuntimeHostSurface(id, initialSurfaceState(view, initial))
@@ -268,8 +276,22 @@ internal object AndroidHostSession {
                 try {
                     when (decision) {
                         is AndroidLifecycleDecision.Ignore -> Unit
-                        is AndroidLifecycleDecision.Publish -> publish(decision.snapshot, sessionSurface)
-                        is AndroidLifecycleDecision.Terminate -> publish(decision.snapshot, sessionSurface)
+
+                        // RUN-004 : la publication ordinaire devient l'état lifecycle du
+                        // runtime (la couture web : `WebLifecycleReducer.Update` →
+                        // `controller.updateLifecycle`), puis l'état de la surface.
+                        is AndroidLifecycleDecision.Publish -> {
+                            propagateToRuntime(decision.snapshot) { state ->
+                                controller.updateLifecycle(state)
+                            }
+                            publish(decision.snapshot, sessionSurface)
+                        }
+
+                        is AndroidLifecycleDecision.Terminate ->
+                            // Le côté lifecycle du terminal appartient à `detach()`
+                            // (l'arrêt host du runtime) ; ici, seul l'instantané canonique
+                            // de la surface est publié, avant l'événement terminal.
+                            publish(decision.snapshot, sessionSurface)
                     }
                 } catch (cause: Throwable) {
                     // Absorbé : un callback ordinaire ne lance jamais dans la boucle lifecycle
@@ -278,17 +300,20 @@ internal object AndroidHostSession {
                 }
             },
             onTerminal = {
+                // Teardown et libération d'abord — locaux, idempotents, un lancement éventuel
+                // y est absorbé sans rien perdre d'autre.
                 try {
                     binding?.teardown() // aussi couvert par la révocation — idempotent
                     reservation.release() // la terminaison effective libère l'ownership — idempotent
-                    // La proposition d'arrêt de host du runtime : `Stopped(HostDetached)`.
-                    // Avant `controller.attach` (relecture terminale pendant l'install), elle
-                    // marque seulement le contrôleur détaché et l'attach échouera `Closed(Host)`.
-                    controller.detach()
                 } catch (cause: Throwable) {
-                    // Absorbé : le terminal doit toujours traverser — teardown, libération et
-                    // proposition d'arrêt sont déjà individuellement idempotents et protégés.
+                    // Absorbé : le terminal doit toujours traverser vers la proposition d'arrêt.
                 }
+                // La proposition d'arrêt de host du runtime : `Stopped(HostDetached)`.
+                // Avant `controller.attach` (relecture terminale pendant l'install), elle
+                // marque seulement le contrôleur détaché et l'attach échouera `Closed(Host)`.
+                // Si elle est perdue (detach lançant), la perte est SIGNALÉE sur le canal de
+                // reporting — jamais avalée en silence.
+                proposeHostStop(detach = { controller.detach() }, reporter = AndroidAttachDiagnostics)
             },
         )
         binding = lifecycleBinding
@@ -310,6 +335,44 @@ internal object AndroidHostSession {
     /** La surface de la session, créée par la factory de composants au moment de l'attach. */
     private class SessionSurface {
         var surface: RuntimeHostSurface? = null
+    }
+
+    /**
+     * RUN-004 : l'instantané d'une publication ordinaire du réducteur devient l'état
+     * lifecycle du runtime — la même publication que la couture web
+     * (`WebLifecycleReducer.Update` → `controller.updateLifecycle`). Le mapping est celui du
+     * runtime : Foreground signifie au moins STARTED, Active exige RESUMED
+     * ([lifecycleStateOf]).
+     *
+     * La fenêtre post-detach est absorbée : `RuntimeHostController.updateLifecycle` exige un
+     * host non détaché et le terminal peut l'avoir déjà emporté (le verrou du réducteur
+     * l'absorbe aussi côté publications) — une publication tardive ne doit ni lancer ni
+     * ressusciter l'host. Le terminal n'emprunte PAS ce chemin : son côté lifecycle est la
+     * proposition d'arrêt `detach()` ([proposeHostStop]), comme la couture web.
+     */
+    internal fun propagateToRuntime(snapshot: AndroidHostSnapshot, update: (LifecycleState) -> Unit) {
+        try {
+            update(lifecycleStateOf(snapshot))
+        } catch (cause: IllegalStateException) {
+            // Le require(!detached) du runtime : le terminal a déjà gagné — absorbé, la
+            // session est déjà en route vers `Stopped(HostDetached)`.
+        }
+    }
+
+    /**
+     * La proposition d'arrêt terminal au runtime (`Stopped(HostDetached)`). Si `detach`
+     * lance, la perte est SIGNALÉE sur le canal de reporting du runtime — jamais avalée en
+     * silence : la réservation est déjà libérée à ce stade, le diagnostic reste la seule
+     * trace d'une session qui ne terminerait pas toute seule. Un reporter qui lance à son
+     * tour est absorbé (la convention du runtime : `runCatching { failureReporter.report }`)
+     * — aucun chemin ne remonte dans la boucle lifecycle du host.
+     */
+    internal fun proposeHostStop(detach: () -> Unit, reporter: RuntimeFailureReporter) {
+        try {
+            detach()
+        } catch (cause: Throwable) {
+            runCatching { reporter.report(cause) }
+        }
     }
 
     /**
@@ -335,8 +398,8 @@ internal object AndroidHostSession {
         }
     }
 
-    /** L'état lifecycle initial du contrôleur, dérivé du même instantané honnête que la surface. */
-    private fun initialLifecycleState(snapshot: AndroidHostSnapshot): LifecycleState = LifecycleState(
+    /** L'état lifecycle du runtime pour un instantané — initial ET publications (RUN-004). */
+    private fun lifecycleStateOf(snapshot: AndroidHostSnapshot): LifecycleState = LifecycleState(
         attachment = if (snapshot.attachment) AttachmentState.Attached else AttachmentState.Detached,
         visibility = if (snapshot.foreground) VisibilityState.Foreground else VisibilityState.Background,
         activation = if (snapshot.active) ActivationState.Active else ActivationState.Inactive,
@@ -375,4 +438,30 @@ internal object AndroidHostSession {
             revision = SurfaceRevision(0L),
         )
     }
+}
+
+/**
+ * Le canal de diagnostic de la couture d'attach — l'[RuntimeFailureReporter] que le runtime
+ * reçoit pour chaque session construite ici : les throwables que le runtime reporte
+ * (application, composants) et la perte éventuelle d'une proposition d'arrêt terminal
+ * ([AndroidHostSession.proposeHostStop]) y sont ENREGISTRÉS, jamais avalés en silence.
+ *
+ * Journal borné (les plus récents gagnent) et thread-safe : le runtime y reporte depuis les
+ * contexts de coroutine des sessions, pas seulement depuis le thread principal de l'attach.
+ */
+internal object AndroidAttachDiagnostics : RuntimeFailureReporter {
+    private val lock = Any()
+    private val recorded = ArrayDeque<Throwable>()
+
+    override fun report(cause: Throwable) {
+        synchronized(lock) {
+            recorded.addLast(cause)
+            while (recorded.size > JOURNAL_CAPACITY) recorded.removeFirst()
+        }
+    }
+
+    /** L'instantané du journal — pour l'observation (diagnostics, tests hôtes). */
+    internal fun failures(): List<Throwable> = synchronized(lock) { recorded.toList() }
+
+    private const val JOURNAL_CAPACITY = 16
 }
