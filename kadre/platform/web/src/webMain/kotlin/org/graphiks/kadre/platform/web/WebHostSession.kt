@@ -608,6 +608,17 @@ internal class WebHostSession(
         WebGamepadEffectReporting.reporter = failureReporter
         val gamepadPort = gamepads.openPort()
         ownership.observeGamepadPort(gamepadPort)
+        // The browsing context's own capture control plane, probed once at this construction: the
+        // secure-context fact, the picker and processor presence, the permission readback and the
+        // canvas kind of the attach element freeze into the port's initial snapshot. The element
+        // accessor is the session's own — the same untyped reference the surface lease lends — read
+        // live on every probe, so a port whose element is gone lends none.
+        val captureDom = webCaptureDom(element = { port.leasedElement })
+        val capturePort = WebCapturePort(
+            dom = captureDom,
+            primarySurfaceElementIsCanvas = captureDom.canvasForSurface() != null,
+        )
+        ownership.observeCapturePort(capturePort)
         return when (windows) {
             // No provider, no seam: the branch keeps the no-window-provider construction it has
             // always had, the phase-6 display and gamepad ports forwarded through it exactly as
@@ -621,6 +632,9 @@ internal class WebHostSession(
                 failureReporter = failureReporter,
                 primarySurfaceFactory = { id ->
                     val surface = WebHostSurface(id, port, ownership, failureReporter)
+                    // The capture port's Surface route resolves a target id against this session's
+                    // own primary surface — the one surface the attach element's canvas belongs to.
+                    capturePort.registerPrimarySurface(id)
                     // The ownership releases the target's bridges before the runtime closes the surface, so
                     // it has to be able to stop the surface from admitting anything new in between.
                     ownership.observeSurface(surface::onOwnershipRevoked)
@@ -629,6 +643,7 @@ internal class WebHostSession(
                 },
                 displayPort = displayPort,
                 gamepadPort = gamepadPort,
+                capturePort = capturePort,
             )
 
             else -> RuntimeHostController.withComponents(
@@ -645,6 +660,9 @@ internal class WebHostSession(
                 failureReporter = failureReporter,
                 componentsFactory = { _, _ ->
                     val surface = WebHostSurface(RuntimeProcessIds.nextSurfaceId(), port, ownership, failureReporter)
+                    // The same registration the direct-attachment path performs: the components
+                    // path's primary surface is the capture port's own Surface resolution.
+                    capturePort.registerPrimarySurface(surface.id)
                     ownership.observeSurface(surface::onOwnershipRevoked)
                     onSurfaceCreated(surface)
                     RuntimeSessionComponents(
@@ -652,6 +670,7 @@ internal class WebHostSession(
                         primarySurface = RuntimePrimarySurface(surface, surface::detach),
                         displayPort = displayPort,
                         gamepadPort = gamepadPort,
+                        capturePort = capturePort,
                     )
                 },
             )
@@ -667,6 +686,7 @@ internal class WebHostOwnership(
     private var reservationReleased: Boolean = false
     private var revokeAdmission: (() -> Unit)? = null
     private var gamepadPort: WebGamepadPort? = null
+    private var capturePort: AutoCloseable? = null
 
     /**
      * Registers the surface this ownership closes the target's bridges for.
@@ -691,6 +711,17 @@ internal class WebHostOwnership(
         this.gamepadPort = gamepadPort
     }
 
+    /**
+     * Registers the capture projection [createController] opened, so every release path closes it —
+     * the gamepad's reasoning verbatim: the port is opened before any of the attach steps that can
+     * fail, and until it is registered here a failed attach would orphan it. The close is
+     * idempotent on both ends: the port's own is, and the runtime's components close may close the
+     * same port again on a clean stop.
+     */
+    fun observeCapturePort(capturePort: AutoCloseable) {
+        this.capturePort = capturePort
+    }
+
     fun releaseAfterAttachFailure() {
         releasePort()
         releaseReservation()
@@ -708,6 +739,7 @@ internal class WebHostOwnership(
         // for a session that never existed. The close is idempotent: the hub's own is, and the
         // runtime's components close may close the same port again on a clean stop.
         runCatching { gamepadPort?.close() }
+        runCatching { capturePort?.close() }
         runCatching { port.release() }
     }
 

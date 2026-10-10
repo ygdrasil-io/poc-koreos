@@ -17,8 +17,8 @@ kotlin {
 }
 
 val jvmMain = kotlin.targets.getByName("jvm").compilations.getByName("main")
-val webContractIds = listOf("BCK-001", "BCK-002", "BCK-003", "BCK-004", "BCK-005", "BCK-006", "BCK-007", "BCK-008", "BCK-009", "INT-002", "INT-003", "INT-004")
-val uikitContractIds = listOf("BCK-010")
+val webContractIds = listOf("BCK-001", "BCK-002", "BCK-003", "BCK-004", "BCK-005", "BCK-006", "BCK-007", "BCK-008", "BCK-009", "BCK-010", "BCK-011", "INT-002", "INT-003", "INT-004")
+val uikitContractIds = listOf("BCK-012")
 val appKitContractIds = listOf(
     "APK-001", "APK-002", "APK-003", "APK-004", "APK-005", "APK-006",
     "APK-007", "APK-008", "APK-009", "APK-010", "APK-011", "APK-012",
@@ -278,7 +278,7 @@ val browserContractEvidenceTasks = listOf("js", "wasmJs").map { target ->
     }
 }
 
-// UIKit driver contracts (BCK-010) : preuve O3 produite par xcodebuild sur simulateurs
+// UIKit driver contracts (BCK-012) : preuve O3 produite par xcodebuild sur simulateurs
 // (:kadre:contracts:driver:uikit:simulatorTests), exportée en JUnit par
 // tools/xctest_to_junit.py. Miroir du bloc AppKit ci-dessus, par target famille.
 // macOS-only : aucune de ces tâches n'est câblée dans `check` — la gate obligatoire est
@@ -365,6 +365,87 @@ val generateUikitContractEvidence by tasks.registering {
     description = "Generates and validates evidence for every active UIKit simulator contract."
     dependsOn(uikitContractEvidenceTasks)
     dependsOn(uikitContractValidateTasks)
+
+val androidContractIds = listOf("AND-001")
+val androidContractRegistry = rootProject.file("kadre/contracts/registry/contracts.tsv")
+val androidContractMappings = listOf(
+    rootProject.file("kadre/contracts/driver/android/contracts/evidence.tsv"),
+)
+// Racine des artefacts du producteur : en exécution JUnit le validateur lit l'artefact à
+// `<racine>/contract-evidence/<contractId>.json` (la copie de gate écrite par le driver Android)
+// et le JUnit associé relativement à la même racine.
+val androidContractEvidenceDirectory = rootProject.file("kadre/contracts/driver/android/build")
+val androidEnginesFile = rootProject.layout.projectDirectory
+    .file("kadre/contracts/driver/android/build/contract-evidence/android/engines.txt")
+// Lecture paresseuse : la liste des moteurs n'existe qu'après un smoke Android sur un émulateur
+// démarré — la configuration ne doit pas échouer en son absence (le doFirst du gate échoue
+// alors avec le message actionnable). Les moteurs alimentent des répertoires JUnit CONCRETS :
+// en exécution JUnit, le validateur rejette le placeholder {engine} (réservé au mode browser).
+val androidContractEngines = providers.fileContents(androidEnginesFile).asText
+    .map { engines ->
+        engines.split(',')
+            .map(String::trim)
+            .filter(String::isNotBlank)
+            .also { parsedEngines ->
+                require(parsedEngines.isNotEmpty()) {
+                    "Android evidence engines file must contain one or more comma-separated engines"
+                }
+            }
+            .distinct()
+    }
+val androidJunitReportRelativeDirectories = androidContractEngines.map { engines ->
+    engines.joinToString(separator = System.getProperty("path.separator")) { engine ->
+        "test-results/android/$engine"
+    }
+}
+val validateAndroidContractEvidence by tasks.registering(JavaExec::class) {
+    group = "verification"
+    description = "Validates every active Android contract evidence artifact."
+    dependsOn("jvmMainClasses")
+    // Le smoke Android est le seul producteur de ces artefacts : dependsOn, jamais mustRunAfter
+    // (piège des phases web — un gate qui valide des artefacts périmés n'est pas un gate).
+    dependsOn(":kadre:contracts:driver:android:androidDeviceSmoke")
+    doFirst {
+        require(androidEnginesFile.asFile.exists()) {
+            "No Android evidence engines file — run :kadre:contracts:driver:android:androidDeviceSmoke on a booted emulator first"
+        }
+    }
+    classpath(jvmMain.output.allOutputs, jvmMain.runtimeDependencyFiles)
+    mainClass.set("org.graphiks.kadre.contracts.ValidateContractEvidenceKt")
+    args(
+        androidContractRegistry.absolutePath,
+        androidContractMappings.joinToString(separator = ",") { it.absolutePath },
+        contractEvidenceCommit.get(),
+        "android",
+        "junit",
+        androidContractIds.joinToString(separator = ","),
+        androidContractEvidenceDirectory.absolutePath,
+    )
+    // Provider<String> évalué à l'exécution, après le doFirst — moteurs réels du device.
+    // Un `args(...)` direct stringifierait le Provider (pas d'unpacking) ; le
+    // CommandLineArgumentProvider est le mécanisme paresseux canonique de JavaExec.
+    argumentProviders.add(
+        CommandLineArgumentProvider {
+            listOf(androidJunitReportRelativeDirectories.get())
+        },
+    )
+    inputs.file(androidContractRegistry)
+    inputs.files(androidContractMappings)
+    inputs.dir(rootProject.file("kadre/contracts/driver/android/build/contract-evidence"))
+    inputs.property("contractCommit", contractEvidenceCommit)
+    inputs.property("contractTarget", "android")
+    inputs.property("contractExecutions", "junit")
+    inputs.property("contractGateIds", androidContractIds)
+}
+
+// Aggregate Android : le branchement CI (job android-contracts) est la phase 10.
+// `:kadre:check` ne dépend PAS de ce task — pas d'émulateur sur les runners actuels ;
+// l'aggregate exige un émulateur démarré (le smoke y relance l'instrumentation consumer).
+tasks.register("androidContractsCheck") {
+    group = "verification"
+    description = "Registry + Android contract evidence gate (requires a booted emulator)."
+    dependsOn(validateContractRegistry)
+    dependsOn(validateAndroidContractEvidence)
 }
 
 tasks.named("check") {

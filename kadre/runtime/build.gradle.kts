@@ -1,6 +1,7 @@
 @file:OptIn(org.jetbrains.kotlin.gradle.ExperimentalWasmDsl::class)
 
 import org.gradle.jvm.tasks.Jar
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import org.jetbrains.kotlin.gradle.tasks.BaseKotlinCompile
 import org.jetbrains.kotlin.gradle.tasks.Kotlin2JsCompile
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompileCommon
@@ -8,6 +9,7 @@ import java.io.File
 
 plugins {
     id("org.jetbrains.kotlin.multiplatform")
+    id("com.android.kotlin.multiplatform.library")
     id("maven-publish")
 }
 
@@ -17,6 +19,9 @@ val foundationJvmJar = project(":kadre:foundation").tasks.named<Jar>("jvmJar")
 val foundationProject = project(":kadre:foundation")
 val foundationAllMetadataJar = foundationProject.tasks.named<Jar>("allMetadataJar")
 val foundationCommonMainMetadata = foundationProject.layout.buildDirectory.dir("classes/kotlin/metadata/commonMain")
+val foundationAndroidClassesJar = foundationProject.layout.buildDirectory.file(
+    "intermediates/compile_library_classes_jar/androidMain/bundleAndroidMainClassesToCompileJar/classes.jar",
+)
 val foundationJsMain = foundationProject.layout.buildDirectory.dir("classes/kotlin/js/main")
 val foundationWasmJsMain = foundationProject.layout.buildDirectory.dir("classes/kotlin/wasmJs/main")
 val runtimeJsMain = layout.buildDirectory.dir("classes/kotlin/js/main")
@@ -25,6 +30,16 @@ val runtimeWasmJsMain = layout.buildDirectory.dir("classes/kotlin/wasmJs/main")
 kotlin {
     applyDefaultHierarchyTemplate()
     jvmToolchain(25)
+    android {
+        compileSdk = 35
+        minSdk = 24
+        namespace = "org.graphiks.kadre.internal.runtime"
+        compilerOptions {
+            jvmTarget.set(JvmTarget.JVM_17)
+        }
+        withHostTest {
+        }
+    }
     jvm()
     js { browser() }
     wasmJs { browser() }
@@ -35,6 +50,15 @@ kotlin {
     explicitApi()
 
     sourceSets {
+        val jvmCommonMain by creating {
+            dependsOn(commonMain.get())
+            // Emplacement du brief : `src/jvmCommon/kotlin` (le défaut du source set
+            // serait `src/jvmCommonMain/kotlin`).
+            kotlin.srcDir("src/jvmCommon/kotlin")
+        }
+        jvmMain.get().dependsOn(jvmCommonMain)
+        androidMain.get().dependsOn(jvmCommonMain)
+
         commonMain.dependencies {
             api(project(":kadre:foundation"))
         }
@@ -53,6 +77,18 @@ tasks.withType<BaseKotlinCompile>().configureEach {
     if (name.endsWith("Jvm")) {
         dependsOn(foundationJvmJar)
         friendPaths.from(foundationJvmJar.flatMap(Jar::getArchiveFile))
+    }
+
+    // Friend-wiring : le runtime voit les internals de foundation. Pour Android, la
+    // compilation (main et host test) a besoin des classes Android de foundation comme
+    // friend. On friende le classes.jar AGP (`bundleAndroidMainClassesToCompileJar`) —
+    // le même fichier que le classpath, exactement comme le friend jvmJar de la cible
+    // jvm ; le répertoire brut `classes/kotlin/android/main` (sortie sondée, présente)
+    // ne suffit pas à lui seul.
+    if (name == "compileAndroidMain" || name == "compileAndroidHostTest") {
+        dependsOn(foundationProject.tasks.named("compileAndroidMain"))
+        dependsOn(foundationProject.tasks.named("bundleAndroidMainClassesToCompileJar"))
+        friendPaths.from(foundationAndroidClassesJar)
     }
 }
 

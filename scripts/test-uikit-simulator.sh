@@ -51,13 +51,13 @@ run_family() {
     ios)
       require_destination "$IOS_DESTINATION" "iOS"
       run_gradle \
-        ":kadre:contracts:validator:generateUikitBCK010IosSimulatorArm64ContractEvidence" \
+        ":kadre:contracts:validator:generateUikitBCK012IosSimulatorArm64ContractEvidence" \
         ":kadre:contracts:validator:validateIosSimulatorArm64UikitContractEvidence"
       ;;
     tvos)
       require_destination "$TVOS_DESTINATION" "tvOS"
       run_gradle \
-        ":kadre:contracts:validator:generateUikitBCK010TvosSimulatorArm64ContractEvidence" \
+        ":kadre:contracts:validator:generateUikitBCK012TvosSimulatorArm64ContractEvidence" \
         ":kadre:contracts:validator:validateTvosSimulatorArm64UikitContractEvidence"
       ;;
     *) echo "FAIL: famille inconnue '$1'" >&2; exit 1;;
@@ -71,7 +71,7 @@ case "$FAMILY" in
     # Les slices appareil compilent et se lient (pas une preuve d'exécution — roadmap §7).
     run_gradle ":kadre:platform:uikit:linkDebugFrameworkIosArm64" ":kadre:platform:uikit:linkDebugFrameworkTvosArm64"
     for target in iosSimulatorArm64 tvosSimulatorArm64; do
-      artifact="kadre/contracts/driver/uikit/build/contract-evidence/$target/contract-evidence/BCK-010.json"
+      artifact="kadre/contracts/driver/uikit/build/contract-evidence/$target/contract-evidence/BCK-012.json"
       [[ -f "$artifact" ]] || { echo "FAIL: artifact manquant: $artifact" >&2; exit 1; }
       echo "OK: $artifact"
     done

@@ -14,7 +14,7 @@ applications hôte Xcode réelles (`kadre/contracts/driver/uikit/KadreUikitDrive
 schemes `KadreUikitDriverIos` et `KadreUikitDriverTvOs`) qui lient le framework
 `KadreUikit` produit par `:kadre:platform:uikit` et exécutent `KadreUikitDriverTests`
 sur les simulateurs. La matrice toolchain **relevée** de cette première édition — ce sont
-les versions qui ont produit les documents de preuve `BCK-010`, pas des minima au-delà
+les versions qui ont produit les documents de preuve `BCK-012`, pas des minima au-delà
 d'eux-mêmes :
 
 - Kotlin **2.4.20** (Kotlin/Native), Gradle **9.8.0** ;
@@ -30,7 +30,7 @@ pont Kotlin/Obj-C : pour la même instance `UIWindow` reçue du hôte, le pont p
 wrappers Kotlin distincts (`===` faux) alors que `hashCode` coïncide. Toute comparaison
 d'identité Objective-C côté hôte passe donc par `NSObject.isEqual` — c'est la lecture
 qu'implémente `KadreUikitProbe.observe` (`view.window.isEqual(window)`), et c'est la
-règle que la sentinelle de `BCK-010` protège (`uikit-driver-window-membership-sentinel`).
+règle que la sentinelle de `BCK-012` protège (`uikit-driver-window-membership-sentinel`).
 
 ## 1. Lecture des colonnes
 
@@ -48,7 +48,7 @@ règle que la sentinelle de `BCK-010` protège (`uikit-driver-window-membership-
   que des membres toujours présents (`UIView.window`, `UIWindow.windowScene`,
   `UIView.bounds`, `UITraitCollection.displayScale`).
 - **runtime gate** — ce dont dépend la *publication* : un run xcodebuild sur le
-  simulateur de chaque famille (la preuve `BCK-010`), jamais une permission hôte.
+  simulateur de chaque famille (la preuve `BCK-012`), jamais une permission hôte.
 - **état absent** — ce qui n'est pas livré à ce stade, dit intégralement : tout le reste
   de la surface d'un adapter (attach, surface, input, IME, drop, displays, devices,
   capture) n'existe pas encore sur ce target — aucun module applicatif Kadre ne référence
@@ -61,7 +61,7 @@ règle que la sentinelle de `BCK-010` protège (`uikit-driver-window-membership-
 
 | feature | target | minimum déclaré | compile gate | runtime gate | état absent | tests |
 |---|---|---|---|---|---|---|
-| observation de conduite (sonde driver) | iosSimulatorArm64, tvosSimulatorArm64 | iOS 16.0 / tvOS 16.0 | `:kadre:platform:uikit:compileKotlin*` | BCK-010 (2 simulateurs) | tout le reste : non livré (attach, surface, input, IME, drop, displays, devices, capture) | `KadreUikitDriverTests` |
+| observation de conduite (sonde driver) | iosSimulatorArm64, tvosSimulatorArm64 | iOS 16.0 / tvOS 16.0 | `:kadre:platform:uikit:compileKotlin*` | BCK-012 (2 simulateurs) | tout le reste : non livré (attach, surface, input, IME, drop, displays, devices, capture) | `KadreUikitDriverTests` |
 
 La ligne se lit : `KadreUikitProbe.observe(window:view:)` publie une `KadreUikitObservation`
 copiée (appartenance à la fenêtre via `isEqual`, connexion de la scène, dimensions

@@ -14,7 +14,7 @@ final class KadreUikitDriverTests: XCTestCase {
         return f
     }
 
-    /// BCK-010 / uikit-driver-observes-real-window — la sonde Kotlin lit les MÊMES valeurs que Swift.
+    /// BCK-012 / uikit-driver-observes-real-window — la sonde Kotlin lit les MÊMES valeurs que Swift.
     func testKotlinProbeObservesRealWindow() throws {
         let f = try fixture()
         let window = try XCTUnwrap(f.window)
@@ -29,7 +29,7 @@ final class KadreUikitDriverTests: XCTestCase {
         XCTAssertEqual(observation.displayScale, Double(view.traitCollection.displayScale), accuracy: 0.001)
     }
 
-    /// BCK-010 / uikit-driver-reports-detached-view — une vue hors fenêtre est rapportée Detached.
+    /// BCK-012 / uikit-driver-reports-detached-view — une vue hors fenêtre est rapportée Detached.
     func testProbeReportsViewOutsideWindowAsDetached() throws {
         let f = try fixture()
         let window = try XCTUnwrap(f.window)
