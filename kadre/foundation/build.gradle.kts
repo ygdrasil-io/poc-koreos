@@ -1,13 +1,26 @@
 @file:OptIn(org.jetbrains.kotlin.gradle.ExperimentalWasmDsl::class)
 
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+
 plugins {
     id("org.jetbrains.kotlin.multiplatform")
+    id("com.android.kotlin.multiplatform.library")
     id("maven-publish")
 }
 
 kotlin {
     applyDefaultHierarchyTemplate()
     jvmToolchain(25)
+    android {
+        compileSdk = 35
+        minSdk = 24
+        namespace = "org.graphiks.kadre.foundation"
+        compilerOptions {
+            jvmTarget.set(JvmTarget.JVM_17)
+        }
+        withHostTest {
+        }
+    }
     jvm()
     js { browser() }
     wasmJs { browser() }
