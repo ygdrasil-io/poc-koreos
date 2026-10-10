@@ -4,6 +4,8 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.channels.BufferOverflow
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -279,8 +281,9 @@ internal class AndroidHostSurface(
      *    annulée pendant lui, et la cancellation se manifeste chez l'appelant après (le
      *    transfert retourne une `CancellationException` ; le chemin inline, sans point de
      *    suspension entre l'admission et la première instruction du block, laisse l'appelant
-     *    déjà annulé l'observer au prochain point de suspension — un appelant annulé AVANT
-     *    l'admission n'invoque rien, le `withLock` rejette d'abord).
+     *    annulé PENDANT le block l'observer au prochain point de suspension — un appelant
+     *    annulé AVANT l'admission n'invoque rien : `ensureActive` rejette sous le verrou,
+     *    avant la pose du bail).
      *
      * L'exception applicative du block se propage TELLE QUELLE — jamais enveloppée en
      * `KadreFailure` (la taxonomie n'admets pas ce mensonge) — et le `finally` rend le bail sur
@@ -291,6 +294,13 @@ internal class AndroidHostSurface(
         lock.withLock {
             admissionFailure()?.let { return it }
             if (leaseHeld) return KadreResult.Failure(KadreFailure.TemporarilyUnavailable(retryable = true))
+            // La cancellation précoce — la roadmap : « aucun callback après fermeture ou
+            // cancellation précoce ». Le moniteur ne lit pas la cancellation : un appelant
+            // déjà annulé doit être rejeté ICI, sous le verrou, avant la pose du bail — le
+            // chemin inline n'a ensuite AUCUN point de suspension avant la première
+            // instruction du block, et l'invocation démarrée, elle, s'achève (NonCancellable).
+            // Un rejet ici sort avant `leaseHeld = true` : le `finally` n'a rien à libérer.
+            currentCoroutineContext().ensureActive()
             leaseHeld = true
         }
         try {
@@ -343,12 +353,16 @@ internal class AndroidHostSurface(
      * §Phase 2 (metrics + redraw + l'accès natif borné). Idempotent : la même annonce republiée
      * est absorbée par le StateFlow.
      *
-     * « Jamais après la révocation » : une installation qui suit [close] est absorbée — les
-     * capabilities sont indisponibles au plus tard au détached, et rien ne les ressuscite.
+     * « Jamais après la révocation » — la double garde de l'admission (`detached` OU état
+     * publié détaché) : une installation qui suit [close] ou qui arrive dans la fenêtre de
+     * teardown (l'instantané détaché publié par le binding, le terminal pas encore passé) est
+     * absorbée — pas de promesse repeinte sur un état déjà détaché, et rien ne ressuscite.
      */
     internal fun observationInstalled() {
         lock.withLock {
-            if (detached) return
+            if (detached || mutableState.value.attachment == SurfaceAttachmentState.Detached) {
+                return
+            }
             mutableCapabilities.value = androidSurfaceCapabilities()
         }
     }

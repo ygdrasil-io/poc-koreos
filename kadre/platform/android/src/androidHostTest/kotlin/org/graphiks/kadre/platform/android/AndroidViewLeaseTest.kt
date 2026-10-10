@@ -1,6 +1,9 @@
 package org.graphiks.kadre.platform.android
 
 import java.util.concurrent.Executors
+import kotlin.coroutines.Continuation
+import kotlin.coroutines.suspendCoroutine
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineStart
@@ -172,7 +175,7 @@ class AndroidViewLeaseTest {
             val surface = surface(hostThread = main.seam, leasedView = { Any() })
             val lease = surface as AndroidViewLeasePort
             runBlocking {
-                val boom = LeaseApplicationException("boom")
+                val boom = LeaseApplicationException.boom()
 
                 val raised = runCatching { lease.lease { throw boom } }.exceptionOrNull()
 
@@ -244,6 +247,53 @@ class AndroidViewLeaseTest {
     }
 
     @Test
+    fun callerCancelledBeforeTheLeaseNeverStartsTheBlock() {
+        TestMainThread().use { main ->
+            val surface = surface(hostThread = main.seam, leasedView = { Any() })
+            val lease = surface as AndroidViewLeasePort
+            runBlocking {
+                var invoked = false
+                var parked: Continuation<Unit>? = null
+                val parkedSeen = CompletableDeferred<Unit>()
+                val seen = CompletableDeferred<Result<KadreResult<Unit>>>()
+                // Le caller s'installe sur le thread host (chemin inline) et s'y gare dans une
+                // suspension BRUTE (`suspendCoroutine`, invisible à la cancellation du job) :
+                // le test annule SON JOB pendant le park puis le laisse reprendre — l'appel du
+                // bail part dans une coroutine DÉJÀ annulée, exactement la « cancellation
+                // précoce » de la roadmap (« aucun callback après fermeture ou cancellation
+                // précoce »). (Le park dans `withContext(NonCancellable)` masquerait le job du
+                // caller : le contexte y porterait le job NonCancellable, toujours actif.)
+                val caller = launch(main.dispatcher) {
+                    suspendCoroutine<Unit> { cont ->
+                        parked = cont
+                        parkedSeen.complete(Unit)
+                    }
+                    seen.complete(runCatching { lease.lease { invoked = true } })
+                }
+                withTimeout(10_000) { parkedSeen.await() }
+                caller.cancel()
+                checkNotNull(parked).resumeWith(Result.success(Unit))
+                withTimeout(10_000) { caller.join() }
+
+                assertIs<CancellationException>(
+                    seen.await().exceptionOrNull(),
+                    "the caller cancelled before the lease observes its cancellation",
+                )
+                assertFalse(
+                    invoked,
+                    "a caller cancelled before the lease never starts the block",
+                )
+
+                // Le bail n'a jamais été posé : un lease suivant réussit.
+                assertIs<KadreResult.Success<Any>>(
+                    lease.lease { it },
+                    "the pre-admission cancellation left no lease held",
+                )
+            }
+        }
+    }
+
+    @Test
     fun capabilitiesBecomeHonestAfterObservationInstalled() = runBlocking {
         val surface = surface()
         // Avant l'installation : le snapshot par défaut, aucune annonce.
@@ -267,6 +317,19 @@ class AndroidViewLeaseTest {
                 ),
             ),
             "the announcement adds nothing to the refusals the phase keeps",
+        )
+
+        // La fenêtre de teardown, côté M-1 : le binding publie l'instantané détaché canonique
+        // AVANT le terminal — une installation qui arrive dans cette fenêtre ne peut pas
+        // repeindre `Supported` sur un état déjà détaché (la double garde de l'admission,
+        // `detached` OU état publié détaché).
+        val late = surface()
+        late.publishMetrics(update = { it.copy(attachment = SurfaceAttachmentState.Detached) })
+        late.observationInstalled()
+        assertEquals(
+            unsupportedSurfaceCapabilities(),
+            late.capabilities.value,
+            "a late install cannot announce on a detached state",
         )
 
         // La révocation retire l'annonce au plus tard au détached (l'ordre du terminal),
@@ -294,14 +357,18 @@ class AndroidViewLeaseTest {
 // ----------------------------------------------------------------------- aides du fichier
 
 /**
- * Une exception applicative que le transport kotlinx-coroutines ne peut PAS cloner : un champ
- * de plus que `Throwable` fait bail out le copieur réflexif (`ExceptionsConstructor`) et
- * l'instance ORIGINALE traverse les sauts de dispatcher. Le contrat « propagée telle quelle »
- * est ainsi épinglé sur l'identité de l'instance — inline comme dispatché — plutôt que sur les
- * détails du transport (un clone, même fidèle en classe et message, n'est pas « telle quelle »).
+ * Une exception applicative que le transport kotlinx-coroutines ne peut PAS cloner : la classe
+ * n'expose aucun constructeur public de la forme `(String)`/`(Throwable)`/`(String, Throwable)`/`()`
+ * que le copieur réflexif du recovery (`ExceptionsConstructor.tryCopyException`) cherche, il
+ * renvoie donc `null` et l'instance ORIGINALE traverse les sauts de dispatcher. Le contrat
+ * « propagée telle quelle » est ainsi épinglé sur l'identité de l'instance — inline comme
+ * dispatché — plutôt que sur les détails du transport (un clone, même fidèle en classe et
+ * message, n'est pas « telle quelle »).
  */
-private class LeaseApplicationException(message: String) : IllegalStateException(message) {
-    val marker: String = message
+private class LeaseApplicationException private constructor() : IllegalStateException("boom") {
+    companion object {
+        fun boom(): LeaseApplicationException = LeaseApplicationException()
+    }
 }
 
 /**
