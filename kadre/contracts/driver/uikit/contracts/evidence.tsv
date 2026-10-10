@@ -1,0 +1,7 @@
+contractId	target	kind	evidenceId	testClass	testName
+BCK-010	iosSimulatorArm64	scenario	uikit-driver-observes-real-window	KadreUikitDriverTests	testKotlinProbeObservesRealWindow()
+BCK-010	iosSimulatorArm64	scenario	uikit-driver-reports-detached-view	KadreUikitDriverTests	testProbeReportsViewOutsideWindowAsDetached()
+BCK-010	tvosSimulatorArm64	scenario	uikit-driver-observes-real-window	KadreUikitDriverTests	testKotlinProbeObservesRealWindow()
+BCK-010	tvosSimulatorArm64	scenario	uikit-driver-reports-detached-view	KadreUikitDriverTests	testProbeReportsViewOutsideWindowAsDetached()
+BCK-010	iosSimulatorArm64	sentinel	uikit-driver-window-membership-sentinel	KadreUikitDriverTests	testProbeReportsViewOutsideWindowAsDetached()
+BCK-010	tvosSimulatorArm64	sentinel	uikit-driver-window-membership-sentinel	KadreUikitDriverTests	testProbeReportsViewOutsideWindowAsDetached()
