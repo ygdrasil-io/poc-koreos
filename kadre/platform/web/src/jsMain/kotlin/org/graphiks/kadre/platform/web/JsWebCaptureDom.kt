@@ -265,11 +265,10 @@ private class JsWebVideoFrame(private val frame: dynamic) : WebVideoFrame {
         val layout = js("result.layout")
         val count = js("layout.length").unsafeCast<Number>().toInt()
         return List(count) { index ->
-            val offset = js("layout[index].destinationOffset").unsafeCast<Number>().toInt()
-            val copyBytes = js("layout[index].copyBytes").unsafeCast<Number>().toInt()
+            val offset = jsPlaneOffset(layout, index)
             WebPlaneBytes(
                 rowStride = jsPlaneRowStride(layout, index, copyWord = format ?: shape.format, shape),
-                bytes = bytes.copyOfRange(offset, offset + copyBytes),
+                bytes = bytes.copyOfRange(offset, offset + jsPlaneCopyBytes(layout, index, view.length)),
             )
         }
     }
@@ -306,11 +305,43 @@ private fun jsReportedStride(layout: dynamic, index: Int): Int =
     js("(layout[index] !== null && layout[index] !== undefined && typeof layout[index].stride === 'number') ? layout[index].stride : -1")
         .unsafeCast<Number>().toInt()
 
+/**
+ * The destination offset of one copied plane: the spec's `destinationOffset` word when the browser
+ * reports it, else Chromium's shipped `offset` — the same fact under the name this engine actually
+ * ships ({offset, stride} entries; probed on the pinned Chromium 148).
+ */
+private fun jsPlaneOffset(layout: dynamic, index: Int): Int = js(
+    "(typeof layout[index].destinationOffset === 'number') ? " +
+        "layout[index].destinationOffset : layout[index].offset",
+).unsafeCast<Number>().toInt()
+
+/**
+ * The copied length of one plane: the spec's `copyBytes` when the browser reports it, else the
+ * span from this plane's offset to the next plane's offset — or to the buffer's end for the last
+ * plane — because an engine that ships `{offset, stride}` entries lays its planes out back to
+ * back, and that span is exactly the bytes the plane's copy wrote.
+ */
+private fun jsPlaneCopyBytes(layout: dynamic, index: Int, totalBytes: Int): Int = js(
+    """(function () {
+         if (typeof layout[index].copyBytes === 'number') return layout[index].copyBytes;
+         var start = typeof layout[index].destinationOffset === 'number'
+           ? layout[index].destinationOffset : layout[index].offset;
+         var end = index + 1 < layout.length
+           ? (typeof layout[index + 1].destinationOffset === 'number'
+               ? layout[index + 1].destinationOffset : layout[index + 1].offset)
+           : totalBytes;
+         return end - start;
+       })()""",
+).unsafeCast<Number>().toInt()
+
 /** The structural shape of one VideoFrame, copied out of the browser's own properties. */
 private fun jsVideoFrameShape(frame: dynamic): WebVideoFrameShape = WebVideoFrameShape(
     format = jsOptionalString(js("frame.format")),
-    width = js("frame.visibleWidth").unsafeCast<Number>().toInt(),
-    height = js("frame.visibleHeight").unsafeCast<Number>().toInt(),
+    // The frame's display size — the WebCodecs name for the visible rect's dimensions, the pixels
+    // a default copy produces. (There is no `visibleWidth`/`visibleHeight` on a VideoFrame; the
+    // browser-level contract caught a reader of those absent words and this is its honest fix.)
+    width = js("frame.displayWidth").unsafeCast<Number>().toInt(),
+    height = js("frame.displayHeight").unsafeCast<Number>().toInt(),
     timestampUs = jsOptionalNumber(js("frame.timestamp")),
     durationUs = jsOptionalNumber(js("frame.duration")),
     colorSpace = jsOptionalColorSpace(js("frame.colorSpace")),

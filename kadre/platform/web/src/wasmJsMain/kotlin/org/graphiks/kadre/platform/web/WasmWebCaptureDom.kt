@@ -175,10 +175,13 @@ private fun wasmPipeCode(refused: Throwable): String = when (val value = (refuse
 @JsFun("(frame) => (frame.format === undefined || frame.format === null) ? null : frame.format")
 internal external fun wasmFrameFormat(frame: JsAny): JsString?
 
-@JsFun("(frame) => frame.visibleWidth")
+// The frame's display size — the WebCodecs name for the visible rect's dimensions, the pixels a
+// default copy produces. (There is no `visibleWidth`/`visibleHeight` on a VideoFrame; the
+// browser-level contract caught readers of those absent words and this is their honest fix.)
+@JsFun("(frame) => frame.displayWidth")
 internal external fun wasmFrameWidth(frame: JsAny): Double
 
-@JsFun("(frame) => frame.visibleHeight")
+@JsFun("(frame) => frame.displayHeight")
 internal external fun wasmFrameHeight(frame: JsAny): Double
 
 /** The presentation timestamp in microseconds, or `null` when the frame says none. */
@@ -240,11 +243,35 @@ internal external fun wasmCopyView(buffer: JsAny): Int8Array
 @JsFun("(layout) => layout.length")
 internal external fun wasmLayoutCount(layout: JsAny): Int
 
-@JsFun("(layout, index) => layout[index].destinationOffset")
+/**
+ * The destination offset of one copied plane: the spec's `destinationOffset` word when the browser
+ * reports it, else Chromium's shipped `offset` — the same fact under the name this engine actually
+ * ships ({offset, stride} entries; probed on the pinned Chromium 148).
+ */
+@JsFun(
+    "(layout, index) => (typeof layout[index].destinationOffset === 'number') ? " +
+        "layout[index].destinationOffset : layout[index].offset",
+)
 internal external fun wasmLayoutOffset(layout: JsAny, index: Int): Double
 
-@JsFun("(layout, index) => layout[index].copyBytes")
-internal external fun wasmLayoutBytes(layout: JsAny, index: Int): Double
+/**
+ * The copied length of one plane: the spec's `copyBytes` when the browser reports it, else the
+ * span from this plane's offset to the next plane's offset — or to the buffer's end for the last
+ * plane — because an engine that ships `{offset, stride}` entries lays its planes out back to
+ * back, and that span is exactly the bytes the plane's copy wrote.
+ */
+@JsFun(
+    "(layout, index, total) => {" +
+        " if (typeof layout[index].copyBytes === 'number') { return layout[index].copyBytes; }" +
+        " var start = typeof layout[index].destinationOffset === 'number'" +
+        " ? layout[index].destinationOffset : layout[index].offset;" +
+        " var end = index + 1 < layout.length" +
+        " ? (typeof layout[index + 1].destinationOffset === 'number'" +
+        " ? layout[index + 1].destinationOffset : layout[index + 1].offset)" +
+        " : total;" +
+        " return end - start; }",
+)
+internal external fun wasmLayoutBytes(layout: JsAny, index: Int, totalBytes: Int): Double
 
 /** The browser's reported stride of one copied plane, or -1 when the layout entry carries none. */
 @JsFun(
@@ -401,7 +428,7 @@ private class WasmWebVideoFrame(private val frame: JsAny) : WebVideoFrame {
         val copyWord = format ?: shape.format ?: throw WebCapturePipeException("unknown-plane-word")
         return List(wasmLayoutCount(layout)) { index ->
             val offset = wasmLayoutOffset(layout, index).toInt()
-            val copyBytes = wasmLayoutBytes(layout, index).toInt()
+            val copyBytes = wasmLayoutBytes(layout, index, view.length).toInt()
             val reported = wasmLayoutStride(layout, index)
             WebPlaneBytes(
                 rowStride = if (reported >= 0) reported.toInt() else tightRowStride(copyWord, index),

@@ -34,6 +34,33 @@ import { installCaptureStub } from './capture-stub.mjs';
  * web-gamepad-effects.spec.mjs): the same served page over plain http on a non-localhost name,
  * where the browsing context itself is not a secure context and every capture capability is the
  * honest unsupported with the secure-context cause on the picker.
+ *
+ * BCK-011 — the session scenarios — run only in the `chromium-capture` project, whose launch
+ * arguments answer the consent the browser's own sanctioned test way. The probe that decided this
+ * posture, on this exact pinned Playwright and its Chromium 148 headless build:
+ *
+ * - `context.grantPermissions(['display-capture'])` is unavailable — Playwright 1.60 dropped the
+ *   permission name from its protocol mapping.
+ * - `--auto-select-desktop-capture-source` alone is refused `NotSupportedError`: the historical
+ *   picker bypass no longer answers on its own.
+ * - A real compositor capture is refused in headless (`NotSupportedError` / `NotReadableError`
+ *   on macOS arm64 unless the fake device is in play).
+ * - With `--auto-select-desktop-capture-source=screen`, `--use-fake-ui-for-media-stream` and
+ *   `--use-fake-device-for-media-stream`, the browser itself answers `getDisplayMedia`: the fake
+ *   UI replaces the interactive picker (the same substitution the flag has always made for the
+ *   camera and microphone prompts) and Chromium's sanctioned synthetic screen source stands in
+ *   for the compositor. Everything else is the browser's real machinery: the consent call, the
+ *   granted `MediaStreamTrack`, the `MediaStreamTrackProcessor` pipe, the delivered `VideoFrame`s
+ *   and the track stop.
+ *
+ * So the session evidence's posture is the real consent path and the real frame pipe, with the
+ * browser's own test source where real pixels would be; the real picker UI and the real
+ * compositor belong to the manual charter, exactly the phase-6 gamepad precedent restated for the
+ * consent flow. The open is still activation-shaped — each scenario drives a real `page.click()`
+ * on the fixture's own button, the gesture a real consent asks for — though under the fake UI the
+ * activation is not load-bearing (the browser answers without it; probed). The canaries stay
+ * armed: the record's exactly-one `getDisplayMedia` entry IS the proof that the consent was
+ * explicit, and the Surface scenario's empty record proves the canvas stream needs none.
  */
 
 const fixtureUrl = process.env.KADRE_FIXTURE_URL;
@@ -225,4 +252,230 @@ test('web-capture-insecure-unsupported', async ({ page }) => {
   expect(await prompts(page)).toEqual([]);
   await expect(host).toHaveAttribute('data-kadre-capture-permissions', permissions);
   await expect(host).toHaveAttribute('data-kadre-capture-revision', revision);
+});
+
+/**
+ * BCK-011 — the capture session scenarios (the `chromium-capture` project only; see the header for
+ * the probe and the posture it decided). The fixture is the `capture-session` scenario: a canvas
+ * attach element the fixture paints on a timer, one open command per target (the host choice
+ * behind a real button, the Surface behind a plain command), one collector, one stop.
+ *
+ * Every frame assertion is structural — sizes, formats, configuration revisions, counts, terminal
+ * outcomes — never pixel content, which is not a contract. The track facts are the page's own:
+ * `capture-stub.mjs` enrolls every granted track, counts the `stop()` calls it forwards and reads
+ * the browser's own `readyState` back, so a capture whose track was never stopped, and a stream
+ * that leaked, are facts a spec can fail on.
+ */
+
+/**
+ * Loads a capture session scenario and waits for the attach to have succeeded: the manager and the
+ * surface the commands drive exist, and every command listener was installed before readiness.
+ */
+async function sessionScenario(page, scenario = 'capture-session') {
+  await installCaptureStub(page);
+  await loadScenario(page, scenario);
+  const host = page.locator('[data-kadre-host="capture-session"]');
+  await expect(host).toHaveAttribute('data-kadre-attach', 'success');
+  return host;
+}
+
+/** The granted tracks the stub enrolled: source, forwarded stop count, the browser's own state. */
+async function trackFacts(page) {
+  return page.evaluate(() => window.__kadreCaptureStub.trackFacts());
+}
+
+/** Waits until the frame counter has reached [count] — the stream really is delivering. */
+async function expectFramesAtLeast(host, count) {
+  await expect
+    .poll(() => host.getAttribute('data-kadre-capture-frames').then(Number), { timeout: 5_000 })
+    .toBeGreaterThanOrEqual(count);
+}
+
+/** The configuration one journal entry publishes: `streaming-started@rev=N:size=WxH:format=F`. */
+function parseConfiguration(entry) {
+  const match = /^streaming-started@rev=(\d+):size=(\d+x\d+):format=([A-Za-z0-9]+)$/.exec(entry);
+  expect(match, `not a streaming-started journal entry: ${entry}`).not.toBeNull();
+  return { rev: match[1], size: match[2], format: match[3] };
+}
+
+test('web-capture-hostchoice-stream', async ({ page }) => {
+  const host = await sessionScenario(page);
+
+  // Before the gesture: no consent machinery of any name has been touched, and no session exists.
+  expect(await prompts(page)).toEqual([]);
+  expect(await host.getAttribute('data-kadre-capture-open')).toBeNull();
+
+  // The open is the click: a real user activation drives the one explicit request path, and the
+  // canary record holds exactly that one consent call — the picker and nothing else.
+  await page.click('[data-kadre-capture-open-button="host-choice"]');
+  await expect(host).toHaveAttribute('data-kadre-capture-open', 'success');
+  expect(await prompts(page)).toEqual(['getDisplayMedia']);
+
+  // The consented stream streams: the collector is admitted, the session publishes Streaming at
+  // configuration revision 0, and real frames of the real pipe arrive.
+  await command(page, 'kadre-capture-collect');
+  await expect(host).toHaveAttribute('data-kadre-capture-session-state', 'streaming:rev=0');
+  await expectFramesAtLeast(host, 2);
+
+  // The frames agree with the published configuration, structurally: every delivered frame names
+  // the configuration's own size and format at the revision the journal published. Nothing about
+  // the pixels is asserted — the source is the browser's, the structure is the contract's.
+  const journal = (await host.getAttribute('data-kadre-capture-session-events')).split(';');
+  const configuration = parseConfiguration(journal[0]);
+  for (const fact of (await host.getAttribute('data-kadre-capture-frame-facts')).split(';')) {
+    expect(fact).toBe(`${configuration.size}:${configuration.format}:rev=${configuration.rev}`);
+  }
+
+  // The consent was spent once: the record has not moved since the open.
+  expect(await prompts(page)).toEqual(['getDisplayMedia']);
+});
+
+test('web-capture-configuration-before-frame', async ({ page }) => {
+  const host = await sessionScenario(page);
+
+  await page.click('[data-kadre-capture-open-button="host-choice"]');
+  await expect(host).toHaveAttribute('data-kadre-capture-open', 'success');
+  await command(page, 'kadre-capture-collect');
+  await expectFramesAtLeast(host, 1);
+
+  // The ordering, as an observation: the state cell the fixture read at the moment frame one was
+  // delivered already carried the streaming configuration — a session whose configuration trailed
+  // its frames would have recorded `ready` there or nothing at all. The journal's first entry is
+  // the StreamingStarted of that very configuration, and every frame fact names it.
+  await expect(host).toHaveAttribute('data-kadre-capture-first-frame', 'streaming:rev=0');
+  const journal = (await host.getAttribute('data-kadre-capture-session-events')).split(';');
+  const configuration = parseConfiguration(journal[0]);
+  expect(configuration.rev).toBe('0');
+  const facts = (await host.getAttribute('data-kadre-capture-frame-facts')).split(';');
+  expect(facts[0]).toBe(`${configuration.size}:${configuration.format}:rev=0`);
+
+  // The source is stable, so the configuration is too: no reconfiguration event trails the first,
+  // and the state stays exactly where the first frame found it.
+  await expectFramesAtLeast(host, 3);
+  await expect(host).toHaveAttribute('data-kadre-capture-session-events', journal.join(';'));
+  await expect(host).toHaveAttribute('data-kadre-capture-session-state', 'streaming:rev=0');
+});
+
+test('web-capture-frames-bounded', async ({ page }) => {
+  // The session bound is the fixture's own policy: 1024 bytes, far below any frame the granted
+  // source delivers — the very first frame cannot fit, which is the oversized-frame terminal.
+  const host = await sessionScenario(page, 'capture-bounded');
+
+  await page.click('[data-kadre-capture-open-button="host-choice"]');
+  await expect(host).toHaveAttribute('data-kadre-capture-open', 'success');
+  expect(await prompts(page)).toEqual(['getDisplayMedia']);
+
+  // The terminal: the bound is read before any buffer exists, so the start fails with the exact
+  // limit the policy named, the session terminates Failed with the same failure, and nothing was
+  // ever delivered — no frame counter moved, no configuration was ever published.
+  await command(page, 'kadre-capture-collect');
+  await expect(host).toHaveAttribute(
+    'data-kadre-capture-collect',
+    'failure:resourceLimitExceeded:capturebuffer:1024',
+  );
+  await expect(host).toHaveAttribute(
+    'data-kadre-capture-session-state',
+    'terminated:failed:resourceLimitExceeded:capturebuffer:1024',
+  );
+  await expect(host).toHaveAttribute(
+    'data-kadre-capture-outcome',
+    'failed:resourceLimitExceeded:capturebuffer:1024',
+  );
+  await expect(host).toHaveAttribute('data-kadre-capture-frames', '0');
+  await expect(host).toHaveAttribute('data-kadre-capture-frame-facts', '');
+  await expect(host).toHaveAttribute('data-kadre-capture-session-events', '');
+
+  // A failed start never reserves frames it cannot pump: the pick the browser granted was released
+  // by the very failure — the track stopped once and the browser says it ended.
+  expect(await trackFacts(page)).toEqual([
+    { source: 'display-capture', stopCalls: 1, readyState: 'ended' },
+  ]);
+});
+
+test('web-capture-stop-exactly-once', async ({ page }) => {
+  const host = await sessionScenario(page);
+
+  await page.click('[data-kadre-capture-open-button="host-choice"]');
+  await expect(host).toHaveAttribute('data-kadre-capture-open', 'success');
+  await command(page, 'kadre-capture-collect');
+  await expectFramesAtLeast(host, 2);
+
+  // The requested stop is the terminal: Stopped(Requested), published once, and the collector's
+  // own request answers success with exactly that outcome.
+  await command(page, 'kadre-capture-stop');
+  await expect(host).toHaveAttribute('data-kadre-capture-outcome', 'stopped:requested');
+  await expect(host).toHaveAttribute('data-kadre-capture-session-state', 'terminated:stopped:requested');
+  await expect(host).toHaveAttribute('data-kadre-capture-collect', 'success');
+
+  // Track-stop-immediate: the browser's own track ended by the time the outcome was published —
+  // read straight away, with no settling, because the stop path releases before it terminates.
+  expect(await trackFacts(page)).toEqual([
+    { source: 'display-capture', stopCalls: 1, readyState: 'ended' },
+  ]);
+
+  // No-frame-after-stop: the counters and the journal the terminal left behind are frozen across a
+  // quiet window — no late delivery, no re-emission, no second configuration.
+  const framesAtStop = await host.getAttribute('data-kadre-capture-frames');
+  const factsAtStop = await host.getAttribute('data-kadre-capture-frame-facts');
+  const journalAtStop = await host.getAttribute('data-kadre-capture-session-events');
+  await settleQuietly(page);
+  await expect(host).toHaveAttribute('data-kadre-capture-frames', framesAtStop);
+  await expect(host).toHaveAttribute('data-kadre-capture-frame-facts', factsAtStop);
+  await expect(host).toHaveAttribute('data-kadre-capture-session-events', journalAtStop);
+  expect(await trackFacts(page)).toEqual([
+    { source: 'display-capture', stopCalls: 1, readyState: 'ended' },
+  ]);
+
+  // Exactly once: a second stop is inert. The terminal outcome is already published, the collector
+  // has its one answer, and no consent machinery ever ran again.
+  await command(page, 'kadre-capture-stop');
+  await settleQuietly(page);
+  await expect(host).toHaveAttribute('data-kadre-capture-outcome', 'stopped:requested');
+  await expect(host).toHaveAttribute('data-kadre-capture-session-state', 'terminated:stopped:requested');
+  await expect(host).toHaveAttribute('data-kadre-capture-collect', 'success');
+  expect(await prompts(page)).toEqual(['getDisplayMedia']);
+
+  // No-stream-leak: zero live handles — every track the page was granted has ended.
+  for (const fact of await trackFacts(page)) {
+    expect(fact.readyState).toBe('ended');
+  }
+});
+
+test('web-capture-surface-canvas-stream', async ({ page }) => {
+  const host = await sessionScenario(page);
+
+  // The host is the painted canvas itself: the page's own paint counter proves frames have a
+  // reason to exist (the first tick lands 33ms in, so the read waits for it), and no consent
+  // machinery has been touched — a canvas stream needs no picker.
+  await expect
+    .poll(() => host.getAttribute('data-kadre-capture-paints').then(Number), { timeout: 5_000 })
+    .toBeGreaterThan(0);
+  expect(await prompts(page)).toEqual([]);
+
+  // The Surface open: the session's own registered primary surface, carrying the region only a
+  // surface may carry. The record stays empty — the open is no consent, and nothing invented one.
+  await command(page, 'kadre-capture-open-surface');
+  await expect(host).toHaveAttribute('data-kadre-capture-open-surface', 'success');
+  expect(await prompts(page)).toEqual([]);
+
+  // The canvas's own stream streams, and the crop is the configuration's own: the region the
+  // request carried is the size the configuration publishes and every delivered frame keeps.
+  await command(page, 'kadre-capture-collect');
+  await expect(host).toHaveAttribute('data-kadre-capture-session-state', 'streaming:rev=0');
+  await expect(host).toHaveAttribute('data-kadre-capture-first-frame', 'streaming:rev=0');
+  await expectFramesAtLeast(host, 1);
+  const journal = (await host.getAttribute('data-kadre-capture-session-events')).split(';');
+  const configuration = parseConfiguration(journal[0]);
+  expect(configuration).toEqual({ rev: '0', size: '32x32', format: 'Rgba8' });
+  for (const fact of (await host.getAttribute('data-kadre-capture-frame-facts')).split(';')) {
+    expect(fact).toBe('32x32:Rgba8:rev=0');
+  }
+
+  // And the teardown is the same exactly-once stop, with the canvas track released like any other.
+  await command(page, 'kadre-capture-stop');
+  await expect(host).toHaveAttribute('data-kadre-capture-outcome', 'stopped:requested');
+  expect(await trackFacts(page)).toEqual([
+    { source: 'canvas-capture-stream', stopCalls: 1, readyState: 'ended' },
+  ]);
+  expect(await prompts(page)).toEqual([]);
 });
