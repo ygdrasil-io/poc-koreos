@@ -16,9 +16,11 @@ import androidx.lifecycle.LifecycleOwner
  * l'enregistrement : si une précondition a sauté pendant l'installation (course
  * validation/détachement), la relecture produit le terminal immédiatement.
  *
- * `teardown()` retire l'observer et le listener et vide le journal d'installation —
- * le zéro-résidu des bridges phase 0 ([AndroidViewBridge]). Idempotent ; sans installation
- * préalable (rollback d'admission), il ne reste rien à retirer et le journal est déjà vide.
+ * `teardown()` retire l'observer et le listener et vide le journal d'installation — le
+ * zéro-résidu des bridges de la phase 0, désormais encodé dans le binding lui-même (les
+ * bridges de phase 0 sont supprimés avec l'API qu'ils servaient). Idempotent ; sans
+ * installation préalable (rollback d'admission), il ne reste rien à retirer et le journal
+ * est déjà vide.
  */
 internal class AndroidLifecycleBinding(
     private val reducer: AndroidLifecycleReducer,
