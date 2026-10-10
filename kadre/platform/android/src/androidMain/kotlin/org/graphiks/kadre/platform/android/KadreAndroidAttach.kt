@@ -21,7 +21,6 @@ import org.graphiks.kadre.diagnostics.KadreResourceKind
 import org.graphiks.kadre.diagnostics.KadreResult
 import org.graphiks.kadre.internal.runtime.RuntimeFailureReporter
 import org.graphiks.kadre.internal.runtime.RuntimeHostController
-import org.graphiks.kadre.internal.runtime.RuntimeHostSurface
 import org.graphiks.kadre.internal.runtime.RuntimePrimarySurface
 import org.graphiks.kadre.internal.runtime.RuntimeProcessIds
 import org.graphiks.kadre.internal.runtime.RuntimeSessionComponents
@@ -244,7 +243,7 @@ internal object AndroidHostSession {
                     // la surface primaire : l'invariant de topologie
                     // `windows.state.value.primary?.surface === primarySurface` est un fait de
                     // session, pas une coïncidence de construction.
-                    val surface = RuntimeHostSurface(
+                    val surface = AndroidHostSurface(
                         RuntimeProcessIds.nextSurfaceId(),
                         initialSurfaceState(view, initial),
                     )
@@ -266,7 +265,7 @@ internal object AndroidHostSession {
                 failureReporter = AndroidAttachDiagnostics,
                 sessionObserver = RuntimeSessionObserver { _, _ -> reservation.release() },
                 primarySurfaceFactory = { id ->
-                    val surface = RuntimeHostSurface(id, initialSurfaceState(view, initial))
+                    val surface = AndroidHostSurface(id, initialSurfaceState(view, initial))
                     sessionSurface.surface = surface
                     RuntimePrimarySurface(surface, surface::close)
                 },
@@ -382,7 +381,7 @@ internal object AndroidHostSession {
 
     /** La surface de la session, créée par la factory de composants au moment de l'attach. */
     private class SessionSurface {
-        var surface: RuntimeHostSurface? = null
+        var surface: AndroidHostSurface? = null
     }
 
     /**
@@ -432,12 +431,12 @@ internal object AndroidHostSession {
      * de la phase 0, tenu courant. Minimal et honnête : attachment/visibility/focus seulement,
      * les Unknown restent Unknown, aucun input ni IME. La surface peut ne pas exister encore
      * (publication plus précoce que l'attach) : l'instantané est alors simplement perdu, le
-     * suivant rétablit l'état — et `RuntimeHostSurface.publish` absorbe tout ce qui suit la
-     * fermeture.
+     * suivant rétablit l'état — et `AndroidHostSurface.publishMetrics` absorbe tout ce qui suit
+     * la fermeture.
      */
     private fun publish(snapshot: AndroidHostSnapshot, sessionSurface: SessionSurface) {
         val surface = sessionSurface.surface ?: return
-        surface.publish { current ->
+        surface.publishMetrics { current ->
             current.copy(
                 attachment = if (snapshot.attachment) {
                     SurfaceAttachmentState.Attached
