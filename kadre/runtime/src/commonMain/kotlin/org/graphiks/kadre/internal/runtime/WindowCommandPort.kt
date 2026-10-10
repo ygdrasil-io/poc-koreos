@@ -16,8 +16,7 @@ import org.graphiks.kadre.window.WindowSpec
 import org.graphiks.kadre.window.WindowState
 import org.graphiks.kadre.window.WindowUpdate
 import org.graphiks.kadre.window.WindowRevision
-import java.util.IdentityHashMap
-import java.util.concurrent.atomic.AtomicBoolean
+import kotlin.concurrent.atomics.AtomicBoolean
 
 /** Unstable backend SPI for dynamic exclusive admission; unsupported for applications. */
 public sealed interface ExclusiveFullscreenAvailability {
@@ -409,8 +408,8 @@ public class WindowOpenCommand internal constructor(
     public val spec: WindowSpec,
     private val stimulusSink: WindowCommandStimulusSink,
 ) {
-    private val ownerLock = Any()
-    private val owners = IdentityHashMap<WindowPeerOwner, ManagedWindowPeerOwner>()
+    private val ownerLock = RuntimeLock()
+    private val owners = IdentityKeyedMap<ManagedWindowPeerOwner>()
 
     /**
      * Commits one fully prepared peer and its atomic initial surface snapshot.
@@ -426,8 +425,8 @@ public class WindowOpenCommand internal constructor(
         initialSurfaceSnapshot: SurfaceInitialSnapshot? = null,
         onSurfaceReady: () -> Unit = {},
     ) {
-        val managedOwner = synchronized(ownerLock) {
-            owners.getOrPut(owner) { ManagedWindowPeerOwner(owner) }
+        val managedOwner = ownerLock.withLock {
+            owners[owner] ?: ManagedWindowPeerOwner(owner).also { owners[owner] = it }
         }
         stimulusSink.commit(
             requestId,
@@ -521,6 +520,7 @@ internal interface WindowFullscreenObservationSink {
     )
 }
 
+@OptIn(kotlin.concurrent.atomics.ExperimentalAtomicApi::class)
 internal class ManagedWindowPeerOwner(
     private val delegate: WindowPeerOwner,
 ) : WindowPeerOwner, RuntimeDesktopWindowHandleAccess {
@@ -533,7 +533,7 @@ internal class ManagedWindowPeerOwner(
     override suspend fun <R> withDesktopHandle(
         block: (RuntimeDesktopNativeWindowHandle) -> R,
     ): KadreResult<R> {
-        if (closed.get()) return KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.Window))
+        if (closed.load()) return KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.Window))
         val access = delegate as? RuntimeDesktopWindowHandleAccess
             ?: return KadreResult.Failure(KadreFailure.Unsupported(KadreOperation.PlatformWindowAccess))
         return access.withDesktopHandle(block)
