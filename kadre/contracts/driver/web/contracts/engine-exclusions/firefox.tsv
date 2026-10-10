@@ -13,7 +13,7 @@
 # greps live in playwright/playwright.config.mjs (the firefox-js/firefox-wasm projects); this file
 # is their CONTRACT-level mirror.
 contractId	target	cause
-BCK-001	wasmJs	deterministic: fixture counters read before wasm attach on firefox (3/3); follow-up
+BCK-001	wasmJs	deterministic: counters read before wasm attach on non-chromium engines (3/3 in-suite each); follow-up: the data-kadre-ready fix retires both rows
 BCK-004	*	CDP-instrumented: the seven touch contact scenarios stage through Input.dispatchTouchEvent, which Playwright answers is only available in Chromium
 BCK-005	*	six of nine scenarios unusable: web-text-composition-lifecycle stages through Input.imeSetComposition (CDP) and five text arrivals route through the Firefox composition pipeline (keyboard.insertText publishes composition journals instead of replace journals)
 BCK-007	*	CDP-instrumented: web-display-dpr-scale-factor and web-display-teardown-quiet stage through Emulation.setDeviceMetricsOverride

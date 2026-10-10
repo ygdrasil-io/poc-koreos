@@ -229,7 +229,11 @@ catalogued failures: Firefox 18 (js) and 19 (wasmJs, one flake), WebKit 15 on
 each target. The flake census: `a duplicate attach is rejected without another
 DOM observer or listener` failed once per engine on wasmJs and passed on every
 isolated re-run (the init-script counting race the smoke's watchdog family
-already knows); `web-input-default-behavior` on macOS WebKit passed standalone
+already knows) — a census later runs sharpened into a deterministic in-suite
+failure of the wasmJs targets on both engines (3/3 each, cumulative container
+runs; Chromium's timing hides it), which is why it is a recorded wasmJs-only
+exclusion of both nightly engines, not a flake (see the per-engine smoke
+section below); `web-input-default-behavior` on macOS WebKit passed standalone
 but failed in five of six in-suite runs.
 
 ### Probed engine facts

@@ -69,21 +69,40 @@ const firefoxCompositionPipelineScenarios =
 // shape of the finding — engine firefox, target wasmJs, never the whole engine.
 const firefoxWasmPublicationRace = /web-typescript-consumer/;
 
-// Other-named, Firefox wasmJs only: the duplicate-attach admission-race scenario reads the
-// fixture's MutationObserver/focusin counters immediately after goto, before the asynchronously
-// instantiated wasm fixture attaches on Firefox — failed 3/3 in-suite in the Task-2 container
-// runs while passing isolated and on js, the same Firefox-deferred-instantiation family as the
-// publication race above. The follow-up is a data-kadre-ready wait before counting; until then
-// the exclusion is recorded at the contract level in
-// contracts/engine-exclusions/firefox.tsv (BCK-001/wasmJs) and this grep is its test-level
-// mirror — one test carrying three BCK-001 rows (web-attach-detach-admission-race,
-// web-attach-same-element-busy and the web-host-single-owner sentinel).
-const firefoxWasmDuplicateAttachRace = /a duplicate attach is rejected/;
+// Other-named, wasmJs-only on BOTH nightly engines (controller ruling, symmetric to the Firefox
+// finding): the duplicate-attach admission-race scenario reads the fixture's
+// MutationObserver/focusin counters immediately after goto, before the asynchronously
+// instantiated wasm fixture attaches on a non-chromium engine — deterministic in-suite (Firefox
+// 3/3, WebKit 3/3 cumulative container runs) while passing isolated and on js; only Chromium's
+// timing hides it. The follow-up is a data-kadre-ready wait before counting, which retires the
+// contract-level rows in contracts/engine-exclusions/firefox.tsv and webkit.tsv
+// (BCK-001/wasmJs) together with this grep — their test-level mirror for one test carrying
+// three BCK-001 rows (web-attach-detach-admission-race, web-attach-same-element-busy and the
+// web-host-single-owner sentinel).
+const wasmDuplicateAttachRace = /a duplicate attach is rejected/;
 
 // Chromium-flags-dependent, WebKit only: the insecure-context scenario needs the fixture's
 // insecure name mapped onto the local server, and WebKit has neither a launch argument nor a
 // preference system for that (probed; Firefox uses `network.dns.localDomains`, below).
 const webkitNoInsecureRoute = /web-gamepad-effect-insecure-context/;
+
+// The exclusion base every Kotlin target of an engine shares; the per-target projects below
+// spread it and append their own wasmJs-only greps, so a target-dependent exclusion never
+// repeats the shared ones.
+const firefoxBaseExclusions = [
+  cdpTouchScenarios,
+  cdpDisplayScenarios,
+  cdpTextInputScenarios,
+  firefoxCompositionPipelineScenarios,
+  captureSuite,
+];
+const webkitBaseExclusions = [
+  cdpTouchScenarios,
+  cdpDisplayScenarios,
+  cdpTextInputScenarios,
+  captureSuite,
+  webkitNoInsecureRoute,
+];
 
 // The Firefox route for the insecure name. The preference names a host no other scenario
 // navigates, so the regular suite observes nothing from it — and the insecure-context scenario
@@ -161,43 +180,32 @@ export default defineConfig({
         },
       },
     },
-    // The Firefox projects, one per Kotlin target — the wasmJs-only TypeScript exclusion above is
+    // The Firefox projects, one per Kotlin target — the two wasmJs-only exclusions above are
     // the single difference between them. Nothing here is launched by the PR gate: the launch
     // script selects `firefox-js` or `firefox-wasm` only for a run whose engine is firefox.
     {
       name: 'firefox-js',
       use: { ...firefoxLaunch },
-      grepInvert: [
-        cdpTouchScenarios,
-        cdpDisplayScenarios,
-        cdpTextInputScenarios,
-        firefoxCompositionPipelineScenarios,
-        captureSuite,
-      ],
+      grepInvert: [...firefoxBaseExclusions],
     },
     {
       name: 'firefox-wasm',
       use: { ...firefoxLaunch },
-      grepInvert: [
-        cdpTouchScenarios,
-        cdpDisplayScenarios,
-        cdpTextInputScenarios,
-        firefoxCompositionPipelineScenarios,
-        captureSuite,
-        firefoxWasmPublicationRace,
-        firefoxWasmDuplicateAttachRace,
-      ],
+      grepInvert: [...firefoxBaseExclusions, firefoxWasmPublicationRace, wasmDuplicateAttachRace],
+    },
+    // The WebKit projects, the same per-target split as Firefox's: the wasmJs-only
+    // duplicate-attach exclusion is the single difference between them, so the js run keeps that
+    // test through `webkit-js` while `webkit-wasm` carries the grep. The launch script selects
+    // one per run whose engine is webkit.
+    {
+      name: 'webkit-js',
+      use: { browserName: 'webkit' },
+      grepInvert: [...webkitBaseExclusions],
     },
     {
-      name: 'webkit',
+      name: 'webkit-wasm',
       use: { browserName: 'webkit' },
-      grepInvert: [
-        cdpTouchScenarios,
-        cdpDisplayScenarios,
-        cdpTextInputScenarios,
-        captureSuite,
-        webkitNoInsecureRoute,
-      ],
+      grepInvert: [...webkitBaseExclusions, wasmDuplicateAttachRace],
     },
   ],
 });

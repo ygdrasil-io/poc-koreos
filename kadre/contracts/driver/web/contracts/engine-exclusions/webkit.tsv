@@ -10,9 +10,10 @@
 # validator's per-engine invocation (its expected contract set); a test excluded by the Playwright
 # config whose contract is missing here fails the smoke, and a row whose mapping the run fully
 # covers is refused — the two directions cannot drift apart silently. The TEST-level exclusion
-# greps live in playwright/playwright.config.mjs (the webkit project); this file is their
-# CONTRACT-level mirror.
+# greps live in playwright/playwright.config.mjs (the webkit-js/webkit-wasm projects); this file
+# is their CONTRACT-level mirror.
 contractId	target	cause
+BCK-001	wasmJs	deterministic: counters read before wasm attach on non-chromium engines (3/3 in-suite each); follow-up: the data-kadre-ready fix retires both rows
 BCK-004	*	CDP-instrumented: the seven touch contact scenarios stage through Input.dispatchTouchEvent, which Playwright answers is only available in Chromium
 BCK-005	*	CDP-instrumented: web-text-composition-lifecycle stages through Input.imeSetComposition; the other eight scenarios run
 BCK-007	*	CDP-instrumented: web-display-dpr-scale-factor and web-display-teardown-quiet stage through Emulation.setDeviceMetricsOverride

@@ -54,8 +54,10 @@ test('launch construction routes each engine to its own Playwright projects', as
       [...configArguments, ...chromiumProjects],
     );
   }
-  // Firefox carries the one target-dependent exclusion (the wasmJs-only TypeScript publication
-  // race), so its project is split per Kotlin target; WebKit needs no split.
+  // Firefox and WebKit each carry one target-dependent exclusion (the wasmJs-only TypeScript
+  // publication race on Firefox; the wasmJs-only duplicate-attach admission race on both), so
+  // each engine's project is split per Kotlin target and the js run keeps the test through the
+  // -js project.
   assert.deepEqual(
     createPlaywrightLaunch('linux', baseOptions, 'firefox', 'js').argumentsList,
     [...configArguments, '--project=firefox-js'],
@@ -66,7 +68,11 @@ test('launch construction routes each engine to its own Playwright projects', as
   );
   assert.deepEqual(
     createPlaywrightLaunch('linux', baseOptions, 'webkit', 'js').argumentsList,
-    [...configArguments, '--project=webkit'],
+    [...configArguments, '--project=webkit-js'],
+  );
+  assert.deepEqual(
+    createPlaywrightLaunch('linux', baseOptions, 'webkit', 'wasmJs').argumentsList,
+    [...configArguments, '--project=webkit-wasm'],
   );
   assert.throws(
     () => createPlaywrightLaunch('linux', baseOptions, 'opera', 'js'),
