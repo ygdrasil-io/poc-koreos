@@ -1900,6 +1900,8 @@ public object KadreIos {
 - Bridge Swift minimal `KadreIos.attach(windowScene, window, surfaceView, applicationFactory, policy)`.
 - SwiftUI utilise un `UIViewControllerRepresentable` hôte.
 - Une fenêtre iPadOS supplémentaire crée une nouvelle scène, une nouvelle session et une nouvelle application via la factory du host.
+- La disponibilité de cet attach et de la façade Swift s’étend à tvOS avec les mêmes noms (`KadreIos`, `KadreHost`) ; le parcours tvOS est mono-scène : une seule session par application, aucune seconde `UIWindowScene` demandée.
+- Sur tvOS, la télécommande est une source d’input propre (directions, sélection, retour), et la navigation par focus reste la responsabilité du moteur de focus du host ; focus et activation de scène ne se confondent pas.
 - Le host, et non un singleton Kadre, conserve la factory et corrèle le `WindowRequestId` avec les options de connexion de scène.
 
 ### 15.3 Web

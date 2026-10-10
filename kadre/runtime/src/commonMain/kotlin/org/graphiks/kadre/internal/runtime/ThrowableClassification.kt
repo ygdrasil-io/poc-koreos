@@ -14,5 +14,10 @@ package org.graphiks.kadre.internal.runtime
  *   (the closest thing is the stdlib-internal `IrLinkageError`), so there is nothing to
  *   classify: a browser build reports an ordinary failure where the JVM would report a broken
  *   bridge, and never claims a linkage failure it cannot observe.
+ * - apple (ios, tvos): `false` for every throwable, exactly like js and wasmJs. Kotlin/Native
+ *   exposes no `LinkageError`, and Objective-C interop failures do not reach Kotlin as catchable
+ *   exceptions. Even the initialiser-failure error Kotlin/Native raises for a failed file or
+ *   class initialiser (`FileFailedToInitializeException`) is an initialisation failure, not a
+ *   linkage failure, so it stays classified `false`.
  */
 internal expect fun Throwable.isLinkageFailure(): Boolean

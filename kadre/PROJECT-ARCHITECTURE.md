@@ -129,9 +129,9 @@ Le graphe respecte les invariants suivants :
 |---|---|
 | `kadre` | metadata commune et variantes correspondant aux composants agrégés |
 | `foundation` | `commonMain` principalement, sans type SDK |
-| `runtime` | `commonMain`, avec spécialisations Android, iOS, JS, Wasm et JVM seulement si le runtime l’exige |
+| `runtime` | `commonMain`, avec spécialisations Android, iOS, tvOS, JS, Wasm et JVM seulement si le runtime l’exige |
 | `platform:android` | Android |
-| `platform:uikit` | iOS Kotlin/Native |
+| `platform:uikit` | iOS et tvOS Kotlin/Native |
 | `platform:web` | source set partagé Web, puis `jsMain` et `wasmJsMain` pour les types DOM distincts |
 | `platform:desktop` | JVM desktop pour macOS, Windows et Linux |
 | `backend:*` | JVM |
@@ -142,6 +142,8 @@ Le graphe respecte les invariants suivants :
 | `integration:javafx` | JVM |
 
 Cette table ferme la topologie, pas le calendrier. Une target ou une intégration réservée n’est ni créée ni publiée avant de posséder une implémentation utile.
+
+Sur les targets Kotlin/Native, le `commonMain` de `runtime` consomme des déclarations `internal` de `foundation` : la compilation native exige donc le câblage des friend-modules (`-friend-modules` en `freeCompilerArgs` des tasks `KotlinNativeCompile`, la propriété `friendPaths` n’y existant pas en KGP 2.4.20) ; la sonde de la phase 0 a établi ce caractère obligatoire — sans ce câblage, la résolution échoue (44 erreurs d’accès sur la sonde iOS).
 
 ## 6. Publications et visibilité
 
@@ -168,7 +170,7 @@ org.graphiks.kadre:web
 org.graphiks.kadre:desktop
 ```
 
-Leur ABI documentée appartient au contrat Kadre, même si la documentation d’installation ne recommande pas de les déclarer directement.
+Leur ABI documentée appartient au contrat Kadre, même si la documentation d’installation ne recommande pas de les déclarer directement. La publication officielle de l’adaptateur UIKit reste différée jusqu’à satisfaction des garanties structurelles (phase 1) ; la phase 0 ne publie l’adaptateur que vers le dépôt `contractTest`.
 
 ### 6.3 Composants transitifs internes
 

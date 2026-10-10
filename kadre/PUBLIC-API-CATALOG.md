@@ -27,7 +27,7 @@
 | `org.graphiks.kadre.policy` | `KadrePolicy`, `KadrePolicies`, `ExecutionPolicy`, `ExecutionPriority`, `EventDeliveryPolicy`, `ResourceBudgetPolicy`, `DevicePolicy`, `GamepadRouting`, `DeviceEffectOwnership`, `DiagnosticPolicy`, `DiagnosticDataExposure`, `DiagnosticOverflowAction`, `ContinuousDelivery`, `FrameDelivery`, `IngressOverflowAction`, `CollectorOverflowAction`, `ContinuousOverflowAction`, `RawInputDeliveryPolicy`, `RawInputOverflowAction`, `SlowCollectorCancellationException`, `InputDeliveryPolicy`, `WindowDeliveryPolicy`, `CaptureDeliveryPolicy` |
 | `org.graphiks.kadre.diagnostics` | `KadreResult`, `KadreException`, `KadreFailure`, `KadreOperation`, `KadrePolicyComponent`, `KadreResourceKind`, `KadrePlatform`, `InteractionFailureReason`, `Capability`, `FeatureAvailability`, `KadreDiagnostics`, `KadreDiagnostic`, `DiagnosticSeverity`, `KadreSubsystem`, `DiagnosticCounters`, `DiagnosticCounter`, `ExperimentalKadreApi`, `KadrePlatformApi`, `DelicateKadreApi` |
 | `org.graphiks.kadre.platform.android` | quatre overloads `attachKadre`; callback `withAndroidView` |
-| `org.graphiks.kadre.platform.uikit` | `KadreIos`; callback `withUIKitView` |
+| `org.graphiks.kadre.platform.uikit` | `KadreIos`; callback `withUIKitView` (disponibilité iOS/iPadOS et tvOS) |
 | `org.graphiks.kadre.platform.web` | `WebAttachmentPolicy`, `WebWindowHost`, `WebWindowProvider`, `KadreApplicationFactoryRef`, `asHostRef`, overloads factory et application de `attachKadre`, `withWebElement` dans chacun des targets JS/Wasm |
 | `org.graphiks.kadre.platform.desktop` | `DesktopBackend`, `DesktopIntegration`, `DesktopHostOptions`, `DesktopNativeWindowHandle`, `attachKadreDesktop`, `runKadreApplication`, `withDesktopHandle` |
 | `org.graphiks.kadre.test` | `VirtualKadreClock`, `FakeHostOptions`, `FakeCapabilities`, `FakeFeature`, `FakeKadreHost`, `VirtualLifecycleController`, `VirtualSurfaceController`, `VirtualWindowController`, `VirtualDisplayController`, `VirtualInputController`, `VirtualGamepadController`, `VirtualCaptureController`, `FakeDisplayState`, `FakeDropItem`, `FakeCaptureSource`, `FakeCaptureConfiguration`, `FakePixelPlane`, `FakeCaptureFrame` |
@@ -1009,7 +1009,7 @@ Les onze variantes sont exhaustives. Leur constructor est `internal`, mais leurs
 
 ## 9. Déclarations de plateforme
 
-La forme exacte des points d’attachement et options est définie dans `BACKEND-CAPABILITIES.md`; leur décision d’export est définie dans `INTEROP-EXPORTS.md`. Aucun SDK type n’entre dans `commonMain`.
+La forme exacte des points d’attachement et options est définie dans `BACKEND-CAPABILITIES.md`; leur décision d’export est définie dans `INTEROP-EXPORTS.md`. Les points d’attachement UIKit s’appliquent à iOS/iPadOS et tvOS ; le parcours tvOS est mono-scène. Aucun SDK type n’entre dans `commonMain`.
 
 ## 10. Artifact `test`
 

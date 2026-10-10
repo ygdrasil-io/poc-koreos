@@ -17,6 +17,8 @@ import org.graphiks.kadre.surface.SurfaceId
  * - js, wasmJs: one shared field. Both targets are mono-threaded and the DOM never re-enters
  *   synchronously, so a single field carries the frame the same way a `ThreadLocal` does per
  *   thread.
+ * - apple (ios, tvos): one `@ThreadLocal` slot per native thread — the native counterpart of the
+ *   JVM `ThreadLocal`, real per-thread storage on real native threads.
  */
 internal expect class InteractionCallFrame() {
     /** The surface of the innermost running interaction callback, or `null` outside one. */

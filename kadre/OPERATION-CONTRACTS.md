@@ -187,6 +187,8 @@ que l'action soit absente, rejetée ou committée.
 | `HostSurface.withAndroidView`, `withUIKitView`, `withWebElement` | `Success(R)` du callback | `Unsupported(PlatformSurfaceAccess)`, `Closed(Surface)`, `Temporary`, `Platform` | avant début du callback : aucune invocation ; après début, callback non suspendu achevé sur le thread host, puis résultat remis seulement au waiter encore actif. Une exception callback est propagée telle quelle. |
 | `Window.withDesktopHandle` | `Success(R)` du callback | `Unsupported(PlatformWindowAccess)`, `Closed(Window)`, `Temporary`, `Platform` | même règle ; aucune validité du handle n’est promise après le retour du callback. |
 
+La ligne `withUIKitView` couvre iOS/iPadOS et tvOS ; le chemin tvOS est livré avec la phase 2 UIKit et n’est pas déduit d’une preuve iOS.
+
 ## 8. Capture
 
 | Opération | Succès / résultat | Failures directes admises | Cancellation et autorité |

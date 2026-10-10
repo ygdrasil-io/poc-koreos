@@ -1,0 +1,696 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		034DDEAA05709F650A3B9E5E /* MainApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = CEA47E7FE25F4B4C3C5A5A7B /* MainApp.swift */; };
+		07F945B2FBD4D75DBBCFF676 /* DriverFixture.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1E444F71E79C711F6BF4ED11 /* DriverFixture.swift */; };
+		0F4DDB979A091F83D7DD43E9 /* DriverSceneDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1D37932D257E216FA8982CD /* DriverSceneDelegate.swift */; };
+		3F8C640BBE16B94EF162448B /* KadreUikit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 418337605D5B3199B7E05325 /* KadreUikit.framework */; };
+		447FB172AC08C6378923191F /* DriverFixture.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1E444F71E79C711F6BF4ED11 /* DriverFixture.swift */; };
+		4F0821B66EE40581CE13D280 /* KadreUikit.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 418337605D5B3199B7E05325 /* KadreUikit.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		5BF1729E91D5C95BD0B4C26C /* KadreUikitDriverTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 34888DC507A9523344912ADC /* KadreUikitDriverTests.swift */; };
+		5D1B320938D1B7DE6A75EC39 /* KadreUikit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 418337605D5B3199B7E05325 /* KadreUikit.framework */; };
+		993798177928E45DD8DDF7E5 /* KadreUikitDriverTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 34888DC507A9523344912ADC /* KadreUikitDriverTests.swift */; };
+		AE3A2C494182A1D8939A3C0B /* DriverSceneDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1D37932D257E216FA8982CD /* DriverSceneDelegate.swift */; };
+		C7C57FE2E6827FC672C6BB25 /* KadreUikit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 0BE6A301E633DDEB145A1DBC /* KadreUikit.framework */; };
+		CC605EAC7648723B63A816A4 /* KadreUikit.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 0BE6A301E633DDEB145A1DBC /* KadreUikit.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		CEFEE3910D583AB4D45A3A32 /* MainApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = FE98F3A76E07C48BCFEE7624 /* MainApp.swift */; };
+		E49BDA2624EB43E594A6B187 /* DriverAppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA321956718EA01BDDC9B035 /* DriverAppDelegate.swift */; };
+		EA945D34993D27F421B50A92 /* DriverAppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA321956718EA01BDDC9B035 /* DriverAppDelegate.swift */; };
+		F5212982C2B3131AFDF6C485 /* KadreUikit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 0BE6A301E633DDEB145A1DBC /* KadreUikit.framework */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		D21F9E78B1BE1062F552B3B2 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 273347CCD9CF3B8FA47945D0 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 5525883501E0E37E0F84C394;
+			remoteInfo = KadreUikitDriverIos;
+		};
+		FBC9B93801EA0D58A2BB8FE9 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 273347CCD9CF3B8FA47945D0 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 357CF9BD840BD724DE081651;
+			remoteInfo = KadreUikitDriverTvOs;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		1391B130B1B5606AD301AD34 /* Embed Frameworks */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 10;
+			files = (
+				4F0821B66EE40581CE13D280 /* KadreUikit.framework in Embed Frameworks */,
+			);
+			name = "Embed Frameworks";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		71175ACA203A2571B79EB98B /* Embed Frameworks */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 10;
+			files = (
+				CC605EAC7648723B63A816A4 /* KadreUikit.framework in Embed Frameworks */,
+			);
+			name = "Embed Frameworks";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
+/* Begin PBXFileReference section */
+		0BE6A301E633DDEB145A1DBC /* KadreUikit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = KadreUikit.framework; path = ../../../platform/uikit/build/bin/tvosSimulatorArm64/debugFramework/KadreUikit.framework; sourceTree = "<group>"; };
+		162BD7AB9092ACFC44FF87B1 /* KadreUikitDriverTvOsTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = KadreUikitDriverTvOsTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		1E444F71E79C711F6BF4ED11 /* DriverFixture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DriverFixture.swift; sourceTree = "<group>"; };
+		34888DC507A9523344912ADC /* KadreUikitDriverTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KadreUikitDriverTests.swift; sourceTree = "<group>"; };
+		418337605D5B3199B7E05325 /* KadreUikit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = KadreUikit.framework; path = ../../../platform/uikit/build/bin/iosSimulatorArm64/debugFramework/KadreUikit.framework; sourceTree = "<group>"; };
+		48C0BE32541B75BA9585E1B3 /* KadreUikitDriverTvOs.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = KadreUikitDriverTvOs.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		5C8547E7BBD74CE87774008C /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		6AF300853AE2B8D0EFFD387F /* KadreUikitDriverIos.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = KadreUikitDriverIos.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		7158A2D7EE927CE0F564B5B7 /* KadreUikitDriverIosTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = KadreUikitDriverIosTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		91719BE8D2BEB7B9A16C9210 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		CEA47E7FE25F4B4C3C5A5A7B /* MainApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainApp.swift; sourceTree = "<group>"; };
+		D1D37932D257E216FA8982CD /* DriverSceneDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DriverSceneDelegate.swift; sourceTree = "<group>"; };
+		DA321956718EA01BDDC9B035 /* DriverAppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DriverAppDelegate.swift; sourceTree = "<group>"; };
+		FE98F3A76E07C48BCFEE7624 /* MainApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainApp.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		0B21C3E489F3E32F4482EEEA /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				5D1B320938D1B7DE6A75EC39 /* KadreUikit.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		6017EF44B8FFCC8D482A6BD6 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				C7C57FE2E6827FC672C6BB25 /* KadreUikit.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		7DDF03897C0B37F10B2B706F /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				3F8C640BBE16B94EF162448B /* KadreUikit.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		885134BA6CD44F9C68464D93 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				F5212982C2B3131AFDF6C485 /* KadreUikit.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		786CA8892BD171820CE67039 /* Shared */ = {
+			isa = PBXGroup;
+			children = (
+				DA321956718EA01BDDC9B035 /* DriverAppDelegate.swift */,
+				1E444F71E79C711F6BF4ED11 /* DriverFixture.swift */,
+				D1D37932D257E216FA8982CD /* DriverSceneDelegate.swift */,
+			);
+			name = Shared;
+			path = apps/Shared;
+			sourceTree = "<group>";
+		};
+		97BF14BE817B85C63AE2CFB5 /* Ios */ = {
+			isa = PBXGroup;
+			children = (
+				5C8547E7BBD74CE87774008C /* Info.plist */,
+				CEA47E7FE25F4B4C3C5A5A7B /* MainApp.swift */,
+			);
+			name = Ios;
+			path = apps/Ios;
+			sourceTree = "<group>";
+		};
+		9B5F9C0254581BF79A6408CA = {
+			isa = PBXGroup;
+			children = (
+				97BF14BE817B85C63AE2CFB5 /* Ios */,
+				786CA8892BD171820CE67039 /* Shared */,
+				AA1AD1E04737B05E03CDB768 /* Shared */,
+				E513D3EB9923675E5B022FB5 /* Tvos */,
+				D417A0BA37926E1243E02C3D /* Frameworks */,
+				C4D6444D83CFAC7D05CF4AA4 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		AA1AD1E04737B05E03CDB768 /* Shared */ = {
+			isa = PBXGroup;
+			children = (
+				34888DC507A9523344912ADC /* KadreUikitDriverTests.swift */,
+			);
+			name = Shared;
+			path = tests/Shared;
+			sourceTree = "<group>";
+		};
+		C4D6444D83CFAC7D05CF4AA4 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				6AF300853AE2B8D0EFFD387F /* KadreUikitDriverIos.app */,
+				7158A2D7EE927CE0F564B5B7 /* KadreUikitDriverIosTests.xctest */,
+				48C0BE32541B75BA9585E1B3 /* KadreUikitDriverTvOs.app */,
+				162BD7AB9092ACFC44FF87B1 /* KadreUikitDriverTvOsTests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		D417A0BA37926E1243E02C3D /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				418337605D5B3199B7E05325 /* KadreUikit.framework */,
+				0BE6A301E633DDEB145A1DBC /* KadreUikit.framework */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
+		E513D3EB9923675E5B022FB5 /* Tvos */ = {
+			isa = PBXGroup;
+			children = (
+				91719BE8D2BEB7B9A16C9210 /* Info.plist */,
+				FE98F3A76E07C48BCFEE7624 /* MainApp.swift */,
+			);
+			name = Tvos;
+			path = apps/Tvos;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		357CF9BD840BD724DE081651 /* KadreUikitDriverTvOs */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 953A9F7F444D5A619D69B1CB /* Build configuration list for PBXNativeTarget "KadreUikitDriverTvOs" */;
+			buildPhases = (
+				FE635F1CD9090FD2A31D720F /* Sources */,
+				885134BA6CD44F9C68464D93 /* Frameworks */,
+				71175ACA203A2571B79EB98B /* Embed Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = KadreUikitDriverTvOs;
+			packageProductDependencies = (
+			);
+			productName = KadreUikitDriverTvOs;
+			productReference = 48C0BE32541B75BA9585E1B3 /* KadreUikitDriverTvOs.app */;
+			productType = "com.apple.product-type.application";
+		};
+		5525883501E0E37E0F84C394 /* KadreUikitDriverIos */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 6FDDAC6C43B765652FAA5351 /* Build configuration list for PBXNativeTarget "KadreUikitDriverIos" */;
+			buildPhases = (
+				5C6060038836FA4B29A1003E /* Sources */,
+				0B21C3E489F3E32F4482EEEA /* Frameworks */,
+				1391B130B1B5606AD301AD34 /* Embed Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = KadreUikitDriverIos;
+			packageProductDependencies = (
+			);
+			productName = KadreUikitDriverIos;
+			productReference = 6AF300853AE2B8D0EFFD387F /* KadreUikitDriverIos.app */;
+			productType = "com.apple.product-type.application";
+		};
+		8622275388A67F934B793A1E /* KadreUikitDriverTvOsTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 3094AC2BBDAEBA3F42901095 /* Build configuration list for PBXNativeTarget "KadreUikitDriverTvOsTests" */;
+			buildPhases = (
+				3E6FF4B52A818022ABFB28A0 /* Sources */,
+				6017EF44B8FFCC8D482A6BD6 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				D8F07B5837093B537B611A8D /* PBXTargetDependency */,
+			);
+			name = KadreUikitDriverTvOsTests;
+			packageProductDependencies = (
+			);
+			productName = KadreUikitDriverTvOsTests;
+			productReference = 162BD7AB9092ACFC44FF87B1 /* KadreUikitDriverTvOsTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		E7960183B9DE474E91F57A3B /* KadreUikitDriverIosTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 23339A3350355EDEDDF47E72 /* Build configuration list for PBXNativeTarget "KadreUikitDriverIosTests" */;
+			buildPhases = (
+				5BBD07B029C46D8FDD1C044D /* Sources */,
+				7DDF03897C0B37F10B2B706F /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				52DB0603C676723F80175E5D /* PBXTargetDependency */,
+			);
+			name = KadreUikitDriverIosTests;
+			packageProductDependencies = (
+			);
+			productName = KadreUikitDriverIosTests;
+			productReference = 7158A2D7EE927CE0F564B5B7 /* KadreUikitDriverIosTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		273347CCD9CF3B8FA47945D0 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1430;
+				TargetAttributes = {
+				};
+			};
+			buildConfigurationList = 2E0A05917074C71FA2FAD248 /* Build configuration list for PBXProject "KadreUikitDriver" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = 9B5F9C0254581BF79A6408CA;
+			minimizedProjectReferenceProxies = 1;
+			preferredProjectObjectVersion = 77;
+			productRefGroup = C4D6444D83CFAC7D05CF4AA4 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				5525883501E0E37E0F84C394 /* KadreUikitDriverIos */,
+				357CF9BD840BD724DE081651 /* KadreUikitDriverTvOs */,
+				E7960183B9DE474E91F57A3B /* KadreUikitDriverIosTests */,
+				8622275388A67F934B793A1E /* KadreUikitDriverTvOsTests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXSourcesBuildPhase section */
+		3E6FF4B52A818022ABFB28A0 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				5BF1729E91D5C95BD0B4C26C /* KadreUikitDriverTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		5BBD07B029C46D8FDD1C044D /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				993798177928E45DD8DDF7E5 /* KadreUikitDriverTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		5C6060038836FA4B29A1003E /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				EA945D34993D27F421B50A92 /* DriverAppDelegate.swift in Sources */,
+				07F945B2FBD4D75DBBCFF676 /* DriverFixture.swift in Sources */,
+				0F4DDB979A091F83D7DD43E9 /* DriverSceneDelegate.swift in Sources */,
+				034DDEAA05709F650A3B9E5E /* MainApp.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		FE635F1CD9090FD2A31D720F /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				E49BDA2624EB43E594A6B187 /* DriverAppDelegate.swift in Sources */,
+				447FB172AC08C6378923191F /* DriverFixture.swift in Sources */,
+				AE3A2C494182A1D8939A3C0B /* DriverSceneDelegate.swift in Sources */,
+				CEFEE3910D583AB4D45A3A32 /* MainApp.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		52DB0603C676723F80175E5D /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 5525883501E0E37E0F84C394 /* KadreUikitDriverIos */;
+			targetProxy = D21F9E78B1BE1062F552B3B2 /* PBXContainerItemProxy */;
+		};
+		D8F07B5837093B537B611A8D /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 357CF9BD840BD724DE081651 /* KadreUikitDriverTvOs */;
+			targetProxy = FBC9B93801EA0D58A2BB8FE9 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		51BD618D198E1B1264CD02A8 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGNING_ALLOWED = NO;
+				CODE_SIGN_IDENTITY = "";
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+				TVOS_DEPLOYMENT_TARGET = 16.0;
+			};
+			name = Debug;
+		};
+		6277C3732F400810CA2C3B78 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				FRAMEWORK_SEARCH_PATHS = (
+					"$(inherited) $(SRCROOT)/../../../platform/uikit/build/bin/tvosSimulatorArm64/debugFramework",
+					"\"../../../platform/uikit/build/bin/tvosSimulatorArm64/debugFramework\"",
+				);
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = org.graphiks.kadre.driver.KadreUikitDriverTvOsTests;
+				SDKROOT = appletvos;
+				TARGETED_DEVICE_FAMILY = 3;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/KadreUikitDriverTvOs.app/KadreUikitDriverTvOs";
+			};
+			name = Debug;
+		};
+		8AFF001522379E7D985197D6 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				FRAMEWORK_SEARCH_PATHS = (
+					"$(inherited) $(SRCROOT)/../../../platform/uikit/build/bin/iosSimulatorArm64/debugFramework",
+					"\"../../../platform/uikit/build/bin/iosSimulatorArm64/debugFramework\"",
+				);
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = org.graphiks.kadre.driver.KadreUikitDriverIosTests;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/KadreUikitDriverIos.app/KadreUikitDriverIos";
+			};
+			name = Debug;
+		};
+		8C3F4F8D006022E18D0E8667 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = "App Icon & Top Shelf Image";
+				ASSETCATALOG_COMPILER_LAUNCHIMAGE_NAME = LaunchImage;
+				FRAMEWORK_SEARCH_PATHS = (
+					"$(inherited) $(SRCROOT)/../../../platform/uikit/build/bin/tvosSimulatorArm64/debugFramework",
+					"\"../../../platform/uikit/build/bin/tvosSimulatorArm64/debugFramework\"",
+				);
+				INFOPLIST_FILE = apps/Tvos/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = org.graphiks.kadre.driver.tvos;
+				SDKROOT = appletvos;
+				TARGETED_DEVICE_FAMILY = 3;
+			};
+			name = Release;
+		};
+		C93BB0A42F3EDB8668C38882 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGNING_ALLOWED = NO;
+				CODE_SIGN_IDENTITY = "";
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.0;
+				TVOS_DEPLOYMENT_TARGET = 16.0;
+			};
+			name = Release;
+		};
+		CBB36CA22ECFC6FD422D499E /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				FRAMEWORK_SEARCH_PATHS = (
+					"$(inherited) $(SRCROOT)/../../../platform/uikit/build/bin/iosSimulatorArm64/debugFramework",
+					"\"../../../platform/uikit/build/bin/iosSimulatorArm64/debugFramework\"",
+				);
+				INFOPLIST_FILE = apps/Ios/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = org.graphiks.kadre.driver.ios;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		E2AE3E0A2CFB74816D01F269 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				FRAMEWORK_SEARCH_PATHS = (
+					"$(inherited) $(SRCROOT)/../../../platform/uikit/build/bin/iosSimulatorArm64/debugFramework",
+					"\"../../../platform/uikit/build/bin/iosSimulatorArm64/debugFramework\"",
+				);
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = org.graphiks.kadre.driver.KadreUikitDriverIosTests;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/KadreUikitDriverIos.app/KadreUikitDriverIos";
+			};
+			name = Release;
+		};
+		E2D39512ED96D54D8D85FA28 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				FRAMEWORK_SEARCH_PATHS = (
+					"$(inherited) $(SRCROOT)/../../../platform/uikit/build/bin/iosSimulatorArm64/debugFramework",
+					"\"../../../platform/uikit/build/bin/iosSimulatorArm64/debugFramework\"",
+				);
+				INFOPLIST_FILE = apps/Ios/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = org.graphiks.kadre.driver.ios;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		E7CC8F8B67B73E0A6D2261CE /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = "App Icon & Top Shelf Image";
+				ASSETCATALOG_COMPILER_LAUNCHIMAGE_NAME = LaunchImage;
+				FRAMEWORK_SEARCH_PATHS = (
+					"$(inherited) $(SRCROOT)/../../../platform/uikit/build/bin/tvosSimulatorArm64/debugFramework",
+					"\"../../../platform/uikit/build/bin/tvosSimulatorArm64/debugFramework\"",
+				);
+				INFOPLIST_FILE = apps/Tvos/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = org.graphiks.kadre.driver.tvos;
+				SDKROOT = appletvos;
+				TARGETED_DEVICE_FAMILY = 3;
+			};
+			name = Debug;
+		};
+		F4BAB8A794AFE2F67AE1FC73 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				FRAMEWORK_SEARCH_PATHS = (
+					"$(inherited) $(SRCROOT)/../../../platform/uikit/build/bin/tvosSimulatorArm64/debugFramework",
+					"\"../../../platform/uikit/build/bin/tvosSimulatorArm64/debugFramework\"",
+				);
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = org.graphiks.kadre.driver.KadreUikitDriverTvOsTests;
+				SDKROOT = appletvos;
+				TARGETED_DEVICE_FAMILY = 3;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/KadreUikitDriverTvOs.app/KadreUikitDriverTvOs";
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		23339A3350355EDEDDF47E72 /* Build configuration list for PBXNativeTarget "KadreUikitDriverIosTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				8AFF001522379E7D985197D6 /* Debug */,
+				E2AE3E0A2CFB74816D01F269 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		2E0A05917074C71FA2FAD248 /* Build configuration list for PBXProject "KadreUikitDriver" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				51BD618D198E1B1264CD02A8 /* Debug */,
+				C93BB0A42F3EDB8668C38882 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		3094AC2BBDAEBA3F42901095 /* Build configuration list for PBXNativeTarget "KadreUikitDriverTvOsTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				6277C3732F400810CA2C3B78 /* Debug */,
+				F4BAB8A794AFE2F67AE1FC73 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		6FDDAC6C43B765652FAA5351 /* Build configuration list for PBXNativeTarget "KadreUikitDriverIos" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				E2D39512ED96D54D8D85FA28 /* Debug */,
+				CBB36CA22ECFC6FD422D499E /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		953A9F7F444D5A619D69B1CB /* Build configuration list for PBXNativeTarget "KadreUikitDriverTvOs" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				E7CC8F8B67B73E0A6D2261CE /* Debug */,
+				8C3F4F8D006022E18D0E8667 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 273347CCD9CF3B8FA47945D0 /* Project object */;
+}

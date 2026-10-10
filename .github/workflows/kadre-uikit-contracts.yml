@@ -1,0 +1,87 @@
+name: Kadre UIKit Contracts
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  uikit-ios-simulator:
+    name: uikit-ios-simulator
+    # Image publique en preview (actions/runner-images#14404 : Xcode 27 préinstallé sur
+    # macOS 27) — choisie car macos-26 livre au mieux Xcode 26.6 / runtimes 26.x, et la
+    # roadmap interdit de dégrader silencieusement les destinations (iOS/tvOS 27.0).
+    # Quirk connu du preview (Metal Toolchain possiblement absente) : sans effet sur cette
+    # gate. Toute instabilité apparaît en job rouge à diagnostiquer, jamais en skip.
+    runs-on: xcode-27
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 25
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "25"
+          cache: gradle
+
+      - name: Grant execute permission
+        run: chmod +x gradlew scripts/test-uikit-simulator.sh
+
+      - name: Run iOS simulator UIKit contract gate
+        run: ./scripts/test-uikit-simulator.sh ios
+
+      - name: Upload iOS simulator contract artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: uikit-ios-contract-artifacts
+          path: |
+            kadre/contracts/driver/uikit/build/contract-evidence/
+            kadre/contracts/driver/uikit/build/xcresult/
+          if-no-files-found: ignore
+          include-hidden-files: true
+
+  uikit-tvos-simulator:
+    name: uikit-tvos-simulator
+    # Image publique en preview (actions/runner-images#14404 : Xcode 27 préinstallé sur
+    # macOS 27) — choisie car macos-26 livre au mieux Xcode 26.6 / runtimes 26.x, et la
+    # roadmap interdit de dégrader silencieusement les destinations (iOS/tvOS 27.0).
+    # Quirk connu du preview (Metal Toolchain possiblement absente) : sans effet sur cette
+    # gate. Toute instabilité apparaît en job rouge à diagnostiquer, jamais en skip.
+    runs-on: xcode-27
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 25
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "25"
+          cache: gradle
+
+      - name: Grant execute permission
+        run: chmod +x gradlew scripts/test-uikit-simulator.sh
+
+      - name: Run tvOS simulator UIKit contract gate
+        run: ./scripts/test-uikit-simulator.sh tvos
+
+      - name: Upload tvOS simulator contract artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: uikit-tvos-contract-artifacts
+          path: |
+            kadre/contracts/driver/uikit/build/contract-evidence/
+            kadre/contracts/driver/uikit/build/xcresult/
+          if-no-files-found: ignore
+          include-hidden-files: true

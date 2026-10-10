@@ -1,0 +1,97 @@
+name: KadreUikitDriver
+options:
+  bundleIdPrefix: org.graphiks.kadre.driver
+  deploymentTarget:
+    iOS: "16.0"
+    tvOS: "16.0"
+settings:
+  base:
+    CODE_SIGNING_ALLOWED: "NO"
+    CODE_SIGN_IDENTITY: ""
+    SWIFT_VERSION: "5.0"
+targets:
+  KadreUikitDriverIos:
+    type: application
+    platform: iOS
+    sources:
+      - path: apps/Shared
+      - path: apps/Ios
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: org.graphiks.kadre.driver.ios
+        FRAMEWORK_SEARCH_PATHS: "$(inherited) $(SRCROOT)/../../../platform/uikit/build/bin/iosSimulatorArm64/debugFramework"
+    dependencies:
+      - framework: "../../../platform/uikit/build/bin/iosSimulatorArm64/debugFramework/KadreUikit.framework"
+        embed: true
+    info:
+      path: apps/Ios/Info.plist
+      properties:
+        UILaunchStoryboardName: ""
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: false
+          UISceneConfigurations:
+            UIWindowSceneSessionRoleApplication:
+              - UISceneConfigurationName: default
+                UISceneDelegateClassName: $(PRODUCT_MODULE_NAME).DriverSceneDelegate
+  KadreUikitDriverTvOs:
+    type: application
+    platform: tvOS
+    sources:
+      - path: apps/Shared
+      - path: apps/Tvos
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: org.graphiks.kadre.driver.tvos
+        FRAMEWORK_SEARCH_PATHS: "$(inherited) $(SRCROOT)/../../../platform/uikit/build/bin/tvosSimulatorArm64/debugFramework"
+    dependencies:
+      - framework: "../../../platform/uikit/build/bin/tvosSimulatorArm64/debugFramework/KadreUikit.framework"
+        embed: true
+    info:
+      path: apps/Tvos/Info.plist
+      properties:
+        UILaunchStoryboardName: ""
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: false
+          UISceneConfigurations:
+            UIWindowSceneSessionRoleApplication:
+              - UISceneConfigurationName: default
+                UISceneDelegateClassName: $(PRODUCT_MODULE_NAME).DriverSceneDelegate
+  KadreUikitDriverIosTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: tests/Shared
+    settings:
+      base:
+        FRAMEWORK_SEARCH_PATHS: "$(inherited) $(SRCROOT)/../../../platform/uikit/build/bin/iosSimulatorArm64/debugFramework"
+    dependencies:
+      - target: KadreUikitDriverIos
+      - framework: "../../../platform/uikit/build/bin/iosSimulatorArm64/debugFramework/KadreUikit.framework"
+        embed: false
+  KadreUikitDriverTvOsTests:
+    type: bundle.unit-test
+    platform: tvOS
+    sources:
+      - path: tests/Shared
+    settings:
+      base:
+        FRAMEWORK_SEARCH_PATHS: "$(inherited) $(SRCROOT)/../../../platform/uikit/build/bin/tvosSimulatorArm64/debugFramework"
+    dependencies:
+      - target: KadreUikitDriverTvOs
+      - framework: "../../../platform/uikit/build/bin/tvosSimulatorArm64/debugFramework/KadreUikit.framework"
+        embed: false
+schemes:
+  KadreUikitDriverIos:
+    build:
+      targets:
+        KadreUikitDriverIos: all
+    test:
+      targets:
+        - KadreUikitDriverIosTests
+  KadreUikitDriverTvOs:
+    build:
+      targets:
+        KadreUikitDriverTvOs: all
+    test:
+      targets:
+        - KadreUikitDriverTvOsTests
