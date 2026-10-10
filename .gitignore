@@ -27,3 +27,7 @@ hs_err_*.log
 
 # npm dependency trees of the consumer builds
 node_modules/
+
+# Xcode driver artifacts
+xcuserdata/
+*.xcuserstate
