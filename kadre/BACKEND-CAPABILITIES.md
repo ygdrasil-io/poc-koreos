@@ -236,6 +236,8 @@ public object KadreIos {
 
 La scope parent est créée et possédée par l’adapter sur le main dispatcher de la scène. L’attach exige `window.windowScene === windowScene`, `surfaceView.window === window` et une scène connectée ; sinon il retourne `InvalidRequest("window")` ou `InvalidRequest("surfaceView")` sans session. Une scène n’accepte qu’une session et les éventuelles autres UIWindows overlay restent host-owned. Il n’existe ni overload `UIApplication`, ni sélection de key window, ni session globale, ni implémentation Swift promise de `KadreApplication` v1.
 
+Disponibilité tvOS : les mêmes contrats d’attach s’appliquent à tvOS, avec une topologie mono-scène ; `requestWindow` y retourne un état `Rejected(Unsupported(RequestWindow))` (livré en phase 4). Les sources d’input tvOS (télécommande, focus) et leurs limites sont décrites par phase ; aucune parité IME ou touch n’est supposée. Les preuves iOS et tvOS sont séparées et obligatoires ; une preuve iOS ne couvre pas tvOS.
+
 ### 6.3 Web (`org.graphiks.kadre.platform.web`)
 
 Les deux targets exposent sémantiquement la même surface et utilisent le type SDK `org.w3c.dom.HTMLElement` fourni par leurs toolchains respectives :
