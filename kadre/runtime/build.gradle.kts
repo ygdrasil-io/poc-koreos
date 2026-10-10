@@ -28,6 +28,10 @@ kotlin {
     jvm()
     js { browser() }
     wasmJs { browser() }
+    iosArm64()
+    iosSimulatorArm64()
+    tvosArm64()
+    tvosSimulatorArm64()
     explicitApi()
 
     sourceSets {
@@ -50,6 +54,32 @@ tasks.withType<BaseKotlinCompile>().configureEach {
         dependsOn(foundationJvmJar)
         friendPaths.from(foundationJvmJar.flatMap(Jar::getArchiveFile))
     }
+}
+
+// Native friend probe (2026-10-10, phase 0): verdict (a) — the Native friend mechanism works.
+// `KotlinNativeCompile.friendPaths` does not exist in KGP 2.4.20; the working channel is
+// `-friend-modules=<klib>` on compilerOptions.freeCompilerArgs, where each klib path must be the
+// module dir (…/main/klib/<module>) exactly as KGP passes it to -library. The argument is
+// single-valued with last-write-wins: for test compilations KGP already friends this module's
+// own main klib there, so the wiring repeats it (plus foundation) — a foundation-only value
+// would override it and break the tests' access to runtime's own internals.
+// Not dormant: runtime's own commonMain consumes foundation internal constructors, so this
+// wiring is what lets the ios/tvos targets compile at all. It will also serve platform:uikit
+// consuming runtime internals in phase 1 (mirror of the JVM wiring above).
+val foundationNativeTargets = listOf("IosArm64", "IosSimulatorArm64", "TvosArm64", "TvosSimulatorArm64")
+
+tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinNativeCompile>().configureEach {
+    val targetSegment = foundationNativeTargets.firstOrNull { name.endsWith(it) } ?: return@configureEach
+    val kotlinClassesDir = layout.buildDirectory.dir("classes/kotlin/${targetSegment.replaceFirstChar(Char::lowercase)}/main/klib")
+    val ownMainKlib = kotlinClassesDir.map { it.dir(project.name) }
+    val foundationMainKlib = foundationProject.layout.buildDirectory
+        .dir("classes/kotlin/${targetSegment.replaceFirstChar(Char::lowercase)}/main/klib/${foundationProject.name}")
+    dependsOn(foundationProject.tasks.named("compileKotlin$targetSegment"))
+    compilerOptions.freeCompilerArgs.add(
+        ownMainKlib.zip(foundationMainKlib) { own, foundation ->
+            "-friend-modules=${own.asFile.absolutePath}${File.pathSeparator}${foundation.asFile.absolutePath}"
+        },
+    )
 }
 
 tasks.withType<KotlinCompileCommon>().configureEach {
