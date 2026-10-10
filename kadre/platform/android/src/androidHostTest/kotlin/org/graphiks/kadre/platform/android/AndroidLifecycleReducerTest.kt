@@ -40,8 +40,11 @@ class AndroidLifecycleReducerTest {
     }
 
     @Test
-    fun terminalPriorityStopVsDestroyVsException() {
+    fun terminalPriorityDestroyVsDetach() {
         // Le premier signal terminal gagne ; destroy après detach, detach après destroy, etc.
+        // (La jambe « exception » du nom historique — un callback qui lance — est portée par
+        // l'arbitrage premier-terminal-gagne du runtime et par le catch de
+        // `proposeHostStop` : elle sera épinglée à l'arrivée des interactions, phase 4.)
         val first = AndroidLifecycleReducer(initial())
         first.onEvent(AndroidHostEvent.LifecycleDestroyed)
         assertEquals(AndroidLifecycleDecision.Ignore, first.onEvent(AndroidHostEvent.ViewDetached))

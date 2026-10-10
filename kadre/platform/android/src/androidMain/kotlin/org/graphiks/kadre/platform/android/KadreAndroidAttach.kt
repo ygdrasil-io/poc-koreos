@@ -174,9 +174,15 @@ private fun View.viewAttachRequest(
  *    ses observateurs et relit les préconditions : un détachement ou une destruction survenus
  *    pendant l'installation produisent le terminal immédiatement ;
  * 5. `controller.attach(parentScope, applicationFactory, policy, launch = null)` — succès :
- *    `Success(session)` ; échec : **rollback intégral** (teardown du binding, rollback de la
- *    réservation) puis `Failure(reason)` — plus jamais d'exception sur ce chemin (le gap de
- *    sûreté d'exception de la phase 0 est comblé).
+ *    `Success(session)` ; échec : **rollback intégral** (teardown du binding, rollback de
+ *    la réservation) puis `Failure(reason)`. Le contrat d'exception exact de ce chemin
+ *    ([installBindingAndAttach]) : les refus d'admission et les rejets du contrôleur
+ *    deviennent des `KadreResult` ; les erreurs de programmation et les throwables SDK —
+ *    installation du binding (`addObserver`/`addOnAttachStateChangeListener`), construction
+ *    du contrôleur, `session.start()`/`clockFactory.start()` dans `controller.attach` — se
+ *    propagent TELS QUELS, mais seulement APRÈS le rollback intégral : jamais avec la
+ *    réservation encore tenue (la View resterait in-attachable jusqu'à la mort du
+ *    processus), jamais reconverti en une failure que la taxonomie n'admets pas.
  *
  * Les publications ordinaires du réducteur deviennent l'état lifecycle du runtime
  * (`RuntimeHostController.updateLifecycle`, RUN-004 — le modèle de la couture web) en plus
@@ -317,18 +323,60 @@ internal object AndroidHostSession {
             },
         )
         binding = lifecycleBinding
-        lifecycleBinding.install(owner, view)
 
-        // 5. L'attach du runtime — succès : la session vit ; échec : rollback intégral puis
-        //    `Failure`, jamais d'exception.
-        return when (val attached = controller.attach(parentScope, applicationFactory, policy, launch = null)) {
-            is KadreResult.Success -> KadreResult.Success(attached.value)
+        // 4+5. L'installation du binding puis l'attach du runtime, sous le garde post-
+        //      réservation : rejet du contrôleur → rollback intégral puis `Failure` ;
+        //      throwable (SDK d'installation, erreur de programmation, échec brut de
+        //      `controller.attach`) → rollback intégral puis propagation TELLE QUELLE.
+        return installBindingAndAttach(
+            reservation = reservation,
+            binding = lifecycleBinding,
+            installBinding = { lifecycleBinding.install(owner, view) },
+            attachController = {
+                controller.attach(parentScope, applicationFactory, policy, launch = null)
+            },
+        )
+    }
 
-            is KadreResult.Failure -> {
-                lifecycleBinding.teardown()
-                reservation.rollback()
-                KadreResult.Failure(attached.reason)
+    /**
+     * La couture post-réservation ([AndroidHostSession.attach], étapes 4 et 5) : installer le
+     * binding, attacher le contrôleur, et garantir que CHAQUE issue laisse l'ownership propre.
+     *
+     * - `attachController` rejette (`KadreResult.Failure`) : teardown du binding, rollback de
+     *   la réservation, `Failure(reason)` retournée — le chemin nominal d'échec.
+     * - un throwable se propage — SDK d'installation (`Lifecycle.addObserver`,
+     *   `View.addOnAttachStateChangeListener` peuvent lancer après l'acquisition de la
+     *   réservation), erreur de programmation, échec brut de `controller.attach` hors son
+     *   `_KadreResult` interne — mais APRÈS teardown + rollback, et TEL QUEL : le
+     *   reconvertir inventerait une failure hors taxonomie, le laisser fuir avec la
+     *   réservation tenue rendrait la View in-attachable jusqu'à la mort du processus.
+     *
+     * `installBinding` est la seule étape injectée — c'est la seule qui touche le SDK
+     * Android ; le test hôte `AndroidHostSessionResultTest.throwingInstallStepRollsBackAndRethrowsRaw`
+     * la remplace par une étape lançante pour épingler le rollback sans construire de View
+     * réelle.
+     */
+    internal fun installBindingAndAttach(
+        reservation: AndroidAttachReservation,
+        binding: AndroidLifecycleBinding,
+        installBinding: () -> Unit,
+        attachController: () -> KadreResult<KadreSession>,
+    ): KadreResult<KadreSession> {
+        try {
+            installBinding()
+            return when (val attached = attachController()) {
+                is KadreResult.Success -> attached
+
+                is KadreResult.Failure -> {
+                    binding.teardown()
+                    reservation.rollback()
+                    KadreResult.Failure(attached.reason)
+                }
             }
+        } catch (cause: Throwable) {
+            binding.teardown()
+            reservation.rollback()
+            throw cause
         }
     }
 

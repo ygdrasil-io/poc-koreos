@@ -181,11 +181,17 @@ authoritative list with the owning phase lives in
   surface metrics snapshot is frozen at attach; only attachment/visibility/
   focus are kept current by the lifecycle reducer);
 - **Phase 3** — keyboard, pointer, touch (no listener is installed on the View);
-- **Phase 4** — real window commands and transient interactions (the Activity
-  primary window exists as a topology — its commands answer `Unsupported` of
-  their operation — and a View host has no `Window` by the normative matrix);
-  the multi-window/dialog refinement of the "interactive window" conjunct of
-  `Active` (derived from the lifecycle alone in phase 1: `Active` ⇔ `RESUMED`);
+- **Phase 4** — real window commands and transient interactions (the Activity primary window
+  exists as a topology; its commands are answered on the exact contract-row shapes of
+  `OPERATION-CONTRACTS` §4 — no real commands: `apply` rejects every requested field under
+  `PartiallyApplied`, `requestAttention` stays `Unsupported`, `respondToCloseRequest` answers
+  `Invalid("requestId")` because no `CloseRequested` is ever published — and a View host has
+  no `Window` by the normative matrix); `close` answers `Temporary(retryable = false)`, the
+  interim on-row response for a structurally non-closable host window (the row admits only
+  `Temporary`/`Platform`; the normative decision — `Unsupported(CloseWindow)` would need an
+  `OPERATION-CONTRACTS` edit — is parked for phase 4); the multi-window/dialog refinement of
+  the "interactive window" conjunct of `Active` (derived from the lifecycle alone in phase 1:
+  `Active` ⇔ `RESUMED`);
 - **Phase 5** — text input/IME, gestures; **Phase 6** — drag-and-drop;
 - **Phase 7** — displays, devices, gamepads, memory pressure, raw-input
   decision; **Phase 8** — capture; **Phase 9** — Java facade, Compose;

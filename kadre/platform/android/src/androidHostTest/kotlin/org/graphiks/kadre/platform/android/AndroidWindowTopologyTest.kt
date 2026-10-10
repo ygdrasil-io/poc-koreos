@@ -15,6 +15,7 @@ import org.graphiks.kadre.surface.LogicalInsets
 import org.graphiks.kadre.surface.LogicalSize
 import org.graphiks.kadre.surface.PhysicalSize
 import org.graphiks.kadre.surface.PointerCaptureMode
+import org.graphiks.kadre.surface.PropertyChange
 import org.graphiks.kadre.surface.SurfaceAppearance
 import org.graphiks.kadre.surface.SurfaceAttachmentState
 import org.graphiks.kadre.surface.SurfaceContrast
@@ -24,9 +25,15 @@ import org.graphiks.kadre.surface.SurfaceRevision
 import org.graphiks.kadre.surface.SurfaceState
 import org.graphiks.kadre.surface.SurfaceTheme
 import org.graphiks.kadre.surface.SurfaceVisibility
+import org.graphiks.kadre.window.RejectedWindowField
+import org.graphiks.kadre.window.WindowCloseDecision
+import org.graphiks.kadre.window.WindowProperty
 import org.graphiks.kadre.window.WindowRequestOutcome
 import org.graphiks.kadre.window.WindowRequestState
+import org.graphiks.kadre.window.WindowRevision
 import org.graphiks.kadre.window.WindowSpec
+import org.graphiks.kadre.window.WindowUpdate
+import org.graphiks.kadre.window.WindowUpdateOutcome
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
@@ -91,6 +98,66 @@ class AndroidWindowTopologyTest {
         assertEquals(
             KadreFailure.Unsupported(KadreOperation.RequestWindow),
             (request.await() as WindowRequestOutcome.Rejected).failure,
+        )
+    }
+
+    @Test
+    fun windowCommandsAnswerOnContractRowShapes() = runBlocking {
+        val manager = AndroidActivityWindowManager(
+            primarySurface = primarySurface(),
+            nextRequestId = RuntimeProcessIds::nextWindowRequestId,
+        )
+        val window = manager.state.value.windows.single()
+
+        // `apply` (contrat §4) : un champ valide mais non supporté se rejette CHAMP PAR CHAMP
+        // dans le SUCCÈS `PartiallyApplied` — jamais une failure externe. Chaque champ demandé
+        // revient `RejectedWindowField(Unsupported(UpdateWindow))`, aucun champ n'est appliqué :
+        // l'état rendu est l'instantané courant, révision intacte, aucun événement.
+        val applied = window.apply(WindowUpdate(title = PropertyChange.Set("ignored")))
+        val partially = when (applied) {
+            is KadreResult.Success -> applied.value as WindowUpdateOutcome.PartiallyApplied
+            is KadreResult.Failure ->
+                throw AssertionError("apply must answer PartiallyApplied, got $applied")
+        }
+        assertEquals(
+            listOf(
+                RejectedWindowField(
+                    WindowProperty.Title,
+                    KadreFailure.Unsupported(KadreOperation.UpdateWindow),
+                ),
+            ),
+            partially.rejected,
+        )
+        assertSame(window.state.value, partially.state)
+        assertEquals(WindowRevision(0), partially.state.revision)
+        // Le champ non demandé n'est pas rejeté ; la garde de révision reste honnête (`Stale`).
+        val noop = window.apply(WindowUpdate())
+        assertTrue(noop is KadreResult.Success && noop.value is WindowUpdateOutcome.Applied)
+        assertEquals(
+            KadreFailure.StaleRevision(7L, 0L),
+            (window.apply(WindowUpdate(expectedRevision = WindowRevision(7))) as KadreResult.Failure).reason,
+        )
+
+        // `close` : ruling provisoire on-row — la fenêtre d'host Activity est structurellement
+        // non fermable, la ligne n'admets que `Temporary`/`Platform` ; `Temporary` non
+        // retryable dit « sans espoir de succès ici » sans réviser le contrat (décision
+        // normative parkée phase 4).
+        assertEquals(
+            KadreFailure.TemporarilyUnavailable(retryable = false),
+            (window.close() as KadreResult.Failure).reason,
+        )
+
+        // `respondToCloseRequest` : `events` est vide — aucun `CloseRequested` n'est jamais
+        // publié — donc aucun `requestId` ne peut être valide : `Invalid("requestId")`, le
+        // field exact du registre `InvalidRequest`.
+        assertEquals(
+            KadreFailure.InvalidRequest("requestId"),
+            (
+                window.respondToCloseRequest(
+                    RuntimeProcessIds.nextWindowCloseRequestId(),
+                    WindowCloseDecision.Accept,
+                ) as KadreResult.Failure
+                ).reason,
         )
     }
 
