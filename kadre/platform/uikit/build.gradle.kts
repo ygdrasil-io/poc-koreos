@@ -46,6 +46,12 @@ kotlin {
         binaries {
             framework {
                 baseName = "KadreUikit"
+                // `KadreResult<KadreSession>` s'efface en `id<KadreResult>` côté Obj-C (pas de
+                // paramètre de type exporté) : sans export de la foundation, la session rendue
+                // par `KadreIos.attach` est inutilisable depuis Swift — ni close(), ni
+                // requestStop(), ni awaitTermination(). L'export rend l'API publique foundation
+                // (KadreSession, KadreApplicationFactory, KadrePolicy…) visible du driver Swift.
+                export(project(":kadre:foundation"))
             }
         }
     }

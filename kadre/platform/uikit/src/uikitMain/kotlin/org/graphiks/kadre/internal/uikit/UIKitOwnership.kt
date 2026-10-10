@@ -56,6 +56,16 @@ internal class UIKitOwnership(private val reservation: UIKitSceneReservation) {
         release()
     }
 
+    /**
+     * Révocation d'admission (handler de révocation de session, roadmap l.120) : couper les
+     * observers SANS libérer la réservation — la terminaison ([release]) fera le reste dans
+     * l'ordre non négociable. Idempotent : [UIKitLifecycleSource.close] est gardé par son
+     * drapeau `closed`.
+     */
+    fun releaseObserversOnly() {
+        observedSource?.close()
+    }
+
     fun release() {
         observedSource?.close()
         reservation.release()

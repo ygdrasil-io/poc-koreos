@@ -26,8 +26,8 @@ public data class KadreUikitObservation(
 
 /**
  * Sonde de conduite de la phase 0 : prouve que le code Kotlin/Native observe des objets UIKit
- * réels reçus du host. Scaffolding du driver — remplacé par `KadreIos.attach` en phase 1 ;
- * ne fait partie d'aucune façade promise. Marqué platform-api : opt-in explicite du consumer.
+ * réels reçus du host. Scaffolding du driver — complété par `KadreIos.attach` (phase 1).
+ * Marqué platform-api : opt-in explicite du consumer.
  */
 @KadrePlatformApi
 public object KadreUikitProbe {
