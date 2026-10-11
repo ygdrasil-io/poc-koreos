@@ -9,8 +9,8 @@ Exclusions de la tranche : fenêtres et interop renderer (phase 2, cadré par D2
 ## Préconditions KFFI
 
 - `KFFI-WAYLAND-001` (`wl_display_connect_to_fd`, statut `pending review`) : **conditionne uniquement le support `WAYLAND_SOCKET` au run** — règles R3/R7 de `WAYLAND-PHASE-0-DECISIONS.md`. Tant qu'il est ouvert, un run avec `WAYLAND_SOCKET` échoue avant session (table F1, ligne 4) ; le reste de la tranche 1 (connexion par nom de socket) est indépendant et non bloqué — règle « un manque bloque sa tranche, pas les domaines indépendants ».
-- Bindings déjà suffisants pour le reste de la tranche (audit `WAYLAND-PHASE-0-KFFI-AUDIT.md` §Conclusion, snapshots pignés) : pompe complète, registry/bind/proxies, listeners bruts + upcallStub, `PosixSymbols`/`PosixWakeup`/`PollFd`, `wl_compositor`/`xdg_wm_base` générés. Aucun autre gap n'ouvre cette tranche.
-- Owner de listeners (quiescence avant destruction, copie des payloads, isolation d'exception) : responsabilité Kadre sur les primitives existantes — composant de la tranche, pas une précondition KFFI.
+- Bindings déjà suffisants pour la connexion et la pompe (audit `WAYLAND-PHASE-0-KFFI-AUDIT.md` §Conclusion, snapshots pignés) : pompe complète, registry/bind/proxies bruts chez kffi, `PosixSymbols`/`PosixWakeup`/`PollFd`, `wl_compositor`/`xdg_wm_base` générés. Le binding managé du registry est livré par kffi (`KFFI-WAYLAND-004`) ; Kadre consomme l'API typée sans aucun FFM local.
+- `KFFI-WAYLAND-004` (binding managé : `WaylandClient` typée + listener registry révocable, stubs/structs FFM possédés par kffi) : **conditionne l'admission par registry** (négociation B-4) — Kadre ne porte aucun stub ni descriptor FFM (règle §3.2). Avant publication, consommation depuis Maven local (précédent KFFI-OBJC-006).
 
 ## Architecture de la tranche
 
