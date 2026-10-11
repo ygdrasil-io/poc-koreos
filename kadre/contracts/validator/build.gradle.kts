@@ -18,7 +18,7 @@ kotlin {
 
 val jvmMain = kotlin.targets.getByName("jvm").compilations.getByName("main")
 val webContractIds = listOf("BCK-001", "BCK-002", "BCK-003", "BCK-004", "BCK-005", "BCK-006", "BCK-007", "BCK-008", "BCK-009", "BCK-010", "BCK-011", "INT-002", "INT-003", "INT-004")
-val uikitContractIds = listOf("BCK-012", "BCK-013", "BCK-014", "WIN-009")
+val uikitContractIds = listOf("BCK-012", "BCK-013", "BCK-014", "BCK-015", "BCK-016", "WIN-009")
 val appKitContractIds = listOf(
     "APK-001", "APK-002", "APK-003", "APK-004", "APK-005", "APK-006",
     "APK-007", "APK-008", "APK-009", "APK-010", "APK-011", "APK-012",
@@ -278,12 +278,14 @@ val browserContractEvidenceTasks = listOf("js", "wasmJs").map { target ->
     }
 }
 
-// UIKit driver contracts (BCK-012 phase 0 ; BCK-013/BCK-014/WIN-009 phase 1) : preuve O3
+// UIKit driver contracts (BCK-012 phase 0 ; BCK-013/BCK-014/WIN-009 phase 1 ;
+// BCK-015/BCK-016 phase 2 — observations, redraw, lease et rotation) : preuve O3
 // produite par xcodebuild sur simulateurs (:kadre:contracts:driver:uikit:simulatorTests),
 // exportée en JUnit par tools/xctest_to_junit.py. Miroir du bloc AppKit ci-dessus, par target
-// famille. BCK-014 (multi-scène iPadOS) n'exige QUE iosSimulatorArm64 : les tâches générées et
-// les gate ids de validation sont filtrés par les requiredTargets du registre (colonne 8) — un
-// contrat actif hors cible ferait échouer ValidateContractEvidence (« target is not required »).
+// famille. BCK-014 (multi-scène iPadOS) et BCK-016 (rotation iPadOS) n'exigent QUE
+// iosSimulatorArm64 : les tâches générées et les gate ids de validation sont filtrés par les
+// requiredTargets du registre (colonne 8) — un contrat actif hors cible ferait échouer
+// ValidateContractEvidence (« target is not required »).
 // macOS-only : aucune de ces tâches n'est câblée dans `check` — la gate obligatoire est
 // le script hors Gradle de Task 7, comme le smoke AppKit.
 val uikitContractRegistry = rootProject.file("kadre/contracts/registry/contracts.tsv")

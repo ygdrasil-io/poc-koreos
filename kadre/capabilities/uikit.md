@@ -46,6 +46,22 @@ la preuve de disconnect du driver passe par le post du vrai nom de notification
 (`uikit-disconnect-terminates`, fallback ruling contrôleur). La preuve de DESTRUCTION réelle
 par FrontBoard est un charter manuel sur matériel — matériel de la phase 10.
 
+**Note rotation programmatique (relevé Task 5, 2026-10-11 — portée par BCK-016).**
+`UIScene.requestGeometryUpdate(.iOS(interfaceOrientations:))` est REFUSÉ par ce runtime
+simulateur quel que soit le levier — TROIS refus capturés, un par configuration :
+(1) windowing libre par défaut → `UISceneErrorDomain 101` « The current windowing mode does
+not allow for programmatic changes to interface orientation » ; (2) avec la clé TN3192
+`UIPreferredDefaultWindowingStyle=UIWindowSceneWindowingStyleFullscreen` dans l'Info.plist
+construit (vérifié présent) → même 101 ; (3) avec `UIRequiresFullScreen=true` →
+`BSActionErrorDomain « response-not-possible »`. Le stimulus retenu est le resize à
+changement d'aspect (240×320) — DÉGRADÉ, tracé `KADRE-DRIVER … DEGRADED` à chaque run
+(NSLog + DriverTrace), jamais présenté comme une rotation réelle. La branche de rotation
+RÉELLE reste codée dans le test (fidélité exacte : largeur tournée == hauteur portrait,
+échange vérifié contre le portrait de référence) et s'exécutera sur un runtime qui accepte
+`requestGeometryUpdate` — charter manuel / runtime futur. Le kill de la sentinelle
+`uikit-rotation-metrics-faithful` est PORTÉ PAR LA BRANCHE DÉGRADÉE (fidélité géométrique :
+publié == vivant après le changement de géométrie), jamais par une rotation réelle.
+
 ## 1. Lecture des colonnes
 
 - **feature** — la conduite livrée, nommée comme le fait le registre Web : le membre
@@ -62,16 +78,24 @@ par FrontBoard est un charter manuel sur matériel — matériel de la phase 10.
   que des membres toujours présents (`UIView.window`, `UIWindow.windowScene`,
   `UIView.bounds`, `UITraitCollection.displayScale`).
 - **runtime gate** — ce dont dépend la *publication* : un run xcodebuild sur le
-  simulateur de chaque famille (les preuves `BCK-012` à `WIN-009`), jamais une permission
-  hôte.
+  simulateur de chaque famille (les preuves `BCK-012` à `WIN-009` puis `BCK-015`/`BCK-016`),
+  jamais une permission hôte.
 - **état absent** — ce qui n'est pas livré à ce stade, dit intégralement : depuis la
   phase 1, l'attach (`KadreIos.attach`), le cycle de vie par scène, le multi-scène iPadOS
-  et l'identité de la fenêtre primaire sont livrés ; restent absents sur ce target
-  input, IME, drop, displays, devices, capture — et toute surface au-delà de la fenêtre
-  primaire fournie par le host. Aucun module applicatif Kadre ne référence
+  et l'identité de la fenêtre primaire sont livrés ; depuis la phase 2, les observations
+  dynamiques de surface (métriques, thème, visibilité — re-lectures sur déclencheurs SDK
+  réels), le redraw coalescé, l'`apply` fermé, le bail d'accès natif `withUIKitView` et la
+  rotation iPadOS (stimulus dégradé, cf. note ci-dessus) sont livrés ; restent absents sur
+  ce target IME, drop, displays, devices, capture — et toute surface au-delà de la fenêtre
+  primaire fournie par le host. Le CHANGEMENT D'ÉCHELLE d'écran (`displayScale`) et le
+  mode-change tvOS (`UIScreenModeDidChangeNotification` — observé mais sans stimulus
+  programmatique sur simulateur) n'ont pas de preuve sur simulateur : charter manuel
+  (matériel de la phase 10). Aucun module applicatif Kadre ne référence
   `:kadre:platform:uikit` en dehors de la preuve.
 - **tests** — la classe Xcode qui porte la ligne (`KadreUikitDriverTests` phase 0,
-  `KadreUikitAttachTests` phase 1), exécutée par
+  `KadreUikitAttachTests` phase 1, `KadreUikitSurfaceTests` phase 2 — extension iOS-only
+  `tests/Ios/KadreUikitSurfaceIosTests.swift` compilée DANS la même classe XCTest pour la
+  rotation), exécutée par
   `./gradlew :kadre:contracts:driver:uikit:simulatorTests` et consommée par le validateur
   via l'export JUnit (`tools/xctest_to_junit.py`).
 
@@ -83,6 +107,9 @@ par FrontBoard est un charter manuel sur matériel — matériel de la phase 10.
 | `KadreIos.attach` — session par scène et cycle de vie | iosSimulatorArm64, tvosSimulatorArm64 | iOS 16.0 / tvOS 16.0 | `:kadre:platform:uikit:compileKotlin*` | BCK-013 (2 simulateurs) | input, IME, drop, displays, devices, capture : non livré | `KadreUikitAttachTests` |
 | multi-scène iPadOS (une session par `UIWindowScene` supplémentaire) | iosSimulatorArm64 | iOS 16.0 (iPad) | `:kadre:platform:uikit:compileKotlin*` | BCK-014 (iPad Pro 11-inch (M5)) | tvOS mono-scène par design (DESIGN.md §15.2) ; input, IME, drop, displays, devices, capture : non livré | `KadreUikitAttachTests` (extension `tests/Ios`) |
 | fenêtre primaire et identité de surface | iosSimulatorArm64, tvosSimulatorArm64 | iOS 16.0 / tvOS 16.0 | `:kadre:platform:uikit:compileKotlin*` | WIN-009 (2 simulateurs) | toute autre fenêtre/surface : non livré (le host impose la primaire) ; input, IME, drop, displays, devices, capture : non livré | `KadreUikitAttachTests` |
+| observations dynamiques de surface, redraw coalescé et `apply` fermé | iosSimulatorArm64, tvosSimulatorArm64 | iOS 16.0 / tvOS 16.0 | `:kadre:platform:uikit:compileKotlin*` | BCK-015 (2 simulateurs) | occlusion (restera `Visible`), changement d'échelle d'écran et mode-change tvOS : pas de stimulus programmatique sur simulateur (charter manuel) ; IME, drop, displays, devices, capture : non livré | `KadreUikitSurfaceTests` |
+| bail d'accès natif `withUIKitView` (platformAccess) | iosSimulatorArm64, tvosSimulatorArm64 | iOS 16.0 / tvOS 16.0 | `:kadre:platform:uikit:compileKotlin*` | BCK-015 (2 simulateurs) | la UIView n'est valide qu'au retour du block (jamais retenue) ; après close : `Unsupported(PlatformSurfaceAccess)` déterministe ; IME, drop, displays, devices, capture : non livré | `KadreUikitSurfaceTests` |
+| rotation iPadOS de la surface | iosSimulatorArm64 | iOS 16.0 (iPad) | `:kadre:platform:uikit:compileKotlin*` | BCK-016 (iPad Pro 11-inch (M5)) | rotation RÉELLE non exercée : `requestGeometryUpdate` refusé 3 voies sur ce runtime — kill porté par la branche DÉGRADÉE (resize à changement d'aspect, fidélité géométrique publié == vivant) ; rotation réelle = runtime qui accepte `requestGeometryUpdate` (charter manuel / runtime futur) ; tvOS : hors sujet (pas de rotation) ; IME, drop, displays, devices, capture : non livré | `KadreUikitSurfaceTests` (extension `tests/Ios`) |
 
 La ligne phase 0 se lit : `KadreUikitProbe.observe(window:view:)` publie une
 `KadreUikitObservation` copiée (appartenance à la fenêtre via `isEqual`, connexion de la
@@ -124,3 +151,50 @@ initiales valent la lecture Swift des `bounds` de la vue. La sentinelle
 `uikit-primary-metrics-faithful` (mutation : fabricater le `contentSize` du
 `WindowSpec` d'admission) est tuée par `testPrimaryWindowAndSurfaceIdentity` sur les deux
 familles.
+
+La ligne BCK-015 « observations dynamiques, redraw et apply » se lit : les métriques
+publiées valent en permanence la lecture VIVANTE de la vue (resize réel 480×200 propagé,
+thème conduit par les overrides réels fenêtre puis vue — repli documenté, §3.3 du rapport
+Task 5 —, reprise background/foreground prouvée par le compteur de re-lectures), le redraw
+coalesce une rafale de 5 (puis 3) requêtes en EXACTEMENT UN événement par tick (fenêtre de
+quiescence), l'`apply` refuse fermé tout champ posé (`PartiallyApplied` à exactement un
+rejeté, `Unsupported(UpdateSurface)`) et accepte tout-`Unchanged` (`Applied`), et un
+`requestRedraw` post-close répond `Closed(Surface)` sans aucun événement résiduel. Trois
+sentinelles : `uikit-metrics-stale-generation` (mutation : le binding republie la géométrie
+gelée à la génération d'attach) est tuée par `testSurfaceResizePropagatesMetrics` — des
+métriques figées ne portent jamais 480×200 — preuve citée sur tvOS (échec SEUL, rayon au
+rapport Task 6 ; même chemin binaire sur iOS) ;
+`uikit-redraw-single-per-tick` (mutation : une requête de rafale — ticket en vol — est
+REFUSÉE au lieu d'être absorbée par le coalescing ; le gate scheduler seul est MASQUÉ par
+le ticket du runtime, cf. rapport Task 6) est tuée par
+`testSurfaceRedrawBurstCoalescesToOnePerTick` (« every redraw of the burst must be
+admitted » — échec SEUL, preuve citée sur tvOS) ;
+`uikit-lease-closed-after-terminal` est la sentinelle de la ligne suivante.
+
+La ligne BCK-015 « bail d'accès natif » se lit : le premier bail est accordé (la vue louée
+`isEqual` la surfaceView), un bail DANS la callback du premier répond
+`TemporarilyUnavailable(retryable = true)` sans jamais invoquer son block, et le verdict
+STEADY post-close est `Unsupported(PlatformSurfaceAccess)` déterministe — la route du
+registre (`UIKitViewLeaseRegistry`) est retirée au close AVANT la publication de l'état
+détaché. La sentinelle `uikit-lease-closed-after-terminal` (mutation : retirer
+l'`unregister` du close — la route survit à la terminaison) est tuée par
+`testLeaseBoundariesHonoursFlightAndClose` : le bail post-terminaison retombe alors sur le
+port résiduel et répond `Closed(Surface)` (course en vol), jamais le `Unsupported` ruled —
+l'assert du verdict steady échoue SEUL (preuve citée sur tvOS, rayon au rapport Task 6).
+
+La ligne BCK-016 se lit : après un changement de géométrie réel de la vue (pleine fenêtre
+puis resize à changement d'aspect 240×320 — stimulus DÉGRADÉ, cf. la note rotation
+ci-dessus), les métriques publiées valent la géométrie VIVANTE post-stimulus
+(`wantWidth ≠ beforeWidth`, published == live). La sentinelle
+`uikit-rotation-metrics-faithful` (mutation : le kernel sert la géométrie du miroir
+courant — un cache périmé — au lieu de l'observation vivante) est tuée par
+`testSurfaceRotationPropagatesMetrics` sur la famille iOS seule : l'égalité géométrique
+post-changement (publié == vivant) échoue — l'état ne quitte jamais les dimensions
+d'attach, le test meurt à l'attente bornée de la géométrie post-stimulus (rayon exact au
+rapport Task 6 : sous ce mutant, exactement `testSurfaceResizePropagatesMetrics` et
+`testSurfaceRotationPropagatesMetrics` échouent, la même couture de fidélité géométrique
+portant les deux morts). Le kill est PORTÉ PAR LA FIDÉLITÉ GÉOMÉTRIQUE DU CHEMIN DÉGRADÉ
+(published == vivant après un changement réel de géométrie), jamais par une rotation
+réelle : la rotation réelle est réservée à un runtime qui accepte
+`requestGeometryUpdate` (charter manuel / runtime futur) — la branche réelle du test
+(fidélité exacte de l'échange portrait↔paysage) reste codée et s'exécutera alors.
