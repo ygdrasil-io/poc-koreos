@@ -18,7 +18,11 @@ jobs:
     # Quirk connu du preview (Metal Toolchain possiblement absente) : sans effet sur cette
     # gate. Toute instabilité apparaît en job rouge à diagnostiquer, jamais en skip.
     runs-on: xcode-27
-    timeout-minutes: 15
+    # Budget 25 min (TEST-STRATEGY.md §9.1, exception revue) : une exécution PR à froid
+    # (caches Gradle/Kotlin-Native vides, premier boot du simulateur iPad, installation de
+    # l'app) a mesuré plus de 15 min sur le run PR 38109607559. Le SLO p95 ≤ 8 min s'entend
+    # gate CHAUD.
+    timeout-minutes: 25
 
     steps:
       - name: Checkout

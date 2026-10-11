@@ -1,6 +1,57 @@
 import UIKit
 import KadreUikit
 
+/// Journal de bord du driver : chaque fait de la chaîne scène (callbacks du delegate,
+/// lifecycle des demandes de scène, lecture d'env de lancement) est ENREGISTRÉ (store
+/// mémoire + NSLog visible dans la sortie console xcodebuild, donc dans le log CI). Un
+/// échec CI doit MONTRER où la chaîne s'est arrêtée : le dump d'échec borné embarque la
+/// trace récente et un snapshot système au moment du timeout.
+enum DriverTrace {
+    private static let lock = NSLock()
+    private static let start = Date()
+    private static var events: [String] = []
+    private static var envRecorded = false
+
+    static func record(_ line: String) {
+        let stamped = String(format: "[+%05.2fs] ", Date().timeIntervalSince(start)) + line
+        lock.lock()
+        events.append(stamped)
+        if events.count > 200 { events.removeFirst(events.count - 200) }
+        lock.unlock()
+        NSLog("KADRE-DRIVER %@", stamped)
+    }
+
+    /// La lecture de l'env de demande de scène est tracée UNE fois (les relectures muettes).
+    static func recordSceneRequestEnvOnce(_ raw: String?) {
+        guard !envRecorded else { return }
+        envRecorded = true
+        record("sceneRequest env KADRE_DRIVER_REQUEST_SECOND_SCENE=\(raw.map { "'\($0)'" } ?? "<unset>")")
+    }
+
+    /// Derniers événements horodatés — embarqués dans tout échec borné.
+    static func recent(_ n: Int = 20) -> String {
+        lock.lock()
+        defer { lock.unlock() }
+        return events.suffix(n).joined(separator: " || ")
+    }
+
+    /// Snapshot système au moment du dump : état de l'app hôte et TOUTES les scènes
+    /// connues d'UIKit avec leur état d'activation — distingue « scène connectée jamais
+    /// activée », « scène jamais connectée » et « app restée en background ».
+    static func systemSnapshot() -> String {
+        guard Thread.isMainThread else { return "system=<off-main>" }
+        let app = UIApplication.shared
+        let scenes = app.connectedScenes
+            .sorted { $0.session.persistentIdentifier < $1.session.persistentIdentifier }
+            .map { scene -> String in
+                "\(String(describing: type(of: scene))) state=\(scene.activationState) "
+                    + "role=\(scene.session.role.rawValue) session=\(scene.session.persistentIdentifier.prefix(8))"
+            }
+            .joined(separator: "; ")
+        return "appState=\(app.applicationState) connectedScenes=\(app.connectedScenes.count) [\(scenes)]"
+    }
+}
+
 /// Fixture D'UNE scène : la fenêtre et les vues que le host fournit, plus tout ce que
 /// l'application Kadre (`DriverKadreApplication`) a capturé pour la session de cette scène.
 /// Identité : `ObjectIdentifier(scene)` — le store `DriverFixture` est la source de vérité.
@@ -145,6 +196,8 @@ final class SceneFixture {
         NSError(domain: Self.errorDomain, code: 1, userInfo: [
             "what": "\(what) not reached in \(timeout)s",
             "state": stateSummary(),
+            "system": DriverTrace.systemSnapshot(),
+            "trace": DriverTrace.recent(),
         ])
     }
 
@@ -195,8 +248,12 @@ final class SceneFixture {
 
     func stateSummary() -> String {
         let sessionState = session?.state.value.map(String.init(describing:)) ?? "no-session"
-        return "ready=\(isReady) runs=\(applicationRuns) session=\(sessionState) "
-            + "primary=\(primarySurfaceId ?? "nil") window=\(primaryWindowSurfaceId ?? "nil")"
+        // Les composants de `isReady` sont détaillés (win/view/active) : sur un échec CI,
+        // `ready=false` doit dire QUEL latch manque — sur un fixture installé, win/view sont
+        // posés de façon synchrone, donc le latch manquant est en pratique `active`.
+        return "ready=\(isReady) win=\(window != nil) view=\(observedView != nil) active=\(becameActive) "
+            + "sceneState=\(String(describing: scene.activationState)) runs=\(applicationRuns) "
+            + "session=\(sessionState) primary=\(primarySurfaceId ?? "nil") window=\(primaryWindowSurfaceId ?? "nil")"
     }
 }
 

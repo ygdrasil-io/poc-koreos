@@ -310,8 +310,8 @@ Les jobs backend n’exécutent pas une seconde fois toute la suite common pure 
 ### 9.1 Budget et mesure
 
 - SLO initial : p95 du temps mural `workflow created → aggregate completed` sur les 20 derniers gates PR réussis inférieur ou égal à 10 minutes. Les gates échoués restent comptabilisés séparément dans la fiabilité et ne peuvent jamais être retirés du rapport ; leur arrêt précoce ne réduit pas artificiellement la mesure de durée.
-- SLO d’exécution : p95 de chaque job, hors attente de runner, inférieur ou égal à 8 minutes.
-- Timeout hard initial : 15 minutes par job et timeout externe de chaque processus enfant.
+- SLO d’exécution : p95 de chaque job, hors attente de runner, inférieur ou égal à 8 minutes. Ce SLO s’entend gate CHAUD (caches Gradle/Kotlin-Native provisionnés, simulateur déjà présent) : une exécution à froid peut le dépasser sans être une dérive de budget tant qu’elle reste sous le timeout hard du job.
+- Timeout hard initial : 15 minutes par job et timeout externe de chaque processus enfant. Exception revue (2026-10-11) : le job `uikit-ios-simulator` est budgété à 25 minutes — une exécution PR à froid de la suite iPad a mesuré plus de 15 minutes (run PR 38109607559 : compilation Kotlin/Native à caches vides, premier boot du simulateur iPad, installation de l’app hôte).
 - Le rapport CI publie temps mural, attente de runner, durée d’exécution, cache hit/miss et job critique.
 - Une attente GitHub exceptionnelle reste visible dans le temps mural mais est séparée de la durée de test pour guider l’action.
 

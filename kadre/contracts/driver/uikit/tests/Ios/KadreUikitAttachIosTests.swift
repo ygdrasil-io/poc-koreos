@@ -29,7 +29,9 @@ extension KadreUikitAttachTests {
                     .map(String.init(describing:)).joined(separator: "; ")
                 XCTFail("secondary scene #\(index) never connected in \(timeout)s — "
                     + "activation errors=[\(errors)] "
-                    + "connected=\(DriverFixture.shared.connected.count)", file: file, line: line)
+                    + "connected=\(DriverFixture.shared.connected.count) "
+                    + "system=\(DriverTrace.systemSnapshot()) "
+                    + "trace=\(DriverTrace.recent())", file: file, line: line)
                 throw NSError(domain: "KadreUikitDriver", code: 2,
                               userInfo: ["what": "secondary scene did not connect"])
             }
