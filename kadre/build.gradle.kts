@@ -60,6 +60,7 @@ tasks.named("check") {
     dependsOn(":kadre:foundation:check")
     dependsOn(":kadre:contracts:validator:check")
     dependsOn(":kadre:backend:appkit:check")
+    dependsOn(":kadre:backend:wayland:check")
     dependsOn(":kadre:platform:desktop:check")
     dependsOn(":kadre:platform:web:check")
     // pin : le contrat de thread phase 0 (AndroidAttachStateTest) tourne à chaque check local
@@ -78,6 +79,7 @@ val contractPublications = tasks.register("publishContractArtifacts") {
     dependsOn(":kadre:publishAllPublicationsToContractTestRepository")
     dependsOn(":kadre:foundation:publishAllPublicationsToContractTestRepository")
     dependsOn(":kadre:backend:appkit:publishAllPublicationsToContractTestRepository")
+    dependsOn(":kadre:backend:wayland:publishAllPublicationsToContractTestRepository")
     dependsOn(":kadre:platform:desktop:publishAllPublicationsToContractTestRepository")
     dependsOn(":kadre:platform:web:publishAllPublicationsToContractTestRepository")
     dependsOn(":kadre:runtime:publishAllPublicationsToContractTestRepository")
