@@ -261,9 +261,20 @@ internal object AndroidHostSession {
                         leasedView = { view },
                     )
                     sessionSurface.surface = surface
+                    // Le seam natif de la fenêtre (phase 4, Task 1) câblé sur CETTE Activity —
+                    // la forme Activity seule (le cast est le même que `inputForwarderFor`).
+                    // Le manager implémente `RuntimeSessionWindowManager` : le runtime lui
+                    // installe la configuration de session (LA MÊME source de stamps que la
+                    // surface) pendant l'attach, et `closeAction` termine le flux d'événements
+                    // de la fenêtre à la teardown (après la fermeture de la surface).
+                    val manager = AndroidActivityWindowManager(
+                        primarySurface = surface,
+                        native = AndroidActivityWindowNative(owner as ComponentActivity),
+                    )
                     RuntimeSessionComponents(
-                        windows = AndroidActivityWindowManager(surface),
+                        windows = manager,
                         primarySurface = RuntimePrimarySurface(surface, surface::close),
+                        closeAction = { manager.terminalise() },
                     )
                 },
                 initialLifecycleState = lifecycleStateOf(initial),
