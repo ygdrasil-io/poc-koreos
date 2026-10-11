@@ -61,10 +61,20 @@ instrumented test class `org.graphiks.kadre.consumer.KadreConsumerSurfaceContrac
 | `android-redraw-single-per-frame` | sentinel | removing the coalescing (one event per request) kills `androidSurfaceRedrawCoalesced` alone |
 | `android-lease-closed-after-terminal` | sentinel | a lease that skips its admission check hands out the View of a closed surface — kills `androidSurfaceLeaseBoundaries` alone |
 
-The two sentinels carry demonstrated blast radius: under the recorded
+The AND-003 sentinel blast radius is recorded the same way: the two instrumented
+mutations (redraw without coalescing; a lease skipping its admission check) each
+kill **exactly one** of the fifteen tests — its guard — and leave the other
+fourteen green. The third, `android-metrics-generation-stale`, is host-pinned:
+the binding labels every observation with the reducer's current generation and
+its View is never replaced mid-session (detach is terminal), so no emulator
+scenario can genuinely produce a stale callback — the kill lives in the host
+suite, against `AndroidSurfaceMetricsTest.staleGenerationCallbackRejected`, with
+the metrics scenario as the mapping anchor.
+
+The two AND-002 sentinels carry demonstrated blast radius: under the recorded
 mutations (late failure that skips the reservation rollback; ownership registry
-keyed on a single global key) each kills **exactly one** of the nine tests —
-its guard — and leaves the other eight green. A first mutation candidate
+keyed on a single global key) each kills **exactly one** of the nine phase-1
+tests — its guard — and leaves the other eight green. A first mutation candidate
 (reordering the reservation ahead of the admission ladder) killed 9/9 and was
 rejected as proving nothing.
 
@@ -138,6 +148,33 @@ device by `AndroidVariantPurityTest` in the umbrella's `jvmTest`; the
 existing web/desktop tasks stay green via
 `./gradlew :kadre:foundation:jvmTest :kadre:runtime:jvmTest :kadre:platform:web:compileKotlinJs`.
 
+### Exit gate of roadmap phase 2
+
+Same commands, one contract more. From a cold start (kill any running emulator,
+`adb emu kill`, wait for zero devices, then let the script boot the AVD itself):
+publish (1), consumer compile (2), emulator smoke + evidence + validator (the
+script — **15** scenarios green, `AND-001.json` + `AND-002.json` +
+`AND-003.json`), the same transitive-resolution purity check (grep exit 1,
+redone cold), and the no-device sanity tasks above. The roadmap checklist is
+carried by the evidence itself:
+
+- metrics compared against the real View — `android-surface-metrics-match-view`,
+  resize propagated without surface replacement — `android-surface-resize-propagates`
+  (the surface identity and its revision discipline survive);
+- bounded redraw without zombie callbacks — `android-surface-redraw-coalesced`
+  (five requests, exactly one `RedrawRequested`) and
+  `android-surface-redraw-after-close` (`Closed(Surface)`, no event follows),
+  plus the host record `AndroidRedrawSchedulerTest.redrawAfterTerminalEmitsNothing`;
+- zero SDK access after close — the lease answers `Closed(Surface)` without
+  invoking after the terminal (`android-surface-lease-boundaries`), the view
+  source is cleared at teardown, and the generation rejection kills stale
+  callbacks (`android-metrics-generation-stale`, host-pinned);
+- the consumer needs both opt-ins and obtains no generic
+  `android.view.Window` — `android-surface-no-window-handle` (`platformAccess`
+  stays `Unsupported(PlatformWindowAccess)` on the window);
+- `AND-001` + `AND-002` + `AND-003` together — 15 instrumented tests, one
+  canonical JSON per contract, all from the same instrumented emulator run.
+
 ## Engine labeling
 
 The engine label is **never hardcoded**. The evidence producer
@@ -149,7 +186,7 @@ writes `emulator-api-<sdk>-<abi>`. On the phase 0 AVD this is
 are attached. Every run resets the per-engine JUnit copy directory first, so a
 stale XML from an earlier run can never inflate the evidence identity. The
 producer writes one canonical JSON per active android contract (currently
-`AND-001` and `AND-002`), each pinned to the current HEAD commit.
+`AND-001`, `AND-002` and `AND-003`), each pinned to the current HEAD commit.
 
 ## Evidence mapping
 
@@ -181,25 +218,39 @@ emulator on the current CI runners, and the aggregate requires a booted device
 is phase 10 of the roadmap
 (`ANDROID-IMPLEMENTATION-ROADMAP.md#Phase 10`).
 
-## Phase 1 limits (deferred guarantees)
+## Phase 2 limits (deferred guarantees)
 
-The phase 1 public surface is exactly the four `DESIGN.md` §15.1 overloads
-`attachKadre` returning `KadreResult<KadreSession>` (two `ComponentActivity`
-receivers requiring an explicit `surfaceView`, two `View` receivers requiring
-an explicit `lifecycleOwner`), the admission ladder, the atomic
-dual-identity reservation, the lifecycle observation with terminal detach, the
-two window topologies and the rejected `requestWindow` — the full public
-surface the normative matrix assigns to Android, with no phase-0-style opt-in
-left (the phase 0 `@OptIn(DelicateKadreApi::class)` minimal attach existed only
-to mark the interim surface and is gone with it). Everything else is deferred,
-never silently absent — the
+The public surface is the four `DESIGN.md` §15.1 overloads `attachKadre`
+returning `KadreResult<KadreSession>` (two `ComponentActivity` receivers
+requiring an explicit `surfaceView`, two `View` receivers requiring an explicit
+`lifecycleOwner`), the admission ladder, the atomic dual-identity reservation,
+the lifecycle observation with terminal detach, the two window topologies and
+the rejected `requestWindow` — plus, since phase 2, the observable
+`AndroidHostSurface`: metrics kept current from SDK observations (dimensions,
+density, insets, appearance — a missing observation keeps its field `Unknown`,
+never invented; focus and visibility stay lifecycle-owned), causes distinguished
+(rotation / resize / density) with generation-based rejection of stale
+callbacks, `requestRedraw` coalesced to one `RedrawRequested` per frame with a
+`Closed(Surface)` answer and zero zombie callbacks after the terminal, `apply`
+admitted per field on the exact P1 on-row shapes (every posed field rejected
+`RejectedSurfaceField(Unsupported(UpdateSurface))` — no commit path yet), the
+`withAndroidView` lease behind the double opt-in
+`@KadrePlatformApi` + `@DelicateKadreApi` (single in-flight lease, host thread,
+early cancellation rejected before anything is invoked, application exception
+propagated as-is), and `platformAccess` `Supported` on the surface — while
+`WindowCapabilities.platformAccess` stays `Unsupported(PlatformWindowAccess)`:
+no public member ever exposes a generic `android.view.Window`.
+
+Everything else is deferred, never silently absent — the
 authoritative list with the owning phase lives in
 [capabilities/android.md](../../../capabilities/android.md) §4:
 
-- **Phase 2** — surface metrics/redraw, the `withAndroidView` lease (the
-  surface metrics snapshot is frozen at attach; only attachment/visibility/
-  focus are kept current by the lifecycle reducer);
-- **Phase 3** — keyboard, pointer, touch (no listener is installed on the View);
+- **Phase 3** — keyboard, pointer, touch (no listener is installed on the
+  View); the four input-delivery `SurfaceUpdate` fields (`cursor`,
+  `pointerCapture`, `hitTesting`, `inputDefaultBehavior`), rejected per field
+  since phase 2 without calling any primitive; the redraw overflow actions
+  driven by the runtime delivery policies (phase 2 coalescing emits at most one
+  event per frame and bounded-flow overflow stays a documented drop);
 - **Phase 4** — real window commands and transient interactions (the Activity primary window
   exists as a topology; its commands are answered on the exact contract-row shapes of
   `OPERATION-CONTRACTS` §4 — no real commands: `apply` rejects every requested field under
@@ -215,6 +266,14 @@ authoritative list with the owning phase lives in
 - **Phase 7** — displays, devices, gamepads, memory pressure, raw-input
   decision; **Phase 8** — capture; **Phase 9** — Java facade, Compose;
 - **Phase 10** — the mandatory `android-contracts` CI job.
+
+Two boundary lines are not deferrals at all. **Rendering itself** is out of
+scope, permanently: phase 2 delivers an observable surface without owning its
+rendering, and no phase will add a renderer, a render surface or a public event
+loop. And whether focus/visibility observation ever moves from the lifecycle to
+real SDK events is a decision the later phases own if a need is demonstrated —
+until then the metrics binding keeps its observation fields `null` and never
+competes with the lifecycle.
 
 The thread contract of `attachKadre` is a phase 0 decision, not a deferral:
 main thread only, non-suspending, no blocking or relocation — and, since
