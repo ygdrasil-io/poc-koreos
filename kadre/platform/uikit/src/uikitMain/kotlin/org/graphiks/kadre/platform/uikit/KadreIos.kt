@@ -28,6 +28,7 @@ import org.graphiks.kadre.internal.uikit.UIKitSceneRegistry
 import org.graphiks.kadre.internal.uikit.UIKitWindowRuntime
 import org.graphiks.kadre.policy.KadrePolicies
 import org.graphiks.kadre.policy.KadrePolicy
+import platform.Foundation.NSThread
 import platform.UIKit.UISceneActivationStateUnattached
 import platform.UIKit.UIView
 import platform.UIKit.UIWindow
@@ -76,9 +77,11 @@ private fun toLifecycleState(snapshot: UIKitLifecycleSnapshot): LifecycleState =
  *  4. controller + factory (le runtime est créé DANS la factory, au premier attach de session) ;
  *  5. `attach` — en cas d'échec, rollback complet (observers + réservation + scope).
  *
- * L'appelant DOIT être sur le thread principal : l'installation NSNotificationCenter, le
- * snapshot initial de la vue et le commit de la fenêtre primaire sont synchrones sur ce
- * thread ; le scope de session est posé sur `Dispatchers.Main` (natif kotlinx-coroutines).
+ * L'appelant DOIT être sur le thread principal — contrat vérifié à l'entrée
+ * (`NSThread.isMainThread()`, sinon IllegalStateException) : l'installation
+ * NSNotificationCenter, le snapshot initial de la vue et le commit de la fenêtre primaire
+ * sont synchrones sur ce thread ; le scope de session est posé sur `Dispatchers.Main`
+ * (natif kotlinx-coroutines).
  */
 @OptIn(ExperimentalKadreApi::class, ExperimentalAtomicApi::class)
 public object KadreIos {
@@ -89,6 +92,10 @@ public object KadreIos {
         applicationFactory: KadreApplicationFactory,
         policy: KadrePolicy = KadrePolicies.Default,
     ): KadreResult<KadreSession> {
+        check(NSThread.isMainThread()) {
+            "KadreIos.attach doit être appelé depuis le thread principal (les lectures UIKit et le pont d'admission l'exigent)"
+        }
+
         // 1. Validations (roadmap l.106). `===` ne pont pas l'identité Obj-C (preuve O3,
         //    phase 0) : les comparaisons passent par NSObject.isEqual.
         val scene: UIWindowScene = window.windowScene
