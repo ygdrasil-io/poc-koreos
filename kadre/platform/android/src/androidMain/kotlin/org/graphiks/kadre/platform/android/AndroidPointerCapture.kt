@@ -12,7 +12,9 @@ import org.graphiks.kadre.surface.PointerCaptureMode
  * Le commit EN DEUX TEMPS du champ `pointerCapture` (phase 4, tâche 3) — le miroir Android du
  * couple `admitCaptureAttempt`/`commitPointerCapture` web, à la différence que le SDK Android ne
  * répond PAS à l'appel : `View.requestPointerCapture()` ne rend rien, et la SEULE confirmation
- * est le `OnPointerCaptureListener` — « le retour d'une requête SDK n'est pas la confirmation de
+ * est la notification d'état du SDK — `Window.Callback.onPointerCaptureChanged` (cf. la KDoc de
+ * [AndroidViewPointerCaptureNative] : aucun enregistrement de listener de capture n'existe sur
+ * `View`) — « le retour d'une requête SDK n'est pas la confirmation de
  * la capture du pointeur ». La mécanique :
  *
  * - [applyMode] tente la primitive — `Confined` (API 26+) pose `requestCapture` et enregistre la
@@ -91,7 +93,7 @@ internal class AndroidPointerCapture(
     /**
      * Tente le mode demandé, ou rapporte le refus champ par champ — `null` dit « tentative
      * lancée » (ou « rien à faire : la valeur est déjà en effet »), jamais « capture prise ».
-     * Appelé sous le verrou de la surface, à la admission du champ — l'admission LANCE la
+     * Appelé sous le verrou de la surface, à l'admission du champ — l'admission LANCE la
      * tentative (le mot du brief), de sorte qu'une confirmation que le SDK délivrerait dans la
      * foulée de l'appel atterrisse avant l'instantané du verdict (le verrou JVM est réentrant).
      */
@@ -130,7 +132,9 @@ internal class AndroidPointerCapture(
     }
 
     /**
-     * Le rapport du `OnPointerCaptureListener` — le SEUL moment du commit d'une capture :
+     * Le rapport d'état du SDK — `Window.Callback.onPointerCaptureChanged`, que la couture
+     * livre au seam ([AndroidViewPointerCaptureNative.dispatchCaptureState]) — le SEUL moment
+     * du commit d'une capture :
      * `true` commit `Confined` (révision + publication, par [onCommitted]) ; `false` revient à
      * `None` et publie (par [onLost]), sans rien demander au seam. Les rapports qui ne suivent
      * aucune demande vivante (un gain sans demande, le gain tardif d'une tentative annulée, une

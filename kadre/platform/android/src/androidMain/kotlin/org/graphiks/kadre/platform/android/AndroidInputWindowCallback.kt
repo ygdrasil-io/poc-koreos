@@ -1,5 +1,6 @@
 package org.graphiks.kadre.platform.android
 
+import android.os.Build
 import android.view.ActionMode
 import android.view.KeyEvent
 import android.view.KeyboardShortcutGroup
@@ -369,8 +370,11 @@ internal class AndroidWindowCallbackForwarder(
 
     override fun onPointerCaptureChanged(hasCapture: Boolean) {
         // L'observation d'état de la capture (Task 3) : livrée au seam AVANT le forward — le
-        // commit en deux temps vit à cette livraison — puis le forward intact.
+        // commit en deux temps vit à cette livraison — puis le forward intact. La notification
+        // d'état est API 26+ (le minSdk du module est 24) — la convention du module garde
+        // chaque primitive au niveau d'API, comme le seam ([AndroidViewPointerCaptureNative]) ;
+        // sous 26 la plateforme ne dispatche jamais l'appel, la garde est de cohérence.
         onPointerCaptureState(hasCapture)
-        wrapped.onPointerCaptureChanged(hasCapture)
+        if (Build.VERSION.SDK_INT >= 26) wrapped.onPointerCaptureChanged(hasCapture)
     }
 }

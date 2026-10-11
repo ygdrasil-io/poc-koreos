@@ -38,7 +38,8 @@ import kotlin.test.assertTrue
 /**
  * Les six comportements normatifs du champ `pointerCapture` committable (phase 4, tâche 3) — le
  * commit EN DEUX TEMPS : `apply(Set(Confined))` lance la primitive (API 26+), mais l'état n'est
- * committé QUE quand le listener du SDK rapporte la capture (`OnPointerCaptureListener`) — le
+ * committé QUE quand le listener du SDK rapporte la capture (`Window.Callback.
+ * onPointerCaptureChanged`) — le
  * retour de la requête n'est JAMAIS la confirmation ; la perte (`listenerChanged(false)`) revient
  * à `None` et publie ; `Set(None)` libère et commit IMMÉDIATEMENT (le release est synchrone côté
  * SDK) ; `Locked` est rejeté champ par champ (D13 — il appartient à

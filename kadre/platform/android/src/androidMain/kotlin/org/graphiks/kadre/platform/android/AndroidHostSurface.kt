@@ -129,8 +129,9 @@ internal class AndroidHostSurface(
     /**
      * La révision de la plateforme, lue au construction en production ([Build.VERSION.SDK_INT])
      * et injectée par les tests : le niveau d'API décide de la DISPONIBILITÉ publiée de
-     * `pointerCapture` — `Available` à partir de 26 (`requestPointerCapture` +
-     * `OnPointerCaptureListener` sont API 26+, le minSdk du module est 24), `Unavailable` avec
+     * `pointerCapture` — `Available` à partir de 26 (`requestPointerCapture`/`releasePointerCapture`
+     * et la notification d'état `Window.Callback.onPointerCaptureChanged` sont API 26+, le
+     * minSdk du module est 24), `Unavailable` avec
      * la raison d'API en dessous. Un fait de construction, comme la présence du seam.
      */
     private val apiLevel: Int = Build.VERSION.SDK_INT,
@@ -843,14 +844,21 @@ internal class AndroidHostSurface(
      *   tâche 4). Refus champ par champ `Unsupported(UpdateSurface)`, tout niveau d'API, zéro
      *   appel natif. Inatteignable tant que la capability refuse le mode (`Locked` est hors de
      *   l'ensemble annoncé) — énoncé ici plutôt qu'assumé absent, le mot du web ;
-     * - sous l'API 26 (le minSdk du module) : `requestPointerCapture` +
-     *   `OnPointerCaptureListener` n'existent pas — `Confined` comme `Locked` sont refusés
+     * - sous l'API 26 (le minSdk du module) : `requestPointerCapture`/`releasePointerCapture`
+     *   et la notification d'état `Window.Callback.onPointerCaptureChanged` n'existent pas —
+     *   `Confined` comme `Locked` sont refusés
      *   champ par champ `Unsupported(UpdateSurface)`, zéro appel natif. Le mot de l'ADMISSION ;
      *   le mot de la PUBLICATION est celui de la capability ([androidSurfaceCapabilities]) :
      *   les modes que la plateforme porte, `Unavailable` avec la raison d'API — et un `None`
      *   qui atteint ici sous l'API 26 est refusé PAR LA CAPABILITY avec cette raison.
      *
-     * Un champ non posé n'est jamais rejeté ; un refus n'bloque jamais les champs du même
+     * Divergence web DÉLIBÉRÉE, sans bras Android : le web refuse un `Confined` sans pointeur
+     * possédé (`InteractionRequired(Missing)`) avant de demander quoi que ce soit au
+     * navigateur — ici le SDK est le faiseur de vérité de la capture (il accorde ou refuse
+     * lui-même, le listener d'état le rapporte), et le pont de focus + la réversion du
+     * listener couvrent l'état publié.
+     *
+     * Un champ non posé n'est jamais rejeté ; un refus ne bloque jamais les champs du même
      * update qui peuvent être honorés ; un `Clear` n'atteint jamais ici (la garde
      * [invalidClearField] le rejette avant l'admission).
      */
