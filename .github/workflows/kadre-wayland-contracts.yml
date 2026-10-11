@@ -1,0 +1,53 @@
+name: Kadre Wayland Contracts
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+jobs:
+  wayland-contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install the Wayland test compositor
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends weston
+          weston --version
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 25
+          cache: gradle
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      - name: Wayland contract gate
+        run: scripts/test-kadre-wayland-contracts.sh
+
+      - name: Require the Wayland gate
+        if: always()
+        run: |
+          if [ -f kadre/backend/wayland/build/ci-diagnostics/tests.log ]; then
+            tail -5 kadre/backend/wayland/build/ci-diagnostics/tests.log
+          fi
+          test -s kadre/backend/wayland/build/contract-evidence/BCK-015.json
+          test -s kadre/backend/wayland/build/contract-evidence/SES-001.json
+          test -s kadre/backend/wayland/build/contract-evidence/SUR-001.json
+
+      - name: Upload diagnostics and evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wayland-contract-diagnostics
+          if-no-files-found: error
+          path: |
+            kadre/backend/wayland/build/contract-evidence/
+            kadre/backend/wayland/build/test-results/
+            kadre/backend/wayland/build/ci-diagnostics/
+            build/wayland/
