@@ -148,6 +148,7 @@ internal class UIKitSurfaceObservationBinding(
      */
     private fun reread() {
         if (lock.withLock { tornDown }) return
+        UIKitObservationCount.recordReread()
         val bounds = view.bounds.useContents { size.width to size.height }
         val scale = view.traitCollection.displayScale
         val insets = view.safeAreaInsets.useContents { LogicalInsets(top, right, bottom, left) }
@@ -185,4 +186,22 @@ internal class UIKitSurfaceObservationBinding(
             UISceneDidActivateNotification!!,
         )
     }
+}
+
+/**
+ * Le compteur process-wide des re-lectures réellement exécutées (une par invocation de
+ * `reread()` passée la garde de teardown) — le proxy d'observation du driver : la reprise et
+ * les stimuli de métriques se prouvent par son incrémentation, pas seulement par l'état publié
+ * (une re-lecture dédupliquée par le kernel ne publie RIEN, le compteur, lui, bouge toujours).
+ * Interne au module ; la lecture du driver passe par la sonde [KadreUikitSurfaceDriver].
+ */
+internal object UIKitObservationCount {
+    private val lock = RuntimeLock()
+    private var count: Long = 0L
+
+    fun recordReread() {
+        lock.withLock { count += 1L }
+    }
+
+    fun total(): Long = lock.withLock { count }
 }

@@ -81,6 +81,10 @@ final class SceneFixture {
     private(set) var primaryWindowContentHeight: Double?
     private(set) var primarySurfaceLogicalWidth: Double?
     private(set) var primarySurfaceLogicalHeight: Double?
+    /// La surface primaire TYPÉE de la session courante (Task 5) : les preuves de surface
+    /// (state, events, requestRedraw, apply, bail via la sonde Kotlin) la lisent ICI. Recapturée
+    /// à chaque `run` — toujours celle de la session vivante du fixture, jamais un reliquat.
+    private(set) var primarySurface: (any HostSurface)?
 
     // Enregistrée par le test après un attach réussi (valeur de retour de `attach`).
     var session: (any KadreSession)?
@@ -155,6 +159,7 @@ final class SceneFixture {
             primarySurfaceLogicalWidth = surfaceState.logicalSize.width
             primarySurfaceLogicalHeight = surfaceState.logicalSize.height
         }
+        self.primarySurface = primarySurface
     }
 
     /// Lecture directe du lifecycle Kadre de la session de cette scène.
@@ -243,6 +248,34 @@ final class SceneFixture {
         }
         if !reached {
             throw timeoutError("session state", timeout: timeout)
+        }
+    }
+
+    /// État de la surface primaire dans un état donné (Task 5) : attente bornée avec pumping,
+    /// retourne le PREMIER état satisfaisant (les assertions portent sur cette valeur capturée).
+    /// L'échec embarque le dernier état vu — un timeout doit dire CE QUE la surface publiait.
+    func waitUntilSurfaceState(
+        timeout: TimeInterval = 5,
+        file: StaticString = #filePath,
+        line: UInt = #line,
+        _ predicate: @escaping (SurfaceState) -> Bool,
+    ) throws -> SurfaceState {
+        let deadline = Date().addingTimeInterval(timeout)
+        var last: SurfaceState?
+        while true {
+            if let surface = primarySurface, let state = surface.state.value as? SurfaceState {
+                last = state
+                if predicate(state) { return state }
+            }
+            if Date() > deadline {
+                throw NSError(domain: "KadreUikitDriver", code: 3, userInfo: [
+                    "what": "surface state not reached in \(timeout)s",
+                    "last": String(describing: last ?? nil),
+                    "state": stateSummary(),
+                    "trace": DriverTrace.recent(),
+                ])
+            }
+            RunLoop.current.run(until: Date().addingTimeInterval(0.02))
         }
     }
 
