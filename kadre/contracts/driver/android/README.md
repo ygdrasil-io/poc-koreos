@@ -1,17 +1,17 @@
 # Android emulator contract driver
 
 This non-published JVM project runs the public Android host-attachment proof of
-phases 0, 1 and 2 on a real emulator. It is a contract driver, not an
+phases 0 through 3 on a real emulator. It is a contract driver, not an
 implementation API: it forks the instrumented consumer build, executes its
 scenarios on the attached device, and turns the JUnit output into the canonical
-`AND-001`, `AND-002` and `AND-003` evidence with the validator's own generator.
-English
+`AND-001`, `AND-002`, `AND-003` and `AND-004` evidence with the validator's own
+generator. English
 prose, like the Web driver README it mirrors; everything else in this phase is
 documented in French in the sources.
 
 ## What the driver proves
 
-Three contracts, all active in the registry
+Four contracts, all active in the registry
 ([contracts.tsv](../../registry/contracts.tsv)), oracle `O3`, mapped in
 [evidence.tsv](contracts/evidence.tsv):
 
@@ -78,6 +78,41 @@ tests — its guard — and leaves the other eight green. A first mutation candi
 (reordering the reservation ahead of the admission ladder) killed 9/9 and was
 rejected as proving nothing.
 
+**`AND-004`** — the phase 3 essential input observation and delivery proof
+(source `ANDROID-IMPLEMENTATION-ROADMAP.md#Phase 3 — Clavier, pointeur, touch
+et stylet`). Six scenarios and three sentinels, all in the instrumented test
+class `org.graphiks.kadre.consumer.KadreConsumerInputContractTest`. The
+injection boundary is the real Android dispatch: events enter through
+`activity.window.callback.dispatchKeyEvent(...)` /
+`dispatchTouchEvent(MotionEvent.obtain(...))` / `onWindowFocusChanged(false)` on
+the activity's real window — whose callback IS the chained Kadre wrapper after
+install — so every event crosses the whole production path (primitive copy at
+dispatch, observation into the delivery, intact forward to the wrapped
+callback). The `KeyEvent` fields the wrapper extracts (`getUnicodeChar()`,
+`repeatCount`, …) are only observable on an emulator; this is exactly where that
+path is proven. All forms are Activity-form: the View form has no
+`Window.Callback` to chain (`View.getWindow()` is `@hide`), its input
+capabilities stay honestly `Unsupported` — the declared phase limit, recorded in
+[capabilities/android.md](../../../capabilities/android.md) §2 and §4 with the
+deferred owner-routing option:
+
+| evidenceId | kind | what it exercises |
+|---|---|---|
+| `android-input-host-untouched` | scenario | a host listener (key AND touch, installed on the attached View BEFORE the attach) still receives its events after the wrapper installs — each exactly once, the chaining does not duplicate; the session observes the same events in parallel (observation is not interception) |
+| `android-input-keys-mapped` | scenario | keys injected at the window callback are mapped through the HID table (usage, case, repeat, modifiers, press/release state); a key outside the table is forwarded without any invented stimulus |
+| `android-input-multi-touch-stable-ids` | scenario | multi-touch contacts keep stable identities across a gesture and retire at up/cancel; a DOWN outside the View bounds mints nothing (its whole gesture is silent), a DOWN inside delivers the whole gesture |
+| `android-input-focus-loss-resets` | scenario | window focus loss delivers the in-band `StateReset(FocusLost)` after forgetting every active contact without emitting; the next DOWN mints fresh identities |
+| `android-input-default-behavior-suppress` | scenario | committing `inputDefaultBehavior = SuppressWhenPossible` consumes the document scroll keys — press AND release — for the host while the session still observes them (delivered-then-suppressed, exactly); under `HostDefault` nothing is consumed |
+| `android-input-two-sessions-isolation` | scenario | two attached activities: a window-A event never crosses into session B (and the reverse), each delivery exactly once; the wrapper ownership identity is exercised — a foreign host callback chained on top stays in the chain and is never overwritten at close; a re-attached session delivers exactly once again |
+| `android-input-suppression-exact` | sentinel | a policy that consumes EVERY key (not exactly the nine scroll keys) kills `androidInputDefaultBehaviorSuppress` alone |
+| `android-input-no-double-delivery` | sentinel | a wrapper that no longer recognizes its own callback (ownership-identity damage) overwrites the foreign callback at close — the host callback is orphaned and loses its events after re-attach. The demonstrated kill is precisely this ownership-identity damage, the mutation class that enables duplicate delivery: no emulator scenario can inject the same event twice through the real dispatch path, so the sentinel pins the identity guard that makes double delivery impossible rather than a duplicate observed in the act |
+| `android-input-contacts-reset` | sentinel | a tracker that no longer clears on focus loss kills `androidInputFocusLossResets` alone |
+
+The AND-004 sentinel blast radius is recorded the same way: each of the three
+instrumented mutations (suppression widened to every key; wrapper ownership
+identity dropped; contact reset on focus loss removed) kills **exactly one** of
+the nine phase-3 tests — its guard — and leaves the other eight green.
+
 ## Running the gate locally
 
 Prerequisites: an Android SDK with the **AVD `Kadre_API_35`** (system image
@@ -100,9 +135,9 @@ emulator-5554`). The Gradle run inside is bounded by a portable 900 s watchdog
 (GNU `timeout` is absent on stock macOS — background Gradle, bounded wait,
 `SIGTERM` at expiry with exit code 124; commit `76229d58`). The gate task is
 `:kadre:contracts:validator:androidContractsCheck`: registry validation plus
-Android contract evidence validation against **`AND-001`, `AND-002` and
-`AND-003`** — one canonical JSON per contract, all from the same instrumented
-emulator run (15 instrumented tests).
+Android contract evidence validation against **`AND-001`, `AND-002`, `AND-003`
+and `AND-004`** — one canonical JSON per contract, all from the same
+instrumented emulator run (21 instrumented tests).
 
 The wrapper chains two steps, each of which can also be run on its own — one
 Gradle invocation per shell command:
@@ -175,6 +210,43 @@ carried by the evidence itself:
 - `AND-001` + `AND-002` + `AND-003` together — 15 instrumented tests, one
   canonical JSON per contract, all from the same instrumented emulator run.
 
+### Exit gate of roadmap phase 3
+
+Same commands, one contract more. From a cold start (kill any running emulator,
+`adb emu kill`, wait for zero devices, then let the script boot the AVD itself):
+publish (1), consumer compile (2), emulator smoke + evidence + validator (the
+script — **21** scenarios green, `AND-001.json` + `AND-002.json` +
+`AND-003.json` + `AND-004.json`), the same transitive-resolution purity check
+(grep exit 1, redone cold), and the no-device sanity tasks above. The roadmap
+checklist is carried by the evidence itself:
+
+- events injected at the real Android boundary, assertions on the public state
+  and events — `android-input-host-untouched`, `android-input-keys-mapped`,
+  `android-input-multi-touch-stable-ids` (the whole production path crossed
+  from `activity.window.callback`);
+- multi-touch, mouse, modifiers, focus loss, overflow —
+  `android-input-multi-touch-stable-ids`, `android-input-focus-loss-resets`,
+  the mapped-key/modifier assertions of `android-input-keys-mapped`, and the
+  host record `AndroidInputDeliveryTest.overflowIsTerminalFromTheRuntime`
+  (the ingress overflow terminalizes the runtime's OWN source,
+  `SourceOverflow(InputSource)` — the adapter has nothing to do);
+- no double delivery, no key/contact left active after reset, no cross-session
+  leak — `android-input-host-untouched` (each event exactly once through the
+  chain), `android-input-two-sessions-isolation` (a window-A event never
+  crosses into session B), `android-input-focus-loss-resets` (contacts
+  forgotten, fresh identities after), and the three sentinels
+  `android-input-suppression-exact`, `android-input-no-double-delivery`
+  (ownership-identity damage: the mutation class that enables duplicates),
+  `android-input-contacts-reset`;
+- consumption respects the policy and the host — `android-input-host-untouched`
+  (the host listener keeps every event it is entitled to) and
+  `android-input-default-behavior-suppress` (delivered-then-suppressed, press
+  and release, exactly the nine document scroll keys, nothing under
+  `HostDefault`, touch/pointer never consumed);
+- `AND-001` + `AND-002` + `AND-003` + `AND-004` together — 21 instrumented
+  tests, one canonical JSON per contract, all from the same instrumented
+  emulator run.
+
 ## Engine labeling
 
 The engine label is **never hardcoded**. The evidence producer
@@ -186,7 +258,8 @@ writes `emulator-api-<sdk>-<abi>`. On the phase 0 AVD this is
 are attached. Every run resets the per-engine JUnit copy directory first, so a
 stale XML from an earlier run can never inflate the evidence identity. The
 producer writes one canonical JSON per active android contract (currently
-`AND-001`, `AND-002` and `AND-003`), each pinned to the current HEAD commit.
+`AND-001`, `AND-002`, `AND-003` and `AND-004`), each pinned to the current HEAD
+commit.
 
 ## Evidence mapping
 
@@ -196,19 +269,21 @@ arguments as the runtime/AppKit producers — no format reimplementation) with:
 
 - the registry [contracts.tsv](../../registry/contracts.tsv) and the mapping
   [evidence.tsv](contracts/evidence.tsv) — the mapping is what binds each
-  scenario/sentinel `evidenceId` to `KadreConsumerSessionTest` (`AND-001`) or
-  `KadreConsumerAttachContractTest` (`AND-002`);
+  scenario/sentinel `evidenceId` to `KadreConsumerSessionTest` (`AND-001`),
+  `KadreConsumerAttachContractTest` (`AND-002`),
+  `KadreConsumerSurfaceContractTest` (`AND-003`) or
+  `KadreConsumerInputContractTest` (`AND-004`);
 - the JUnit XML the consumer produced under
   `kadre/consumers/android/build/outputs/androidTest-results/connected/`;
 - the current HEAD commit (the same `git rev-parse HEAD` rule the validator
   uses — a document pinned to a commit is stale by definition once HEAD moves).
 
-Outputs: `build/contract-evidence/android/<engine>/AND-{001,002,003}.json`
+Outputs: `build/contract-evidence/android/<engine>/AND-{001,002,003,004}.json`
 (canonical), `build/test-results/android/<engine>/TEST-*.xml` (the JUnit copy
 the validator cross-checks), `build/contract-evidence/android/engines.txt` (the
 engines this run actually produced), and the gate copies
-`build/contract-evidence/AND-{001,002,003}.json` that `validateContractEvidence`
-reads.
+`build/contract-evidence/AND-{001,002,003,004}.json` that
+`validateContractEvidence` reads.
 
 ## `androidContractsCheck` is deliberately not in `:kadre:check`
 
@@ -218,7 +293,7 @@ emulator on the current CI runners, and the aggregate requires a booted device
 is phase 10 of the roadmap
 (`ANDROID-IMPLEMENTATION-ROADMAP.md#Phase 10`).
 
-## Phase 2 limits (deferred guarantees)
+## Phase limits (deferred guarantees)
 
 The public surface is the four `DESIGN.md` §15.1 overloads `attachKadre`
 returning `KadreResult<KadreSession>` (two `ComponentActivity` receivers
@@ -232,37 +307,72 @@ never invented; focus and visibility stay lifecycle-owned), causes distinguished
 (rotation / resize / density) with generation-based rejection of stale
 callbacks, `requestRedraw` coalesced to one `RedrawRequested` per frame with a
 `Closed(Surface)` answer and zero zombie callbacks after the terminal, `apply`
-admitted per field on the exact P1 on-row shapes (every posed field rejected
-`RejectedSurfaceField(Unsupported(UpdateSurface))` — no commit path yet), the
-`withAndroidView` lease behind the double opt-in
-`@KadrePlatformApi` + `@DelicateKadreApi` (single in-flight lease, host thread,
-early cancellation rejected before anything is invoked, application exception
-propagated as-is), and `platformAccess` `Supported` on the surface — while
-`WindowCapabilities.platformAccess` stays `Unsupported(PlatformWindowAccess)`:
-no public member ever exposes a generic `android.view.Window`.
+admitted per field on the exact P1 on-row shapes, the `withAndroidView` lease
+behind the double opt-in `@KadrePlatformApi` + `@DelicateKadreApi` (single
+in-flight lease, host thread, early cancellation rejected before anything is
+invoked, application exception propagated as-is), and `platformAccess`
+`Supported` on the surface — while `WindowCapabilities.platformAccess` stays
+`Unsupported(PlatformWindowAccess)`: no public member ever exposes a generic
+`android.view.Window`.
+
+Since phase 3, the surface also carries essential input observation and
+delivery, in the **Activity form only**: a chainable `Window.Callback` wrapper
+(the host callback is wrapped, never replaced, never reached through
+reflection; every method forwards as-is, four input-side entry points deviate),
+the 65-key HID key mapping (a key outside the table is forwarded without any
+invented stimulus; keyboard observation lives only under focus), the motion
+translation (contacts keyed on the native `getPointerId`, bounds gate on DOWN
+with gesture continuity — a declared limit: targeting is the bounds gate, not
+host hit-testing, so overlapping siblings are attributed by bounds —, the lane
+follows the tool type, stylus and eraser riding the single pointer lane per
+D11/D12), delivery through the runtime's `RuntimeSurfaceInput` (buffered until
+installed, `InputObservationChanged` carrying the facts actually wired, focus
+loss → tracker reset without emitting + in-band `StateReset(FocusLost)` + text
+session suspension, ingress overflow terminal from the runtime itself), and
+`inputDefaultBehavior` committable `Supported({HostDefault,
+SuppressWhenPossible})` with exact suppression of the nine document scroll keys,
+press AND release (a consumed press without its release would leave the host an
+orphaned release — the web suppresses the keydown alone because
+`preventDefault` never removes events from the flow). Touch and pointer are
+never consumed; `gestures` is decided `Unsupported(GestureInput)`; the IME and
+raw input are not inferred from keyboard/pointer events (the text-input port
+refuses `Unsupported(TextInput)`).
+
+**The View form has no input observation — a structural, declared limit.**
+`View.getWindow()` is `@hide`: a View-form attach has no `Window.Callback` to
+chain, so no observation path exists. The input capabilities there stay
+honestly `Unsupported` (an unwired install submits the "nothing is wired"
+stimulus, which the reducer absorbs — never an empty promise). Routing through
+the owner `ComponentActivity`'s window is the deferred option, but its
+ownership is undesigned — in a multi-window world, which window carries which
+session — and the decision belongs to the phases owning windows and the View
+form ([capabilities/android.md](../../../capabilities/android.md) §4).
 
 Everything else is deferred, never silently absent — the
 authoritative list with the owning phase lives in
 [capabilities/android.md](../../../capabilities/android.md) §4:
 
-- **Phase 3** — keyboard, pointer, touch (no listener is installed on the
-  View); the four input-delivery `SurfaceUpdate` fields (`cursor`,
-  `pointerCapture`, `hitTesting`, `inputDefaultBehavior`), rejected per field
-  since phase 2 without calling any primitive; the redraw overflow actions
-  driven by the runtime delivery policies (phase 2 coalescing emits at most one
-  event per frame and bounded-flow overflow stays a documented drop);
-- **Phase 4** — real window commands and transient interactions (the Activity primary window
-  exists as a topology; its commands are answered on the exact contract-row shapes of
-  `OPERATION-CONTRACTS` §4 — no real commands: `apply` rejects every requested field under
-  `PartiallyApplied`, `requestAttention` stays `Unsupported`, `respondToCloseRequest` answers
-  `Invalid("requestId")` because no `CloseRequested` is ever published — and a View host has
-  no `Window` by the normative matrix); `close` answers `Temporary(retryable = false)`, the
-  interim on-row response for a structurally non-closable host window (the row admits only
-  `Temporary`/`Platform`; the normative decision — `Unsupported(CloseWindow)` would need an
-  `OPERATION-CONTRACTS` edit — is parked for phase 4); the multi-window/dialog refinement of
-  the "interactive window" conjunct of `Active` (derived from the lifecycle alone in phase 1:
-  `Active` ⇔ `RESUMED`);
-- **Phase 5** — text input/IME, gestures; **Phase 6** — drag-and-drop;
+- **Phase 4** — armed and synchronous interactions (the install seam exposes no
+  synchronous-interaction handler), and the commit paths for `cursor`,
+  `pointerCapture`, `hitTesting` (rejected per field since phase 2; only
+  `inputDefaultBehavior` became committable in phase 3); real window commands
+  (the Activity primary window exists as a topology; its commands are answered
+  on the exact contract-row shapes of `OPERATION-CONTRACTS` §4 — no real
+  commands: `apply` rejects every requested field under `PartiallyApplied`,
+  `requestAttention` stays `Unsupported`, `respondToCloseRequest` answers
+  `Invalid("requestId")` because no `CloseRequested` is ever published — and a
+  View host has no `Window` by the normative matrix); `close` answers
+  `Temporary(retryable = false)`, the interim on-row response for a structurally
+  non-closable host window (the row admits only `Temporary`/`Platform`; the
+  normative decision — `Unsupported(CloseWindow)` would need an
+  `OPERATION-CONTRACTS` edit — is parked for phase 4); the multi-window/dialog
+  refinement of the "interactive window" conjunct of `Active` (derived from the
+  lifecycle alone in phase 1: `Active` ⇔ `RESUMED`);
+- **Phases 4/9** — View-form input observation via owner routing (ownership
+  multi-window undesigned); View-form input generally;
+- **Phase 5** — text input/IME (`gestures` left the deferral list: phase 3
+  publishes the decided `Unsupported(GestureInput)`);
+  **Phase 6** — drag-and-drop;
 - **Phase 7** — displays, devices, gamepads, memory pressure, raw-input
   decision; **Phase 8** — capture; **Phase 9** — Java facade, Compose;
 - **Phase 10** — the mandatory `android-contracts` CI job.
