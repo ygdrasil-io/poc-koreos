@@ -255,10 +255,15 @@ internal object AndroidHostSession {
                     // `windows.state.value.primary?.surface === primarySurface` est un fait de
                     // session, pas une coïncidence de construction. `leasedView` est LA source
                     // du bail natif (Task 4) : la View est relue à chaque lease, jamais capturée.
+                    // Le seam du curseur (phase 4, Task 2) est câblé sur la MÊME View —
+                    // `pointerIcon` est une propriété de `View`, la forme Activity n'y a aucun
+                    // monopole (le miroir du branchement métriques, pas des commandes de
+                    // fenêtre).
                     val surface = AndroidHostSurface(
                         RuntimeProcessIds.nextSurfaceId(),
                         initialSurfaceState(view, initial),
                         leasedView = { view },
+                        cursorNative = AndroidViewCursorNative(view),
                     )
                     sessionSurface.surface = surface
                     // Le seam natif de la fenêtre (phase 4, Task 1) câblé sur CETTE Activity —
@@ -289,10 +294,14 @@ internal object AndroidHostSession {
                 failureReporter = AndroidAttachDiagnostics,
                 sessionObserver = RuntimeSessionObserver { _, _ -> reservation.release() },
                 primarySurfaceFactory = { id ->
+                    // Le seam du curseur câblé sur la View de CETTE forme aussi : la
+                    // propriété `View.pointerIcon` vit sur la vue, pas sur la fenêtre — la
+                    // forme View committe le curseur exactement comme la forme Activity.
                     val surface = AndroidHostSurface(
                         id,
                         initialSurfaceState(view, initial),
                         leasedView = { view },
+                        cursorNative = AndroidViewCursorNative(view),
                     )
                     sessionSurface.surface = surface
                     RuntimePrimarySurface(surface, surface::close)

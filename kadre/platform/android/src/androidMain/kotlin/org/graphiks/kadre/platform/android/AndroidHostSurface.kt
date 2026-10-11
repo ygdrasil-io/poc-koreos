@@ -41,12 +41,14 @@ import org.graphiks.kadre.internal.runtime.RuntimeLock
 import org.graphiks.kadre.internal.runtime.RuntimePrimarySurfaceConfiguration
 import org.graphiks.kadre.internal.runtime.RuntimeSurfaceInput
 import org.graphiks.kadre.internal.runtime.admitField
+import org.graphiks.kadre.internal.runtime.capabilityFailure
 import org.graphiks.kadre.internal.runtime.fieldName
 import org.graphiks.kadre.internal.runtime.unsupportedSurfaceCapabilities
 import org.graphiks.kadre.internal.runtime.withLock
 import org.graphiks.kadre.policy.InputDeliveryPolicy
 import org.graphiks.kadre.policy.ResourceBudgetPolicy
 import org.graphiks.kadre.policy.WindowDeliveryPolicy
+import org.graphiks.kadre.surface.CursorStyle
 import org.graphiks.kadre.surface.HostSurface
 import org.graphiks.kadre.surface.InputDefaultBehavior
 import org.graphiks.kadre.surface.PropertyChange
@@ -68,7 +70,10 @@ import org.graphiks.kadre.surface.SurfaceUpdateOutcome
  * `state`/`capabilities`/`events`, un `apply` conforme à sa ligne §3 — aucun champ supporté en
  * phase 2 ; depuis la phase 3 (Task 4), `inputDefaultBehavior` y est le PREMIER champ
  * committable (la capability publiée à l'installation, le commit immédiat à une révision — le
- * miroir web) — et
+ * miroir web) — depuis la phase 4 (Task 2), `cursor` y est le SECOND (annoncé à l'installation
+ * quand le seam du pointeur est câblé — exactement l'ensemble mappable de
+ * [AndroidCursorIcons] — committé par [AndroidCursorNative] : `System(icon)` pose le TYPE_* de
+ * la table, `Hidden` pose l'icône null, `Custom(image)` reste refusé champ par champ) — et
  * un `requestRedraw` dont Task 3 branchera le scheduling à la place de la
  * branche on-row. Task 4 a ajouté `: AndroidViewLeasePort` à cette déclaration : la View du host
  * n'est exposée qu'au block du bail ([withAndroidView], double opt-in), jamais ailleurs.
@@ -91,6 +96,16 @@ internal class AndroidHostSurface(
     private val frameClock: () -> AndroidRedrawScheduler.FrameClock = { ChoreographerFrameClock() },
     private val hostThread: AndroidHostThreadDispatch = AndroidMainThreadDispatch,
     private val leasedView: () -> Any? = { null },
+    /**
+     * Le seam natif du curseur (phase 4, Task 2) — la primitive [AndroidCursorNative] que le
+     * commit du champ `cursor` pose, câblé par la couture sur la View du host pour LES DEUX
+     * formes (`pointerIcon` est une propriété de `View`). `null` (constructions sans seam —
+     * tests) : la capability `cursor` reste à son refus à TOUTE installation — la présence du
+     * seam est un fait de construction, la même discipline que le `native` de la fenêtre
+     * (Task 1) et le `inputWired` de l'entrée : on n'annonce jamais un commit qui ne peut pas
+     * arriver. Les tests de commit injectent un recorder.
+     */
+    private val cursorNative: AndroidCursorNative? = null,
     /**
      * Le canal des diagnostics d'entrée qui ne sont pas des failures de session — les
      * débordements que le réducteur runtime reporte (`SourceOverflow` et cie), le miroir du
@@ -236,18 +251,25 @@ internal class AndroidHostSurface(
      *    `InvalidRequest(field)` (les quatre noms du registre §1.1), lui aussi avant admission ;
      * 4. l'admission CHAMP PAR CHAMP contre la capability publiée — l'admission partagée du
      *    runtime ([admitField], celle-là même de la surface web et de la surface de
-     *    référence). `inputDefaultBehavior` est SUPPORTED depuis la phase 3 (publiée à
+     *    référence) et, pour `cursor`, l'admission DÉDIÉE de la référence
+     *    ([admitCursor], le miroir `MinimalWindowSurface.admitCursor` : `Custom(image)`
+     *    consulte `customCursor`, `System(icon)` consulte `cursor` contre l'ensemble
+     *    annoncé). `inputDefaultBehavior` est SUPPORTED depuis la phase 3 (publiée à
      *    l'installation, `Supported({HostDefault, SuppressWhenPossible}, Available)` — le
-     *    miroir web `WebHostSession.kt:2102-2105`) : un champ posé est admis ; les trois
-     *    autres capabilities restent `Unsupported(UpdateSurface)` : un champ posé est rejeté
+     *    miroir web `WebHostSession.kt:2102-2105`) ; `cursor` l'est depuis la phase 4 quand
+     *    le seam du pointeur est câblé (`Supported(<exactement les icônes mappables>,
+     *    Available)`) : un champ posé est admis ; les deux autres capabilities restent
+     *    `Unsupported(UpdateSurface)` : un champ posé est rejeté
      *    `RejectedSurfaceField(Unsupported(UpdateSurface))`, un champ non posé ne l'est
      *    jamais — et un rejet ne bloque jamais les champs du même update qui peuvent être
      *    honorés ;
-     * 5. le verdict — `inputDefaultBehavior` a un chemin de commit (la surface est son
-     *    propre backend : un champ admis est commis immédiatement, UNE révision nouvelle,
-     *    l'outcome portant l'état publié — le miroir du commit web `:1612-1613`) ; les trois
-     *    champs sans chemin de commit restent gardés par [requireRefused]. Rien de posé ni
-     *    de commis → `Applied(current)` ; un champ rejeté →
+     * 5. le verdict — `inputDefaultBehavior` et `cursor` ont un chemin de commit
+     *    (`inputDefaultBehavior` : la surface est son propre backend ; `cursor` : le seam
+     *    [AndroidCursorNative] pose le TYPE_* mappé, ou l'icône null pour `Hidden`) — un
+     *    champ admis est commis immédiatement, UNE révision nouvelle, l'outcome portant
+     *    l'état publié (le miroir du commit web `:1612-1613`) ; les deux champs sans chemin
+     *    de commit restent gardés par [requireRefused]. Rien de posé ni de commis →
+     *    `Applied(current)` ; un champ rejeté →
      *    `PartiallyApplied(published, rejected)`. Jamais une failure externe `Unsupported`
      *    pour l'update entier : le rejet est PAR CHAMP, dans la liste du succès.
      *
@@ -276,7 +298,7 @@ internal class AndroidHostSurface(
         // l'admission est ce qui enregistre le `RejectedSurfaceField` dans la liste, dans l'ordre
         // des champs de l'update (une seule passe ici : aucun second refus au commit). Le champ
         // ADMIS est ce que l'admission rend — c'est lui que la garde de commit relit.
-        val cursor = admitField(update.cursor, SurfaceProperty.Cursor, capabilities.cursor, rejected)
+        val cursor = admitCursor(update.cursor, capabilities, rejected)
         val pointerCapture = admitField(
             update.pointerCapture,
             SurfaceProperty.PointerCapture,
@@ -295,20 +317,42 @@ internal class AndroidHostSurface(
             capabilities.inputDefaultBehavior,
             rejected,
         )
-        // Les trois champs d'update sans chemin de commit restent gardés plutôt qu'assumés
+        // Les deux champs d'update sans chemin de commit restent gardés plutôt qu'assumés
         // absents : leurs capabilities refusent toute valeur aujourd'hui, mais le jour où
         // l'une deviendrait `Supported` le changement atterrirait ici non commis et serait
         // répondu d'un `Applied` pour un état qui ne l'a jamais pris (la même garde que la
         // surface web pose sur ses propres champs sans commit).
-        cursor.requireRefused(SurfaceProperty.Cursor)
         pointerCapture.requireRefused(SurfaceProperty.PointerCapture)
         hitTesting.requireRefused(SurfaceProperty.HitTesting)
-        // `inputDefaultBehavior` est le PREMIER champ committable de cette surface, et la
-        // surface Android est son propre backend : rien en dessous ne peut rapporter une
-        // valeur effective différente, un champ admis est donc commis ICI ET MAINTENANT —
-        // le miroir exact du commit own-backend web (`WebHostSession.kt:1612-1613`).
+        // `inputDefaultBehavior` (phase 3) et `cursor` (phase 4) sont les champs committables
+        // de cette surface — la surface est le backend du premier, le seam du pointeur celui
+        // du second : rien en dessous ne peut rapporter une valeur effective différente, un
+        // champ admis est donc commis ICI ET MAINTENANT — le miroir exact du commit
+        // own-backend web (`WebHostSession.kt:1612-1613`).
         val current = mutableState.value
         var committed = current
+        // Le commit du curseur : l'admission dédiée ([admitCursor]) n'a pu rendre un `Set`
+        // que pour `Hidden` ou `System(icon mappable)` — `Custom` consulte `customCursor`
+        // (Unsupported) et une icône hors de l'ensemble annoncé est refusée avant. Le seam
+        // reçoit le TYPE_* de la table, ou null pour `Hidden` ; l'état porte le style
+        // demandé — le readback EST ce que le seam a reçu (l'implémentation production pose
+        // exactement le type reçu, cf. [AndroidViewCursorNative]).
+        if (cursor is PropertyChange.Set) {
+            val seam = checkNotNull(cursorNative) {
+                "cursor arrived admitted, but the android surface has no pointer-icon seam"
+            }
+            val style = cursor.value
+            when (style) {
+                is CursorStyle.Hidden -> seam.setPointerIcon(null)
+                is CursorStyle.System -> seam.setPointerIcon(
+                    checkNotNull(AndroidCursorIcons.systemIconType(style.icon)) {
+                        "a mapped icon lost its pointer type between admission and commit"
+                    },
+                )
+                is CursorStyle.Custom -> error("CursorStyle.Custom arrived admitted, but the customCursor capability refuses it")
+            }
+            committed = committed.copy(cursor = style)
+        }
         if (inputDefaultBehavior is PropertyChange.Set) {
             committed = committed.copy(inputDefaultBehavior = inputDefaultBehavior.value)
         }
@@ -523,7 +567,7 @@ internal class AndroidHostSurface(
             if (detached || mutableState.value.attachment == SurfaceAttachmentState.Detached) {
                 return
             }
-            mutableCapabilities.value = androidSurfaceCapabilities()
+            mutableCapabilities.value = androidSurfaceCapabilities(cursorCommittable = cursorNative != null)
         }
         // L'installation de l'observation d'entrée (Task 3) : le stimulus structurel — avec
         // les faits câblés — puis le replay ordonné des observations bufferisées. Hors verrou :
@@ -658,6 +702,55 @@ internal class AndroidHostSurface(
         else -> null
     }
 
+    /**
+     * L'admission DÉDIÉE du champ `cursor` — le miroir exact de
+     * `MinimalWindowSurface.admitCursor` (la référence) : `SurfaceUpdate.cursor` porte un
+     * [CursorStyle] tandis que la capability `cursor` contraint les [org.graphiks.kadre.surface.CursorIcon]
+     * — l'admission partagée [admitField] ne peut pas les croiser, la référence la scinde
+     * donc en deux capabilities et ce champ la suit :
+     *
+     * - `Custom(image)` consulte `customCursor` — `Unsupported(UpdateSurface)` en phase 4
+     *   (aucun chemin image→bitmap prouvé) : refus champ par champ, le seam jamais appelé ;
+     * - `Hidden` et `System(icon)` consultent `cursor` ; un `System` dont l'icône est hors de
+     *   l'ensemble annoncé (les non-mappables de [AndroidCursorIcons]) est refusé
+     *   `Unsupported(UpdateSurface)` — l'annonce et la table ne peuvent pas diverger.
+     *
+     * Un `Clear` n'atteint jamais ici : la garde [invalidClearField] le rejette avant
+     * l'admission. Un champ non posé n'est jamais rejeté, et un refus n'bloque jamais les
+     * champs du même update qui peuvent être honorés (la forme commune [admitField]).
+     */
+    private fun admitCursor(
+        change: PropertyChange<CursorStyle>,
+        capabilities: SurfaceCapabilities,
+        rejected: MutableList<RejectedSurfaceField>,
+    ): PropertyChange<CursorStyle> {
+        if (change is PropertyChange.Unchanged) return change
+        val capability = if (change is PropertyChange.Set && change.value is CursorStyle.Custom) {
+            capabilities.customCursor
+        } else {
+            capabilities.cursor
+        }
+        val failure = capabilityFailure(capability)
+        if (failure != null) {
+            rejected += RejectedSurfaceField(SurfaceProperty.Cursor, failure)
+            return PropertyChange.Unchanged
+        }
+        if (
+            change is PropertyChange.Set &&
+            change.value is CursorStyle.System &&
+            capability is Capability.Supported<*> &&
+            capability.constraints is Set<*> &&
+            change.value.icon !in capability.constraints
+        ) {
+            rejected += RejectedSurfaceField(
+                SurfaceProperty.Cursor,
+                KadreFailure.Unsupported(KadreOperation.UpdateSurface),
+            )
+            return PropertyChange.Unchanged
+        }
+        return change
+    }
+
     // ------------------------------------------------------------------
     // La couture d'entrée (Task 3) — les funnels que le wrapper T1 et le tracker T2
     // nourrissent, et la lecture de suppression que le wrapper consulte. Thread principal
@@ -720,24 +813,36 @@ private fun PropertyChange<*>.requireRefused(property: SurfaceProperty) {
  * Le snapshot honnête d'une surface Android observée : les refus de la phase 2
  * ([unsupportedSurfaceCapabilities]) avec les annonces d'installation — `platformAccess`
  * `Supported` (la rangée Android de `capabilities/android.md` §Phase 2, qui couvre ensemble les
- * métriques publiées, le redraw coalescé et l'accès natif borné du bail) et, depuis la
+ * métriques publiées, le redraw coalescé et l'accès natif borné du bail), depuis la
  * phase 3,
  * `inputDefaultBehavior` `Supported({HostDefault, SuppressWhenPossible}, Available)` — le
  * miroir EXACT de la capability web (`WebHostSession.kt:2102-2105`) : les deux valeurs du
- * comportement, disponibles. Publié par [AndroidHostSurface.observationInstalled] quand
+ * comportement, disponibles — et, depuis la phase 4, `cursor`
+ * `Supported(<exactement les icônes mappables>, Available)` QUAND le seam du pointeur est
+ * câblé ([cursorNative] non-null — un fait de construction, la même discipline que le
+ * `inputWired` de l'entrée : on n'annonce pas un commit qui ne peut jamais arriver ; le
+ * miroir de la fenêtre Task 1, `native != null`), les icônes étant EXACTEMENT celles de la
+ * table [AndroidCursorIcons] — l'annonce et la table sont une seule vérité. Publié par
+ * [AndroidHostSurface.observationInstalled] quand
  * l'observation et le scheduling vivent (le moment structurel où la surface qui honore — le
  * wrapper de dispatch, la lecture de l'état commis — existe, la même sémantique « `Available`
  * seulement après une installation réelle » que partout ailleurs), retiré au terminal
- * ([AndroidHostSurface.close]) — jamais après. Les trois autres champs d'update restent
- * `Unsupported(UpdateSurface)` : leurs refus de la phase 2 ne sont pas affaiblis.
+ * ([AndroidHostSurface.close]) — jamais après. `customCursor` et les deux autres champs
+ * d'update restent `Unsupported(UpdateSurface)` : leurs refus de la phase 2 ne sont pas
+ * affaiblis.
  */
-private fun androidSurfaceCapabilities(): SurfaceCapabilities =
+private fun androidSurfaceCapabilities(cursorCommittable: Boolean): SurfaceCapabilities =
     unsupportedSurfaceCapabilities().copy(
         platformAccess = Capability.Supported(Unit, FeatureAvailability.Available),
         inputDefaultBehavior = Capability.Supported(
             setOf(InputDefaultBehavior.HostDefault, InputDefaultBehavior.SuppressWhenPossible),
             FeatureAvailability.Available,
         ),
+        cursor = if (cursorCommittable) {
+            Capability.Supported(AndroidCursorIcons.committableIcons, FeatureAvailability.Available)
+        } else {
+            Capability.Unsupported(KadreFailure.Unsupported(KadreOperation.UpdateSurface))
+        },
     )
 
 /**
