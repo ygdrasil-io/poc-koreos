@@ -157,11 +157,11 @@ Toutes les phases ci-dessous sont proposées. Aucun jalon Wayland de la nouvelle
 
 **Objectif :** rendre la première verticale implémentable sans hypothèse cachée.
 
-- [ ] Auditer les APIs KFFI publiées : symboles, callbacks managés, POSIX, XKB, ownership et chargement paresseux ; ouvrir uniquement les gaps confirmés.
-- [ ] Choisir et enregistrer la baseline Linux/JVM/libc, les versions minimales de protocoles bindées et les images de test reproductibles.
-- [ ] Résoudre le défaut `WindowDecorations.System`, la frontière renderer/commit/lease et la représentation du lifecycle sans observer d’occlusion ou de visibilité inventé.
-- [ ] Définir le probe `isAvailable()` : libraries, endpoint et protocoles requis, coût borné, cleanup ; traiter le fd transmis par `WAYLAND_SOCKET` sans le consommer au probe puis le réutiliser fermé au run.
-- [ ] Écrire le design de première tranche avec failures avant session, panne après admission et fermeture ; identifier les contrats à allouer dans les familles normatives existantes.
+- [x] Auditer les APIs KFFI publiées : symboles, callbacks managés, POSIX, XKB, ownership et chargement paresseux ; ouvrir uniquement les gaps confirmés.
+- [x] Choisir et enregistrer la baseline Linux/JVM/libc, les versions minimales de protocoles bindées et les images de test reproductibles.
+- [x] Résoudre le défaut `WindowDecorations.System`, la frontière renderer/commit/lease et la représentation du lifecycle sans observer d’occlusion ou de visibilité inventé.
+- [x] Définir le probe `isAvailable()` : libraries, endpoint et protocoles requis, coût borné, cleanup ; traiter le fd transmis par `WAYLAND_SOCKET` sans le consommer au probe puis le réutiliser fermé au run.
+- [x] Écrire le design de première tranche avec failures avant session, panne après admission et fermeture ; identifier les contrats à allouer dans les familles normatives existantes.
 
 **Gate de sortie :** décisions précédentes documentées, bindings minimaux vérifiés ou blocages KFFI identifiés précisément, scénarios positifs/négatifs définis. Un manque de binding bloque sa tranche, pas les domaines indépendants.
 
