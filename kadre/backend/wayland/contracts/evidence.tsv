@@ -21,6 +21,6 @@ SUR-001	jvm	scenario	wayland-pump-flush-eagain-watches-write	org.graphiks.kadre.
 SUR-001	jvm	scenario	wayland-pump-eintr-keeps-prepared-read	org.graphiks.kadre.internal.wayland.WaylandEventPumpTest	interruptedPollKeepsThePreparedRead[jvm]
 SUR-001	jvm	scenario	wayland-pump-no-prepared-roundtrip	org.graphiks.kadre.internal.wayland.WaylandEventPumpTest	nonEmptyQueueRearmsWithoutPreparingTwice[jvm]
 SES-001	jvm	sentinel	wayland-failure-no-reconnect	org.graphiks.kadre.internal.wayland.WaylandBackendProviderTest	disconnectAfterAdmissionFailsTheSessionWithoutReconnecting[jvm]
-SES-001	jvm	scenario	wayland-session-cycles-on-weston	org.graphiks.kadre.internal.wayland.WaylandNativeSessionLinuxTest	threeCyclesLeaveNoFdBehind[jvm]
-SUR-001	jvm	sentinel	wayland-pump-no-late-callback	org.graphiks.kadre.internal.wayland.WaylandNativeSessionLinuxTest	repeatedWakeKeepsThePumpResponsive[jvm]
-SUR-001	jvm	sentinel	wayland-teardown-no-fd-leak	org.graphiks.kadre.internal.wayland.WaylandNativeSessionLinuxTest	threeCyclesLeaveNoFdBehind[jvm]
+SES-001	jvm	scenario	wayland-session-cycles-on-weston	org.graphiks.kadre.internal.wayland.WaylandNativeSessionLinuxTest	threeCyclesLeaveNoFdBehind
+SUR-001	jvm	sentinel	wayland-pump-no-late-callback	org.graphiks.kadre.internal.wayland.WaylandNativeSessionLinuxTest	repeatedWakeKeepsThePumpResponsive
+SUR-001	jvm	sentinel	wayland-teardown-no-fd-leak	org.graphiks.kadre.internal.wayland.WaylandNativeSessionLinuxTest	threeCyclesLeaveNoFdBehind
