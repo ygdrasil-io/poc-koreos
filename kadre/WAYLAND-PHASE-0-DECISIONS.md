@@ -43,3 +43,18 @@ Le mapping normatif `DESIGN.md:337-343` (ligne Desktop `Standalone`) est relu su
 | `Detached` | teardown du host / arrêt standalone | — |
 
 Règles : aucune occlusion ou visibilité « inventée » — aucun événement de visibilité synthétisé, aucune heuristique de recouvrement ; les transitions publiées ne proviennent que des sources ci-dessus, dédupliquées conformément à `DESIGN.md:331` (snapshots atomiques valides, `Background` publie toujours `Inactive` auparavant ou dans le même snapshot). La ligne « lifecycle à trois axes = G » de la matrice §4 reste valide : ce sont les sources des axes qui sont définies ici, pas une rétraction de garantie. Le signal de pression mémoire n'a pas de primitive Wayland : `LifecycleCapabilities.memoryPressure` sera `Unsupported` sur ce backend (colonne `C` de la matrice — pilotée à runtime — sans contradiction).
+
+## Probe `isAvailable()`
+
+Contrat du probe que le provider Wayland (phase 1) implémentera derrière le SPI interne `DesktopBackendProvider` (`isAvailable(): Boolean`, `DesktopBackendProvider.kt:28-37`). Précédent AppKit : le probe ne vérifie que l'environnement, sans charge native (`AppKitBackendProvider.kt:69-76`). Règles :
+
+- **R1 — aucune charge native** : aucun `SymbolLookup`, aucun `System::loadLibrary`, aucune connexion Wayland ; le probe ne dépend d'aucun binding KFFI.
+- **R2 — plateforme** : plateforme ≠ Linux ⇒ `false`, raison `platform`.
+- **R3 — endpoint par fd** : si `WAYLAND_SOCKET` est défini, analyse entière uniquement. Valeur non entière ou hors bornes de descripteur ⇒ `false`, raison `wayland-socket-invalid`. Valeur valide ⇒ `true` **sans aucun syscall sur ce fd** — pas de `fcntl`, pas de `read`, pas de `stat /proc/self/fd` ; le fd reste la propriété du host au stade du probe.
+- **R4 — endpoint par socket nommé** : sinon, `XDG_RUNTIME_DIR` et `WAYLAND_DISPLAY` définis ⇒ chemin `<XDG_RUNTIME_DIR>/<WAYLAND_DISPLAY>` ; `WAYLAND_DISPLAY` absent ⇒ `<XDG_RUNTIME_DIR>/wayland-0` ; `XDG_RUNTIME_DIR` absent ⇒ `false`, raison `runtime-dir-absent`. Le chemin existe et est un socket (attribut POSIX) ⇒ `true` ; sinon `false`, raison `socket-absent`.
+- **R5 — coût borné** : O(1), aucun blocage, aucun fd ouvert, aucun état muté ; répétable et thread-safe ; pur — deux appels successifs renvoient la même valeur si l'environnement n'a pas changé.
+- **R6 — diagnostic** : chaque `false` porte une raison interne énumérée (`platform`, `wayland-socket-invalid`, `runtime-dir-absent`, `socket-absent`), publiée en diagnostic interne uniquement — jamais dans l'API publique.
+- **R7 — réutilisation au run** : le fd transmis par `WAYLAND_SOCKET` est réutilisé, possédé par la session, et fermé exactement une fois au teardown ; le probe ne l'a ni dupliqué ni consommé (R3). Subordonné à `KFFI-WAYLAND-001` : tant que le gap est ouvert, un run avec `WAYLAND_SOCKET` échoue avant session sans repli par nom de socket (voir design de tranche).
+- **R8 — totalité** : le probe ne lève jamais — toute `Exception` ou `Linker`/`LinkageError` interne ⇒ `false` + raison, en complément du filet `availability-exception` déjà assuré par le sélecteur (`DesktopHostFacade.kt`, AppKit : `AppKitBackendProvider.kt:69-76`), qui reste la dernière barrière.
+
+Cohérence SPI : la spécification n'exige rien que le SPI ne permette pas (retour `Boolean`, pas de paramètre, appels multiples autorisés) ; le cas `DesktopBackend.Wayland` explicite sous Linux et le chemin `Auto → [Wayland, X11]` (`DesktopHostFacade.kt:165`) consomment ce probe tel quel. Le scénario SN-2 du design de tranche épingle R3, le SN-3 épingle R7.
