@@ -1,16 +1,17 @@
 # Android emulator contract driver
 
 This non-published JVM project runs the public Android host-attachment proof of
-phases 0 and 1 on a real emulator. It is a contract driver, not an
+phases 0, 1 and 2 on a real emulator. It is a contract driver, not an
 implementation API: it forks the instrumented consumer build, executes its
 scenarios on the attached device, and turns the JUnit output into the canonical
-`AND-001` and `AND-002` evidence with the validator's own generator. English
+`AND-001`, `AND-002` and `AND-003` evidence with the validator's own generator.
+English
 prose, like the Web driver README it mirrors; everything else in this phase is
 documented in French in the sources.
 
 ## What the driver proves
 
-Two contracts, both active in the registry
+Three contracts, all active in the registry
 ([contracts.tsv](../../registry/contracts.tsv)), oracle `O3`, mapped in
 [evidence.tsv](contracts/evidence.tsv):
 
@@ -43,6 +44,23 @@ all in `org.graphiks.kadre.consumer.KadreConsumerAttachContractTest`:
 | `android-attach-rollback-restores-state` | sentinel | a late attach failure restores the reservation — guarded by `androidAttachParentCancelled` |
 | `android-attach-isolation-per-identity` | sentinel | ownership keys on native identities, never a global lock — guarded by `androidAttachRecreationIsolation` |
 
+**`AND-003`** — the phase 2 observable surface, metrics, redraw and native-access
+proof (source `ANDROID-IMPLEMENTATION-ROADMAP.md#Phase 2 — Surface, metrics,
+redraw et accès natif`). Six scenarios and three sentinels, all in the
+instrumented test class `org.graphiks.kadre.consumer.KadreConsumerSurfaceContractTest`:
+
+| evidenceId | kind | what it exercises |
+|---|---|---|
+| `android-surface-metrics-match-view` | scenario | the published state (physical/logical size, scale, insets) matches the real View values (`view.width/height`, `resources.displayMetrics.density`, `rootWindowInsets`) |
+| `android-surface-resize-propagates` | scenario | changing the View's layout params publishes the new size; the surface instance and its revision discipline survive |
+| `android-surface-redraw-coalesced` | scenario | 5 `requestRedraw()` in one frame answer `Success(Unit)` each and produce EXACTLY one `RedrawRequested` |
+| `android-surface-redraw-after-close` | scenario | after `session.close()`, `requestRedraw()` answers `Failure(Closed(Surface))` and no event follows |
+| `android-surface-lease-boundaries` | scenario | `withAndroidView` hands the attached View; a second in-flight lease is `TemporarilyUnavailable(retryable = true)`; after close every lease is `Closed(Surface)` without invoking |
+| `android-surface-no-window-handle` | scenario | the window's `platformAccess` is `Unsupported(PlatformWindowAccess)` and no public surface member exposes `android.view.Window` |
+| `android-metrics-generation-stale` | sentinel | a stale-generation observation never publishes — host-pinned: the kill is demonstrated by the recorded mutation run against `AndroidSurfaceMetricsTest.staleGenerationCallbackRejected` (no emulator scenario can genuinely produce a stale callback); the mapping anchors on the metrics scenario |
+| `android-redraw-single-per-frame` | sentinel | removing the coalescing (one event per request) kills `androidSurfaceRedrawCoalesced` alone |
+| `android-lease-closed-after-terminal` | sentinel | a lease that skips its admission check hands out the View of a closed surface — kills `androidSurfaceLeaseBoundaries` alone |
+
 The two sentinels carry demonstrated blast radius: under the recorded
 mutations (late failure that skips the reservation rollback; ownership registry
 keyed on a single global key) each kills **exactly one** of the nine tests —
@@ -72,8 +90,9 @@ emulator-5554`). The Gradle run inside is bounded by a portable 900 s watchdog
 (GNU `timeout` is absent on stock macOS — background Gradle, bounded wait,
 `SIGTERM` at expiry with exit code 124; commit `76229d58`). The gate task is
 `:kadre:contracts:validator:androidContractsCheck`: registry validation plus
-Android contract evidence validation against **`AND-001` and `AND-002`** —
-one canonical JSON per contract, both from the same instrumented emulator run.
+Android contract evidence validation against **`AND-001`, `AND-002` and
+`AND-003`** — one canonical JSON per contract, all from the same instrumented
+emulator run (15 instrumented tests).
 
 The wrapper chains two steps, each of which can also be run on its own — one
 Gradle invocation per shell command:
@@ -147,11 +166,11 @@ arguments as the runtime/AppKit producers — no format reimplementation) with:
 - the current HEAD commit (the same `git rev-parse HEAD` rule the validator
   uses — a document pinned to a commit is stale by definition once HEAD moves).
 
-Outputs: `build/contract-evidence/android/<engine>/AND-{001,002}.json`
+Outputs: `build/contract-evidence/android/<engine>/AND-{001,002,003}.json`
 (canonical), `build/test-results/android/<engine>/TEST-*.xml` (the JUnit copy
 the validator cross-checks), `build/contract-evidence/android/engines.txt` (the
 engines this run actually produced), and the gate copies
-`build/contract-evidence/AND-{001,002}.json` that `validateContractEvidence`
+`build/contract-evidence/AND-{001,002,003}.json` that `validateContractEvidence`
 reads.
 
 ## `androidContractsCheck` is deliberately not in `:kadre:check`

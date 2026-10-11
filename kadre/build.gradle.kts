@@ -154,18 +154,20 @@ publishing {
     }
 }
 
-// Les variantes natives iOS/tvOS ne se publient que depuis un hôte Apple : les gates
-// ubuntu (web-contracts) publient jvm/js/wasm via le même agrégat contractTest, et un
-// hôte non-Apple ne produit pas les klibs. La résolution native depuis contractTest
-// sera révisée quand platform:uikit sera officiellement publié (phase 1).
-if (!org.gradle.internal.os.OperatingSystem.current().isMacOsX) {
-    tasks.configureEach {
-        val nativePublicationTask = name.startsWith("publish") &&
-            (name.contains("Ios") || name.contains("Tvos"))
-        val nativeMetadataTask = name.startsWith("generateMetadataFileFor") &&
-            (name.contains("Ios") || name.contains("Tvos"))
-        if (nativePublicationTask || nativeMetadataTask) {
-            enabled = false
-        }
+// Les variantes natives iOS/tvOS de l'umbrella ne se publient PAS — sur AUCUN hôte : le
+// module d'agrégation n'a aucune source native (compilations NO-SOURCE, aucun klib
+// n'existe), sa publication maven échoue donc à la génération des métadonnées
+// (FileNotFoundException sur le klib inexistant). Les variantes réellement consommées
+// depuis contractTest sont android/jvm/js/wasm ; le natif consomme le LIEN framework de
+// platform:uikit (le driver UIKit), pas une variante maven — les propres publications de
+// platform:uikit, qui a des sources, restent actives. La résolution native depuis
+// contractTest sera révisée quand platform:uikit sera officiellement publié.
+tasks.configureEach {
+    val nativePublicationTask = name.startsWith("publish") &&
+        (name.contains("Ios") || name.contains("Tvos"))
+    val nativeMetadataTask = name.startsWith("generateMetadataFileFor") &&
+        (name.contains("Ios") || name.contains("Tvos"))
+    if (nativePublicationTask || nativeMetadataTask) {
+        enabled = false
     }
 }

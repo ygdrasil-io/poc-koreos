@@ -124,6 +124,17 @@ internal class AndroidHostSurface(
      */
     private var leaseHeld: Boolean = false
 
+    /**
+     * La source de la View du host, lue à CHAQUE bail (jamais capturée avec la surface) et
+     * EFFACÉE par le terminal ([close], sous le verrou — le carry M-3 de la Task 4) : un bail
+     * admis avant `close` mais dont la lecture suit le teardown trouve une source vide et
+     * répond `Closed(Surface)` — une View démontée n'est jamais remise au block. Volatile :
+     * écrit sous [lock] par [close] seul, lu hors verrou par [lease] — la visibilité croisée
+     * thread est portée par le modificateur, pas par la chance.
+     */
+    @Volatile
+    private var viewSource: (() -> Any?)? = leasedView
+
     private val mutableState = MutableStateFlow(initialState)
     private val mutableCapabilities = MutableStateFlow(unsupportedSurfaceCapabilities())
 
@@ -274,7 +285,8 @@ internal class AndroidHostSurface(
      *    `TemporarilyUnavailable(retryable = true)`, [block] jamais invoqué : se rentrer dedans
      *    est une erreur de programmation, pas une contre-pression ;
      * 3. la View est relue à CHAQUE bail (la source [leasedView], jamais capturée avec la
-     *    surface) — un host parti ne prête rien : `Closed(Surface)`, le miroir du port web ;
+     *    surface, effacée par le terminal sous le verrou) — un host parti ne prête rien :
+     *    `Closed(Surface)`, le miroir du port web ;
      * 4. le block tourne sur le thread host (le principal Android) : inline si l'appelant y est
      *    déjà, sinon dispatché ([hostThread]) — et l'invocation DÉMARRÉE est enveloppée de
      *    `NonCancellable` : un callback commencé s'achève même si la coroutine appelante est
@@ -304,7 +316,13 @@ internal class AndroidHostSurface(
             leaseHeld = true
         }
         try {
-            val view = leasedView()
+            // La source est relue ICI, hors verrou mais APRÈS l'admission — le terminal l'a
+            // effacée sous le verrou (M-3) : si `close` a passé sa section critique, la lecture
+            // trouve `null` et le bail répond `Closed` SANS invoquer le block. Si la lecture a
+            // gagné la course, la View était celle d'une surface vivante à l'instant de la
+            // remise ; `close` tournant sur le thread principal, le block dispatché d'un bail
+            // admis-puis-fermé s'ordonne derrière le teardown — et s'achève (NonCancellable).
+            val view = viewSource?.invoke()
                 ?: return KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.Surface))
             return hostThread.dispatch {
                 KadreResult.Success(withContext(NonCancellable) { block(view) })
@@ -373,9 +391,10 @@ internal class AndroidHostSurface(
      * `surface::close`) et idempotent :
      *
      * 1. le drapeau terminal est posé sous le verrou — toute admission suivante répond `Closed` ;
-     * 2. le scheduler de redraw est annulé sous le même verrou — plus jamais de callback de
-     *    frame après le retour (zombie interdit ; [emitRedrawFrame] garde en plus son propre
-     *    garde terminal pour un corps de frame que la course du SDK aurait déçu) ;
+     * 2. le scheduler de redraw est annulé sous le même verrou et la source de la View du bail
+     *    est effacée au même endroit (M-3) — plus jamais de callback de frame après le retour
+     *    (zombie interdit ; [emitRedrawFrame] garde en plus son propre garde terminal pour un
+     *    corps de frame que la course du SDK aurait déçu), plus jamais de View démontée louée ;
      * 3. les capabilities deviennent indisponibles AVANT la publication de l'état détaché (« les
      *    capabilities indisponibles au plus tard au détached » — un consommateur ne peut jamais
      *    lire une promesse sur un état déjà détaché) ;
@@ -389,6 +408,9 @@ internal class AndroidHostSurface(
         lock.withLock {
             if (detached) return
             detached = true
+            // M-3 : la source de la View meurt avec la surface — un bail admis avant close
+            // mais dont la lecture suit le teardown ne reçoit jamais la View démontée.
+            viewSource = null
             redrawScheduler.cancel()
             // Les capabilities d'abord : indisponibles au plus tard au détached, ici avant.
             mutableCapabilities.value = unsupportedSurfaceCapabilities()
