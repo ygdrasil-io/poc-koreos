@@ -11,11 +11,23 @@ class PublicApiBoundaryTest {
     @Test
     fun `sample source uses public Kadre APIs and one host`() {
         // Le sample est devenu multiplateforme : la frontière porte sur le code partagé
-        // (commonMain) ET le code de host bureau (jvmMain).
+        // (commonMain), le code de host bureau (jvmMain) et le code de host web (wasmJsMain).
         val sourceRoots = listOf(Path.of("src/commonMain/kotlin"), Path.of("src/jvmMain/kotlin"))
-        val forbiddenImports = sourceRoots.flatMap { forbiddenImports(it) }
+        val forbiddenImports = sourceRoots.flatMap { forbiddenImports(it, ::forbiddenHostImport) }
 
-        assertFalse(forbiddenImports.isNotEmpty(), forbiddenImports.joinToString("\n"))
+        // Le host web a le même droit qu'un bureau : UN seul hôte Compose. Le sien est
+        // `ComposeViewport` (le point d'entrée de la page) ; toute autre importation
+        // `androidx.compose.ui.window.*` y reste interdite, comme toute API interne
+        // Kadre ou hôte AWT/Swing.
+        val webRoot = Path.of("src/wasmJsMain/kotlin")
+        val webForbiddenImports = if (Files.isDirectory(webRoot)) {
+            forbiddenImports(webRoot, ::forbiddenWebHostImport)
+        } else {
+            emptyList()
+        }
+
+        val offences = forbiddenImports + webForbiddenImports
+        assertFalse(offences.isNotEmpty(), offences.joinToString("\n"))
     }
 
     @Test
@@ -55,19 +67,28 @@ class PublicApiBoundaryTest {
         }
     }
 
-    private fun forbiddenImports(sourceRoot: Path): List<String> =
+    private fun forbiddenImports(sourceRoot: Path, forbidden: (String) -> Boolean = ::forbiddenHostImport): List<String> =
         Files.walk(sourceRoot).use { paths ->
             paths.filter { Files.isRegularFile(it) && it.extension == "kt" }
                 .flatMap { Files.readAllLines(it).stream() }
-                .filter { line ->
-                    listOf(
-                        "org.graphiks.kadre.internal.",
-                        "androidx.compose.ui.window.",
-                        "androidx.compose.ui.awt.ComposePanel",
-                        "java.awt.",
-                        "javax.swing.",
-                    ).any { line.trimStart().startsWith("import $it") }
-                }
+                .filter(forbidden)
                 .toList()
+        }
+
+    /** La frontière commune : public Kadre, un seul hôte, jamais AWT ni Swing. */
+    private fun forbiddenHostImport(line: String): Boolean =
+        listOf(
+            "org.graphiks.kadre.internal.",
+            "androidx.compose.ui.window.",
+            "androidx.compose.ui.awt.ComposePanel",
+            "java.awt.",
+            "javax.swing.",
+        ).any { line.trimStart().startsWith("import $it") }
+
+    /** La frontière du host web : `ComposeViewport` est SON hôte, le seul autorisé du paquet. */
+    private fun forbiddenWebHostImport(line: String): Boolean =
+        when {
+            line.trimStart().startsWith("import androidx.compose.ui.window.ComposeViewport") -> false
+            else -> forbiddenHostImport(line)
         }
 }

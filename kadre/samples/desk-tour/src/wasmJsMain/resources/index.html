@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<!--
+  La page hôte de la démo Kadre Desk Tour (cible web).
+
+  Le conteneur `kadre-desk-tour` est LA fenêtre de la démo : il remplit la fenêtre du
+  navigateur, car Compose (wasm) ne relit la boîte de son viewport qu'aux resizes de la
+  fenêtre (PROBE-NOTES.md, Q2-d) — le chemin de resize du navigateur est donc le chemin
+  de resize de l'application. Le conteneur doit rester vide : `ComposeViewport` le vide
+  à l'amorçage (Q1) ; aucun contenu de page n'y vit.
+
+  `kadre-desk-tour-notes` est la couche à notes : une surcouche fixe au-dessus du
+  conteneur qui ne bloque pas ses clics (`pointer-events: none`, réarmé par note), et
+  qui ne change jamais la boîte du conteneur — aucune redistribution de mise en page
+  quand une note apparaît ou disparaît.
+
+  Le script est le chargeur webpack émis par `wasmJsBrowserDistribution` ; il charge
+  lui-même les binaires wasm (Kotlin et Skiko) — aucun autre élément n'est nécessaire
+  (pas de `skiko.js`, pas d'en-têtes CORS/COOP/COEP, Q4).
+-->
+<html lang="fr">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Kadre Desk Tour</title>
+    <link rel="stylesheet" href="desk-tour.css">
+</head>
+<body>
+    <div id="kadre-desk-tour"></div>
+    <div id="kadre-desk-tour-notes"></div>
+    <script src="desk-tour.js"></script>
+</body>
+</html>
