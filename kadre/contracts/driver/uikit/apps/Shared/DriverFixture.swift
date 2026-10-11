@@ -17,9 +17,15 @@ final class SceneFixture {
     private(set) var applicationRuns = 0
     private(set) var launchSessionIdDescription: String?
     private(set) var scope: (any KadreScope)?
+    // NB : `SurfaceId.description` est VOLONTAIREMENT rédigié par Kotlin (« SurfaceId(<redacted>) »)
+    // — l'égalité de CHAÎNES entre deux ids est donc VIDE DE SENS. Les preuves d'identité
+    // passent par `isEqual` (même id) et `===` (même instance), pas par les descriptions.
     private(set) var primarySurfaceId: String?
     private(set) var primaryWindowSurfaceId: String?
+    private(set) var primarySurfaceIdMatchesWindowSurfaceId = false
     private(set) var primarySurfaceIsPrimaryWindowSurface = false
+    /// Référence objet de la surface primaire capturée (comparaisons d'identité entre fixtures).
+    private(set) var primarySurfaceRef: AnyObject?
     private(set) var primaryWindowContentWidth: Double?
     private(set) var primaryWindowContentHeight: Double?
     private(set) var primarySurfaceLogicalWidth: Double?
@@ -45,14 +51,21 @@ final class SceneFixture {
 
     /// Fenêtre + vues du host. `observedView` est DANS la fenêtre ; `detachedView` n'y est
     /// JAMAIS ajoutée (cible du refus `InvalidRequest("surfaceView")`).
-    func installWindow() {
+    /// `makeKeyAndVisible` est réservé à la fenêtre de la scène PRIMAIRE (l'app) : une scène
+    /// secondaire qui prend le key à la création reste « au premier plan » aux yeux de
+    /// FrontBoard, qui diffère (ici : ignore) sa destruction.
+    func installWindow(makeKey: Bool = true) {
         let window = UIWindow(windowScene: scene)
         let frame = CGRect(x: 0, y: 0, width: 320, height: 240)
         let observed = UIView(frame: frame)
         let detached = UIView(frame: frame)
         window.addSubview(observed)
         window.isHidden = false
-        window.makeKeyAndVisible()
+        if makeKey {
+            window.makeKeyAndVisible()
+        } else {
+            window.isHidden = false
+        }
         self.window = window
         self.observedView = observed
         self.detachedView = detached
@@ -76,8 +89,11 @@ final class SceneFixture {
         primaryWindowSurfaceId = windowSurface?.id.description
         switch (primarySurface, windowSurface) {
         case (let surface?, let windowSurface?):
+            primarySurfaceIdMatchesWindowSurfaceId = surface.id.isEqual(windowSurface.id)
             primarySurfaceIsPrimaryWindowSurface = (surface as AnyObject) === (windowSurface as AnyObject)
+            primarySurfaceRef = surface as AnyObject
         default:
+            primarySurfaceIdMatchesWindowSurfaceId = false
             primarySurfaceIsPrimaryWindowSurface = false
         }
         if let windowState = primaryWindow?.state.value as? WindowState {
@@ -133,18 +149,32 @@ final class SceneFixture {
     }
 
     /// Scène prête (fenêtre + vue + activation). Échec borné avec l'état courant si non prêt.
-    func waitUntilReady(timeout: TimeInterval = 10) throws {
+    /// `requireActivation: false` pour les scènes secondaires demandées par l'app : une scène
+    /// demandée programmatiquement reste ForegroundInactive (la scène primaire garde
+    /// l'activation) — `sceneDidBecomeActive` n'y fire jamais, et l'attach accepte par design
+    /// ForegroundInactive (reducer + validation `!= Unattached`).
+    func waitUntilReady(requireActivation: Bool = true, timeout: TimeInterval = 10) throws {
         let deadline = Date().addingTimeInterval(timeout)
-        if !pump(until: deadline) { !self.isReady } {
+        if !pump(until: deadline, while: {
+            !(self.window != nil && self.observedView != nil
+                && (!requireActivation || self.becameActive))
+        }) {
             throw timeoutError("scene readiness", timeout: timeout)
         }
     }
 
     /// Faits applicatifs capturés (l'application Kadre a tourné au moins une fois).
-    func waitUntilApplicationFacts(timeout: TimeInterval = 10) throws {
+    /// `minimumRuns` rend l'attente SENSIBLE À LA FRAÎCHEUR : les faits S'ACCUMULENT sur un
+    /// fixture réutilisé d'un test à l'autre (le process hôte vit pendant toute la suite),
+    /// donc sans ce plancher, un attach neuf « passerait » instantanément sur des faits
+    /// périmés d'une session précédente.
+    func waitUntilApplicationFacts(minimumRuns: Int? = nil, timeout: TimeInterval = 10) throws {
         let deadline = Date().addingTimeInterval(timeout)
-        if !pump(until: deadline) { !self.hasApplicationFacts } {
-            throw timeoutError("application facts", timeout: timeout)
+        let floor = minimumRuns ?? (applicationRuns + 1)
+        if !pump(until: deadline, while: {
+            !(self.hasApplicationFacts && self.applicationRuns >= floor)
+        }) {
+            throw timeoutError("application facts (runs >= \(floor))", timeout: timeout)
         }
     }
 
@@ -177,8 +207,20 @@ final class DriverFixture {
 
     private var byScene: [ObjectIdentifier: SceneFixture] = [:]
     private(set) var connected: [SceneFixture] = []
+    /// Erreurs d'activation de scène enregistrées par `DriverSceneRequest` — les tests les
+    /// remontent telles quelles (aucun contournement factice).
+    private(set) var sceneActivationErrors: [any Error] = []
+    private(set) var sceneDestructionErrors: [any Error] = []
 
     private init() {}
+
+    func recordSceneActivationError(_ error: any Error) {
+        sceneActivationErrors.append(error)
+    }
+
+    func recordSceneDestructionError(_ error: any Error) {
+        sceneDestructionErrors.append(error)
+    }
 
     /// Ordre de connexion — la première scène est la scène primaire de l'app.
     var primary: SceneFixture? { connected.first }
@@ -195,12 +237,15 @@ final class DriverFixture {
     }
 
     /// Installation au `willConnectTo` — une nouvelle identité de scène crée un nouveau fixture.
+    /// Seule la PREMIÈRE scène (primaire de l'app) prend le key ; les scènes secondaires
+    /// demandées par l'app affichent leur fenêtre sans voler le key à la scène primaire.
     @discardableResult
     func install(windowScene: UIWindowScene) -> SceneFixture {
         let fixture = SceneFixture(scene: windowScene)
-        fixture.installWindow()
+        fixture.installWindow(makeKey: connected.isEmpty)
         byScene[ObjectIdentifier(windowScene)] = fixture
         connected.append(fixture)
+        DriverSceneRequest.sceneConnected()
         return fixture
     }
 }

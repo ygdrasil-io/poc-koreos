@@ -8,7 +8,12 @@ FAMILY="${1:?usage: test-uikit-simulator.sh [ios|tvos|all]}"
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
-IOS_DESTINATION="${KADRE_UIKIT_IOS_DESTINATION:-platform=iOS Simulator,name=iPhone 17,OS=27.0}"
+# Destination iOS = iPad : le multi-scène (demande de scènes supplémentaires) est refusé par
+# l'idiome téléphone (« The current device does not support multiple scenes. ») — la preuve
+# multi-scène (Task 5, tests 1/5/6) exige un iPad. Les scènes secondaires sont demandées par
+# l'APP au lancement : passer TEST_RUNNER_KADRE_DRIVER_REQUEST_SECOND_SCENE=2 à xcodebuild test.
+# iPhone 17 reste atteignable localement via KADRE_UIKIT_IOS_DESTINATION (7 tests partagés seulement).
+IOS_DESTINATION="${KADRE_UIKIT_IOS_DESTINATION:-platform=iOS Simulator,name=iPad Pro 11-inch (M5),OS=27.0}"
 TVOS_DESTINATION="${KADRE_UIKIT_TVOS_DESTINATION:-platform=tvOS Simulator,name=Apple TV 4K (3rd generation),OS=27.0}"
 
 command -v xcodebuild >/dev/null || { echo "FAIL: xcodebuild indisponible" >&2; exit 1; }

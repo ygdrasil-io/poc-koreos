@@ -13,10 +13,44 @@ import KadreUikit
 /// (`tests/Ios/KadreUikitAttachIosTests.swift`, compilée uniquement dans la cible de tests iOS).
 final class KadreUikitAttachTests: XCTestCase {
 
+    /// Filet de sécurité ENTRE tests : toute session encore Starting/Running est arrêtée et
+    /// attendue (borné). Sans cela, un test qui échoue à mi-chemin laisse la réservation de
+    /// scène posée et les tests SUIVANTS échouent en cascade (`AlreadyInUse(Host)`) — le test
+    /// fautif doit rester le seul à porter sa défaillance.
+    override func tearDown() {
+        super.tearDown()
+        for fixture in DriverFixture.shared.connected {
+            guard let session = fixture.session else { continue }
+            let state = session.state.value as? (any SessionState)
+            guard state is SessionStateStarting || state is SessionStateRunning else {
+                fixture.session = nil
+                continue
+            }
+            session.requestStop()
+            let terminated = expectation(description: "teardown: session terminated")
+            session.awaitTermination { _, _ in terminated.fulfill() }
+            wait(for: [terminated], timeout: 15)
+            try? fixture.waitUntilSessionState(timeout: 10) { $0 is SessionStateTerminated }
+            fixture.session = nil
+        }
+    }
+
     // MARK: - Helpers (internal : l'extension multi-scènes iOS les réutilise)
 
     func primaryFixture() throws -> SceneFixture {
-        let fixture = try XCTUnwrap(DriverFixture.shared.primary, "no scene fixture connected")
+        // La scène primaire peut n'être connectée qu'après le lancement (froid) de l'app hôte :
+        // attendre SON EXISTENCE de façon bornée avant sa disponibilité — jamais un échec
+        // instantané sur un process encore en train de démarrer.
+        let connected = Date().addingTimeInterval(25)
+        while DriverFixture.shared.primary == nil {
+            if Date() > connected {
+                XCTFail("no scene fixture connected after 25s — the host app never connected its scene")
+                throw NSError(domain: "KadreUikitDriver", code: 4,
+                              userInfo: ["what": "primary scene never connected"])
+            }
+            RunLoop.current.run(until: Date().addingTimeInterval(0.05))
+        }
+        let fixture = try XCTUnwrap(DriverFixture.shared.primary)
         try fixture.waitUntilReady()
         return fixture
     }
@@ -41,6 +75,7 @@ final class KadreUikitAttachTests: XCTestCase {
     func attach(_ fixture: SceneFixture, file: StaticString = #filePath, line: UInt = #line) throws -> any KadreSession {
         let window = try XCTUnwrap(fixture.window, file: file, line: line)
         let view = try XCTUnwrap(fixture.observedView, file: file, line: line)
+        let runsBeforeAttach = fixture.applicationRuns
         let result = attachRaw(fixture: fixture, window: window, view: view)
         if let failure = (result as? KadreResultFailure)?.reason {
             XCTFail("attach failed unexpectedly: \(failure)", file: file, line: line)
@@ -48,6 +83,9 @@ final class KadreUikitAttachTests: XCTestCase {
         let success = try XCTUnwrap(result as? KadreResultSuccess<AnyObject>, file: file, line: line)
         let session = try XCTUnwrap(success.value as? (any KadreSession), file: file, line: line)
         fixture.session = session
+        // Les faits attendus sont CEUX DE CETTE session — jamais un reliquat d'un attach
+        // précédent sur le même fixture (voir SceneFixture.waitUntilApplicationFacts).
+        try fixture.waitUntilApplicationFacts(minimumRuns: runsBeforeAttach + 1, timeout: 10)
         return session
     }
 
@@ -136,7 +174,6 @@ final class KadreUikitAttachTests: XCTestCase {
     func testSecondAttachOnTheSameSceneIsAlreadyInUse() throws {
         let fixture = try primaryFixture()
         let first = try attach(fixture)
-        try fixture.waitUntilApplicationFacts()
         let runsBefore = fixture.applicationRuns
         let firstSessionId = first.id.description
 
@@ -168,11 +205,11 @@ final class KadreUikitAttachTests: XCTestCase {
     func testPrimaryWindowAndSurfaceIdentity() throws {
         let fixture = try primaryFixture()
         _ = try attach(fixture)
-        try fixture.waitUntilApplicationFacts()
 
         XCTAssertNotNil(fixture.primarySurfaceId, "primary surface id must be captured")
-        XCTAssertEqual(fixture.primarySurfaceId, fixture.primaryWindowSurfaceId,
-                       "primarySurface.id must equal primary window surface id")
+        // `isEqual` — les descriptions sont rédigées par Kotlin, l'égalité de chaînes serait vide.
+        XCTAssertTrue(fixture.primarySurfaceIdMatchesWindowSurfaceId,
+                      "primarySurface.id must isEqual the primary window surface's id")
         XCTAssertTrue(fixture.primarySurfaceIsPrimaryWindowSurface,
                       "scope.primarySurface.value must be the primary window's surface instance")
 
@@ -208,7 +245,6 @@ final class KadreUikitAttachTests: XCTestCase {
         // La réservation est libérée : re-attach sur la MÊME scène.
         fixture.session = nil
         let second = try attach(fixture)
-        try fixture.waitUntilApplicationFacts()
         XCTAssertFalse(second.id.isEqual(first.id), "the re-attach must be a new session")
         try fixture.waitUntilSessionState(timeout: 10) { $0 is SessionStateRunning }
 
@@ -222,7 +258,6 @@ final class KadreUikitAttachTests: XCTestCase {
     func testDisconnectDuringStopTerminatesExactlyOnce() throws {
         let fixture = try primaryFixture()
         let session = try attach(fixture)
-        try fixture.waitUntilApplicationFacts()
 
         let terminals = expectation(description: "exactly one terminal outcome")
         terminals.assertForOverFulfill = true
@@ -246,7 +281,6 @@ final class KadreUikitAttachTests: XCTestCase {
         // Le nouvel attach fonctionne (réservation libérée exactement une fois).
         fixture.session = nil
         _ = try attach(fixture)
-        try fixture.waitUntilApplicationFacts()
         try stopAndAwaitTermination(fixture)
     }
 
@@ -256,7 +290,6 @@ final class KadreUikitAttachTests: XCTestCase {
     func testLifecycleTransitionsFollowTheScene() throws {
         let fixture = try primaryFixture()
         _ = try attach(fixture)
-        try fixture.waitUntilApplicationFacts()
         let scene = fixture.scene
 
         NotificationCenter.default.post(name: UIScene.didEnterBackgroundNotification, object: scene)
@@ -278,7 +311,6 @@ final class KadreUikitAttachTests: XCTestCase {
     func testLateNativeCallbackAfterTerminationIsIgnored() throws {
         let fixture = try primaryFixture()
         let session = try attach(fixture)
-        try fixture.waitUntilApplicationFacts()
 
         try stopAndAwaitTermination(fixture)
         fixture.freezeLifecycleAtTermination()

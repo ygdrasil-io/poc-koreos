@@ -11,68 +11,45 @@ extension KadreUikitAttachTests {
 
     // MARK: - Mécanique multi-scènes (UIKit réel)
 
-    /// Demande une scène supplémentaire via `requestSceneSessionActivation` (mécanique UIKit
-    /// réelle — aucune scène synthétique), attend borné la connexion de SON fixture au
-    /// `willConnectTo` du delegate, puis sa disponibilité complète. Toute erreur de la
-    /// requête est capturée et échoue le test avec son message exact (aucune expectation
-    /// inversée : le diagnostic prime sur la mécanique d'attente).
-    func requestSecondarySceneFixture(timeout: TimeInterval = 15, file: StaticString = #filePath, line: UInt = #line) throws -> SceneFixture {
-        let countBefore = DriverFixture.shared.connected.count
-        let errorLock = NSLock()
-        var requestError: (any Error)?
-        UIApplication.shared.requestSceneSessionActivation(
-            nil,
-            userActivity: NSUserActivity(activityType: "org.graphiks.kadre.driver.scene"),
-            options: nil,
-        ) { error in
-            errorLock.lock()
-            requestError = error
-            errorLock.unlock()
-        }
-
-        func capturedError() -> (any Error)? {
-            errorLock.lock(); defer { errorLock.unlock() }
-            return requestError
-        }
-
-        var connected = false
+    /// Attend borné la n-ième scène secondaire demandée PAR L'APP (mécanique launch-time :
+    /// `TEST_RUNNER_KADRE_DRIVER_REQUEST_SECOND_SCENE=<n>` — la demande part de
+    /// `DriverAppDelegate` après la première activation, jamais du bundle de test), puis sa
+    /// disponibilité complète. Toute erreur d'activation enregistrée par l'app est remontée
+    /// telle quelle dans l'échec (aucun contournement factice).
+    func secondaryFixture(
+        at index: Int = 1,
+        timeout: TimeInterval = 20,
+        file: StaticString = #filePath,
+        line: UInt = #line,
+    ) throws -> SceneFixture {
         let deadline = Date().addingTimeInterval(timeout)
-        while Date() < deadline {
-            if DriverFixture.shared.connected.count > countBefore {
-                connected = true
-                // Laisse l' errorHandler éventuel arriver après la connexion (borné).
-                let settle = Date().addingTimeInterval(1)
-                while capturedError() == nil && Date() < settle {
-                    RunLoop.current.run(until: Date().addingTimeInterval(0.05))
-                }
-                break
+        while DriverFixture.shared.connected.count <= index {
+            if Date() > deadline {
+                let errors = DriverFixture.shared.sceneActivationErrors
+                    .map(String.init(describing:)).joined(separator: "; ")
+                XCTFail("secondary scene #\(index) never connected in \(timeout)s — "
+                    + "activation errors=[\(errors)] "
+                    + "connected=\(DriverFixture.shared.connected.count)", file: file, line: line)
+                throw NSError(domain: "KadreUikitDriver", code: 2,
+                              userInfo: ["what": "secondary scene did not connect"])
             }
-            if capturedError() != nil { break }
             RunLoop.current.run(until: Date().addingTimeInterval(0.05))
         }
-        if let requestError = capturedError() {
-            XCTFail("scene session activation refused: \(requestError) "
-                + "(connected=\(DriverFixture.shared.connected.count))", file: file, line: line)
-            throw NSError(domain: "KadreUikitDriver", code: 3,
-                          userInfo: ["what": "secondary scene request refused"])
-        }
-        guard connected, DriverFixture.shared.connected.count > countBefore else {
-            XCTFail("secondary scene never connected in \(timeout)s (connected=\(DriverFixture.shared.connected.count))",
-                    file: file, line: line)
-            throw NSError(domain: "KadreUikitDriver", code: 2,
-                          userInfo: ["what": "secondary scene did not connect"])
-        }
-        let fixture = DriverFixture.shared.connected[countBefore]
-        try fixture.waitUntilReady()
+        let fixture = DriverFixture.shared.connected[index]
+        // Scène demandée par l'app : reste ForegroundInactive (pas de didBecomeActive) —
+        // l'attach l'accepte par design (voir SceneFixture.waitUntilReady).
+        try fixture.waitUntilReady(requireActivation: false, timeout: timeout)
         return fixture
     }
 
-    /// Destruction RÉELLE de la session de scène : UIKit poste alors le VRAI DidDisconnect.
-    /// L' errorHandler inversé échoue le test si la destruction est refusée.
+    /// Destruction RÉELLE de la session de scène — déclenchée par le code de l'APP
+    /// (`DriverSceneRequest`, même mécanique que l'activation) : la demande équivalente depuis
+    /// le bundle de test est un no-op silencieux dans cet environnement (30 s, aucune erreur,
+    /// aucun DidDisconnect — cf. rapport). UIKit poste alors le VRAI DidDisconnect.
     func destroySceneSession(_ sceneSession: UISceneSession, timeout: TimeInterval = 15, file: StaticString = #filePath, line: UInt = #line) throws {
         let refused = expectation(description: "requestSceneSessionDestruction must not error")
         refused.isInverted = true
-        UIApplication.shared.requestSceneSessionDestruction(sceneSession, options: nil) { error in
+        DriverSceneRequest.destroySceneSession(sceneSession) { error in
             refused.fulfill()
             _ = error
         }
@@ -85,7 +62,7 @@ extension KadreUikitAttachTests {
     /// est refusée `InvalidRequest("window")` (la fenêtre appartient à une AUTRE scène).
     func testAttachRejectsWindowFromAnotherScene() throws {
         let first = try primaryFixture()
-        let second = try requestSecondarySceneFixture()
+        let second = try secondaryFixture(at: 1)
         XCTAssertFalse(first.scene.isEqual(second.scene), "two distinct scenes are required")
 
         let window2 = try XCTUnwrap(second.window)
@@ -103,16 +80,20 @@ extension KadreUikitAttachTests {
     func testTwoScenesRunIndependentSessions() throws {
         let first = try primaryFixture()
         let session1 = try attach(first)
-        try first.waitUntilApplicationFacts()
 
-        let second = try requestSecondarySceneFixture()
+        // Scène secondaire #2 : la #1 a été DÉTRUITE par testSceneDisconnection (ordre
+        // alphabétique) — la session de scène détruite ne se reconnecte pas.
+        let second = try secondaryFixture(at: 2)
         let session2 = try attach(second)
-        try second.waitUntilApplicationFacts()
 
-        // Fixtures indépendants : identités, ids de surface et prédictions propres.
+        // Fixtures indépendants : scènes, sessions et surfaces toutes distinctes (identités —
+        // les descriptions d'ids sont rédigées par Kotlin, jamais comparées en chaînes).
         XCTAssertFalse(first.scene.isEqual(second.scene))
-        XCTAssertNotEqual(first.primarySurfaceId, second.primarySurfaceId)
-        XCTAssertFalse(session1.id.isEqual(session2.id))
+        XCTAssertFalse(session1.id.isEqual(session2.id), "two sessions must have distinct ids")
+        guard let firstSurface = first.primarySurfaceRef, let secondSurface = second.primarySurfaceRef else {
+            return XCTFail("both fixtures must have captured their primary surface")
+        }
+        XCTAssertFalse(firstSurface === secondSurface, "two sessions must not share a primary surface")
         XCTAssertTrue(second.primarySurfaceIsPrimaryWindowSurface)
 
         // requestStop sur la session 1 uniquement.
@@ -121,7 +102,7 @@ extension KadreUikitAttachTests {
 
         // La session 2 reste Running, le fixture 2 reste intact.
         try second.waitUntilSessionState(timeout: 5) { $0 is SessionStateRunning }
-        XCTAssertEqual(second.primarySurfaceId, second.primaryWindowSurfaceId)
+        XCTAssertTrue(second.primarySurfaceIdMatchesWindowSurfaceId)
         XCTAssertTrue(second.primarySurfaceIsPrimaryWindowSurface)
         XCTAssertNotNil(second.lifecycleSnapshot())
 
@@ -142,13 +123,22 @@ extension KadreUikitAttachTests {
     func testSceneDisconnectionTerminatesOnlyItsSession() throws {
         let first = try primaryFixture()
         _ = try attach(first)
-        try first.waitUntilApplicationFacts()
 
-        let second = try requestSecondarySceneFixture()
+        let second = try secondaryFixture(at: 1)
         _ = try attach(second)
-        try second.waitUntilApplicationFacts()
 
         try destroySceneSession(try XCTUnwrap(second.scene.session))
+
+        // La destruction UIKit est asynchrone (coalescing) : attendre d'abord la preuve
+        // UIKit-side (session invalidée), puis la terminaison Kadre par le disconnect réel.
+        let uikitDeadline = Date().addingTimeInterval(30)
+        while second.scene.session != nil {
+            if Date() > uikitDeadline {
+                XCTFail("UIKit never invalidated the destroyed scene session in 30s")
+                break
+            }
+            RunLoop.current.run(until: Date().addingTimeInterval(0.05))
+        }
 
         // La session de la scène 2 est terminée par le disconnect réel.
         try second.waitUntilSessionState(timeout: 15) { $0 is SessionStateTerminated }
