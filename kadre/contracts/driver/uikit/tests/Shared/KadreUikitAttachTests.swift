@@ -7,7 +7,7 @@ import KadreUikit
 @testable import KadreUikitDriverTvOs
 #endif
 
-/// Preuves O3 de `KadreIos.attach` (phase 1, BCK-013 / WIN-009) — noms de scénarios FIGÉS
+/// Preuves O3 de `KadreIos.attach` (phase 1, BCK-013 / BCK-014 / WIN-009) — noms de scénarios FIGÉS
 /// pour Task 6. Les tests partagés tournent sur LES DEUX familles (iOS + tvOS, topologies
 /// mono-scène) ; les scénarios multi-scènes vivent dans l'extension iOS-only
 /// (`tests/Ios/KadreUikitAttachIosTests.swift`, compilée uniquement dans la cible de tests iOS).

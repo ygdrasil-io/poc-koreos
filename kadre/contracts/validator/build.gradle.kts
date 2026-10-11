@@ -18,7 +18,7 @@ kotlin {
 
 val jvmMain = kotlin.targets.getByName("jvm").compilations.getByName("main")
 val webContractIds = listOf("BCK-001", "BCK-002", "BCK-003", "BCK-004", "BCK-005", "BCK-006", "BCK-007", "BCK-008", "BCK-009", "BCK-010", "BCK-011", "INT-002", "INT-003", "INT-004")
-val uikitContractIds = listOf("BCK-012")
+val uikitContractIds = listOf("BCK-012", "BCK-013", "BCK-014", "WIN-009")
 val appKitContractIds = listOf(
     "APK-001", "APK-002", "APK-003", "APK-004", "APK-005", "APK-006",
     "APK-007", "APK-008", "APK-009", "APK-010", "APK-011", "APK-012",
@@ -278,22 +278,34 @@ val browserContractEvidenceTasks = listOf("js", "wasmJs").map { target ->
     }
 }
 
-// UIKit driver contracts (BCK-012) : preuve O3 produite par xcodebuild sur simulateurs
-// (:kadre:contracts:driver:uikit:simulatorTests), exportée en JUnit par
-// tools/xctest_to_junit.py. Miroir du bloc AppKit ci-dessus, par target famille.
+// UIKit driver contracts (BCK-012 phase 0 ; BCK-013/BCK-014/WIN-009 phase 1) : preuve O3
+// produite par xcodebuild sur simulateurs (:kadre:contracts:driver:uikit:simulatorTests),
+// exportée en JUnit par tools/xctest_to_junit.py. Miroir du bloc AppKit ci-dessus, par target
+// famille. BCK-014 (multi-scène iPadOS) n'exige QUE iosSimulatorArm64 : les tâches générées et
+// les gate ids de validation sont filtrés par les requiredTargets du registre (colonne 8) — un
+// contrat actif hors cible ferait échouer ValidateContractEvidence (« target is not required »).
 // macOS-only : aucune de ces tâches n'est câblée dans `check` — la gate obligatoire est
 // le script hors Gradle de Task 7, comme le smoke AppKit.
 val uikitContractRegistry = rootProject.file("kadre/contracts/registry/contracts.tsv")
 val uikitContractMapping = rootProject.file("kadre/contracts/driver/uikit/contracts/evidence.tsv")
 val uikitContractAdapter = "uikit-driver"
 val activeUikitContractIds = uikitContractIds.filter(activeContractIds::contains)
+val uikitRequiredTargetsByContractId = uikitContractRegistry
+    .readLines()
+    .drop(1)
+    .map { line -> line.split('\t') }
+    .filter { columns -> columns.first() in uikitContractIds }
+    .associate { columns ->
+        columns.first() to columns[7].split(',').map(String::trim).filter(String::isNotBlank)
+    }
 val uikitTargets = listOf(
     // (target, tâche d'export JUnit du driver qui produit le répertoire ci-dessous)
     "iosSimulatorArm64" to "iosSimulatorJunitExport",
     "tvosSimulatorArm64" to "tvosSimulatorJunitExport",
 )
 val uikitContractEvidenceTasks = activeUikitContractIds.flatMap { id ->
-    uikitTargets.map { (target, junitExportTask) ->
+    uikitTargets.mapNotNull { (target, junitExportTask) ->
+        if (target !in uikitRequiredTargetsByContractId[id].orEmpty()) return@mapNotNull null
         val capitalized = target.replaceFirstChar { it.uppercase() }
         val artifactDirectory = rootProject.file("kadre/contracts/driver/uikit/build/contract-evidence/$target")
         // ValidateContractEvidence résout les répertoires JUnit relativement au répertoire
@@ -326,37 +338,38 @@ val uikitContractEvidenceTasks = activeUikitContractIds.flatMap { id ->
         }
     }
 }
-val uikitContractValidateTasks = activeUikitContractIds.flatMap { id ->
-    uikitTargets.map { (target, _) ->
-        val capitalized = target.replaceFirstChar { it.uppercase() }
-        val artifactDirectory = rootProject.file("kadre/contracts/driver/uikit/build/contract-evidence/$target")
-        tasks.register<JavaExec>("validate${capitalized}UikitContractEvidence") {
-            group = "verification"
-            description = "Validates every active UIKit $target contract evidence artifact."
-            dependsOn(uikitContractEvidenceTasks.filter { taskProvider ->
-                taskProvider.name == "generateUikit${id.replace("-", "")}${capitalized}ContractEvidence"
-            })
-            classpath(jvmMain.output.allOutputs, jvmMain.runtimeDependencyFiles)
-            mainClass.set("org.graphiks.kadre.contracts.ValidateContractEvidenceKt")
-            args(
-                uikitContractRegistry.absolutePath,
-                uikitContractMapping.absolutePath,
-                contractEvidenceCommit.get(),
-                target,
-                "junit",
-                activeUikitContractIds.joinToString(separator = ","),
-                artifactDirectory.absolutePath,
-                "test-results/$target",
-            )
-            inputs.file(uikitContractRegistry)
-            inputs.file(uikitContractMapping)
-            inputs.dir(artifactDirectory)
-            inputs.property("contractCommit", contractEvidenceCommit)
-            inputs.property("contractTarget", target)
-            inputs.property("contractExecutions", "junit")
-            inputs.property("contractGateIds", activeUikitContractIds)
-            inputs.property("junitReportRelativeDirectories", listOf("test-results/$target"))
-        }
+val uikitContractValidateTasks = uikitTargets.map { (target, _) ->
+    val capitalized = target.replaceFirstChar { it.uppercase() }
+    val artifactDirectory = rootProject.file("kadre/contracts/driver/uikit/build/contract-evidence/$target")
+    val targetGateIds = activeUikitContractIds.filter { id ->
+        target in uikitRequiredTargetsByContractId[id].orEmpty()
+    }
+    tasks.register<JavaExec>("validate${capitalized}UikitContractEvidence") {
+        group = "verification"
+        description = "Validates every active UIKit $target contract evidence artifact."
+        dependsOn(uikitContractEvidenceTasks.filter { taskProvider ->
+            taskProvider.name.endsWith("${capitalized}ContractEvidence")
+        })
+        classpath(jvmMain.output.allOutputs, jvmMain.runtimeDependencyFiles)
+        mainClass.set("org.graphiks.kadre.contracts.ValidateContractEvidenceKt")
+        args(
+            uikitContractRegistry.absolutePath,
+            uikitContractMapping.absolutePath,
+            contractEvidenceCommit.get(),
+            target,
+            "junit",
+            targetGateIds.joinToString(separator = ","),
+            artifactDirectory.absolutePath,
+            "test-results/$target",
+        )
+        inputs.file(uikitContractRegistry)
+        inputs.file(uikitContractMapping)
+        inputs.dir(artifactDirectory)
+        inputs.property("contractCommit", contractEvidenceCommit)
+        inputs.property("contractTarget", target)
+        inputs.property("contractExecutions", "junit")
+        inputs.property("contractGateIds", targetGateIds)
+        inputs.property("junitReportRelativeDirectories", listOf("test-results/$target"))
     }
 }
 

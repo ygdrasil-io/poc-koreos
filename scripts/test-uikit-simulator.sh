@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# UIKit contract gate (phase 0). Usage: test-uikit-simulator.sh [ios|tvos|all]
+# UIKit contract gate (BCK-012, BCK-013, BCK-014, WIN-009). Usage: test-uikit-simulator.sh [ios|tvos|all]
 # Sélectionne explicitement la famille et sa destination, vérifie la toolchain,
 # lance les tests, valide les preuves et retourne un code d'échec fidèle.
 set -euo pipefail
@@ -51,22 +51,45 @@ run_gradle() {
   ./gradlew --console=plain "$@"
 }
 
+# Contrats actifs du gate UIKit, par famille — miroir des requiredTargets du registre
+# (colonne 8 de kadre/contracts/registry/contracts.tsv) et de la liste
+# uikitRequiredTargetsByContractId de kadre/contracts/validator/build.gradle.kts :
+# BCK-014 (multi-scène iPadOS) n'exige QUE iosSimulatorArm64, la suite tvOS reste mono-scène.
+IOS_CONTRACT_IDS=(BCK-012 BCK-013 BCK-014 WIN-009)
+TVOS_CONTRACT_IDS=(BCK-012 BCK-013 WIN-009)
+
+# Une SEULE invocation Gradle par famille : les quatre tâches generate partagent le même
+# dependOn (export JUnit → xcodebuild) — une invocation exécute la suite simulateur UNE fois,
+# quatre invocations successives la rejoueraient quatre fois (Exec sans sorties déclarées).
 run_family() {
+  local ids generates=() target id
   case "$1" in
     ios)
       require_destination "$IOS_DESTINATION" "iOS"
-      run_gradle \
-        ":kadre:contracts:validator:generateUikitBCK012IosSimulatorArm64ContractEvidence" \
-        ":kadre:contracts:validator:validateIosSimulatorArm64UikitContractEvidence"
+      ids=("${IOS_CONTRACT_IDS[@]}")
+      target="IosSimulatorArm64"
       ;;
     tvos)
       require_destination "$TVOS_DESTINATION" "tvOS"
-      run_gradle \
-        ":kadre:contracts:validator:generateUikitBCK012TvosSimulatorArm64ContractEvidence" \
-        ":kadre:contracts:validator:validateTvosSimulatorArm64UikitContractEvidence"
+      ids=("${TVOS_CONTRACT_IDS[@]}")
+      target="TvosSimulatorArm64"
       ;;
     *) echo "FAIL: famille inconnue '$1'" >&2; exit 1;;
   esac
+  for id in "${ids[@]}"; do
+    generates+=(":kadre:contracts:validator:generateUikit${id//-/}${target}ContractEvidence")
+  done
+  run_gradle "${generates[@]}" ":kadre:contracts:validator:validate${target}UikitContractEvidence"
+}
+
+assert_artifacts() {
+  local target="$1"; shift
+  local id artifact
+  for id in "$@"; do
+    artifact="kadre/contracts/driver/uikit/build/contract-evidence/$target/contract-evidence/$id.json"
+    [[ -f "$artifact" ]] || { echo "FAIL: artifact manquant: $artifact" >&2; exit 1; }
+    echo "OK: $artifact"
+  done
 }
 
 case "$FAMILY" in
@@ -75,11 +98,8 @@ case "$FAMILY" in
     run_family tvos
     # Les slices appareil compilent et se lient (pas une preuve d'exécution — roadmap §7).
     run_gradle ":kadre:platform:uikit:linkDebugFrameworkIosArm64" ":kadre:platform:uikit:linkDebugFrameworkTvosArm64"
-    for target in iosSimulatorArm64 tvosSimulatorArm64; do
-      artifact="kadre/contracts/driver/uikit/build/contract-evidence/$target/contract-evidence/BCK-012.json"
-      [[ -f "$artifact" ]] || { echo "FAIL: artifact manquant: $artifact" >&2; exit 1; }
-      echo "OK: $artifact"
-    done
+    assert_artifacts iosSimulatorArm64 "${IOS_CONTRACT_IDS[@]}"
+    assert_artifacts tvosSimulatorArm64 "${TVOS_CONTRACT_IDS[@]}"
     ;;
   ios|tvos) run_family "$FAMILY" ;;
   *) echo "usage: test-uikit-simulator.sh [ios|tvos|all]" >&2; exit 1;;

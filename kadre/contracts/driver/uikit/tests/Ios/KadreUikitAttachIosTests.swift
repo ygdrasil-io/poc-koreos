@@ -60,7 +60,7 @@ extension KadreUikitAttachTests {
 
     // MARK: - Scénarios iOS-only (multi-scène)
 
-    /// BCK-013 / uikit-attach-window-mismatch — la fenêtre de la scène 2 avec la scène 1
+    /// BCK-014 / uikit-attach-window-mismatch — la fenêtre de la scène 2 avec la scène 1
     /// est refusée `InvalidRequest("window")` (la fenêtre appartient à une AUTRE scène).
     func testAttachRejectsWindowFromAnotherScene() throws {
         let first = try primaryFixture()
@@ -76,7 +76,7 @@ extension KadreUikitAttachTests {
         XCTAssertNil(second.session, "a refused attach must not leave a session on scene 2")
     }
 
-    /// BCK-013 / uikit-two-scenes-independent — les deux scènes attachées tournent des
+    /// BCK-014 / uikit-two-scenes-independent — les deux scènes attachées tournent des
     /// sessions INDÉPENDANTES : requestStop sur la session 1, la session 2 reste Running
     /// et le fixture 2 reste intact.
     func testTwoScenesRunIndependentSessions() throws {
@@ -118,7 +118,7 @@ extension KadreUikitAttachTests {
         try stopAndAwaitTermination(second)
     }
 
-    /// BCK-013 / uikit-disconnect-terminates — la destruction RÉELLE de la scène 2
+    /// BCK-014 / uikit-disconnect-terminates — la destruction RÉELLE de la scène 2
     /// (`requestSceneSessionDestruction` → vrai DidDisconnect) termine SA session
     /// uniquement : session 2 Terminated, session 1 intacte, et les références Swift de
     /// la fenêtre/vue de la scène 2 restent utilisables (Kadre ne détruit jamais le natif).
