@@ -1,0 +1,52 @@
+/*
+ * Le chrome de la page autour des canvases Compose — rien de plus.
+ *
+ * L'application est une page pleine : le conteneur hôte occupe toute la fenêtre (le
+ * resize fenêtre est le seul chemin de resize de Compose wasm, PROBE-NOTES.md Q2-d) et
+ * la couche à notes est une surcouche fixe qui n'entre jamais dans sa mise en page.
+ * Les couleurs suivent l'esprit Material3 du thème par défaut de l'application
+ * (surface claire, ombres douces) ; les canvases stylent leur propre contenu.
+ */
+
+html,
+body {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background: #fef7ff; /* surface Material3 de base, visible pendant l'amorçage wasm. */
+}
+
+/* La fenêtre de la démo : tout le viewport, à tout moment. */
+#kadre-desk-tour {
+    position: fixed;
+    inset: 0;
+}
+
+/* La couche à notes : au-dessus du conteneur, transparente aux clics par elle-même. */
+#kadre-desk-tour-notes {
+    position: fixed;
+    inset: 0;
+    z-index: 10;
+    pointer-events: none;
+}
+
+/*
+ * Une note de la démo : le div hôte d'un viewport Compose. La taille est fixe (la
+ * même grammaire que la note bureau, 420 × 240), la position est posée par le host
+ * (cascade en style en ligne). Chaque note réarme les pointeurs pour elle-même.
+ */
+.desk-tour-note {
+    position: absolute;
+    width: 420px;
+    height: 240px;
+    pointer-events: auto;
+    background: #ffffff;
+    border: 1px solid rgba(0, 0, 0, 0.08);
+    border-radius: 16px;
+    box-shadow:
+        0 8px 28px rgba(0, 0, 0, 0.28),
+        0 2px 8px rgba(0, 0, 0, 0.18);
+    overflow: hidden;
+}

@@ -1,0 +1,4 @@
+# Les artifacts du filet ne sont jamais commis — le spec EST le filet.
+node_modules/
+playwright-output/
+test-results/
