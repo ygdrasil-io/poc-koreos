@@ -34,7 +34,7 @@ Sources audit : jars `-sources` de ces versions exactes (`Wayland_h.kt`, `Waylan
 
 **Bindings minimaux requis pour la tranche 1 (liste fermée)** : domaines 2, 3, 4, 5, 7 ci-dessus — tous **vérifiés présents** dans `kffi-wayland-jvm:1.0.0-20261011.162917-59` et `kffi-posix-jvm:1.0.0-20261011.162917-58`.
 
-**Correction M1 (2026-10-12)** : les handles `wlDisplayGetRegistry`, `wlRegistryAddListener` et `wlRegistryBind` de kffi ciblent des fonctions `static inline` des en-têtes — ces symboles n'existent dans aucune distribution de libwayland-client. Le verdict « usable » du domaine 1 ci-dessus était donc trop optimiste ; le binding managé `KFFI-WAYLAND-004` crée le registry via le marshal générique (`wlProxyMarshalNewId` + `wl_registry_interface`) et installe les listeners via le symbole réel `wl_proxy_add_listener` (kffi `feat/wayland-managed-client`, commit `b970f86`), preuve à l'appui (gate M1 verte).
+**Correction M1 (2026-10-12)** : les handles `wlDisplayGetRegistry`, `wlRegistryAddListener` et `wlRegistryBind` de kffi ciblent des fonctions `static inline` des en-têtes — ces symboles n'existent dans aucune distribution de libwayland-client. Le verdict « usable » du domaine 1 ci-dessus était donc trop optimiste ; le binding managé `KFFI-WAYLAND-004` crée le registry via le marshal générique (`wlProxyMarshalNewId` + `wl_registry_interface`) et installe les listeners via le symbole réel `wl_proxy_add_listener` (kffi `feat/wayland-managed-client`, PR Graphiks-org/kffi#115), preuve à l'appui (gate M1 verte).
 
 **Blocages précis** :
 
