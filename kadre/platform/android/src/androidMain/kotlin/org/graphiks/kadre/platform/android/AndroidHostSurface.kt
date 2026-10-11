@@ -470,23 +470,36 @@ internal class AndroidHostSurface(
      * §Phase 2 (metrics + redraw + l'accès natif borné). Idempotent : la même annonce republiée
      * est absorbée par le StateFlow.
      *
+     * [inputWired] (Task 3, fix review) est le fait que la couture seule peut porter : un
+     * wrapper T1 a-t-il été CONSTRUIT pour cet attach (forme Activity avec un callback
+     * fenêtre à enchaîner) ? Les faits du stimulus structurel d'entrée suivent CETTE
+     * présence — pas la forme déclarée — de sorte qu'un attach sans observateur (forme View,
+     * ou Activity dont `window.callback` est null) laisse les capabilities d'entrée du
+     * réducteur à leur refus d'origine au lieu de promettre un clavier, un pointeur et un
+     * tactile qui ne peuvent jamais arriver (la sémantique C de BACKEND-CAPABILITIES §4 —
+     * `Available` seulement après une installation réelle). Le réducteur absorbe le
+     * stimulus « rien n'est câblé » (dédoublonnage) : ni événement, ni mouvement de révision.
+     *
      * « Jamais après la révocation » — la double garde de l'admission (`detached` OU état
      * publié détaché) : une installation qui suit [close] ou qui arrive dans la fenêtre de
      * teardown (l'instantané détaché publié par le binding, le terminal pas encore passé) est
      * absorbée — pas de promesse repeinte sur un état déjà détaché, et rien ne ressuscite.
      */
-    internal fun observationInstalled() {
+    internal fun observationInstalled(inputWired: Boolean) {
         lock.withLock {
             if (detached || mutableState.value.attachment == SurfaceAttachmentState.Detached) {
                 return
             }
             mutableCapabilities.value = androidSurfaceCapabilities()
         }
-        // L'installation de l'observation d'entrée (Task 3) : le stimulus structurel
-        // (`InputObservationChanged` — les capabilities d'entrée deviennent `Available`)
-        // puis le replay ordonné des observations bufferisées. Hors verrou : la delivery
-        // vit sur le thread principal, et le réducteur runtime tient le sien.
-        inputDelivery?.observationInstalled()
+        // L'installation de l'observation d'entrée (Task 3) : le stimulus structurel — avec
+        // les faits câblés — puis le replay ordonné des observations bufferisées. Hors verrou :
+        // la delivery vit sur le thread principal, et le réducteur runtime tient le sien.
+        inputDelivery?.observationInstalled(
+            keyboardInstalled = inputWired,
+            pointerInstalled = inputWired,
+            touchInstalled = inputWired,
+        )
     }
 
     /**

@@ -303,7 +303,7 @@ class AndroidViewLeaseTest {
         // capabilities deviennent honnêtes — l'annonce de la phase 2 (`platformAccess`,
         // la rangée Android qui couvre metrics + redraw + l'accès natif borné), les refus
         // d'update inchangés.
-        surface.observationInstalled()
+        surface.observationInstalled(inputWired = false)
         val honest = surface.capabilities.value
         assertIs<Capability.Supported<Unit>>(
             honest.platformAccess,
@@ -325,7 +325,7 @@ class AndroidViewLeaseTest {
         // `detached` OU état publié détaché).
         val late = surface()
         late.publishMetrics(update = { it.copy(attachment = SurfaceAttachmentState.Detached) })
-        late.observationInstalled()
+        late.observationInstalled(inputWired = false)
         assertEquals(
             unsupportedSurfaceCapabilities(),
             late.capabilities.value,
@@ -344,7 +344,7 @@ class AndroidViewLeaseTest {
         surface.close()
         withTimeout(10_000) { detachedSeen.await() }
         assertEquals(unsupportedSurfaceCapabilities(), surface.capabilities.value)
-        surface.observationInstalled()
+        surface.observationInstalled(inputWired = false)
         assertEquals(
             unsupportedSurfaceCapabilities(),
             surface.capabilities.value,

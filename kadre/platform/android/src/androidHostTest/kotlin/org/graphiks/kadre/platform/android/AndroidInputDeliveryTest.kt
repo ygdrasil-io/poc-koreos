@@ -205,7 +205,7 @@ class AndroidInputDeliveryTest {
         val surface = surface()
         surfaceUnderCollect = surface
         install(on = surface)
-        surface.observationInstalled()
+        surface.observationInstalled(inputWired = true)
         val collector = collectEvents()
 
         // Une pression de A (meta Shift générique) : le stimulus mappé sort sur le flux.
@@ -302,7 +302,7 @@ class AndroidInputDeliveryTest {
         assertEquals(FeatureAvailability.Unsupported, pre.touch)
 
         // L'install : capabilities Available, PUIS le replay ordonné du buffer.
-        surface.observationInstalled()
+        surface.observationInstalled(inputWired = true)
         val post = surface.input.state.value.capabilities
         assertEquals(FeatureAvailability.Available, post.keyboard)
         assertEquals(FeatureAvailability.Available, post.pointer)
@@ -332,7 +332,7 @@ class AndroidInputDeliveryTest {
         val surface = surface()
         surfaceUnderCollect = surface
         install(on = surface)
-        surface.observationInstalled()
+        surface.observationInstalled(inputWired = true)
         val collector = collectEvents()
 
         // Une touche pressée et un contact doigt vivant.
@@ -387,7 +387,7 @@ class AndroidInputDeliveryTest {
         assertIs<Capability.Unsupported>(preCapabilities.rawInput)
 
         install(on = surface)
-        surface.observationInstalled()
+        surface.observationInstalled(inputWired = true)
 
         val post = surface.input
         assertNotSame(pre, post, "the install swaps the pre-install input for the shared reducer")
@@ -400,6 +400,32 @@ class AndroidInputDeliveryTest {
     }
 
     // -----------------------------------------------------------------------
+    // Cas 4-bis (fix review) — un install SANS observateur câblé ne promet RIEN
+    // -----------------------------------------------------------------------
+
+    @Test
+    fun unwiredInstallKeepsInputCapabilitiesUnsupported() = runBlocking {
+        val surface = surface()
+        install(on = surface)
+
+        // Le seam d'un attach sans wrapper (forme View, ou Activity dont window.callback
+        // est null) installe l'observation avec les faits au NÉANT : le stimulus structurel
+        // (false, false, false) est ABSORBÉ par le réducteur — les caps d'entrée restent à
+        // leur refus d'origine, la révision ne bouge pas. Aucune promesse vide.
+        surface.observationInstalled(inputWired = false)
+
+        val capabilities = surface.input.state.value.capabilities
+        assertEquals(FeatureAvailability.Unsupported, capabilities.keyboard)
+        assertEquals(FeatureAvailability.Unsupported, capabilities.pointer)
+        assertEquals(FeatureAvailability.Unsupported, capabilities.touch)
+        // L'absorption du stimulus « rien n'est câblé » : ni événement, ni mouvement d'état.
+        assertEquals(0L, surface.input.state.value.revision.value)
+        // Le contraste CÂBLÉ (pré-install Unsupported → post-install Available) reste épinglé
+        // par les cas 1, 2 et 4 : les mêmes funnels, les faits d'un observateur réellement
+        // installé rendent les caps Available — ici ils y restent refusés, et c'est le fait.
+    }
+
+    // -----------------------------------------------------------------------
     // Cas 5 — le débordement d'ingress est TERMINAL CÔTÉ RUNTIME (l'adaptateur n'a rien à faire)
     // -----------------------------------------------------------------------
 
@@ -408,7 +434,7 @@ class AndroidInputDeliveryTest {
         val reported = mutableListOf<Throwable>()
         val surface = surface(failureReporter = RuntimeFailureReporter { reported += it })
         val sessionFailures = install(on = surface, ingressCapacity = 1)
-        surface.observationInstalled()
+        surface.observationInstalled(inputWired = true)
 
         // La file d'ingress (capacité 1) ne s'accumule que par RE-ENTRÉE pendant le drain —
         // le même schéma déterministe que le test runtime du même nom : le second et le
@@ -466,7 +492,7 @@ class AndroidInputDeliveryTest {
         val surface = surface()
         surfaceUnderCollect = surface
         install(on = surface)
-        surface.observationInstalled()
+        surface.observationInstalled(inputWired = true)
         val collector = collectEvents()
 
         // La sonde : le seam `installSessionConfiguration` ne révèle aucun handler
@@ -553,20 +579,11 @@ class AndroidInputDeliveryTest {
         metaState = 0,
     )
 
-    /** Draine ce qui reste sur le canal sans bloquer — le compte de l'inattendu. */
-    private suspend fun drainCount(channel: Channel<InputEvent>): Int {
-        var count = 0
-        while (true) {
-            val extra = channel.tryReceive().getOrNull() ?: break
-            count += 1
-            assertFalse(true, "unexpected event: $extra")
-        }
-        return count
-    }
 }
 
 /** L'état initial de surface du test — le même instantané honnête que les autres tests hôtes. */
-private fun testSurfaceState(): SurfaceState = SurfaceState(    attachment = SurfaceAttachmentState.Attached,
+private fun testSurfaceState(): SurfaceState = SurfaceState(
+    attachment = SurfaceAttachmentState.Attached,
     logicalSize = LogicalSize(1.0, 1.0),
     physicalSize = PhysicalSize(1, 1),
     scaleFactor = 1.0,

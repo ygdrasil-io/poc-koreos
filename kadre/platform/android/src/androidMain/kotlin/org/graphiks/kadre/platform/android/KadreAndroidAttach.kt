@@ -378,12 +378,18 @@ internal object AndroidHostSession {
                     // deviennent honnêtes. La surface existe — la factory de composants a
                     // tourné pendant l'attach ; la double garde de `observationInstalled`
                     // absorbe une installation qui suivrait un terminal déjà passé.
-                    // L'installation d'entrée (Task 3) courra DERRIÈRE : le stimulus
-                    // structurel d'abord, le replay du buffer ensuite — et le wrapper, posé
-                    // ENSUITE seulement, ne peut jamais observer avant que la delivery
-                    // n'existe (le thread principal sérialise l'attach tout entier).
-                    sessionSurface.surface?.observationInstalled()
+                    //
+                    // L'installation d'entrée (Task 3) courra DERRIÈRE, avec le FAIT du
+                    // câblage : le wrapper est posé D'ABORD (toute observation qui glisserait
+                    // entre install et install-métrique attend dans le buffer de la delivery —
+                    // son unique raison d'être), et `observationInstalled` porte la présence
+                    // du wrapper — PAS la forme déclarée. Un attach sans wrapper (forme View,
+                    // ou Activity sans callback fenêtre) installe l'observation SANS
+                    // observateur : le stimulus structurel « rien n'est câblé » est absorbé
+                    // par le réducteur, les caps d'entrée restent Unsupported — jamais la
+                    // promesse d'un clavier qui ne peut pas arriver.
                     inputForwarder?.install()
+                    sessionSurface.surface?.observationInstalled(inputWired = inputForwarder != null)
                 }
                 attached
             },

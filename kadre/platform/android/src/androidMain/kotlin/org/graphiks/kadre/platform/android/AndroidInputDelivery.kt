@@ -93,10 +93,11 @@ internal fun sessionCollectorAllocator(allocator: Any): RuntimeEventCollectorAll
  *
  * **Pré-installation : bufferisées.** Toute observation qui précède [observationInstalled]
  * attend dans [pending], EN ORDRE — le miroir de `pendingInput` web — puis l'install soumet
- * D'ABORD le stimulus structurel `InputObservationChanged(true, true, true, [])` — le
- * moment où les capabilities deviennent `Available` — et rejoue ENSUITE le buffer, dans
- * l'ordre (ruling P3-T3 : l'installation précède le replay ; les stimuli rejoués portent
- * donc la révision qui déclare déjà l'installation).
+ * D'ABORD le stimulus structurel `InputObservationChanged` portant les faits RÉELLEMENT
+ * CÂBLÉS (les caps deviennent `Available` seulement là où un observateur vit — un install
+ * sans observateur est absorbé par le réducteur, jamais une promesse vide) — et rejoue
+ * ENSUITE le buffer, dans l'ordre (ruling P3-T3 : l'installation précède le replay ; les
+ * stimuli rejoués portent donc la révision qui déclare déjà l'installation).
  *
  * La livraison, par observation :
  * - une [AndroidInputObservation.Key] DONT LE KEYCODE EST HORS TABLE ([AndroidKeyMapper])
@@ -146,20 +147,29 @@ internal class AndroidInputDelivery(
     }
 
     /**
-     * L'installation de l'observation : le stimulus structurel d'abord (les capabilities
-     * `Available`), puis le replay ORDONNÉ du buffer. Idempotent : une seconde installation
-     * ne rejoue rien — le buffer est vide et le stimulus structurel est absorbé par le
-     * réducteur (mêmes capabilities, révision intacte) ; le garde évite le débat.
+     * L'installation de l'observation : le stimulus structurel — PORTANT LES FAITS RÉELLEMENT
+     * CÂBLÉS (les caps `Available` SEULEMENT pour un observateur installé ; la sémantique C de
+     * BACKEND-CAPABILITIES §4, la même honnêteté que le port texte refusant et le
+     * `dragAndDropAvailable = false`) — puis le replay ORDONNÉ du buffer. Un install SANS
+     * observateur câblé (`false, false, false`) soumet quand même le stimulus : le réducteur
+     * l'absorbe (capabilities déjà Unsupported, révision intouchée — le dédoublonnage du
+     * runtime est le contrat), aucune promesse vide n'est publiée. Idempotent : une seconde
+     * installation ne rejoue rien — le buffer est vide et le stimulus structurel est absorbé
+     * par le réducteur (mêmes capabilities, révision intacte) ; le garde évite le débat.
      */
-    public fun observationInstalled() {
+    public fun observationInstalled(
+        keyboardInstalled: Boolean,
+        pointerInstalled: Boolean,
+        touchInstalled: Boolean,
+    ) {
         if (installed) return
         installed = true
         surfaceInput.accept(
             SurfaceStimulus.InputObservationChanged(
                 surfaceId = surfaceId,
-                keyboardInstalled = true,
-                pointerInstalled = true,
-                touchInstalled = true,
+                keyboardInstalled = keyboardInstalled,
+                pointerInstalled = pointerInstalled,
+                touchInstalled = touchInstalled,
                 gestureKinds = emptySet(),
             ),
         )
@@ -188,7 +198,10 @@ internal class AndroidInputDelivery(
                 logicalKey = AndroidKeyMapper.logicalKey(observation.nativeKeyCode, observation.unicodeChar),
                 location = AndroidKeyMapper.location(observation.isSystemKey, observation.metaState),
                 keyState = observation.keyState,
-                repeat = observation.repeat,
+                // Un repeat est par définition une pression — un chemin OEM qui livrerait un
+                // UP porteur de repeatCount ne franchit pas l'invariant du modèle
+                // (`repeat ⇒ Pressed`) : le flag tombe avec la relève, le stimulus reste vrai.
+                repeat = observation.repeat && observation.keyState == KeyState.Pressed,
                 modifiers = AndroidKeyMapper.modifiers(observation.metaState),
             ),
         )
