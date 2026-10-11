@@ -2,6 +2,11 @@ package org.graphiks.kadre.internal.uikit
 
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.useContents
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.withContext
 import org.graphiks.kadre.diagnostics.Capability
 import org.graphiks.kadre.diagnostics.FeatureAvailability
 import org.graphiks.kadre.diagnostics.KadreFailure
@@ -62,6 +67,7 @@ import org.graphiks.kadre.surface.toPhysical
 import org.graphiks.kadre.window.WindowId
 import org.graphiks.kadre.window.WindowRequestId
 import org.graphiks.kadre.window.WindowState
+import platform.Foundation.NSThread
 import platform.UIKit.UIUserInterfaceStyle
 import platform.UIKit.UIView
 import platform.UIKit.UIWindow
@@ -90,6 +96,12 @@ import platform.darwin.dispatch_get_main_queue
  * Contrainte roadmap l.120 : la fermeture ne détruit JAMAIS la `UIWindow`/`UIView` du host —
  * `UIKitWindowPeerOwner.close()` ne fait rien côté natif (destruct endogène) et
  * `requestOpenedClose` retire seulement l'entry du registre : le host garde sa fenêtre.
+ *
+ * Task 4 a ajouté `: UIKitViewLeasePort` à cette déclaration (miroir Android, `AndroidHostSurface`
+ * l.66-67/l.89) : la UIView du host n'est exposée qu'au block du bail (`withUIKitView`, double
+ * opt-in), jamais ailleurs. L'enregistrement du port dans le registre par surface
+ * ([UIKitViewLeaseRegistry]) vit dans `UIKitWindowRuntime` — au commit du peer, retiré à la
+ * fermeture AVANT la publication de l'état détaché (ordre Android l.415-416).
  */
 internal class UIKitWindowCommandPort(
     private val window: UIWindow,
@@ -99,7 +111,7 @@ internal class UIKitWindowCommandPort(
     private val stimulusSink: (SurfaceStimulus) -> Boolean,
     private val windowStateSink: (WindowId, WindowState) -> Boolean,
     private val readySink: (SurfaceId) -> Unit,
-) : WindowCommandPort, SurfaceCommandPort {
+) : WindowCommandPort, SurfaceCommandPort, UIKitViewLeasePort {
     // `resources` (paramètre constructeur ci-dessus) est filé pour la symétrie AppKit
     // (l.275-277) ; phase 1 n'a rien à pré-réserver, phase 2 en héritera.
 
@@ -108,6 +120,14 @@ internal class UIKitWindowCommandPort(
     private val byWindow = linkedMapOf<WindowId, PeerEntry>()
     private val bySurface = linkedMapOf<SurfaceId, PeerEntry>()
     private var closed = false
+
+    /**
+     * Le bail unique en vol (Task 4, miroir `AndroidHostSurface.lease` l.120-125), sous [lock] :
+     * vrai entre l'admission d'un lease ([lease]) et la fin du block qu'il a admis — retour,
+     * exception ou cancellation. Un second bail pendant ce créneau répond
+     * `TemporarilyUnavailable(retryable = true)` sans invoquer son block.
+     */
+    private var leaseHeld: Boolean = false
 
     /**
      * Le branchement d'observation (phase 2, Task 3) : installé par [requestOpen] après le commit
@@ -405,6 +425,75 @@ internal class UIKitWindowCommandPort(
     private fun consumeRedraw(generation: SurfaceRedrawGeneration) {
         val surfaceId = lock.withLock { bySurface.values.firstOrNull()?.surfaceId } ?: return
         stimulusSink(SurfaceStimulus.RedrawConsumed(surfaceId, generation))
+    }
+
+    /**
+     * Le bail d'accès natif (Task 4) : prête la UIView du host pour la durée de [block], et pas
+     * plus. L'échelle EXACTE du miroir Android (`AndroidHostSurface.lease` l.305-333, template
+     * du plan) :
+     *
+     * 1. l'admission d'abord, sous [lock] — un port fermé, ou sans peer vivant, répond
+     *    `Closed(Surface)` sans invoquer [block] ; elle GAGNE sur la garde de réentrance : un
+     *    bail après close n'est jamais re-tentable, le décrire retryable serait un mensonge ;
+     * 2. le bail unique — un bail commencé pendant qu'un autre est en vol répond
+     *    `TemporarilyUnavailable(retryable = true)`, [block] jamais invoqué : se rentrer dedans
+     *    est une erreur de programmation, pas une contre-pression ;
+     * 3. la cancellation précoce — `ensureActive` sous le verrou, AVANT la pose du bail : le
+     *    chemin main (inline) n'a ensuite AUCUN point de suspension avant la première
+     *    instruction du block, et l'invocation démarrée, elle, s'achève (NonCancellable). Un
+     *    rejet ici sort avant `leaseHeld = true` : le `finally` n'a rien à libérer ;
+     * 4. la vue est RELUE hors de la section critique d'admission — l'entry du registre du port
+     *    EST la source vivante de la vue (l'analogue UIKit du `viewSource` Android effacé par le
+     *    terminal, M-3) : retirée par `requestOpenedClose` ou vidée par `finishClose`, ou le
+     *    port fermé par `beginClose`, la relecture trouve vide et répond `Closed(Surface)` SANS
+     *    invoquer le block. Si la relecture a gagné la course, la UIView était celle d'une
+     *    surface vivante à l'instant de la remise (et la UIView du host n'est de toute façon
+     *    jamais détruite par Kadre — roadmap l.120) ;
+     * 5. le block tourne sur le thread host (le principal UIKit, le même que l'attach) : inline
+     *    si l'appelant y est déjà (`NSThread.isMainThread()`, le précédent `KadreIos.attach`
+     *    l.95), sinon `withContext(Dispatchers.Main.immediate)` — et l'invocation DÉMARRÉE est
+     *    enveloppée de `NonCancellable` : un callback commencé s'achève même si la coroutine
+     *    appelante est annulée pendant lui, et la cancellation se manifeste chez l'appelant
+     *    après (le résultat n'est remis qu'à un waiter resté actif) ;
+     * 6. l'exception applicative du block se propage TELLE QUELLE — jamais enveloppée en
+     *    `KadreFailure` (la taxonomie n'admets pas ce mensonge) — et le `finally` rend le bail
+     *    sous le verrou sur tous les chemins : un bail suivant réussit après un block lançant
+     *    comme après un block annulé. La UIView n'est retenue par personne après le retour.
+     *
+     * Le peer servi est le PRIMAIRE (premier/unique peer en phase 2 — le miroir de
+     * [consumeRedraw] : toutes les entries de ce port pointent de toute façon la MÊME
+     * `UIWindow`/`UIView` du constructeur).
+     */
+    override suspend fun <R> lease(block: suspend (Any) -> R): KadreResult<R> {
+        lock.withLock {
+            if (closed || bySurface.isEmpty()) {
+                return KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.Surface))
+            }
+            if (leaseHeld) {
+                return KadreResult.Failure(KadreFailure.TemporarilyUnavailable(retryable = true))
+            }
+            currentCoroutineContext().ensureActive()
+            leaseHeld = true
+        }
+        try {
+            // La source vivante de la vue est RELUE ICI, hors de la section critique
+            // d'admission mais APRÈS elle (M-3) : si le teardown a passé sa section critique,
+            // la relecture répond Closed SANS invoquer le block — une vue d'une surface qui ne
+            // vit plus n'est jamais remise.
+            val viewLive = lock.withLock { !closed && bySurface.isNotEmpty() }
+            if (!viewLive) {
+                return KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.Surface))
+            }
+            return if (NSThread.isMainThread()) {
+                KadreResult.Success(withContext(NonCancellable) { block(view) })
+            } else {
+                withContext(Dispatchers.Main.immediate) {
+                    KadreResult.Success(withContext(NonCancellable) { block(view) })
+                }
+            }
+        } finally {
+            lock.withLock { leaseHeld = false }
+        }
     }
 
     /**

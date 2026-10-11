@@ -12,6 +12,7 @@ import org.graphiks.kadre.internal.runtime.RuntimeWindowManager
 import org.graphiks.kadre.internal.runtime.RuntimeWindowSurface
 import org.graphiks.kadre.policy.KadrePolicy
 import org.graphiks.kadre.surface.LogicalSize
+import org.graphiks.kadre.surface.SurfaceId
 import org.graphiks.kadre.window.WindowSpec
 import platform.UIKit.UIView
 import platform.UIKit.UIWindow
@@ -83,6 +84,13 @@ internal class UIKitWindowRuntime internal constructor(
         private set
 
     /**
+     * Le surfaceId sous lequel le port de lease est enregistré dans
+     * [UIKitViewLeaseRegistry.shared] — posé au commit du peer, lu par [close] pour le retrait.
+     * `null` tant que la fenêtre primaire n'est pas committée (rien n'est alors routable).
+     */
+    private var leaseSurfaceId: SurfaceId? = null
+
+    /**
      * Admission différée de la fenêtre primaire — exactement une fois, appelé par le delegate
      * d'admission juste après avoir transmis `installSessionConfiguration` au manager. Le
      * RuntimePrimarySurface est construit ICI (mémoïsé) : la surface n'existe qu'après le
@@ -108,7 +116,14 @@ internal class UIKitWindowRuntime internal constructor(
         // (le rejet vit dans l'état de la requête) : la preuve d'ouverture réelle est la
         // publication de la fenêtre primaire par le commit du port.
         check(manager.state.value.primary != null) { "primary window was not committed: $request" }
-        attachedPrimarySurface = RuntimePrimarySurface(surface) { surface.detach() }
+        // Task 4 : le peer est committé — le port de lease (`withUIKitView`) est enregistré
+        // pour la surface primaire AVANT que la surface ne devienne joignable par la session :
+        // un bail ne peut jamais résoudre une surface dont le peer n'est pas committé. Le
+        // runtime seul connaît le surfaceId à ce point (alloué par le manager au commit).
+        val primary = surface
+        UIKitViewLeaseRegistry.shared.register(primary.id, commandPort)
+        leaseSurfaceId = primary.id
+        attachedPrimarySurface = RuntimePrimarySurface(primary) { primary.detach() }
     }
 
     /** La surface primaire (la vue du host), publiée par le commit de la fenêtre primaire. */
@@ -120,13 +135,19 @@ internal class UIKitWindowRuntime internal constructor(
         }
 
     /**
-     * Ordre AppKit (driver l.146-158) : le port cesse d'admettre (`beginClose`), le manager
-     * clos ses requêtes et fenêtres (`manager.close()` — les owners no-op ne touchent jamais
-     * aux objets UIKit), le port vide son registre (`finishClose`). La UIWindow/UIView du host
-     * n'est ni détruite ni cachée : seul l'état Kadre est relâché.
+     * Ordre AppKit (driver l.146-158) : le port cesse d'admettre (`beginClose`), la route du
+     * bail sort du registre (Task 4 — AVANT la publication de l'état détaché par
+     * [manager.close], l'ordre Android l.415-416 : « les capabilities indisponibles au plus tard
+     * au détached », la route du bail ne survit jamais à un état détaché publié), le manager
+     * clos ses requêtes et fenêtres (`manager.close()` — les owners no-op ne touchent jamais aux
+     * objets UIKit), le port vide son registre (`finishClose`). Idempotent : le retrait du
+     * registre l'est aussi, et `leaseSurfaceId` remis à `null` absorbe un second close. La
+     * UIWindow/UIView du host n'est ni détruite ni cachée : seul l'état Kadre est relâché.
      */
     override fun close() {
         commandPort.beginClose()
+        leaseSurfaceId?.let { UIKitViewLeaseRegistry.shared.unregister(it) }
+        leaseSurfaceId = null
         try {
             manager.close()
         } finally {
