@@ -88,7 +88,9 @@ class WaylandBackendProviderTest {
 - [ ] **Step 2: Vérifier RED**, **Step 3: implémenter** R1-R6/R8 (pur, jamais de throw), **Step 4: GREEN** (11+ cas) et `WaylandBackendProviderTest.discoveryFindsExactlyOneWaylandProvider` toujours vert.
 - [ ] **Step 5: Commit** — `feat(wayland): implement the isAvailable probe contract (phase 1)`.
 
-### Task 3: Pont KFFI, registry durable, négociation et owners de listeners
+### Task 3: Binding managé kffi (KFFI-WAYLAND-004), adaptateur kadre, négociation
+
+> **Ruling (partenaire, en cours d'exécution) :** la couche binding managée est portée par **kffi** (`feat/wayland-managed-client`, commit `0b8eee4`, publié en mavenLocal, consommation kadre documentée par KFFI-WAYLAND-004/précédent OBJC-006). Kadre ne porte aucun stub/descriptor FFM : le pont ci-dessous n'est qu'un adaptateur sur l'API typée `org.graphiks.kffi.wayland.managed.WaylandClient`.
 
 **Files:**
 - Create: `…/wayland/WaylandNativeBridge.kt` — interface pont (seule couche touchant kffi) :

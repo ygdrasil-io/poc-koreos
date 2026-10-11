@@ -22,6 +22,10 @@ dependencyResolutionManagement {
     // added by the Wasm plugin itself → `wasmJsBrowserProductionWebpack` failed.
     repositoriesMode.set(RepositoriesMode.PREFER_SETTINGS)
     repositories {
+        // Consommation pré-publication du binding managé Wayland (gap KFFI-WAYLAND-004,
+        // précédent KFFI-OBJC-006) : à retirer dès la publication kffi sur
+        // Central Portal Snapshots.
+        mavenLocal()
         google()
         maven("https://central.sonatype.com/repository/maven-snapshots/") {
             name = "Central Portal Snapshots"
