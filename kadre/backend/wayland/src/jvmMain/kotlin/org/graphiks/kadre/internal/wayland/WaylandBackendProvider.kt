@@ -20,7 +20,7 @@ public class WaylandBackendProvider private constructor(
 
     override val supportedIntegrations: Set<DesktopIntegrationKind> = emptySet()
 
-    override fun isAvailable(): Boolean = availability()
+    override fun isAvailable(): Boolean = WaylandProbe.check(WaylandProbeEnvironment.fromSystem()).available
 
     override fun attach(request: DesktopEmbeddedRequest): KadreResult<KadreSession> {
         return KadreResult.Failure(KadreFailure.Unsupported(KadreOperation.HostAttach))
