@@ -27,6 +27,18 @@ public class WaylandCompositorController(
     public val displayName: String
         get() = externalDisplayName ?: socketName
 
+    /**
+     * Adresse de socket à consommer par le client : chemin absolu en mode
+     * auto-hébergé (indépendant de `XDG_RUNTIME_DIR`), nom relatif en mode
+     * externalisé (le JVM hérite alors du `XDG_RUNTIME_DIR` du script).
+     */
+    public val socketAddress: String
+        get() = if (ownsCompositor) {
+            runtimeDirectory.resolve(displayName).toString()
+        } else {
+            displayName
+        }
+
     private var externalDisplayName: String? = null
 
     public fun start(): Unit {
@@ -55,7 +67,7 @@ public class WaylandCompositorController(
         )
         builder.environment()["XDG_RUNTIME_DIR"] = runtimeDirectory.toString()
         builder.redirectErrorStream(true)
-        builder.redirectOutputTo(logFile)
+        builder.redirectOutput(ProcessBuilder.Redirect.appendTo(logFile.toFile()))
         val started = builder.start()
         process = started
         ownsCompositor = true

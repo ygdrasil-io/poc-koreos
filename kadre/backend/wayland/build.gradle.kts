@@ -22,6 +22,7 @@ kotlin {
             dependencies {
                 implementation(kotlin("test"))
                 implementation(project(":kadre:platform:desktop"))
+                implementation(project(":kadre:contracts:driver:wayland"))
             }
         }
     }
