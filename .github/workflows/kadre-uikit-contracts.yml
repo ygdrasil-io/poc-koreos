@@ -18,15 +18,25 @@ jobs:
     # Quirk connu du preview (Metal Toolchain possiblement absente) : sans effet sur cette
     # gate. Toute instabilité apparaît en job rouge à diagnostiquer, jamais en skip.
     runs-on: xcode-27
-    # Budget 25 min (TEST-STRATEGY.md §9.1, exception revue) : une exécution PR à froid
-    # (caches Gradle/Kotlin-Native vides, premier boot du simulateur iPad, installation de
-    # l'app) a mesuré plus de 15 min sur le run PR 38109607559. Le SLO p95 ≤ 8 min s'entend
-    # gate CHAUD.
-    timeout-minutes: 25
+    # Budget 40 min (TEST-STRATEGY.md §9.1, exception revue) : les coûts fixes À FROID sont
+    # dominants et variables — run 38109607559 : >15 min ; run 38131804115 : pré-boot 2m30 +
+    # latence `simctl list` ~4m30 (enregistrement des devices après boot) + configuration
+    # Gradle ~4m30 avant le premier compile, xcodebuild tué à 25 min. Le SLO p95 ≤ 8 min
+    # s'entend gate CHAUD. Le cache ~/.konan ci-dessous retire le re-téléchargement du
+    # toolchain Kotlin/Native de chaque run à froid.
+    timeout-minutes: 40
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Cache the Kotlin/Native toolchain
+        uses: actions/cache@v4
+        with:
+          # La toolchain K/N vit dans ~/.konan (PAS dans ~/.gradle) : sans ce cache, chaque
+          # runner froid la re-télécharge. La clé suit la version Kotlin de libs.versions.toml.
+          path: ~/.konan
+          key: konan-${{ runner.os }}-kotlin-2.4.20
 
       - name: Set up JDK 25
         uses: actions/setup-java@v5
@@ -73,11 +83,17 @@ jobs:
     # Quirk connu du preview (Metal Toolchain possiblement absente) : sans effet sur cette
     # gate. Toute instabilité apparaît en job rouge à diagnostiquer, jamais en skip.
     runs-on: xcode-27
-    timeout-minutes: 15
+    timeout-minutes: 25
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Cache the Kotlin/Native toolchain
+        uses: actions/cache@v4
+        with:
+          path: ~/.konan
+          key: konan-${{ runner.os }}-kotlin-2.4.20
 
       - name: Set up JDK 25
         uses: actions/setup-java@v5
