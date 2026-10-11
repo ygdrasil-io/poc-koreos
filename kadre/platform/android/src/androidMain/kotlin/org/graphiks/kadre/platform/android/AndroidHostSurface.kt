@@ -1,5 +1,6 @@
 package org.graphiks.kadre.platform.android
 
+import android.os.Build
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.NonCancellable
@@ -22,6 +23,7 @@ import org.graphiks.kadre.diagnostics.FeatureAvailability
 import org.graphiks.kadre.diagnostics.KadreDiagnostic
 import org.graphiks.kadre.diagnostics.KadreFailure
 import org.graphiks.kadre.diagnostics.KadreOperation
+import org.graphiks.kadre.diagnostics.KadrePlatform
 import org.graphiks.kadre.diagnostics.KadreResourceKind
 import org.graphiks.kadre.diagnostics.KadreResult
 import org.graphiks.kadre.input.InputCapabilities
@@ -51,6 +53,7 @@ import org.graphiks.kadre.policy.WindowDeliveryPolicy
 import org.graphiks.kadre.surface.CursorStyle
 import org.graphiks.kadre.surface.HostSurface
 import org.graphiks.kadre.surface.InputDefaultBehavior
+import org.graphiks.kadre.surface.PointerCaptureMode
 import org.graphiks.kadre.surface.PropertyChange
 import org.graphiks.kadre.surface.RejectedSurfaceField
 import org.graphiks.kadre.surface.SurfaceAttachmentState
@@ -73,7 +76,13 @@ import org.graphiks.kadre.surface.SurfaceUpdateOutcome
  * miroir web) — depuis la phase 4 (Task 2), `cursor` y est le SECOND (annoncé à l'installation
  * quand le seam du pointeur est câblé — exactement l'ensemble mappable de
  * [AndroidCursorIcons] — committé par [AndroidCursorNative] : `System(icon)` pose le TYPE_* de
- * la table, `Hidden` pose l'icône null, `Custom(image)` reste refusé champ par champ) — et
+ * la table, `Hidden` pose l'icône null, `Custom(image)` reste refusé champ par champ) — depuis
+ * la phase 4 (Task 3), `pointerCapture` y est le TROISIÈME (annoncé à l'installation quand le
+ * seam de capture est câblé — exactement `{None, Confined}`, la disponibilité décidée au
+ * niveau d'API — committé EN DEUX TEMPS par [AndroidPointerCapture] : la primitive est posée à
+ * l'admission, le LISTENER du SDK confirme — le retour de la requête n'est JAMAIS la
+ * confirmation ; `None` se libère et se commit immédiatement, `Locked` reste refusé champ par
+ * champ, D13) — et
  * un `requestRedraw` dont Task 3 branchera le scheduling à la place de la
  * branche on-row. Task 4 a ajouté `: AndroidViewLeasePort` à cette déclaration : la View du host
  * n'est exposée qu'au block du bail ([withAndroidView], double opt-in), jamais ailleurs.
@@ -106,6 +115,25 @@ internal class AndroidHostSurface(
      * arriver. Les tests de commit injectent un recorder.
      */
     private val cursorNative: AndroidCursorNative? = null,
+    /**
+     * Le seam natif de la capture (phase 4, Task 3) — la primitive [AndroidPointerCapture.Native]
+     * que le commit DU LISTENER du champ `pointerCapture` confirme, câblé par la couture sur la
+     * View du host pour LES DEUX formes (la capture est une propriété de `View`). `null`
+     * (constructions sans seam — tests) : la capability `pointerCapture` reste à son refus à
+     * TOUTE installation — la présence du seam est un fait de construction, la même discipline
+     * que le `native` de la fenêtre (Task 1), le `cursorNative` du curseur (Task 2) et le
+     * `inputWired` de l'entrée : on n'annonce jamais un commit qui ne peut pas arriver. Les
+     * tests de commit injectent un recorder.
+     */
+    private val pointerCaptureNative: AndroidPointerCapture.Native? = null,
+    /**
+     * La révision de la plateforme, lue au construction en production ([Build.VERSION.SDK_INT])
+     * et injectée par les tests : le niveau d'API décide de la DISPONIBILITÉ publiée de
+     * `pointerCapture` — `Available` à partir de 26 (`requestPointerCapture` +
+     * `OnPointerCaptureListener` sont API 26+, le minSdk du module est 24), `Unavailable` avec
+     * la raison d'API en dessous. Un fait de construction, comme la présence du seam.
+     */
+    private val apiLevel: Int = Build.VERSION.SDK_INT,
     /**
      * Le canal des diagnostics d'entrée qui ne sont pas des failures de session — les
      * débordements que le réducteur runtime reporte (`SourceOverflow` et cie), le miroir du
@@ -216,6 +244,25 @@ internal class AndroidHostSurface(
      */
     private val preInstallInput: SurfaceInput = PreInstallAndroidSurfaceInput()
 
+    /**
+     * Le commit en deux temps du champ `pointerCapture` (phase 4, Task 3) — construit avec le
+     * seam, absent sans lui (la capability refuse alors avant que quiconque puisse l'appeler).
+     * Les callbacks sont les PUBLICATIONS de cette surface : la confirmation du listener
+     * ([AndroidPointerCapture.listenerChanged] → `onCommitted`) publie `Confined` à une révision
+     * nouvelle, la perte (`onLost`) revient à `None` et publie — [publishMetrics] porte la
+     * discipline commune (révision = marqueur de changement, publication absorbée après la
+     * fermeture). Le listener du SDK est enregistré à la construction du seam — une réponse ne
+     * peut jamais trouver le seam sourd.
+     */
+    private val pointerCapture: AndroidPointerCapture? = pointerCaptureNative?.let { native ->
+        AndroidPointerCapture(
+            apiLevel = apiLevel,
+            native = native,
+            onCommitted = { mode -> publishMetrics(update = { it.copy(pointerCapture = mode) }) },
+            onLost = { publishMetrics(update = { it.copy(pointerCapture = PointerCaptureMode.None) }) },
+        )
+    }
+
     override val state: StateFlow<SurfaceState> = mutableState.asStateFlow()
     override val capabilities: StateFlow<SurfaceCapabilities> = mutableCapabilities.asStateFlow()
 
@@ -249,29 +296,38 @@ internal class AndroidHostSurface(
      *    demande à la fois périmée et mal formée soit répondue périmée ;
      * 3. la garde `Clear` — un `Clear` sur un champ sans valeur « non posée » est un
      *    `InvalidRequest(field)` (les quatre noms du registre §1.1), lui aussi avant admission ;
-     * 4. l'admission CHAMP PAR CHAMP contre la capability publiée — l'admission partagée du
-     *    runtime ([admitField], celle-là même de la surface web et de la surface de
-     *    référence) et, pour `cursor`, l'admission DÉDIÉE de la référence
-     *    ([admitCursor], le miroir `MinimalWindowSurface.admitCursor` : `Custom(image)`
-     *    consulte `customCursor`, `System(icon)` consulte `cursor` contre l'ensemble
-     *    annoncé). `inputDefaultBehavior` est SUPPORTED depuis la phase 3 (publiée à
-     *    l'installation, `Supported({HostDefault, SuppressWhenPossible}, Available)` — le
-     *    miroir web `WebHostSession.kt:2102-2105`) ; `cursor` l'est depuis la phase 4 quand
-     *    le seam du pointeur est câblé (`Supported(<exactement les icônes mappables>,
-     *    Available)`) : un champ posé est admis ; les deux autres capabilities restent
-     *    `Unsupported(UpdateSurface)` : un champ posé est rejeté
-     *    `RejectedSurfaceField(Unsupported(UpdateSurface))`, un champ non posé ne l'est
-     *    jamais — et un rejet ne bloque jamais les champs du même update qui peuvent être
-     *    honorés ;
-     * 5. le verdict — `inputDefaultBehavior` et `cursor` ont un chemin de commit
-     *    (`inputDefaultBehavior` : la surface est son propre backend ; `cursor` : le seam
-     *    [AndroidCursorNative] pose le TYPE_* mappé, ou l'icône null pour `Hidden`) — un
-     *    champ admis est commis immédiatement, UNE révision nouvelle, l'outcome portant
-     *    l'état publié (le miroir du commit web `:1612-1613`) ; les deux champs sans chemin
-     *    de commit restent gardés par [requireRefused]. Rien de posé ni de commis →
-     *    `Applied(current)` ; un champ rejeté →
-     *    `PartiallyApplied(published, rejected)`. Jamais une failure externe `Unsupported`
-     *    pour l'update entier : le rejet est PAR CHAMP, dans la liste du succès.
+ * 4. l'admission CHAMP PAR CHAMP contre la capability publiée — l'admission partagée du
+ *    runtime ([admitField], celle-là même de la surface web et de la surface de
+ *    référence) et, pour `cursor` et `pointerCapture`, les admissions DÉDIÉE de la
+ *    référence ([admitCursor], le miroir `MinimalWindowSurface.admitCursor` : `Custom(image)`
+ *    consulte `customCursor`, `System(icon)` consulte `cursor` contre l'ensemble
+ *    annoncé) et DU WEB ([admitPointerCapture], le miroir `admitCaptureAttempt` :
+ *    `Locked` refusé D13, sous l'API 26 `Confined` aussi — zéro appel natif — puis la
+ *    TENTATIVE lancée). `inputDefaultBehavior` est SUPPORTED depuis la phase 3 (publiée à
+ *    l'installation, `Supported({HostDefault, SuppressWhenPossible}, Available)` — le
+ *    miroir web `WebHostSession.kt:2102-2105`) ; `cursor` l'est depuis la phase 4 quand
+ *    le seam du pointeur est câblé (`Supported(<exactement les icônes mappables>,
+ *    Available)`) ; `pointerCapture` l'est depuis la phase 4 quand le seam de capture
+ *    est câblé (`Supported({None, Confined})`, `Available` à partir de l'API 26,
+ *    `Unavailable` avec la raison d'API en dessous) : un champ posé est admis ; les
+ *    capabilities restantes restent `Unsupported(UpdateSurface)` : un champ posé est rejeté
+ *    `RejectedSurfaceField(Unsupported(UpdateSurface))`, un champ non posé ne l'est
+ *    jamais — et un rejet ne bloque jamais les champs du même update qui peuvent être
+ *    honorés ;
+ * 5. le verdict — `inputDefaultBehavior`, `cursor` et `pointerCapture` ont un chemin de commit
+ *    (`inputDefaultBehavior` : la surface est son propre backend ; `cursor` : le seam
+ *    [AndroidCursorNative] pose le TYPE_* mappé, ou l'icône null pour `Hidden` ;
+ *    `pointerCapture` : EN DEUX TEMPS — `None` se commit DANS CETTE PASSE, le release
+ *    synchrone côté SDK ayant été posé à l'admission, `Confined` ne se commit JAMAIS ici :
+ *    le listener du SDK confirme, la publication suit
+ *    [AndroidPointerCapture.listenerChanged] à une révision nouvelle — « le retour d'une
+ *    requête SDK n'est pas la confirmation de la capture du pointeur ») — un champ admis est
+ *    commis immédiatement, UNE révision nouvelle, l'outcome portant
+ *    l'état publié (le miroir du commit web `:1612-1613`) ; le champ sans chemin
+ *    de commit reste gardé par [requireRefused]. Rien de posé ni de commis →
+ *    `Applied(current)` ; un champ rejeté →
+ *    `PartiallyApplied(published, rejected)`. Jamais une failure externe `Unsupported`
+ *    pour l'update entier : le rejet est PAR CHAMP, dans la liste du succès.
      *
      * Toute la décision tient sous [RuntimeLock] — le miroir de la surface de phase 0
      * (`RuntimeHostSurface.kt:48-62`) : la garde de révision relit l'état publié et le verdict
@@ -299,12 +355,7 @@ internal class AndroidHostSurface(
         // des champs de l'update (une seule passe ici : aucun second refus au commit). Le champ
         // ADMIS est ce que l'admission rend — c'est lui que la garde de commit relit.
         val cursor = admitCursor(update.cursor, capabilities, rejected)
-        val pointerCapture = admitField(
-            update.pointerCapture,
-            SurfaceProperty.PointerCapture,
-            capabilities.pointerCapture,
-            rejected,
-        )
+        val pointerCapture = admitPointerCapture(update.pointerCapture, capabilities, rejected)
         val hitTesting = admitField(
             update.hitTesting,
             SurfaceProperty.HitTesting,
@@ -317,21 +368,22 @@ internal class AndroidHostSurface(
             capabilities.inputDefaultBehavior,
             rejected,
         )
-        // Les deux champs d'update sans chemin de commit restent gardés plutôt qu'assumés
-        // absents : leurs capabilities refusent toute valeur aujourd'hui, mais le jour où
-        // l'une deviendrait `Supported` le changement atterrirait ici non commis et serait
-        // répondu d'un `Applied` pour un état qui ne l'a jamais pris (la même garde que la
-        // surface web pose sur ses propres champs sans commit).
-        pointerCapture.requireRefused(SurfaceProperty.PointerCapture)
+        // Le champ d'update sans chemin de commit reste gardé plutôt qu'assumé absent : sa
+        // capability refuse toute valeur aujourd'hui, mais le jour où elle deviendrait
+        // `Supported` le changement atterrirait ici non commis et serait répondu d'un `Applied`
+        // pour un état qui ne l'a jamais pris (la même garde que la surface web pose sur ses
+        // propres champs sans commit).
         hitTesting.requireRefused(SurfaceProperty.HitTesting)
-        // `inputDefaultBehavior` (phase 3) et `cursor` (phase 4) sont les champs committables
-        // de cette surface — la surface est le backend du premier, le seam du pointeur celui
-        // du second : rien en dessous ne peut rapporter une valeur effective différente, un
-        // champ admis est donc commis ICI ET MAINTENANT — le miroir exact du commit
-        // own-backend web (`WebHostSession.kt:1612-1613`).
+        // L'instantané du verdict est relu APRÈS les admissions : la tentative de capture est
+        // lancée à l'admission (le mot du brief), et une confirmation que le SDK délivrerait
+        // dans la foulée de l'appel publierait déjà à travers le verrou réentrant — l'instantané
+        // la verrait.
         val current = mutableState.value
         var committed = current
-        // Le commit du curseur : l'admission dédiée ([admitCursor]) n'a pu rendre un `Set`
+        // `inputDefaultBehavior` (phase 3), `cursor` (phase 4, tâche 2) et `pointerCapture`
+        // (phase 4, tâche 3) sont les champs committables de cette surface — la surface est le
+        // backend du premier, le seam du pointeur ceux des deux autres. Le commit du curseur
+        // : l'admission dédiée ([admitCursor]) n'a pu rendre un `Set`
         // que pour `Hidden` ou `System(icon mappable)` — `Custom` consulte `customCursor`
         // (Unsupported) et une icône hors de l'ensemble annoncé est refusée avant. Le seam
         // reçoit le TYPE_* de la table, ou null pour `Hidden` ; l'état porte le style
@@ -355,6 +407,17 @@ internal class AndroidHostSurface(
         }
         if (inputDefaultBehavior is PropertyChange.Set) {
             committed = committed.copy(inputDefaultBehavior = inputDefaultBehavior.value)
+        }
+        // Le commit de `pointerCapture` : `None` seul se commit DANS CETTE PASSE — le release
+        // est SYNCHRONE côté SDK ([AndroidPointerCapture.applyMode] l'a déjà posé à
+        // l'admission), le commit est donc immédiat, une révision avec les autres champs (le
+        // miroir du commit en une passe web). `Confined` ne se commit JAMAIS ici : la tentative
+        // lancée à l'admission n'est pas la confirmation — « le retour d'une requête SDK n'est
+        // pas la confirmation de la capture du pointeur » — l'état se commit au listener
+        // ([AndroidPointerCapture.listenerChanged] → publication à révision nouvelle), et une
+        // demande déjà en effet ne bouge rien.
+        if (pointerCapture is PropertyChange.Set && pointerCapture.value == PointerCaptureMode.None) {
+            committed = committed.copy(pointerCapture = PointerCaptureMode.None)
         }
         // Un commit, une révision, et seulement pour un état qui a réellement bougé :
         // `next != current` est la règle de la référence (`commitUpdateLocked`), celle qui
@@ -557,6 +620,11 @@ internal class AndroidHostSurface(
      * `Available` seulement après une installation réelle). Le réducteur absorbe le
      * stimulus « rien n'est câblé » (dédoublonnage) : ni événement, ni mouvement de révision.
      *
+     * Depuis la phase 4 (Task 3), le MÊME fait porte la capability `pointerCapture` : le canal
+     * d'état du SDK est la notification `Window.Callback.onPointerCaptureChanged`, enchaînée
+     * par ce wrapper-là — sans lui, la confirmation du commit en deux temps ne peut jamais
+     * arriver et la capability reste à son refus, même le seam des primitives câblé.
+     *
      * « Jamais après la révocation » — la double garde de l'admission (`detached` OU état
      * publié détaché) : une installation qui suit [close] ou qui arrive dans la fenêtre de
      * teardown (l'instantané détaché publié par le binding, le terminal pas encore passé) est
@@ -567,7 +635,19 @@ internal class AndroidHostSurface(
             if (detached || mutableState.value.attachment == SurfaceAttachmentState.Detached) {
                 return
             }
-            mutableCapabilities.value = androidSurfaceCapabilities(cursorCommittable = cursorNative != null)
+            // Le fait câblé de la capture (Task 3) : le SEAM porte les primitives, mais le
+            // commit vit au LISTENER d'état du SDK — le canal `Window.Callback.
+            // onPointerCaptureChanged`, enchaîné par le MÊME wrapper que l'observation d'entrée.
+            // `inputWired` nomme CE canal : sans lui (forme View, ou Activity dont `window.
+            // callback` est null) la confirmation ne peut jamais arriver et la capability reste
+            // à son refus — on n'annonce jamais un commit qui ne peut pas arriver.
+            mutableCapabilities.value = androidSurfaceCapabilities(
+                cursorCommittable = cursorNative != null,
+                pointerCapture = pointerCaptureCapability(
+                    wired = pointerCaptureNative != null && inputWired,
+                    apiLevel = apiLevel,
+                ),
+            )
         }
         // L'installation de l'observation d'entrée (Task 3) : le stimulus structurel — avec
         // les faits câblés — puis le replay ordonné des observations bufferisées. Hors verrou :
@@ -751,6 +831,60 @@ internal class AndroidHostSurface(
         return change
     }
 
+    /**
+     * L'admission DÉDIÉE du champ `pointerCapture` — le miroir Android de
+     * `admitCaptureAttempt` (la surface web) : les règles de CETTE surface d'abord, la
+     * capability commune ([admitField]) ensuite, puis la TENTATIVE — l'admission la LANCE (le
+     * mot du brief) de sorte qu'une confirmation que le SDK délivrerait dans la foulée de
+     * l'appel atterrisse avant l'instantané du verdict (le verrou JVM est réentrant) :
+     *
+     * - `Locked` (D13) : il appartient à `InteractionAction.LockPointer` — la capture Android
+     *   est une confinement de souris, le verrou passe par le chemin d'interaction (phase 4,
+     *   tâche 4). Refus champ par champ `Unsupported(UpdateSurface)`, tout niveau d'API, zéro
+     *   appel natif. Inatteignable tant que la capability refuse le mode (`Locked` est hors de
+     *   l'ensemble annoncé) — énoncé ici plutôt qu'assumé absent, le mot du web ;
+     * - sous l'API 26 (le minSdk du module) : `requestPointerCapture` +
+     *   `OnPointerCaptureListener` n'existent pas — `Confined` comme `Locked` sont refusés
+     *   champ par champ `Unsupported(UpdateSurface)`, zéro appel natif. Le mot de l'ADMISSION ;
+     *   le mot de la PUBLICATION est celui de la capability ([androidSurfaceCapabilities]) :
+     *   les modes que la plateforme porte, `Unavailable` avec la raison d'API — et un `None`
+     *   qui atteint ici sous l'API 26 est refusé PAR LA CAPABILITY avec cette raison.
+     *
+     * Un champ non posé n'est jamais rejeté ; un refus n'bloque jamais les champs du même
+     * update qui peuvent être honorés ; un `Clear` n'atteint jamais ici (la garde
+     * [invalidClearField] le rejette avant l'admission).
+     */
+    private fun admitPointerCapture(
+        change: PropertyChange<PointerCaptureMode>,
+        capabilities: SurfaceCapabilities,
+        rejected: MutableList<RejectedSurfaceField>,
+    ): PropertyChange<PointerCaptureMode> {
+        if (change is PropertyChange.Unchanged) return change
+        if (change is PropertyChange.Set && change.value != PointerCaptureMode.None) {
+            if (change.value == PointerCaptureMode.Locked || apiLevel < 26) {
+                rejected += RejectedSurfaceField(
+                    SurfaceProperty.PointerCapture,
+                    KadreFailure.Unsupported(KadreOperation.UpdateSurface),
+                )
+                return PropertyChange.Unchanged
+            }
+        }
+        val admitted = admitField(change, SurfaceProperty.PointerCapture, capabilities.pointerCapture, rejected)
+        if (admitted !is PropertyChange.Set) return admitted
+        // La tentative : le seam est nécessairement câblé (la capability n'annonce le champ
+        // que le long de sa présence) — un refus du seam à ce stade serait une divergence
+        // d'admission (les règles sont les mêmes des deux côtés) et est rapporté tel quel.
+        val seam = checkNotNull(pointerCapture) {
+            "pointerCapture arrived admitted, but the android surface has no pointer-capture seam"
+        }
+        val failure = seam.applyMode(admitted.value)
+        if (failure != null) {
+            rejected += RejectedSurfaceField(SurfaceProperty.PointerCapture, failure)
+            return PropertyChange.Unchanged
+        }
+        return admitted
+    }
+
     // ------------------------------------------------------------------
     // La couture d'entrée (Task 3) — les funnels que le wrapper T1 et le tracker T2
     // nourrissent, et la lecture de suppression que le wrapper consulte. Thread principal
@@ -760,6 +894,12 @@ internal class AndroidHostSurface(
 
     /** Route une observation clavier/focus du wrapper T1 vers la delivery. */
     internal fun onInputObservation(observation: AndroidInputObservation) {
+        // Le pont P1 de la capture (phase 4, tâche 3) : la perte de focus fenêtre que la
+        // couture observe déjà (phase 3, le `focusLost` de la delivery) libère la capture côté
+        // SDK — le listener la rapportera de lui-même ; le pont couvre la cohérence du seam
+        // propre en empruntant le MÊME chemin que la perte rapportée
+        // ([AndroidPointerCapture.focusLost] → réversion + publication).
+        if (observation is AndroidInputObservation.WindowFocusLost) pointerCapture?.focusLost()
         inputDelivery?.onObservation(observation)
     }
 
@@ -827,11 +967,14 @@ private fun PropertyChange<*>.requireRefused(property: SurfaceProperty) {
  * l'observation et le scheduling vivent (le moment structurel où la surface qui honore — le
  * wrapper de dispatch, la lecture de l'état commis — existe, la même sémantique « `Available`
  * seulement après une installation réelle » que partout ailleurs), retiré au terminal
- * ([AndroidHostSurface.close]) — jamais après. `customCursor` et les deux autres champs
- * d'update restent `Unsupported(UpdateSurface)` : leurs refus de la phase 2 ne sont pas
- * affaiblis.
+ * ([AndroidHostSurface.close]) — jamais après. `customCursor` et le dernier champ
+ * d'update sans chemin de commit (`hitTesting`) restent `Unsupported(UpdateSurface)` : leurs
+ * refus de la phase 2 ne sont pas affaiblis.
  */
-private fun androidSurfaceCapabilities(cursorCommittable: Boolean): SurfaceCapabilities =
+private fun androidSurfaceCapabilities(
+    cursorCommittable: Boolean,
+    pointerCapture: Capability<Set<PointerCaptureMode>>,
+): SurfaceCapabilities =
     unsupportedSurfaceCapabilities().copy(
         platformAccess = Capability.Supported(Unit, FeatureAvailability.Available),
         inputDefaultBehavior = Capability.Supported(
@@ -843,7 +986,46 @@ private fun androidSurfaceCapabilities(cursorCommittable: Boolean): SurfaceCapab
         } else {
             Capability.Unsupported(KadreFailure.Unsupported(KadreOperation.UpdateSurface))
         },
+        pointerCapture = pointerCapture,
     )
+
+/**
+ * La capability `pointerCapture` publiée — les DEUX modes que la plateforme peut honorer,
+ * écrits un à un (la capability est la promesse de ce backend, le miroir web
+ * `WebHostSession.webSurfaceCapabilities` : `Locked` est DEHORS — D13, la capture Android est
+ * une confinement de souris, le verrou appartient à `InteractionAction.LockPointer`, phase 4,
+ * tâche 4), avec la disponibilité décidée AU CONSTRUCTION :
+ *
+ * - sans seam OU sans canal d'état ([wired] — le seam des primitives ET l'enchaînement du
+ *   `Window.Callback` qui livre les notifications d'état du SDK, le fait qu'[inputWired] porte
+ *   à [AndroidHostSurface.observationInstalled]) — le refus de la phase 2 tient à toute
+ *   installation : sans le listener, la confirmation ne peut jamais arriver et la capture
+ *   demandée resterait à jamais non committée (on n'annonce jamais un commit qui ne peut pas
+ *   arriver, le miroir du curseur sans seam) ;
+ * - à partir de l'API 26 — `Available` : `requestPointerCapture`/`releasePointerCapture`
+ *   existent et le commit vit au listener d'état du SDK ;
+ * - en dessous — `Unavailable` portant la raison d'API (`PlatformFailure(Android,
+ *   "pointer-capture", "api-26-required")`, l'équivalent Android de l'indisponibilité web) :
+ *   le mot de la PUBLICATION ; l'admission refuse `Confined`/`Locked` champ par champ
+ *   `Unsupported(UpdateSurface)` — son propre mot ([AndroidHostSurface.admitPointerCapture]).
+ */
+private fun pointerCaptureCapability(
+    wired: Boolean,
+    apiLevel: Int,
+): Capability<Set<PointerCaptureMode>> = when {
+    !wired -> Capability.Unsupported(KadreFailure.Unsupported(KadreOperation.UpdateSurface))
+    apiLevel >= 26 -> Capability.Supported(
+        setOf(PointerCaptureMode.None, PointerCaptureMode.Confined),
+        FeatureAvailability.Available,
+    )
+
+    else -> Capability.Supported(
+        setOf(PointerCaptureMode.None, PointerCaptureMode.Confined),
+        FeatureAvailability.Unavailable(
+            KadreFailure.PlatformFailure(KadrePlatform.Android, "pointer-capture", "api-26-required"),
+        ),
+    )
+}
 
 /**
  * L'entrée d'une surface dont la configuration de session n'a pas installé — l'état honnête

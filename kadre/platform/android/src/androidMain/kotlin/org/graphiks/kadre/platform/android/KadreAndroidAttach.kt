@@ -258,12 +258,18 @@ internal object AndroidHostSession {
                     // Le seam du curseur (phase 4, Task 2) est câblé sur la MÊME View —
                     // `pointerIcon` est une propriété de `View`, la forme Activity n'y a aucun
                     // monopole (le miroir du branchement métriques, pas des commandes de
-                    // fenêtre).
+                    // fenêtre). Le seam de capture (phase 4, Task 3) l'est aussi — la capture
+                    // est une propriété de `View` — et le canal d'état du SDK (la notification
+                    // `Window.Callback.onPointerCaptureChanged`, enchaînée ci-dessous par le
+                    // wrapper T1) est retenu pour le livrer au listener du seam.
+                    val captureNative = AndroidViewPointerCaptureNative(view)
+                    sessionSurface.capture = captureNative
                     val surface = AndroidHostSurface(
                         RuntimeProcessIds.nextSurfaceId(),
                         initialSurfaceState(view, initial),
                         leasedView = { view },
                         cursorNative = AndroidViewCursorNative(view),
+                        pointerCaptureNative = captureNative,
                     )
                     sessionSurface.surface = surface
                     // Le seam natif de la fenêtre (phase 4, Task 1) câblé sur CETTE Activity —
@@ -296,12 +302,18 @@ internal object AndroidHostSession {
                 primarySurfaceFactory = { id ->
                     // Le seam du curseur câblé sur la View de CETTE forme aussi : la
                     // propriété `View.pointerIcon` vit sur la vue, pas sur la fenêtre — la
-                    // forme View committe le curseur exactement comme la forme Activity.
+                    // forme View committe le curseur exactement comme la forme Activity. Le
+                    // seam de capture (phase 4, Task 3) de même pour les primitives — mais la
+                    // forme View n'a pas de fenêtre enchaînée : le canal d'état du SDK
+                    // (`Window.Callback.onPointerCaptureChanged`) n'existe pas ici, la
+                    // capability suit le fait câblé (`inputWired`) et le champ y reste refusé
+                    // plutôt que d'annoncer un commit qui ne peut pas arriver.
                     val surface = AndroidHostSurface(
                         id,
                         initialSurfaceState(view, initial),
                         leasedView = { view },
                         cursorNative = AndroidViewCursorNative(view),
+                        pointerCaptureNative = AndroidViewPointerCaptureNative(view),
                     )
                     sessionSurface.surface = surface
                     RuntimePrimarySurface(surface, surface::close)
@@ -461,6 +473,16 @@ internal object AndroidHostSession {
     /** La surface de la session, créée par la factory de composants au moment de l'attach. */
     private class SessionSurface {
         var surface: AndroidHostSurface? = null
+
+        /**
+         * Le seam de capture (Task 3) retenu pour le canal d'état du SDK : la notification
+         * `Window.Callback.onPointerCaptureChanged`, enchaînée par le wrapper T1 (forme
+         * Activity seule), est livrée ICI — [AndroidViewPointerCaptureNative.
+         * dispatchCaptureState] la route dans le listener posé par le seam. `null` sur la
+         * forme View : pas de fenêtre enchaînée, pas de canal d'état — la capability suit le
+         * fait câblé (`inputWired`) et le champ y reste refusé.
+         */
+        var capture: AndroidViewPointerCaptureNative? = null
     }
 
     /**
@@ -539,7 +561,13 @@ internal object AndroidHostSession {
                     view.getLocationOnScreen(viewLocation)
                     val decorLocation = IntArray(2)
                     window.decorView.getLocationOnScreen(decorLocation)
-                    (viewLocation[0] - decorLocation[0]) to (viewLocation[1] - decorLocation[1])
+                    viewLocation[0] - decorLocation[0] to viewLocation[1] - decorLocation[1]
+                },
+                // Le canal d'état de la capture (Task 3) : la notification du SDK livrée au
+                // seam retenu par la session — le listener posé par
+                // [AndroidPointerCapture] reçoit la confirmation (le commit en deux temps).
+                onPointerCaptureState = { hasCapture ->
+                    sessionSurface.capture?.dispatchCaptureState(hasCapture)
                 },
             ),
         )

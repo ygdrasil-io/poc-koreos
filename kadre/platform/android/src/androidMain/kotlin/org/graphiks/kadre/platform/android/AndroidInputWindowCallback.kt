@@ -176,6 +176,15 @@ internal class AndroidWindowCallbackForwarder(
      * la fenêtre ; la couture réelle fournit la paire publique.
      */
     private val viewOffsetInWindow: () -> Pair<Int, Int> = { 0 to 0 },
+    /**
+     * Le canal d'état de la capture (Task 3) : la notification
+     * `Window.Callback.onPointerCaptureChanged` du SDK — LA notification d'état que la
+     * plateforme offre à une fenêtre (aucun enregistrement de listener de capture n'existe sur
+     * `View`, relevé du `android-35`), livrée au seam de la surface
+     * ([AndroidViewPointerCaptureNative.dispatchCaptureState] → le listener du seam → le commit
+     * en deux temps). Le forward reste intact : l'observation n'est jamais une interception.
+     */
+    private val onPointerCaptureState: (hasCapture: Boolean) -> Unit = {},
 ) : Window.Callback {
     private var installed: Boolean = false
     private var pendingKeyEvent: KeyEvent? = null
@@ -359,6 +368,9 @@ internal class AndroidWindowCallbackForwarder(
     }
 
     override fun onPointerCaptureChanged(hasCapture: Boolean) {
+        // L'observation d'état de la capture (Task 3) : livrée au seam AVANT le forward — le
+        // commit en deux temps vit à cette livraison — puis le forward intact.
+        onPointerCaptureState(hasCapture)
         wrapped.onPointerCaptureChanged(hasCapture)
     }
 }
