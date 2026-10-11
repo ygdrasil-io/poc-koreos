@@ -79,7 +79,9 @@ val assembleKadreUikitXCFramework by tasks.registering(GradleBuild::class) {
     tasks = listOf(":kadre:platform:uikit:assembleKadreUikitDebugXCFramework")
 }
 
-/** xcodegen régénère le projet si la spec change — le .xcodeproj n'est pas versionné. */
+/** xcodegen régénère le projet à chaque évolution de la spec — le .xcodeproj GÉNÉRÉ est
+ *  commité (convention des drivers, cf. contracts/driver/uikit) pour que la revue lise
+ *  les diffs et que le consumer compile sans xcodegen préalable. */
 val generateConsumerProject by tasks.registering(Exec::class) {
     group = "build"
     description = "Generates KadreSwiftConsumer.xcodeproj from project.yml."

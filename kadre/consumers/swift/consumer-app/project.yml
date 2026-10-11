@@ -31,8 +31,15 @@ targets:
         # celui de la distribution, qui ne porte PAS la factory du consumer. Les deux
         # archives portent les MÊMES symboles Obj-C (même préfixe `KadreUikit`, exports
         # identiques — vérifié : 478 classes en commun, la seule classe propre au
-        # consumer étant la factory) : le lien paresseux ne garde qu'UNE copie de chaque
-        # classe et du runtime, quelle que soit l'ordre ; un doublon serait refusé par ld.
+        # consumer étant la factory). SÉMANTIQUE EXACTE du lien : ld ne refuse PAS un
+        # doublon — à sémantique d'archive paresseuse, il garde SILENCIEUSEMENT le
+        # PREMIER membre définissant chaque symbole, quelle que soit l'ordre des -F.
+        # Les vraies gardes sont : (1) la vérification au lancement — une classe Obj-C
+        # définie deux fois est loggée/crashée par le runtime (« Class X is implemented
+        # in both… », refusée par le doLast des tâches de test de
+        # consumers/swift/build.gradle.kts) ; (2) la recette des bundles de test —
+        # search paths SANS liaison (`BUNDLE_LOADER` fournit les symboles depuis l'app
+        # hôte) pour ne JAMAIS dupliquer les archives dans le process de test.
         FRAMEWORK_SEARCH_PATHS:
           - "$(inherited)"
           - "$(SRCROOT)/../consumer-kmp/build/bin/iosSimulatorArm64/debugFramework"

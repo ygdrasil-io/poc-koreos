@@ -7,18 +7,34 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		03145DE37055C9534A4AE166 /* KadreFailure.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0C8CEBD7FBDF9EA1B987DC63 /* KadreFailure.swift */; };
+		0AF10D0DC6E95D12059E226D /* KadreStopReason.swift in Sources */ = {isa = PBXBuildFile; fileRef = 43292E2F01EC2BE56DD3ECBB /* KadreStopReason.swift */; };
+		209E8F0240120C373C9FE836 /* KadreSessionSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1FA20495BE515A582FA06497 /* KadreSessionSnapshot.swift */; };
+		3296AB0337BE37630A758186 /* KadreFailure.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0C8CEBD7FBDF9EA1B987DC63 /* KadreFailure.swift */; };
 		3BB69E0C97DC45C1ED3DC917 /* ConsumerSceneStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 25E713565274B5F3FB7C73B8 /* ConsumerSceneStore.swift */; };
 		4E9564B58747EF8EC9D70023 /* ConsumerSceneDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = AEF94E2574734A0415EC0C77 /* ConsumerSceneDelegate.swift */; };
 		52AD0BBD6F36FBE6B06FD4FC /* ConsumerSceneStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 25E713565274B5F3FB7C73B8 /* ConsumerSceneStore.swift */; };
+		5771BC8EBC2F476166B51991 /* KadreHostMappingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9746AFF6F5941E955EF7E507 /* KadreHostMappingTests.swift */; };
 		5AE7285696E85FC5848A3C0E /* KadreUikit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 2D8AA8E11EE4F5E68181E3CE /* KadreUikit.framework */; };
 		5E34D35E0F40901418D3F45C /* MainApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDCA87CC094641E6BBF5AFDB /* MainApp.swift */; };
+		609669BAA69E4FB4E682784F /* KadreSessionOutcome.swift in Sources */ = {isa = PBXBuildFile; fileRef = 54E2BE6F8EB71926EF1E2602 /* KadreSessionOutcome.swift */; };
+		70E88A01CA1B6D2E5498BA09 /* KadreFailureMapping.swift in Sources */ = {isa = PBXBuildFile; fileRef = 41AE0B7EE64975E17AEED2B1 /* KadreFailureMapping.swift */; };
 		7F7A5A82773F05E027BB472B /* ConsumerSceneDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = AEF94E2574734A0415EC0C77 /* ConsumerSceneDelegate.swift */; };
+		8AEDF24A3CEA840BD94B7578 /* KadreSessionOutcome.swift in Sources */ = {isa = PBXBuildFile; fileRef = 54E2BE6F8EB71926EF1E2602 /* KadreSessionOutcome.swift */; };
+		95DEA49E4C51BFE86B217521 /* KadreFailureMapping.swift in Sources */ = {isa = PBXBuildFile; fileRef = 41AE0B7EE64975E17AEED2B1 /* KadreFailureMapping.swift */; };
 		A0DB6FC34880DC596CE51C65 /* MainApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 56FED9FFB75A8D992C0EA32A /* MainApp.swift */; };
 		A310B8A469A73E53038F91A3 /* ConsumerAttachTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC0E86EF723AF24C7EFC4806 /* ConsumerAttachTests.swift */; };
 		A40ADB47A4104994215F671F /* ConsumerAttachTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC0E86EF723AF24C7EFC4806 /* ConsumerAttachTests.swift */; };
+		A8D4BB16017614E86C55CCFB /* KadreSessionSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1FA20495BE515A582FA06497 /* KadreSessionSnapshot.swift */; };
 		AA63C146043A842DA0837A6C /* KadreUikit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = C519437100752691E90A2286 /* KadreUikit.framework */; };
+		AA9F6895E23B2961393FAA4E /* KadrePolicyProfile.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2099391B1E94214A33D5E9D /* KadrePolicyProfile.swift */; };
+		B635F909F940BF46CD4FF84F /* KadreStopReason.swift in Sources */ = {isa = PBXBuildFile; fileRef = 43292E2F01EC2BE56DD3ECBB /* KadreStopReason.swift */; };
+		D1D4DF1403C354538DDB34F7 /* KadreError.swift in Sources */ = {isa = PBXBuildFile; fileRef = DE821343EB3E67D401204C31 /* KadreError.swift */; };
 		E032A49F1EDA725F50420028 /* KadreHost.swift in Sources */ = {isa = PBXBuildFile; fileRef = B164056271954F9C33E3CF6D /* KadreHost.swift */; };
+		E4C5E08B0041F058B00A736A /* KadreError.swift in Sources */ = {isa = PBXBuildFile; fileRef = DE821343EB3E67D401204C31 /* KadreError.swift */; };
 		EB5B7A0CE4D1F274E83A507A /* KadreHost.swift in Sources */ = {isa = PBXBuildFile; fileRef = B164056271954F9C33E3CF6D /* KadreHost.swift */; };
+		F2804AA5B3FFCE782A928717 /* KadrePolicyProfile.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2099391B1E94214A33D5E9D /* KadrePolicyProfile.swift */; };
+		F295E4F378E6304E9414AA46 /* KadreHostMappingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9746AFF6F5941E955EF7E507 /* KadreHostMappingTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -40,18 +56,26 @@
 
 /* Begin PBXFileReference section */
 		0B77F4A2FEB55244717BAB07 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		0C8CEBD7FBDF9EA1B987DC63 /* KadreFailure.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KadreFailure.swift; sourceTree = "<group>"; };
+		1FA20495BE515A582FA06497 /* KadreSessionSnapshot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KadreSessionSnapshot.swift; sourceTree = "<group>"; };
 		25E713565274B5F3FB7C73B8 /* ConsumerSceneStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConsumerSceneStore.swift; sourceTree = "<group>"; };
 		27BBA3062D2945FBD94DD07A /* KadreConsumerIos.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = KadreConsumerIos.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		2D8AA8E11EE4F5E68181E3CE /* KadreUikit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = KadreUikit.framework; path = "../consumer-kmp/build/bin/tvosSimulatorArm64/debugFramework/KadreUikit.framework"; sourceTree = "<group>"; };
+		41AE0B7EE64975E17AEED2B1 /* KadreFailureMapping.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KadreFailureMapping.swift; sourceTree = "<group>"; };
+		43292E2F01EC2BE56DD3ECBB /* KadreStopReason.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KadreStopReason.swift; sourceTree = "<group>"; };
+		54E2BE6F8EB71926EF1E2602 /* KadreSessionOutcome.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KadreSessionOutcome.swift; sourceTree = "<group>"; };
 		56FED9FFB75A8D992C0EA32A /* MainApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainApp.swift; sourceTree = "<group>"; };
 		680A1C1D11E0C27A6C41CEB4 /* KadreConsumerIosTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = KadreConsumerIosTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		8DA42D44F4BD68FF42C7D8B7 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		9746AFF6F5941E955EF7E507 /* KadreHostMappingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KadreHostMappingTests.swift; sourceTree = "<group>"; };
 		9FFBF3ED1FF30017053F3E0E /* KadreConsumerTvOs.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = KadreConsumerTvOs.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		AEF94E2574734A0415EC0C77 /* ConsumerSceneDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConsumerSceneDelegate.swift; sourceTree = "<group>"; };
 		B164056271954F9C33E3CF6D /* KadreHost.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KadreHost.swift; sourceTree = "<group>"; };
 		C519437100752691E90A2286 /* KadreUikit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = KadreUikit.framework; path = "../consumer-kmp/build/bin/iosSimulatorArm64/debugFramework/KadreUikit.framework"; sourceTree = "<group>"; };
 		CC0E86EF723AF24C7EFC4806 /* ConsumerAttachTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConsumerAttachTests.swift; sourceTree = "<group>"; };
 		DDCA87CC094641E6BBF5AFDB /* MainApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainApp.swift; sourceTree = "<group>"; };
+		DE821343EB3E67D401204C31 /* KadreError.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KadreError.swift; sourceTree = "<group>"; };
+		E2099391B1E94214A33D5E9D /* KadrePolicyProfile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KadrePolicyProfile.swift; sourceTree = "<group>"; };
 		E217C0D95EC3CF45C9178C68 /* KadreConsumerTvOsTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = KadreConsumerTvOsTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -78,7 +102,14 @@
 		51ADEC675A4EFAE98F25A9D7 /* KadreHost */ = {
 			isa = PBXGroup;
 			children = (
+				DE821343EB3E67D401204C31 /* KadreError.swift */,
+				0C8CEBD7FBDF9EA1B987DC63 /* KadreFailure.swift */,
+				41AE0B7EE64975E17AEED2B1 /* KadreFailureMapping.swift */,
 				B164056271954F9C33E3CF6D /* KadreHost.swift */,
+				E2099391B1E94214A33D5E9D /* KadrePolicyProfile.swift */,
+				54E2BE6F8EB71926EF1E2602 /* KadreSessionOutcome.swift */,
+				1FA20495BE515A582FA06497 /* KadreSessionSnapshot.swift */,
+				43292E2F01EC2BE56DD3ECBB /* KadreStopReason.swift */,
 			);
 			name = KadreHost;
 			path = ../../../platform/uikit/swift/Sources/KadreHost;
@@ -128,6 +159,7 @@
 			isa = PBXGroup;
 			children = (
 				CC0E86EF723AF24C7EFC4806 /* ConsumerAttachTests.swift */,
+				9746AFF6F5941E955EF7E507 /* KadreHostMappingTests.swift */,
 			);
 			name = Shared;
 			path = tests/Shared;
@@ -271,7 +303,14 @@
 			files = (
 				7F7A5A82773F05E027BB472B /* ConsumerSceneDelegate.swift in Sources */,
 				3BB69E0C97DC45C1ED3DC917 /* ConsumerSceneStore.swift in Sources */,
+				E4C5E08B0041F058B00A736A /* KadreError.swift in Sources */,
+				3296AB0337BE37630A758186 /* KadreFailure.swift in Sources */,
+				70E88A01CA1B6D2E5498BA09 /* KadreFailureMapping.swift in Sources */,
 				EB5B7A0CE4D1F274E83A507A /* KadreHost.swift in Sources */,
+				F2804AA5B3FFCE782A928717 /* KadrePolicyProfile.swift in Sources */,
+				609669BAA69E4FB4E682784F /* KadreSessionOutcome.swift in Sources */,
+				209E8F0240120C373C9FE836 /* KadreSessionSnapshot.swift in Sources */,
+				0AF10D0DC6E95D12059E226D /* KadreStopReason.swift in Sources */,
 				A0DB6FC34880DC596CE51C65 /* MainApp.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -282,7 +321,14 @@
 			files = (
 				4E9564B58747EF8EC9D70023 /* ConsumerSceneDelegate.swift in Sources */,
 				52AD0BBD6F36FBE6B06FD4FC /* ConsumerSceneStore.swift in Sources */,
+				D1D4DF1403C354538DDB34F7 /* KadreError.swift in Sources */,
+				03145DE37055C9534A4AE166 /* KadreFailure.swift in Sources */,
+				95DEA49E4C51BFE86B217521 /* KadreFailureMapping.swift in Sources */,
 				E032A49F1EDA725F50420028 /* KadreHost.swift in Sources */,
+				AA9F6895E23B2961393FAA4E /* KadrePolicyProfile.swift in Sources */,
+				8AEDF24A3CEA840BD94B7578 /* KadreSessionOutcome.swift in Sources */,
+				A8D4BB16017614E86C55CCFB /* KadreSessionSnapshot.swift in Sources */,
+				B635F909F940BF46CD4FF84F /* KadreStopReason.swift in Sources */,
 				5E34D35E0F40901418D3F45C /* MainApp.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -292,6 +338,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				A40ADB47A4104994215F671F /* ConsumerAttachTests.swift in Sources */,
+				5771BC8EBC2F476166B51991 /* KadreHostMappingTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -300,6 +347,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				A310B8A469A73E53038F91A3 /* ConsumerAttachTests.swift in Sources */,
+				F295E4F378E6304E9414AA46 /* KadreHostMappingTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

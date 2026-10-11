@@ -32,8 +32,9 @@ final class ConsumerAttachTests: XCTestCase {
         let store = ConsumerSceneStore.shared
 
         // La scène primaire se connecte au lancement de l'app hôte ; l'attach survient au
-        // `willConnectTo`. Attente bornée de son résultat — jamais un échec instantané sur
-        // un process encore en train de démarrer.
+        // premier `sceneDidBecomeActive` (iPadOS 27 laisse la scène `Unattached` au
+        // `willConnectTo` — consumer-kmp/ConsumerSceneDelegate). Attente bornée de son
+        // résultat — jamais un échec instantané sur un process encore en train de démarrer.
         let deadline = Date().addingTimeInterval(25)
         while store.sessionObject == nil && store.attachFailureDescription == nil {
             if Date() > deadline {

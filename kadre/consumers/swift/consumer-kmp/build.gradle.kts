@@ -5,10 +5,14 @@ import org.jetbrains.kotlin.gradle.plugin.mpp.KotlinNativeTarget
  * repository contractTest (artefacts publiés, JAMAIS un `project(...)`) et produit, par
  * cible native, un framework STATIQUE — l'autre moitié du lien deux-frameworks avec
  * `KadreUikit.xcframework` (distribution Task 1). L'app Swift lie les DEUX archives sans
- * embed : l'édition de liens à sémantique d'archive paresseuse ne tire du second
- * fragment que les symboles encore indéfinis — une seule copie du runtime Kotlin et de
- * chaque classe Obj-C survit dans le binaire (des doublons seraient refusés par ld ;
- * des classes dupliquées crasheraient le lancement).
+ * embed : à sémantique d'archive paresseuse, ld ne refuse PAS un doublon — il garde
+ * SILENCIEUSEMENT le PREMIER membre définissant chaque symbole, d'où une seule copie du
+ * runtime Kotlin et de chaque classe Obj-C dans le binaire. Les VRAIES gardes anti-
+ * duplication sont : (1) la vérification au lancement de l'app par les tests xcodebuild
+ * (le runtime logge/crash « Class X is implemented in both… » — le doLast des tâches
+ * `iosSimulatorTests`/`tvosSimulatorTests` de consumers/swift/build.gradle.kts refuse
+ * tout log qui en contient) ; (2) la recette des bundles de test — search paths SANS
+ * liaison (`BUNDLE_LOADER`), pour ne jamais relier les archives dans le process de test.
  *
  * POURQUOI baseName = "KadreUikit" (et pas "ConsumerKadre") : KGP 2.4.20 dérive le
  * préfixe Obj-C exporté du NOM DU FRAMEWORK — aucun override n'existe (option binaire
