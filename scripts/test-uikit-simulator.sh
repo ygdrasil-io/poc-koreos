@@ -98,6 +98,10 @@ case "$FAMILY" in
     run_family tvos
     # Les slices appareil compilent et se lient (pas une preuve d'exécution — roadmap §7).
     run_gradle ":kadre:platform:uikit:linkDebugFrameworkIosArm64" ":kadre:platform:uikit:linkDebugFrameworkTvosArm64"
+    # Tests natifs du runtime sur les deux simulateurs (mineur N2 de phase 0, promu phase 1) :
+    # les rapports XML sont régénérés à chaque gate.
+    run_gradle ":kadre:runtime:iosSimulatorArm64Test"
+    run_gradle ":kadre:runtime:tvosSimulatorArm64Test"
     assert_artifacts iosSimulatorArm64 "${IOS_CONTRACT_IDS[@]}"
     assert_artifacts tvosSimulatorArm64 "${TVOS_CONTRACT_IDS[@]}"
     ;;
