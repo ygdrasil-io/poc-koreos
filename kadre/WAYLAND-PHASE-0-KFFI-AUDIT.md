@@ -56,3 +56,28 @@ curl -fsSL -o kffi-posix-jvm.jar     "$BASE/kffi-posix-jvm/1.0.0-SNAPSHOT/kffi-p
 ```
 
 Inventaires détaillés : `wl_display_connect_to_fd` absent de `Wayland_h.kt` (grep `connect` : `wl_display_connect` ligne 97, `wl_display_disconnect` ligne 107, rien d'autre) ; handles XKB = 11 (`xkbContextNew` … `xkbComposeStateUnref`, aucun `*key_get*`/`*update_mask*`) ; handles POSIX wake = `eventfd`/`pipe2`/`pipe` avec `EFD_NONBLOCK|EFD_CLOEXEC`, `O_NONBLOCK`, retry `EINTR` (`PosixWakeup.kt:24-85,121-183`) ; `PosixSymbols.kt:8-27` = loader d'abord, candidats SONAME ensuite.
+
+## Baseline
+
+Décisions d'environnement enregistrées pour les phases Wayland ; toute extension ou dérogation se décide dans le design de la phase concernée et met à jour cette section.
+
+- **B-1 JVM** — plancher JVM 25 (Temurin), aligné sur l'en-tête de la roadmap et l'outilisation courante du dépôt.
+- **B-2 libc** — glibc : plancher 2.39 (Ubuntu 24.04 Noble, image de test B-3). musl : ≥ 1.2.5 (Alpine 3.22+, image de test B-3). Règle de résolution des symboles : `SymbolLookup.loaderLookup()` (process) d'abord, puis candidats SONAME ordonnés `libc.so.6`, `libc.so` — aucun SONAME codé en dur hors de cette liste ; c'est exactement la chaîne publiée par `kffi-posix` `PosixSymbols` (audit §verdicts, domaine 4).
+- **B-3 images de test reproductibles** —
+  - glibc : `eclipse-temurin:25-jdk-noble` + `weston` (paquet distro ; version exacte relevée à l'installation du premier job CI et inscrite ici).
+  - musl : image Alpine + `weston` du dépôt community — disponibilité vérifiée le 2026-10-11 (`weston 16.0.0-r0`, edge/community x86_64, index Alpine) ; si une release stable Alpine ne porte weston, l'image `edge` est retenue et **pignée par digest**.
+  - Les deux images sont pignées par digest au moment de l'écriture du workflow CI (phase 1, topologie §4) ; un digest pigné vaut baseline, un tag mobile n'en est pas une.
+- **B-4 versions minimales de protocoles bindées** — règle de décision : version bindée = `min(annoncée par le global, max supportée par le binding kffi)` ; exigence d'admission = `annoncée ≥ minimal requis ci-dessous`. Un global dont la version annoncée est inférieure au minimal requis fait échouer la négociation (failure avant session), jamais un fonctionnement dégradé silencieux.
+
+| Interface | Minimal requis | Justification (fonction utilisée) | Source (constante kffi) |
+|---|---|---|---|
+| `wl_compositor` | 4 | `wl_surface.damage_buffer` (rendu/phase 2+) ; plafond bindé `WL_COMPOSITOR_VERSION = 4` | `WaylandInterfaces.kt` |
+| `xdg_wm_base` | 1 requis, bindé ≤ 2 | v1 couvre `get_xdg_surface`/`pong` (tranches 1-2) ; plafond bindé `XDG_WM_BASE_VERSION = 2` ; `configure_bounds` (v2) exploité ou non — décision de geometry en phase 3 | `WaylandInterfaces.kt` |
+| `wl_seat` | 5 | `wl_pointer.frame` et `repeat_info` (input/phase 4) ; `axis_value120` (v8) — décision en phase 4 ; pas de constante kffi publiée : la version bindée est celle passée à `wl_registry_bind` | spec wayland + usage phases 2-4 |
+| `wp_viewporter`, `wp_fractional_scale_manager_v1`, `wp_presentation` | 1 | version initiale de chaque protocole ; metrics/redraw/phase 3 | spec wp-viewporter/wp-fractional-scale/wp-presentation |
+| `wl_output` | 1 | inventaire displays/phase 3 ; la version bindée borne les events consommés | spec wayland |
+
+Les globals exigés dès la tranche 1 : `wl_compositor` et `xdg_wm_base` (admission avant session, design `WAYLAND-PHASE-1-HOST-DESIGN.md`).
+
+- **B-5 véhicule de preuve compositor** — reprise de la recette historique `kadre-old` : Weston headless (`--backend=headless-backend.so --renderer=pixman --width=800 --height=600 --socket=<dédié> --idle-time=0`, `XDG_RUNTIME_DIR` dédié chmod 0700) comme véhicule de preuve O3 de la tranche 1. Les scripts sont réécrits dans la nouvelle architecture (`scripts/ci-wayland-runtime.sh`, topologie §4) ; rien n'est porté de `kadre-old` tel quel.
+- **B-6 hors baseline** — toute distribution, libc, version de Weston ou de compositor non listée ici est **non testée**, pas « non supportée » : l'ajout à la baseline passe par une preuve dans l'image correspondante, pas par une promesse.
