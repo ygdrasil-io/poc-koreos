@@ -255,15 +255,42 @@ internal object AndroidHostSession {
                     // `windows.state.value.primary?.surface === primarySurface` est un fait de
                     // session, pas une coïncidence de construction. `leasedView` est LA source
                     // du bail natif (Task 4) : la View est relue à chaque lease, jamais capturée.
+                    // Le seam du curseur (phase 4, Task 2) est câblé sur la MÊME View —
+                    // `pointerIcon` est une propriété de `View`, la forme Activity n'y a aucun
+                    // monopole (le miroir du branchement métriques, pas des commandes de
+                    // fenêtre). Le seam de capture (phase 4, Task 3) l'est aussi — la capture
+                    // est une propriété de `View` — et le canal d'état du SDK (la notification
+                    // `Window.Callback.onPointerCaptureChanged`, enchaînée ci-dessous par le
+                    // wrapper T1) est retenu pour le livrer au listener du seam.
+                    val captureNative = AndroidViewPointerCaptureNative(view)
+                    sessionSurface.capture = captureNative
+                    // Le seam natif de la fenêtre (phase 4, Task 1) câblé sur CETTE Activity —
+                    // construit UNE fois et remis aux DEUX consommateurs : le manager (les
+                    // commandes de fenêtre) et la surface (les interactions
+                    // `EnterFullscreen`/`ExitFullscreen` de Task 4) — le MÊME insets
+                    // controller, une seule vérité de readback pour le champ et l'interaction.
+                    val windowSeam = AndroidActivityWindowNative(owner as ComponentActivity)
                     val surface = AndroidHostSurface(
                         RuntimeProcessIds.nextSurfaceId(),
                         initialSurfaceState(view, initial),
                         leasedView = { view },
+                        cursorNative = AndroidViewCursorNative(view),
+                        pointerCaptureNative = captureNative,
+                        windowNative = windowSeam,
                     )
                     sessionSurface.surface = surface
+                    // Le manager implémente `RuntimeSessionWindowManager` : le runtime lui
+                    // installe la configuration de session (LA MÊME source de stamps que la
+                    // surface) pendant l'attach, et `closeAction` termine le flux d'événements
+                    // de la fenêtre à la teardown (après la fermeture de la surface).
+                    val manager = AndroidActivityWindowManager(
+                        primarySurface = surface,
+                        native = windowSeam,
+                    )
                     RuntimeSessionComponents(
-                        windows = AndroidActivityWindowManager(surface),
+                        windows = manager,
                         primarySurface = RuntimePrimarySurface(surface, surface::close),
+                        closeAction = { manager.terminalise() },
                     )
                 },
                 initialLifecycleState = lifecycleStateOf(initial),
@@ -278,10 +305,20 @@ internal object AndroidHostSession {
                 failureReporter = AndroidAttachDiagnostics,
                 sessionObserver = RuntimeSessionObserver { _, _ -> reservation.release() },
                 primarySurfaceFactory = { id ->
+                    // Le seam du curseur câblé sur la View de CETTE forme aussi : la
+                    // propriété `View.pointerIcon` vit sur la vue, pas sur la fenêtre — la
+                    // forme View committe le curseur exactement comme la forme Activity. Le
+                    // seam de capture (phase 4, Task 3) de même pour les primitives — mais la
+                    // forme View n'a pas de fenêtre enchaînée : le canal d'état du SDK
+                    // (`Window.Callback.onPointerCaptureChanged`) n'existe pas ici, la
+                    // capability suit le fait câblé (`inputWired`) et le champ y reste refusé
+                    // plutôt que d'annoncer un commit qui ne peut pas arriver.
                     val surface = AndroidHostSurface(
                         id,
                         initialSurfaceState(view, initial),
                         leasedView = { view },
+                        cursorNative = AndroidViewCursorNative(view),
+                        pointerCaptureNative = AndroidViewPointerCaptureNative(view),
                     )
                     sessionSurface.surface = surface
                     RuntimePrimarySurface(surface, surface::close)
@@ -441,6 +478,16 @@ internal object AndroidHostSession {
     /** La surface de la session, créée par la factory de composants au moment de l'attach. */
     private class SessionSurface {
         var surface: AndroidHostSurface? = null
+
+        /**
+         * Le seam de capture (Task 3) retenu pour le canal d'état du SDK : la notification
+         * `Window.Callback.onPointerCaptureChanged`, enchaînée par le wrapper T1 (forme
+         * Activity seule), est livrée ICI — [AndroidViewPointerCaptureNative.
+         * dispatchCaptureState] la route dans le listener posé par le seam. `null` sur la
+         * forme View : pas de fenêtre enchaînée, pas de canal d'état — la capability suit le
+         * fait câblé (`inputWired`) et le champ y reste refusé.
+         */
+        var capture: AndroidViewPointerCaptureNative? = null
     }
 
     /**
@@ -519,7 +566,13 @@ internal object AndroidHostSession {
                     view.getLocationOnScreen(viewLocation)
                     val decorLocation = IntArray(2)
                     window.decorView.getLocationOnScreen(decorLocation)
-                    (viewLocation[0] - decorLocation[0]) to (viewLocation[1] - decorLocation[1])
+                    viewLocation[0] - decorLocation[0] to viewLocation[1] - decorLocation[1]
+                },
+                // Le canal d'état de la capture (Task 3) : la notification du SDK livrée au
+                // seam retenu par la session — le listener posé par
+                // [AndroidPointerCapture] reçoit la confirmation (le commit en deux temps).
+                onPointerCaptureState = { hasCapture ->
+                    sessionSurface.capture?.dispatchCaptureState(hasCapture)
                 },
             ),
         )

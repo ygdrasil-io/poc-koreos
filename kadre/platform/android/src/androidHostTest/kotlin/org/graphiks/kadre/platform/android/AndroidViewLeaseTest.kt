@@ -19,6 +19,7 @@ import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.yield
 import org.graphiks.kadre.diagnostics.Capability
 import org.graphiks.kadre.diagnostics.DelicateKadreApi
+import org.graphiks.kadre.diagnostics.FeatureAvailability
 import org.graphiks.kadre.diagnostics.KadreFailure
 import org.graphiks.kadre.diagnostics.KadreOperation
 import org.graphiks.kadre.diagnostics.KadrePlatformApi
@@ -78,12 +79,14 @@ class AndroidViewLeaseTest {
     private fun surface(
         hostThread: AndroidHostThreadDispatch = AndroidMainThreadDispatch,
         leasedView: () -> Any? = { null },
+        cursorNative: AndroidCursorNative? = null,
     ): AndroidHostSurface = AndroidHostSurface(
         id = RuntimeProcessIds.nextSurfaceId(),
         initialState = initialSurfaceStateForLeaseTest(),
         frameClock = { InertLeaseFrameClock },
         hostThread = hostThread,
         leasedView = leasedView,
+        cursorNative = cursorNative,
     )
 
     @Test
@@ -295,7 +298,9 @@ class AndroidViewLeaseTest {
 
     @Test
     fun capabilitiesBecomeHonestAfterObservationInstalled() = runBlocking {
-        val surface = surface()
+        // La shape production : le seam du pointeur câblé (la phase 4 — la couture pose
+        // [AndroidViewCursorNative] sur les DEUX formes, la View est form-agnostique).
+        val surface = surface(cursorNative = PresentCursorNative)
         // Avant l'installation : le snapshot par défaut, aucune annonce.
         assertEquals(unsupportedSurfaceCapabilities(), surface.capabilities.value)
 
@@ -303,12 +308,18 @@ class AndroidViewLeaseTest {
         // capabilities deviennent honnêtes — l'annonce de la phase 2 (`platformAccess`,
         // la rangée Android qui couvre metrics + redraw + l'accès natif borné) rejointe en
         // phase 3 par `inputDefaultBehavior` (le premier champ committable, le miroir web),
-        // les refus d'update inchangés.
+        // puis en phase 4 par `cursor` (exactement l'ensemble mappable de la table du
+        // pointeur — [AndroidCursorIcons]), les refus d'update inchangés.
         surface.observationInstalled(inputWired = false)
         val honest = surface.capabilities.value
         assertIs<Capability.Supported<Unit>>(
             honest.platformAccess,
             "an installed surface announces what it can now do",
+        )
+        assertEquals(
+            Capability.Supported(AndroidCursorIcons.committableIcons, FeatureAvailability.Available),
+            honest.cursor,
+            "the pointer-icon seam makes exactly the mappable cursor set available",
         )
         assertEquals(
             unsupportedSurfaceCapabilities(),
@@ -317,6 +328,9 @@ class AndroidViewLeaseTest {
                     KadreFailure.Unsupported(KadreOperation.PlatformSurfaceAccess),
                 ),
                 inputDefaultBehavior = Capability.Unsupported(
+                    KadreFailure.Unsupported(KadreOperation.UpdateSurface),
+                ),
+                cursor = Capability.Unsupported(
                     KadreFailure.Unsupported(KadreOperation.UpdateSurface),
                 ),
             ),
@@ -359,6 +373,14 @@ class AndroidViewLeaseTest {
 }
 
 // ----------------------------------------------------------------------- aides du fichier
+
+/**
+ * Un seam du pointeur PRÉSENT mais muet — le pin de capabilities n'observe que la structure
+ * (le fait de construction qui rend l'annonce honnête), jamais les types passés.
+ */
+private object PresentCursorNative : AndroidCursorNative {
+    override fun setPointerIcon(type: Int?) = Unit
+}
 
 /**
  * Une exception applicative que le transport kotlinx-coroutines ne peut PAS cloner : la classe

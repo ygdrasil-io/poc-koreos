@@ -1,5 +1,6 @@
 package org.graphiks.kadre.platform.android
 
+import android.os.Build
 import android.view.ActionMode
 import android.view.KeyEvent
 import android.view.KeyboardShortcutGroup
@@ -176,6 +177,15 @@ internal class AndroidWindowCallbackForwarder(
      * la fenêtre ; la couture réelle fournit la paire publique.
      */
     private val viewOffsetInWindow: () -> Pair<Int, Int> = { 0 to 0 },
+    /**
+     * Le canal d'état de la capture (Task 3) : la notification
+     * `Window.Callback.onPointerCaptureChanged` du SDK — LA notification d'état que la
+     * plateforme offre à une fenêtre (aucun enregistrement de listener de capture n'existe sur
+     * `View`, relevé du `android-35`), livrée au seam de la surface
+     * ([AndroidViewPointerCaptureNative.dispatchCaptureState] → le listener du seam → le commit
+     * en deux temps). Le forward reste intact : l'observation n'est jamais une interception.
+     */
+    private val onPointerCaptureState: (hasCapture: Boolean) -> Unit = {},
 ) : Window.Callback {
     private var installed: Boolean = false
     private var pendingKeyEvent: KeyEvent? = null
@@ -359,6 +369,12 @@ internal class AndroidWindowCallbackForwarder(
     }
 
     override fun onPointerCaptureChanged(hasCapture: Boolean) {
-        wrapped.onPointerCaptureChanged(hasCapture)
+        // L'observation d'état de la capture (Task 3) : livrée au seam AVANT le forward — le
+        // commit en deux temps vit à cette livraison — puis le forward intact. La notification
+        // d'état est API 26+ (le minSdk du module est 24) — la convention du module garde
+        // chaque primitive au niveau d'API, comme le seam ([AndroidViewPointerCaptureNative]) ;
+        // sous 26 la plateforme ne dispatche jamais l'appel, la garde est de cohérence.
+        onPointerCaptureState(hasCapture)
+        if (Build.VERSION.SDK_INT >= 26) wrapped.onPointerCaptureChanged(hasCapture)
     }
 }
