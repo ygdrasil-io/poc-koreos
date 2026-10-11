@@ -43,6 +43,13 @@ internal class KffiWaylandBridge private constructor(
     override fun flush(): WaylandFlushOutcome =
         if (client.flush() >= 0) WaylandFlushOutcome.Done else WaylandFlushOutcome.Eagain
 
+    override fun pollEvents(wakeFd: Int, watchWrite: Boolean): PollOutcome = when (client.pollForEvents(wakeFd, watchWrite)) {
+        org.graphiks.kffi.wayland.managed.WaylandPollOutcome.DisplayReady -> PollOutcome.DisplayReady
+        org.graphiks.kffi.wayland.managed.WaylandPollOutcome.WakeOnly -> PollOutcome.WakeOnly
+        org.graphiks.kffi.wayland.managed.WaylandPollOutcome.Interrupted -> PollOutcome.Interrupted
+        org.graphiks.kffi.wayland.managed.WaylandPollOutcome.Failed -> PollOutcome.Lost
+    }
+
     override fun connectionLost(): Boolean = client.hasError()
 
     override fun close() {

@@ -41,6 +41,9 @@ internal interface WaylandNativeBridge : AutoCloseable {
 
     fun flush(): WaylandFlushOutcome
 
+    /** Poll display+wake typé (le plumbing pollfd vit dans kffi). */
+    fun pollEvents(wakeFd: Int, watchWrite: Boolean): PollOutcome
+
     /** Une erreur display a été constatée (toute primitive renvoyant -1). */
     fun connectionLost(): Boolean
 

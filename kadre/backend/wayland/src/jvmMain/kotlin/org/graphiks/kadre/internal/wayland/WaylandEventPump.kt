@@ -13,13 +13,13 @@ internal interface PumpOperations {
 
     /**
      * Poll bloquant sur le fd display + fd de wake (et POLLOUT si [watchWrite]).
-     * Draine le wake avant de renvoyer [PollOutcome.WakeOnly]. -1/EINTR se
-     * traduit par [PollOutcome.Interrupted] : la lecture préparée subsiste.
+     * L'implémentation draine le wake avant de renvoyer [PollOutcome.WakeOnly] ;
+     * un échec de poll se traduit par [PollOutcome.Lost] (connexion perdue).
      */
     fun poll(wakeFd: Int, watchWrite: Boolean): PollOutcome
 }
 
-internal enum class PollOutcome { DisplayReady, WakeOnly, Interrupted }
+internal enum class PollOutcome { DisplayReady, WakeOnly, Interrupted, Lost }
 
 internal enum class PumpStep { Dispatched, Rearm, ConnectionLost, Stopped }
 
@@ -70,6 +70,10 @@ internal class WaylandEventPump(
                 // réveil sans arrêt ou EINTR : la lecture préparée subsiste,
                 // on repoll — jamais un second prepare_read
                 PollOutcome.WakeOnly, PollOutcome.Interrupted -> continue
+                PollOutcome.Lost -> {
+                    ops.cancelRead()
+                    return PumpStep.ConnectionLost
+                }
             }
         }
         if (stopRequested.get()) {

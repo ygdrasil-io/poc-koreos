@@ -1,3 +1,5 @@
+import org.jetbrains.kotlin.gradle.tasks.BaseKotlinCompile
+
 plugins {
     id("org.jetbrains.kotlin.multiplatform")
     id("maven-publish")
@@ -49,6 +51,18 @@ val waylandNativeTests = tasks.register<Test>("waylandNativeTests") {
     )
     forkEvery = 1
     reports.junitXml.outputLocation.set(layout.buildDirectory.dir("test-results/waylandNativeTests"))
+}
+
+// Friend-wiring JVM : le backend construit des internals de foundation
+// (WindowManagerRevision pour l'état du WindowManager headless) — la même
+// couture que :kadre:runtime, qui friende le jvmJar (le répertoire brut
+// `classes/kotlin/jvm/main` ne suffit pas, cf. runtime/build.gradle.kts).
+val foundationJvmJar = project(":kadre:foundation").tasks.named<Jar>("jvmJar")
+tasks.withType<BaseKotlinCompile>().configureEach {
+    if (name == "compileKotlinJvm" || name == "compileTestKotlinJvm") {
+        dependsOn(foundationJvmJar)
+        friendPaths.from(foundationJvmJar.flatMap(Jar::getArchiveFile))
+    }
 }
 
 publishing {
