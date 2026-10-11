@@ -169,6 +169,7 @@ class ContractRegistryTest {
                         "web-pagehide-admission-close",
                         "web-pagehide-navigation",
                         "web-pagehide-no-resurrection",
+                        "web-memory-pressure-unsupported",
                     ),
                     conditionalCapabilities = listOf("WindowManagerCapabilities.requestWindow"),
                     sentinels = listOf(
@@ -181,6 +182,7 @@ class ContractRegistryTest {
                         "web-provider-no-same-document-window",
                         "web-provider-owned-element-rejected",
                         "web-active-gate-requires-js-and-wasm",
+                        "web-memory-no-fabricated-signal",
                     ),
                 ),
                 "BCK-002" to webContract(

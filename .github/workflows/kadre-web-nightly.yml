@@ -1,0 +1,110 @@
+name: Kadre Web Nightly
+
+# The nightly half of the roadmap's section 3.8 gate (kadre/WEB-IMPLEMENTATION-ROADMAP.md: "En PR,
+# Chromium est obligatoire pour JS et Wasm ; le nightly exécute Chromium, Firefox et WebKit pour
+# chaque combinaison supportée"): the PR gate's Chromium matrix plus the four nightly-engine smokes,
+# their per-engine validations and the aggregate check, closed by the zero-test guard that keeps a
+# silently empty combination red. No skips and no retries anywhere (roadmap: "sans skip ni retry").
+on:
+  schedule:
+    # 03:17 UTC daily. The hour is the trough between the end of the North-American working day
+    # and the start of the European one - lowest runner contention for three browser engines on
+    # one machine, and a red nightly lands with a full working day ahead of it for triage. Minute
+    # 17 stays clear of the top of the hour, the highest-load window of GitHub's scheduler, where
+    # scheduled runs are delayed first. Scheduled workflows only ever run on the default branch.
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  # One nightly in flight. The run is an idempotent snapshot of the default branch, so a second
+  # overlapping matrix would double the browser and Gradle load of the same commit and buy
+  # nothing - overlapping load is exactly what the sequential single invocation below exists to
+  # avoid. The older run is cancelled rather than queued; its diagnostics still upload, because
+  # the upload step below also runs on cancellation.
+  group: kadre-web-nightly
+  cancel-in-progress: true
+
+jobs:
+  web-nightly:
+    name: web-nightly
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 25
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "25"
+          cache: gradle
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: kadre/contracts/driver/web/package-lock.json
+
+      - name: Install locked Playwright dependencies
+        run: npm ci --prefix kadre/contracts/driver/web
+
+      # All three engines, not only the two nightly ones: the aggregate `:kadre:contracts:validator:check`
+      # dependsOn the Chromium smokes, so Chromium must be provisioned even though the PR gate also
+      # covers it (roadmap 3.8: the nightly executes Chromium, Firefox and WebKit).
+      - name: Provision Chromium, Firefox and WebKit
+        run: npx --prefix kadre/contracts/driver/web playwright install --with-deps chromium firefox webkit
+
+      # ONE Gradle invocation with the tasks listed sequentially - the same single-invocation
+      # shape as the PR gate. gradle.properties configures no org.gradle.parallel and no --parallel
+      # is passed, so Gradle executes the six smokes one at a time on a single worker. That is the
+      # repo's flake discipline, not a style choice: the wasmJs duplicate-attach race is
+      # load-timing sensitive (deterministic in-suite on Firefox and WebKit wasmJs, hidden only by
+      # Chromium's timing; see the "Engine coverage" section of
+      # kadre/contracts/driver/web/README.md), and concurrent Gradle load is what reproduces it.
+      # Splitting into one gradlew per task would re-run Gradle configuration eleven times and add
+      # no sequentiality. The two Chromium smokes are listed even though `check` pulls them in
+      # transitively, for the same reason the PR gate lists its smokes: this invocation declares
+      # the six-combination matrix the zero-test guard audits.
+      - name: Run the three-engine browser contract matrix
+        run: >
+          ./gradlew --console=plain
+          :kadre:contracts:driver:web:browserSmokeRunnerTest
+          :kadre:contracts:driver:web:jsBrowserSmoke
+          :kadre:contracts:driver:web:wasmJsBrowserSmoke
+          :kadre:contracts:driver:web:firefoxJsBrowserSmoke
+          :kadre:contracts:driver:web:firefoxWasmJsBrowserSmoke
+          :kadre:contracts:driver:web:webkitJsBrowserSmoke
+          :kadre:contracts:driver:web:webkitWasmJsBrowserSmoke
+          :kadre:contracts:validator:validateFirefoxJsBrowserContractEvidence
+          :kadre:contracts:validator:validateFirefoxWasmJsBrowserContractEvidence
+          :kadre:contracts:validator:validateWebkitJsBrowserContractEvidence
+          :kadre:contracts:validator:validateWebkitWasmJsBrowserContractEvidence
+          :kadre:contracts:validator:check
+
+      # The zero-test guard: a nightly that "passed" while any declared engine/target combination
+      # executed zero tests is silently unverified. The guard re-derives the six JUnit directories
+      # the smokes must have written (the Gradle --evidence roots plus browserEvidenceLocations)
+      # and fails the job unless every one positively declares tests. Its own fixture test runs
+      # first, so the killing path is exercised every night, not only on the night it is needed.
+      - name: Fail if any engine-target combination ran zero tests
+        run: |
+          node --test kadre/contracts/driver/web/scripts/nightly-zero-test-guard.test.mjs
+          node kadre/contracts/driver/web/scripts/nightly-zero-test-guard.mjs \
+            --evidence-root=kadre/contracts/driver/web/build/contract-evidence
+
+      - name: Upload Web diagnostics and evidence
+        if: failure() || cancelled()
+        uses: actions/upload-artifact@v4
+        with:
+          name: kadre-web-nightly-failure-artifacts
+          path: |
+            kadre/contracts/driver/web/build/dist/
+            kadre/contracts/driver/web/build/contract-evidence/
+          if-no-files-found: ignore
+          include-hidden-files: true

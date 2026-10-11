@@ -18,8 +18,11 @@ const SERVER_FORCED_DRAIN_TIMEOUT_MILLISECONDS = 1_000;
 const DIAGNOSTIC_OPERATION_TIMEOUT_MILLISECONDS = 5_000;
 const signalExitCodes = { SIGINT: 2, SIGTERM: 15 };
 
-/** The one engine the browser contract smoke runs today: its JUnit and evidence layouts are scoped to it. */
-const BROWSER_ENGINE = 'chromium';
+/**
+ * The browser engines a smoke can run. The engine of the run scopes its JUnit report, its
+ * canonical evidence and its diagnostics directories; the default is the PR gate's engine.
+ */
+const SUPPORTED_BROWSER_ENGINES = ['chromium', 'firefox', 'webkit'];
 /** The published package is served under `/host`, with the consumer compiled for this target. */
 const CONSUMER_PREFIX = '/host';
 const SHIM_MODULE = `${CONSUMER_PREFIX}/index.mjs`;
@@ -48,8 +51,10 @@ async function runBrowserSmoke(argumentsList) {
   const consumer = argumentsByName.get('--consumer');
   const contracts = argumentsByName.get('--contracts');
   const mapping = argumentsByName.get('--mapping');
+  const engineExclusions = argumentsByName.get('--engine-exclusions');
   const commit = argumentsByName.get('--commit');
   const timeoutMilliseconds = parseTimeout(argumentsByName.get('--timeout-ms'));
+  const engine = parseEngine(argumentsByName.get('--engine'), process.env);
 
   if (!['js', 'wasmJs'].includes(target) || !distribution || !evidence || !consumer || !contracts || !mapping) {
     throw new Error(
@@ -70,12 +75,19 @@ async function runBrowserSmoke(argumentsList) {
   if (!existsSync(mapping)) {
     throw new Error(`missing contract evidence mapping: ${mapping}`);
   }
+  if (engineExclusions !== undefined && !existsSync(engineExclusions)) {
+    throw new Error(`missing engine contract exclusions: ${engineExclusions}`);
+  }
 
-  const locations = browserEvidenceLocations(evidence, BROWSER_ENGINE);
+  const locations = browserEvidenceLocations(evidence, engine);
   const junitDirectory = locations.junitDirectory;
   const junitOutput = join(junitDirectory, 'TEST-web-phase0.xml');
-  const playwrightOutput = join(evidence, 'diagnostics', 'playwright');
-  const preservedPlaywrightOutput = join(evidence, 'diagnostics', 'playwright-preserved');
+  // Every diagnostics artifact of the run — the Playwright output, the preserved copy and the
+  // durable quarantines the janitor removes — sits under the engine's own directory, so one
+  // engine's run cannot delete another's quarantines.
+  const engineDiagnostics = join(evidence, 'diagnostics', 'playwright', engine);
+  const playwrightOutput = join(engineDiagnostics, 'output');
+  const preservedPlaywrightOutput = join(engineDiagnostics, 'output-preserved');
   const distributionRoot = await realpath(distribution);
   const consumerRoot = await realpath(consumer);
   const entryScript = await findEntryScript(distributionRoot);
@@ -94,11 +106,12 @@ async function runBrowserSmoke(argumentsList) {
       env: {
         ...process.env,
         KADRE_FIXTURE_URL: `${server.url}/index.html`,
+        KADRE_SMOKE_TARGET: target,
         KADRE_JUNIT_OUTPUT: junitOutput,
         KADRE_PLAYWRIGHT_OUTPUT_DIR: playwrightOutput,
       },
       stdio: 'inherit',
-    });
+    }, engine, target);
     const result = await runWithWatchdog(
       launch.command,
       launch.argumentsList,
@@ -115,13 +128,14 @@ async function runBrowserSmoke(argumentsList) {
         validateJunitReport(junit, junitOutput);
         const artifacts = await generateContractEvidence({
           target,
-          engine: BROWSER_ENGINE,
+          engine,
           bundlePath: join(distributionRoot, entryScript),
           junitDirectory,
           outputDirectory: locations.evidenceDirectory,
           commit,
           registryPath: contracts,
           mappingPath: mapping,
+          exclusionsPath: engineExclusions,
         });
         for (const artifact of artifacts) console.log(`browser contract evidence: ${artifact}`);
         if (!coordinator.hasTerminalReason()) businessSucceeded = true;
@@ -172,6 +186,21 @@ function parseTimeout(value) {
     throw new Error('--timeout-ms must be a positive integer');
   }
   return Number(value);
+}
+
+/**
+ * The engine of this run: the `--engine=<name>` argument, else the `KADRE_BROWSER_ENGINE`
+ * environment variable, else chromium — the engine the PR gate has always run. An unsupported
+ * name fails fast, before any server, child or directory exists.
+ */
+function parseEngine(argumentValue, environment) {
+  const engine = argumentValue ?? environment.KADRE_BROWSER_ENGINE ?? 'chromium';
+  if (!SUPPORTED_BROWSER_ENGINES.includes(engine)) {
+    throw new Error(
+      `unsupported browser engine: ${engine} (expected one of ${SUPPORTED_BROWSER_ENGINES.join(', ')})`,
+    );
+  }
+  return engine;
 }
 
 function validateJunitReport(xml, path) {
@@ -687,8 +716,8 @@ async function findFiles(directory, matches) {
  * the document is parsed and publishes its bindings and factory key. The import map and the module
  * script that runs the TypeScript scenario live in the head: the map is registered before the first
  * module resolves, and every element the page owns exists before the fixture records its DOM
- * baseline. `@kadre/host` resolves to the published package's shim, served straight from the consumer
- * root, and every other scenario leaves the package unloaded.
+ * baseline. `@kadre/host` resolves to the published package's shim, served straight from the unpacked
+ * published archive the consumer root holds, and every other scenario leaves the package unloaded.
  */
 function fixturePage(entryScript) {
   const imports = { '@kadre/host': SHIM_MODULE };

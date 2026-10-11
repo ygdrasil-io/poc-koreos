@@ -20,6 +20,13 @@ import {
 /**
  * Renders a failure through a `never`-guarded switch: adding a variant to the union makes this
  * consumer fail to compile instead of silently falling through.
+ *
+ * The `bigint`-typed fields are pinned with explicit assignments, not interpolation: a template
+ * literal accepts a `number` just as silently, so `${failure.limit}` would not notice the curated
+ * declaration drifting away from `INTEROP-EXPORTS` section 6. The scenario itself never reaches a
+ * failure carrying any of these fields at runtime — `const limit: bigint = failure.limit` and its
+ * siblings are the compile-time proof, and they fail the type check the moment the field stops being
+ * `bigint`.
  */
 export function describeFailure(failure: KadreFailure): string {
   switch (failure.kind) {
@@ -37,20 +44,27 @@ export function describeFailure(failure: KadreFailure): string {
       return `alreadyInUse:${failure.resource}`;
     case "closed":
       return `closed:${failure.resource}`;
-    case "resourceLimitExceeded":
-      return `resourceLimitExceeded:${failure.resource}:${failure.limit}`;
+    case "resourceLimitExceeded": {
+      const limit: bigint = failure.limit;
+      return `resourceLimitExceeded:${failure.resource}:${limit.toString()}`;
+    }
     case "sourceOverflow":
       return `sourceOverflow:${failure.resource}`;
-    case "staleRevision":
-      return `staleRevision:${failure.expected}:${failure.received}`;
+    case "staleRevision": {
+      const expected: bigint = failure.expected;
+      const received: bigint = failure.received;
+      return `staleRevision:${expected.toString()}:${received.toString()}`;
+    }
     case "interactionRequired":
       return `interactionRequired:${failure.reason}`;
     case "unsupportedPolicy":
       return `unsupportedPolicy:${failure.component}`;
     case "parentScopeCancelled":
       return "parentScopeCancelled";
-    case "shutdownTimedOut":
-      return `shutdownTimedOut:${failure.timeoutNanoseconds}`;
+    case "shutdownTimedOut": {
+      const timeoutNanoseconds: bigint = failure.timeoutNanoseconds;
+      return `shutdownTimedOut:${timeoutNanoseconds.toString()}`;
+    }
     case "sourceLost":
       return `sourceLost:${failure.sourceId}`;
     case "applicationFailure":

@@ -14,6 +14,7 @@ import org.graphiks.kadre.application.ActivationState
 import org.graphiks.kadre.application.EventStamp
 import org.graphiks.kadre.application.KadreApplicationFactory
 import org.graphiks.kadre.application.KadreSession
+import org.graphiks.kadre.application.LifecycleCapabilities
 import org.graphiks.kadre.application.LifecycleState
 import org.graphiks.kadre.diagnostics.Capability
 import org.graphiks.kadre.diagnostics.DelicateKadreApi
@@ -405,6 +406,35 @@ internal interface WebElementLeasePort {
     suspend fun <R> lease(block: suspend (Any) -> R): KadreResult<R>
 }
 
+/**
+ * The lifecycle capabilities every web session opens with, stated explicitly rather than inherited
+ * from the runtime's own default: the one field this type carries today is memory pressure, and on
+ * this target it is the bare structural [FeatureAvailability.Unsupported] — never a cause-carrying
+ * `Unavailable(PlatformFailure)`.
+ *
+ * **Why the bare literal.** The browser exposes no memory-pressure primitive at all. There is no
+ * event, no callback, no observable the page could poll: `performance.memory` is a Chromium-only,
+ * non-standard heap readback this adapter deliberately never calls; the `memory` device metric is a
+ * budget snapshot, not a pressure signal; and `measureUserAgentSpecificMemory` is
+ * cross-origin-isolation-locked and measures attribution, not pressure. An
+ * `Unavailable(PlatformFailure(Web, "memory-pressure", …))` would assert a platform failure that
+ * never happened — there is no browser API whose refusal could be reported — and
+ * `BACKEND-CAPABILITIES.md` §1 mandates the bare `Unsupported` for exactly this case: a passive
+ * field typed directly `FeatureAvailability` uses it for structural absence and never invents a
+ * failure only to fill the snapshot. This is also the state the AppKit family publishes when its
+ * native source is absent (`AppKitProcessBroker.memoryPressureAvailability`): `Unavailable` is
+ * reserved there for a source that exists and failed to install, which is a state this target
+ * cannot reach.
+ *
+ * **Why the runtime stays safe.** The only two consumers of this cell gate on equality with
+ * [FeatureAvailability.Available] (`RuntimeLifecycle.emitMemoryPressure`,
+ * `RuntimeHostController.emitMemoryPressure`): a session that does not publish `Available` can
+ * never admit a `HostSignal.MemoryPressure`, so no web code path emits one and none could — the
+ * non-invention is structural, and `WebMemoryPressureCapabilityTest` pins both halves (the exact
+ * cell, and the absence of any signal across a lifecycle exercise).
+ */
+private val WEB_LIFECYCLE_CAPABILITIES = LifecycleCapabilities(FeatureAvailability.Unsupported)
+
 internal class WebHostSession(
     private val port: WebHostPort,
     private val registry: WebHostRegistry = WebHostRegistry.shared,
@@ -627,6 +657,7 @@ internal class WebHostSession(
             null -> RuntimeHostController.withPrimarySurface(
                 platform = KadrePlatform.Web,
                 initialLifecycleState = initialLifecycle,
+                initialLifecycleCapabilities = WEB_LIFECYCLE_CAPABILITIES,
                 sessionRevocationHandler = RuntimeSessionRevocationHandler { ownership.releasePort() },
                 sessionObserver = RuntimeSessionObserver { _, _ -> ownership.releaseReservation() },
                 failureReporter = failureReporter,
@@ -649,6 +680,7 @@ internal class WebHostSession(
             else -> RuntimeHostController.withComponents(
                 platform = KadrePlatform.Web,
                 initialLifecycleState = initialLifecycle,
+                initialLifecycleCapabilities = WEB_LIFECYCLE_CAPABILITIES,
                 sessionRevocationHandler = RuntimeSessionRevocationHandler { ownership.releasePort() },
                 sessionObserver = RuntimeSessionObserver { _, _ ->
                     // The session is gone: the manager is closed with it, so a late `requestWindow` from

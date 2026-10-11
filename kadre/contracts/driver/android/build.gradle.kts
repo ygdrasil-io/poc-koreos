@@ -45,7 +45,7 @@ val gateEvidenceDir = layout.buildDirectory
 /** Le registre et le mapping qui décident des documents canoniques qu'un smoke écrit. */
 val contractRegistry = rootProject.file("kadre/contracts/registry/contracts.tsv")
 val contractMapping = layout.projectDirectory.file("contracts/evidence.tsv")
-val androidContractId = "AND-001"
+val androidContractIds = listOf("AND-001", "AND-002")
 
 /**
  * Le commit auquel la preuve canonique appartient.
@@ -113,7 +113,7 @@ val androidDeviceSmokeRun = tasks.register<Exec>("androidDeviceSmokeRun") {
 //    qui valide des artefacts périmés ne passe que là où quelqu'un a déjà lancé le smoke à HEAD).
 tasks.register<JavaExec>("androidDeviceSmoke") {
     group = "verification"
-    description = "Runs the Android consumer smoke on the attached emulator and produces the $androidContractId evidence."
+    description = "Runs the Android consumer smoke on the attached emulator and produces the ${androidContractIds.joinToString("/")} evidence."
     dependsOn(androidDeviceSmokeRun)
     classpath(sourceSets.main.get().runtimeClasspath)
     mainClass.set("org.graphiks.kadre.contracts.android.AndroidContractEvidenceKt")

@@ -12,6 +12,11 @@ Run both targets from the repository root:
 rtk ./gradlew :kadre:contracts:driver:web:jsBrowserSmoke :kadre:contracts:driver:web:wasmJsBrowserSmoke --rerun-tasks
 ```
 
+The `npm test` convenience script runs the three Chromium projects alone — the same
+`--project` selection the launch routing passes for the Chromium smokes; the Firefox
+and WebKit projects run only through the per-engine Gradle smokes of the
+[Engine coverage](#engine-coverage) section, never through a bare `playwright test`.
+
 Fifteen target-specific Playwright suites run in Chromium, across three Playwright
 projects of one invocation — the regular browser; the insecure-context project, a
 browser whose host resolution maps the fixture's insecure name onto the same local
@@ -29,7 +34,10 @@ target-specific JUnit results:
 - [web-lifecycle.spec.mjs](playwright/web-lifecycle.spec.mjs) proves the
   attachment lifecycle: ownership, detach/reinsert, cross-document transfer,
   Shadow DOM observation, `Manual` reconnection, focus and visibility reduction,
-  `pagehide`, and the absence of Kadre-created DOM or a primary window;
+  `pagehide`, the absence of Kadre-created DOM or a primary window, and the
+  memory-pressure capability cell of the phase 8 closure — the bare structural
+  `unsupported` re-read across a focus/visibility exercise with no host signal
+  ever appearing (`web-memory-pressure-unsupported`);
 - [web-surface.spec.mjs](playwright/web-surface.spec.mjs) proves the host
   surface: the size and scale readback published from the element's own layout
   box and the browsing context's device pixel ratio, the per-animation-frame
@@ -150,6 +158,215 @@ evidence at all: `platform:web`'s packaging check verifies that the two shim
 bodies are shared and reconciles the shipped declarations against the curated
 contract at build time.
 
+## Engine coverage
+
+This section is the factual record of the Firefox/WebKit probe of 2026-10-10.
+Nothing here is aspiration: every cell below is backed by a real run of the
+suite through the same machinery the Chromium smoke uses — the same Gradle-built
+distributions and host roots, served by the same runner, one run at a time. The
+probe drove the engines through local throwaway copies of the config and the
+runner (never committed): a config whose projects mirror the Chromium project's
+routing with the engine selected by an environment variable, and a runner copy
+that reads the engine from the same variable and skips the canonical-evidence
+generation, so a probe run cannot pollute the Chromium evidence tree. The
+matrix names what was observed, and the classes it names are the ones the
+follow-up tasks consume:
+
+- **CDP-instrumented** — the scenario drives the browser through
+  `context.newCDPSession`, which Playwright answers
+  `CDP session is only available in Chromium` on both other engines (probed);
+- **Chromium-flags-dependent** — the scenario needs a Chromium launch argument
+  with no counterpart on the other engine (the insecure-context host mapping);
+- **engine-missing-primitive** — the browser does not ship the web platform
+  primitive the scenario's machinery is built on;
+- **other-named** — a real engine divergence, named per finding below.
+
+Platforms and builds, stated because they bound every claim: the pinned
+Playwright 1.60.0 revisions are Chromium 148.0.7778 (the smoke's own engine,
+148.0.7778.96 on this macOS), WebKit build 2287 (`browser.version()` reports
+`26.4`) and Firefox build 1522 (Firefox 150.0.2). **The pinned Firefox build
+cannot start on this machine's macOS (27.0.1)**: it spins at ~99% CPU with the
+main thread inside `CTFontDescriptorCreateMatchingFontDescriptors` (a `sample`
+of the process names the loop), the Juggler pipe never connects, and every
+launch — headless, headed, with sandbox-disabling environment or WebRender
+preferences — times out; the cached firefox-1538 build hangs identically and
+Playwright 1.64's firefox-1555 exits at once with `Could not find profile
+folder`. Every Firefox cell below was therefore probed inside the pinned
+driver's own container image `mcr.microsoft.com/playwright:v1.60.0-noble`
+(Linux, same firefox-1522 build, which launches normally), while WebKit was
+probed natively on the macOS and cross-checked in the same container — the one
+platform divergence that cross-check surfaced is named in the matrix.
+
+### The engine × suite matrix
+
+`RUNS` means every scenario of the suite that the engine can honestly stage
+passed on both Kotlin targets in the probe runs; a suite with excluded
+scenarios says so and names them. Counts are from the full no-exclusion
+discovery runs (102 scenarios per engine per target, mirroring the Chromium
+project set plus the two insecure and five capture-session scenarios).
+
+| Suite | Firefox (container Linux) | WebKit (macOS native) |
+| --- | --- | --- |
+| web-phase0 | RUNS | RUNS |
+| web-lifecycle | RUNS | RUNS |
+| web-surface | RUNS | RUNS |
+| web-input | RUNS (12/12 both targets) | RUNS except `web-input-pointer-multi` (other-named, macOS-only) and `web-input-default-behavior` (other-named, macOS-only) |
+| web-interaction | RUNS | RUNS |
+| web-window-provider | RUNS (popups granted; `window.open` non-null, probed) | RUNS (same probe) |
+| web-host-facade | RUNS | RUNS |
+| web-touch | EXCLUDE the seven CDP-driven scenarios (CDP-instrumented: `Input.dispatchTouchEvent`); `web-touch-capability-structural` RUNS | same |
+| web-drop | RUNS | RUNS |
+| web-text-input | EXCLUDE `web-text-composition-lifecycle` (CDP-instrumented: `Input.imeSetComposition`) **and** the five `keyboard.insertText`-driven scenarios (other-named, below); the other three RUNS | EXCLUDE `web-text-composition-lifecycle` (CDP-instrumented); the other eight RUNS |
+| web-display | EXCLUDE `web-display-dpr-scale-factor` and `web-display-teardown-quiet` (CDP-instrumented: `Emulation.setDeviceMetricsOverride`); the other two RUNS | same |
+| web-devices | RUNS | RUNS |
+| web-gamepad-effects | RUNS all five — the insecure-context scenario included, via the Firefox host-mapping preference (below) | RUNS the four regular scenarios; EXCLUDE `web-gamepad-effect-insecure-context` (Chromium-flags-dependent: no WebKit counterpart to `--host-resolver-rules`, probed) |
+| web-capture | EXCLUDE the whole suite (engine-missing-primitive, below) | same |
+| web-typescript | RUNS on js; EXCLUDE on wasmJs (other-named: the publication race, below) | RUNS both targets |
+
+Discovery-run outcomes behind the table: Firefox js 77/102, Firefox wasmJs
+75/102, WebKit js (macOS) 80/102, WebKit wasmJs (macOS) 80/102, WebKit js
+(Linux container) 82/102 — every failure in every run falls in the excluded
+classes above or is one of the three named flakes below. Confirmation runs with
+the Chromium project's own exclusion set (95 scenarios) leave exactly the
+catalogued failures: Firefox 18 (js) and 19 (wasmJs, one flake), WebKit 15 on
+each target. The flake census: `a duplicate attach is rejected without another
+DOM observer or listener` failed once per engine on wasmJs and passed on every
+isolated re-run (the init-script counting race the smoke's watchdog family
+already knows) — a census later runs sharpened into a deterministic in-suite
+failure of the wasmJs targets on both engines (3/3 each, cumulative container
+runs; Chromium's timing hides it), which is why it is a recorded wasmJs-only
+exclusion of both nightly engines, not a flake (see the per-engine smoke
+section below); `web-input-default-behavior` on macOS WebKit passed standalone
+but failed in five of six in-suite runs; `web-typescript-consumer` on WebKit
+wasmJs failed two of the four phase-8 container runs — non-deterministic,
+deliberately unexcluded (a flake is not an exclusion), and expected to
+occasionally redden the nightly on that same combination until the
+publication-aware-attach follow-up retires it (the same scenario's publication
+race on Firefox wasmJs is the finding below).
+
+### Probed engine facts
+
+Stated per engine, probed directly on a served `http://127.0.0.1` page (an
+`about:blank` probe understates secure-context APIs — `navigator.mediaDevices`
+is absent there on both engines):
+
+| fact | Firefox 150.0.2 | WebKit 26.4 |
+| --- | --- | --- |
+| `context.newCDPSession` | throws (`only available in Chromium`) | same |
+| `MediaStreamTrackProcessor` | `undefined` | `undefined` |
+| `VideoFrame`, `canvas.captureStream` | present, present | present, present |
+| `navigator.mediaDevices.getDisplayMedia` | present; outside a user gesture refused `InvalidStateError` (`requires transient activation`) | present; refused `InvalidStateError` (`must be called from a user gesture handler`) |
+| `permissions.query({name:'display-capture'})` | rejected `TypeError` (not a valid permission name) | rejected `NotSupportedError` |
+| `navigator.getGamepads` / `GamepadHapticActuator` | present / present | present / present |
+| `Gamepad.prototype.vibrationActuator` | absent | present |
+| Chromium capture flag trio as launch args | browser launches; flags inert (session scenarios fail identically) | same |
+| `--host-resolver-rules` as a launch arg | inert (`NS_ERROR_UNKNOWN_HOST` for the mapped name) | inert (`A server with the specified hostname could not be found`) |
+
+### The named findings
+
+- **the capture suite is engine-missing-primitive on both engines.** The frame
+  pump is `MediaStreamTrackProcessor`-only, and neither engine ships it (probed
+  `typeof` on both), so the port freezes `screen`, `window` and `surface`
+  capabilities at `unsupported:captureopen` — the received attributes of the
+  failing control-plane scenarios show exactly that cell — and every session
+  scenario, the canvas surface session included, fails before any frame. The
+  permission readback cannot settle either (`permissions.query` rejects the
+  `display-capture` name on both), so the three control-plane scenarios fail at
+  their settled-mirror precondition with the transient
+  `unavailable:unsupported:capturepermission` cells. The Chromium consent-test
+  flag trio is accepted-but-inert on both engines, and both refuse
+  `getDisplayMedia` without a user gesture, so no launch-argument substitution
+  exists on either engine for the consent path either.
+- **Firefox routes `keyboard.insertText` through its composition pipeline.**
+  The five text-input scenarios that stage one text arrival without a
+  composition (`open-single-session`, `replace-event`, `focus-suspends`,
+  `writeback-sync`, `teardown-closes`) receive
+  `composition:(0,0)=""`/`composition:(0,0)="X"`/`composition:end` journals on
+  Firefox where Chromium and WebKit publish `replace:(0,0)="X"` — the same
+  Playwright API drives the browser's own IME path there. This is an honest
+  engine divergence in the stimulus, not a runtime defect; the affected
+  scenarios are exclusion candidates on Firefox until the driver gains an
+  engine-neutral insertion route or Firefox changes its pipeline.
+- **the Firefox insecure-context route exists and works.** The Chromium
+  insecure project's `--host-resolver-rules` has no Firefox launch-arg
+  counterpart (inert, probed), but the preference
+  `network.dns.localDomains = insecure.kadre.invalid` maps the fixture's
+  insecure name onto the same local server: probed at the API level and then
+  through the runner, **both insecure-context scenarios pass on Firefox**
+  (`web-gamepad-effect-insecure-context` and `web-capture-insecure-unsupported`,
+  probed on both Kotlin targets) with `isSecureContext` false. One probe fact
+  matters for whoever
+  wires this: on Playwright 1.60 the test runner silently ignores a
+  `use`-level `firefoxUserPrefs` — the preference must sit inside
+  `use.launchOptions.firefoxUserPrefs` to reach the browser (both placements
+  were probed; only the nested one works). WebKit has neither a launch argument
+  nor a preference system: its two insecure scenarios stay
+  Chromium-flags-dependent exclusions.
+- **`web-input-pointer-multi` fails deterministically on macOS WebKit only.**
+  After the synthetic pen merge the real mouse release publishes nothing on
+  macOS WebKit — the surface state stays frozen at the pen's entry
+  (`pointers=[pen#@(60,40):pen]`, revisions stop) — although WebKit does
+  deliver the trusted `pointerup` (probed with an instrumented page: the event
+  log shows `pointerup:id=1:type=mouse:buttons=0` arriving). macOS WebKit also
+  omits the trailing `pointermove` with `buttons=1` after a secondary-button
+  release that Chromium sends. The same scenario passes on Firefox and on
+  Linux WebKit (the container cross-check ran the input suite 12/12), so the
+  divergence is a macOS-WebKit input-pipeline behaviour the single-pointer
+  merge (D11) does not absorb.
+- **`web-input-default-behavior`'s HostDefault arm has no macOS WebKit
+  counterpart.** The arm asserts the browser's own default (`scrollY > 20`
+  after an `ArrowDown` on a focused host); macOS WebKit left the document at
+  `scrollY` 0 in five of six in-suite runs (a minimal standalone probe with a
+  focused element and a tall body also scrolled 0), passing standalone and on
+  Linux WebKit. The SuppressWhenPossible arms are unaffected (they assert the
+  scroll does not happen).
+- **`web-typescript-consumer` loses a publication race on Firefox wasmJs.**
+  Firefox evaluates the deferred consumer module before the asynchronously
+  instantiated Wasm bundle has published its bindings, so the shim honestly
+  reports `missing-application-factory` — observed in three of four Firefox
+  wasmJs runs (discovery, isolated re-runs), passing once; js, both WebKit
+  targets and Chromium are unaffected. The shim's documented contract ("the
+  application must publish before it calls `KadreWeb.attach`") makes this an
+  honest failure, and the race is an exclusion candidate on Firefox wasmJs or
+  a candidate for a publication-aware attach in a later phase — recorded here
+  so Task 2 can choose with the facts.
+
+### The per-engine smokes and their recorded exclusions
+
+The matrix above drives two layers that must agree, engine by engine:
+
+- the **test level** — the `grepInvert` lists of the Firefox and WebKit
+  Playwright projects in
+  [playwright.config.mjs](playwright/playwright.config.mjs), each with its cause
+  comment (this is what keeps an engine from *running* a scenario it cannot
+  honestly stage);
+- the **contract level** — the exclusion files
+  [contracts/engine-exclusions/firefox.tsv](contracts/engine-exclusions/firefox.tsv)
+  and [webkit.tsv](contracts/engine-exclusions/webkit.tsv), one row per
+  contract and target (`contractId`, target `js`/`wasmJs`/`*`, cause): this is
+  what the *evidence* machinery subtracts. The granularity is the contract —
+  a canonical JSON must carry every declared scenario and sentinel of its
+  contract, so a contract with even one excluded test produces no engine
+  evidence at all; the scenarios of that contract which do run stay visible in
+  the nightly's JUnit report, and a contract returns to the engine's expected
+  set by deleting its row when the engine ships the primitive.
+
+The Gradle smokes of the nightly are
+`firefoxJsBrowserSmoke`/`firefoxWasmJsBrowserSmoke`/`webkitJsBrowserSmoke`/`webkitWasmJsBrowserSmoke`
+— the same runner and distributions as the Chromium smokes, plus `--engine=<name>`
+and `--engine-exclusions=<engine>.tsv`; their evidence lands under
+`build/contract-evidence/<engine>/<target>/`. The validator's matching tasks
+(`validateFirefoxJsBrowserContractEvidence` and siblings) subtract the same
+file from their expected contract set.
+
+The two layers cannot drift apart silently, in either direction: a test the
+config excludes whose contract is still expected fails the smoke's evidence
+completeness (the error names the contract and the engine), and an exclusion
+row whose mapping the run fully covers — every mapped testcase ran and passed —
+is refused outright, because it would silently drop producible evidence. Both
+rules are unit-tested in
+[run-browser-smoke.test.mjs](playwright/run-browser-smoke.test.mjs).
+
 ## Contract evidence
 
 The smoke is also the producer of the canonical browser evidence of
@@ -186,6 +403,31 @@ The two Gradle tasks `:kadre:contracts:validator:validateJsBrowserContractEviden
 and `...:validateWasmJsBrowserContractEvidence` read those documents against the
 same registry, the same mapping and the same JUnit report; they are part of
 `:kadre:contracts:validator:check`.
+
+## Phase 8 lifecycle memory-pressure limits
+
+These are the real boundaries of the delivered phase, not defects:
+
+- the browsing context exposes no memory-pressure primitive at all — no event, no
+  callback, no observable to poll. `performance.memory` is a Chromium-only,
+  non-standard heap readback the two targets never call, the `memory` device
+  metric is a budget rather than a signal, and `measureUserAgentSpecificMemory`
+  is cross-origin-isolation-locked and measures attribution, not pressure. The
+  session therefore publishes the bare structural `Unsupported` and never a
+  cause-carrying `Unavailable(PlatformFailure)`: there is no browser API whose
+  failure could be reported, and inventing one to fill the snapshot is what
+  `BACKEND-CAPABILITIES.md` §1 forbids for a passive field;
+- the absence is structural, not observed: admitting a `HostSignal.MemoryPressure`
+  requires the capability cell to read `Available` (`RuntimeLifecycle.kt`), so a
+  session that publishes `Unsupported` cannot emit one, and no web code does — no
+  poll, no timer and no memory observer exists on this target, so there is
+  nothing to stop and nothing that outlives the session.
+
+### Published phase 8 availability
+
+| API | Published value | Asserted by |
+| --- | --- | --- |
+| `LifecycleCapabilities.memoryPressure` | `FeatureAvailability.Unsupported` in every state of the session — the one value this field ever takes on this target, passed explicitly by `WebHostSession` to both controller constructions (`WEB_LIFECYCLE_CAPABILITIES`) | `web-memory-pressure-unsupported` reads the cell `data-kadre-memory-pressure` from the real facade after focus, blur and a hidden document, and the sentinel `web-memory-no-fabricated-signal` watches the host-signal attribute that any signal would set; `WebMemoryPressureCapabilityTest.memoryPressureIsTheBareStructuralUnsupportedEveryStateOfTheSession`, `.noMemoryPressureSignalIsEverEmittedAcrossALifecycleExercise` re-read the cell after every transition of a full exercise up to the terminal pagehide |
 
 ## Phase 7 capture limits
 
@@ -845,9 +1087,13 @@ browser version is not an input to the automated smoke.
 
 ## Manual browser charter
 
-Two charters supplement the automated suites with browser behaviour that
-headless automation cannot claim reliably, and neither replaces the JS and Wasm
-automated smokes:
+Seven charters supplement the automated suites with browser behaviour that
+headless automation cannot claim reliably, and none replaces the JS or Wasm
+automated smokes. [INDEX.md](manual/INDEX.md) consolidates them by the six
+host-owned frontiers of the Phase 8 gate — navigation/bfcache, real focus,
+user activation, a host-prepared popup, permissions and hardware — citing
+every covering procedure verbatim; its verification found no uncovered
+frontier:
 
 - [phase-1-lifecycle.md](manual/phase-1-lifecycle.md) covers a real back-forward
   cache traversal, browser-level focus, and host owned open/closed Shadow DOM;
