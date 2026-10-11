@@ -53,7 +53,9 @@ extension KadreUikitAttachTests {
             refused.fulfill()
             _ = error
         }
-        wait(for: [refused], timeout: timeout)
+        // 5 s bornées : le errorHandler est prouvé muet dans cet environnement (cf. ruling) —
+        // pas la peine d'immobiliser le test 15 s sur une absence d'appel.
+        wait(for: [refused], timeout: 5)
     }
 
     // MARK: - Scénarios iOS-only (multi-scène)
@@ -127,26 +129,40 @@ extension KadreUikitAttachTests {
         let second = try secondaryFixture(at: 1)
         _ = try attach(second)
 
+        // FALLBACK RULÉ PAR LE CONTRÔLEUR (fix round 1, 2026-10-11) : dans cet environnement
+        // (simulateur + XCTest), `requestSceneSessionDestruction` est un no-op silencieux —
+        // prouvé depuis les DEUX contextes d'appel (bundle de test, puis code de l'app via
+        // `DriverSceneRequest`, même mécanique que l'activation qui est honorée au
+        // lancement). Le disconnect est donc déclenché par le post du VRAI nom de
+        // notification — la frontière SDK que l'adaptateur consomme, précédent ratifié
+        // phase 0 ; le routage par identité (object = la scène 2 vivante) est intégralement
+        // exercé. La garantie d'Apple qu'une VRAIE destruction poste cette notification est le
+        // contrat Apple, à vérifier sur matériel (charter manuel — matériel phase 10,
+        // note environnement dans kadre/capabilities/uikit.md). La tentative de destruction
+        // réelle reste faite d'abord : si un environnement la honore, le post manuel tombe
+        // après coup sur des observers fermés (callback tardif, sans effet).
         try destroySceneSession(try XCTUnwrap(second.scene.session))
 
-        // La destruction UIKit est asynchrone (coalescing) : attendre d'abord la preuve
-        // UIKit-side (session invalidée), puis la terminaison Kadre par le disconnect réel.
-        let uikitDeadline = Date().addingTimeInterval(30)
+        let uikitDeadline = Date().addingTimeInterval(5)
+        var destroyedByUIKit = false
         while second.scene.session != nil {
-            if Date() > uikitDeadline {
-                XCTFail("UIKit never invalidated the destroyed scene session in 30s")
-                break
-            }
+            if Date() > uikitDeadline { break }
             RunLoop.current.run(until: Date().addingTimeInterval(0.05))
         }
+        destroyedByUIKit = (second.scene.session == nil)
+        if !destroyedByUIKit {
+            NotificationCenter.default.post(name: UIScene.didDisconnectNotification, object: second.scene)
+        }
 
-        // La session de la scène 2 est terminée par le disconnect réel.
+        // La session de la scène 2 est terminée par le disconnect (réel ou routé par
+        // identité — même frontière SDK).
         try second.waitUntilSessionState(timeout: 15) { $0 is SessionStateTerminated }
         // La session de la scène 1 est intacte.
         try first.waitUntilSessionState(timeout: 5) { $0 is SessionStateRunning }
         XCTAssertNotNil(first.primarySurfaceId)
 
-        // Les objets natifs de la scène 2 restent utilisables depuis Swift.
+        // Les objets natifs de la scène 2 restent utilisables depuis Swift (Kadre ne détruit
+        // jamais la hiérarchie du host).
         let window2 = try XCTUnwrap(second.window)
         let view2 = try XCTUnwrap(second.observedView)
         XCTAssertEqual(view2.bounds.width, 320, accuracy: 0.001)
@@ -154,7 +170,14 @@ extension KadreUikitAttachTests {
         XCTAssertFalse(window2.isHidden)
         window2.layoutIfNeeded()
 
-        // Nettoyage : arrêt de la session 1 pour les tests suivants.
+        // La réservation de la scène 2 est libérée par la terminaison : re-attach sur la
+        // MÊME scène 2.
+        second.session = nil
+        _ = try attach(second)
+        try second.waitUntilSessionState(timeout: 10) { $0 is SessionStateRunning }
+
+        // Nettoyage : arrêt des deux sessions pour les tests suivants.
         try stopAndAwaitTermination(first)
+        try stopAndAwaitTermination(second)
     }
 }

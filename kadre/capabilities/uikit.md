@@ -32,6 +32,14 @@ d'identité Objective-C côté hôte passe donc par `NSObject.isEqual` — c'est
 qu'implémente `KadreUikitProbe.observe` (`view.window.isEqual(window)`), et c'est la
 règle que la sentinelle de `BCK-012` protège (`uikit-driver-window-membership-sentinel`).
 
+**Note environnement simulateur (relevé Task 5 fix round, 2026-10-11).** Sous XCTest,
+`requestSceneSessionDestruction` est un no-op silencieux sur simulateur (errorHandler jamais
+appelé, session jamais invalidée — prouvé depuis le bundle de test ET le code de l'app ;
+`requestSceneSessionActivation` n'est honoré par FrontBoard que depuis le lancement de l'app) :
+la preuve de disconnect du driver passe par le post du vrai nom de notification
+(`uikit-disconnect-terminates`, fallback ruling contrôleur). La preuve de DESTRUCTION réelle
+par FrontBoard est un charter manuel sur matériel — matériel de la phase 10.
+
 ## 1. Lecture des colonnes
 
 - **feature** — la conduite livrée, nommée comme le fait le registre Web : le membre
