@@ -7,6 +7,7 @@ import kotlinx.coroutines.runBlocking
 import org.graphiks.kadre.diagnostics.KadrePlatform
 import org.graphiks.kadre.diagnostics.KadreResult
 import org.graphiks.kadre.internal.runtime.RuntimeFailureReporter
+import org.graphiks.kadre.internal.runtime.RuntimePrimarySurface
 import org.graphiks.kadre.internal.runtime.RuntimeWindowManager
 import org.graphiks.kadre.internal.runtime.RuntimeWindowSurface
 import org.graphiks.kadre.internal.runtime.unsupportedSurfaceCapabilities
@@ -27,19 +28,25 @@ import platform.UIKit.UIWindow
  *    snapshot initial figé ;
  *  - pas d'attention, pas de fullscreen, pas de TextInput factory dédiée (défauts du manager).
  *
- * La fenêtre primaire est DEMANDÉE au manager dans l'`init` (jamais d'écriture directe dans
- * l'état — le reducer du manager reste l'autorité) : `manager.requestWindow` déclenche
- * `requestOpen` sur le port, qui committe la UIWindow fournie de façon synchrone. Le pont
- * `runBlocking` est sûr ici : tout se joue sur le thread appelant (le main, garantie de
- * l'attach) et la seule reprise suspendue (`suspendCancellableCoroutine` de `requestWindow`)
- * est drainée par la boucle bloquante elle-même — aucun dispatch vers une autre file, donc
- * aucun interblocage possible avec le main run loop. `requestWindow` rend la main après le
- * handoff (pas après le commit) ; le commit est garanti fait (et `primary` publié) car le
- * port commite pendant le dispatch — vérifié par le check sur `manager.state.primary`.
+ * La fenêtre primaire est DEMANDÉE au manager DANS [admitPrimaryWindow] — jamais d'écriture
+ * directe dans l'état (le reducer du manager reste l'autorité) — appelé par
+ * `RuntimeDeferredAdmissionWindowManager` APRÈS `installSessionConfiguration` : le manager
+ * refuse toute admission avant l'installation du stamp source (« window event stamp source must
+ * be installed before admission »), et la construction des components précède cette
+ * installation dans `SessionRuntime`. Le pont `runBlocking` est sûr ici : tout se joue sur le
+ * thread appelant (le main, garantie de l'attach — l'installation EST synchrone dans la
+ * construction de la session) et la seule reprise suspendue (`suspendCancellableCoroutine` de
+ * `requestWindow`) est drainée par la boucle bloquante elle-même — aucun dispatch vers une
+ * autre file, donc aucun interblocage possible avec le main run loop. `requestWindow` rend la
+ * main après le handoff (pas après le commit) ; le commit est garanti fait (et `primary`
+ * publié) car le port commite pendant le dispatch — vérifié par le check sur
+ * `manager.state.primary`. Le primary est lu par la session APRÈS l'installation (le provider
+ * de `RuntimeSessionComponents` n'est évalué qu'à cet instant) : la fenêtre primaire est donc
+ * committée AVANT Running mais APRÈS la configuration.
  */
 internal class UIKitWindowRuntime internal constructor(
     window: UIWindow,
-    view: UIView,
+    private val view: UIView,
     policy: KadrePolicy,
     failureReporter: RuntimeFailureReporter,
 ) : AutoCloseable {
@@ -66,7 +73,18 @@ internal class UIKitWindowRuntime internal constructor(
         enabledSurfaceCapabilities = unsupportedSurfaceCapabilities(),
     )
 
-    init {
+    /** Le RuntimePrimarySurface de la session, construit par [admitPrimaryWindow] (mémoïsé). */
+    internal var attachedPrimarySurface: RuntimePrimarySurface? = null
+        private set
+
+    /**
+     * Admission différée de la fenêtre primaire — exactement une fois, appelé par le delegate
+     * d'admission juste après avoir transmis `installSessionConfiguration` au manager. Le
+     * RuntimePrimarySurface est construit ICI (mémoïsé) : la surface n'existe qu'après le
+     * commit, et `RuntimePrimarySurface` lie sa surface à la construction.
+     */
+    internal fun admitPrimaryWindow() {
+        check(attachedPrimarySurface == null) { "primary window already admitted" }
         // Spécification minimale : la taille logique réelle de la vue ; tout le reste par
         // défaut (`WindowSpec(title = "", contentSize = LogicalSize(800, 600), …)` — fondation
         // window/Window.kt l.81-100). `publicWindowCapabilities = false` neutralise la
@@ -85,6 +103,7 @@ internal class UIKitWindowRuntime internal constructor(
         // (le rejet vit dans l'état de la requête) : la preuve d'ouverture réelle est la
         // publication de la fenêtre primaire par le commit du port.
         check(manager.state.value.primary != null) { "primary window was not committed: $request" }
+        attachedPrimarySurface = RuntimePrimarySurface(surface) { surface.detach() }
     }
 
     /** La surface primaire (la vue du host), publiée par le commit de la fenêtre primaire. */

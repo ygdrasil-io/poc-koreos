@@ -14,9 +14,9 @@ import org.graphiks.kadre.diagnostics.ExperimentalKadreApi
 import org.graphiks.kadre.diagnostics.KadreFailure
 import org.graphiks.kadre.diagnostics.KadrePlatform
 import org.graphiks.kadre.diagnostics.KadreResult
+import org.graphiks.kadre.internal.runtime.RuntimeDeferredAdmissionWindowManager
 import org.graphiks.kadre.internal.runtime.RuntimeFailureReporter
 import org.graphiks.kadre.internal.runtime.RuntimeHostController
-import org.graphiks.kadre.internal.runtime.RuntimePrimarySurface
 import org.graphiks.kadre.internal.runtime.RuntimeSessionComponents
 import org.graphiks.kadre.internal.runtime.RuntimeSessionRevocationHandler
 import org.graphiks.kadre.internal.runtime.RuntimeSessionObserver
@@ -142,6 +142,11 @@ public object KadreIos {
 
         // 4. Controller + factory — le runtime est créé DANS la factory (patron AppKit
         //    l.307-340) : paresseux par session, exactement une fois, au moment de l'attach.
+        //    L'admission de la fenêtre primaire est DIFFÉRÉE : le delegate
+        //    `RuntimeDeferredAdmissionWindowManager` transmet d'abord `installSessionConfiguration`
+        //    au manager (qui refuse toute admission avant le stamp source), PUIS appelle
+        //    `admitPrimaryWindow` — commit synchrone, avant Running, après la configuration.
+        //    `attachedPrimarySurface` n'est lu par la session qu'après cette installation.
         val controller = RuntimeHostController.withComponents(
             platform = KadrePlatform.UIKit,
             sessionRevocationHandler = RuntimeSessionRevocationHandler {
@@ -152,8 +157,10 @@ public object KadreIos {
             componentsFactory = { _, _ ->
                 val runtime = UIKitWindowRuntime(window, surfaceView, policy, failureReporter)
                 RuntimeSessionComponents(
-                    windows = runtime.manager,
-                    primarySurface = RuntimePrimarySurface(runtime.surface) { runtime.surface.detach() },
+                    windows = RuntimeDeferredAdmissionWindowManager(runtime.manager) {
+                        runtime.admitPrimaryWindow()
+                    },
+                    primarySurfaceProvider = { runtime.attachedPrimarySurface },
                     closeAction = runtime::close,
                 )
             },
