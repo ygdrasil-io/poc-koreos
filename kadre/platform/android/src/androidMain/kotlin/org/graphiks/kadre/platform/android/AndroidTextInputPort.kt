@@ -343,6 +343,12 @@ internal class AndroidTextInputOwner(
      * span de la composition remplacé, puis le terminal — tandis que la chaîne qui EST le
      * composé (la forme commune) ne change rien : le composé est déjà dans le document,
      * le terminal seul termine.
+     *
+     * Divergence web délibérée et défensive : un `text` null est normalisé en `""` (le
+     * commit vide de la sélection), là où le miroir web garde une `data` null silencieuse
+     * (le terminal seul) — le SDK Android type le paramètre `String?` sans sémantique
+     * d'absence documentée, l'observation d'une édition vide reste vraie là où l'omettre
+     * inventerait un silence.
      */
     public fun commitText(text: String?) {
         if (closed) return
