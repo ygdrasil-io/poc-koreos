@@ -152,8 +152,9 @@ initiales valent la lecture Swift des `bounds` de la vue. La sentinelle
 `WindowSpec` d'admission) est tuée par `testPrimaryWindowAndSurfaceIdentity` sur les deux
 familles.
 
-La ligne BCK-015 « observations dynamiques, redraw et apply » se lit : les métriques
-publiées valent en permanence la lecture VIVANTE de la vue (resize réel 480×200 propagé,
+La ligne BCK-015 « observations dynamiques, redraw et apply » se lit : à chaque déclencheur
+SDK, les métriques publiées valent la lecture VIVANTE de la vue ; un changement entre deux
+déclencheurs est observé au déclencheur suivant (resize réel 480×200 propagé,
 thème conduit par les overrides réels fenêtre puis vue — repli documenté, §3.3 du rapport
 Task 5 —, reprise background/foreground prouvée par le compteur de re-lectures), le redraw
 coalesce une rafale de 5 (puis 3) requêtes en EXACTEMENT UN événement par tick (fenêtre de

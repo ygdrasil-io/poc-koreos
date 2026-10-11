@@ -35,8 +35,11 @@ import platform.UIKit.UIView
  *
  * Le double opt-in est le contrat de la frontière : [KadrePlatformApi] parce que le type SDK
  * traverse, [DelicateKadreApi] parce que tenir une UIView hors de [block] est exactement le
- * danger que la surface promet de ne jamais faire courir ailleurs. Kotlin-only (INTEROP §7 :
- * aucun pointer n'apparaît dans les exports Swift).
+ * danger que la surface promet de ne jamais faire courir ailleurs. La règle Kotlin-only d'INTEROP
+ * §7 est le contrat de la façade phase 3 (`KadreHost`), pas celui de l'en-tête framework livré :
+ * celui-ci exporte aujourd'hui [withUIKitView] (et la sonde leaseProbe du driver) porteurs de
+ * `UIView*` — divergence connue et enregistrée, que l'audit façade phase 3 résout (supprimer
+ * l'export Obj-C ou amender INTEROP §7 d'une exception en-tête framework).
  */
 @KadrePlatformApi
 @DelicateKadreApi
