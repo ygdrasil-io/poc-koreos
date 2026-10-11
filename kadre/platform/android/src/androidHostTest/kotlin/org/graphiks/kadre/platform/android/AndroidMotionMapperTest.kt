@@ -28,6 +28,10 @@ import kotlin.test.assertTrue
  * doublon et événements d'un contact retiré ne répondent rien), `WebPointerMotion` (UN pointeur
  * par surface, D11 — delta mesuré entre les deux dernières positions, `(0, 0)` sans précédent),
  * `WebScrollBoundary` (frontière de coalescing strictement croissante, jamais réutilisée).
+ * La lane suit le TYPE D'OUTIL, pas la famille d'action (fix review F1, adjudication
+ * stylus) : `TOOL_TYPE_STYLUS`/`ERASER` sont TOUJOURS le pointeur unique — un contact stylet
+ * est la pression `Primary` du pointeur, son cancel un `PointerLeft` — tandis que le doigt et
+ * l'outil inconnu restent des contacts.
  * Les constantes `ACTION_*`/`TOOL_TYPE_*`/`BUTTON_*` sont des constantes de compilation.
  */
 class AndroidMotionMapperTest {
@@ -301,10 +305,86 @@ class AndroidMotionMapperTest {
         assertNull(moved.pressure, "a mouse that reported no pressure carries none")
         assertNull(moved.pen, "a mouse never carries a pen state")
 
+        // Un stylet qui TOUCHE est la pression Primary du pointeur unique — le MÊME gate de
+        // bornes qu'un doigt, AUCUNE entrée synthétique (le runtime minte le pointeur
+        // paresseusement), et l'état de stylet porte les champs tilt non observés à null.
+        val stylusDown = tracker.onObservation(
+            observation(
+                MotionEvent.ACTION_DOWN,
+                pointers = listOf(PointerSpec(4, 14f, 24f, pressure = 0.5f, tool = MotionEvent.TOOL_TYPE_STYLUS)),
+            ),
+            viewWidth = 100, viewHeight = 100, scaleFactor = 2.0,
+        )
+        val stylusPressed = assertIs<SurfaceStimulus.PointerButtonChanged>(stylusDown.single())
+        assertEquals(PointerKind.Pen, stylusPressed.kind)
+        assertEquals(PointerButton.Primary, stylusPressed.button)
+        assertEquals(PointerButtonState.Pressed, stylusPressed.buttonState)
+        assertEquals(LogicalPoint(7.0, 12.0), stylusPressed.position)
+        assertEquals(0.5, stylusPressed.pressure)
+        val penState = stylusPressed.pen
+        assertTrue(penState != null, "a stylus carries a pen state payload")
+        assertNull(penState.tiltXDegrees)
+        assertNull(penState.tiltYDegrees)
+        assertNull(penState.twistRadians)
+        assertNull(penState.tangentialPressure)
+
+        // Le contact stylet traverse la MÊME histoire de mouvement — le delta se mesure depuis
+        // la position du down (une transition de bouton porte son mouvement elle-même).
+        val stylusMove = tracker.onObservation(
+            observation(
+                MotionEvent.ACTION_MOVE,
+                pointers = listOf(PointerSpec(4, 20f, 24f, tool = MotionEvent.TOOL_TYPE_STYLUS)),
+            ),
+            viewWidth = 100, viewHeight = 100, scaleFactor = 2.0,
+        )
+        val stylusMoved = assertIs<SurfaceStimulus.PointerMoved>(stylusMove.single())
+        assertEquals(PointerKind.Pen, stylusMoved.kind)
+        assertEquals(LogicalPoint(10.0, 12.0), stylusMoved.position)
+        assertEquals(org.graphiks.kadre.surface.LogicalDelta(3.0, 0.0), stylusMoved.delta)
+
+        // La gomme en cours de contact : le genre suit l'outil de CHAQUE événement.
+        val eraserMove = tracker.onObservation(
+            observation(
+                MotionEvent.ACTION_MOVE,
+                pointers = listOf(PointerSpec(4, 22f, 24f, tool = MotionEvent.TOOL_TYPE_ERASER)),
+            ),
+            viewWidth = 100, viewHeight = 100, scaleFactor = 2.0,
+        )
+        val eraserMoved = assertIs<SurfaceStimulus.PointerMoved>(eraserMove.single())
+        assertEquals(PointerKind.Eraser, eraserMoved.kind)
+        assertEquals(org.graphiks.kadre.surface.LogicalDelta(1.0, 0.0), eraserMoved.delta)
+
+        val stylusUp = tracker.onObservation(
+            observation(
+                MotionEvent.ACTION_UP,
+                pointers = listOf(PointerSpec(4, 22f, 24f, tool = MotionEvent.TOOL_TYPE_ERASER)),
+            ),
+            viewWidth = 100, viewHeight = 100, scaleFactor = 2.0,
+        )
+        val stylusReleased = assertIs<SurfaceStimulus.PointerButtonChanged>(stylusUp.single())
+        assertEquals(PointerKind.Eraser, stylusReleased.kind)
+        assertEquals(PointerButton.Primary, stylusReleased.button)
+        assertEquals(PointerButtonState.Released, stylusReleased.buttonState)
+        assertEquals(LogicalPoint(11.0, 12.0), stylusReleased.position)
+
+        // Fusion D11 de bout en bout : le delta de la souris qui REVIENT se mesure depuis la
+        // DERNIÈRE position du pointeur unique — celle du release du stylet — preuve qu'un seul
+        // état de pointeur porte la souris, le stylet en hover ET le stylet en contact.
+        val fusionMove = tracker.onObservation(
+            observation(
+                MotionEvent.ACTION_HOVER_MOVE,
+                pointers = listOf(PointerSpec(0, 24f, 24f, tool = MotionEvent.TOOL_TYPE_MOUSE)),
+            ),
+            viewWidth = 100, viewHeight = 100, scaleFactor = 2.0,
+        )
+        val fusion = assertIs<SurfaceStimulus.PointerMoved>(fusionMove.single())
+        assertEquals(PointerKind.Mouse, fusion.kind)
+        assertEquals(org.graphiks.kadre.surface.LogicalDelta(1.0, 0.0), fusion.delta)
+
         val press = tracker.onObservation(
             observation(
                 MotionEvent.ACTION_BUTTON_PRESS, actionButton = MotionEvent.BUTTON_PRIMARY,
-                pointers = listOf(PointerSpec(0, 12f, 24f, tool = MotionEvent.TOOL_TYPE_MOUSE)),
+                pointers = listOf(PointerSpec(0, 24f, 24f, tool = MotionEvent.TOOL_TYPE_MOUSE)),
             ),
             viewWidth = 100, viewHeight = 100, scaleFactor = 2.0,
         )
@@ -316,62 +396,107 @@ class AndroidMotionMapperTest {
         val exit = tracker.onObservation(
             observation(
                 MotionEvent.ACTION_HOVER_EXIT,
-                pointers = listOf(PointerSpec(0, 12f, 24f, tool = MotionEvent.TOOL_TYPE_MOUSE)),
+                pointers = listOf(PointerSpec(0, 24f, 24f, tool = MotionEvent.TOOL_TYPE_MOUSE)),
             ),
             viewWidth = 100, viewHeight = 100, scaleFactor = 2.0,
         )
         assertEquals(PointerKind.Mouse, assertIs<SurfaceStimulus.PointerLeft>(exit.single()).kind)
+    }
 
-        // Le stylet suit le MÊME chemin, avec son genre et son état de stylet (tilt non
-        // observé par cette observation → champs null, jamais inventés).
-        tracker.onObservation(
-            observation(
-                MotionEvent.ACTION_HOVER_ENTER,
-                pointers = listOf(PointerSpec(0, 10f, 20f, pressure = 0.5f, tool = MotionEvent.TOOL_TYPE_STYLUS)),
-            ),
-            viewWidth = 100, viewHeight = 100, scaleFactor = 2.0,
-        )
-        val penMove = tracker.onObservation(
-            observation(
-                MotionEvent.ACTION_HOVER_MOVE,
-                pointers = listOf(PointerSpec(0, 14f, 24f, pressure = 0.5f, tool = MotionEvent.TOOL_TYPE_STYLUS)),
-            ),
-            viewWidth = 100, viewHeight = 100, scaleFactor = 2.0,
-        )
-        val penMoved = assertIs<SurfaceStimulus.PointerMoved>(penMove.single())
-        assertEquals(PointerKind.Pen, penMoved.kind)
-        assertEquals(LogicalPoint(7.0, 12.0), penMoved.position)
-        assertEquals(0.5, penMoved.pressure)
-        val penState = penMoved.pen
-        assertTrue(penState != null, "a stylus carries a pen state payload")
-        assertNull(penState.tiltXDegrees)
-        assertNull(penState.tiltYDegrees)
-        assertNull(penState.twistRadians)
-        assertNull(penState.tangentialPressure)
+    // -----------------------------------------------------------------------
+    // Cas F1 — le contact stylet passe le MÊME gate que le doigt ; son CANCEL est un PointerLeft
+    // -----------------------------------------------------------------------
 
-        // La gomme : le genre Eraser, même chemin.
-        val eraserMove = tracker.onObservation(
+    @Test
+    fun stylusContactFollowsTheTouchGateAndCancelsAsThePointer() {
+        val tracker = tracker()
+        val down = tracker.onObservation(
             observation(
-                MotionEvent.ACTION_HOVER_MOVE,
-                pointers = listOf(PointerSpec(0, 16f, 24f, tool = MotionEvent.TOOL_TYPE_ERASER)),
+                MotionEvent.ACTION_DOWN,
+                pointers = listOf(PointerSpec(9, 10f, 10f, tool = MotionEvent.TOOL_TYPE_STYLUS)),
             ),
-            viewWidth = 100, viewHeight = 100, scaleFactor = 2.0,
+            viewWidth = 100, viewHeight = 100, scaleFactor = 1.0,
         )
-        assertEquals(PointerKind.Eraser, assertIs<SurfaceStimulus.PointerMoved>(eraserMove.single()).kind)
+        val pressed = assertIs<SurfaceStimulus.PointerButtonChanged>(down.single())
+        assertEquals(PointerKind.Pen, pressed.kind)
+        assertEquals(PointerButton.Primary, pressed.button)
+        assertEquals(PointerButtonState.Pressed, pressed.buttonState)
+        assertEquals(LogicalPoint(10.0, 10.0), pressed.position)
 
-        // Fusion D11 : souris puis stylet dans le MÊME tracker — le delta du stylet se mesure
-        // depuis la DERNIÈRE position du pointeur unique (celle de la gomme), preuve qu'un seul
-        // état de pointeur existe pour toute la surface.
-        val fusionMove = tracker.onObservation(
+        // La continuité du doigt vaut pour le stylet : commencé DANS les bornes, livré hors bornes.
+        val beyond = tracker.onObservation(
             observation(
-                MotionEvent.ACTION_HOVER_MOVE,
-                pointers = listOf(PointerSpec(0, 20f, 24f, tool = MotionEvent.TOOL_TYPE_STYLUS)),
+                MotionEvent.ACTION_MOVE,
+                pointers = listOf(PointerSpec(9, 150f, -20f, tool = MotionEvent.TOOL_TYPE_STYLUS)),
             ),
-            viewWidth = 100, viewHeight = 100, scaleFactor = 2.0,
+            viewWidth = 100, viewHeight = 100, scaleFactor = 1.0,
         )
-        val fusion = assertIs<SurfaceStimulus.PointerMoved>(fusionMove.single())
-        assertEquals(org.graphiks.kadre.surface.LogicalDelta(2.0, 0.0), fusion.delta)
-        assertEquals(PointerKind.Pen, fusion.kind)
+        val movedBeyond = assertIs<SurfaceStimulus.PointerMoved>(beyond.single())
+        assertEquals(LogicalPoint(150.0, -20.0), movedBeyond.position)
+        assertEquals(org.graphiks.kadre.surface.LogicalDelta(140.0, -30.0), movedBeyond.delta)
+
+        // Le cancel d'un contact stylet est la règle pointercancel web : PointerLeft, pas de release.
+        val cancel = tracker.onObservation(
+            observation(
+                MotionEvent.ACTION_CANCEL,
+                pointers = listOf(PointerSpec(9, 150f, -20f, tool = MotionEvent.TOOL_TYPE_STYLUS)),
+            ),
+            viewWidth = 100, viewHeight = 100, scaleFactor = 1.0,
+        )
+        assertEquals(PointerKind.Pen, assertIs<SurfaceStimulus.PointerLeft>(cancel.single()).kind)
+
+        // La pression est fermée : le move suivant ne répond plus rien.
+        assertTrue(
+            tracker.onObservation(
+                observation(
+                    MotionEvent.ACTION_MOVE,
+                    pointers = listOf(PointerSpec(9, 151f, -20f, tool = MotionEvent.TOOL_TYPE_STYLUS)),
+                ),
+                viewWidth = 100, viewHeight = 100, scaleFactor = 1.0,
+            ).isEmpty(),
+            "the cancelled stylus press no longer answers",
+        )
+
+        // Un DOWN hors bornes n'ouvre PAS la pression — le geste stylet est muet, comme un doigt.
+        assertTrue(
+            tracker.onObservation(
+                observation(
+                    MotionEvent.ACTION_DOWN,
+                    pointers = listOf(PointerSpec(9, 200f, 50f, tool = MotionEvent.TOOL_TYPE_STYLUS)),
+                ),
+                viewWidth = 100, viewHeight = 100, scaleFactor = 1.0,
+            ).isEmpty(),
+        )
+        assertTrue(
+            tracker.onObservation(
+                observation(
+                    MotionEvent.ACTION_MOVE,
+                    pointers = listOf(PointerSpec(9, 210f, 50f, tool = MotionEvent.TOOL_TYPE_STYLUS)),
+                ),
+                viewWidth = 100, viewHeight = 100, scaleFactor = 1.0,
+            ).isEmpty(),
+            "a stylus whose down was outside the bounds has no continuity",
+        )
+
+        // Une pression peut se rouvrir après un cancel, et son UP la referme proprement.
+        val renewed = tracker.onObservation(
+            observation(
+                MotionEvent.ACTION_DOWN,
+                pointers = listOf(PointerSpec(9, 30f, 30f, tool = MotionEvent.TOOL_TYPE_STYLUS)),
+            ),
+            viewWidth = 100, viewHeight = 100, scaleFactor = 1.0,
+        )
+        assertEquals(PointerButtonState.Pressed, assertIs<SurfaceStimulus.PointerButtonChanged>(renewed.single()).buttonState)
+        val up = tracker.onObservation(
+            observation(
+                MotionEvent.ACTION_UP,
+                pointers = listOf(PointerSpec(9, 30f, 30f, tool = MotionEvent.TOOL_TYPE_STYLUS)),
+            ),
+            viewWidth = 100, viewHeight = 100, scaleFactor = 1.0,
+        )
+        val released = assertIs<SurfaceStimulus.PointerButtonChanged>(up.single())
+        assertEquals(PointerButtonState.Released, released.buttonState)
+        assertEquals(LogicalPoint(30.0, 30.0), released.position)
     }
 
     // -----------------------------------------------------------------------
@@ -560,6 +685,15 @@ class AndroidMotionMapperTest {
         )
         val boundaryBeforeReset = assertIs<SurfaceStimulus.Scroll>(scroll.single()).coalescingBoundary
 
+        // La pression stylet du pointeur est un état actif de plus, oublié par le reset.
+        tracker.onObservation(
+            observation(
+                MotionEvent.ACTION_DOWN,
+                pointers = listOf(PointerSpec(5, 30f, 30f, tool = MotionEvent.TOOL_TYPE_STYLUS)),
+            ),
+            viewWidth = 100, viewHeight = 100, scaleFactor = 1.0,
+        )
+
         tracker.reset()
 
         // Le prochain DOWN re-mint une identité FRAÎCHE — jamais l'identité d'avant le reset.
@@ -581,6 +715,18 @@ class AndroidMotionMapperTest {
         assertEquals(
             org.graphiks.kadre.surface.LogicalDelta(0.0, 0.0),
             assertIs<SurfaceStimulus.PointerMoved>(orphanMove.single()).delta,
+        )
+
+        // La pression stylet ouverte avant le reset est fermée : le move suivant ne répond plus.
+        assertTrue(
+            tracker.onObservation(
+                observation(
+                    MotionEvent.ACTION_MOVE,
+                    pointers = listOf(PointerSpec(5, 32f, 30f, tool = MotionEvent.TOOL_TYPE_STYLUS)),
+                ),
+                viewWidth = 100, viewHeight = 100, scaleFactor = 1.0,
+            ).isEmpty(),
+            "the stylus press opened before reset stays closed",
         )
 
         // La frontière de scroll ne recule JAMAIS (miroir WebScrollBoundary.clear : le
@@ -650,6 +796,108 @@ class AndroidMotionMapperTest {
         )
         val fallbackPressed = assertIs<SurfaceStimulus.PointerButtonChanged>(fallback.single())
         assertEquals(PointerButton.Auxiliary, fallbackPressed.button)
+    }
+
+    // -----------------------------------------------------------------------
+    // Cas F3 — une coordonnée terminale non finie livre QUAND MÊME la phase terminale
+    // -----------------------------------------------------------------------
+
+    @Test
+    fun malformedTerminalPositionsStillDeliverTheTerminalPhase() {
+        val tracker = tracker()
+        tracker.onObservation(
+            observation(MotionEvent.ACTION_DOWN, pointers = listOf(PointerSpec(1, 10f, 10f))),
+            viewWidth = 100, viewHeight = 100, scaleFactor = 1.0,
+        )
+        // UP avec une coordonnée non finie : l'Ended porte la dernière position connue —
+        // un contact n'est jamais retiré sans sa phase terminale.
+        val up = tracker.onObservation(
+            observation(MotionEvent.ACTION_UP, pointers = listOf(PointerSpec(1, Float.NaN, 10f))),
+            viewWidth = 100, viewHeight = 100, scaleFactor = 1.0,
+        )
+        val ended = assertIs<SurfaceStimulus.TouchChanged>(up.single())
+        assertEquals(TouchPhase.Ended, ended.phase)
+        assertEquals(LogicalPoint(10.0, 10.0), ended.position)
+
+        // Le contact suivant met à jour la dernière position connue à chaque move…
+        tracker.onObservation(
+            observation(MotionEvent.ACTION_DOWN, pointers = listOf(PointerSpec(2, 20f, 10f))),
+            viewWidth = 100, viewHeight = 100, scaleFactor = 1.0,
+        )
+        tracker.onObservation(
+            observation(MotionEvent.ACTION_MOVE, pointers = listOf(PointerSpec(2, 30f, 14f))),
+            viewWidth = 100, viewHeight = 100, scaleFactor = 1.0,
+        )
+        // …et le CANCEL non fini porte cette dernière position, jamais un retrait muet.
+        val cancel = tracker.onObservation(
+            observation(MotionEvent.ACTION_CANCEL, pointers = listOf(PointerSpec(2, Float.NaN, Float.NaN))),
+            viewWidth = 100, viewHeight = 100, scaleFactor = 1.0,
+        )
+        val cancelled = assertIs<SurfaceStimulus.TouchChanged>(cancel.single())
+        assertEquals(TouchPhase.Cancelled, cancelled.phase)
+        assertEquals(LogicalPoint(30.0, 14.0), cancelled.position)
+
+        // La lane pointeur tient la même règle : un release non fini porte la dernière connue,
+        // plutôt que de laisser la pression stylet ouverte sans stimulus.
+        tracker.onObservation(
+            observation(
+                MotionEvent.ACTION_DOWN,
+                pointers = listOf(PointerSpec(3, 5f, 5f, tool = MotionEvent.TOOL_TYPE_STYLUS)),
+            ),
+            viewWidth = 100, viewHeight = 100, scaleFactor = 1.0,
+        )
+        val stylusUp = tracker.onObservation(
+            observation(
+                MotionEvent.ACTION_UP,
+                pointers = listOf(PointerSpec(3, Float.NaN, Float.NaN, tool = MotionEvent.TOOL_TYPE_STYLUS)),
+            ),
+            viewWidth = 100, viewHeight = 100, scaleFactor = 1.0,
+        )
+        val released = assertIs<SurfaceStimulus.PointerButtonChanged>(stylusUp.single())
+        assertEquals(PointerButtonState.Released, released.buttonState)
+        assertEquals(LogicalPoint(5.0, 5.0), released.position)
+    }
+
+    // -----------------------------------------------------------------------
+    // Cas F2 — une pression hors 0..1 n'est pas une pression : lâchée, jamais bornée
+    // -----------------------------------------------------------------------
+
+    @Test
+    fun pressuresOutsideTheModelRangeAreNotCarried() {
+        val tracker = tracker()
+        val inflated = tracker.onObservation(
+            observation(MotionEvent.ACTION_DOWN, pointers = listOf(PointerSpec(1, 10f, 10f, pressure = 1.5f))),
+            viewWidth = 100, viewHeight = 100, scaleFactor = 1.0,
+        )
+        assertNull(assertIs<SurfaceStimulus.TouchChanged>(inflated.single()).pressure)
+
+        tracker.onObservation(
+            observation(
+                MotionEvent.ACTION_HOVER_ENTER,
+                pointers = listOf(PointerSpec(0, 10f, 10f, tool = MotionEvent.TOOL_TYPE_MOUSE)),
+            ),
+            viewWidth = 100, viewHeight = 100, scaleFactor = 1.0,
+        )
+        val deflated = tracker.onObservation(
+            observation(
+                MotionEvent.ACTION_HOVER_MOVE,
+                pointers = listOf(PointerSpec(0, 12f, 10f, pressure = -0.5f, tool = MotionEvent.TOOL_TYPE_MOUSE)),
+            ),
+            viewWidth = 100, viewHeight = 100, scaleFactor = 1.0,
+        )
+        assertNull(assertIs<SurfaceStimulus.PointerMoved>(deflated.single()).pressure)
+
+        // Les bords du domaine, eux, sont portés.
+        val edge = tracker.onObservation(
+            observation(MotionEvent.ACTION_DOWN, pointers = listOf(PointerSpec(2, 10f, 10f, pressure = 1.0f))),
+            viewWidth = 100, viewHeight = 100, scaleFactor = 1.0,
+        )
+        assertEquals(1.0, assertIs<SurfaceStimulus.TouchChanged>(edge.single()).pressure)
+        val zero = tracker.onObservation(
+            observation(MotionEvent.ACTION_DOWN, pointers = listOf(PointerSpec(3, 10f, 10f, pressure = 0.0f))),
+            viewWidth = 100, viewHeight = 100, scaleFactor = 1.0,
+        )
+        assertEquals(0.0, assertIs<SurfaceStimulus.TouchChanged>(zero.single()).pressure)
     }
 
     // -----------------------------------------------------------------------

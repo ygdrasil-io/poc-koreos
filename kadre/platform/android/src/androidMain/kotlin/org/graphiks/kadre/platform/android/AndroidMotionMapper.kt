@@ -101,33 +101,55 @@ internal object AndroidMotionMapping {
  * La clé est l'id NATIF, stable pour la vie du contact — le fait de la plateforme Android sur
  * lequel toute la règle repose (`getPointerId` d'un pointeur d'un geste ne change pas), cité
  * là où on s'y fie, comme le miroir web le fait pour le `pointerId` du DOM.
+ *
+ * Une extension Android au miroir : chaque contact retient sa dernière position logique
+ * FINIE. Un événement terminal d'Android peut porter une coordonnée non finie, et la phase
+ * terminale doit toujours pouvoir être livrée — un contact n'est jamais retiré sans son
+ * `Ended`/`Cancelled` (le miroir web n'en a pas besoin : une coordonnée DOM est finie).
  */
 internal class AndroidTouchContacts {
-    private val identitiesByPointerId = mutableMapOf<Int, Any>()
+    /** Le contact vivant : son identité mintée et la dernière position logique finie observée. */
+    private class ActiveContact(val identity: Any) {
+        var lastPosition: LogicalPoint? = null
+    }
+
+    /** Ce que retire un contact : son identité et la dernière position connue, pour la phase terminale. */
+    internal class End(val identity: Any, val lastPosition: LogicalPoint?)
+
+    private val contactsByPointerId = mutableMapOf<Int, ActiveContact>()
 
     /**
      * Ouvre un contact et répond son identité stable, ou `null` quand un contact vit déjà sous
      * cet id — un second down d'un contact vivant n'est pas un second contact.
      */
     fun begin(pointerId: Int): Any? {
-        if (identitiesByPointerId.containsKey(pointerId)) return null
-        val identity = Any()
-        identitiesByPointerId[pointerId] = identity
-        return identity
+        if (contactsByPointerId.containsKey(pointerId)) return null
+        val contact = ActiveContact(Any())
+        contactsByPointerId[pointerId] = contact
+        return contact.identity
     }
 
     /** L'identité du contact vivant sous [pointerId], ou `null` quand aucun ne l'est. */
-    fun identity(pointerId: Int): Any? = identitiesByPointerId[pointerId]
+    fun identity(pointerId: Int): Any? = contactsByPointerId[pointerId]?.identity
+
+    /** Enregistre la dernière position logique finie observée du contact vivant. */
+    fun record(pointerId: Int, position: LogicalPoint) {
+        contactsByPointerId[pointerId]?.lastPosition = position
+    }
 
     /**
-     * Retire le contact sous [pointerId] et répond l'identité qu'il tenait, ou `null` quand
-     * aucun contact ne vit sous cet id. L'identité n'est plus jamais rendue : le contact est fini.
+     * Retire le contact sous [pointerId] et répond la charge terminale — l'identité qu'il
+     * tenait et sa dernière position connue — ou `null` quand aucun contact ne vit sous cet
+     * id. L'identité n'est plus jamais rendue : le contact est fini.
      */
-    fun retire(pointerId: Int): Any? = identitiesByPointerId.remove(pointerId)
+    fun retire(pointerId: Int): End? {
+        val contact = contactsByPointerId.remove(pointerId) ?: return null
+        return End(contact.identity, contact.lastPosition)
+    }
 
     /** Oublie chaque contact : plus aucun ne peut être continué, le prochain down re-mint. */
     fun clear() {
-        identitiesByPointerId.clear()
+        contactsByPointerId.clear()
     }
 }
 
@@ -142,8 +164,9 @@ internal class AndroidTouchContacts {
  * mouvement ; un left oublie, pour qu'une ré-entrée mesure depuis SA propre entrée. Le premier
  * mouvement sans précédent est `(0, 0)` : aucun mouvement n'a été observé, en inventer un
  * serait une approximation. Le runtime garde une identité de pointeur par surface (D11) — la
- * souris ET le stylet fusionnent dans CET état unique, et le delta d'un stylet se mesure depuis
- * la dernière position de la souris, preuve qu'un seul pointeur existe.
+ * souris, le stylet en hover ET le stylet en contact fusionnent dans CET état unique, et le
+ * delta d'un stylet se mesure depuis la dernière position de la souris, preuve qu'un seul
+ * pointeur existe.
  */
 internal class AndroidPointerMotion {
     private var previous: LogicalPoint? = null
@@ -164,6 +187,13 @@ internal class AndroidPointerMotion {
     fun record(position: LogicalPoint) {
         previous = position
     }
+
+    /**
+     * Répond la dernière position enregistrée, ou `null`. Extension Android au miroir : une
+     * transition terminale sur une coordonnée non finie porte CETTE position plutôt que de
+     * laisser le pointeur pressé sans stimulus — la phase terminale porte toujours une position.
+     */
+    fun lastPosition(): LogicalPoint? = previous
 
     /** Oublie la précédente : la prochaine observation n'a plus rien à mesurer. */
     fun clear() {
@@ -202,29 +232,36 @@ internal class AndroidScrollBoundary {
  * de Task 1, avec les trois règles du plan :
  *
  * - **Contacts stables.** La famille touch (`DOWN`/`POINTER_DOWN`/`MOVE`/`UP`/`POINTER_UP`/
- *   `CANCEL`) est le lane CONTACT, clé par `getPointerId` dans [AndroidTouchContacts] — le
- *   réservoir kadre-old (`KadreActivity.kt:348-418`) porté au modèle : `MOVE` et `CANCEL`
- *   itèrent TOUS les pointeurs de l'événement, les autres actions utilisent l'[actionIndex].
- *   Le ciblage est le gate du plan : un contact dont le DOWN tombe dans les bornes de la View
- *   est livré sur TOUT son geste, au-delà des bornes ensuite ; un DOWN hors bornes ne minte
- *   rien — jamais — et son geste entier est muet. Le gate ne s'applique qu'au DOWN : la
- *   continuité est une identité, pas une géométrie.
- * - **Un seul pointeur (D11).** La famille hover, les boutons et le scroll sont le lane
- *   POINTEUR : souris, doigt-en-hover, stylet et gomme fusionnent dans UN état (souris + stylet
- *   simultanés = une identité, le genre porté par stimulus). Un contact et un pointeur restent
- *   deux lanes disjointes, comme le modèle les garde. Un stylet qui TOUCHE arrive par la
- *   famille touch et est livré en contact — le lane contact ne porte pas de genre ; l'identité
- *   de stylet du même outil est livrée par le lane pointeur tant qu'il survole. La frontière
- *   de ciblage hover est de la couture (le wrapper décide quand livrer) : le tracker livre ce
- *   qu'on lui donne.
+ *   `CANCEL`) livre des CONTACTS clé par `getPointerId` dans [AndroidTouchContacts] pour les
+ *   outils doigt et inconnus — le réservoir kadre-old (`KadreActivity.kt:348-418`) porté au
+ *   modèle. `MOVE` et `CANCEL` itèrent TOUS les pointeurs de l'événement, les autres actions
+ *   utilisent l'[actionIndex]. Le ciblage est le gate du plan : un contact dont le DOWN tombe
+ *   dans les bornes de la View est livré sur TOUT son geste, au-delà des bornes ensuite ; un
+ *   DOWN hors bornes ne minte rien — jamais — et son geste entier est muet. Le gate ne
+ *   s'applique qu'au DOWN : la continuité est une identité, pas une géométrie.
+ * - **La lane suit le type d'outil, pas la famille d'action (D11/D12).** `TOOL_TYPE_STYLUS` et
+ *   `TOOL_TYPE_ERASER` sont TOUJOURS le pointeur unique, sur toute action : un stylet qui
+ *   touche est la pression `Primary` du pointeur — son DOWN (passant le MÊME gate de bornes et
+ *   la même continuité qu'un doigt) livre `PointerButtonChanged(Primary, Pressed)` sans entrée
+ *   synthétique (le runtime minte le pointeur paresseusement), son MOVE traverse la MÊME
+ *   histoire de mouvement que la souris ([AndroidPointerMotion] — la fusion D11 vraie : le
+ *   pointeur ne gèle plus pendant le contact), son UP est le release, et son CANCEL un
+ *   `PointerLeft` (la règle `pointercancel` web). Les boutons barrel continuent de couler par
+ *   `BUTTON_PRESS`/`RELEASE`. Le doigt et l'outil INCONNU restent des contacts : précipiter un
+ *   outil inconnu dans le pointeur unique effondrerait le multitouch (les numériseurs bon
+ *   marché rapportent `UNKNOWN` pour des doigts). Souris, doigt en hover, stylet et gomme
+ *   fusionnent dans cet unique état — un contact et un pointeur restent deux lanes disjointes
+ *   au sein d'un MÊME événement, chaque pointeur routé par son propre tool type (un doigt et
+ *   un stylet posés ensemble livrent le contact du doigt ET le mouvement du stylet).
  * - **Copies avant toute dérivation.** Les tableaux de l'observation sont copiés à l'entrée :
  *   muter l'array source après [onObservation] ne change ni les stimuli déjà émis, ni les clés
  *   du tracker — la preuve contractuelle du recyclage SDK.
  *
  * Totalité : chaque action répond une liste (vide pour une action que le modèle ne porte pas —
  * l'événement, lui, est de toute façon forwardé par le wrapper), un pointeur de position non
- * finie est sauté plutôt qu'inventé, et rien ne lance en-dehors du `scaleFactor` — un facteur
- * non positif est un bug de couture, pas une observation.
+ * finie est sauté plutôt qu'inventé — sauf la phase terminale d'un contact ou d'une pression
+ * déjà ouverts, qui porte la dernière position connue —, et rien ne lance en-dehors du
+ * `scaleFactor` : un facteur non positif est un bug de couture, pas une observation.
  *
  * Contrat de thread : le tracker appartient à la couture (Task 3), qui ne l'appelle que depuis
  * le thread principal Android — la même discipline que le réducteur de métriques de phase 2.
@@ -235,6 +272,13 @@ internal class AndroidMotionTracker(
     private val contacts = AndroidTouchContacts()
     private val pointerMotion = AndroidPointerMotion()
     private val scrollBoundary = AndroidScrollBoundary()
+
+    /**
+     * La pression `Primary` du pointeur unique tenue par un contact stylet/gomme : ouverte au
+     * DOWN du tool (passé le gate de bornes), fermée à son UP/CANCEL — la continuité du geste
+     * stylet est CET état, le même gate qu'un doigt.
+     */
+    private var pointerPressActive: Boolean = false
 
     /**
      * Traduit une observation en stimuli copiés, SDK-free, et répond la liste ordonnée — vide
@@ -272,14 +316,14 @@ internal class AndroidMotionTracker(
         val device = observation.deviceId.takeIf { it >= 0 }?.let { DeviceId(it.toLong()) }
 
         return when (observation.actionMasked) {
-            MotionEvent.ACTION_DOWN, MotionEvent.ACTION_POINTER_DOWN -> touchBegan(
-                observation, ids, xs, ys, pressures, viewWidth, viewHeight, scaleFactor, device,
+            MotionEvent.ACTION_DOWN, MotionEvent.ACTION_POINTER_DOWN -> began(
+                observation, ids, xs, ys, pressures, tools, viewWidth, viewHeight, scaleFactor, device,
             )
-            MotionEvent.ACTION_MOVE -> touchMoved(ids, xs, ys, pressures, scaleFactor, device)
-            MotionEvent.ACTION_UP, MotionEvent.ACTION_POINTER_UP -> touchEnded(
-                observation, ids, xs, ys, pressures, scaleFactor, device,
+            MotionEvent.ACTION_MOVE -> moved(ids, xs, ys, pressures, tools, scaleFactor, device)
+            MotionEvent.ACTION_UP, MotionEvent.ACTION_POINTER_UP -> ended(
+                observation, ids, xs, ys, pressures, tools, scaleFactor, device,
             )
-            MotionEvent.ACTION_CANCEL -> touchCancelled(ids, xs, ys, pressures, scaleFactor, device)
+            MotionEvent.ACTION_CANCEL -> cancelled(ids, xs, ys, pressures, tools, scaleFactor, device)
             MotionEvent.ACTION_HOVER_ENTER -> pointerEntered(tools, xs, ys, scaleFactor, device)
             MotionEvent.ACTION_HOVER_MOVE -> pointerMoved(tools, xs, ys, pressures, scaleFactor, device)
             MotionEvent.ACTION_HOVER_EXIT -> pointerLeft(tools, device)
@@ -295,26 +339,29 @@ internal class AndroidMotionTracker(
     }
 
     /**
-     * Perte de focus / déconnexion : oublie chaque contact actif et l'état du pointeur, SANS
-     * émettre — le `StateReset(FocusLost)` est de la livraison (le `focusLost()` du runtime),
-     * pas du tracker. Le prochain DOWN re-mint des identités fraîches ; la frontière de scroll
-     * n'est pas remise à zéro (une frontière déjà publiée n'est plus jamais distribuée).
+     * Perte de focus / déconnexion : oublie chaque contact actif, la pression stylet du
+     * pointeur et l'état du pointeur, SANS émettre — le `StateReset(FocusLost)` est de la
+     * livraison (le `focusLost()` du runtime), pas du tracker. Le prochain DOWN re-mint des
+     * identités fraîches ; la frontière de scroll n'est pas remise à zéro (une frontière déjà
+     * publiée n'est plus jamais distribuée).
      */
     public fun reset() {
         contacts.clear()
         pointerMotion.clear()
+        pointerPressActive = false
     }
 
     // -----------------------------------------------------------------
-    // Lane contact — la famille touch
+    // La famille touch — routée par tool type : stylet/gomme → pointeur, doigt/inconnu → contact
     // -----------------------------------------------------------------
 
-    private fun touchBegan(
+    private fun began(
         observation: AndroidMotionObservation,
         ids: IntArray,
         xs: FloatArray,
         ys: FloatArray,
         pressures: Array<Float?>,
+        tools: IntArray,
         viewWidth: Int,
         viewHeight: Int,
         scaleFactor: Double,
@@ -322,108 +369,203 @@ internal class AndroidMotionTracker(
     ): List<SurfaceStimulus> {
         if (ids.isEmpty()) return emptyList()
         val index = actionIndexOf(observation, ids.size)
-        // Le gate des bornes s'applique au DOWN SEUL, AVANT de minter : un contact commencé
-        // hors bornes n'existe pas pour cette surface — son geste entier est muet.
+        // Le gate des bornes s'applique au DOWN SEUL, AVANT de minter — pour les DEUX lanes :
+        // un geste commencé hors bornes n'existe pas pour cette surface, il est muet pour
+        // toujours ; la continuité au-delà des bornes suit l'identité (contact) ou la pression
+        // ouverte (pointeur).
         if (!isInsideBounds(xs[index], ys[index], viewWidth, viewHeight)) return emptyList()
-        val identity = contacts.begin(ids[index]) ?: return emptyList()
-        return listOf(
-            SurfaceStimulus.TouchChanged(
-                surfaceId = surfaceId,
-                nativeIdentity = identity,
-                phase = TouchPhase.Started,
-                position = logicalPoint(xs[index], ys[index], scaleFactor),
-                pressure = pressureOf(pressures[index]),
-                deviceId = device,
-            ),
-        )
+        val position = logicalPoint(xs[index], ys[index], scaleFactor)
+        val pressure = pressureOf(pressures[index])
+        return when (tools[index]) {
+            MotionEvent.TOOL_TYPE_STYLUS, MotionEvent.TOOL_TYPE_ERASER -> {
+                // Pointeur unique (D11) : un stylet qui touche est la pression Primary — pas
+                // d'entrée synthétique, le runtime minte le pointeur paresseusement. Un second
+                // down d'une pression vivante n'est pas une seconde pression.
+                if (pointerPressActive) return emptyList()
+                pointerPressActive = true
+                pointerMotion.record(position)
+                listOf(
+                    SurfaceStimulus.PointerButtonChanged(
+                        surfaceId = surfaceId,
+                        kind = AndroidMotionMapping.pointerKind(tools[index]),
+                        button = PointerButton.Primary,
+                        buttonState = PointerButtonState.Pressed,
+                        position = position,
+                        pressure = pressure,
+                        pen = penStateOf(tools[index]),
+                        deviceId = device,
+                    ),
+                )
+            }
+            else -> {
+                val identity = contacts.begin(ids[index]) ?: return emptyList()
+                contacts.record(ids[index], position)
+                listOf(
+                    SurfaceStimulus.TouchChanged(
+                        surfaceId = surfaceId,
+                        nativeIdentity = identity,
+                        phase = TouchPhase.Started,
+                        position = position,
+                        pressure = pressure,
+                        deviceId = device,
+                    ),
+                )
+            }
+        }
     }
 
-    private fun touchMoved(
+    private fun moved(
         ids: IntArray,
         xs: FloatArray,
         ys: FloatArray,
         pressures: Array<Float?>,
+        tools: IntArray,
         scaleFactor: Double,
         device: DeviceId?,
     ): List<SurfaceStimulus> {
-        // MOVE itère TOUS les pointeurs de l'événement (kadre-old :348-365) — un stimulus par
-        // contact vivant, dans l'ordre des pointeurs ; un id retiré ou jamais commencé ne
-        // répond rien.
+        // MOVE itère TOUS les pointeurs de l'événement (kadre-old :348-365), CHACUN routé par
+        // son propre tool type — un doigt et un stylet posés ensemble livrent le contact du
+        // doigt ET le mouvement du pointeur, dans l'ordre des pointeurs ; un id retiré ou
+        // jamais commencé ne répond rien.
         val stimuli = ArrayList<SurfaceStimulus>(ids.size)
         for (i in ids.indices) {
-            val identity = contacts.identity(ids[i]) ?: continue
             if (!isFinitePosition(xs[i], ys[i])) continue
-            stimuli += SurfaceStimulus.TouchChanged(
-                surfaceId = surfaceId,
-                nativeIdentity = identity,
-                phase = TouchPhase.Moved,
-                position = logicalPoint(xs[i], ys[i], scaleFactor),
-                pressure = pressureOf(pressures[i]),
-                deviceId = device,
-            )
+            val position = logicalPoint(xs[i], ys[i], scaleFactor)
+            when (tools[i]) {
+                MotionEvent.TOOL_TYPE_STYLUS, MotionEvent.TOOL_TYPE_ERASER -> {
+                    if (!pointerPressActive) continue
+                    stimuli += SurfaceStimulus.PointerMoved(
+                        surfaceId = surfaceId,
+                        kind = AndroidMotionMapping.pointerKind(tools[i]),
+                        position = position,
+                        delta = pointerMotion.advance(position),
+                        pressure = pressureOf(pressures[i]),
+                        pen = penStateOf(tools[i]),
+                        deviceId = device,
+                    )
+                }
+                else -> {
+                    val identity = contacts.identity(ids[i]) ?: continue
+                    contacts.record(ids[i], position)
+                    stimuli += SurfaceStimulus.TouchChanged(
+                        surfaceId = surfaceId,
+                        nativeIdentity = identity,
+                        phase = TouchPhase.Moved,
+                        position = position,
+                        pressure = pressureOf(pressures[i]),
+                        deviceId = device,
+                    )
+                }
+            }
         }
         return stimuli
     }
 
-    private fun touchEnded(
+    private fun ended(
         observation: AndroidMotionObservation,
         ids: IntArray,
         xs: FloatArray,
         ys: FloatArray,
         pressures: Array<Float?>,
+        tools: IntArray,
         scaleFactor: Double,
         device: DeviceId?,
     ): List<SurfaceStimulus> {
         if (ids.isEmpty()) return emptyList()
         val index = actionIndexOf(observation, ids.size)
-        // Exactement UN Ended, au pointeur de l'actionIndex ; l'identité est retirée — les
-        // événements suivants de ce pointeur ne répondent plus rien.
-        val identity = contacts.retire(ids[index]) ?: return emptyList()
+        // La phase terminale porte TOUJOURS une position : la coordonnée de l'événement si elle
+        // est finie, sinon la dernière connue — un contact n'est jamais retiré sans stimulus.
         val position = if (isFinitePosition(xs[index], ys[index])) {
             logicalPoint(xs[index], ys[index], scaleFactor)
         } else {
-            // Une position non finie n'est pas inventée ; le Ended porte le dernier point
-            // logique fin du contact s'il en existe un, sinon l'action est muette.
             null
         }
-        if (position == null) return emptyList()
-        return listOf(
-            SurfaceStimulus.TouchChanged(
-                surfaceId = surfaceId,
-                nativeIdentity = identity,
-                phase = TouchPhase.Ended,
-                position = position,
-                pressure = pressureOf(pressures[index]),
-                deviceId = device,
-            ),
-        )
+        val pressure = pressureOf(pressures[index])
+        return when (tools[index]) {
+            MotionEvent.TOOL_TYPE_STYLUS, MotionEvent.TOOL_TYPE_ERASER -> {
+                if (!pointerPressActive) return emptyList()
+                val at = position ?: pointerMotion.lastPosition() ?: return emptyList()
+                pointerPressActive = false
+                // Une transition de bouton enregistre la position : le mouvement qui suit ne
+                // répète pas ce que le release a déjà porté (miroir web).
+                pointerMotion.record(at)
+                listOf(
+                    SurfaceStimulus.PointerButtonChanged(
+                        surfaceId = surfaceId,
+                        kind = AndroidMotionMapping.pointerKind(tools[index]),
+                        button = PointerButton.Primary,
+                        buttonState = PointerButtonState.Released,
+                        position = at,
+                        pressure = pressure,
+                        pen = penStateOf(tools[index]),
+                        deviceId = device,
+                    ),
+                )
+            }
+            else -> {
+                // Exactement UN Ended, au pointeur de l'actionIndex ; l'identité est retirée —
+                // les événements suivants de ce pointeur ne répondent plus rien.
+                val end = contacts.retire(ids[index]) ?: return emptyList()
+                val at = position ?: end.lastPosition ?: return emptyList()
+                listOf(
+                    SurfaceStimulus.TouchChanged(
+                        surfaceId = surfaceId,
+                        nativeIdentity = end.identity,
+                        phase = TouchPhase.Ended,
+                        position = at,
+                        pressure = pressure,
+                        deviceId = device,
+                    ),
+                )
+            }
+        }
     }
 
-    private fun touchCancelled(
+    private fun cancelled(
         ids: IntArray,
         xs: FloatArray,
         ys: FloatArray,
         pressures: Array<Float?>,
+        tools: IntArray,
         scaleFactor: Double,
         device: DeviceId?,
     ): List<SurfaceStimulus> {
-        // CANCEL itère TOUS les pointeurs de l'événement et livre `Cancelled` TEL QUEL pour
-        // chaque contact actif (le host a révoqué le geste — rien n'est compensé), puis retire
-        // chaque identité. Les contacts résiduels hors événement (flux mal formé) sont lâchés
-        // sans stimulus : un contact que l'événement ne nomme pas n'a pas de `Cancelled` à
-        // livrer, et aucun contact ne doit survivre à un cancel.
+        // CANCEL itère TOUS les pointeurs de l'événement et livre la révocation TELLE QUEL pour
+        // chaque lane vivante — `Cancelled` pour chaque contact actif nommé, `PointerLeft` pour
+        // la pression stylet ouverte (la règle `pointercancel` web) — puis retire chaque
+        // identité. Les contacts résiduels hors événement (flux mal formé) sont lâchés sans
+        // stimulus : un contact que l'événement ne nomme pas n'a pas de `Cancelled` à livrer,
+        // et aucun contact ne doit survivre à un cancel.
         val stimuli = ArrayList<SurfaceStimulus>(ids.size)
         for (i in ids.indices) {
-            val identity = contacts.retire(ids[i]) ?: continue
-            if (!isFinitePosition(xs[i], ys[i])) continue
-            stimuli += SurfaceStimulus.TouchChanged(
-                surfaceId = surfaceId,
-                nativeIdentity = identity,
-                phase = TouchPhase.Cancelled,
-                position = logicalPoint(xs[i], ys[i], scaleFactor),
-                pressure = pressureOf(pressures[i]),
-                deviceId = device,
-            )
+            when (tools[i]) {
+                MotionEvent.TOOL_TYPE_STYLUS, MotionEvent.TOOL_TYPE_ERASER -> {
+                    if (!pointerPressActive) continue
+                    pointerPressActive = false
+                    pointerMotion.clear()
+                    stimuli += SurfaceStimulus.PointerLeft(
+                        surfaceId = surfaceId,
+                        kind = AndroidMotionMapping.pointerKind(tools[i]),
+                        deviceId = device,
+                    )
+                }
+                else -> {
+                    val end = contacts.retire(ids[i]) ?: continue
+                    val position = if (isFinitePosition(xs[i], ys[i])) {
+                        logicalPoint(xs[i], ys[i], scaleFactor)
+                    } else {
+                        end.lastPosition ?: continue
+                    }
+                    stimuli += SurfaceStimulus.TouchChanged(
+                        surfaceId = surfaceId,
+                        nativeIdentity = end.identity,
+                        phase = TouchPhase.Cancelled,
+                        position = position,
+                        pressure = pressureOf(pressures[i]),
+                        deviceId = device,
+                    )
+                }
+            }
         }
         contacts.clear()
         return stimuli
@@ -588,8 +730,14 @@ internal class AndroidMotionTracker(
         return PenState(tiltXDegrees = null, tiltYDegrees = null, twistRadians = null, tangentialPressure = null)
     }
 
+    /**
+     * La pression portée par le modèle, ou `null` quand il ne peut pas la porter — le miroir
+     * exact de `webPointerPressure` (`WebInputMapping.kt:463-464`) : une valeur hors `0..1`
+     * n'est pas une pression, elle est LACHÉE plutôt que bornée, de même qu'une valeur non
+     * finie (la pression du modèle est optionnelle, jamais hors domaine).
+     */
     private fun pressureOf(native: Float?): Double? =
-        native?.takeIf { it.isFinite() }?.toDouble()
+        native?.takeIf { it.isFinite() && it in 0.0f..1.0f }?.toDouble()
 
     /** Un axe de scroll : la valeur finie portée, ou le zéro neutre — un axe non finie n'est pas un fait. */
     private fun axisOf(native: Float): Double = if (native.isFinite()) native.toDouble() else 0.0
