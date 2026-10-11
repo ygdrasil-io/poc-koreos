@@ -585,13 +585,18 @@ final class KadreUikitSurfaceTests: XCTestCase {
         try stopAndAwaitTermination(fixture)
     }
 
-    /// uikit-lease-boundaries — le bail natif (`withUIKitView`, Kotlin-only : conduit par la
-    /// sonde, voie retenue documentée au rapport) : le premier bail est ADMIS et la vue remise
-    /// EST la surfaceView (`isEqual`) ; le second bail PENDANT le vol (tenté dans la callback
-    /// du premier) répond `TemporarilyUnavailable(retryable = true)` sans invoquer son block ;
-    /// après terminaison, l'issue steady ruled est `Unsupported(PlatformSurfaceAccess)` (la
-    /// route du registre est retirée au close — `Closed(Surface)` n'est que la course en vol).
+    /// uikit-lease-boundaries — le bail natif (`withUIKitView`) : le premier bail est ADMIS et
+    /// la vue remise EST la surfaceView (`isEqual`) ; le second bail PENDANT le vol (tenté dans
+    /// la callback du premier) répond `TemporarilyUnavailable(retryable = true)` sans invoquer
+    /// son block ; après terminaison, l'issue steady ruled est `Unsupported(PlatformSurfaceAccess)`
+    /// (la route du registre est retirée au close — `Closed(Surface)` n'est que la course en vol).
     /// Tue la sentinelle uikit-lease-closed-after-terminal.
+    ///
+    /// VOIE : `withUIKitView` EST exporté vers Swift (KadreUikit.h,
+    /// `KadreUikitUIKitSurfaceAccessKt.withUIKitView(_:block:completionHandler:)`) ; la preuve
+    /// passe par la sonde Kotlin car l'exigence de bail concurrent DANS le premier callback est
+    /// matériellement plus propre en Kotlin (closures + vérification single-flight), pas parce
+    /// que l'API est inexportable.
     func testLeaseBoundariesHonoursFlightAndClose() throws {
         let (fixture, _, surface) = try attachedSurface()
         let view = try XCTUnwrap(fixture.observedView)
