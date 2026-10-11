@@ -40,6 +40,20 @@ internal enum class AndroidInputCategory {
  *   de sorte qu'une touche hors catégorie se comporte
  *   exactement comme sous le défaut.
  *
+ * L'ÉCART DE COUCHE press+release contre le web (revue Task 4, adjudication conservée) : sous
+ * `SuppressWhenPossible`, la decision Android consomme le PRESS **et** le RELEASE d'une
+ * scroll-key, là où le web ne supprime que le keydown (`preventDefault` d'un seul événement).
+ * La raison est la SÉMANTIQUE de la consommation aux deux frontières : sur Android, un retour
+ * `true` de `dispatchKeyEvent` retire l'événement DU FLUX DU HOST — la fenêtre ne le voit
+ * jamais — de sorte qu'une presse consommée sans sa relève laisserait le host tenir une
+ * RELÈVE ORPHELINE : l'arbre de vues croirait la touche encore pressée (état d'entrée du host
+ * collé, répétitions fantômes d'un événement que le host n'a jamais reçu). Sur le web,
+ * `preventDefault` annule le DÉFAUT de l'événement sans le retirer du flux : le navigateur
+ * voit le keyup, aucune relève orpheline ne peut exister, supprimer le keydown seul suffit.
+ * Consommer la paire press+release est donc la traduction Android exacte de l'intention web —
+ * « le host ne subit pas le défaut documentaire » — et non une policy plus large : une touche
+ * hors catégorie reste forwardée entière, ses DEUX actions comprises.
+ *
  * L'ÉCART ASSUMÉ avec le web est la CLÉ de lecture : le web lit la touche LOGIQUE (celle que
  * le layout produit — le défaut du navigateur se définit par là) ; Android lit le KEYCODE
  * NATIF (carry de la review Task 1) : `PageUp`/`PageDown`/`Home`/`End` ne sont PAS dans la

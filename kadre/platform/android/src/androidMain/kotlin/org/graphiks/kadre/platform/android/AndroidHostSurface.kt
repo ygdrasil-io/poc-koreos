@@ -687,6 +687,10 @@ internal class AndroidHostSurface(
      * dispatch vit dans [AndroidInputWindowCallback] : une touche consommée répond `true`
      * SANS forward, et reste OBSERVÉE — la delivery d'abord, la suppression ensuite (le
      * précédent web « delivered then suppressed »). Pure lecture : rien n'y commet rien.
+     * L'écart press+release contre le web (keydown seul) est documenté dans la KDoc de
+     * [AndroidInputTranslation.shouldSuppress] : la consommation Android retire l'événement
+     * du flux du host — une presse consommée sans sa relève y laisserait une relève
+     * orpheline.
      */
     internal fun shouldConsumeKey(nativeKeyCode: Int): Boolean =
         AndroidInputTranslation.shouldSuppress(nativeKeyCode, mutableState.value.inputDefaultBehavior)
