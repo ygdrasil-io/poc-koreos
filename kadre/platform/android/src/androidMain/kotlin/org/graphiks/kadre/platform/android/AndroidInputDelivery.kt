@@ -138,12 +138,18 @@ internal class AndroidInputDelivery(
         deliver(observation)
     }
 
-    public fun onMotion(observation: AndroidMotionObservation, width: Int, height: Int) {
+    public fun onMotion(
+        observation: AndroidMotionObservation,
+        width: Int,
+        height: Int,
+        offsetX: Int = 0,
+        offsetY: Int = 0,
+    ) {
         if (!installed) {
-            pending.addLast(PendingObservation.Motion(observation, width, height))
+            pending.addLast(PendingObservation.Motion(observation, width, height, offsetX, offsetY))
             return
         }
-        deliverMotion(observation, width, height)
+        deliverMotion(observation, width, height, offsetX, offsetY)
     }
 
     /**
@@ -176,7 +182,8 @@ internal class AndroidInputDelivery(
         while (pending.isNotEmpty()) {
             when (val buffered = pending.removeFirst()) {
                 is PendingObservation.Keyed -> deliver(buffered.observation)
-                is PendingObservation.Motion -> deliverMotion(buffered.observation, buffered.width, buffered.height)
+                is PendingObservation.Motion ->
+                    deliverMotion(buffered.observation, buffered.width, buffered.height, buffered.offsetX, buffered.offsetY)
             }
         }
     }
@@ -218,16 +225,39 @@ internal class AndroidInputDelivery(
         surfaceInput.suspendTextInput()
     }
 
-    /** Une motion : le tracker décide, chaque stimulus rendu part dans l'ordre. */
-    private fun deliverMotion(observation: AndroidMotionObservation, width: Int, height: Int) {
+    /**
+     * Une motion : le tracker décide, chaque stimulus rendu part dans l'ordre. L'offset
+     * ([offsetX]/[offsetY] — l'origine de la View dans l'espace fenêtre, échantillonné par la
+     * couture au moment du dispatch) voyage avec l'observation : le tracker convertit les
+     * coordonnées fenêtre du dispatch en view-local AVANT ses gates et son mapping.
+     */
+    private fun deliverMotion(
+        observation: AndroidMotionObservation,
+        width: Int,
+        height: Int,
+        offsetX: Int,
+        offsetY: Int,
+    ) {
         val state = committedState()
-        tracker.onObservation(observation, viewWidth = width, viewHeight = height, scaleFactor = state.scaleFactor)
-            .forEach(surfaceInput::accept)
+        tracker.onObservation(
+            observation,
+            viewWidth = width,
+            viewHeight = height,
+            scaleFactor = state.scaleFactor,
+            viewOffsetX = offsetX,
+            viewOffsetY = offsetY,
+        ).forEach(surfaceInput::accept)
     }
 
-    /** Une observation bufferisée : key/focus telle quelle, motion avec ses bornes copiées. */
+    /** Une observation bufferisée : key/focus telle quelle, motion avec ses bornes et son offset copiés. */
     private sealed interface PendingObservation {
         data class Keyed(val observation: AndroidInputObservation) : PendingObservation
-        data class Motion(val observation: AndroidMotionObservation, val width: Int, val height: Int) : PendingObservation
+        data class Motion(
+            val observation: AndroidMotionObservation,
+            val width: Int,
+            val height: Int,
+            val offsetX: Int,
+            val offsetY: Int,
+        ) : PendingObservation
     }
 }

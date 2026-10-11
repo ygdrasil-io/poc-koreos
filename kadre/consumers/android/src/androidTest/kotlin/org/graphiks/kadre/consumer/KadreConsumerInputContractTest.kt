@@ -43,17 +43,23 @@ import org.graphiks.kadre.input.LogicalKey
 import org.graphiks.kadre.input.ModifierKey
 import org.graphiks.kadre.input.NamedKey
 import org.graphiks.kadre.input.PhysicalKey
+import org.graphiks.kadre.input.PointerButton
+import org.graphiks.kadre.input.PointerButtonState
+import org.graphiks.kadre.input.PointerKind
+import org.graphiks.kadre.input.ScrollDelta
+import org.graphiks.kadre.input.SurfaceInputState
 import org.graphiks.kadre.input.TouchPhase
 import org.graphiks.kadre.platform.android.attachKadre
 import org.graphiks.kadre.surface.HostSurface
 import org.graphiks.kadre.surface.InputDefaultBehavior
+import org.graphiks.kadre.surface.LogicalPoint
 import org.graphiks.kadre.surface.PropertyChange
 import org.graphiks.kadre.surface.SurfaceUpdate
 import org.graphiks.kadre.surface.SurfaceUpdateOutcome
 import org.junit.runner.RunWith
 
 /**
- * Les six scénarios instrumentés du contrat AND-004 (observation et livraison de l'entrée
+ * Les sept scénarios instrumentés du contrat AND-004 (observation et livraison de l'entrée
  * essentielle Android) sur l'API publique `attachKadre` résolue depuis l'umbrella PUBLIÉ.
  * Chaque nom de méthode est un `testName` contractuel du mapping AND-004 — la correspondance :
  *
@@ -65,15 +71,18 @@ import org.junit.runner.RunWith
  * | android-input-focus-loss-resets         | androidInputFocusLossResets         | android-input-contacts-reset     |
  * | android-input-default-behavior-suppress | androidInputDefaultBehaviorSuppress | android-input-suppression-exact  |
  * | android-input-two-sessions-isolation    | androidInputTwoSessionsIsolation    | android-input-no-double-delivery |
+ * | android-input-stylus-mouse-boundary     | androidInputStylusMouseBoundary     | -                                |
  *
  * LA FRONTIÈRE DE L'INJECTION : chaque événement entre par le point de dispatch RÉEL
  * d'Android — `activity.window.callback.dispatchKeyEvent(...)` /
- * `dispatchTouchEvent(MotionEvent.obtain(...))` / `onWindowFocusChanged(false)` — la fenêtre
- * réelle de l'Activity, dont le callback EST le wrapper Kadre enchaîné après l'install.
- * Les événements traversent donc le chemin de production entier : copie des primitives au
- * point de dispatch, observation vers la delivery, forward intact au callback wrappé. Les
- * champs du `KeyEvent` que le wrapper extrait (`getUnicodeChar()`, `repeatCount`…) ne sont
- * observables que sur émulateur — c'est exactement ici que ce chemin est prouvé.
+ * `dispatchTouchEvent(MotionEvent.obtain(...))` /
+ * `dispatchGenericMotionEvent(MotionEvent.obtain(...))` / `onWindowFocusChanged(false)` — la
+ * fenêtre réelle de l'Activity, dont le callback EST le wrapper Kadre enchaîné après
+ * l'install. Les événements traversent donc le chemin de production entier : copie des
+ * primitives au point de dispatch, observation vers la delivery, forward intact au callback
+ * wrappé. Les champs du `KeyEvent` que le wrapper extrait (`getUnicodeChar()`,
+ * `repeatCount`…) ne sont observables que sur émulateur — c'est exactement ici que ce chemin
+ * est prouvé.
  *
  * Toutes les formes sont Activity (l'observation n'est câblée que là — la forme View n'a pas
  * de `Window.Callback` à enchaîner, ses capabilities d'entrée restent honnêtement
@@ -578,6 +587,155 @@ class KadreConsumerInputContractTest {
         }
     }
 
+    /**
+     * android-input-stylus-mouse-boundary — le stylet et la souris traversent la MÊME
+     * frontière réelle que les doigts (le dispatch `window.callback`) et suivent la LANE de
+     * leur outil, pas leur famille d'action (D11/D12) :
+     *
+     * - un contact STYLUS (`TOOL_TYPE_STYLUS` : DOWN/MOVE/UP injectés par
+     *   `dispatchTouchEvent`) livre la pression `Primary` du pointeur unique —
+     *   `PointerButtonChanged(Pen, Pressed)` portant l'état de stylet, puis
+     *   `PointerMoved(Pen)`, puis la release — et l'état publié garde `touches` VIDE : le
+     *   contact du stylet n'est pas un contact tactile ;
+     * - la souris en hover (`ACTION_HOVER_ENTER`/`ACTION_HOVER_MOVE` injectés par
+     *   `dispatchGenericMotionEvent`) livre `PointerEntered(Mouse)` puis `PointerMoved(Mouse)`
+     *   — le hover des coordinates fenêtre, aux bornes de la View — et une molette
+     *   `ACTION_SCROLL` à axes relatifs livre `Scrolled(Logical)` dans le delta relatif.
+     *
+     * L'injection est en coordonnées FENÊTRE (l'espace du dispatch `Window.Callback`) : le
+     * scénario calcule l'origine de la View dans la fenêtre — la même paire publique
+     * `getLocationOnScreen` que la couture lit — et injecte au centre VIEW-LOCAL ; les
+     * positions livrées sont assertées view-loCALES (physique / scale publié), la preuve que
+     * les coordonnées traversent la conversion de la couture.
+     */
+    @Test
+    fun androidInputStylusMouseBoundary() = runBlocking {
+        ActivityScenario.launch(ConsumerActivity::class.java).use { scenario ->
+            val activity = activityReference(scenario)
+            val captured = AtomicReference<KadreScope?>(null)
+            val session = AtomicReference<KadreSession?>(null)
+            scenario.onActivity { activity2 ->
+                session.set(
+                    ConsumerTestSupport.success(
+                        activity2.attachKadre(activity2.consumerView, scopeCapturingFactory(captured)),
+                    ),
+                )
+            }
+            val surface = awaitPrimarySurface(captured)
+            val recorder = InputEventRecorder(surface.input.events, this)
+            settle()
+            val size = awaitViewSized(ConsumerTestSupport.notNull(activity))
+            val offset = awaitViewOffsetInWindow(ConsumerTestSupport.notNull(activity))
+            val target = ConsumerTestSupport.notNull(activity)
+            val scale = surface.state.value.scaleFactor
+            // Le centre VIEW-LOCAL de la View, porté en coordonnées fenêtre pour l'injection.
+            val center = (offset.first + size.width / 2f) to (offset.second + size.height / 2f)
+
+            // --- La jambe stylet : un contact TOOL_TYPE_STYLUS par la frontière tactile. ---
+            dispatchTouch(target, touchEvent(MotionEvent.ACTION_DOWN, pens(0 to center)))
+            awaitRecorder(recorder, "the stylus Primary press") { events ->
+                pointerButtonChanges(events).size >= 1
+            }
+            // L'état publié : la pression du stylo vit dans le pointeur unique, JAMAIS dans
+            // les touches.
+            val penState = awaitSurfaceInputState(surface, "the pressed pen pointer in state") { state ->
+                state.pointers.any { pointer ->
+                    pointer.kind == PointerKind.Pen &&
+                        pointer.pen != null &&
+                        PointerButton.Primary in pointer.pressedButtons
+                }
+            }
+            assertEquals(0, penState.touches.size, "the stylus contact is NOT a touch state")
+
+            dispatchTouch(
+                target,
+                touchEvent(MotionEvent.ACTION_MOVE, pens(0 to (center.first + 20f to center.second))),
+            )
+            dispatchTouch(target, touchEvent(MotionEvent.ACTION_UP, pens(0 to (center.first + 20f to center.second))))
+            val stylus = awaitRecorder(recorder, "the stylus move and release") { events ->
+                pointerMoves(events).isNotEmpty() && pointerButtonChanges(events).size >= 2
+            }
+            val pressed = pointerButtonChanges(stylus).first()
+            val released = pointerButtonChanges(stylus).last()
+            val stylusMove = pointerMoves(stylus).single()
+            assertEquals(PointerKind.Pen, pressed.kind, "the stylus rides the pointer lane as a pen")
+            assertEquals(PointerButton.Primary, pressed.button)
+            assertEquals(PointerButtonState.Pressed, pressed.buttonState)
+            assertTrue(pressed.pen != null, "the stylus press carries a pen state payload")
+            assertEquals(PointerKind.Pen, stylusMove.kind, "the stylus move carries the pen kind")
+            assertTrue(stylusMove.pen != null, "the stylus move carries a pen state payload")
+            assertEquals(
+                LogicalPoint(size.width / 2.0 / scale, size.height / 2.0 / scale),
+                pressed.position,
+                "the press position is the view-local center, divided by the published scale",
+            )
+            assertEquals(PointerButtonState.Released, released.buttonState, "the stylus release closes the press")
+            assertTrue(
+                touches(stylus).isEmpty(),
+                "no TouchChanged ever rides the stylus contact",
+            )
+            awaitSurfaceInputState(surface, "the neutral touches after the stylus contact") { state ->
+                state.touches.isEmpty()
+            }
+
+            // --- La jambe souris : hover aux bornes, molette à axes relatifs. ---
+            dispatchGenericMotion(
+                target,
+                genericMotionEvent(
+                    MotionEvent.ACTION_HOVER_ENTER,
+                    mousePointers(0 to center),
+                    InputDevice.SOURCE_MOUSE,
+                ),
+            )
+            dispatchGenericMotion(
+                target,
+                genericMotionEvent(
+                    MotionEvent.ACTION_HOVER_MOVE,
+                    mousePointers(0 to (center.first + 10f to center.second)),
+                    InputDevice.SOURCE_MOUSE,
+                ),
+            )
+            val hover = awaitRecorder(recorder, "the mouse hover enter and move") { events ->
+                pointerEnters(events).isNotEmpty() && pointerMoves(events).size >= 2
+            }
+            val entered = pointerEnters(hover).single()
+            assertEquals(PointerKind.Mouse, entered.kind, "the hover rides the pointer lane as a mouse")
+            assertEquals(
+                LogicalPoint(size.width / 2.0 / scale, size.height / 2.0 / scale),
+                entered.position,
+                "the hover enter position is the view-local center",
+            )
+            val hoverMove = pointerMoves(hover).last()
+            assertEquals(PointerKind.Mouse, hoverMove.kind)
+            assertEquals(
+                LogicalPoint((size.width / 2f + 10f) / scale, size.height / 2.0 / scale),
+                hoverMove.position,
+                "the hover move position is view-local",
+            )
+
+            // La molette : les axes RELATIFS de l'ACTION_SCROLL livrent un Scrolled(Logical)
+            // dans le delta exact de l'axe — l'observation passive, jamais consommée.
+            dispatchGenericMotion(
+                target,
+                scrollMotionEvent(
+                    at = center.first + 10f to center.second,
+                    relativeX = 3f,
+                    relativeY = -2f,
+                ),
+            )
+            val scrolled = awaitRecorder(recorder, "the relative-axis wheel scroll") { events ->
+                scrolls(events).isNotEmpty()
+            }
+            val scroll = scrolls(scrolled).single()
+            assertEquals(
+                ScrollDelta.Logical(3.0, -2.0),
+                scroll.delta,
+                "the wheel scroll carries the relative axes as the logical delta",
+            )
+            closeOnMain(session)
+        }
+    }
+
     // ------------------------------------------------------------------
     // Aides du fichier — l'observation bornée et la frontière d'injection.
     // ------------------------------------------------------------------
@@ -708,6 +866,85 @@ class KadreConsumerInputContractTest {
             toolType = MotionEvent.TOOL_TYPE_FINGER
         }
 
+    /** Les propriétés d'un pointeur stylet — le lane pointeur en CONTACT (jamais un touch). */
+    private fun pen(id: Int): MotionEvent.PointerProperties =
+        MotionEvent.PointerProperties().apply {
+            this.id = id
+            toolType = MotionEvent.TOOL_TYPE_STYLUS
+        }
+
+    /** Les propriétés d'un pointeur souris — le lane pointeur en HOVER. */
+    private fun mouse(id: Int): MotionEvent.PointerProperties =
+        MotionEvent.PointerProperties().apply {
+            this.id = id
+            toolType = MotionEvent.TOOL_TYPE_MOUSE
+        }
+
+    private fun pens(vararg pointers: Pair<Int, Pair<Float, Float>>): Pair<
+        Array<MotionEvent.PointerProperties>,
+        Array<MotionEvent.PointerCoords>,
+        > = Pair(
+        Array(pointers.size) { index -> pen(pointers[index].first) },
+        Array(pointers.size) { index -> at(pointers[index].second.first, pointers[index].second.second) },
+    )
+
+    private fun mousePointers(vararg pointers: Pair<Int, Pair<Float, Float>>): Pair<
+        Array<MotionEvent.PointerProperties>,
+        Array<MotionEvent.PointerCoords>,
+        > = Pair(
+        Array(pointers.size) { index -> mouse(pointers[index].first) },
+        Array(pointers.size) { index -> at(pointers[index].second.first, pointers[index].second.second) },
+    )
+
+    /** Un événement motion générique (hover) de la source déclarée de son outil. */
+    private fun genericMotionEvent(
+        action: Int,
+        pointers: Pair<Array<MotionEvent.PointerProperties>, Array<MotionEvent.PointerCoords>>,
+        source: Int,
+    ): MotionEvent = MotionEvent.obtain(
+        SystemClock.uptimeMillis(),
+        SystemClock.uptimeMillis(),
+        action,
+        pointers.first.size,
+        pointers.first,
+        pointers.second,
+        0,
+        0,
+        1f,
+        1f,
+        0,
+        0,
+        source,
+        0,
+    )
+
+    /**
+     * Une molette `ACTION_SCROLL` : les axes RELATIFS vivent dans les coords du pointeur —
+     * c'est là que `getAxisValue(AXIS_RELATIVE_*)` du wrapper les lit.
+     */
+    private fun scrollMotionEvent(at: Pair<Float, Float>, relativeX: Float, relativeY: Float): MotionEvent {
+        val coords = at(at.first, at.second).apply {
+            setAxisValue(MotionEvent.AXIS_RELATIVE_X, relativeX)
+            setAxisValue(MotionEvent.AXIS_RELATIVE_Y, relativeY)
+        }
+        return MotionEvent.obtain(
+            SystemClock.uptimeMillis(),
+            SystemClock.uptimeMillis(),
+            MotionEvent.ACTION_SCROLL,
+            1,
+            arrayOf(mouse(0)),
+            arrayOf(coords),
+            0,
+            0,
+            1f,
+            1f,
+            0,
+            0,
+            InputDevice.SOURCE_MOUSE,
+            0,
+        )
+    }
+
     private fun at(x: Float, y: Float): MotionEvent.PointerCoords =
         MotionEvent.PointerCoords().apply {
             clear()
@@ -744,6 +981,58 @@ class KadreConsumerInputContractTest {
         InputDevice.SOURCE_TOUCHSCREEN,
         0,
     )
+
+    /** La même frontière pour la motion générique — hover, boutons, molette. */
+    private fun dispatchGenericMotion(activity: ConsumerActivity, event: MotionEvent): Boolean {
+        val done = CountDownLatch(1)
+        val holder = AtomicReference(false)
+        ConsumerTestSupport.onMain {
+            holder.set(requireNotNull(activity.window.callback).dispatchGenericMotionEvent(event))
+            done.countDown()
+        }
+        check(done.await(INJECTION_TIMEOUT_MILLIS, TimeUnit.MILLISECONDS)) { "the generic motion dispatch never returned" }
+        return holder.get()
+    }
+
+    /**
+     * L'origine de la View DANS l'espace fenêtre — la même paire publique que la couture lit
+     * (`view.getLocationOnScreen()` moins `decorView.getLocationOnScreen()`) : l'injection se
+     * fait en coordonnées fenêtre, les assertions portent des positions view-loCALES.
+     */
+    private fun awaitViewOffsetInWindow(activity: ConsumerActivity): Pair<Int, Int> {
+        val holder = AtomicReference<Pair<Int, Int>?>(null)
+        val deadline = System.currentTimeMillis() + DEFAULT_TIMEOUT_MILLIS
+        while (System.currentTimeMillis() < deadline && holder.get() == null) {
+            ConsumerTestSupport.onMain {
+                val view = activity.consumerView
+                if (view.isAttachedToWindow) {
+                    val viewLocation = IntArray(2)
+                    view.getLocationOnScreen(viewLocation)
+                    val decorLocation = IntArray(2)
+                    activity.window.decorView.getLocationOnScreen(decorLocation)
+                    holder.set((viewLocation[0] - decorLocation[0]) to (viewLocation[1] - decorLocation[1]))
+                }
+            }
+            if (holder.get() == null) Thread.sleep(POLL_INTERVAL_MILLIS)
+        }
+        return holder.get() ?: error("the consumer view was never attached within ${DEFAULT_TIMEOUT_MILLIS}ms")
+    }
+
+    /** L'état d'entrée publié — attendu par polling borné sur le prédicat du scénario. */
+    private suspend fun awaitSurfaceInputState(
+        surface: HostSurface,
+        description: String,
+        predicate: (SurfaceInputState) -> Boolean,
+    ): SurfaceInputState {
+        val deadline = System.currentTimeMillis() + DEFAULT_TIMEOUT_MILLIS
+        var last = surface.input.state.value
+        while (System.currentTimeMillis() < deadline) {
+            last = surface.input.state.value
+            if (predicate(last)) return last
+            delay(POLL_INTERVAL_MILLIS)
+        }
+        error("the input state never satisfied the predicate within ${DEFAULT_TIMEOUT_MILLIS}ms ($description); last=$last")
+    }
 
     /** Le drain de souscription : le miroir des tests hôte (channelFlow → SharedFlow). */
     private suspend fun settle() {
@@ -792,10 +1081,27 @@ class KadreConsumerInputContractTest {
     private fun touches(events: List<InputEvent>): List<InputEvent.TouchChanged> =
         events.filterIsInstance<InputEvent.TouchChanged>()
 
+    private fun pointerMoves(events: List<InputEvent>): List<InputEvent.PointerMoved> =
+        events.filterIsInstance<InputEvent.PointerMoved>()
+
+    private fun pointerButtonChanges(events: List<InputEvent>): List<InputEvent.PointerButtonChanged> =
+        events.filterIsInstance<InputEvent.PointerButtonChanged>()
+
+    private fun pointerEnters(events: List<InputEvent>): List<InputEvent.PointerEntered> =
+        events.filterIsInstance<InputEvent.PointerEntered>()
+
+    private fun scrolls(events: List<InputEvent>): List<InputEvent.Scrolled> =
+        events.filterIsInstance<InputEvent.Scrolled>()
+
     private fun describe(event: InputEvent): String = when (event) {
         is InputEvent.Key -> "Key(${event.physicalKey}, ${event.logicalKey}, ${event.keyState})"
         is InputEvent.TouchChanged -> "Touch(${event.phase}, ${event.touchId})"
         is InputEvent.StateReset -> "Reset(${event.reason})"
+        is InputEvent.PointerMoved -> "PointerMoved(${event.kind}, ${event.position})"
+        is InputEvent.PointerButtonChanged -> "PointerButton(${event.kind}, ${event.button}, ${event.buttonState})"
+        is InputEvent.PointerEntered -> "PointerEntered(${event.kind}, ${event.position})"
+        is InputEvent.PointerLeft -> "PointerLeft(${event.kind})"
+        is InputEvent.Scrolled -> "Scrolled(${event.delta})"
         else -> event.toString()
     }
 

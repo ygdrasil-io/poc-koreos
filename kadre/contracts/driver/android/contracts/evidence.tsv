@@ -27,6 +27,7 @@ AND-004	android	scenario	android-input-multi-touch-stable-ids	org.graphiks.kadre
 AND-004	android	scenario	android-input-focus-loss-resets	org.graphiks.kadre.consumer.KadreConsumerInputContractTest	androidInputFocusLossResets
 AND-004	android	scenario	android-input-default-behavior-suppress	org.graphiks.kadre.consumer.KadreConsumerInputContractTest	androidInputDefaultBehaviorSuppress
 AND-004	android	scenario	android-input-two-sessions-isolation	org.graphiks.kadre.consumer.KadreConsumerInputContractTest	androidInputTwoSessionsIsolation
+AND-004	android	scenario	android-input-stylus-mouse-boundary	org.graphiks.kadre.consumer.KadreConsumerInputContractTest	androidInputStylusMouseBoundary
 AND-004	android	sentinel	android-input-suppression-exact	org.graphiks.kadre.consumer.KadreConsumerInputContractTest	androidInputDefaultBehaviorSuppress
 AND-004	android	sentinel	android-input-no-double-delivery	org.graphiks.kadre.consumer.KadreConsumerInputContractTest	androidInputTwoSessionsIsolation
 AND-004	android	sentinel	android-input-contacts-reset	org.graphiks.kadre.consumer.KadreConsumerInputContractTest	androidInputFocusLossResets

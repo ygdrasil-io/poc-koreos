@@ -22,7 +22,8 @@ import kotlin.test.assertTrue
 
 /**
  * Le mécanisme d'observation clavier de la phase 3 : le cœur de décision pur
- * ([AndroidInputWindowCallback]) — les six cas épinglés du plan — puis le wrapper réel
+ * ([AndroidInputWindowCallback]) — les sept cas épinglés du plan (l'interaction
+ * focus×consommation comprise) — puis le wrapper réel
  * `Window.Callback` ([AndroidWindowCallbackForwarder]) sur ce que l'hôte JVM peut prouver :
  * l'installation/la restauration exactes (garde anti-double-install et garde de
  * non-propriété), le forward du focus perdu et la délégation des méthodes sans argument.
@@ -193,6 +194,68 @@ class AndroidInputWindowCallbackTest {
         val passthrough = CoreRecorder(consumeKeys = false)
         assertTrue(passthrough.core.dispatchKeyEvent(KeyEvent.KEYCODE_PAGE_DOWN, false, 0, null, false, KeyState.Pressed))
         assertEquals(1, passthrough.forwards.size)
+    }
+
+    // -----------------------------------------------------------------------
+    // Cas 4 bis — la consommation vit SOUS la porte de focus (interaction focus×policy)
+    // -----------------------------------------------------------------------
+
+    @Test
+    fun scrollKeyConsumptionLivesUnderTheFocusGate() {
+        // Le même cœur, la policy réelle (SuppressWhenPossible sur les scroll-keys), le
+        // focus qui change ENTRE deux dispatchs : la consommation suit la porte de focus,
+        // jamais la policy seule.
+        val observations = mutableListOf<AndroidInputObservation>()
+        val forwards = mutableListOf<Triple<Int, Boolean, Int>>()
+        var targetFocused = false
+        val core = AndroidInputWindowCallback(
+            isTargetFocused = { targetFocused },
+            onObservation = { observations += it },
+            shouldConsumeKey = { it == KeyEvent.KEYCODE_DPAD_DOWN },
+            forwardKey = { code, repeat, meta ->
+                forwards += Triple(code, repeat, meta)
+                true
+            },
+            forwardFocusLost = {},
+        )
+
+        // SANS focus : la scroll-key sous policy est forwardée, PAS consommée, PAS
+        // observée — le host (une autre vue focalisée) la reçoit entière.
+        assertTrue(
+            core.dispatchKeyEvent(
+                nativeKeyCode = KeyEvent.KEYCODE_DPAD_DOWN,
+                repeat = false,
+                metaState = 0,
+                unicodeChar = null,
+                isSystemKey = false,
+                keyState = KeyState.Pressed,
+            ),
+            "an unfocused scroll key is always forwarded",
+        )
+        assertEquals(
+            listOf(Triple(KeyEvent.KEYCODE_DPAD_DOWN, false, 0)),
+            forwards,
+            "an unfocused scroll key is never consumed, whatever the policy asks",
+        )
+        assertTrue(observations.isEmpty(), "an unfocused scroll key is never observed")
+
+        // AVEC focus : la MÊME touche est consommée (aucun forward) et OBSERVÉE —
+        // delivered then suppressed, l'invariant documenté.
+        targetFocused = true
+        assertTrue(
+            core.dispatchKeyEvent(
+                nativeKeyCode = KeyEvent.KEYCODE_DPAD_DOWN,
+                repeat = false,
+                metaState = 0,
+                unicodeChar = null,
+                isSystemKey = false,
+                keyState = KeyState.Pressed,
+            ),
+            "a consumed key reports true to the system",
+        )
+        assertEquals(1, forwards.size, "the focused scroll key adds NO forward")
+        val observed = assertIs<AndroidInputObservation.Key>(observations.single())
+        assertEquals(KeyEvent.KEYCODE_DPAD_DOWN, observed.nativeKeyCode)
     }
 
     // -----------------------------------------------------------------------

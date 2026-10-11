@@ -506,8 +506,20 @@ internal object AndroidHostSession {
                 isTargetFocused = { view.hasFocus() },
                 onObservation = { observation -> sessionSurface.surface?.onInputObservation(observation) },
                 shouldConsumeKey = { nativeKeyCode -> sessionSurface.surface?.shouldConsumeKey(nativeKeyCode) ?: false },
-                onMotion = { observation ->
-                    sessionSurface.surface?.onMotionObservation(observation, view.width, view.height)
+                onMotion = { observation, offsetX, offsetY ->
+                    sessionSurface.surface?.onMotionObservation(observation, view.width, view.height, offsetX, offsetY)
+                },
+                // L'origine de la View DANS l'espace fenêtre — la paire publique
+                // `getLocationOnScreen` de la View et du decorView de CETTE fenêtre, lue à
+                // chaque dispatch (les positions fenêtre et parent-relatives peuvent diverger
+                // à tout layout) : le tracker convertit les coordonnées fenêtre du dispatch
+                // `Window.Callback` en view-local avant ses gates.
+                viewOffsetInWindow = {
+                    val viewLocation = IntArray(2)
+                    view.getLocationOnScreen(viewLocation)
+                    val decorLocation = IntArray(2)
+                    window.decorView.getLocationOnScreen(decorLocation)
+                    (viewLocation[0] - decorLocation[0]) to (viewLocation[1] - decorLocation[1])
                 },
             ),
         )

@@ -80,7 +80,7 @@ rejected as proving nothing.
 
 **`AND-004`** — the phase 3 essential input observation and delivery proof
 (source `ANDROID-IMPLEMENTATION-ROADMAP.md#Phase 3 — Clavier, pointeur, touch
-et stylet`). Six scenarios and three sentinels, all in the instrumented test
+et stylet`). Seven scenarios and three sentinels, all in the instrumented test
 class `org.graphiks.kadre.consumer.KadreConsumerInputContractTest`. The
 injection boundary is the real Android dispatch: events enter through
 `activity.window.callback.dispatchKeyEvent(...)` /
@@ -104,6 +104,7 @@ deferred owner-routing option:
 | `android-input-focus-loss-resets` | scenario | window focus loss delivers the in-band `StateReset(FocusLost)` after forgetting every active contact without emitting; the next DOWN mints fresh identities |
 | `android-input-default-behavior-suppress` | scenario | committing `inputDefaultBehavior = SuppressWhenPossible` consumes the document scroll keys — press AND release — for the host while the session still observes them (delivered-then-suppressed, exactly); under `HostDefault` nothing is consumed |
 | `android-input-two-sessions-isolation` | scenario | two attached activities: a window-A event never crosses into session B (and the reverse), each delivery exactly once; the wrapper ownership identity is exercised — a foreign host callback chained on top stays in the chain and is never overwritten at close; a re-attached session delivers exactly once again |
+| `android-input-stylus-mouse-boundary` | scenario | a stylus contact (`TOOL_TYPE_STYLUS` DOWN/MOVE/UP through the touch dispatch) rides the pointer lane — `PointerButtonChanged(Pen, Pressed/Released)` carrying pen state, `PointerMoved(Pen)` — with the published `touches` staying EMPTY; a mouse hover (`ACTION_HOVER_ENTER`/`MOVE` through the generic dispatch) delivers `PointerEntered(Mouse)`/`PointerMoved(Mouse)` scoped to the View bounds and a relative-axis `ACTION_SCROLL` delivers `Scrolled(Logical)`; injection is in window coordinates (the dispatch space) at the view-local center computed through the public `getLocationOnScreen` pair, and delivered positions are asserted view-local |
 | `android-input-suppression-exact` | sentinel | a policy that consumes EVERY key (not exactly the nine scroll keys) kills `androidInputDefaultBehaviorSuppress` alone |
 | `android-input-no-double-delivery` | sentinel | a wrapper that no longer recognizes its own callback (ownership-identity damage) overwrites the foreign callback at close — the host callback is orphaned and loses its events after re-attach. The demonstrated kill is precisely this ownership-identity damage, the mutation class that enables duplicate delivery: no emulator scenario can inject the same event twice through the real dispatch path, so the sentinel pins the identity guard that makes double delivery impossible rather than a duplicate observed in the act |
 | `android-input-contacts-reset` | sentinel | a tracker that no longer clears on focus loss kills `androidInputFocusLossResets` alone |
@@ -111,7 +112,7 @@ deferred owner-routing option:
 The AND-004 sentinel blast radius is recorded the same way: each of the three
 instrumented mutations (suppression widened to every key; wrapper ownership
 identity dropped; contact reset on focus loss removed) kills **exactly one** of
-the nine phase-3 tests — its guard — and leaves the other eight green.
+the ten phase-3 tests — its guard — and leaves the other nine green.
 
 ## Running the gate locally
 
@@ -137,7 +138,7 @@ emulator-5554`). The Gradle run inside is bounded by a portable 900 s watchdog
 `:kadre:contracts:validator:androidContractsCheck`: registry validation plus
 Android contract evidence validation against **`AND-001`, `AND-002`, `AND-003`
 and `AND-004`** — one canonical JSON per contract, all from the same
-instrumented emulator run (21 instrumented tests).
+instrumented emulator run (22 instrumented tests).
 
 The wrapper chains two steps, each of which can also be run on its own — one
 Gradle invocation per shell command:
@@ -215,7 +216,7 @@ carried by the evidence itself:
 Same commands, one contract more. From a cold start (kill any running emulator,
 `adb emu kill`, wait for zero devices, then let the script boot the AVD itself):
 publish (1), consumer compile (2), emulator smoke + evidence + validator (the
-script — **21** scenarios green, `AND-001.json` + `AND-002.json` +
+script — **22** scenarios green, `AND-001.json` + `AND-002.json` +
 `AND-003.json` + `AND-004.json`), the same transitive-resolution purity check
 (grep exit 1, redone cold), and the no-device sanity tasks above. The roadmap
 checklist is carried by the evidence itself:
@@ -224,9 +225,12 @@ checklist is carried by the evidence itself:
   and events — `android-input-host-untouched`, `android-input-keys-mapped`,
   `android-input-multi-touch-stable-ids` (the whole production path crossed
   from `activity.window.callback`);
-- multi-touch, mouse, modifiers, focus loss, overflow —
+- multi-touch, stylus, mouse, modifiers, focus loss, overflow —
   `android-input-multi-touch-stable-ids`, `android-input-focus-loss-resets`,
-  the mapped-key/modifier assertions of `android-input-keys-mapped`, and the
+  `android-input-stylus-mouse-boundary` (a stylus contact rides the pointer
+  lane with no touch state; a mouse hover and wheel scroll cross the same
+  boundary through the generic dispatch), the mapped-key/modifier assertions
+  of `android-input-keys-mapped`, and the
   host record `AndroidInputDeliveryTest.overflowIsTerminalFromTheRuntime`
   (the ingress overflow terminalizes the runtime's OWN source,
   `SourceOverflow(InputSource)` — the adapter has nothing to do);
@@ -242,8 +246,12 @@ checklist is carried by the evidence itself:
   (the host listener keeps every event it is entitled to) and
   `android-input-default-behavior-suppress` (delivered-then-suppressed, press
   and release, exactly the nine document scroll keys, nothing under
-  `HostDefault`, touch/pointer never consumed);
-- `AND-001` + `AND-002` + `AND-003` + `AND-004` together — 21 instrumented
+  `HostDefault`, touch/pointer never consumed); the consumption lives under
+  the same focus gate as the observation — an unfocused scroll key is never
+  consumed nor observed
+  (`AndroidInputWindowCallbackTest.scrollKeyConsumptionLivesUnderTheFocusGate`,
+  the host record the recorder cannot express);
+- `AND-001` + `AND-002` + `AND-003` + `AND-004` together — 22 instrumented
   tests, one canonical JSON per contract, all from the same instrumented
   emulator run.
 
@@ -320,12 +328,18 @@ delivery, in the **Activity form only**: a chainable `Window.Callback` wrapper
 (the host callback is wrapped, never replaced, never reached through
 reflection; every method forwards as-is, four input-side entry points deviate),
 the 65-key HID key mapping (a key outside the table is forwarded without any
-invented stimulus; keyboard observation lives only under focus), the motion
-translation (contacts keyed on the native `getPointerId`, bounds gate on DOWN
+invented stimulus; keyboard observation lives only under focus, and so does
+its consumption — an unfocused scroll key is never consumed nor observed), the
+motion translation (contacts keyed on the native `getPointerId`, bounds gate on
+DOWN
 with gesture continuity — a declared limit: targeting is the bounds gate, not
 host hit-testing, so overlapping siblings are attributed by bounds —, the lane
 follows the tool type, stylus and eraser riding the single pointer lane per
-D11/D12), delivery through the runtime's `RuntimeSurfaceInput` (buffered until
+D11/D12, hover scoped to the View bounds — a mouse elsewhere in the window is
+not the surface's pointer — and dispatch coordinates converted to view-local
+at the observation seam through the public `getLocationOnScreen` pair of the
+View and the window's decorView, sampled at every dispatch), delivery through
+the runtime's `RuntimeSurfaceInput` (buffered until
 installed, `InputObservationChanged` carrying the facts actually wired, focus
 loss → tracker reset without emitting + in-band `StateReset(FocusLost)` + text
 session suspension, ingress overflow terminal from the runtime itself), and

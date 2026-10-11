@@ -245,14 +245,23 @@ class AndroidInputDeliveryTest {
         assertTrue(released.stamp.sequence.value > pressed.stamp.sequence.value, "stamps are sequential")
         assertFalse(surface.input.state.value.keyboard.pressedKeys.contains(PhysicalKey.Code(0x07, 0x04)))
 
-        // Une motion hover : le stimulus pointeur correspondant, au scale factor de l'état.
+        // Une motion hover : l'entrée PUIS le mouvement — le stimulus pointeur correspondant,
+        // au scale factor de l'état (le premier hover DANS les bornes est l'entrée, le scope
+        // des bornes du lane pointeur).
         surface.onMotionObservation(
-            motion(MotionEvent.ACTION_HOVER_MOVE, pointers = listOf(Spec(0, 20f, 10f, tool = MotionEvent.TOOL_TYPE_MOUSE))),
+            motion(MotionEvent.ACTION_HOVER_ENTER, pointers = listOf(Spec(0, 20f, 10f, tool = MotionEvent.TOOL_TYPE_MOUSE))),
+            width = 100,
+            height = 100,
+        )
+        val entered = assertIs<InputEvent.PointerEntered>(collector.next())
+        assertEquals(org.graphiks.kadre.surface.LogicalPoint(20.0, 10.0), entered.position)
+        surface.onMotionObservation(
+            motion(MotionEvent.ACTION_HOVER_MOVE, pointers = listOf(Spec(0, 22f, 12f, tool = MotionEvent.TOOL_TYPE_MOUSE))),
             width = 100,
             height = 100,
         )
         val moved = assertIs<InputEvent.PointerMoved>(collector.next())
-        assertEquals(org.graphiks.kadre.surface.LogicalPoint(20.0, 10.0), moved.position)
+        assertEquals(org.graphiks.kadre.surface.LogicalPoint(22.0, 12.0), moved.position)
 
         // Une touche HORS table : forwarded-only, AUCUN stimulus (décision Task 1).
         surface.onInputObservation(
@@ -309,10 +318,12 @@ class AndroidInputDeliveryTest {
         assertEquals(FeatureAvailability.Available, post.touch)
 
         // Le replay livre la touche d'abord, la motion ensuite — l'ordre du buffer. La
-        // stateRevision de l'événement touche PORTE la preuve de l'ordre : l'observation
-        // structurale (InputObservationChanged) a déplacé la révision AVANT le replay.
+        // stateRevision de l'événement pointeur PORTE la preuve de l'ordre : l'observation
+        // structurale (InputObservationChanged) a déplacé la révision AVANT le replay. Le
+        // hover bufferisé est le PREMIER hover dans les bornes : il est livré en entrée
+        // (PointerEntered), le scope des bornes du lane pointeur.
         val bufferedKey = assertIs<InputEvent.Key>(collector.next())
-        val bufferedMotion = assertIs<InputEvent.PointerMoved>(collector.next())
+        val bufferedMotion = assertIs<InputEvent.PointerEntered>(collector.next())
         assertEquals(PhysicalKey.Code(0x07, 0x04), bufferedKey.physicalKey)
         assertEquals(
             surface.input.state.value.revision,

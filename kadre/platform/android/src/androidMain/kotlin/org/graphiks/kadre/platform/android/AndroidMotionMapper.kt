@@ -281,11 +281,28 @@ internal class AndroidMotionTracker(
     private var pointerPressActive: Boolean = false
 
     /**
+     * Le hover est DANS les bornes de la View : le scope du lane pointeur en hover — un
+     * `HOVER_ENTER`/`HOVER_MOVE` hors bornes n'ouvre rien (la souris ailleurs dans la fenêtre
+     * n'est pas le pointeur de CETTE surface), la sortie des bornes émet le `PointerLeft`
+     * d'un hover observé dedans. Le premier hover DANS les bornes est l'entrée, même quand la
+     * plateforme ne livre qu'un `HOVER_MOVE` (le flux hover peut traverser la fenêtre sans
+     * `ENTER` nommé). Remis par [reset].
+     */
+    private var hoverInside: Boolean = false
+
+    /**
      * Traduit une observation en stimuli copiés, SDK-free, et répond la liste ordonnée — vide
-     * quand rien n'est à livrer (contact hors bornes ou retiré, action non portée).
+     * quand rien n'est à livrer (contact hors bornes ou retiré, hover hors bornes, action non
+     * portée).
      *
      * [viewWidth]/[viewHeight] sont les bornes PHYSIQUES de la View attachée, le gate du DOWN
-     * touch ; [scaleFactor] convertit vers le logique par division IEEE — la même conversion
+     * touch et celui du hover ; [viewOffsetX]/[viewOffsetY] sont l'origine de la View DANS
+     * l'espace de la fenêtre (l'écart `view.getLocationOnScreen() - decor.originOnScreen`,
+     * échantillonné par la couture AU MOMENT du dispatch) : le dispatch `Window.Callback`
+     * livre des coordonnées fenêtre, les bornes de la View sont parent-relatives — la
+     * soustraction ici, AVANT tout gate et tout mapping, rend chaque coordonnée view-loCALE.
+     * L'absence d'offset (défaut) est le cas d'une View collée à l'origine de la fenêtre.
+     * [scaleFactor] convertit vers le logique par division IEEE — la même conversion
      * déterministe que les métriques de phase 2 (`PhysicalPoint.toLogical`).
      */
     public fun onObservation(
@@ -293,13 +310,17 @@ internal class AndroidMotionTracker(
         viewWidth: Int,
         viewHeight: Int,
         scaleFactor: Double,
+        viewOffsetX: Int = 0,
+        viewOffsetY: Int = 0,
     ): List<SurfaceStimulus> {
         require(scaleFactor.isFinite() && scaleFactor > 0.0) { "scaleFactor must be finite and positive" }
 
         // Copies défensives : TOUTE la dérivation lit ces instantanés, jamais les tableaux de
         // l'appelant — la preuve `payloadsAreCopiedNotReferenced` tient sur ce bloc. Le compte
         // est serré sur les tableaux réels : une observation mal formée de la couture est
-        // tronquée, jamais indexée hors bornes.
+        // tronquée, jamais indexée hors bornes. La conversion view-locale (l'offset de fenêtre
+        // soustrait) a lieu SUR LA COPIE : les primitives copiées au dispatch restent telles
+        // quelles, la dérivation ne lit jamais l'espace fenêtre.
         val count = minOf(
             observation.pointerCount,
             observation.pointerIds.size,
@@ -309,8 +330,8 @@ internal class AndroidMotionTracker(
             observation.toolTypes.size,
         )
         val ids = observation.pointerIds.copyOf(count)
-        val xs = observation.xs.copyOf(count)
-        val ys = observation.ys.copyOf(count)
+        val xs = FloatArray(count) { observation.xs[it] - viewOffsetX }
+        val ys = FloatArray(count) { observation.ys[it] - viewOffsetY }
         val pressures = observation.pressures.copyOf(count)
         val tools = observation.toolTypes.copyOf(count)
         val device = observation.deviceId.takeIf { it >= 0 }?.let { DeviceId(it.toLong()) }
@@ -324,8 +345,10 @@ internal class AndroidMotionTracker(
                 observation, ids, xs, ys, pressures, tools, scaleFactor, device,
             )
             MotionEvent.ACTION_CANCEL -> cancelled(ids, xs, ys, pressures, tools, scaleFactor, device)
-            MotionEvent.ACTION_HOVER_ENTER -> pointerEntered(tools, xs, ys, scaleFactor, device)
-            MotionEvent.ACTION_HOVER_MOVE -> pointerMoved(tools, xs, ys, pressures, scaleFactor, device)
+            MotionEvent.ACTION_HOVER_ENTER -> pointerEntered(tools, xs, ys, viewWidth, viewHeight, scaleFactor, device)
+            MotionEvent.ACTION_HOVER_MOVE -> pointerMoved(
+                tools, xs, ys, pressures, viewWidth, viewHeight, scaleFactor, device,
+            )
             MotionEvent.ACTION_HOVER_EXIT -> pointerLeft(tools, device)
             MotionEvent.ACTION_BUTTON_PRESS -> pointerButtonChanged(
                 observation, tools, xs, ys, pressures, scaleFactor, device, PointerButtonState.Pressed,
@@ -349,6 +372,7 @@ internal class AndroidMotionTracker(
         contacts.clear()
         pointerMotion.clear()
         pointerPressActive = false
+        hoverInside = false
     }
 
     // -----------------------------------------------------------------
@@ -572,17 +596,27 @@ internal class AndroidMotionTracker(
     }
 
     // -----------------------------------------------------------------
-    // Lane pointeur — hover, boutons, scroll : UN pointeur par surface (D11)
+    // Lane pointeur — hover, boutons, scroll : UN pointeur par surface (D11), le hover
+    // scopé aux bornes de la View (entrée/sortie)
     // -----------------------------------------------------------------
 
+    /**
+     * Un `HOVER_ENTER` DANS les bornes ouvre le hover ; hors bornes, la souris ailleurs dans
+     * la fenêtre n'entre pas — muette pour cette surface ([hoverInside] reste faux, le
+     * `MOVE` d'après hors bornes n'émettra pas de sortie inventée).
+     */
     private fun pointerEntered(
         tools: IntArray,
         xs: FloatArray,
         ys: FloatArray,
+        viewWidth: Int,
+        viewHeight: Int,
         scaleFactor: Double,
         device: DeviceId?,
     ): List<SurfaceStimulus> {
         val position = pointerPosition(xs, ys, scaleFactor) ?: return emptyList()
+        if (!isInsideBounds(xs[0], ys[0], viewWidth, viewHeight)) return emptyList()
+        hoverInside = true
         // Une entrée énonce une position, pas un mouvement — elle l'enregistre.
         pointerMotion.record(position)
         return listOf(
@@ -595,15 +629,48 @@ internal class AndroidMotionTracker(
         )
     }
 
+    /**
+     * Un `HOVER_MOVE` suit le scope des bornes : dedans déjà (ou premier hover dans les
+     * bornes — l'entrée, quand le flux a traversé la fenêtre sans `ENTER` nommé), dehors la
+     * SORTIE d'un hover observé dedans, rien pour un hover jamais entré.
+     */
     private fun pointerMoved(
         tools: IntArray,
         xs: FloatArray,
         ys: FloatArray,
         pressures: Array<Float?>,
+        viewWidth: Int,
+        viewHeight: Int,
         scaleFactor: Double,
         device: DeviceId?,
     ): List<SurfaceStimulus> {
         val position = pointerPosition(xs, ys, scaleFactor) ?: return emptyList()
+        if (!isInsideBounds(xs[0], ys[0], viewWidth, viewHeight)) {
+            if (!hoverInside) return emptyList()
+            hoverInside = false
+            pointerMotion.clear()
+            return listOf(
+                SurfaceStimulus.PointerLeft(
+                    surfaceId = surfaceId,
+                    kind = pointerKindOf(tools),
+                    deviceId = device,
+                ),
+            )
+        }
+        if (!hoverInside) {
+            // Le premier hover DANS les bornes est l'entrée : une position énoncée, pas un
+            // mouvement — le miroir de [pointerEntered] pour le flux sans `ENTER` nommé.
+            hoverInside = true
+            pointerMotion.record(position)
+            return listOf(
+                SurfaceStimulus.PointerEntered(
+                    surfaceId = surfaceId,
+                    kind = pointerKindOf(tools),
+                    position = position,
+                    deviceId = device,
+                ),
+            )
+        }
         return listOf(
             SurfaceStimulus.PointerMoved(
                 surfaceId = surfaceId,
@@ -617,10 +684,13 @@ internal class AndroidMotionTracker(
         )
     }
 
+    /** Un `HOVER_EXIT` ne sort qu'un hover OBSERVÉ dedans — jamais une sortie inventée. */
     private fun pointerLeft(
         tools: IntArray,
         device: DeviceId?,
     ): List<SurfaceStimulus> {
+        if (!hoverInside) return emptyList()
+        hoverInside = false
         // Un left oublie la position : une ré-entrée mesure depuis SA propre entrée.
         pointerMotion.clear()
         return listOf(
@@ -754,8 +824,9 @@ internal class AndroidMotionTracker(
     private fun isFinitePosition(x: Float, y: Float): Boolean = x.isFinite() && y.isFinite()
 
     /**
-     * Le gate des bornes du DOWN : la position physique doit tomber DANS la View — le bord est
-     * exclusif (`x == viewWidth` est hors bornes), une position non finie aussi.
+     * Le gate des bornes — le DOWN des contacts ET le hover du pointeur : la position
+     * physique view-LOCALE doit tomber DANS la View — le bord est exclusif
+     * (`x == viewWidth` est hors bornes), une position non finie aussi.
      */
     private fun isInsideBounds(x: Float, y: Float, viewWidth: Int, viewHeight: Int): Boolean {
         if (!isFinitePosition(x, y)) return false

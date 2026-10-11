@@ -670,9 +670,19 @@ internal class AndroidHostSurface(
         inputDelivery?.onObservation(observation)
     }
 
-    /** Route une observation motion du wrapper T1 vers la delivery, avec les bornes de la View. */
-    internal fun onMotionObservation(observation: AndroidMotionObservation, width: Int, height: Int) {
-        inputDelivery?.onMotion(observation, width, height)
+    /**
+     * Route une observation motion du wrapper T1 vers la delivery, avec les bornes de la View
+     * et son origine DANS l'espace fenêtre (la conversion view-locale du dispatch
+     * `Window.Callback` — voir [AndroidMotionTracker.onObservation]).
+     */
+    internal fun onMotionObservation(
+        observation: AndroidMotionObservation,
+        width: Int,
+        height: Int,
+        offsetX: Int = 0,
+        offsetY: Int = 0,
+    ) {
+        inputDelivery?.onMotion(observation, width, height, offsetX, offsetY)
     }
 
     /**
@@ -684,9 +694,12 @@ internal class AndroidHostSurface(
      * scroll-keys documentaires seules le sont ([ANDROID_DOCUMENT_SCROLL_KEYS], keyé sur le
      * keycode natif — carry de la review Task 1 : les touches de page, Home et End
      * n'existent pas comme touches logiques nommées dans la table Android). La décision du
-     * dispatch vit dans [AndroidInputWindowCallback] : une touche consommée répond `true`
-     * SANS forward, et reste OBSERVÉE — la delivery d'abord, la suppression ensuite (le
-     * précédent web « delivered then suppressed »). Pure lecture : rien n'y commet rien.
+     * dispatch vit dans [AndroidInputWindowCallback], SOUS LA MÊME PORTE DE FOCUS que
+     * l'observation : la vue attachée focalisée seule — une touche consommée répond `true`
+     * SANS forward et reste OBSERVÉE, la delivery d'abord, la suppression ensuite (le
+     * précédent web « delivered then suppressed ») ; une touche alors que la vue N'A PAS
+     * le focus n'est ni observée ni consommée — le host la reçoit entière. Pure lecture :
+     * rien n'y commet rien.
      * L'écart press+release contre le web (keydown seul) est documenté dans la KDoc de
      * [AndroidInputTranslation.shouldSuppress] : la consommation Android retire l'événement
      * du flux du host — une presse consommée sans sa relève y laisserait une relève

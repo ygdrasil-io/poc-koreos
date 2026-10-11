@@ -46,17 +46,25 @@ internal sealed interface AndroidInputObservation {
  * le wrapper réel ([AndroidWindowCallbackForwarder]) n'est que la plomberie
  * `Window.Callback` autour de cette classe.
  *
- * Le contrat complet de [dispatchKeyEvent] :
- * 1. la touche est observée ([onObservation] avec [AndroidInputObservation.Key]) UNIQUEMENT
- *    si la vue attachée porte le focus ([isTargetFocused] — `view.hasFocus()` au moment de
- *    l'événement) ; l'événement est TOUJOURS forwardé quoi qu'il arrive ;
- * 2. une touche système ([isSystemKey]) n'est JAMAIS consommée — forwardée intacte ;
- * 3. sinon, la policy décide ([shouldConsumeKey] — câblée par la tâche 4 à l'état COMMIS de
- *    la surface : [AndroidInputTranslation.shouldSuppress], exactement les scroll-keys
- *    documentaires sous `SuppressWhenPossible`, rien sous `HostDefault`) : `true` consomme
- *    (aucun forward),
- *    `false` laisse partir ;
- * 4. le forward est la décision : la valeur de retour de [forwardKey] EST celle rendue au
+ * Le contrat complet de [dispatchKeyEvent] — la CONSOMMATION vit sous la MÊME porte de
+ * focus que l'observation : une touche destinée à une AUTRE vue focalisée n'est ni
+ * observée ni consommée, le host la reçoit entière (l'invariant « delivered then
+ * suppressed … reste OBSERVÉE » ne parle que d'une touche dont la vue attachée EST la
+ * destinataire focalisée ; consommer hors focus avalerait au host une touche qui ne
+ * regarde pas la surface) :
+ * 1. la vue attachée PORTE le focus ([isTargetFocused] — `view.hasFocus()` au moment de
+ *    l'événement) → la touche est observée ([onObservation] avec
+ *    [AndroidInputObservation.Key]) PUIS la consommation décide : une touche système
+ *    ([isSystemKey]) n'est JAMAIS consommée — forwardée intacte ; sinon la policy répond
+ *    ([shouldConsumeKey] — câblée par la tâche 4 à l'état COMMIS de la surface :
+ *    [AndroidInputTranslation.shouldSuppress], exactement les scroll-keys documentaires
+ *    sous `SuppressWhenPossible`, rien sous `HostDefault`) : `true` consomme (aucun
+ *    forward, l'observation reste livrée — « delivered then suppressed »), `false` laisse
+ *    partir (forward) ;
+ * 2. la vue attachée N'A PAS le focus → AUCUNE observation, AUCUNE consommation : le
+ *    forward SEUL — l'événement est TOUJOURS forwardé quoi qu'il arrive, dans les deux
+ *    branches ;
+ * 3. le forward est la décision : la valeur de retour de [forwardKey] EST celle rendue au
  *    système.
  *
  * [onWindowFocusChanged] observe la PERTE seule : [onObservation] reçoit
@@ -79,7 +87,11 @@ internal class AndroidInputWindowCallback(
         isSystemKey: Boolean,
         keyState: KeyState,
     ): Boolean {
-        if (isTargetFocused()) {
+        // La porte de focus gouverne l'OBSERVATION et la CONSOMMATION ensemble : sans
+        // focus, la touche est forwardée seule — jamais avalée au nom d'une policy qui ne
+        // concerne pas la vue focalisée d'un autre host.
+        val focused = isTargetFocused()
+        if (focused) {
             onObservation(
                 AndroidInputObservation.Key(
                     nativeKeyCode = nativeKeyCode,
@@ -91,7 +103,7 @@ internal class AndroidInputWindowCallback(
                 ),
             )
         }
-        if (!isSystemKey && shouldConsumeKey(nativeKeyCode)) return true
+        if (focused && !isSystemKey && shouldConsumeKey(nativeKeyCode)) return true
         return forwardKey(nativeKeyCode, repeat, metaState)
     }
 
@@ -119,8 +131,12 @@ internal class AndroidInputWindowCallback(
  * - [onWindowFocusChanged] : la perte passe par le cœur (observation + un seul forward) ;
  * - [dispatchTouchEvent] et [dispatchGenericMotionEvent] : les deux points d'entrée motion —
  *   les primitives de [MotionEvent] sont copiées AVANT le forward (l'événement est recyclé
- *   par le système au retour du dispatch) et remises à [onMotion] ; le forward, lui, reste
- *   intact, tel quel — l'observation n'est jamais une interception ;
+ *   par le système au retour du dispatch) et remises à [onMotion] avec l'ORIGINE de la View
+ *   dans l'espace fenêtre ([viewOffsetInWindow] — `view.getLocationOnScreen()` moins
+ *   `decorView.getLocationOnScreen()`, échantillonné AU MOMENT du dispatch par la paire
+ *   publique `getLocationOnScreen` ; le dispatch `Window.Callback` livre des coordonnées
+ *   fenêtre, les bornes de la View sont parent-relatives, le tracker convertit) ; le
+ *   forward, lui, reste intact, tel quel — l'observation n'est jamais une interception ;
  * - [dispatchKeyShortcutEvent], [dispatchTrackballEvent] : forwardés intacts, NON observés —
  *   le trackball est le chemin des périphériques hérités dont le routage de lane (un MOVE
  *   d'outil inconnu est un contact, pas un pointeur) serait une invention ; le chemin
@@ -152,7 +168,14 @@ internal class AndroidWindowCallbackForwarder(
     isTargetFocused: () -> Boolean,
     onObservation: (AndroidInputObservation) -> Unit,
     shouldConsumeKey: (nativeKeyCode: Int) -> Boolean,
-    private val onMotion: (AndroidMotionObservation) -> Unit = {},
+    private val onMotion: (AndroidMotionObservation, offsetX: Int, offsetY: Int) -> Unit = { _, _, _ -> },
+    /**
+     * L'origine de la View DANS l'espace fenêtre, `view.getLocationOnScreen()` moins
+     * `decorView.getLocationOnScreen()` — la couture de la conversion view-locale (le tracker
+     * soustrait avant ses gates). Le défaut zéro est le cas d'une View collée à l'origine de
+     * la fenêtre ; la couture réelle fournit la paire publique.
+     */
+    private val viewOffsetInWindow: () -> Pair<Int, Int> = { 0 to 0 },
 ) : Window.Callback {
     private var installed: Boolean = false
     private var pendingKeyEvent: KeyEvent? = null
@@ -225,15 +248,21 @@ internal class AndroidWindowCallbackForwarder(
     override fun dispatchKeyShortcutEvent(event: KeyEvent): Boolean = wrapped.dispatchKeyShortcutEvent(event)
 
     override fun dispatchTouchEvent(event: MotionEvent): Boolean {
-        onMotion(motionObservation(event))
+        onMotionWithViewOffset(event)
         return wrapped.dispatchTouchEvent(event)
     }
 
     override fun dispatchTrackballEvent(event: MotionEvent): Boolean = wrapped.dispatchTrackballEvent(event)
 
     override fun dispatchGenericMotionEvent(event: MotionEvent): Boolean {
-        onMotion(motionObservation(event))
+        onMotionWithViewOffset(event)
         return wrapped.dispatchGenericMotionEvent(event)
+    }
+
+    /** L'observation motion avec l'origine de la View échantillonnée AU MOMENT du dispatch. */
+    private fun onMotionWithViewOffset(event: MotionEvent) {
+        val (offsetX, offsetY) = viewOffsetInWindow()
+        onMotion(motionObservation(event), offsetX, offsetY)
     }
 
     /**

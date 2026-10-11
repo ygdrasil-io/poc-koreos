@@ -31,7 +31,9 @@ import kotlin.test.assertTrue
  * La lane suit le TYPE D'OUTIL, pas la famille d'action (fix review F1, adjudication
  * stylus) : `TOOL_TYPE_STYLUS`/`ERASER` sont TOUJOURS le pointeur unique — un contact stylet
  * est la pression `Primary` du pointeur, son cancel un `PointerLeft` — tandis que le doigt et
- * l'outil inconnu restent des contacts.
+ * l'outil inconnu restent des contacts. La revue finale ajoute ses deux cas : le hover est
+ * scopé aux bornes de la View (entrée/sortie), et une View décalée dans sa fenêtre lit le
+ * gate et les positions en view-local (l'offset fenêtre échantillonné par la couture).
  * Les constantes `ACTION_*`/`TOOL_TYPE_*`/`BUTTON_*` sont des constantes de compilation.
  */
 class AndroidMotionMapperTest {
@@ -552,6 +554,170 @@ class AndroidMotionMapperTest {
     }
 
     // -----------------------------------------------------------------------
+    // Cas 5 bis (revue finale I-3) — le hover est scopé aux bornes : entrée/sortie
+    // -----------------------------------------------------------------------
+
+    @Test
+    fun hoverIsScopedToTheViewBoundsWithEnterAndExit() {
+        val tracker = tracker()
+        // Un hover ailleurs dans la fenêtre (hors bornes de la View) : AUCUN stimulus — la
+        // souris hors de la View n'est pas le pointeur de CETTE surface, ni en MOVE ni en
+        // ENTER hors bornes.
+        assertTrue(
+            tracker.onObservation(
+                observation(
+                    MotionEvent.ACTION_HOVER_MOVE,
+                    pointers = listOf(PointerSpec(0, 150f, 50f, tool = MotionEvent.TOOL_TYPE_MOUSE)),
+                ),
+                viewWidth = 100, viewHeight = 100, scaleFactor = 1.0,
+            ).isEmpty(),
+            "an out-of-bounds hover move feeds nothing",
+        )
+        assertTrue(
+            tracker.onObservation(
+                observation(
+                    MotionEvent.ACTION_HOVER_ENTER,
+                    pointers = listOf(PointerSpec(0, 150f, 50f, tool = MotionEvent.TOOL_TYPE_MOUSE)),
+                ),
+                viewWidth = 100, viewHeight = 100, scaleFactor = 1.0,
+            ).isEmpty(),
+            "an out-of-bounds hover enter opens nothing",
+        )
+
+        // Le premier hover DANS les bornes est l'entrée — même porté par un MOVE (le flux
+        // hover peut traverser la fenêtre sans ENTER nommé).
+        val first = tracker.onObservation(
+            observation(
+                MotionEvent.ACTION_HOVER_MOVE,
+                pointers = listOf(PointerSpec(0, 50f, 50f, tool = MotionEvent.TOOL_TYPE_MOUSE)),
+            ),
+            viewWidth = 100, viewHeight = 100, scaleFactor = 1.0,
+        )
+        assertIs<SurfaceStimulus.PointerEntered>(first.single())
+
+        // Le hover dedans continue : mouvement mesuré depuis l'entrée.
+        val second = tracker.onObservation(
+            observation(
+                MotionEvent.ACTION_HOVER_MOVE,
+                pointers = listOf(PointerSpec(0, 60f, 50f, tool = MotionEvent.TOOL_TYPE_MOUSE)),
+            ),
+            viewWidth = 100, viewHeight = 100, scaleFactor = 1.0,
+        )
+        assertIs<SurfaceStimulus.PointerMoved>(second.single())
+
+        // La sortie des bornes émet le left du hover observé dedans…
+        val leaving = tracker.onObservation(
+            observation(
+                MotionEvent.ACTION_HOVER_MOVE,
+                pointers = listOf(PointerSpec(0, 150f, 50f, tool = MotionEvent.TOOL_TYPE_MOUSE)),
+            ),
+            viewWidth = 100, viewHeight = 100, scaleFactor = 1.0,
+        )
+        assertIs<SurfaceStimulus.PointerLeft>(leaving.single())
+        // …puis reste muet dehors (jamais de left en rafale), et un EXIT sans hover observé
+        // dedans n'invente rien.
+        assertTrue(
+            tracker.onObservation(
+                observation(
+                    MotionEvent.ACTION_HOVER_MOVE,
+                    pointers = listOf(PointerSpec(0, 160f, 50f, tool = MotionEvent.TOOL_TYPE_MOUSE)),
+                ),
+                viewWidth = 100, viewHeight = 100, scaleFactor = 1.0,
+            ).isEmpty(),
+            "an out-of-bounds hover stays silent after its exit",
+        )
+        assertTrue(
+            tracker.onObservation(
+                observation(
+                    MotionEvent.ACTION_HOVER_EXIT,
+                    pointers = listOf(PointerSpec(0, 160f, 50f, tool = MotionEvent.TOOL_TYPE_MOUSE)),
+                ),
+                viewWidth = 100, viewHeight = 100, scaleFactor = 1.0,
+            ).isEmpty(),
+            "a hover exit without an observed enter emits nothing",
+        )
+
+        // La ré-entrée officielle mesure depuis SA propre entrée.
+        val reEntering = tracker.onObservation(
+            observation(
+                MotionEvent.ACTION_HOVER_ENTER,
+                pointers = listOf(PointerSpec(0, 10f, 10f, tool = MotionEvent.TOOL_TYPE_MOUSE)),
+            ),
+            viewWidth = 100, viewHeight = 100, scaleFactor = 1.0,
+        )
+        assertIs<SurfaceStimulus.PointerEntered>(reEntering.single())
+        val resumed = tracker.onObservation(
+            observation(
+                MotionEvent.ACTION_HOVER_MOVE,
+                pointers = listOf(PointerSpec(0, 12f, 10f, tool = MotionEvent.TOOL_TYPE_MOUSE)),
+            ),
+            viewWidth = 100, viewHeight = 100, scaleFactor = 1.0,
+        )
+        assertEquals(
+            org.graphiks.kadre.surface.LogicalDelta(2.0, 0.0),
+            assertIs<SurfaceStimulus.PointerMoved>(resumed.single()).delta,
+        )
+
+        // Le reset oublie le scope : le premier hover dedans redevient une entrée.
+        tracker.reset()
+        val afterReset = tracker.onObservation(
+            observation(
+                MotionEvent.ACTION_HOVER_MOVE,
+                pointers = listOf(PointerSpec(0, 14f, 10f, tool = MotionEvent.TOOL_TYPE_MOUSE)),
+            ),
+            viewWidth = 100, viewHeight = 100, scaleFactor = 1.0,
+        )
+        assertIs<SurfaceStimulus.PointerEntered>(afterReset.single())
+    }
+
+    // -----------------------------------------------------------------------
+    // Cas 5 ter (revue finale I-3) — View décalée : le gate et les positions sont view-loCAUX
+    // -----------------------------------------------------------------------
+
+    @Test
+    fun offsetViewBoundsGateAndPositionsAreViewLocal() {
+        val tracker = tracker()
+        // Une View décalée dans sa fenêtre (une toolbar au-dessus) : origine (0, 60) — le
+        // dispatch `Window.Callback` livre des coordonnées FENÊTRE, l'offset échantillonné
+        // par la couture les rend view-loCALES avant le gate et le mapping.
+        val inside = tracker.onObservation(
+            observation(MotionEvent.ACTION_DOWN, pointers = listOf(PointerSpec(7, 30f, 90f))),
+            viewWidth = 100, viewHeight = 100, scaleFactor = 2.0, viewOffsetX = 0, viewOffsetY = 60,
+        )
+        val started = assertIs<SurfaceStimulus.TouchChanged>(inside.single())
+        assertEquals(
+            LogicalPoint(15.0, 15.0),
+            started.position,
+            "the delivered position is the view-local one, divided by the scale",
+        )
+
+        // La continuité du geste porte des positions view-loCALES, pas fenêtre.
+        val continued = tracker.onObservation(
+            observation(MotionEvent.ACTION_MOVE, pointers = listOf(PointerSpec(7, 40f, 100f))),
+            viewWidth = 100, viewHeight = 100, scaleFactor = 2.0, viewOffsetX = 0, viewOffsetY = 60,
+        )
+        assertEquals(LogicalPoint(20.0, 20.0), assertIs<SurfaceStimulus.TouchChanged>(continued.single()).position)
+
+        // Le gate lit la géométrie view-LOCALE des deux côtés : un DOWN fenêtre (30, 170) —
+        // view-local (30, 110), SOUS le bord bas de la View — ne minte rien ; un DOWN à
+        // gauche de la View (offset x) non plus.
+        assertTrue(
+            tracker.onObservation(
+                observation(MotionEvent.ACTION_DOWN, pointers = listOf(PointerSpec(8, 30f, 170f))),
+                viewWidth = 100, viewHeight = 100, scaleFactor = 2.0, viewOffsetX = 0, viewOffsetY = 60,
+            ).isEmpty(),
+            "a DOWN below the offset view (in window space) mints nothing",
+        )
+        assertTrue(
+            tracker.onObservation(
+                observation(MotionEvent.ACTION_DOWN, pointers = listOf(PointerSpec(9, 20f, 90f))),
+                viewWidth = 100, viewHeight = 100, scaleFactor = 2.0, viewOffsetX = 30, viewOffsetY = 60,
+            ).isEmpty(),
+            "a DOWN left of the offset view (in window space) mints nothing",
+        )
+    }
+
+    // -----------------------------------------------------------------------
     // Cas 6 — scroll : axes relatifs → Logical, notches → Lines, frontière croissante
     // -----------------------------------------------------------------------
 
@@ -656,6 +822,14 @@ class AndroidMotionMapperTest {
         )
 
         // Même preuve sur le lane pointeur : le kind dérivé du toolType copié ne bouge plus.
+        // (Le hover dedans est précédé de son entrée : le MOVE d'après est un vrai mouvement.)
+        tracker.onObservation(
+            observation(
+                MotionEvent.ACTION_HOVER_ENTER,
+                pointers = listOf(PointerSpec(0, 8f, 10f, tool = MotionEvent.TOOL_TYPE_STYLUS)),
+            ),
+            viewWidth = 100, viewHeight = 200, scaleFactor = 2.0,
+        )
         val pen = observation(
             MotionEvent.ACTION_HOVER_MOVE,
             pointers = listOf(PointerSpec(0, 10f, 10f, tool = MotionEvent.TOOL_TYPE_STYLUS)),
@@ -704,7 +878,9 @@ class AndroidMotionMapperTest {
         val renewedIdentity = assertIs<SurfaceStimulus.TouchChanged>(renewed.single()).nativeIdentity
         assertNotSame(firstIdentity, renewedIdentity, "reset retires every minted identity for good")
 
-        // Le lane pointeur aussi est oublié : un hover move sans précédent mesure (0, 0).
+        // Le lane pointeur aussi est oublié — le scope du hover avec lui : le premier hover
+        // dans les bornes d'après le reset est une ENTRÉE (l'ancien « dedans » est perdu),
+        // qui énonce sa position sans mesurer de mouvement.
         val orphanMove = tracker.onObservation(
             observation(
                 MotionEvent.ACTION_HOVER_MOVE,
@@ -712,10 +888,7 @@ class AndroidMotionMapperTest {
             ),
             viewWidth = 100, viewHeight = 100, scaleFactor = 1.0,
         )
-        assertEquals(
-            org.graphiks.kadre.surface.LogicalDelta(0.0, 0.0),
-            assertIs<SurfaceStimulus.PointerMoved>(orphanMove.single()).delta,
-        )
+        assertIs<SurfaceStimulus.PointerEntered>(orphanMove.single())
 
         // La pression stylet ouverte avant le reset est fermée : le move suivant ne répond plus.
         assertTrue(
