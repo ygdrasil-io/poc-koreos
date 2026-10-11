@@ -1,17 +1,17 @@
 # Android emulator contract driver
 
 This non-published JVM project runs the public Android host-attachment proof of
-phases 0 through 3 on a real emulator. It is a contract driver, not an
+phases 0 through 4 on a real emulator. It is a contract driver, not an
 implementation API: it forks the instrumented consumer build, executes its
 scenarios on the attached device, and turns the JUnit output into the canonical
-`AND-001`, `AND-002`, `AND-003` and `AND-004` evidence with the validator's own
+`AND-001` through `AND-005` evidence with the validator's own
 generator. English
 prose, like the Web driver README it mirrors; everything else in this phase is
 documented in French in the sources.
 
 ## What the driver proves
 
-Four contracts, all active in the registry
+Five contracts, all active in the registry
 ([contracts.tsv](../../registry/contracts.tsv)), oracle `O3`, mapped in
 [evidence.tsv](contracts/evidence.tsv):
 
@@ -114,6 +114,45 @@ instrumented mutations (suppression widened to every key; wrapper ownership
 identity dropped; contact reset on focus loss removed) kills **exactly one** of
 the ten phase-3 tests — its guard — and leaves the other nine green.
 
+**`AND-005`** — the phase 4 window commands and transient interactions proof
+(source `ANDROID-IMPLEMENTATION-ROADMAP.md#Phase 4 — Fenêtre Activity et
+interactions transitoires`). Five scenarios and three sentinels, all in the
+instrumented test class
+`org.graphiks.kadre.consumer.KadreConsumerWindowInteractionContractTest`, on
+the Activity form at the real boundary (the same `window.callback` dispatch as
+phase 3, plus the real `Activity`/`Window` the commands commit through). The
+View form appears inside the evidence as the distinct-capabilities pin: it has
+neither a window manager (`primary == null`) nor input observation (the phase 3
+structural limit).
+
+| evidenceId | kind | what it exercises |
+|---|---|---|
+| `android-window-commits-with-readback` | scenario | the three supported fields commit with effective readback — `title` read back on BOTH sides (`Activity.getTitle` and the window state), `contentProtection` through `FLAG_SECURE` set/cleared and read back on the layout flags, `fullscreen` `Borderless` committed through the readback-driven retry (`PartiallyApplied(TemporarilyUnavailable(retryable = true))` replayed until the insets readback confirms the bars hidden); `PropertiesChanged` events carry exactly the changed properties; then the View-form pin on a second own-task Activity attached View-form: `primary == null` and the keyboard/pointer/touch input capabilities `Unsupported` |
+| `android-window-refused-fields-inert` | scenario | `resizable`/`level`/`decorations` answer `PartiallyApplied` with per-field `Unsupported(UpdateWindow)` and call NO primitive: the Activity snapshot (title, `FLAG_SECURE`, system bars), the window state (revision included) and the event flow are untouched |
+| `android-window-back-host-owned` | scenario | `KEYCODE_BACK` down/up at the window callback: the Activity finishes itself (`onBackPressed`), Kadre observes nothing (Back is unmapped — no stimulus, no `CloseRequested`, the window stays `Open`), the session terminates only `Stopped(HostDetached)`; then `window.close()` answers `Failure(TemporarilyUnavailable(retryable = false))` and `session.close()` terminates `Stopped(HostRequested)` with the Activity still alive and not finishing |
+| `android-surface-cursor-and-capture` | scenario | `System(Text)` reaches `view.pointerIcon === PointerIcon.getSystemIcon(context, TYPE_TEXT)` (identity readback) and `Default` restores; `apply(Confined)`'s response carries `pointerCapture == None` — the attempt is NOT the confirmation — and the real `Window.Callback.onPointerCaptureChanged` listener then publishes `Confined` at a later revision; `Locked` is refused field-by-field; `None` commits in-pass and the state returns |
+| `android-interaction-token-authority` | scenario | the capability announces exactly `{EnterFullscreen, ExitFullscreen, LockPointer, UnlockPointer}` `Available`; a second handler answers `AlreadyInUse(Interaction)`; key `a` injected at the window callback reaches the handler as `KeyPressed` BEFORE the ordinary stimulus (deterministic, same thread); the script: `OpenWindow` → `Unsupported(Interaction)` (no token consumed, no outcome published), `LockPointer(Locked)` → admitted (`Committed` outcome, state `Confined` via the listener), `UnlockPointer` on the SAME token → `InteractionRequired(Consumed)`; key `b`: `UnlockPointer` on a fresh token releases, state `None` via the same listener |
+| `android-window-native-gate` | sentinel | a refused field that calls its native primitive anyway is caught — the mutation (`native?.setTitle` inside the refused-field branch) kills `androidWindowRefusedFieldsInert` alone |
+| `android-capture-listener-confirmation` | sentinel | committing the capture at `request()` return without the listener kills `androidSurfaceCursorAndCapture` alone (the two-step assertion) |
+| `android-interaction-unadvertised-refused` | sentinel | advertising `OpenWindow` kills `androidInteractionTokenAuthority` alone (the exact-advertised-set assertion) |
+
+The AND-005 sentinel blast radius is recorded the same way: each of the three
+instrumented mutations (a refused field reaching its native primitive; the
+capture committed at request return without the listener; `OpenWindow`
+advertised) kills **exactly one** of the twenty-seven phase-0–4 tests — its
+guard — and leaves the other twenty-six green (revert + green demonstrated for
+each during task 5).
+
+One environment finding is documented in the scenario itself: on the headless
+`Kadre_API_35` emulator, `InsetsController.show(systemBars())` never flips the
+dispatched insets' visible state back, so the `Windowed` restore commit is NOT
+asserted — the window honestly answers
+`TemporarilyUnavailable(retryable = true)` throughout the readback-driven retry
+loop (the on-row word working — a commit that did not happen is never
+published) and the bar restore is a best-effort SDK cleanup. A graphical
+emulator can extend the scenario if a future registry row ever demands the
+reverse direction.
+
 ## Running the gate locally
 
 Prerequisites: an Android SDK with the **AVD `Kadre_API_35`** (system image
@@ -136,9 +175,9 @@ emulator-5554`). The Gradle run inside is bounded by a portable 900 s watchdog
 (GNU `timeout` is absent on stock macOS — background Gradle, bounded wait,
 `SIGTERM` at expiry with exit code 124; commit `76229d58`). The gate task is
 `:kadre:contracts:validator:androidContractsCheck`: registry validation plus
-Android contract evidence validation against **`AND-001`, `AND-002`, `AND-003`
-and `AND-004`** — one canonical JSON per contract, all from the same
-instrumented emulator run (22 instrumented tests).
+Android contract evidence validation against **`AND-001` through `AND-005`** —
+one canonical JSON per contract, all from the same instrumented emulator run
+(27 instrumented tests).
 
 The wrapper chains two steps, each of which can also be run on its own — one
 Gradle invocation per shell command:
@@ -255,6 +294,56 @@ checklist is carried by the evidence itself:
   tests, one canonical JSON per contract, all from the same instrumented
   emulator run.
 
+### Exit gate of roadmap phase 4
+
+Same commands, one contract more. From a cold start (kill any running emulator,
+`adb emu kill`, wait for zero devices, then let the script boot the AVD itself):
+publish (1), consumer compile (2), emulator smoke + evidence + validator (the
+script — **27** scenarios green, `AND-001.json` + `AND-002.json` +
+`AND-003.json` + `AND-004.json` + `AND-005.json`), the same
+transitive-resolution purity check (grep exit 1, redone cold), and the
+no-device sanity tasks above. The roadmap checklist is carried by the evidence
+itself:
+
+- Activity and View have distinct capabilities — the View form has neither a
+  window manager (`windows.state.value.primary == null`, empty window list) nor
+  input observation (the phase 3 structural limit), asserted in the same run
+  that proves the Activity-form commits:
+  `android-window-commits-with-readback` carries the View-form pin, and the
+  host records `AndroidWindowTopologyTest.viewFormHasNullPrimaryAndEmptyWindows`
+  and `AndroidInputDeliveryTest.unwiredInstallKeepsInputCapabilitiesUnsupported`
+  pin both forms without a device;
+- refused fields are inert — `android-window-refused-fields-inert` (the
+  Activity snapshot, the window state including its revision, and the event
+  flow are untouched after a refused-only update), with the sentinel
+  `android-window-native-gate` guarding exactly that inertness and the host
+  record `AndroidActivityWindowTest.refusedFieldsCallNoPrimitive`;
+- accepted effects are correlated to their observation or outcome —
+  `android-window-commits-with-readback` (title read back on both sides,
+  `FLAG_SECURE` read back on the layout flags, the Borderless commit replayed
+  until the insets readback confirms, `PropertiesChanged` carrying exactly the
+  changed properties), the cursor identity readback and the two-step
+  pointer-capture commit of `android-surface-cursor-and-capture` (the apply
+  response is not the confirmation — the SDK listener is; sentinel
+  `android-capture-listener-confirmation` guards that seam), and the host
+  records `AndroidActivityWindowTest.titleCommitsWithReadbackAndEvent`,
+  `.contentProtectionCommitsViaFlagReadback`,
+  `.borderlessFullscreenCommitsAndExclusiveIsPerFieldRejected`;
+- revocation, late callback, destruction during a command, cancellation
+  before/after commit — the host records: the capture revocation paths
+  (`AndroidPointerCaptureTest.lostListenerRevertsToNone`,
+  `.focusLossBridgesToLost`), the late/failed handler
+  (`AndroidInteractionEngineTest.handlerExceptionFailsSessionThroughTheRuntime`),
+  the lifecycle teardown (a detached owner is terminal and absorbs late
+  publications — `AndroidLifecycleReducerTest.detachIsTerminalEvenWithSurvivingScope`,
+  `AndroidHostLifecyclePropagationTest.publicationAfterDetachIsAbsorbedWithoutResurrection`)
+  and the cancellation ladder (`AndroidViewLeaseTest.callerCancelledBeforeTheLeaseNeverStartsTheBlock`,
+  `.startedCallbackCompletesOnHostThreadDespiteCancellation`; the window
+  command's stale guard `AndroidActivityWindowTest.staleAndEmptyShapesPreserved`);
+- `AND-001` + `AND-002` + `AND-003` + `AND-004` + `AND-005` together — 27
+  instrumented tests, one canonical JSON per contract, all from the same
+  instrumented emulator run.
+
 ## Engine labeling
 
 The engine label is **never hardcoded**. The evidence producer
@@ -266,7 +355,7 @@ writes `emulator-api-<sdk>-<abi>`. On the phase 0 AVD this is
 are attached. Every run resets the per-engine JUnit copy directory first, so a
 stale XML from an earlier run can never inflate the evidence identity. The
 producer writes one canonical JSON per active android contract (currently
-`AND-001`, `AND-002`, `AND-003` and `AND-004`), each pinned to the current HEAD
+`AND-001` through `AND-005`), each pinned to the current HEAD
 commit.
 
 ## Evidence mapping
@@ -279,18 +368,19 @@ arguments as the runtime/AppKit producers — no format reimplementation) with:
   [evidence.tsv](contracts/evidence.tsv) — the mapping is what binds each
   scenario/sentinel `evidenceId` to `KadreConsumerSessionTest` (`AND-001`),
   `KadreConsumerAttachContractTest` (`AND-002`),
-  `KadreConsumerSurfaceContractTest` (`AND-003`) or
-  `KadreConsumerInputContractTest` (`AND-004`);
+  `KadreConsumerSurfaceContractTest` (`AND-003`),
+  `KadreConsumerInputContractTest` (`AND-004`) or
+  `KadreConsumerWindowInteractionContractTest` (`AND-005`);
 - the JUnit XML the consumer produced under
   `kadre/consumers/android/build/outputs/androidTest-results/connected/`;
 - the current HEAD commit (the same `git rev-parse HEAD` rule the validator
   uses — a document pinned to a commit is stale by definition once HEAD moves).
 
-Outputs: `build/contract-evidence/android/<engine>/AND-{001,002,003,004}.json`
+Outputs: `build/contract-evidence/android/<engine>/AND-{001,002,003,004,005}.json`
 (canonical), `build/test-results/android/<engine>/TEST-*.xml` (the JUnit copy
 the validator cross-checks), `build/contract-evidence/android/engines.txt` (the
 engines this run actually produced), and the gate copies
-`build/contract-evidence/AND-{001,002,003,004}.json` that
+`build/contract-evidence/AND-{001,002,003,004,005}.json` that
 `validateContractEvidence` reads.
 
 ## `androidContractsCheck` is deliberately not in `:kadre:check`
@@ -352,6 +442,35 @@ never consumed; `gestures` is decided `Unsupported(GestureInput)`; the IME and
 raw input are not inferred from keyboard/pointer events (the text-input port
 refuses `Unsupported(TextInput)`).
 
+Since phase 4, the Activity primary window carries its command table with
+effective readback — `title` → `Activity.setTitle`, `contentProtection` →
+`FLAG_SECURE`, `fullscreen` `Borderless` → `WindowInsetsController` (API 30+;
+an unconfirmed readback answers `Temporary(retryable = true)` field by field,
+and under API 30 it cannot confirm so it answers that honestly; the `Windowed`
+restore is a best-effort SDK cleanup on the headless proof emulator, where
+`InsetsController.show` never flips the dispatched state back) — the whole
+commit pass dispatched to the host thread (`AndroidMainThreadDispatch`, inline
+when the caller is already there), mutation and readback atomic on it, one
+bumped revision plus one stamped `PropertiesChanged` per state that really
+moved; the eleven other fields are refused per field with their reason
+(host-imposed: `outerPosition`, `contentSize`, `minimumSize`, `maximumSize`,
+`resizable`, `decorations`, `systemButtons`, `level`, `transparency`,
+`blurBehind`; no primitive: `icon`, `Exclusive` fullscreen) — an update
+carrying only refused fields is `PartiallyApplied` with no revision and no
+event. The surface commits `cursor` (the total `AndroidCursorIcons` table: 20
+mapped TYPE_* constants, three named-unmappable with reasons, `Hidden` → the
+transparent `TYPE_NULL` icon — never `pointerIcon = null` —, `Custom` refused
+without a native call; both attach forms), `pointerCapture` in two steps
+(API 26+; the primitive fired at admission, the state committed ONLY by the SDK
+state listener — the View form refuses honestly: no listener channel exists
+there), and installs the transient interaction engine (`handlerInteractions`
+announcing exactly `{EnterFullscreen, ExitFullscreen}` plus
+`{LockPointer, UnlockPointer}` at API 26+; synchronous interactions dispatched
+BEFORE the ordinary stimulus of the same fact; single-use tokens;
+`OpenWindow`/`BeginWindowMove`/`BeginWindowResize`/`AcceptDrop` never
+advertised and refused before any native call; `armedInteractions` stays
+`Unsupported(ArmInteraction)` — no platform arms).
+
 **The View form has no input observation — a structural, declared limit.**
 `View.getWindow()` is `@hide`: a View-form attach has no `Window.Callback` to
 chain, so no observation path exists. The input capabilities there stay
@@ -366,24 +485,26 @@ Everything else is deferred, never silently absent — the
 authoritative list with the owning phase lives in
 [capabilities/android.md](../../../capabilities/android.md) §4:
 
-- **Phase 4** — armed and synchronous interactions (the install seam exposes no
-  synchronous-interaction handler), and the commit paths for `cursor`,
-  `pointerCapture`, `hitTesting` (rejected per field since phase 2; only
-  `inputDefaultBehavior` became committable in phase 3); real window commands
-  (the Activity primary window exists as a topology; its commands are answered
-  on the exact contract-row shapes of `OPERATION-CONTRACTS` §4 — no real
-  commands: `apply` rejects every requested field under `PartiallyApplied`,
-  `requestAttention` stays `Unsupported`, `respondToCloseRequest` answers
-  `Invalid("requestId")` because no `CloseRequested` is ever published — and a
-  View host has no `Window` by the normative matrix); `close` answers
-  `Temporary(retryable = false)`, the interim on-row response for a structurally
-  non-closable host window (the row admits only `Temporary`/`Platform`; the
-  normative decision — `Unsupported(CloseWindow)` would need an
-  `OPERATION-CONTRACTS` edit — is parked for phase 4); the multi-window/dialog
-  refinement of the "interactive window" conjunct of `Active` (derived from the
-  lifecycle alone in phase 1: `Active` ⇔ `RESUMED`);
-- **Phases 4/9** — View-form input observation via owner routing (ownership
-  multi-window undesigned); View-form input generally;
+- **Later phases** — armed interactions (`armInteraction` stays
+  `Unsupported(ArmInteraction)`: no platform implements the armed path, the
+  handler token is the only interaction authority — the web holds the same
+  refusal); `hitTesting` (still without a commit path, rejected per field);
+  the multi-window/dialog refinement of the "interactive window" conjunct of
+  `Active` (phase 4 delivered the primary-window commands without opening
+  multi-window; `Active` ⇔ `RESUMED` still); View-form input observation AND
+  window via owner routing (ownership multi-window undesigned — the phase 4
+  close left the option untaken);
+- **The `Window.close` decision is closed; the normative question is parked
+  for the user.** `close` answers `Temporary(retryable = false)`, the interim
+  on-row response for a structurally non-closable host window (the row admits
+  only `Temporary`/`Platform`); Back is host-owned — never intercepted, no
+  `finish()` from the Kadre side, no Back callback, no `CloseRequested` ever
+  published (`respondToCloseRequest` therefore answers `Invalid("requestId")`),
+  proven end-to-end by `android-window-back-host-owned`. What remains is a
+  NORMATIVE question only the user can decide: whether `OPERATION-CONTRACTS`'s
+  `Window.close` row gains `Unsupported(CloseWindow)` for structurally
+  non-closable windows — that is an edit to the normative operation contracts,
+  never taken in passing;
 - **Phase 5** — text input/IME (`gestures` left the deferral list: phase 3
   publishes the decided `Unsupported(GestureInput)`);
   **Phase 6** — drag-and-drop;
