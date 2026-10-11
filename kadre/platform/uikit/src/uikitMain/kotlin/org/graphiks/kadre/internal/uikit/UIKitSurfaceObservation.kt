@@ -66,10 +66,15 @@ internal sealed interface UIKitSurfaceReduction {
  * place du compteur que le réducteur Android possède ; le réducteur UIKit de la Task 3 lira
  * [currentGeneration] de la même façon).
  *
- * Contrat de pureté : zéro import UIKit, aucune mutation, jamais d'exception — une observation non
- * mesurable (dimension non finie ou <= 0 ; scale non fini ou <= 0 ; inset non fini ou négatif,
- * contrat de [LogicalInsets]) ne publie RIEN ([UIKitSurfaceReduction.Ignored]), précédent Android :
- * « une vue non mesurée ne publie rien ». Le rejet est entier, jamais partiel.
+ * Contrat de pureté : zéro import UIKit, aucune mutation, aucune exception SUR LES VALEURS QU'IL
+ * EXAMINE — une observation non mesurable (dimension non finie ou <= 0 ; scale non fini ou <= 0 ;
+ * inset non fini ou négatif, contrat de [LogicalInsets]) ne publie RIEN
+ * ([UIKitSurfaceReduction.Ignored]), précédent Android : « une vue non mesurée ne publie rien ».
+ * Le rejet est entier, jamais partiel. La totalité n'est PAS garantie pour TOUTE entrée : des
+ * valeurs finies mais énormes peuvent déborder dans la dérivation physique (`toPhysical`) ou
+ * heurter un `require` d'un type construit — l'appelant (le port, Task 3) n'a PAS à compter sur
+ * la totalité du kernel pour sa gestion d'erreur : il enveloppe le chemin de publication dans
+ * `runCatching` et ABANDONNE une observation qui jette (rapportée, jamais fatale).
  */
 internal object UIKitSurfaceObservationKernel {
     public fun apply(

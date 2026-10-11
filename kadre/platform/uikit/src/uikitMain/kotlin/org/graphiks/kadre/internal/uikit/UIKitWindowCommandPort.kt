@@ -110,6 +110,25 @@ internal class UIKitWindowCommandPort(
     private var closed = false
 
     /**
+     * Le branchement d'observation (phase 2, Task 3) : installé par [requestOpen] après le commit
+     * (la surface doit être vivante avant qu'une publication n'arrive), retiré par
+     * [requestOpenedClose] / [beginClose] / [finishClose]. Une seule surface en phase 2 — un seul
+     * couple binding/observer par port, jamais réinstallé. Tout se joue sur la file principale.
+     *
+     * [surfaceMetrics] / [surfaceAppearance] sont le MIROIR du dernier état publié (la place que
+     * le réducteur Android tient dans son binding, AndroidSurfaceMetrics.kt l.152-193) : le
+     * kernel pur [`UIKitSurfaceObservationKernel`] déduplique et reconstruit le candidat CONTRE
+     * cet état, et la publication route `MetricsChanged` / `AppearanceChanged` par différence —
+     * le résultat combiné du kernel ne dit pas QUI a bougé, le diff contre le miroir le dit. Le
+     * runtime reste l'autorité d'état (« publication state-before-event ») : ce miroir ne sert
+     * qu'au jugement local, jamais de source de vérité.
+     */
+    private var observationBinding: UIKitSurfaceObservationBinding? = null
+    private var appearanceObserver: UIKitAppearanceObserver? = null
+    private var surfaceMetrics: SurfaceMetrics? = null
+    private var surfaceAppearance: SurfaceAppearance? = null
+
+    /**
      * Le drain coalescé du redraw (phase 2) : le ticket d'une commande admise est RETENU
      * (pending), au plus un drain est programmé sur la file principale, et la consommation —
      * le stimulus `RedrawConsumed` portant la génération exacte — n'arrive qu'au drain. Le
@@ -164,11 +183,158 @@ internal class UIKitWindowCommandPort(
         // `finishOpenDispatchLocked` — la surface devient `primary` avant que le
         // `requestWindow` de l'init du runtime ne rende (sémantique synchrone exigée par
         // l'attach, cf. `RuntimeWindowManager.requestWindow` l.452-536).
+        val snapshot = initialSnapshot()
         command.commit(
             entry.owner,
             effectiveSpec = command.spec,
-            initialSurfaceSnapshot = initialSnapshot(),
+            initialSurfaceSnapshot = snapshot,
         ) { readySink(entry.surfaceId) }
+        // Task 3 : le binding d'observation est installé APRÈS le commit, avec le surfaceId du
+        // peer pour le routage des stimuli. `UIKitWindowPeerOwner.close()` reste NEUTRE (aucun
+        // objet UIKit touché) — le binding, lui, est Kadre-owned : c'est le PORT qui le retire
+        // (requestOpenedClose / beginClose), jamais le destruct endogène.
+        installSurfaceObservation(entry.surfaceId, snapshot)
+    }
+
+    /**
+     * L'installation du couple binding d'observation + observer d'apparence (une seule fois, une
+     * seule surface en phase 2). Le miroir démarre sur le snapshot EXACT passé au commit — le
+     * premier kernel apply juge donc contre l'état réellement publié, jamais contre une re-lecture
+     * divergente. Toute exception d'installation est rapportée ([failureReporter]) et absorbée :
+     * un attach ne casse jamais pour un observer (posture « never crash from an observation »).
+     */
+    private fun installSurfaceObservation(surfaceId: SurfaceId, snapshot: SurfaceInitialSnapshot) {
+        lock.withLock {
+            if (observationBinding != null) return
+            surfaceMetrics = snapshot.metrics
+            surfaceAppearance = snapshot.appearance
+        }
+        val binding = UIKitSurfaceObservationBinding(
+            view = view,
+            scene = window.windowScene,
+            window = window,
+            publish = { observation -> onSurfaceObservation(surfaceId, observation) },
+            onVisibility = { visible -> onVisibility(surfaceId, visible) },
+        )
+        val observer = window.windowScene?.let { scene ->
+            UIKitAppearanceObserver(scene, onTheme = { theme -> onAppearancePush(surfaceId, theme) })
+        }
+        lock.withLock {
+            observationBinding = binding
+            appearanceObserver = observer
+        }
+        runCatching {
+            binding.install()
+            observer?.install()
+        }.onFailure(failureReporter::report)
+    }
+
+    /**
+     * Le chemin de publication du binding (Task 3) : le kernel pur juge l'observation contre le
+     * miroir et la génération COURANTE du binding (lue au moment du traitement — une livraison
+     * tardive après teardown est `Stale`, jamais publiée). Sur `Metrics`, le diff contre le
+     * miroir route chaque stimulus MOUVÉ — les DEUX si les deux ont bougé (le résultat du kernel
+     * est combiné, la cause vient du diff) — puis le miroir avance. Enveloppé dans `runCatching`
+     * (ride-along Task 2 : la totalité du kernel n'est pas garantie sur des valeurs énormes) —
+     * une observation qui jette est ABANDONNÉE et rapportée, jamais fatale.
+     */
+    private fun onSurfaceObservation(surfaceId: SurfaceId, observation: UIKitSurfaceObservation) {
+        val binding = lock.withLock { observationBinding } ?: return
+        val (currentMetrics, currentAppearance, currentGeneration) = lock.withLock {
+            Triple(surfaceMetrics, surfaceAppearance, binding.generation)
+        }
+        runCatching {
+            val metrics = currentMetrics ?: return
+            val appearance = currentAppearance ?: return
+            when (val reduction = UIKitSurfaceObservationKernel.apply(
+                current = metrics,
+                appearance = appearance,
+                currentGeneration = currentGeneration,
+                observation = observation,
+            )) {
+                is UIKitSurfaceReduction.Metrics -> {
+                    val metricsMoved = reduction.metrics != metrics
+                    val appearanceMoved = reduction.appearance != appearance
+                    lock.withLock {
+                        surfaceMetrics = reduction.metrics
+                        surfaceAppearance = reduction.appearance
+                    }
+                    if (metricsMoved) {
+                        stimulusSink(SurfaceStimulus.MetricsChanged(surfaceId, reduction.metrics))
+                    }
+                    if (appearanceMoved) {
+                        stimulusSink(SurfaceStimulus.AppearanceChanged(surfaceId, reduction.appearance))
+                    }
+                }
+                UIKitSurfaceReduction.Ignored -> Unit
+                UIKitSurfaceReduction.Stale -> Unit
+            }
+        }.onFailure(failureReporter::report)
+    }
+
+    /**
+     * La visibilité observée (re-lue de `window.isHidden` sur les déclencheurs du binding) : le
+     * stimulus porte `Visible`/`Hidden` et l'occlusion INTOUCHÉE (`Visible`, aucune notion
+     * d'occlusion UIKit — phase 1). Les valeurs répétées sont dédupliquées par le runtime.
+     */
+    private fun onVisibility(surfaceId: SurfaceId, visible: Boolean) {
+        runCatching {
+            stimulusSink(
+                SurfaceStimulus.VisibilityChanged(
+                    surfaceId,
+                    if (visible) SurfaceVisibility.Visible else SurfaceVisibility.Hidden,
+                    SurfaceOcclusion.Visible,
+                ),
+            )
+        }.onFailure(failureReporter::report)
+    }
+
+    /**
+     * Le seam du push 17+ (route du `UIKitAppearanceObserver`) : le thème poussé rejoint le
+     * MÊME chemin de publication (thème seul, tous les autres champs `null` — le kernel les
+     * conserve) ; la génération courante du binding étiquette l'observation. Aujourd'hui le push
+     * ne peut pas s'enregistrer (API absente du mapping K/N, cf. rapport) — la route reste
+     * câblée, prête, et le kernel dédupliquerait de toute façon un thème inchangé.
+     */
+    private fun onAppearancePush(surfaceId: SurfaceId, theme: SurfaceTheme) {
+        val binding = lock.withLock { observationBinding } ?: return
+        onSurfaceObservation(
+            surfaceId,
+            UIKitSurfaceObservation(
+                logicalWidth = null,
+                logicalHeight = null,
+                scaleFactor = null,
+                safeAreaTop = null,
+                safeAreaRight = null,
+                safeAreaBottom = null,
+                safeAreaLeft = null,
+                theme = theme,
+                generation = binding.generation,
+            ),
+        )
+    }
+
+    /**
+     * Le retrait du branchement (requestOpenedClose / beginClose / finishClose) : zéro observer
+     * résiduel (teardown du binding = tokens retirés + génération périmée), miroir remis à zéro.
+     * Idempotent — les trois chemins peuvent converger.
+     */
+    private fun teardownSurfaceObservation() {
+        val stale = lock.withLock {
+            if (observationBinding == null && appearanceObserver == null) {
+                null
+            } else {
+                val binding = observationBinding
+                val observer = appearanceObserver
+                observationBinding = null
+                appearanceObserver = null
+                surfaceMetrics = null
+                surfaceAppearance = null
+                binding to observer
+            }
+        } ?: return
+        stale.first?.teardown()
+        stale.second?.teardown()
     }
 
     /**
@@ -209,6 +375,10 @@ internal class UIKitWindowCommandPort(
         } ?: return OpenedWindowCloseOutcome.PlatformFailure(
             KadreFailure.PlatformFailure(KadrePlatform.UIKit, "uikit-window", "missing-peer"),
         )
+        // Task 3 : l'entry sort → le branchement d'observation de CETTE surface est retiré
+        // (une seule surface en phase 2 : l'entry retirée EST la surface observée). Aucun objet
+        // UIKit n'est touché — seuls les observers Kadre-owned sont libérés.
+        teardownSurfaceObservation()
         return OpenedWindowCloseOutcome.Accepted
     }
 
@@ -305,16 +475,21 @@ internal class UIKitWindowCommandPort(
     /**
      * Fermeture du port (ordre AppKit l.600-608 adapté) : le scheduler est annulé AVANT le
      * verrou — aucun drain après fermeture, un ticket pendant est abandonné (la surface qui
-     * le porte s'arrête de toute façon). Puis marquer fermé pour refuser toute nouvelle
-     * admission.
+     * le porte s'arrête de toute façon). Puis le branchement d'observation est retiré (Task 3 :
+     * tokens + génération périmée — aucune publication résiduelle) et le port marqué fermé pour
+     * refuser toute nouvelle admission.
      */
     fun beginClose() {
         redrawScheduler.cancel()
+        teardownSurfaceObservation()
         lock.withLock { closed = true }
     }
 
     /** Sortie du registre des entries restantes ; les owners ne touchent aucun objet UIKit. */
     fun finishClose() {
+        // Défense en profondeur (idempotent) : si un chemin de close oubliait beginClose, le
+        // branchement d'observation ne survivrait pas au port.
+        teardownSurfaceObservation()
         val remaining = lock.withLock {
             val entries = byRequest.values.toList()
             byRequest.clear()

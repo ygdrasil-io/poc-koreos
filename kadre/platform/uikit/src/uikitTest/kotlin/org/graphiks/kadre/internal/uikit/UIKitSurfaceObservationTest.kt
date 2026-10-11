@@ -225,12 +225,28 @@ class UIKitSurfaceObservationTest {
             )
         }
         // Insets : `LogicalInsets` exige fini et >= 0 — un noyau total ne doit jamais jeter,
-        // une observation non mesurable ne publie rien.
+        // une observation non mesurable ne publie rien. Les QUATRE côtés sont gardés (Task 3,
+        // ride-along : la garde de droite/bas/gauche vaut celle du haut).
         for (bad in listOf(-0.5, Double.NaN, Double.POSITIVE_INFINITY)) {
             assertEquals(
                 UIKitSurfaceReduction.Ignored,
                 UIKitSurfaceObservationKernel.apply(current, appearance, generation, observation(safeAreaTop = bad)),
                 "safeAreaTop=$bad",
+            )
+            assertEquals(
+                UIKitSurfaceReduction.Ignored,
+                UIKitSurfaceObservationKernel.apply(current, appearance, generation, observation(safeAreaRight = bad)),
+                "safeAreaRight=$bad",
+            )
+            assertEquals(
+                UIKitSurfaceReduction.Ignored,
+                UIKitSurfaceObservationKernel.apply(current, appearance, generation, observation(safeAreaBottom = bad)),
+                "safeAreaBottom=$bad",
+            )
+            assertEquals(
+                UIKitSurfaceReduction.Ignored,
+                UIKitSurfaceObservationKernel.apply(current, appearance, generation, observation(safeAreaLeft = bad)),
+                "safeAreaLeft=$bad",
             )
         }
         // Rejet ENTIÈREMENT (pas d'application partielle) : un champ valide à côté d'un champ
@@ -244,6 +260,40 @@ class UIKitSurfaceObservationTest {
                 observation(logicalWidth = 100.0, scaleFactor = 0.0),
             ),
         )
+    }
+
+    @Test
+    fun combinedChangeAppliesEverythingInOneMetrics() {
+        // Ride-along Task 3 : un fire réel du binding est une re-lecture COMPLÈTE — taille,
+        // scale, insets et thème bougent ENSEMBLE dans une seule observation, et le kernel
+        // les applique TOUS dans un unique `Metrics` (aucun champ laissé au courant).
+        val reduction = UIKitSurfaceObservationKernel.apply(
+            current,
+            appearance,
+            generation,
+            observation(
+                logicalWidth = 390.0,
+                logicalHeight = 844.0,
+                scaleFactor = 3.0,
+                safeAreaTop = 59.0,
+                safeAreaRight = 0.0,
+                safeAreaBottom = 34.0,
+                safeAreaLeft = 0.0,
+                theme = SurfaceTheme.Dark,
+            ),
+        )
+        val result = assertIs<UIKitSurfaceReduction.Metrics>(reduction)
+        assertEquals(LogicalSize(390.0, 844.0), result.metrics.logicalSize)
+        // Le physique est DÉRIVÉ du couple effectif (390×3=1170, 844×3=2532) — l'invariant de
+        // `SurfaceMetrics` est satisfait par construction même sur un changement combiné.
+        assertEquals(PhysicalSize(1170, 2532), result.metrics.physicalSize)
+        assertEquals(3.0, result.metrics.scaleFactor)
+        assertEquals(
+            LogicalInsets(top = 59.0, right = 0.0, bottom = 34.0, left = 0.0),
+            result.metrics.safeAreaInsets,
+        )
+        // Le thème combiné traverse sans jamais toucher le contraste (Unknown conservé).
+        assertEquals(SurfaceAppearance(SurfaceTheme.Dark, SurfaceContrast.Unknown), result.appearance)
     }
 
     private fun observation(
