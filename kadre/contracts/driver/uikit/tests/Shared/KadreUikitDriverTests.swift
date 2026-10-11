@@ -8,8 +8,8 @@ import KadreUikit
 
 final class KadreUikitDriverTests: XCTestCase {
 
-    private func fixture() throws -> DriverFixture {
-        let f = DriverFixture.shared
+    private func fixture() throws -> SceneFixture {
+        let f = try XCTUnwrap(DriverFixture.shared.primary, "no scene fixture connected")
         try f.waitUntilReady()
         return f
     }

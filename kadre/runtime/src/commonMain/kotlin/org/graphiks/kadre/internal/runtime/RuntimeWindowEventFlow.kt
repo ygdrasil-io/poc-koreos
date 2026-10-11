@@ -24,13 +24,13 @@ internal class RuntimeWindowEventFlow(
     private val sessionFailureHandler: (KadreFailure) -> Unit,
     private val closeWindow: () -> Unit,
 ) {
-    private val ingressLock = Any()
+    private val ingressLock = RuntimeLock()
     private val ingress = BoundedWindowEventScheduler(
         discreteCapacity = policy.discreteEvents.ingressCapacity,
         geometryDelivery = policy.geometryChanges,
     )
     private var ingressDrainActive = false
-    private val subscribersLock = Any()
+    private val subscribersLock = RuntimeLock()
     private val subscribers = linkedMapOf<WindowEventSubscriber, RuntimeEventCollectorLease>()
     private var terminal: WindowEventFlowTerminal? = null
 
@@ -52,7 +52,7 @@ internal class RuntimeWindowEventFlow(
         var shouldDrain = false
         var reportOverflow = false
         var terminalOverflow: Boolean? = null
-        synchronized(ingressLock) {
+        ingressLock.withLock {
             if (terminal != null) return
             when (val offered = ingress.offer(event)) {
                 WindowSchedulerOffer.Accepted -> shouldDrain = ensureIngressDrainLocked()
@@ -85,7 +85,7 @@ internal class RuntimeWindowEventFlow(
 
     private fun drainIngress() {
         while (true) {
-            val event = synchronized(ingressLock) {
+            val event = ingressLock.withLock {
                 if (terminal != null) {
                     ingressDrainActive = false
                     return
@@ -100,9 +100,9 @@ internal class RuntimeWindowEventFlow(
     }
 
     private fun deliver(event: WindowEvent) {
-        val subscribers = synchronized(ingressLock) {
+        val subscribers = ingressLock.withLock {
             if (terminal != null) return
-            synchronized(subscribersLock) { subscribers.keys.toList() }
+            subscribersLock.withLock { subscribers.keys.toList() }
         }
         var closeSource = false
         var failSession = false
@@ -123,12 +123,12 @@ internal class RuntimeWindowEventFlow(
         failSession: Boolean,
         failure: KadreFailure? = overflowFailure(),
     ) {
-        val subscribers = synchronized(ingressLock) {
+        val subscribers = ingressLock.withLock {
             if (terminal != null) return
             ingress.clear()
             ingressDrainActive = false
             terminal = failure?.let(WindowEventFlowTerminal::Failed) ?: WindowEventFlowTerminal.Closed
-            synchronized(subscribersLock) { subscribers.keys.toList() }
+            subscribersLock.withLock { subscribers.keys.toList() }
         }
         subscribers.forEach { subscriber ->
             subscriber.terminate(failure?.let(::KadreException), drain = true)
@@ -138,11 +138,11 @@ internal class RuntimeWindowEventFlow(
     }
 
     private fun register(subscriber: WindowEventSubscriber): WindowSubscriberRegistration =
-        synchronized(ingressLock) {
+        ingressLock.withLock {
             when (val knownTerminal = terminal) {
                 WindowEventFlowTerminal.Closed -> WindowSubscriberRegistration.Closed
                 is WindowEventFlowTerminal.Failed -> WindowSubscriberRegistration.Failed(knownTerminal.failure)
-                null -> synchronized(subscribersLock) {
+                null -> subscribersLock.withLock {
                     when (val admission = eventCollectorGate.tryAcquire()) {
                         is org.graphiks.kadre.diagnostics.KadreResult.Failure ->
                             WindowSubscriberRegistration.Failed(admission.reason)
@@ -157,7 +157,7 @@ internal class RuntimeWindowEventFlow(
         }
 
     private fun unregister(subscriber: WindowEventSubscriber) {
-        val lease = synchronized(subscribersLock) { subscribers.remove(subscriber) }
+        val lease = subscribersLock.withLock { subscribers.remove(subscriber) }
         lease?.close()
         subscriber.dispose()
     }
@@ -167,8 +167,12 @@ internal class RuntimeWindowEventFlow(
             failureReporter.report(cause)
         } catch (_: Exception) {
             // Error reporting is best-effort and must not alter delivery terminality.
-        } catch (_: LinkageError) {
-            // Error reporting is best-effort and must not alter delivery terminality.
+        } catch (cause: Throwable) {
+            if (cause.isLinkageFailure()) {
+                // Error reporting is best-effort and must not alter delivery terminality.
+            } else {
+                throw cause
+            }
         }
     }
 
@@ -177,8 +181,8 @@ internal class RuntimeWindowEventFlow(
             sessionFailureHandler(failure)
         } catch (cause: Exception) {
             safeReport(cause)
-        } catch (cause: LinkageError) {
-            safeReport(cause)
+        } catch (cause: Throwable) {
+            if (cause.isLinkageFailure()) safeReport(cause) else throw cause
         }
     }
 
@@ -303,7 +307,7 @@ private sealed interface WindowEventFlowTerminal {
 }
 
 private class WindowEventSubscriber(private val policy: WindowDeliveryPolicy) {
-    private val lock = Any()
+    private val lock = RuntimeLock()
     private val signal = Channel<Unit>(capacity = 1)
     private val scheduler = BoundedWindowEventScheduler(
         discreteCapacity = policy.discreteEvents.collectorCapacity,
@@ -312,7 +316,7 @@ private class WindowEventSubscriber(private val policy: WindowDeliveryPolicy) {
     private var terminal: WindowSubscriberTerminal? = null
 
     fun offer(event: WindowEvent): WindowSubscriberOffer {
-        val result = synchronized(lock) {
+        val result = lock.withLock {
             if (terminal != null) return WindowSubscriberOffer.Accepted
             when (val offered = scheduler.offer(event)) {
                 WindowSchedulerOffer.Accepted -> WindowSubscriberOffer.Accepted
@@ -348,7 +352,7 @@ private class WindowEventSubscriber(private val policy: WindowDeliveryPolicy) {
 
     suspend fun next(): WindowEvent? {
         while (true) {
-            val knownTerminal = synchronized(lock) {
+            val knownTerminal = lock.withLock {
                 scheduler.poll()?.let { return it }
                 terminal
             }
@@ -361,7 +365,7 @@ private class WindowEventSubscriber(private val policy: WindowDeliveryPolicy) {
     }
 
     fun terminate(cause: Throwable?, drain: Boolean) {
-        synchronized(lock) {
+        lock.withLock {
             if (terminal != null) return
             if (!drain) scheduler.clear()
             terminal = cause?.let(WindowSubscriberTerminal::Failed) ?: WindowSubscriberTerminal.Closed
@@ -370,7 +374,7 @@ private class WindowEventSubscriber(private val policy: WindowDeliveryPolicy) {
     }
 
     fun dispose() {
-        synchronized(lock) { scheduler.clear() }
+        lock.withLock { scheduler.clear() }
         signal.cancel()
     }
 }
@@ -405,7 +409,7 @@ private fun coalescedWindowStamp(previous: EventStamp, latest: EventStamp): Even
     val previousCount = previous.deliverySpan?.eventCount ?: 1L
     val latestCount = latest.deliverySpan?.eventCount ?: 1L
     return latest.copy(
-        deliverySpan = EventDeliverySpan(first, latest.sequence, Math.addExact(previousCount, latestCount)),
+        deliverySpan = EventDeliverySpan(first, latest.sequence, checkedAdd(previousCount, latestCount)),
     )
 }
 

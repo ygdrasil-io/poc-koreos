@@ -110,6 +110,27 @@ class NativePrimitivesConcurrencyTest {
     }
 
     @Test
+    fun runtimeCallFrameIsPerThread() {
+        val frame = RuntimeCallFrame { ArrayDeque<String>() }
+        frame.current().addLast("main")
+        val seen = onNativeThread {
+            val isolated = frame.current()
+            isolated.addLast("worker")
+            isolated.toList()
+        }
+        // the worker's frame was created from the factory and never saw the main thread's value
+        assertEquals(listOf("worker"), seen)
+        assertEquals(listOf("main"), frame.current().toList())
+
+        frame.set(ArrayDeque<String>().also { it.addLast("replaced") })
+        assertEquals(listOf("replaced"), frame.current().toList())
+
+        frame.clear()
+        // after a clear the next access recreates the value from the factory, like ThreadLocal.remove
+        assertEquals(0, frame.current().size)
+    }
+
+    @Test
     fun linkageFailureClassificationStaysFalseOnNative() {
         assertFalse(RuntimeException("x").isLinkageFailure())
         assertFalse(NullPointerException().isLinkageFailure())

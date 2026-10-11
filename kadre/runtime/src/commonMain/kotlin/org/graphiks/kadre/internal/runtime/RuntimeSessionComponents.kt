@@ -48,6 +48,7 @@ public class RuntimeSessionComponents private constructor(
     public val inputDevicePort: InputDevicePort?,
     private val closeAction: () -> Unit,
     primarySurface: RuntimePrimarySurface?,
+    private val primarySurfaceProvider: (() -> RuntimePrimarySurface?)?,
 ) : AutoCloseable {
     public constructor(
         windows: WindowManager,
@@ -57,7 +58,7 @@ public class RuntimeSessionComponents private constructor(
         gamepadPort: GamepadPort? = null,
         inputDevicePort: InputDevicePort? = null,
         closeAction: () -> Unit = {},
-    ) : this(windows, rawInputPort, displayPort, capturePort, gamepadPort, inputDevicePort, closeAction, null)
+    ) : this(windows, rawInputPort, displayPort, capturePort, gamepadPort, inputDevicePort, closeAction, null, null)
 
     public constructor(
         windows: WindowManager,
@@ -68,13 +69,31 @@ public class RuntimeSessionComponents private constructor(
         gamepadPort: GamepadPort? = null,
         inputDevicePort: InputDevicePort? = null,
         closeAction: () -> Unit = {},
-    ) : this(windows, rawInputPort, displayPort, capturePort, gamepadPort, inputDevicePort, closeAction, primarySurface)
+    ) : this(windows, rawInputPort, displayPort, capturePort, gamepadPort, inputDevicePort, closeAction, primarySurface, null)
+
+    /**
+     * Deferred primary-surface form: the provider is invoked on first access, not at
+     * construction. Backends whose primary surface only exists after
+     * [RuntimeSessionWindowManager.installSessionConfiguration] (uikit: the host window is
+     * admitted through [RuntimeDeferredAdmissionWindowManager]) hand the surface over this way;
+     * the session reads [primarySurface] after the configuration install, so the provider runs
+     * exactly then — never while the components are still being constructed.
+     */
+    public constructor(
+        windows: WindowManager,
+        primarySurfaceProvider: () -> RuntimePrimarySurface?,
+        closeAction: () -> Unit,
+    ) : this(windows, null, null, null, null, null, closeAction, null, primarySurfaceProvider)
 
     private val lock = RuntimeLock()
     private var closed = false
 
-    public val primarySurface: HostSurface? = primarySurface?.surface
-    private val closePrimarySurface: (() -> Unit)? = primarySurface?.let { it::close }
+    private val primarySurfaceResolved: RuntimePrimarySurface? by lazy {
+        primarySurface ?: primarySurfaceProvider?.invoke()
+    }
+
+    public val primarySurface: HostSurface? get() = primarySurfaceResolved?.surface
+    private val closePrimarySurface: (() -> Unit)? by lazy { primarySurfaceResolved?.let { it::close } }
 
     override public fun close() {
         val shouldClose = lock.withLock {
@@ -173,8 +192,13 @@ public class RuntimeSessionComponents private constructor(
     }
 }
 
-internal interface RuntimeSessionWindowManager {
-    fun installSessionConfiguration(
+/**
+ * Session-configuration seam for the components-side window manager. Public so backend modules
+ * can implement it (same clause as [RuntimePrimarySurfaceConfiguration]): the uikit backend wraps
+ * its manager to defer the host-window admission until the configuration has been installed.
+ */
+public interface RuntimeSessionWindowManager {
+    public fun installSessionConfiguration(
         deliveryPolicy: WindowDeliveryPolicy,
         inputDeliveryPolicy: InputDeliveryPolicy,
         source: () -> EventStamp,
@@ -186,7 +210,50 @@ internal interface RuntimeSessionWindowManager {
         rawInputPort: RawInputPort?,
     )
 
-    fun installExclusiveDisplayTargetResolver(resolver: ExclusiveDisplayTargetResolver) {}
+    public fun installExclusiveDisplayTargetResolver(resolver: ExclusiveDisplayTargetResolver) {}
+}
+
+/**
+ * [RuntimeSessionWindowManager] wrapper that forwards the session configuration to the real
+ * manager and only THEN runs one deferred admission. Exists because the manager refuses
+ * admission before its configuration is installed (stamp source), while the uikit backend can
+ * only commit its host-provided primary window during components creation. The admission closure
+ * runs synchronously on the caller of [installSessionConfiguration] — the same thread that runs
+ * the session construction — so the committed primary surface is published before the session can
+ * ever be observed Running.
+ */
+public class RuntimeDeferredAdmissionWindowManager(
+    private val target: RuntimeWindowManager,
+    private val admission: () -> Unit,
+) : WindowManager by target, RuntimeSessionWindowManager {
+    override fun installSessionConfiguration(
+        deliveryPolicy: WindowDeliveryPolicy,
+        inputDeliveryPolicy: InputDeliveryPolicy,
+        source: () -> EventStamp,
+        sessionFailureHandler: (KadreFailure) -> Unit,
+        collectorAllocator: Any,
+        maxCollectorsPerFlow: Int,
+        dropTransferScope: CoroutineScope?,
+        diagnostics: (KadreDiagnostic) -> Unit,
+        rawInputPort: RawInputPort?,
+    ) {
+        target.installSessionConfiguration(
+            deliveryPolicy,
+            inputDeliveryPolicy,
+            source,
+            sessionFailureHandler,
+            collectorAllocator,
+            maxCollectorsPerFlow,
+            dropTransferScope,
+            diagnostics,
+            rawInputPort,
+        )
+        admission()
+    }
+
+    override fun installExclusiveDisplayTargetResolver(resolver: ExclusiveDisplayTargetResolver) {
+        target.installExclusiveDisplayTargetResolver(resolver)
+    }
 }
 
 internal object UnsupportedRuntimeSessionComponentsFactory : RuntimeSessionComponentsFactory {

@@ -82,8 +82,9 @@ import org.graphiks.kadre.window.WindowUpdateOutcome
 import org.graphiks.kadre.input.DropOfferId
 import org.graphiks.kadre.interaction.InteractionAction
 import org.graphiks.kadre.interaction.InteractionKind
-import java.util.concurrent.atomic.AtomicLong
-import kotlin.time.Duration.Companion.nanoseconds
+import kotlin.concurrent.atomics.AtomicLong
+import kotlin.time.Duration
+import kotlin.time.TimeSource
 
 /**
  * Unstable backend SPI implementing the portable window-request state machine.
@@ -91,6 +92,7 @@ import kotlin.time.Duration.Companion.nanoseconds
  * Constructing this manager does not install it in any runtime session. Backends may compose it
  * privately until their complete public window contract is ready for activation.
  */
+@OptIn(kotlin.concurrent.atomics.ExperimentalAtomicApi::class)
 public class RuntimeWindowManager public constructor(
     private val resources: ResourceBudgetPolicy,
     private val commandPort: WindowCommandPort,
@@ -115,9 +117,9 @@ public class RuntimeWindowManager public constructor(
         }
     }
 
-    private val lock = Any()
-    private val pendingCloseWork = ThreadLocal.withInitial { ArrayDeque<() -> Unit>() }
-    private val drainingCloseWork = ThreadLocal.withInitial { false }
+    private val lock = RuntimeLock()
+    private val pendingCloseWork = RuntimeCallFrame { ArrayDeque<() -> Unit>() }
+    private val drainingCloseWork = RuntimeCallFrame { false }
     private val pending = linkedMapOf<WindowRequestId, PendingWindow>()
     private val committed = linkedMapOf<WindowRequestId, CommittedWindow>()
     private val dispatchedWindowCloses = linkedMapOf<WindowRequestId, CommittedWindow>()
@@ -133,7 +135,7 @@ public class RuntimeWindowManager public constructor(
     private var lastWindowStopProposalPending = false
     private var closed = false
     private val eventSequence = AtomicLong(0L)
-    private val eventClockOrigin = System.nanoTime()
+    private val eventClockOrigin = monotonic.markNow()
     private var sessionEventStampSource: (() -> EventStamp)? = null
     private var exclusiveDisplayTargetResolver: ExclusiveDisplayTargetResolver? = null
     private var exclusiveFullscreenPort: ExclusiveFullscreenPort? = null
@@ -201,7 +203,7 @@ public class RuntimeWindowManager public constructor(
     private val updateStimulusSink = WindowUpdateCommandStimulusSink(::acceptWindowUpdateStimulus)
     private val exclusiveFullscreenCommandSink = object : ExclusiveFullscreenCommandSink {
         override fun captureCommitted(windowId: WindowId, operationId: WindowOperationId): Boolean {
-            val window = synchronized(lock) { dispatchedWindowUpdates[operationId] }
+            val window = lock.withLock { dispatchedWindowUpdates[operationId] }
                 ?.takeIf { it.id == windowId } ?: return false
             return window.markExclusiveCaptureCommitted(operationId)
         }
@@ -211,7 +213,7 @@ public class RuntimeWindowManager public constructor(
             operationId: WindowOperationId,
             effectiveState: WindowState,
         ) {
-            val window = synchronized(lock) { dispatchedWindowUpdates.remove(operationId) }
+            val window = lock.withLock { dispatchedWindowUpdates.remove(operationId) }
                 ?.takeIf { it.id == windowId } ?: return
             window.applyNativeUpdate(operationId, effectiveState)
         }
@@ -223,7 +225,7 @@ public class RuntimeWindowManager public constructor(
             effectiveState: WindowState?,
             publicationOperationId: WindowOperationId?,
         ) {
-            val window = synchronized(lock) { dispatchedWindowUpdates.remove(operationId) }
+            val window = lock.withLock { dispatchedWindowUpdates.remove(operationId) }
                 ?.takeIf { it.id == windowId } ?: return
             if (effectiveState == null) {
                 window.rejectDispatchedUpdate(operationId, failure)
@@ -261,7 +263,7 @@ public class RuntimeWindowManager public constructor(
     override val state: StateFlow<WindowManagerState> = mutableState.asStateFlow()
 
     // Narrow module-internal seam for deterministic ownership-race tests.
-    internal fun requestForTesting(requestId: WindowRequestId): RuntimeWindowRequest? = synchronized(lock) {
+    internal fun requestForTesting(requestId: WindowRequestId): RuntimeWindowRequest? = lock.withLock {
         pending[requestId]?.request ?: committed[requestId]?.request
     }
 
@@ -292,7 +294,7 @@ public class RuntimeWindowManager public constructor(
                 maxCollectorsPerFlow = maxCollectorsPerFlow,
             )
         }
-        synchronized(lock) {
+        lock.withLock {
             check(sessionEventStampSource == null) { "window event stamp source was already installed" }
             check(pending.isEmpty() && committed.isEmpty()) { "window event stamp source must be installed before admission" }
             sessionEventStampSource = source
@@ -330,7 +332,7 @@ public class RuntimeWindowManager public constructor(
 
     /** Installs the display resolver before any window can be admitted for this session. */
     override fun installExclusiveDisplayTargetResolver(resolver: ExclusiveDisplayTargetResolver) {
-        synchronized(lock) {
+        lock.withLock {
             check(pending.isEmpty() && committed.isEmpty()) {
                 "exclusive display target resolver must be installed before window admission"
             }
@@ -346,7 +348,7 @@ public class RuntimeWindowManager public constructor(
      * Unsupported for application use.
      */
     public fun installExclusiveFullscreenPort(port: ExclusiveFullscreenPort) {
-        synchronized(lock) {
+        lock.withLock {
             check(pending.isEmpty() && committed.isEmpty()) {
                 "exclusive fullscreen port must be installed before window admission"
             }
@@ -361,7 +363,7 @@ public class RuntimeWindowManager public constructor(
     }
 
     private fun updateExclusiveFullscreenAvailability(availability: ExclusiveFullscreenAvailability) {
-        val windows = synchronized(lock) {
+        val windows = lock.withLock {
             if (exclusiveFullscreenAvailability == availability) return
             exclusiveFullscreenAvailability = availability
             committed.values.map { it.window }
@@ -373,14 +375,14 @@ public class RuntimeWindowManager public constructor(
     }
 
     private fun acceptExclusiveFullscreenDisplayLoss(loss: ExclusiveFullscreenDisplayLoss) {
-        val window = synchronized(lock) {
+        val window = lock.withLock {
             committed.values
                 .firstOrNull { it.window.id == loss.windowId }
                 ?.window
         } ?: return
         if (!window.applyExclusiveDisplayLoss(loss)) return
         loss.operationId?.let { operationId ->
-            synchronized(lock) {
+            lock.withLock {
                 if (dispatchedWindowUpdates[operationId] === window) {
                     dispatchedWindowUpdates.remove(operationId)
                 }
@@ -395,7 +397,7 @@ public class RuntimeWindowManager public constructor(
      * backend retry.
      */
     public fun acceptSurfaceStimulus(stimulus: SurfaceStimulus): Boolean {
-        val surface = synchronized(lock) { surfaces[stimulus.surfaceId] } ?: return false
+        val surface = lock.withLock { surfaces[stimulus.surfaceId] } ?: return false
         return surface.accept(stimulus)
     }
 
@@ -409,7 +411,7 @@ public class RuntimeWindowManager public constructor(
         supported: Set<InteractionKind>,
         invokeNative: (InteractionAction) -> KadreResult<Unit>,
     ): Boolean {
-        val surface = synchronized(lock) { surfaces[surfaceId] } ?: return false
+        val surface = lock.withLock { surfaces[surfaceId] } ?: return false
         surface.dispatchSynchronousInteraction(event, supported, invokeNative)
         return true
     }
@@ -427,7 +429,7 @@ public class RuntimeWindowManager public constructor(
         position: LogicalPoint,
         invokeNative: (DropOfferId) -> KadreResult<Unit>,
     ): DropOfferId? {
-        val surface = synchronized(lock) { surfaces[surfaceId] }
+        val surface = lock.withLock { surfaces[surfaceId] }
         if (surface == null) {
             source.close()
             return null
@@ -441,7 +443,7 @@ public class RuntimeWindowManager public constructor(
      * The runtime remains authoritative for revision assignment and event publication.
      */
     public fun acceptWindowGeometryObservation(windowId: WindowId, state: WindowState): Boolean {
-        val window = synchronized(lock) {
+        val window = lock.withLock {
             committed.values.firstOrNull { it.window.id == windowId }?.window
         } ?: return false
         return window.observeNativeUpdate(state)
@@ -450,7 +452,7 @@ public class RuntimeWindowManager public constructor(
     override suspend fun requestWindow(spec: WindowSpec): KadreResult<WindowRequest> {
         currentCoroutineContext().ensureActive()
         if (unsupportedInitialWindowProperty(spec) != null) {
-            return synchronized(lock) {
+            return lock.withLock {
                 if (closed) {
                     KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.Host))
                 } else {
@@ -459,8 +461,8 @@ public class RuntimeWindowManager public constructor(
             }
         }
         if (spec.fullscreen != FullscreenMode.Windowed) {
-            return synchronized(lock) {
-                if (closed) return@synchronized KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.Host))
+            return lock.withLock {
+                if (closed) return@withLock KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.Host))
                 when (spec.fullscreen) {
                     FullscreenMode.Borderless -> KadreResult.Failure(KadreFailure.InvalidRequest("fullscreen"))
                     is FullscreenMode.Exclusive -> {
@@ -578,12 +580,12 @@ public class RuntimeWindowManager public constructor(
         exclusiveFullscreenDisplayLossObservation = null
         drainAttentionReleases()
         rawInputCapabilityObservation?.close()
-        synchronized(lock) { rawInputCoordinator }?.close()
+        lock.withLock { rawInputCoordinator }?.close()
         portToClose?.let(::safeCloseAttentionPort)
     }
 
     private fun updateRawInputCapability(capability: Capability<Unit>) {
-        val targets = synchronized(lock) {
+        val targets = lock.withLock {
             if (rawInputCapability == capability) return
             rawInputCapability = capability
             surfaces.values.toList()
@@ -711,7 +713,7 @@ public class RuntimeWindowManager public constructor(
             guardPort("window-update-exception") { commandPort.requestUpdate(command) }
         }
         if (dispatch is GuardedCall.Failure) {
-            synchronized(lock) { dispatchedWindowUpdates.remove(pending.operationId) }
+            lock.withLock { dispatchedWindowUpdates.remove(pending.operationId) }
             window.rejectDispatchedUpdate(pending.operationId, dispatch.failure)
         }
     }
@@ -722,7 +724,7 @@ public class RuntimeWindowManager public constructor(
         transition: ExclusiveFullscreenTransition,
     ) {
         beforeWindowUpdateRegistration(window, pending)
-        val port = synchronized(lock) { exclusiveFullscreenPort }
+        val port = lock.withLock { exclusiveFullscreenPort }
         if (port == null) {
             window.rejectDispatchedUpdate(
                 pending.operationId,
@@ -741,16 +743,16 @@ public class RuntimeWindowManager public constructor(
             sink = exclusiveFullscreenCommandSink,
         )
         if (!window.beginNativeUpdateDispatch(pending.operationId)) return
-        synchronized(lock) { dispatchedWindowUpdates[pending.operationId] = window }
+        lock.withLock { dispatchedWindowUpdates[pending.operationId] = window }
         when (transition) {
             is ExclusiveFullscreenTransition.Enter -> {
                 when (val reservation = guardPort("exclusive-reserve-exception") { port.reserve(command) }) {
                     is GuardedCall.Success -> if (reservation.value is KadreResult.Failure) {
-                        synchronized(lock) { dispatchedWindowUpdates.remove(pending.operationId) }
+                        lock.withLock { dispatchedWindowUpdates.remove(pending.operationId) }
                         window.rejectDispatchedUpdate(pending.operationId, reservation.value.reason)
                     }
                     is GuardedCall.Failure -> {
-                        synchronized(lock) { dispatchedWindowUpdates.remove(pending.operationId) }
+                        lock.withLock { dispatchedWindowUpdates.remove(pending.operationId) }
                         window.rejectDispatchedUpdate(pending.operationId, reservation.failure)
                     }
                 }
@@ -759,7 +761,7 @@ public class RuntimeWindowManager public constructor(
                 when (val release = guardPort("exclusive-release-exception") { port.release(command) }) {
                     is GuardedCall.Success -> Unit
                     is GuardedCall.Failure -> {
-                        synchronized(lock) { dispatchedWindowUpdates.remove(pending.operationId) }
+                        lock.withLock { dispatchedWindowUpdates.remove(pending.operationId) }
                         window.rejectDispatchedUpdate(pending.operationId, release.failure)
                     }
                 }
@@ -768,12 +770,12 @@ public class RuntimeWindowManager public constructor(
     }
 
     internal fun resolveExclusiveTarget(request: FullscreenMode.Exclusive): KadreResult<ExclusiveDisplayTarget> {
-        val resolver = synchronized(lock) { exclusiveDisplayTargetResolver }
+        val resolver = lock.withLock { exclusiveDisplayTargetResolver }
             ?: return KadreResult.Failure(KadreFailure.Unsupported(KadreOperation.UpdateWindow))
         return resolver.resolveExclusiveTarget(request.displayId, request.mode)
     }
 
-    internal fun exclusiveFullscreenAvailable(): Boolean = synchronized(lock) {
+    internal fun exclusiveFullscreenAvailable(): Boolean = lock.withLock {
         exclusiveFullscreenPort != null &&
             exclusiveFullscreenAvailability == ExclusiveFullscreenAvailability.Available
     }
@@ -783,7 +785,7 @@ public class RuntimeWindowManager public constructor(
         operationId: WindowOperationId,
         failure: KadreFailure,
     ) {
-        val port = synchronized(lock) { exclusiveFullscreenPort } ?: return
+        val port = lock.withLock { exclusiveFullscreenPort } ?: return
         val outcome = guardPort("exclusive-cancellation-exception") {
             port.cancelReservation(operationId)
         }
@@ -791,13 +793,13 @@ public class RuntimeWindowManager public constructor(
             outcome is GuardedCall.Success &&
             outcome.value == ExclusiveFullscreenCancellationOutcome.CancelledBeforeCommit
         ) {
-            synchronized(lock) { dispatchedWindowUpdates.remove(operationId) }
+            lock.withLock { dispatchedWindowUpdates.remove(operationId) }
             window.terminaliseReservedExclusive(operationId, failure)
         }
     }
 
     internal fun withdrawExclusiveReservation(window: RuntimeWindow, operationId: WindowOperationId) {
-        val port = synchronized(lock) { exclusiveFullscreenPort } ?: return
+        val port = lock.withLock { exclusiveFullscreenPort } ?: return
         val outcome = guardPort("exclusive-cancellation-exception") {
             port.cancelReservation(operationId)
         }
@@ -805,7 +807,7 @@ public class RuntimeWindowManager public constructor(
             outcome is GuardedCall.Success &&
             outcome.value == ExclusiveFullscreenCancellationOutcome.CancelledBeforeCommit
         ) {
-            synchronized(lock) { dispatchedWindowUpdates.remove(operationId) }
+            lock.withLock { dispatchedWindowUpdates.remove(operationId) }
             window.withdrawDispatchedUpdate(operationId)
         } else {
             window.detachDispatchedUpdateWaiter(operationId)
@@ -813,7 +815,7 @@ public class RuntimeWindowManager public constructor(
     }
 
     internal fun releaseExclusiveWindow(windowId: WindowId) {
-        val port = synchronized(lock) { exclusiveFullscreenPort } ?: return
+        val port = lock.withLock { exclusiveFullscreenPort } ?: return
         val release = guardPort("exclusive-window-release-exception") {
             port.releaseWindow(windowId)
         }
@@ -858,9 +860,9 @@ public class RuntimeWindowManager public constructor(
         retainDispatch: Boolean,
     ) {
         val operationId = stimulus.operationId()
-        val window = synchronized(lock) { dispatchedWindowUpdates[operationId] } ?: return
+        val window = lock.withLock { dispatchedWindowUpdates[operationId] } ?: return
         if (bufferFullscreenTerminal && window.bufferFullscreenTerminal(stimulus)) return
-        if (!retainDispatch) synchronized(lock) { dispatchedWindowUpdates.remove(operationId) }
+        if (!retainDispatch) lock.withLock { dispatchedWindowUpdates.remove(operationId) }
         when (stimulus) {
             is WindowUpdateCommandStimulus.Applied -> window.applyNativeUpdate(stimulus.operationId, stimulus.state)
             is WindowUpdateCommandStimulus.CommittedFailure -> window.applyCommittedFailure(
@@ -892,12 +894,12 @@ public class RuntimeWindowManager public constructor(
         windowId: WindowId,
         observation: WindowFullscreenObservation,
     ): Boolean {
-        val window = synchronized(lock) {
+        val window = lock.withLock {
             committed.values.firstOrNull { it.window.id == windowId }?.window
         } ?: return false
         val acceptance = window.acceptFullscreenObservation(observation, operationId = null)
         acceptance.terminalOperationId?.let { operationId ->
-            synchronized(lock) { dispatchedWindowUpdates.remove(operationId) }
+            lock.withLock { dispatchedWindowUpdates.remove(operationId) }
         }
         return acceptance.accepted
     }
@@ -913,7 +915,7 @@ public class RuntimeWindowManager public constructor(
         )
 
     override fun desiredLevel(windowId: WindowId): WindowLevel? =
-        synchronized(lock) {
+        lock.withLock {
             committed.values.firstOrNull { it.window.id == windowId }?.window
         }?.desiredLevel()
 
@@ -922,11 +924,11 @@ public class RuntimeWindowManager public constructor(
         operationId: WindowOperationId,
         observation: WindowFullscreenObservation,
     ) {
-        val window = synchronized(lock) { dispatchedWindowUpdates[operationId] }
+        val window = lock.withLock { dispatchedWindowUpdates[operationId] }
             ?.takeIf { it.id == windowId } ?: return
         val acceptance = window.acceptFullscreenObservation(observation, operationId)
         if (acceptance.terminalOperationId != null) {
-            synchronized(lock) { dispatchedWindowUpdates.remove(acceptance.terminalOperationId) }
+            lock.withLock { dispatchedWindowUpdates.remove(acceptance.terminalOperationId) }
         }
     }
 
@@ -934,7 +936,7 @@ public class RuntimeWindowManager public constructor(
         windowId: WindowId,
         operationId: WindowOperationId,
     ): Boolean {
-        val window = synchronized(lock) { dispatchedWindowUpdates[operationId] }
+        val window = lock.withLock { dispatchedWindowUpdates[operationId] }
             ?.takeIf { it.id == windowId } ?: return false
         return window.beginFullscreenSelectorInvocation(operationId)
     }
@@ -944,10 +946,10 @@ public class RuntimeWindowManager public constructor(
         operationId: WindowOperationId,
         failure: KadreFailure?,
     ) {
-        val window = synchronized(lock) { dispatchedWindowUpdates[operationId] }
+        val window = lock.withLock { dispatchedWindowUpdates[operationId] }
             ?.takeIf { it.id == windowId } ?: return
         if (window.finishFullscreenSelectorInvocation(operationId, failure)) {
-            synchronized(lock) { dispatchedWindowUpdates.remove(operationId) }
+            lock.withLock { dispatchedWindowUpdates.remove(operationId) }
         }
     }
 
@@ -964,7 +966,7 @@ public class RuntimeWindowManager public constructor(
         window: RuntimeWindow,
         attention: WindowAttention,
     ): KadreResult<Unit> {
-        val port = synchronized(lock) {
+        val port = lock.withLock {
             if (window.currentState().phase != WindowPhase.Open) {
                 return KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.Window))
             }
@@ -982,11 +984,15 @@ public class RuntimeWindowManager public constructor(
         } catch (cause: Exception) {
             safeReport(cause)
             KadreResult.Failure(platformFailure("window-attention-exception"))
-        } catch (cause: LinkageError) {
-            safeReport(cause)
-            KadreResult.Failure(platformFailure("window-attention-exception"))
+        } catch (cause: Throwable) {
+            if (cause.isLinkageFailure()) {
+                safeReport(cause)
+                KadreResult.Failure(platformFailure("window-attention-exception"))
+            } else {
+                throw cause
+            }
         }
-        val closedResource = synchronized(lock) {
+        val closedResource = lock.withLock {
             val stillOpen =
                 committed[window.requestId]?.window === window &&
                     window.currentState().phase == WindowPhase.Open
@@ -1093,8 +1099,8 @@ public class RuntimeWindowManager public constructor(
         if (!publicWindowCapabilities) {
             return KadreResult.Failure(KadreFailure.Unsupported(KadreOperation.PlatformWindowAccess))
         }
-        val access = synchronized(lock) {
-            if (window.currentState().phase != WindowPhase.Open) return@synchronized null
+        val access = lock.withLock {
+            if (window.currentState().phase != WindowPhase.Open) return@withLock null
             committed[window.requestId]?.owner as? RuntimeDesktopWindowHandleAccess
         } ?: return KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.Window))
         return access.withDesktopHandle(block)
@@ -1181,8 +1187,8 @@ public class RuntimeWindowManager public constructor(
             closeOwner?.let(::safeCloseOwner)
         } catch (cause: Exception) {
             recoverCallbackFailure(requestId, owner, cause)
-        } catch (cause: LinkageError) {
-            recoverCallbackFailure(requestId, owner, cause)
+        } catch (cause: Throwable) {
+            if (cause.isLinkageFailure()) recoverCallbackFailure(requestId, owner, cause) else throw cause
         }
     }
 
@@ -1204,8 +1210,8 @@ public class RuntimeWindowManager public constructor(
             }
         } catch (cause: Exception) {
             recoverCallbackFailure(requestId, null, cause)
-        } catch (cause: LinkageError) {
-            recoverCallbackFailure(requestId, null, cause)
+        } catch (cause: Throwable) {
+            if (cause.isLinkageFailure()) recoverCallbackFailure(requestId, null, cause) else throw cause
         }
     }
 
@@ -1220,8 +1226,8 @@ public class RuntimeWindowManager public constructor(
             }
         } catch (cause: Exception) {
             recoverCallbackFailure(requestId, null, cause)
-        } catch (cause: LinkageError) {
-            recoverCallbackFailure(requestId, null, cause)
+        } catch (cause: Throwable) {
+            if (cause.isLinkageFailure()) recoverCallbackFailure(requestId, null, cause) else throw cause
         }
     }
 
@@ -1262,8 +1268,8 @@ public class RuntimeWindowManager public constructor(
             owner?.let(::safeCloseOwner)
         } catch (cause: Exception) {
             recoverCallbackFailure(requestId, null, cause)
-        } catch (cause: LinkageError) {
-            recoverCallbackFailure(requestId, null, cause)
+        } catch (cause: Throwable) {
+            if (cause.isLinkageFailure()) recoverCallbackFailure(requestId, null, cause) else throw cause
         } finally {
             drainAttentionReleases()
             drainLastWindowStopProposal()
@@ -1277,12 +1283,12 @@ public class RuntimeWindowManager public constructor(
         record.closeCommandSent = true
         dispatchedWindowCloses[record.request.id] = record
         record.window.prepareClose(attempt.operationId)
-        pendingCloseWork.get().addLast { dispatchClose(record, attempt, forced) }
+        pendingCloseWork.current().addLast { dispatchClose(record, attempt, forced) }
         return attempt
     }
 
     private fun dispatchClose(record: CommittedWindow, attempt: CloseAttempt, forced: Boolean) {
-        check(!Thread.holdsLock(lock)) { "native close must run outside the manager lock" }
+        check(!lock.isHeldByCurrentThread()) { "native close must run outside the manager lock" }
         val portOutcome = guardPort("opened-close-exception") {
             commandPort.requestOpenedClose(record.closeCommand())
         }
@@ -1358,7 +1364,7 @@ public class RuntimeWindowManager public constructor(
             }
             if (forced) reportForcedCloseOutcome(portOutcome)
             if (record.ownerReleasePending) releaseOwnerLocked(record)
-            pendingCloseWork.get().addLast { attempt.result.complete(result) }
+            pendingCloseWork.current().addLast { attempt.result.complete(result) }
         }
     }
 
@@ -1395,7 +1401,7 @@ public class RuntimeWindowManager public constructor(
         record.ownerReleasePending = true
         if (record.closeAttempt?.dispatching == true || record.ownerReleased) return
         record.ownerReleased = true
-        pendingCloseWork.get().addLast { safeCloseOwner(record.owner) }
+        pendingCloseWork.current().addLast { safeCloseOwner(record.owner) }
     }
 
     private fun reportForcedCloseOutcome(close: GuardedCall<OpenedWindowCloseOutcome>) {
@@ -1538,8 +1544,8 @@ public class RuntimeWindowManager public constructor(
             }
         } catch (recoveryCause: Exception) {
             safeReport(recoveryCause)
-        } catch (recoveryCause: LinkageError) {
-            safeReport(recoveryCause)
+        } catch (recoveryCause: Throwable) {
+            if (recoveryCause.isLinkageFailure()) safeReport(recoveryCause) else throw recoveryCause
         } finally {
             drainAttentionReleases()
             drainLastWindowStopProposal()
@@ -1567,22 +1573,26 @@ public class RuntimeWindowManager public constructor(
     } catch (cause: Exception) {
         safeReport(cause)
         GuardedCall.Failure(platformFailure(code))
-    } catch (cause: LinkageError) {
-        safeReport(cause)
-        GuardedCall.Failure(platformFailure(code))
+    } catch (cause: Throwable) {
+        if (cause.isLinkageFailure()) {
+            safeReport(cause)
+            GuardedCall.Failure(platformFailure(code))
+        } else {
+            throw cause
+        }
     }
 
     private fun safeCloseOwner(owner: WindowPeerOwner) {
-        if (Thread.holdsLock(lock)) {
-            pendingCloseWork.get().addLast { safeCloseOwner(owner) }
+        if (lock.isHeldByCurrentThread()) {
+            pendingCloseWork.current().addLast { safeCloseOwner(owner) }
             return
         }
         try {
             owner.close()
         } catch (cause: Exception) {
             safeReport(cause)
-        } catch (cause: LinkageError) {
-            safeReport(cause)
+        } catch (cause: Throwable) {
+            if (cause.isLinkageFailure()) safeReport(cause) else throw cause
         }
     }
 
@@ -1590,26 +1600,26 @@ public class RuntimeWindowManager public constructor(
     // cleanup runs it after its outermost manager critical section. A concurrent reader
     // must never steal backend work, as it may hold an unrelated callback/native lock.
     private inline fun <T> withManagerLock(block: () -> T): T = try {
-        synchronized(lock) { block() }
+        lock.withLock { block() }
     } finally {
         drainCloseWork()
     }
 
     private fun drainCloseWork() {
-        if (Thread.holdsLock(lock) || drainingCloseWork.get()) return
-        val work = pendingCloseWork.get()
+        if (lock.isHeldByCurrentThread() || drainingCloseWork.current()) return
+        val work = pendingCloseWork.current()
         drainingCloseWork.set(true)
         try {
             while (work.isNotEmpty()) work.removeFirst().invoke()
         } finally {
-            drainingCloseWork.remove()
-            if (work.isEmpty()) pendingCloseWork.remove()
+            drainingCloseWork.clear()
+            if (work.isEmpty()) pendingCloseWork.clear()
         }
     }
 
     private fun drainAttentionReleases() {
-        val releases = synchronized(lock) {
-            val port = attentionPort ?: return@synchronized null
+        val releases = lock.withLock {
+            val port = attentionPort ?: return@withLock null
             val windowIds = pendingAttentionReleases.toList()
             pendingAttentionReleases.clear()
             windowIds to port
@@ -1620,8 +1630,8 @@ public class RuntimeWindowManager public constructor(
                 port.release(windowId)
             } catch (cause: Exception) {
                 safeReport(cause)
-            } catch (cause: LinkageError) {
-                safeReport(cause)
+            } catch (cause: Throwable) {
+                if (cause.isLinkageFailure()) safeReport(cause) else throw cause
             }
         }
     }
@@ -1631,8 +1641,8 @@ public class RuntimeWindowManager public constructor(
             port.close()
         } catch (cause: Exception) {
             safeReport(cause)
-        } catch (cause: LinkageError) {
-            safeReport(cause)
+        } catch (cause: Throwable) {
+            if (cause.isLinkageFailure()) safeReport(cause) else throw cause
         }
     }
 
@@ -1641,8 +1651,12 @@ public class RuntimeWindowManager public constructor(
             failureReporter.report(cause)
         } catch (_: Exception) {
             // Diagnostics must never destabilise window ownership cleanup.
-        } catch (_: LinkageError) {
-            // Diagnostics must never destabilise window ownership cleanup.
+        } catch (cause: Throwable) {
+            if (cause.isLinkageFailure()) {
+                // Diagnostics must never destabilise window ownership cleanup.
+            } else {
+                throw cause
+            }
         }
     }
 
@@ -1722,7 +1736,7 @@ public class RuntimeWindowManager public constructor(
     }
 
     private fun drainLastWindowStopProposal() {
-        val callback = synchronized(lock) {
+        val callback = lock.withLock {
             if (!lastWindowStopProposalPending) {
                 null
             } else {
@@ -1734,16 +1748,16 @@ public class RuntimeWindowManager public constructor(
             callback()
         } catch (cause: Exception) {
             safeReport(cause)
-        } catch (cause: LinkageError) {
-            safeReport(cause)
+        } catch (cause: Throwable) {
+            if (cause.isLinkageFailure()) safeReport(cause) else throw cause
         }
     }
 
     private fun nextEventStamp(): EventStamp {
         sessionEventStampSource?.let { return it() }
-        val sequence = eventSequence.getAndIncrement()
+        val sequence = eventSequence.fetchAndAdd(1)
         check(sequence >= 0L) { "window event sequence exhausted" }
-        val elapsed = (System.nanoTime() - eventClockOrigin).coerceAtLeast(0L).nanoseconds
+        val elapsed = eventClockOrigin.elapsedNow().coerceAtLeast(Duration.ZERO)
         return EventStamp(SessionSequence(sequence), SessionInstant(elapsed), null)
     }
 
@@ -1789,6 +1803,10 @@ public class RuntimeWindowManager public constructor(
         data class Success<T>(val value: T) : GuardedCall<T>
         data class Failure(val failure: KadreFailure.PlatformFailure) : GuardedCall<Nothing>
     }
+
+    private companion object {
+        val monotonic = TimeSource.Monotonic
+    }
 }
 
 private fun fallbackSurfaceSnapshot(effectiveSpec: WindowSpec): SurfaceInitialSnapshot = SurfaceInitialSnapshot(
@@ -1809,7 +1827,7 @@ internal class RuntimeWindowRequest(
     val windowId: WindowId,
     private val manager: RuntimeWindowManager,
 ) : WindowRequest {
-    private val outcomeLock = Any()
+    private val outcomeLock = RuntimeLock()
     private val mutableState = MutableStateFlow<WindowRequestState>(WindowRequestState.Pending)
     private var preHandoffOwnership: PreHandoffOwnership? = PreHandoffOwnership.Held
 
@@ -1825,25 +1843,25 @@ internal class RuntimeWindowRequest(
         state.filterIsInstance<WindowRequestState.Terminated>().first().outcome
 
     fun terminate(outcome: WindowRequestOutcome) {
-        synchronized(outcomeLock) {
+        outcomeLock.withLock {
             if (mutableState.value == WindowRequestState.Pending) {
                 mutableState.value = WindowRequestState.Terminated(outcome)
             }
         }
     }
 
-    fun terminalOutcome(): WindowRequestOutcome? = synchronized(outcomeLock) {
+    fun terminalOutcome(): WindowRequestOutcome? = outcomeLock.withLock {
         (mutableState.value as? WindowRequestState.Terminated)?.outcome
     }
 
-    fun claimPreHandoffCancellation(): Boolean = synchronized(outcomeLock) {
-        if (preHandoffOwnership != PreHandoffOwnership.Held) return@synchronized false
+    fun claimPreHandoffCancellation(): Boolean = outcomeLock.withLock {
+        if (preHandoffOwnership != PreHandoffOwnership.Held) return@withLock false
         preHandoffOwnership = PreHandoffOwnership.Abandoning
         true
     }
 
     fun finishPreHandoffCancellation(outcome: WindowRequestOutcome) {
-        synchronized(outcomeLock) {
+        outcomeLock.withLock {
             if (preHandoffOwnership != PreHandoffOwnership.Abandoning) return
             mutableState.value = when (val current = mutableState.value) {
                 WindowRequestState.Pending -> WindowRequestState.Terminated(outcome)
@@ -1858,7 +1876,7 @@ internal class RuntimeWindowRequest(
     }
 
     fun markHandoffDelivered() {
-        synchronized(outcomeLock) {
+        outcomeLock.withLock {
             if (preHandoffOwnership == PreHandoffOwnership.Held) preHandoffOwnership = null
         }
     }
@@ -1907,7 +1925,7 @@ internal class RuntimeWindow(
         sessionFailureHandler = sessionFailureHandler,
         closeWindow = { manager.terminaliseWindowEventDelivery(this) },
     )
-    private val updateLock = Any()
+    private val updateLock = RuntimeLock()
     private val pendingUpdates = ArrayDeque<PendingWindowUpdate>()
     private var dispatchedUpdate: PendingWindowUpdate? = null
     private var publishingUpdate: PendingWindowUpdate? = null
@@ -1946,10 +1964,10 @@ internal class RuntimeWindow(
 
     fun currentState(): WindowState = mutableState.value
 
-    fun desiredLevel(): WindowLevel = synchronized(updateLock) { desiredLevel }
+    fun desiredLevel(): WindowLevel = updateLock.withLock { desiredLevel }
 
     fun updateExclusiveFullscreenCapability(availability: ExclusiveFullscreenAvailability) {
-        synchronized(updateLock) {
+        updateLock.withLock {
             mutableCapabilities.value = windowCapabilities(
                 publicWindowCapabilities,
                 enabledWindowUpdateCapabilities,
@@ -1961,7 +1979,7 @@ internal class RuntimeWindow(
     }
 
     fun cancelReservedExclusiveAfterCapabilityDrop(failure: KadreFailure) {
-        val operationId = synchronized(updateLock) {
+        val operationId = updateLock.withLock {
             val pending = dispatchedUpdate?.takeIf {
                 it.exclusivePhase == ExclusiveFullscreenPhase.Reserved &&
                     !it.cancellationRequested
@@ -1980,7 +1998,7 @@ internal class RuntimeWindow(
 
     fun terminaliseReservedExclusive(operationId: WindowOperationId, failure: KadreFailure) {
         var closeEventDelivery = false
-        synchronized(updateLock) {
+        updateLock.withLock {
             val pending = dispatchedUpdate?.takeIf {
                 it.operationId == operationId && it.exclusivePhase == ExclusiveFullscreenPhase.Reserved
             } ?: return
@@ -2001,7 +2019,7 @@ internal class RuntimeWindow(
         var publication: WindowStatePublication? = null
         var completion: PendingWindowUpdate? = null
         var diagnostic = false
-        synchronized(updateLock) {
+        updateLock.withLock {
             val lifecycle = mutableState.value
             if (lifecycle.phase != WindowPhase.Open) return false
             val pending = loss.operationId?.let { operationId ->
@@ -2046,7 +2064,7 @@ internal class RuntimeWindow(
                 if (pending.waiterDetached) diagnostic = true
             }
             if (diagnostic) manager.reportDetachedWindowUpdateFailure(failure)
-            val closeEventDelivery = synchronized(updateLock) {
+            val closeEventDelivery = updateLock.withLock {
                 if (publishingUpdate === completion) publishingUpdate = null
                 eventPublicationsInFlight -= 1
                 takePendingEventDeliveryCloseLocked()
@@ -2059,9 +2077,7 @@ internal class RuntimeWindow(
 
     suspend fun applyUpdate(update: WindowUpdate): KadreResult<WindowUpdateOutcome> {
         currentCoroutineContext().ensureActive()
-        val pending: PendingWindowUpdate
-        val immediate: KadreResult<WindowUpdateOutcome>?
-        synchronized(updateLock) {
+        val (pending, immediate) = updateLock.withLock {
             val current = mutableState.value
             if (current.phase != WindowPhase.Open) {
                 return KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.Window))
@@ -2162,18 +2178,18 @@ internal class RuntimeWindow(
                     }
                 }
                 if (requestedLevel != null && requestedLevel != desiredLevel) desiredLevel = requestedLevel
-                immediate = KadreResult.Success(updateOutcome(operationId, current, rejected))
-                pending = PendingWindowUpdate(operationId, null, canonicalUpdate, rejected)
+                PendingWindowUpdate(operationId, null, canonicalUpdate, rejected) to
+                    KadreResult.Success(updateOutcome(operationId, current, rejected))
             } else {
-                immediate = null
-                pending = PendingWindowUpdate(
+                val queued = PendingWindowUpdate(
                     operationId = operationId,
                     expectedRevision = update.expectedRevision,
                     update = canonicalUpdate,
                     rejected = rejected,
                     exclusiveTransition = resolvedExclusiveTransition,
                 )
-                pendingUpdates.addLast(pending)
+                pendingUpdates.addLast(queued)
+                queued to null
             }
         }
         immediate?.let { return it }
@@ -2199,7 +2215,7 @@ internal class RuntimeWindow(
         var publication: WindowStatePublication? = null
         var completion: PendingWindowUpdate? = null
         var outcome: KadreResult<WindowUpdateOutcome>? = null
-        synchronized(updateLock) {
+        updateLock.withLock {
             val pending = dispatchedUpdate?.takeIf { it.operationId == operationId } ?: return
             dispatchedUpdate = null
             fullscreenBarrier?.takeIf { it.operationId == operationId }?.let { barrier ->
@@ -2230,7 +2246,7 @@ internal class RuntimeWindow(
             publishStatePublication(checkNotNull(publication))
         } finally {
             checkNotNull(completion).result.complete(checkNotNull(outcome))
-            val closeEventDelivery = synchronized(updateLock) {
+            val closeEventDelivery = updateLock.withLock {
                 if (publishingUpdate === completion) publishingUpdate = null
                 check(eventPublicationsInFlight > 0) { "window event publication accounting underflow" }
                 eventPublicationsInFlight -= 1
@@ -2251,7 +2267,7 @@ internal class RuntimeWindow(
     ) {
         var publication: WindowStatePublication? = null
         var completion: PendingWindowUpdate? = null
-        synchronized(updateLock) {
+        updateLock.withLock {
             val pending = dispatchedUpdate?.takeIf { it.operationId == operationId } ?: return
             dispatchedUpdate = null
             fullscreenBarrier?.takeIf { it.operationId == operationId }?.let { barrier ->
@@ -2290,7 +2306,7 @@ internal class RuntimeWindow(
             if (pending.waiterDetached) {
                 manager.reportDetachedWindowUpdateFailure(failure, diagnosticCause)
             }
-            val closeEventDelivery = synchronized(updateLock) {
+            val closeEventDelivery = updateLock.withLock {
                 if (publishingUpdate === completion) publishingUpdate = null
                 if (publication != null) eventPublicationsInFlight -= 1
                 takePendingEventDeliveryCloseLocked()
@@ -2310,14 +2326,14 @@ internal class RuntimeWindow(
         bufferFullscreenTerminal = true,
     )
 
-    fun bufferFullscreenTerminal(stimulus: WindowUpdateCommandStimulus): Boolean = synchronized(updateLock) {
+    fun bufferFullscreenTerminal(stimulus: WindowUpdateCommandStimulus): Boolean = updateLock.withLock {
         val barrier = fullscreenBarrier?.takeIf { it.operationId == stimulus.operationId() }
-            ?: return@synchronized false
+            ?: return@withLock false
         if (
             barrier.phase != FullscreenPhase.InvokingSelector &&
             barrier.phase != FullscreenPhase.DrainingTerminals
         ) {
-            return@synchronized false
+            return@withLock false
         }
         barrier.terminalCallbacks.addLast(FullscreenTerminalCallback.Stimulus(stimulus))
         true
@@ -2329,14 +2345,14 @@ internal class RuntimeWindow(
         drainAfter: Boolean,
         bufferFullscreenTerminal: Boolean,
     ): FullscreenObservationAcceptance {
-        val resolution = synchronized(updateLock) {
+        val resolution = updateLock.withLock {
             val actualBarrier = fullscreenBarrier
             if (
                 operationId != null &&
                 actualBarrier != null &&
                 actualBarrier.operationId != operationId
             ) {
-                return@synchronized FullscreenResolution.Rejected
+                return@withLock FullscreenResolution.Rejected
             }
             if (
                 bufferFullscreenTerminal &&
@@ -2348,7 +2364,7 @@ internal class RuntimeWindow(
                     )
             ) {
                 actualBarrier.terminalCallbacks.addLast(FullscreenTerminalCallback.Observation(observation))
-                return@synchronized FullscreenResolution.Accepted
+                return@withLock FullscreenResolution.Accepted
             }
             val currentBarrier = actualBarrier?.takeUnless {
                 it.phase == FullscreenPhase.DrainingTerminals && it.terminalResolved
@@ -2383,7 +2399,7 @@ internal class RuntimeWindow(
         operationId: WindowOperationId,
         dispatchFailure: KadreFailure?,
     ): Boolean {
-        val drainingBarrier = synchronized(updateLock) {
+        val drainingBarrier = updateLock.withLock {
             fullscreenBarrier?.takeIf { it.operationId == operationId }?.also { barrier ->
                 if (barrier.phase == FullscreenPhase.InvokingSelector) {
                     barrier.phase = FullscreenPhase.DrainingTerminals
@@ -2391,7 +2407,7 @@ internal class RuntimeWindow(
             }
         }
         while (drainingBarrier != null) {
-            val callback = synchronized(updateLock) {
+            val callback = updateLock.withLock {
                 if (drainingBarrier.terminalCallbacks.isNotEmpty()) {
                     drainingBarrier.terminalCallbacks.removeFirst()
                 } else {
@@ -2415,7 +2431,7 @@ internal class RuntimeWindow(
                 is FullscreenTerminalCallback.Stimulus -> manager.acceptBufferedWindowUpdateStimulus(callback.stimulus)
             }
         }
-        val selectorFailure = synchronized(updateLock) {
+        val selectorFailure = updateLock.withLock {
             val barrier = fullscreenBarrier?.takeIf { it.operationId == operationId }
             if (dispatchFailure != null && barrier != null && !barrier.willObserved) {
                 failLocalFullscreenLocked(
@@ -2427,7 +2443,7 @@ internal class RuntimeWindow(
             }
         }
         if (selectorFailure != null) executeFullscreenResolution(selectorFailure, drainAfter = false)
-        val terminal = synchronized(updateLock) { dispatchedUpdate?.operationId != operationId }
+        val terminal = updateLock.withLock { dispatchedUpdate?.operationId != operationId }
         if (terminal) dispatchNextUpdate()
         return terminal
     }
@@ -2692,7 +2708,7 @@ internal class RuntimeWindow(
                 if (failure != null && pending.waiterDetached) manager.reportDetachedWindowUpdateFailure(failure)
             }
             resolution.diagnostics.forEach(manager::reportDetachedWindowUpdateFailure)
-            val closeEventDelivery = synchronized(updateLock) {
+            val closeEventDelivery = updateLock.withLock {
                 if (resolution.publication != null) eventPublicationsInFlight -= 1
                 takePendingEventDeliveryCloseLocked()
             }
@@ -2739,9 +2755,9 @@ internal class RuntimeWindow(
 
     /** Accepts an uncorrelated native observation after the peer has filtered its own setters. */
     fun observeNativeUpdate(state: WindowState): Boolean {
-        val publication = synchronized(updateLock) {
+        val publication = updateLock.withLock {
             val lifecycle = mutableState.value
-            if (lifecycle.phase != WindowPhase.Open) return@synchronized null
+            if (lifecycle.phase != WindowPhase.Open) return@withLock null
             val candidate = try {
                 lifecycle.copy(
                     outerBounds = if (WindowProperty.OuterPosition in supportedWindowUpdateProperties) {
@@ -2755,9 +2771,9 @@ internal class RuntimeWindow(
                     resizable = state.resizable,
                 )
             } catch (_: IllegalArgumentException) {
-                return@synchronized null
+                return@withLock null
             }
-            if (candidate == lifecycle) return@synchronized null
+            if (candidate == lifecycle) return@withLock null
             val effective = candidate.copy(revision = WindowRevision(lifecycle.revision.value + 1L))
             mutableState.value = effective
             WindowStatePublication(lifecycle, effective, operationId = null)
@@ -2773,7 +2789,7 @@ internal class RuntimeWindow(
     ) {
         var closeEventDelivery = false
         var reportDetached = false
-        synchronized(updateLock) {
+        updateLock.withLock {
             val pending = dispatchedUpdate?.takeIf { it.operationId == operationId } ?: return
             dispatchedUpdate = null
             fullscreenBarrier?.takeIf { it.operationId == operationId }?.let { barrier ->
@@ -2793,7 +2809,7 @@ internal class RuntimeWindow(
 
     fun withdrawDispatchedUpdate(operationId: WindowOperationId) {
         var closeEventDelivery = false
-        synchronized(updateLock) {
+        updateLock.withLock {
             val pending = dispatchedUpdate?.takeIf { it.operationId == operationId } ?: return
             dispatchedUpdate = null
             pending.cancelled = true
@@ -2806,7 +2822,7 @@ internal class RuntimeWindow(
         dispatchNextUpdate()
     }
 
-    fun detachDispatchedUpdateWaiter(operationId: WindowOperationId) = synchronized(updateLock) {
+    fun detachDispatchedUpdateWaiter(operationId: WindowOperationId) = updateLock.withLock {
         dispatchedUpdate
             ?.takeIf { it.operationId == operationId }
             ?.let { it.waiterDetached = true }
@@ -2814,7 +2830,7 @@ internal class RuntimeWindow(
 
     private fun dispatchNextUpdate() {
         var next: PendingWindowUpdate? = null
-        synchronized(updateLock) {
+        updateLock.withLock {
             if (dispatchedUpdate != null) return
             if (fullscreenBarrier != null) return
             while (pendingUpdates.isNotEmpty()) {
@@ -2881,7 +2897,7 @@ internal class RuntimeWindow(
         var drainNext = false
         var withdrawDispatched = false
         var withdrawExclusive = false
-        synchronized(updateLock) {
+        updateLock.withLock {
             if (publishingUpdate === pending) {
                 pending.waiterDetached = true
                 return
@@ -2898,7 +2914,7 @@ internal class RuntimeWindow(
                     if (pending.cancellationRequested) return
                     pending.cancellationRequested = true
                     withdrawExclusive = true
-                    return@synchronized
+                    return@withLock
                 }
                 if (pending.isFullscreenUpdate() && pending.nativeDispatchStarted) {
                     pending.waiterDetached = true
@@ -2912,12 +2928,12 @@ internal class RuntimeWindow(
                     }?.let { fullscreenBarrier = null }
                     closeEventDelivery = takePendingEventDeliveryCloseLocked()
                     drainNext = true
-                    return@synchronized
+                    return@withLock
                 }
                 if (pending.cancellationRequested) return
                 pending.cancellationRequested = true
                 withdrawDispatched = true
-                return@synchronized
+                return@withLock
             }
             pending.cancelled = true
             pendingUpdates.remove(pending)
@@ -2928,8 +2944,8 @@ internal class RuntimeWindow(
         if (withdrawDispatched) manager.withdrawWindowUpdate(this, pending.operationId)
     }
 
-    fun beginNativeUpdateDispatch(operationId: WindowOperationId): Boolean = synchronized(updateLock) {
-        val pending = dispatchedUpdate?.takeIf { it.operationId == operationId } ?: return@synchronized false
+    fun beginNativeUpdateDispatch(operationId: WindowOperationId): Boolean = updateLock.withLock {
+        val pending = dispatchedUpdate?.takeIf { it.operationId == operationId } ?: return@withLock false
         if (mutableState.value.phase == WindowPhase.Open) {
             pending.backendRegistrationEntered = true
             if (!pending.isFullscreenUpdate()) pending.nativeDispatchStarted = true
@@ -2941,27 +2957,27 @@ internal class RuntimeWindow(
         }
     }
 
-    fun markExclusiveCaptureCommitted(operationId: WindowOperationId): Boolean = synchronized(updateLock) {
+    fun markExclusiveCaptureCommitted(operationId: WindowOperationId): Boolean = updateLock.withLock {
         val pending = dispatchedUpdate?.takeIf {
             it.operationId == operationId && it.exclusiveTransition is ExclusiveFullscreenTransition.Enter
-        } ?: return@synchronized false
-        if (pending.exclusivePhase != ExclusiveFullscreenPhase.Reserved) return@synchronized false
+        } ?: return@withLock false
+        if (pending.exclusivePhase != ExclusiveFullscreenPhase.Reserved) return@withLock false
         pending.exclusivePhase = ExclusiveFullscreenPhase.Committing
         pending.nativeDispatchStarted = true
         true
     }
 
-    fun beginFullscreenSelectorInvocation(operationId: WindowOperationId): Boolean = synchronized(updateLock) {
-        val pending = dispatchedUpdate?.takeIf { it.operationId == operationId } ?: return@synchronized false
+    fun beginFullscreenSelectorInvocation(operationId: WindowOperationId): Boolean = updateLock.withLock {
+        val pending = dispatchedUpdate?.takeIf { it.operationId == operationId } ?: return@withLock false
         val barrier = fullscreenBarrier?.takeIf {
             it.operationId == operationId && it.phase == FullscreenPhase.PreparedLocal
-        } ?: return@synchronized false
+        } ?: return@withLock false
         if (
             mutableState.value.phase != WindowPhase.Open ||
             pending.cancelled ||
             pending.cancellationRequested
         ) {
-            return@synchronized false
+            return@withLock false
         }
         pending.nativeDispatchStarted = true
         barrier.phase = FullscreenPhase.InvokingSelector
@@ -3042,7 +3058,7 @@ internal class RuntimeWindow(
     ): WindowOperationId? {
         var fullscreenOperationId: WindowOperationId? = null
         var releaseExclusive = false
-        val closingState = synchronized(updateLock) {
+        val closingState = updateLock.withLock {
             val current = mutableState.value
             if (current.phase != WindowPhase.Open) return null
             closeOperationId = operationId
@@ -3081,7 +3097,7 @@ internal class RuntimeWindow(
     }
 
     fun finishClosing() {
-        val closeEventDelivery = synchronized(updateLock) {
+        val closeEventDelivery = updateLock.withLock {
             val current = mutableState.value
             if (current.phase == WindowPhase.Closed) return
             check(current.phase == WindowPhase.Closing) { "window must enter Closing before its terminal close" }
@@ -3629,9 +3645,6 @@ private fun fullscreenTarget(update: WindowUpdate): FullscreenMode? =
 
 private fun FullscreenMode.isNativeFullscreenTarget(): Boolean =
     this == FullscreenMode.Windowed || this == FullscreenMode.Borderless
-
-private fun <T> unsupported(operation: KadreOperation): Capability<T> =
-    Capability.Unsupported(KadreFailure.Unsupported(operation))
 
 private val REQUEST_WINDOW_INVALID_REQUEST_FIELDS: Set<String> = setOf(
     "title",

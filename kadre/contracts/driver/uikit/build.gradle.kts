@@ -10,14 +10,24 @@ val contractEvidenceDirectory = layout.projectDirectory.dir("build/contract-evid
 /**
  * Un run xcodebuild d'une famille de tests XCTest du driver. Les Chemins passés à xcodebuild
  * sont absolus : le `-resultBundlePath` relatif se résout depuis le workingDir, mais l'absolu
- * ôte toute ambiguïté entre le CWD de l'Exec et celui du démon Gradle.
+ * ôte toute ambiguïté entre le CWD de l'Exec et celui du démon Gradle. L'environnement
+ * `TEST_RUNNER_*` est passé EXPLICITEMENT (jamais hérité du shell du démon — un run non
+ * hermétique rejouerait une preuve différente selon la machine).
  */
-fun simulatorTestTask(name: String, scheme: String, destination: String, xcresult: Directory, frameworkTasks: List<String>) =
+fun simulatorTestTask(
+    name: String,
+    scheme: String,
+    destination: String,
+    xcresult: Directory,
+    frameworkTasks: List<String>,
+    testRunnerEnvironment: Map<String, String> = emptyMap(),
+) =
     tasks.register<Exec>(name) {
         group = "verification"
         description = "Runs the $scheme XCTest suite on $destination."
         dependsOn(frameworkTasks)
         workingDir = projectDir
+        environment(testRunnerEnvironment)
         // xcodebuild refuse un -resultBundlePath déjà existant : purge avant chaque exécution.
         doFirst { delete(xcresult) }
         commandLine(
@@ -48,12 +58,19 @@ fun junitExportTask(name: String, xcresult: Directory, output: Directory, upstre
         )
     }
 
+// Destination iOS = iPad (phase 1) : les scénarios multi-scènes (BCK-014) sont refusés par
+// l'idiome téléphone (« The current device does not support multiple scenes. »). Même
+// destination que le gate scripts/test-uikit-simulator.sh ; les scènes secondaires sont
+// demandées par l'APP au lancement (TEST_RUNNER_KADRE_DRIVER_REQUEST_SECOND_SCENE=2 — deux
+// scènes : le scénario d'indépendance attache la primaire + les secondaires #1 et #2).
 val iosSimulatorTests = simulatorTestTask(
     "iosSimulatorTests", "KadreUikitDriverIos",
-    "platform=iOS Simulator,name=iPhone 17,OS=27.0",
+    "platform=iOS Simulator,name=iPad Pro 11-inch (M5),OS=27.0",
     simulatorXcresultDirectory.dir("ios.xcresult"),
     listOf(":kadre:platform:uikit:linkDebugFrameworkIosSimulatorArm64"),
+    mapOf("TEST_RUNNER_KADRE_DRIVER_REQUEST_SECOND_SCENE" to "2"),
 )
+// tvOS reste mono-scène par design (DESIGN.md §15.2) : aucune scène secondaire demandée.
 val tvosSimulatorTests = simulatorTestTask(
     "tvosSimulatorTests", "KadreUikitDriverTvOs",
     "platform=tvOS Simulator,name=Apple TV 4K (3rd generation),OS=27.0",
