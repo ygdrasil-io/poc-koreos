@@ -63,9 +63,16 @@ internal class KffiWaylandBridge private constructor(
             val client = WaylandClient.connect(name)
                 ?: throw WaylandConnectException("display-connect-failed")
             return try {
-                KffiWaylandBridge(client)
+                val bridge = KffiWaylandBridge(client)
+                // les globals n'arrivent qu'au dispatch : le roundtrip initial
+                // alimente le snapshot durable AVANT toute négociation
+                if (!bridge.roundtrip()) {
+                    throw WaylandConnectException("registry-roundtrip-failed")
+                }
+                bridge
             } catch (failure: Throwable) {
                 client.close()
+                if (failure is WaylandConnectException) throw failure
                 throw WaylandConnectException("registry-listener-failed", failure)
             }
         }
