@@ -66,8 +66,10 @@ import org.graphiks.kadre.surface.SurfaceUpdateOutcome
  * `WebHostSession.kt` qui implémente `RuntimePrimarySurfaceConfiguration`), l'homologue observable
  * du `RuntimeHostSurface` minimal de la phase 0. Implémente [HostSurface] intégralement :
  * `state`/`capabilities`/`events`, un `apply` conforme à sa ligne §3 — aucun champ supporté en
- * phase 2, la ligne n'admets donc jamais un champ et ne sort jamais une failure externe pour
- * l'update entier — et un `requestRedraw` dont Task 3 branchera le scheduling à la place de la
+ * phase 2 ; depuis la phase 3 (Task 4), `inputDefaultBehavior` y est le PREMIER champ
+ * committable (la capability publiée à l'installation, le commit immédiat à une révision — le
+ * miroir web) — et
+ * un `requestRedraw` dont Task 3 branchera le scheduling à la place de la
  * branche on-row. Task 4 a ajouté `: AndroidViewLeasePort` à cette déclaration : la View du host
  * n'est exposée qu'au block du bail ([withAndroidView], double opt-in), jamais ailleurs.
  *
@@ -233,14 +235,21 @@ internal class AndroidHostSurface(
      * 3. la garde `Clear` — un `Clear` sur un champ sans valeur « non posée » est un
      *    `InvalidRequest(field)` (les quatre noms du registre §1.1), lui aussi avant admission ;
      * 4. l'admission CHAMP PAR CHAMP contre la capability publiée — l'admission partagée du
-     *    runtime ([admitField], celle-là même de la surface web et de la surface de référence).
-     *    En phase 2, les quatre capabilities sont `Unsupported(UpdateSurface)` : un champ posé
-     *    est rejeté `RejectedSurfaceField(Unsupported(UpdateSurface))`, un champ non posé ne
-     *    l'est jamais ;
-     * 5. le verdict — la surface n'a aucun chemin de commit en phase 2 : l'état ne bouge pas, la
-     *    révision non plus. Rien de posé → `Applied(current)` ; un champ posé →
-     *    `PartiallyApplied(current, rejected)`. Jamais une failure externe `Unsupported` pour
-     *    l'update entier : le rejet est PAR CHAMP, dans la liste du succès.
+     *    runtime ([admitField], celle-là même de la surface web et de la surface de
+     *    référence). `inputDefaultBehavior` est SUPPORTED depuis la phase 3 (publiée à
+     *    l'installation, `Supported({HostDefault, SuppressWhenPossible}, Available)` — le
+     *    miroir web `WebHostSession.kt:2102-2105`) : un champ posé est admis ; les trois
+     *    autres capabilities restent `Unsupported(UpdateSurface)` : un champ posé est rejeté
+     *    `RejectedSurfaceField(Unsupported(UpdateSurface))`, un champ non posé ne l'est
+     *    jamais — et un rejet ne bloque jamais les champs du même update qui peuvent être
+     *    honorés ;
+     * 5. le verdict — `inputDefaultBehavior` a un chemin de commit (la surface est son
+     *    propre backend : un champ admis est commis immédiatement, UNE révision nouvelle,
+     *    l'outcome portant l'état publié — le miroir du commit web `:1612-1613`) ; les trois
+     *    champs sans chemin de commit restent gardés par [requireRefused]. Rien de posé ni
+     *    de commis → `Applied(current)` ; un champ rejeté →
+     *    `PartiallyApplied(published, rejected)`. Jamais une failure externe `Unsupported`
+     *    pour l'update entier : le rejet est PAR CHAMP, dans la liste du succès.
      *
      * Toute la décision tient sous [RuntimeLock] — le miroir de la surface de phase 0
      * (`RuntimeHostSurface.kt:48-62`) : la garde de révision relit l'état publié et le verdict
@@ -286,21 +295,45 @@ internal class AndroidHostSurface(
             capabilities.inputDefaultBehavior,
             rejected,
         )
-        // Les quatre champs n'ont aucun chemin de commit en phase 2 : la garde assure qu'un champ
-        // arrivé admis (une capability qui deviendrait `Supported` sans commit ici) est une erreur
-        // de programmation criante, pas un `Applied` pour un état qui ne l'a jamais pris.
+        // Les trois champs d'update sans chemin de commit restent gardés plutôt qu'assumés
+        // absents : leurs capabilities refusent toute valeur aujourd'hui, mais le jour où
+        // l'une deviendrait `Supported` le changement atterrirait ici non commis et serait
+        // répondu d'un `Applied` pour un état qui ne l'a jamais pris (la même garde que la
+        // surface web pose sur ses propres champs sans commit).
         cursor.requireRefused(SurfaceProperty.Cursor)
         pointerCapture.requireRefused(SurfaceProperty.PointerCapture)
         hitTesting.requireRefused(SurfaceProperty.HitTesting)
-        inputDefaultBehavior.requireRefused(SurfaceProperty.InputDefaultBehavior)
-        // Aucun commit : l'état rendu est l'instantané courant, révision intacte — demander la
-        // valeur déjà en effet serait admis et répondue `Applied` de la même façon.
+        // `inputDefaultBehavior` est le PREMIER champ committable de cette surface, et la
+        // surface Android est son propre backend : rien en dessous ne peut rapporter une
+        // valeur effective différente, un champ admis est donc commis ICI ET MAINTENANT —
+        // le miroir exact du commit own-backend web (`WebHostSession.kt:1612-1613`).
         val current = mutableState.value
+        var committed = current
+        if (inputDefaultBehavior is PropertyChange.Set) {
+            committed = committed.copy(inputDefaultBehavior = inputDefaultBehavior.value)
+        }
+        // Un commit, une révision, et seulement pour un état qui a réellement bougé :
+        // `next != current` est la règle de la référence (`commitUpdateLocked`), celle qui
+        // fait de la révision la marque d'un changement d'état plutôt que d'un appel.
+        // Demander la valeur déjà en effet est admis et répondu `Applied` de l'état — et
+        // donc de la révision — intacts. La publication de l'état est l'événement du commit
+        // : aucun champ de ce commit n'a de variante `SurfaceEvent` typée SUR AUCUNE
+        // plateforme (la surface web commet le même champ sans en émettre) — les
+        // observateurs de `state` voient la valeur, les observateurs d'`events` ne sont pas
+        // doublement notifiés.
+        val next = if (committed != current) {
+            check(current.revision.value < Long.MAX_VALUE) { "surface revision space exhausted" }
+            committed.copy(revision = SurfaceRevision(current.revision.value + 1L))
+        } else {
+            current
+        }
+        if (next != current) mutableState.value = next
+        val published = mutableState.value
         KadreResult.Success(
             if (rejected.isEmpty()) {
-                SurfaceUpdateOutcome.Applied(current)
+                SurfaceUpdateOutcome.Applied(published)
             } else {
-                SurfaceUpdateOutcome.PartiallyApplied(current, rejected)
+                SurfaceUpdateOutcome.PartiallyApplied(published, rejected)
             },
         )
     }
@@ -643,19 +676,20 @@ internal class AndroidHostSurface(
     }
 
     /**
-     * La lecture de suppression (le `suppressDefaultFor` web, côté surface) : la réponse
-     * vient de l'état COMMIS de la surface — [SurfaceState.inputDefaultBehavior] tel que
-     * `apply` l'a rendu (le chemin de commit est le sujet de la Task 4 ; jusqu'alors l'état
-     * reste `HostDefault`, qui ne consomme jamais). La category est la famille des
-     * scroll-keys documentaires — l'ensemble fermé [ANDROID_DOCUMENT_SCROLL_KEYS], le miroir
-     * des 9 touches web, keyé sur le keycode natif (carry de la review Task 1 : les touches
-     * de page, Home et End n'existent pas comme touches logiques nommées dans la table
-     * Android). Pure lecture : rien n'y commet rien.
+     * La lecture de suppression (le `suppressDefaultFor` web, côté surface — le seam T1
+     * câblé, Task 4) : la réponse vient de l'état COMMIS de la surface —
+     * [SurfaceState.inputDefaultBehavior] tel que `apply` l'a commis — et de la table de la
+     * plateforme ([AndroidInputTranslation.shouldSuppress], le miroir de `shouldSuppress`
+     * web) : sous `HostDefault` rien n'est consommé, sous `SuppressWhenPossible` les NEUF
+     * scroll-keys documentaires seules le sont ([ANDROID_DOCUMENT_SCROLL_KEYS], keyé sur le
+     * keycode natif — carry de la review Task 1 : les touches de page, Home et End
+     * n'existent pas comme touches logiques nommées dans la table Android). La décision du
+     * dispatch vit dans [AndroidInputWindowCallback] : une touche consommée répond `true`
+     * SANS forward, et reste OBSERVÉE — la delivery d'abord, la suppression ensuite (le
+     * précédent web « delivered then suppressed »). Pure lecture : rien n'y commet rien.
      */
-    internal fun shouldConsumeKey(nativeKeyCode: Int): Boolean = when (mutableState.value.inputDefaultBehavior) {
-        InputDefaultBehavior.HostDefault -> false
-        InputDefaultBehavior.SuppressWhenPossible -> nativeKeyCode in ANDROID_DOCUMENT_SCROLL_KEYS
-    }
+    internal fun shouldConsumeKey(nativeKeyCode: Int): Boolean =
+        AndroidInputTranslation.shouldSuppress(nativeKeyCode, mutableState.value.inputDefaultBehavior)
 }
 
 /** Affirme qu'un champ sans chemin de commit a bien été refusé par sa capability. */
@@ -667,15 +701,26 @@ private fun PropertyChange<*>.requireRefused(property: SurfaceProperty) {
 
 /**
  * Le snapshot honnête d'une surface Android observée : les refus de la phase 2
- * ([unsupportedSurfaceCapabilities]) avec l'annonce d'installation — `platformAccess` `Supported`
- * (la rangée Android de `capabilities/android.md` §Phase 2, qui couvre ensemble les métriques
- * publiées, le redraw coalescé et l'accès natif borné du bail). Publié par
- * [AndroidHostSurface.observationInstalled] quand l'observation et le scheduling vivent, retiré
- * au terminal ([AndroidHostSurface.close]) — jamais après.
+ * ([unsupportedSurfaceCapabilities]) avec les annonces d'installation — `platformAccess`
+ * `Supported` (la rangée Android de `capabilities/android.md` §Phase 2, qui couvre ensemble les
+ * métriques publiées, le redraw coalescé et l'accès natif borné du bail) et, depuis la
+ * phase 3,
+ * `inputDefaultBehavior` `Supported({HostDefault, SuppressWhenPossible}, Available)` — le
+ * miroir EXACT de la capability web (`WebHostSession.kt:2102-2105`) : les deux valeurs du
+ * comportement, disponibles. Publié par [AndroidHostSurface.observationInstalled] quand
+ * l'observation et le scheduling vivent (le moment structurel où la surface qui honore — le
+ * wrapper de dispatch, la lecture de l'état commis — existe, la même sémantique « `Available`
+ * seulement après une installation réelle » que partout ailleurs), retiré au terminal
+ * ([AndroidHostSurface.close]) — jamais après. Les trois autres champs d'update restent
+ * `Unsupported(UpdateSurface)` : leurs refus de la phase 2 ne sont pas affaiblis.
  */
 private fun androidSurfaceCapabilities(): SurfaceCapabilities =
     unsupportedSurfaceCapabilities().copy(
         platformAccess = Capability.Supported(Unit, FeatureAvailability.Available),
+        inputDefaultBehavior = Capability.Supported(
+            setOf(InputDefaultBehavior.HostDefault, InputDefaultBehavior.SuppressWhenPossible),
+            FeatureAvailability.Available,
+        ),
     )
 
 /**

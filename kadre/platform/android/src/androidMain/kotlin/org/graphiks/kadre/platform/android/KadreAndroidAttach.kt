@@ -483,7 +483,8 @@ internal object AndroidHostSession {
      *   mais le wrapper n'est POSÉ qu'après un attach réussi : la course est structurellement
      *   impossible, le thread principal sérialise l'attach tout entier ;
      * - [AndroidInputWindowCallback.shouldConsumeKey] lit l'état COMMIS de la surface (le
-     *   `suppressDefaultFor` web côté surface) — sans surface, rien n'est consommé.
+     *   `suppressDefaultFor` web côté surface — depuis la tâche 4, les scroll-keys sous
+     *   `SuppressWhenPossible`) — sans surface, rien n'est consommé.
      *
      * La forme View n'a pas de fenêtre : `null`, l'observation clavier/tactile y est dépourvue
      * à cette phase (documenté au point d'appel).

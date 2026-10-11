@@ -51,8 +51,10 @@ internal sealed interface AndroidInputObservation {
  *    si la vue attachée porte le focus ([isTargetFocused] — `view.hasFocus()` au moment de
  *    l'événement) ; l'événement est TOUJOURS forwardé quoi qu'il arrive ;
  * 2. une touche système ([isSystemKey]) n'est JAMAIS consommée — forwardée intacte ;
- * 3. sinon, la policy décide ([shouldConsumeKey] — les scroll-keys, câblé par la tâche 4 ;
- *    le seam de la tâche 1 répond toujours `false`) : `true` consomme (aucun forward),
+ * 3. sinon, la policy décide ([shouldConsumeKey] — câblée par la tâche 4 à l'état COMMIS de
+ *    la surface : [AndroidInputTranslation.shouldSuppress], exactement les scroll-keys
+ *    documentaires sous `SuppressWhenPossible`, rien sous `HostDefault`) : `true` consomme
+ *    (aucun forward),
  *    `false` laisse partir ;
  * 4. le forward est la décision : la valeur de retour de [forwardKey] EST celle rendue au
  *    système.
