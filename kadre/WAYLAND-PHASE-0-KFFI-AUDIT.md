@@ -34,6 +34,8 @@ Sources audit : jars `-sources` de ces versions exactes (`Wayland_h.kt`, `Waylan
 
 **Bindings minimaux requis pour la tranche 1 (liste fermée)** : domaines 2, 3, 4, 5, 7 ci-dessus — tous **vérifiés présents** dans `kffi-wayland-jvm:1.0.0-20261011.162917-59` et `kffi-posix-jvm:1.0.0-20261011.162917-58`.
 
+**Correction M1 (2026-10-12)** : les handles `wlDisplayGetRegistry`, `wlRegistryAddListener` et `wlRegistryBind` de kffi ciblent des fonctions `static inline` des en-têtes — ces symboles n'existent dans aucune distribution de libwayland-client. Le verdict « usable » du domaine 1 ci-dessus était donc trop optimiste ; le binding managé `KFFI-WAYLAND-004` crée le registry via le marshal générique (`wlProxyMarshalNewId` + `wl_registry_interface`) et installe les listeners via le symbole réel `wl_proxy_add_listener` (kffi `feat/wayland-managed-client`, commit `b970f86`), preuve à l'appui (gate M1 verte).
+
 **Blocages précis** :
 
 1. `KFFI-WAYLAND-001` — `wl_display_connect_to_fd` absent (seul `wl_display_connect` par nom de socket existe). Sans lui, le contrat `WAYLAND_SOCKET` du probe (réutiliser puis fermer le fd au run) n'est pas implémentable, et tout downcall local est interdit (roadmap §3.2). **Bloque le support `WAYLAND_SOCKET` de la tranche 1** ; la connexion par nom de socket et le reste de la tranche 1 restent indépendants et non bloqués.
@@ -65,7 +67,7 @@ Décisions d'environnement enregistrées pour les phases Wayland ; toute extensi
 - **B-1 JVM** — plancher JVM 25 (Temurin), aligné sur l'en-tête de la roadmap et l'outilisation courante du dépôt.
 - **B-2 libc** — glibc : plancher 2.39 (Ubuntu 24.04 Noble, image de test B-3). musl : ≥ 1.2.5 (Alpine 3.22+, image de test B-3). Règle de résolution des symboles : `SymbolLookup.loaderLookup()` (process) d'abord, puis candidats SONAME ordonnés `libc.so.6`, `libc.so` — aucun SONAME codé en dur hors de cette liste ; c'est exactement la chaîne publiée par `kffi-posix` `PosixSymbols` (audit §verdicts, domaine 4).
 - **B-3 images de test reproductibles** —
-  - glibc : `eclipse-temurin:25-jdk-noble` + `weston` (paquet distro ; version exacte relevée à l'installation du premier job CI et inscrite ici).
+  - glibc : `eclipse-temurin:25-jdk-noble` + `weston` (paquet distro). **Preuve M0/M1 du 2026-10-12** : weston **13.0.0** (Noble), image pignée `eclipse-temurin@sha256:589ff4cc3f71aab462e7048a47a0d10edf57fbccde3fceea2281e610bf5880b4` (variante linux/arm64 comme amd64), wayland-client **1.22.0** ; gate complète verte (`scripts/test-kadre-wayland-contracts.sh`), preuves `BCK-015/SES-001/SUR-001` générées et validées.
   - musl : image Alpine + `weston` du dépôt community — disponibilité vérifiée le 2026-10-11 (`weston 16.0.0-r0`, edge/community x86_64, index Alpine) ; si une release stable Alpine ne porte weston, l'image `edge` est retenue et **pignée par digest**.
   - Les deux images sont pignées par digest au moment de l'écriture du workflow CI (phase 1, topologie §4) ; un digest pigné vaut baseline, un tag mobile n'en est pas une.
 - **B-4 versions minimales de protocoles bindées** — règle de décision : version bindée = `min(annoncée par le global, max supportée par le binding kffi)` ; exigence d'admission = `annoncée ≥ minimal requis ci-dessous`. Un global dont la version annoncée est inférieure au minimal requis fait échouer la négociation (failure avant session), jamais un fonctionnement dégradé silencieux.
