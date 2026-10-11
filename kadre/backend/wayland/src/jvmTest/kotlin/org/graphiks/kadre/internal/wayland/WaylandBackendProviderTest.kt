@@ -12,6 +12,7 @@ import kotlinx.coroutines.Job
 import org.graphiks.kadre.application.KadreApplication
 import org.graphiks.kadre.application.KadreApplicationFactory
 import org.graphiks.kadre.application.SessionOutcome
+import org.graphiks.kadre.application.SessionStopReason
 import org.graphiks.kadre.diagnostics.KadreFailure
 import org.graphiks.kadre.diagnostics.KadreOperation
 import org.graphiks.kadre.diagnostics.KadrePlatform
@@ -178,6 +179,30 @@ class WaylandBackendProviderTest {
             ),
         )
         assertEquals(KadreResult.Success(SessionOutcome.Completed), outcome)
+    }
+
+    @Test
+    fun applicationRequestedStopStopsTheLoop() {
+        // SN-9 : annulation côté application — `KadreScope.requestStop()`
+        // passe par le stopHandler, réveille la pompe et termine la session
+        // en `ApplicationRequested` (premier motif terminal conservé).
+        val provider = WaylandBackendProvider.forTesting(
+            availability = { true },
+            environment = { environment() },
+            bridgeFactory = { _ -> FakeBridge() },
+            wakeFactory = { SessionFakeWakeup() },
+        )
+        val outcome = provider.run(
+            DesktopStandaloneRequest(
+                applicationFactory = KadreApplicationFactory { KadreApplication { requestStop() } },
+                stopWhenLastWindowClosed = true,
+                policy = KadrePolicies.Default,
+            ),
+        )
+        assertEquals(
+            KadreResult.Success(SessionOutcome.Stopped(SessionStopReason.ApplicationRequested)),
+            outcome,
+        )
     }
 
     @Test

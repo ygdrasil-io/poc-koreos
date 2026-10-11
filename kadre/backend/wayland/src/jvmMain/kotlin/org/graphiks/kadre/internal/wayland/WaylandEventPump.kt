@@ -13,8 +13,9 @@ internal interface PumpOperations {
 
     /**
      * Poll bloquant sur le fd display + fd de wake (et POLLOUT si [watchWrite]).
-     * L'implémentation draine le wake avant de renvoyer [PollOutcome.WakeOnly] ;
-     * un échec de poll se traduit par [PollOutcome.Lost] (connexion perdue).
+     * Ne draine PAS le wake : c'est la pompe qui draine ([PosixWakeup.drain])
+     * après [PollOutcome.WakeOnly], sinon un réveil non consommé resterait
+     * lisible et la boucle tournerait à vide.
      */
     fun poll(wakeFd: Int, watchWrite: Boolean): PollOutcome
 }
@@ -67,9 +68,18 @@ internal class WaylandEventPump(
             }
             when (ops.poll(wake.readFd, watchWrite)) {
                 PollOutcome.DisplayReady -> break
-                // réveil sans arrêt ou EINTR : la lecture préparée subsiste,
-                // on repoll — jamais un second prepare_read
-                PollOutcome.WakeOnly, PollOutcome.Interrupted -> continue
+                // EINTR : la lecture préparée subsiste, on repoll — jamais un
+                // second prepare_read. WakeOnly : DRAINER le wake (sinon il
+                // resterait lisible et la boucle tournerait à vide), puis repoll.
+                PollOutcome.Interrupted -> continue
+                PollOutcome.WakeOnly -> {
+                    if (stopRequested.get()) {
+                        ops.cancelRead()
+                        return PumpStep.Stopped
+                    }
+                    wake.drain()
+                    continue
+                }
                 PollOutcome.Lost -> {
                     ops.cancelRead()
                     return PumpStep.ConnectionLost

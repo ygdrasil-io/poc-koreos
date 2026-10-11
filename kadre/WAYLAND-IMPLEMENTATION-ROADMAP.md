@@ -169,11 +169,11 @@ Toutes les phases ci-dessous sont proposées. Aucun jalon Wayland de la nouvelle
 
 **Dépendance :** phase 0 et bindings host.
 
-- [ ] Ajouter le provider paresseux et son service descriptor ; aucune charge native Wayland pendant la discovery sur macOS/Windows.
-- [ ] Implémenter connexion, registry durable, négociation, dispatch, wake réarmable, arrêt, erreurs et owners révocables.
-- [ ] Brancher `runKadreApplication` sur `SessionRuntime`, avec `primarySurface = null` et managers explicites. Une session initialement headless reste `Background + Inactive` et ne s’arrête pas parce qu’elle n’a jamais eu de fenêtre.
-- [ ] Introduire le driver, le workflow et le producteur de preuves Wayland dès cette tranche ; utiliser Weston headless pour la première frontière externe.
-- [ ] Tester plusieurs cycles start/stop, réveils répétés, arrêt depuis un autre thread, annulation, serveur absent et déconnexion en attente.
+- [x] Ajouter le provider paresseux et son service descriptor ; aucune charge native Wayland pendant la discovery sur macOS/Windows.
+- [x] Implémenter connexion, registry durable, négociation, dispatch, wake réarmable, arrêt, erreurs et owners révocables.
+- [x] Brancher `runKadreApplication` sur `SessionRuntime`, avec `primarySurface = null` et managers explicites. Une session initialement headless reste `Background + Inactive` et ne s’arrête pas parce qu’elle n’a jamais eu de fenêtre.
+- [x] Introduire le driver, le workflow et le producteur de preuves Wayland dès cette tranche ; utiliser Weston headless pour la première frontière externe.
+- [x] Tester plusieurs cycles start/stop, réveils répétés, arrêt depuis un autre thread, annulation, serveur absent et déconnexion en attente.
 
 **Gate de sortie :** session réelle démarrée/arrêtée sur Linux, sans fuite de fd ni callback tardive ; preuve O3 de la pompe et preuve O2 de l’outcome. Le livrable reste explicitement limité au headless ; la garantie Desktop complète de `requestWindow` ne peut être revendiquée avant la phase 2.
 

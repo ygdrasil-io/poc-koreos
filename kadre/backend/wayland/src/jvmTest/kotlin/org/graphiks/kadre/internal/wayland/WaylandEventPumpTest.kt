@@ -105,6 +105,19 @@ class WaylandEventPumpTest {
     }
 
     @Test
+    fun wakeOnlyDrainsTheWakeBeforeRearming() {
+        val ops = RecordingOperations()
+        ops.pollResults = ArrayDeque(listOf(PollOutcome.WakeOnly, PollOutcome.DisplayReady))
+        val wake = FakeWakeup()
+        val pump = WaylandEventPump(ops, wake)
+        // sans drain, un eventfd/pipe réveillé resterait lisible : la boucle
+        // tournerait à vide (P-2, roadmap §3.3)
+        assertEquals(PumpStep.Dispatched, pump.runOnce())
+        assertEquals(1, wake.drainCount)
+        assertEquals(0, ops.cancelCount)
+    }
+
+    @Test
     fun stopDuringPollExitsThroughTheWakeWithoutReading() {
         val ops = RecordingOperations()
         val released = CountDownLatch(1)

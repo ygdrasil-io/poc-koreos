@@ -24,8 +24,13 @@ dependencyResolutionManagement {
     repositories {
         // Consommation pré-publication du binding managé Wayland (gap KFFI-WAYLAND-004,
         // précédent KFFI-OBJC-006) : à retirer dès la publication kffi sur
-        // Central Portal Snapshots.
-        mavenLocal()
+        // Central Portal Snapshots. Filtré au groupe org.graphiks pour ne
+        // masquer aucune résolution distante d'un autre module.
+        mavenLocal {
+            content {
+                includeGroup("org.graphiks")
+            }
+        }
         google()
         maven("https://central.sonatype.com/repository/maven-snapshots/") {
             name = "Central Portal Snapshots"
