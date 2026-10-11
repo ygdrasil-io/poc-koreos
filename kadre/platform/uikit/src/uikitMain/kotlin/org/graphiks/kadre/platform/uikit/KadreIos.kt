@@ -17,9 +17,11 @@ import org.graphiks.kadre.diagnostics.KadreResult
 import org.graphiks.kadre.internal.runtime.RuntimeDeferredAdmissionWindowManager
 import org.graphiks.kadre.internal.runtime.RuntimeFailureReporter
 import org.graphiks.kadre.internal.runtime.RuntimeHostController
+import org.graphiks.kadre.internal.runtime.RuntimeLock
 import org.graphiks.kadre.internal.runtime.RuntimeSessionComponents
 import org.graphiks.kadre.internal.runtime.RuntimeSessionRevocationHandler
 import org.graphiks.kadre.internal.runtime.RuntimeSessionObserver
+import org.graphiks.kadre.internal.runtime.withLock
 import org.graphiks.kadre.internal.uikit.UIKitLifecycleReducer
 import org.graphiks.kadre.internal.uikit.UIKitLifecycleSource
 import org.graphiks.kadre.internal.uikit.UIKitLifecycleSnapshot
@@ -118,7 +120,7 @@ public object KadreIos {
             is KadreResult.Failure -> return KadreResult.Failure(r.reason)
         }
         val ownership = UIKitOwnership(reservation)
-        val failureReporter = RuntimeFailureReporter { }
+        val failureReporter = UIKitAttachDiagnostics
 
         // 3. Source de lifecycle + observations, avec rollback par étape. Le relais pointe
         //    vers le controller créé plus bas : la référence atomique est lue par les closures
@@ -193,4 +195,39 @@ public object KadreIos {
             }
         }
     }
+}
+
+/**
+ * Le canal de diagnostic de la couture d'attach UIKit/tvOS — l'[RuntimeFailureReporter] que le
+ * runtime et le port reçoivent pour chaque session construite ici : les throwables reportés par
+ * le chemin d'observation de surface (`UIKitWindowCommandPort` enveloppe publication et
+ * installation dans `runCatching` — une observation abandonnée ou un observer qui jette y
+ * funnelle) y sont ENREGISTRÉS, jamais avalés en silence (miroir exact
+ * d'`AndroidAttachDiagnostics`, `KadreAndroidAttach.kt` l.551).
+ *
+ * Journal borné (les plus récents gagnent) et thread-safe : le runtime y reporte depuis les
+ * contexts de coroutine des sessions, pas seulement depuis le thread principal de l'attach.
+ * Interne au module — la surface lisible du driver passe par la sonde publique
+ * [KadreUikitSurfaceDriver] (scaffolding du driver, même posture que [KadreUikitProbe]).
+ */
+internal object UIKitAttachDiagnostics : RuntimeFailureReporter {
+    private val lock = RuntimeLock()
+    private val recorded = ArrayDeque<Throwable>()
+    private var reportedTotal = 0
+
+    override fun report(cause: Throwable) {
+        lock.withLock {
+            reportedTotal += 1
+            recorded.addLast(cause)
+            while (recorded.size > JOURNAL_CAPACITY) recorded.removeFirst()
+        }
+    }
+
+    /** L'instantané du journal — pour l'observation (diagnostics, tests hôtes). */
+    internal fun failures(): List<Throwable> = lock.withLock { recorded.toList() }
+
+    /** Le nombre TOTAL de reports depuis le lancement du process — chaque report compte. */
+    internal fun totalReported(): Int = lock.withLock { reportedTotal }
+
+    private const val JOURNAL_CAPACITY = 16
 }

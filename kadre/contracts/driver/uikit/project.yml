@@ -27,6 +27,25 @@ targets:
       path: apps/Ios/Info.plist
       properties:
         UILaunchStoryboardName: ""
+        # Task 5 (rotation réelle, BCK-016) : les QUATRE orientations sont déclarées —
+        # `windowScene.requestGeometryUpdate(.iOS(interfaceOrientations:))` refuse une
+        # orientation hors de cette liste (l'API lit le plist, pas l'appel).
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        # La rotation RÉELLE est INDISPONIBLE sur ce simulateur (iPadOS 27) : TROIS refus
+        # capturés, un par levier système — (1) mode fenêtré libre par défaut :
+        # UISceneErrorDomain 101 « The current windowing mode does not allow for programmatic
+        # changes to interface orientation » ; (2) avec la clé TN3192
+        # `UIPreferredDefaultWindowingStyle: UIWindowSceneWindowingStyleFullscreen` (vérifiée
+        # dans l'Info.plist construit) : même 101 — la clé ne débloque pas la rotation, elle a
+        # donc été RETIRÉE ; (3) avec `UIRequiresFullScreen=true` :
+        # BSActionErrorDomain « response-not-possible » — la demande est refusée à la source
+        # (clé retirée aussi). Le stimulus retenu est le repli DOCUMENTÉ du brief Step 2 :
+        # resize à changement d'aspect (240×320), tracé (NSLog + DriverTrace) et rapporté —
+        # JAMAIS un faux vert rotation.
         UIApplicationSceneManifest:
           UIApplicationSupportsMultipleScenes: true
           UISceneConfigurations:

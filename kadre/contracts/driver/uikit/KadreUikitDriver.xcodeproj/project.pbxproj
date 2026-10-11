@@ -10,6 +10,7 @@
 		034DDEAA05709F650A3B9E5E /* MainApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = CEA47E7FE25F4B4C3C5A5A7B /* MainApp.swift */; };
 		07F945B2FBD4D75DBBCFF676 /* DriverFixture.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1E444F71E79C711F6BF4ED11 /* DriverFixture.swift */; };
 		0F4DDB979A091F83D7DD43E9 /* DriverSceneDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1D37932D257E216FA8982CD /* DriverSceneDelegate.swift */; };
+		0FC29BEE66FB0AEBF6754ED6 /* KadreUikitSurfaceIosTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B48BF1317CBEE3F8F731C20 /* KadreUikitSurfaceIosTests.swift */; };
 		28E4137FCEE717DC6770EEB4 /* KadreUikitAttachTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB076B59B50782C75356E323 /* KadreUikitAttachTests.swift */; };
 		3F8C640BBE16B94EF162448B /* KadreUikit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 418337605D5B3199B7E05325 /* KadreUikit.framework */; };
 		447FB172AC08C6378923191F /* DriverFixture.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1E444F71E79C711F6BF4ED11 /* DriverFixture.swift */; };
@@ -21,10 +22,12 @@
 		5FFF4CF409B518FE59B30608 /* KadreUikitAttachIosTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EF4BB6EECE039A378B8E072F /* KadreUikitAttachIosTests.swift */; };
 		993798177928E45DD8DDF7E5 /* KadreUikitDriverTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 34888DC507A9523344912ADC /* KadreUikitDriverTests.swift */; };
 		A2B6955939359F103409316F /* KadreUikitAttachTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB076B59B50782C75356E323 /* KadreUikitAttachTests.swift */; };
+		A4E05FA21538599220B2A46D /* KadreUikitSurfaceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 28AB0CD4DD2034DD313DB5B3 /* KadreUikitSurfaceTests.swift */; };
 		AE3A2C494182A1D8939A3C0B /* DriverSceneDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1D37932D257E216FA8982CD /* DriverSceneDelegate.swift */; };
 		C7C57FE2E6827FC672C6BB25 /* KadreUikit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 0BE6A301E633DDEB145A1DBC /* KadreUikit.framework */; };
 		CC605EAC7648723B63A816A4 /* KadreUikit.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 0BE6A301E633DDEB145A1DBC /* KadreUikit.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		CEFEE3910D583AB4D45A3A32 /* MainApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = FE98F3A76E07C48BCFEE7624 /* MainApp.swift */; };
+		D4F50CB46FA8FDC71A32C3C2 /* KadreUikitSurfaceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 28AB0CD4DD2034DD313DB5B3 /* KadreUikitSurfaceTests.swift */; };
 		E49BDA2624EB43E594A6B187 /* DriverAppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA321956718EA01BDDC9B035 /* DriverAppDelegate.swift */; };
 		E5B93085E4574BE844900F4D /* DriverSceneRequest.swift in Sources */ = {isa = PBXBuildFile; fileRef = 17F420D2055A050D2FA7B71F /* DriverSceneRequest.swift */; };
 		EA945D34993D27F421B50A92 /* DriverAppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA321956718EA01BDDC9B035 /* DriverAppDelegate.swift */; };
@@ -75,10 +78,12 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		0B48BF1317CBEE3F8F731C20 /* KadreUikitSurfaceIosTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KadreUikitSurfaceIosTests.swift; sourceTree = "<group>"; };
 		0BE6A301E633DDEB145A1DBC /* KadreUikit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = KadreUikit.framework; path = ../../../platform/uikit/build/bin/tvosSimulatorArm64/debugFramework/KadreUikit.framework; sourceTree = "<group>"; };
 		162BD7AB9092ACFC44FF87B1 /* KadreUikitDriverTvOsTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = KadreUikitDriverTvOsTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		17F420D2055A050D2FA7B71F /* DriverSceneRequest.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DriverSceneRequest.swift; sourceTree = "<group>"; };
 		1E444F71E79C711F6BF4ED11 /* DriverFixture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DriverFixture.swift; sourceTree = "<group>"; };
+		28AB0CD4DD2034DD313DB5B3 /* KadreUikitSurfaceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KadreUikitSurfaceTests.swift; sourceTree = "<group>"; };
 		34888DC507A9523344912ADC /* KadreUikitDriverTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KadreUikitDriverTests.swift; sourceTree = "<group>"; };
 		418337605D5B3199B7E05325 /* KadreUikit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = KadreUikit.framework; path = ../../../platform/uikit/build/bin/iosSimulatorArm64/debugFramework/KadreUikit.framework; sourceTree = "<group>"; };
 		48C0BE32541B75BA9585E1B3 /* KadreUikitDriverTvOs.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = KadreUikitDriverTvOs.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -171,6 +176,7 @@
 			isa = PBXGroup;
 			children = (
 				EF4BB6EECE039A378B8E072F /* KadreUikitAttachIosTests.swift */,
+				0B48BF1317CBEE3F8F731C20 /* KadreUikitSurfaceIosTests.swift */,
 			);
 			name = Ios;
 			path = tests/Ios;
@@ -181,6 +187,7 @@
 			children = (
 				FB076B59B50782C75356E323 /* KadreUikitAttachTests.swift */,
 				34888DC507A9523344912ADC /* KadreUikitDriverTests.swift */,
+				28AB0CD4DD2034DD313DB5B3 /* KadreUikitSurfaceTests.swift */,
 			);
 			name = Shared;
 			path = tests/Shared;
@@ -335,6 +342,7 @@
 			files = (
 				28E4137FCEE717DC6770EEB4 /* KadreUikitAttachTests.swift in Sources */,
 				5BF1729E91D5C95BD0B4C26C /* KadreUikitDriverTests.swift in Sources */,
+				A4E05FA21538599220B2A46D /* KadreUikitSurfaceTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -345,6 +353,8 @@
 				5FFF4CF409B518FE59B30608 /* KadreUikitAttachIosTests.swift in Sources */,
 				A2B6955939359F103409316F /* KadreUikitAttachTests.swift in Sources */,
 				993798177928E45DD8DDF7E5 /* KadreUikitDriverTests.swift in Sources */,
+				0FC29BEE66FB0AEBF6754ED6 /* KadreUikitSurfaceIosTests.swift in Sources */,
+				D4F50CB46FA8FDC71A32C3C2 /* KadreUikitSurfaceTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

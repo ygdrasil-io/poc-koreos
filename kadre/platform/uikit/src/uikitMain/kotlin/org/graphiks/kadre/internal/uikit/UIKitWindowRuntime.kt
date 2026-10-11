@@ -10,9 +10,9 @@ import org.graphiks.kadre.internal.runtime.RuntimeFailureReporter
 import org.graphiks.kadre.internal.runtime.RuntimePrimarySurface
 import org.graphiks.kadre.internal.runtime.RuntimeWindowManager
 import org.graphiks.kadre.internal.runtime.RuntimeWindowSurface
-import org.graphiks.kadre.internal.runtime.unsupportedSurfaceCapabilities
 import org.graphiks.kadre.policy.KadrePolicy
 import org.graphiks.kadre.surface.LogicalSize
+import org.graphiks.kadre.surface.SurfaceId
 import org.graphiks.kadre.window.WindowSpec
 import platform.UIKit.UIView
 import platform.UIKit.UIWindow
@@ -21,12 +21,18 @@ import platform.UIKit.UIWindow
  * Composition root UIKit d'une session (miroir d'`AppKitWindowRuntimeDriver` l.72-159) :
  * le port est créé d'abord avec des sinks qui pointent vers le manager, le manager est créé
  * ensuite avec le même objet comme `commandPort` ET `surfaceCommandPort` (driver l.126-144).
- * Différences AppKit assumées, phase 1 :
- *  - `publicWindowCapabilities = false`, `publicSurfaceCapabilities = false` — la session
- *   UIKit est mono-fenêtre imposée par le host : rien n'est annoncé comme créable/modifiable ;
- *  - `enabledWindowUpdateCapabilities = emptySet()` et capabilities surface « unsupported » —
- *    snapshot initial figé ;
+ * Différences AppKit assumées :
+ *  - `publicWindowCapabilities = false`, `enabledWindowUpdateCapabilities = emptySet()` — la
+ *   session UIKit est mono-fenêtre imposée par le host : rien n'est annoncé comme
+ *   créable/modifiable côté fenêtre ;
  *  - pas d'attention, pas de fullscreen, pas de TextInput factory dédiée (défauts du manager).
+ *
+ * Phase 2 : `publicSurfaceCapabilities = true` — les commands surface sont OUVERTS (le runtime
+ * alloue des tickets de redraw et transmet les `SurfaceUpdateCommand` au port) et les
+ * capabilities annoncées sont celles d'[uikitSurfaceCapabilities] : redraw coalescé et accès
+ * plateforme supportés, les quatre champs update refusés. La contrainte du manager
+ * (`RuntimeWindowManager.commitPendingLocked` l.1461 : capabilities publiées exigent un
+ * snapshot initial) est satisfaite — le port commite `initialSnapshot()` à l'open.
  *
  * La fenêtre primaire est DEMANDÉE au manager DANS [admitPrimaryWindow] — jamais d'écriture
  * directe dans l'état (le reducer du manager reste l'autorité) — appelé par
@@ -69,13 +75,20 @@ internal class UIKitWindowRuntime internal constructor(
         failureReporter = failureReporter,
         publicWindowCapabilities = false,
         enabledWindowUpdateCapabilities = emptySet(),
-        publicSurfaceCapabilities = false,
-        enabledSurfaceCapabilities = unsupportedSurfaceCapabilities(),
+        publicSurfaceCapabilities = true,
+        enabledSurfaceCapabilities = uikitSurfaceCapabilities(),
     )
 
     /** Le RuntimePrimarySurface de la session, construit par [admitPrimaryWindow] (mémoïsé). */
     internal var attachedPrimarySurface: RuntimePrimarySurface? = null
         private set
+
+    /**
+     * Le surfaceId sous lequel le port de lease est enregistré dans
+     * [UIKitViewLeaseRegistry.shared] — posé au commit du peer, lu par [close] pour le retrait.
+     * `null` tant que la fenêtre primaire n'est pas committée (rien n'est alors routable).
+     */
+    private var leaseSurfaceId: SurfaceId? = null
 
     /**
      * Admission différée de la fenêtre primaire — exactement une fois, appelé par le delegate
@@ -103,7 +116,14 @@ internal class UIKitWindowRuntime internal constructor(
         // (le rejet vit dans l'état de la requête) : la preuve d'ouverture réelle est la
         // publication de la fenêtre primaire par le commit du port.
         check(manager.state.value.primary != null) { "primary window was not committed: $request" }
-        attachedPrimarySurface = RuntimePrimarySurface(surface) { surface.detach() }
+        // Task 4 : le peer est committé — le port de lease (`withUIKitView`) est enregistré
+        // pour la surface primaire AVANT que la surface ne devienne joignable par la session :
+        // un bail ne peut jamais résoudre une surface dont le peer n'est pas committé. Le
+        // runtime seul connaît le surfaceId à ce point (alloué par le manager au commit).
+        val primary = surface
+        UIKitViewLeaseRegistry.shared.register(primary.id, commandPort)
+        leaseSurfaceId = primary.id
+        attachedPrimarySurface = RuntimePrimarySurface(primary) { primary.detach() }
     }
 
     /** La surface primaire (la vue du host), publiée par le commit de la fenêtre primaire. */
@@ -115,13 +135,19 @@ internal class UIKitWindowRuntime internal constructor(
         }
 
     /**
-     * Ordre AppKit (driver l.146-158) : le port cesse d'admettre (`beginClose`), le manager
-     * clos ses requêtes et fenêtres (`manager.close()` — les owners no-op ne touchent jamais
-     * aux objets UIKit), le port vide son registre (`finishClose`). La UIWindow/UIView du host
-     * n'est ni détruite ni cachée : seul l'état Kadre est relâché.
+     * Ordre AppKit (driver l.146-158) : le port cesse d'admettre (`beginClose`), la route du
+     * bail sort du registre (Task 4 — AVANT la publication de l'état détaché par
+     * [manager.close], l'ordre Android l.415-416 : « les capabilities indisponibles au plus tard
+     * au détached », la route du bail ne survit jamais à un état détaché publié), le manager
+     * clos ses requêtes et fenêtres (`manager.close()` — les owners no-op ne touchent jamais aux
+     * objets UIKit), le port vide son registre (`finishClose`). Idempotent : le retrait du
+     * registre l'est aussi, et `leaseSurfaceId` remis à `null` absorbe un second close. La
+     * UIWindow/UIView du host n'est ni détruite ni cachée : seul l'état Kadre est relâché.
      */
     override fun close() {
         commandPort.beginClose()
+        leaseSurfaceId?.let { UIKitViewLeaseRegistry.shared.unregister(it) }
+        leaseSurfaceId = null
         try {
             manager.close()
         } finally {

@@ -58,10 +58,12 @@ kotlin {
 }
 
 // Phase 1 : uikitMain consomme les internals de runtime (RuntimeWindowManager et ses ports).
+// Phase 2 : et ceux de foundation (SurfaceRevision, porteur de l'état du kernel `apply`).
 // Miroir du wiring runtime→foundation : -friend-modules est mono-valeur last-write-wins,
-// donc le klib propre d'uikit est répété avec runtime (et foundation pour les tests).
+// donc le klib propre d'uikit est répété avec runtime et foundation (main et tests).
 val uikitNativeTargets = listOf("IosArm64", "IosSimulatorArm64", "TvosArm64", "TvosSimulatorArm64")
 val runtimeProject = project(":kadre:runtime")
+val foundationProject = project(":kadre:foundation")
 
 tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinNativeCompile>().configureEach {
     val targetSegment = uikitNativeTargets.firstOrNull { name.endsWith(it) } ?: return@configureEach
@@ -69,10 +71,22 @@ tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinNativeCompile>().configur
     val ownMainKlib = layout.buildDirectory.dir("classes/kotlin/$lowerSegment/main/klib/${project.name}")
     val runtimeMainKlib = runtimeProject.layout.buildDirectory
         .dir("classes/kotlin/$lowerSegment/main/klib/${runtimeProject.name}")
+    val foundationMainKlib = foundationProject.layout.buildDirectory
+        .dir("classes/kotlin/$lowerSegment/main/klib/${foundationProject.name}")
     dependsOn(runtimeProject.tasks.named("compileKotlin$targetSegment"))
+    dependsOn(foundationProject.tasks.named("compileKotlin$targetSegment"))
+    // Phase 2 : le kernel d'`apply` construit l'état porteur du verdict (`SurfaceRevision`,
+    // internal foundation) — foundation rejoint runtime en friend, pour main comme pour les
+    // tests. C'est le même patron que les autres modules plateforme consommateurs d'internals
+    // (androidMain/webMain : foundation ET runtime en friends à main ET au host test).
     compilerOptions.freeCompilerArgs.add(
         ownMainKlib.zip(runtimeMainKlib) { own, runtime ->
-            "-friend-modules=${own.asFile.absolutePath}${File.pathSeparator}${runtime.asFile.absolutePath}"
+            val friends = listOf(
+                own.asFile.absolutePath,
+                runtime.asFile.absolutePath,
+                foundationMainKlib.get().asFile.absolutePath,
+            )
+            "-friend-modules=${friends.joinToString(File.pathSeparator)}"
         },
     )
 }
@@ -83,14 +97,18 @@ tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinNativeCompile>().configur
 // runtime en friend — même channel -friend-modules que les cibles natives ci-dessus. Le actual
 // d'RuntimeLock est résolu depuis runtime_appleMain/runtime_nativeMain, le expect depuis
 // runtime_commonMain : friend uniquement sur commonMain ne suffit pas.
+// Phase 2 : le kernel d'`apply` lit aussi un internal de foundation (SurfaceRevision) — le
+// klib metadata de foundation (commonMain seul : module purement common) rejoint la liste.
 val runtimeMetadataKlibs = listOf(
     "commonMain" to runtimeProject.layout.buildDirectory.dir("classes/kotlin/metadata/commonMain"),
     "appleMain" to runtimeProject.layout.buildDirectory.dir("classes/kotlin/metadata/appleMain/klib/${runtimeProject.name}_appleMain"),
     "nativeMain" to runtimeProject.layout.buildDirectory.dir("classes/kotlin/metadata/nativeMain/klib/${runtimeProject.name}_nativeMain"),
 )
+val foundationMetadataKlib = foundationProject.layout.buildDirectory.dir("classes/kotlin/metadata/commonMain")
 
-val runtimeMetadataFriendModules = providers.provider {
-    runtimeMetadataKlibs.joinToString(File.pathSeparator) { it.second.get().asFile.absolutePath }
+val metadataFriendModules = providers.provider {
+    (runtimeMetadataKlibs.map { it.second } + foundationMetadataKlib)
+        .joinToString(File.pathSeparator) { it.get().asFile.absolutePath }
 }
 
 tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinNativeCompile>().configureEach {
@@ -99,8 +117,12 @@ tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinNativeCompile>().configur
             val capSegment = sourceSet.replaceFirstChar(Char::uppercase)
             dependsOn(runtimeProject.tasks.named("compile${capSegment}KotlinMetadata"))
         }
-        // -friend-modules est mono-valeur (last-write-wins) : les trois klibs en une seule valeur.
-        compilerOptions.freeCompilerArgs.add(runtimeMetadataFriendModules.map { "-friend-modules=$it" })
+        // Le commonMain de foundation n'a pas de tâche `compileCommonKotlinMetadata` (le
+        // partagé-common se compile dans chaque source set metadata) : son klib
+        // `classes/kotlin/metadata/commonMain` est assemblé par `metadataCommonMainClasses`.
+        dependsOn(foundationProject.tasks.named("metadataCommonMainClasses"))
+        // -friend-modules est mono-valeur (last-write-wins) : les quatre klibs en une seule valeur.
+        compilerOptions.freeCompilerArgs.add(metadataFriendModules.map { "-friend-modules=$it" })
     }
 }
 

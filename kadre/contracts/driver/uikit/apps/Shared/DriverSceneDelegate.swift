@@ -17,6 +17,9 @@ final class DriverSceneDelegate: NSObject, UIWindowSceneDelegate {
     func sceneDidBecomeActive(_ scene: UIScene) {
         DriverTrace.record("scene didBecomeActive session=\(sceneId(scene))")
         DriverFixture.shared.fixture(for: scene)?.markActive()
+        // Les demandes de scènes secondaires ne partent JAMAIS avant une activation réelle
+        // (garde anti-course iPadOS 27 — voir DriverSceneRequest.sceneActivated).
+        DriverSceneRequest.sceneActivated()
     }
 
     func sceneDidDisconnect(_ scene: UIScene) {

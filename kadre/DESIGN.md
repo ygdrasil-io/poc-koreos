@@ -1903,7 +1903,7 @@ public object KadreIos {
 - La disponibilité de cet attach et de la façade Swift s’étend à tvOS avec les mêmes noms (`KadreIos`, `KadreHost`) ; le parcours tvOS est mono-scène : une seule session par application, aucune seconde `UIWindowScene` demandée.
 - Sur tvOS, la télécommande est une source d’input propre (directions, sélection, retour), et la navigation par focus reste la responsabilité du moteur de focus du host ; focus et activation de scène ne se confondent pas.
 - Le host, et non un singleton Kadre, conserve la factory et corrèle le `WindowRequestId` avec les options de connexion de scène.
-- L’attach, le lifecycle par scène et les propriétaires sont livrés (phase 1) ; surface dynamique (phase 2), façade Swift (phase 3), demandes de scènes (phase 4).
+- L’attach, le lifecycle par scène et les propriétaires sont livrés (phase 1) ; les observations dynamiques de surface (métriques, apparence, visibilité — re-lectures sur déclencheurs SDK réels), le redraw coalescé, l’apply fermé (les quatre champs update refusés `Unsupported(UpdateSurface)`) et le bail natif `withUIKitView` sont livrés (phase 2) ; la façade Swift (phase 3) et les demandes de scènes (phase 4) restent à livrer.
 
 ### 15.3 Web
 
