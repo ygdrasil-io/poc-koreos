@@ -21,3 +21,13 @@ AND-003	android	scenario	android-surface-no-window-handle	org.graphiks.kadre.con
 AND-003	android	sentinel	android-metrics-generation-stale	org.graphiks.kadre.consumer.KadreConsumerSurfaceContractTest	androidSurfaceMetricsMatchView
 AND-003	android	sentinel	android-redraw-single-per-frame	org.graphiks.kadre.consumer.KadreConsumerSurfaceContractTest	androidSurfaceRedrawCoalesced
 AND-003	android	sentinel	android-lease-closed-after-terminal	org.graphiks.kadre.consumer.KadreConsumerSurfaceContractTest	androidSurfaceLeaseBoundaries
+AND-004	android	scenario	android-input-host-untouched	org.graphiks.kadre.consumer.KadreConsumerInputContractTest	androidInputHostUntouched
+AND-004	android	scenario	android-input-keys-mapped	org.graphiks.kadre.consumer.KadreConsumerInputContractTest	androidInputKeysMapped
+AND-004	android	scenario	android-input-multi-touch-stable-ids	org.graphiks.kadre.consumer.KadreConsumerInputContractTest	androidInputMultiTouchStableIds
+AND-004	android	scenario	android-input-focus-loss-resets	org.graphiks.kadre.consumer.KadreConsumerInputContractTest	androidInputFocusLossResets
+AND-004	android	scenario	android-input-default-behavior-suppress	org.graphiks.kadre.consumer.KadreConsumerInputContractTest	androidInputDefaultBehaviorSuppress
+AND-004	android	scenario	android-input-two-sessions-isolation	org.graphiks.kadre.consumer.KadreConsumerInputContractTest	androidInputTwoSessionsIsolation
+AND-004	android	scenario	android-input-stylus-mouse-boundary	org.graphiks.kadre.consumer.KadreConsumerInputContractTest	androidInputStylusMouseBoundary
+AND-004	android	sentinel	android-input-suppression-exact	org.graphiks.kadre.consumer.KadreConsumerInputContractTest	androidInputDefaultBehaviorSuppress
+AND-004	android	sentinel	android-input-no-double-delivery	org.graphiks.kadre.consumer.KadreConsumerInputContractTest	androidInputTwoSessionsIsolation
+AND-004	android	sentinel	android-input-contacts-reset	org.graphiks.kadre.consumer.KadreConsumerInputContractTest	androidInputFocusLossResets

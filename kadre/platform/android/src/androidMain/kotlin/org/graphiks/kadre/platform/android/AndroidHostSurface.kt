@@ -34,8 +34,12 @@ import org.graphiks.kadre.input.SurfaceInputState
 import org.graphiks.kadre.input.TextInputConfig
 import org.graphiks.kadre.input.TextInputSession
 import org.graphiks.kadre.internal.runtime.RawInputPort
+import org.graphiks.kadre.internal.runtime.RuntimeDropTransferBudget
+import org.graphiks.kadre.internal.runtime.RuntimeEventCollectorAllocator
+import org.graphiks.kadre.internal.runtime.RuntimeFailureReporter
 import org.graphiks.kadre.internal.runtime.RuntimeLock
 import org.graphiks.kadre.internal.runtime.RuntimePrimarySurfaceConfiguration
+import org.graphiks.kadre.internal.runtime.RuntimeSurfaceInput
 import org.graphiks.kadre.internal.runtime.admitField
 import org.graphiks.kadre.internal.runtime.fieldName
 import org.graphiks.kadre.internal.runtime.unsupportedSurfaceCapabilities
@@ -44,6 +48,7 @@ import org.graphiks.kadre.policy.InputDeliveryPolicy
 import org.graphiks.kadre.policy.ResourceBudgetPolicy
 import org.graphiks.kadre.policy.WindowDeliveryPolicy
 import org.graphiks.kadre.surface.HostSurface
+import org.graphiks.kadre.surface.InputDefaultBehavior
 import org.graphiks.kadre.surface.PropertyChange
 import org.graphiks.kadre.surface.RejectedSurfaceField
 import org.graphiks.kadre.surface.SurfaceAttachmentState
@@ -61,8 +66,10 @@ import org.graphiks.kadre.surface.SurfaceUpdateOutcome
  * `WebHostSession.kt` qui implémente `RuntimePrimarySurfaceConfiguration`), l'homologue observable
  * du `RuntimeHostSurface` minimal de la phase 0. Implémente [HostSurface] intégralement :
  * `state`/`capabilities`/`events`, un `apply` conforme à sa ligne §3 — aucun champ supporté en
- * phase 2, la ligne n'admets donc jamais un champ et ne sort jamais une failure externe pour
- * l'update entier — et un `requestRedraw` dont Task 3 branchera le scheduling à la place de la
+ * phase 2 ; depuis la phase 3 (Task 4), `inputDefaultBehavior` y est le PREMIER champ
+ * committable (la capability publiée à l'installation, le commit immédiat à une révision — le
+ * miroir web) — et
+ * un `requestRedraw` dont Task 3 branchera le scheduling à la place de la
  * branche on-row. Task 4 a ajouté `: AndroidViewLeasePort` à cette déclaration : la View du host
  * n'est exposée qu'au block du bail ([withAndroidView], double opt-in), jamais ailleurs.
  *
@@ -84,6 +91,13 @@ internal class AndroidHostSurface(
     private val frameClock: () -> AndroidRedrawScheduler.FrameClock = { ChoreographerFrameClock() },
     private val hostThread: AndroidHostThreadDispatch = AndroidMainThreadDispatch,
     private val leasedView: () -> Any? = { null },
+    /**
+     * Le canal des diagnostics d'entrée qui ne sont pas des failures de session — les
+     * débordements que le réducteur runtime reporte (`SourceOverflow` et cie), le miroir du
+     * `failureReporter` que la surface web reçoit à sa construction. Le défaut de production
+     * est le journal de la couture d'attach ; les tests injectent le leur.
+     */
+    private val failureReporter: RuntimeFailureReporter = AndroidAttachDiagnostics,
 ) : HostSurface,
     RuntimePrimarySurfaceConfiguration,
     AndroidViewLeasePort,
@@ -157,6 +171,36 @@ internal class AndroidHostSurface(
     /** Le stamp de session, installé pendant l'attach (cf. la KDoc de la classe). */
     private var stampSource: (() -> EventStamp)? = null
 
+    /**
+     * Le réducteur d'entrée partagé, construit par [installSessionConfiguration] — jamais à la
+     * construction : il est fait de la configuration de session (policy d'entrée, source de
+     * stamps, gates de collecteurs), rien de ce que la surface pourrait inventer seule. Avant
+     * l'install, [input] expose l'entrée pré-install de cette surface ([preInstallInput]) ;
+     * après, le réducteur. Volatile : écrit une fois sur le thread principal de l'attach, lu
+     * par les coroutines applicatives — la visibilité croisée thread est portée par le
+     * modificateur, pas par la chance.
+     */
+    @Volatile
+    private var surfaceInput: RuntimeSurfaceInput? = null
+
+    /**
+     * Le pont d'observation → delivery (Task 3), construit avec le réducteur par
+     * [installSessionConfiguration] et possédé par cette surface : les funnels
+     * [onInputObservation]/[onMotionObservation] y routent les observations du wrapper T1 et
+     * du tracker T2, [observationInstalled] y déclenche l'installation (stimulus structurel
+     * + replay du buffer). Volatile, même discipline que [surfaceInput].
+     */
+    @Volatile
+    private var inputDelivery: AndroidInputDelivery? = null
+
+    /**
+     * L'entrée pré-install de CETTE surface — un instantané honnête par surface (toutes les
+     * capabilities indisponibles, aucun événement, chaque appel refuse), jamais l'objet
+     * partagé d'avant la Task 3 : l'install remplace l'instance entière, et le swap est
+     * observable (le réducteur vit, l'entrée pré-install ne vit pas).
+     */
+    private val preInstallInput: SurfaceInput = PreInstallAndroidSurfaceInput()
+
     override val state: StateFlow<SurfaceState> = mutableState.asStateFlow()
     override val capabilities: StateFlow<SurfaceCapabilities> = mutableCapabilities.asStateFlow()
 
@@ -174,7 +218,11 @@ internal class AndroidHostSurface(
         forwarding.cancel()
     }
 
-    override val input: SurfaceInput = UnsupportedAndroidSurfaceInput
+    /**
+     * L'entrée de cette surface : l'entrée pré-install jusqu'à [installSessionConfiguration],
+     * le réducteur runtime ensuite — le swap honnête, observable par identité d'instance.
+     */
+    override val input: SurfaceInput get() = surfaceInput ?: preInstallInput
 
     /**
      * L'admission d'un [SurfaceUpdate], dans l'ordre de la référence (la surface web, elle-même
@@ -187,14 +235,21 @@ internal class AndroidHostSurface(
      * 3. la garde `Clear` — un `Clear` sur un champ sans valeur « non posée » est un
      *    `InvalidRequest(field)` (les quatre noms du registre §1.1), lui aussi avant admission ;
      * 4. l'admission CHAMP PAR CHAMP contre la capability publiée — l'admission partagée du
-     *    runtime ([admitField], celle-là même de la surface web et de la surface de référence).
-     *    En phase 2, les quatre capabilities sont `Unsupported(UpdateSurface)` : un champ posé
-     *    est rejeté `RejectedSurfaceField(Unsupported(UpdateSurface))`, un champ non posé ne
-     *    l'est jamais ;
-     * 5. le verdict — la surface n'a aucun chemin de commit en phase 2 : l'état ne bouge pas, la
-     *    révision non plus. Rien de posé → `Applied(current)` ; un champ posé →
-     *    `PartiallyApplied(current, rejected)`. Jamais une failure externe `Unsupported` pour
-     *    l'update entier : le rejet est PAR CHAMP, dans la liste du succès.
+     *    runtime ([admitField], celle-là même de la surface web et de la surface de
+     *    référence). `inputDefaultBehavior` est SUPPORTED depuis la phase 3 (publiée à
+     *    l'installation, `Supported({HostDefault, SuppressWhenPossible}, Available)` — le
+     *    miroir web `WebHostSession.kt:2102-2105`) : un champ posé est admis ; les trois
+     *    autres capabilities restent `Unsupported(UpdateSurface)` : un champ posé est rejeté
+     *    `RejectedSurfaceField(Unsupported(UpdateSurface))`, un champ non posé ne l'est
+     *    jamais — et un rejet ne bloque jamais les champs du même update qui peuvent être
+     *    honorés ;
+     * 5. le verdict — `inputDefaultBehavior` a un chemin de commit (la surface est son
+     *    propre backend : un champ admis est commis immédiatement, UNE révision nouvelle,
+     *    l'outcome portant l'état publié — le miroir du commit web `:1612-1613`) ; les trois
+     *    champs sans chemin de commit restent gardés par [requireRefused]. Rien de posé ni
+     *    de commis → `Applied(current)` ; un champ rejeté →
+     *    `PartiallyApplied(published, rejected)`. Jamais une failure externe `Unsupported`
+     *    pour l'update entier : le rejet est PAR CHAMP, dans la liste du succès.
      *
      * Toute la décision tient sous [RuntimeLock] — le miroir de la surface de phase 0
      * (`RuntimeHostSurface.kt:48-62`) : la garde de révision relit l'état publié et le verdict
@@ -240,21 +295,45 @@ internal class AndroidHostSurface(
             capabilities.inputDefaultBehavior,
             rejected,
         )
-        // Les quatre champs n'ont aucun chemin de commit en phase 2 : la garde assure qu'un champ
-        // arrivé admis (une capability qui deviendrait `Supported` sans commit ici) est une erreur
-        // de programmation criante, pas un `Applied` pour un état qui ne l'a jamais pris.
+        // Les trois champs d'update sans chemin de commit restent gardés plutôt qu'assumés
+        // absents : leurs capabilities refusent toute valeur aujourd'hui, mais le jour où
+        // l'une deviendrait `Supported` le changement atterrirait ici non commis et serait
+        // répondu d'un `Applied` pour un état qui ne l'a jamais pris (la même garde que la
+        // surface web pose sur ses propres champs sans commit).
         cursor.requireRefused(SurfaceProperty.Cursor)
         pointerCapture.requireRefused(SurfaceProperty.PointerCapture)
         hitTesting.requireRefused(SurfaceProperty.HitTesting)
-        inputDefaultBehavior.requireRefused(SurfaceProperty.InputDefaultBehavior)
-        // Aucun commit : l'état rendu est l'instantané courant, révision intacte — demander la
-        // valeur déjà en effet serait admis et répondue `Applied` de la même façon.
+        // `inputDefaultBehavior` est le PREMIER champ committable de cette surface, et la
+        // surface Android est son propre backend : rien en dessous ne peut rapporter une
+        // valeur effective différente, un champ admis est donc commis ICI ET MAINTENANT —
+        // le miroir exact du commit own-backend web (`WebHostSession.kt:1612-1613`).
         val current = mutableState.value
+        var committed = current
+        if (inputDefaultBehavior is PropertyChange.Set) {
+            committed = committed.copy(inputDefaultBehavior = inputDefaultBehavior.value)
+        }
+        // Un commit, une révision, et seulement pour un état qui a réellement bougé :
+        // `next != current` est la règle de la référence (`commitUpdateLocked`), celle qui
+        // fait de la révision la marque d'un changement d'état plutôt que d'un appel.
+        // Demander la valeur déjà en effet est admis et répondu `Applied` de l'état — et
+        // donc de la révision — intacts. La publication de l'état est l'événement du commit
+        // : aucun champ de ce commit n'a de variante `SurfaceEvent` typée SUR AUCUNE
+        // plateforme (la surface web commet le même champ sans en émettre) — les
+        // observateurs de `state` voient la valeur, les observateurs d'`events` ne sont pas
+        // doublement notifiés.
+        val next = if (committed != current) {
+            check(current.revision.value < Long.MAX_VALUE) { "surface revision space exhausted" }
+            committed.copy(revision = SurfaceRevision(current.revision.value + 1L))
+        } else {
+            current
+        }
+        if (next != current) mutableState.value = next
+        val published = mutableState.value
         KadreResult.Success(
             if (rejected.isEmpty()) {
-                SurfaceUpdateOutcome.Applied(current)
+                SurfaceUpdateOutcome.Applied(published)
             } else {
-                SurfaceUpdateOutcome.PartiallyApplied(current, rejected)
+                SurfaceUpdateOutcome.PartiallyApplied(published, rejected)
             },
         )
     }
@@ -335,16 +414,46 @@ internal class AndroidHostSurface(
     /**
      * Installe la configuration de session que cette surface publie.
      *
-     * La source des stamps est la seule valeur dont Task 1 a besoin — les neuf autres paramètres
-     * sont ceux des Tasks 2-3 (les politiques du réducteur d'entrée, les gates de collecteurs, le
-     * scope des transferts de drop). La surface web garde les dix verbatim dans sa configuration ;
-     * ici, le holder de stamps est tout ce qui existe encore, posé pendant l'attach, avant que le
-     * code applicatif puisse tenir la session — aucun événement ne peut précéder l'installation.
+     * Task 3 : la configuration est ce dont le réducteur d'entrée est FAIT — la surface
+     * construit ici son `RuntimeSurfaceInput` avec la sémantique exacte des arguments web
+     * (`WebHostSession.kt:967-996`), puis le pont d'observation qui le nourrit :
      *
+     * - `deliveryPolicy` (la policy FENÊTRE) : hors de cette phase — c'était la matière du
+     *   moteur d'interactions du web, et le seam n'expose pas d'interactions armées en
+     *   phase 3 (sonde du cas 6) ; elle n'est ni stockée ni interprétée ;
+     * - `inputDeliveryPolicy` = la policy d'entrée du réducteur (l'ordonnancement discrete/
+     *   continuous/scroll/gesture, telle quelle) ;
+     * - `eventStampSource` = la source de stamps de session, telle quelle ;
+     * - `eventCollectorGate` / `textInputEventCollectorGate` = DEUX gates du même allocateur
+     *   de session (l'[Any] runtime-interne, rendu inchangé — le miroir
+     *   `sessionCollectorAllocator` web, qui [error] sur un type invalide) ;
+     * - `textInputPort` = le port qui refuse — le paramètre runtime n'est pas nullable et la
+     *   phase 3 n'a AUCUN IME (le miroir inverse du port web structurellement supporté) : la
+     *   capability dit `Unsupported(TextInput)` dès la construction ;
+     * - `rawInputCoordinator = null` + `rawInputCapability = Unsupported(RawInputAccess)` —
+     *   l'accès natif n'est pas activé, la capability le dit structurellement (le miroir web) ;
+     * - `dragAndDropAvailable = false` — le paramètre est la capability `dragAndDrop` de
+     *   l'ÉTAT d'entrée (et le garde de `presentDrop`) : il promet l'observation du drag, et
+     *   la phase 3 n'a aucun listener de drag (le drop est phase 6) — pas de promesse que
+     *   rien ne pourrait honorer ;
+     * - `resources`, `dropTransferScope` : tels quels (le budget des transferts de drop est
+     *   construit du budget de ressources, comme le web) ; `diagnostics` et `rawInputPort`
+     *   restent hors de la phase 3 (aucun coordinateur raw input, aucun diagnostic typé
+     *   KadreDiagnostic pour les throwables d'entrée — ils partent sur [failureReporter]) ;
+     * - `sessionFailureHandler` : tel quel ; les diagnostics d'entrée (débordements) partent
+     *   sur le [failureReporter] de la surface.
+     *
+     * Les interactions synchrones (`RuntimeSynchronousInteraction`) ne sont PAS câblées : le
+     * seam ne les expose pas (elles vivent derrière `RuntimeWindowManager.
+     * dispatchSynchronousInteraction` et le port d'interaction du port web, sans homologue
+     * Android en phase 3) — le différé est épinglé par le test cas 6, les interactions armées
+     * restent la phase 4.
+     *
+     * La source des stamps reste la seule valeur dont Task 1 a besoin au-delà de l'entrée.
      * Une surface qui a cessé d'admettre abandonne la configuration avec les stimuli qui
-     * l'attendaient (le miroir de la surface web) ; une seconde installation est une erreur de
-     * programmation — une configuration construit une séquence de stamps, deux n'en peuvent pas
-     * partager une.
+     * l'attendaient (le miroir de la surface web) ; une seconde installation est une erreur
+     * de programmation — une configuration construit une séquence de stamps, deux n'en
+     * peuvent pas partager une.
      */
     override fun installSessionConfiguration(
         deliveryPolicy: WindowDeliveryPolicy,
@@ -361,6 +470,29 @@ internal class AndroidHostSurface(
         if (detached) return
         check(stampSource == null) { "the session configuration was already installed" }
         stampSource = source
+        val allocator = sessionCollectorAllocator(collectorAllocator)
+        val input = RuntimeSurfaceInput(
+            surfaceId = id,
+            deliveryPolicy = inputDeliveryPolicy,
+            eventStampSource = source,
+            eventCollectorGate = allocator.newGate(maxCollectorsPerFlow),
+            textInputPort = RefusingTextInputPort,
+            rawInputCoordinator = null,
+            rawInputCapability = Capability.Unsupported(KadreFailure.Unsupported(KadreOperation.RawInputAccess)),
+            dragAndDropAvailable = false,
+            resources = resources,
+            dropTransferBudget = RuntimeDropTransferBudget(resources.maxConcurrentDropTransfers),
+            dropTransferScope = dropTransferScope,
+            textInputEventCollectorGate = allocator.newGate(maxCollectorsPerFlow),
+            failureReporter = { cause -> failureReporter.report(cause) },
+            sessionFailureHandler = sessionFailureHandler,
+        )
+        surfaceInput = input
+        inputDelivery = AndroidInputDelivery(
+            surfaceId = id,
+            surfaceInput = input,
+            committedState = { mutableState.value },
+        )
     }
 
     /**
@@ -371,18 +503,36 @@ internal class AndroidHostSurface(
      * §Phase 2 (metrics + redraw + l'accès natif borné). Idempotent : la même annonce republiée
      * est absorbée par le StateFlow.
      *
+     * [inputWired] (Task 3, fix review) est le fait que la couture seule peut porter : un
+     * wrapper T1 a-t-il été CONSTRUIT pour cet attach (forme Activity avec un callback
+     * fenêtre à enchaîner) ? Les faits du stimulus structurel d'entrée suivent CETTE
+     * présence — pas la forme déclarée — de sorte qu'un attach sans observateur (forme View,
+     * ou Activity dont `window.callback` est null) laisse les capabilities d'entrée du
+     * réducteur à leur refus d'origine au lieu de promettre un clavier, un pointeur et un
+     * tactile qui ne peuvent jamais arriver (la sémantique C de BACKEND-CAPABILITIES §4 —
+     * `Available` seulement après une installation réelle). Le réducteur absorbe le
+     * stimulus « rien n'est câblé » (dédoublonnage) : ni événement, ni mouvement de révision.
+     *
      * « Jamais après la révocation » — la double garde de l'admission (`detached` OU état
      * publié détaché) : une installation qui suit [close] ou qui arrive dans la fenêtre de
      * teardown (l'instantané détaché publié par le binding, le terminal pas encore passé) est
      * absorbée — pas de promesse repeinte sur un état déjà détaché, et rien ne ressuscite.
      */
-    internal fun observationInstalled() {
+    internal fun observationInstalled(inputWired: Boolean) {
         lock.withLock {
             if (detached || mutableState.value.attachment == SurfaceAttachmentState.Detached) {
                 return
             }
             mutableCapabilities.value = androidSurfaceCapabilities()
         }
+        // L'installation de l'observation d'entrée (Task 3) : le stimulus structurel — avec
+        // les faits câblés — puis le replay ordonné des observations bufferisées. Hors verrou :
+        // la delivery vit sur le thread principal, et le réducteur runtime tient le sien.
+        inputDelivery?.observationInstalled(
+            keyboardInstalled = inputWired,
+            pointerInstalled = inputWired,
+            touchInstalled = inputWired,
+        )
     }
 
     /**
@@ -423,6 +573,10 @@ internal class AndroidHostSurface(
                 )
             }
         }
+        // Le réducteur d'entrée ferme EN DERNIER — l'état terminal qu'il ne peut plus
+        // publier est déjà dehors ; sa fermeture achève le flux d'événements d'entrée et
+        // refuse tout stimulus ultérieur, une fois et une seule (idempotent).
+        surfaceInput?.close(failure = null)
         terminal.complete(Unit)
     }
 
@@ -503,6 +657,56 @@ internal class AndroidHostSurface(
 
         else -> null
     }
+
+    // ------------------------------------------------------------------
+    // La couture d'entrée (Task 3) — les funnels que le wrapper T1 et le tracker T2
+    // nourrissent, et la lecture de suppression que le wrapper consulte. Thread principal
+    // uniquement ; sans configuration installée, il n'y a rien à nourrir (le wrapper,
+    // installé après l'attach, ne peut de toute façon pas observer plus tôt).
+    // ------------------------------------------------------------------
+
+    /** Route une observation clavier/focus du wrapper T1 vers la delivery. */
+    internal fun onInputObservation(observation: AndroidInputObservation) {
+        inputDelivery?.onObservation(observation)
+    }
+
+    /**
+     * Route une observation motion du wrapper T1 vers la delivery, avec les bornes de la View
+     * et son origine DANS l'espace fenêtre (la conversion view-locale du dispatch
+     * `Window.Callback` — voir [AndroidMotionTracker.onObservation]).
+     */
+    internal fun onMotionObservation(
+        observation: AndroidMotionObservation,
+        width: Int,
+        height: Int,
+        offsetX: Int = 0,
+        offsetY: Int = 0,
+    ) {
+        inputDelivery?.onMotion(observation, width, height, offsetX, offsetY)
+    }
+
+    /**
+     * La lecture de suppression (le `suppressDefaultFor` web, côté surface — le seam T1
+     * câblé, Task 4) : la réponse vient de l'état COMMIS de la surface —
+     * [SurfaceState.inputDefaultBehavior] tel que `apply` l'a commis — et de la table de la
+     * plateforme ([AndroidInputTranslation.shouldSuppress], le miroir de `shouldSuppress`
+     * web) : sous `HostDefault` rien n'est consommé, sous `SuppressWhenPossible` les NEUF
+     * scroll-keys documentaires seules le sont ([ANDROID_DOCUMENT_SCROLL_KEYS], keyé sur le
+     * keycode natif — carry de la review Task 1 : les touches de page, Home et End
+     * n'existent pas comme touches logiques nommées dans la table Android). La décision du
+     * dispatch vit dans [AndroidInputWindowCallback], SOUS LA MÊME PORTE DE FOCUS que
+     * l'observation : la vue attachée focalisée seule — une touche consommée répond `true`
+     * SANS forward et reste OBSERVÉE, la delivery d'abord, la suppression ensuite (le
+     * précédent web « delivered then suppressed ») ; une touche alors que la vue N'A PAS
+     * le focus n'est ni observée ni consommée — le host la reçoit entière. Pure lecture :
+     * rien n'y commet rien.
+     * L'écart press+release contre le web (keydown seul) est documenté dans la KDoc de
+     * [AndroidInputTranslation.shouldSuppress] : la consommation Android retire l'événement
+     * du flux du host — une presse consommée sans sa relève y laisserait une relève
+     * orpheline.
+     */
+    internal fun shouldConsumeKey(nativeKeyCode: Int): Boolean =
+        AndroidInputTranslation.shouldSuppress(nativeKeyCode, mutableState.value.inputDefaultBehavior)
 }
 
 /** Affirme qu'un champ sans chemin de commit a bien été refusé par sa capability. */
@@ -514,22 +718,35 @@ private fun PropertyChange<*>.requireRefused(property: SurfaceProperty) {
 
 /**
  * Le snapshot honnête d'une surface Android observée : les refus de la phase 2
- * ([unsupportedSurfaceCapabilities]) avec l'annonce d'installation — `platformAccess` `Supported`
- * (la rangée Android de `capabilities/android.md` §Phase 2, qui couvre ensemble les métriques
- * publiées, le redraw coalescé et l'accès natif borné du bail). Publié par
- * [AndroidHostSurface.observationInstalled] quand l'observation et le scheduling vivent, retiré
- * au terminal ([AndroidHostSurface.close]) — jamais après.
+ * ([unsupportedSurfaceCapabilities]) avec les annonces d'installation — `platformAccess`
+ * `Supported` (la rangée Android de `capabilities/android.md` §Phase 2, qui couvre ensemble les
+ * métriques publiées, le redraw coalescé et l'accès natif borné du bail) et, depuis la
+ * phase 3,
+ * `inputDefaultBehavior` `Supported({HostDefault, SuppressWhenPossible}, Available)` — le
+ * miroir EXACT de la capability web (`WebHostSession.kt:2102-2105`) : les deux valeurs du
+ * comportement, disponibles. Publié par [AndroidHostSurface.observationInstalled] quand
+ * l'observation et le scheduling vivent (le moment structurel où la surface qui honore — le
+ * wrapper de dispatch, la lecture de l'état commis — existe, la même sémantique « `Available`
+ * seulement après une installation réelle » que partout ailleurs), retiré au terminal
+ * ([AndroidHostSurface.close]) — jamais après. Les trois autres champs d'update restent
+ * `Unsupported(UpdateSurface)` : leurs refus de la phase 2 ne sont pas affaiblis.
  */
 private fun androidSurfaceCapabilities(): SurfaceCapabilities =
     unsupportedSurfaceCapabilities().copy(
         platformAccess = Capability.Supported(Unit, FeatureAvailability.Available),
+        inputDefaultBehavior = Capability.Supported(
+            setOf(InputDefaultBehavior.HostDefault, InputDefaultBehavior.SuppressWhenPossible),
+            FeatureAvailability.Available,
+        ),
     )
 
 /**
- * L'entrée d'une surface sans entrée — la copie de l'objet privé de la surface interne de la
- * phase 0 (le même état honnête, les mêmes refus), car celui du runtime est privé à son fichier.
+ * L'entrée d'une surface dont la configuration de session n'a pas installé — l'état honnête
+ * de la phase 2, INSTANCIÉ PAR SURFACE (le stub partagé d'avant la Task 3 n'existe plus :
+ * l'install remplace l'instance entière, et le swap est observable). Les mêmes refus que le
+ * runtime neuf : toutes les capabilities indisponibles, aucun événement, chaque appel refuse.
  */
-private object UnsupportedAndroidSurfaceInput : SurfaceInput {
+private class PreInstallAndroidSurfaceInput : SurfaceInput {
     private val unsupportedTextInput = KadreFailure.Unsupported(KadreOperation.TextInput)
     private val mutableState = MutableStateFlow(
         SurfaceInputState(
