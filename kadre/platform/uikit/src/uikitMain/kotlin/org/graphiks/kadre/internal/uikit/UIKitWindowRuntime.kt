@@ -10,7 +10,6 @@ import org.graphiks.kadre.internal.runtime.RuntimeFailureReporter
 import org.graphiks.kadre.internal.runtime.RuntimePrimarySurface
 import org.graphiks.kadre.internal.runtime.RuntimeWindowManager
 import org.graphiks.kadre.internal.runtime.RuntimeWindowSurface
-import org.graphiks.kadre.internal.runtime.unsupportedSurfaceCapabilities
 import org.graphiks.kadre.policy.KadrePolicy
 import org.graphiks.kadre.surface.LogicalSize
 import org.graphiks.kadre.window.WindowSpec
@@ -21,12 +20,18 @@ import platform.UIKit.UIWindow
  * Composition root UIKit d'une session (miroir d'`AppKitWindowRuntimeDriver` l.72-159) :
  * le port est créé d'abord avec des sinks qui pointent vers le manager, le manager est créé
  * ensuite avec le même objet comme `commandPort` ET `surfaceCommandPort` (driver l.126-144).
- * Différences AppKit assumées, phase 1 :
- *  - `publicWindowCapabilities = false`, `publicSurfaceCapabilities = false` — la session
- *   UIKit est mono-fenêtre imposée par le host : rien n'est annoncé comme créable/modifiable ;
- *  - `enabledWindowUpdateCapabilities = emptySet()` et capabilities surface « unsupported » —
- *    snapshot initial figé ;
+ * Différences AppKit assumées :
+ *  - `publicWindowCapabilities = false`, `enabledWindowUpdateCapabilities = emptySet()` — la
+ *   session UIKit est mono-fenêtre imposée par le host : rien n'est annoncé comme
+ *   créable/modifiable côté fenêtre ;
  *  - pas d'attention, pas de fullscreen, pas de TextInput factory dédiée (défauts du manager).
+ *
+ * Phase 2 : `publicSurfaceCapabilities = true` — les commands surface sont OUVERTS (le runtime
+ * alloue des tickets de redraw et transmet les `SurfaceUpdateCommand` au port) et les
+ * capabilities annoncées sont celles d'[uikitSurfaceCapabilities] : redraw coalescé et accès
+ * plateforme supportés, les quatre champs update refusés. La contrainte du manager
+ * (`RuntimeWindowManager.commitPendingLocked` l.1461 : capabilities publiées exigent un
+ * snapshot initial) est satisfaite — le port commite `initialSnapshot()` à l'open.
  *
  * La fenêtre primaire est DEMANDÉE au manager DANS [admitPrimaryWindow] — jamais d'écriture
  * directe dans l'état (le reducer du manager reste l'autorité) — appelé par
@@ -69,8 +74,8 @@ internal class UIKitWindowRuntime internal constructor(
         failureReporter = failureReporter,
         publicWindowCapabilities = false,
         enabledWindowUpdateCapabilities = emptySet(),
-        publicSurfaceCapabilities = false,
-        enabledSurfaceCapabilities = unsupportedSurfaceCapabilities(),
+        publicSurfaceCapabilities = true,
+        enabledSurfaceCapabilities = uikitSurfaceCapabilities(),
     )
 
     /** Le RuntimePrimarySurface de la session, construit par [admitPrimaryWindow] (mémoïsé). */
