@@ -94,7 +94,11 @@ class WaylandNativeSessionLinuxTest {
                 }.start()
             }
             val outcome = provider.run(aliveApplication())
-            assertEquals(KadreResult.Success(SessionOutcome.Stopped(SessionStopReason.HostRequested)), outcome)
+            // l'arrêt vient du hook pompe (fin de boucle host), pas d'un
+            // session.stop() runtime : le motif terminal est HostDetached ;
+            // un stop runtime conserverait HostRequested (selectOutcome garde
+            // le premier motif terminal, cf. SessionRuntime.requestTermination)
+            assertEquals(KadreResult.Success(SessionOutcome.Stopped(SessionStopReason.HostDetached)), outcome)
         }
     }
 
@@ -105,7 +109,7 @@ class WaylandNativeSessionLinuxTest {
                 Thread { pump.requestStop() }.start()
             }
             val outcome = provider.run(aliveApplication())
-            assertEquals(KadreResult.Success(SessionOutcome.Stopped(SessionStopReason.HostRequested)), outcome)
+            assertEquals(KadreResult.Success(SessionOutcome.Stopped(SessionStopReason.HostDetached)), outcome)
         }
     }
 
