@@ -47,3 +47,7 @@ Sorties (gitignorées, jamais commises — le spec EST le filet) :
   pour les contrats kadre).
 - Variables : `KADRE_DEMO_DIST` (distribution à servir), `KADRE_DEMO_PORT` (défaut
   4173), `KADRE_E2E_OUTPUT_DIR` (défaut `playwright-output/`).
+- Dépannage du port : en local, un serveur déjà à l'écoute sur le port est
+  **réutilisé** (`reuseExistingServer`, coupé en CI) — un serveur manuel oublié sur
+  4173 servirait SON contenu à la place de la distribution fraîche. Tuez-le
+  (`lsof -ti :4173 | xargs kill`) ou pointez `KADRE_DEMO_PORT` ailleurs.

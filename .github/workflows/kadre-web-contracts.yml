@@ -42,6 +42,17 @@ jobs:
       - name: Run Web browser contract smoke gate
         run: ./gradlew :kadre:contracts:driver:web:browserSmokeRunnerTest :kadre:contracts:driver:web:jsBrowserSmoke :kadre:contracts:driver:web:wasmJsBrowserSmoke :kadre:contracts:validator:check --console=plain
 
+      - name: Compile the desk-tour web sample (rot-guard)
+        # Compile-only rot-guard: the desk-tour demo's wasmJs chain (shared core+ui, the
+        # web host, the Compose-for-web dependency chain) must stay green on every push.
+        # The full distribution + e2e net is deliberately OUT of this workflow: the ~13 MB
+        # distribution build plus a served Playwright pass do not fit the 15-minute budget
+        # this workflow already spends on the contract gate — the e2e net stays local and
+        # is chartered (kadre/samples/desk-tour/e2e/README.md,
+        # kadre/samples/desk-tour/manual/web-charter.md). Its own step, after the gate,
+        # so a failure here can never mask the gate's evidence.
+        run: ./gradlew :kadre:samples:desk-tour:compileKotlinWasmJs --console=plain
+
       - name: Upload Web diagnostics and evidence
         if: failure() || cancelled()
         uses: actions/upload-artifact@v4

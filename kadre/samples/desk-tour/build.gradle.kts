@@ -43,7 +43,16 @@ kotlin {
     }
 
     wasmJs {
-        browser()
+        browser {
+            // Décision T2 (le plus petit choix honnête) : aucun harnais de test navigateur
+            // n'est configuré pour ce sample — karma + webpack + navigateur achèteraient
+            // rien pour une suite de logique. La suite commune tourne déjà sur jvm
+            // (jvmTest porte tout commonTest) et le binaire wasm est couvert bout-en-bout
+            // par le filet e2e commis (e2e/README.md). La tâche est désactivée
+            // explicitement pour qu'un `check` n'essaie pas d'amorcer un harnais qui
+            // n'existe pas.
+            testTask { enabled = false }
+        }
         // Le binaire navigateur (wasmJsBrowserDistribution) est ce que l'hôte web
         // servira ; le host lui-même est la tâche 3.
         binaries.executable()
