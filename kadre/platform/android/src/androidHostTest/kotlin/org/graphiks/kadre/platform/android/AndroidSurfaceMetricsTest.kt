@@ -10,6 +10,7 @@ import kotlinx.coroutines.yield
 import org.graphiks.kadre.application.EventStamp
 import org.graphiks.kadre.application.SessionInstant
 import org.graphiks.kadre.application.SessionSequence
+import org.graphiks.kadre.internal.runtime.RuntimeEventCollectorAllocator
 import org.graphiks.kadre.internal.runtime.RuntimeProcessIds
 import org.graphiks.kadre.policy.KadrePolicies
 import org.graphiks.kadre.surface.CursorStyle
@@ -350,7 +351,7 @@ private fun installSessionStampsForTest(surface: AndroidHostSurface, source: () 
         inputDeliveryPolicy = KadrePolicies.Default.input,
         source = source,
         sessionFailureHandler = {},
-        collectorAllocator = Any(),
+        collectorAllocator = RuntimeEventCollectorAllocator(64),
         maxCollectorsPerFlow = 8,
         resources = KadrePolicies.Default.resources,
         dropTransferScope = null,

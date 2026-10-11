@@ -799,6 +799,50 @@ class AndroidMotionMapperTest {
     }
 
     // -----------------------------------------------------------------------
+    // Cas F1-bis (porté de la review Task 2) — un MOVE mixte doigt+stylet livre les DEUX
+    // lanes, CHACUNE routée par son propre tool type, dans l'ordre des pointeurs
+    // -----------------------------------------------------------------------
+
+    @Test
+    fun mixedFingerAndStylusMoveDeliversBothLanesInPointerOrder() {
+        val tracker = tracker()
+        // Le doigt minte son contact, le stylet ouvre la pression du pointeur unique.
+        tracker.onObservation(
+            observation(MotionEvent.ACTION_DOWN, pointers = listOf(PointerSpec(1, 10f, 10f))),
+            viewWidth = 100, viewHeight = 100, scaleFactor = 1.0,
+        )
+        tracker.onObservation(
+            observation(
+                MotionEvent.ACTION_DOWN,
+                pointers = listOf(PointerSpec(2, 30f, 10f, tool = MotionEvent.TOOL_TYPE_STYLUS)),
+            ),
+            viewWidth = 100, viewHeight = 100, scaleFactor = 1.0,
+        )
+
+        // LE test porté : un MOVE à deux pointeurs — doigt index 0, stylet index 1 — livre
+        // exactement UN TouchChanged (le contact du doigt) PUIS UN PointerMoved (le stylet),
+        // dans l'ordre des pointeurs de l'événement.
+        val move = tracker.onObservation(
+            observation(
+                MotionEvent.ACTION_MOVE,
+                pointers = listOf(
+                    PointerSpec(1, 12f, 14f),
+                    PointerSpec(2, 34f, 14f, tool = MotionEvent.TOOL_TYPE_STYLUS),
+                ),
+            ),
+            viewWidth = 100, viewHeight = 100, scaleFactor = 1.0,
+        )
+        assertEquals(2, move.size, "a mixed MOVE delivers exactly one stimulus per lane")
+        val touch = assertIs<SurfaceStimulus.TouchChanged>(move[0])
+        assertEquals(TouchPhase.Moved, touch.phase)
+        assertEquals(LogicalPoint(12.0, 14.0), touch.position)
+        val pointer = assertIs<SurfaceStimulus.PointerMoved>(move[1])
+        assertEquals(PointerKind.Pen, pointer.kind)
+        assertEquals(LogicalPoint(34.0, 14.0), pointer.position)
+        assertEquals(org.graphiks.kadre.surface.LogicalDelta(4.0, 4.0), pointer.delta)
+    }
+
+    // -----------------------------------------------------------------------
     // Cas F3 — une coordonnée terminale non finie livre QUAND MÊME la phase terminale
     // -----------------------------------------------------------------------
 

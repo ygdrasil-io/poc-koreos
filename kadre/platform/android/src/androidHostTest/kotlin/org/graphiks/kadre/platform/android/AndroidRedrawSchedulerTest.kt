@@ -13,6 +13,7 @@ import org.graphiks.kadre.application.SessionSequence
 import org.graphiks.kadre.diagnostics.KadreFailure
 import org.graphiks.kadre.diagnostics.KadreResourceKind
 import org.graphiks.kadre.diagnostics.KadreResult
+import org.graphiks.kadre.internal.runtime.RuntimeEventCollectorAllocator
 import org.graphiks.kadre.internal.runtime.RuntimeProcessIds
 import org.graphiks.kadre.policy.KadrePolicies
 import org.graphiks.kadre.surface.CursorStyle
@@ -253,7 +254,7 @@ private fun installSessionStampsForRedrawTest(surface: AndroidHostSurface) {
             EventStamp(SessionSequence(sequence), SessionInstant((sequence++).nanoseconds), null)
         },
         sessionFailureHandler = {},
-        collectorAllocator = Any(),
+        collectorAllocator = RuntimeEventCollectorAllocator(64),
         maxCollectorsPerFlow = 8,
         resources = KadrePolicies.Default.resources,
         dropTransferScope = null,

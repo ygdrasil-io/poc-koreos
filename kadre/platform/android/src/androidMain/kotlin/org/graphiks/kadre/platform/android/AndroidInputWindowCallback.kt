@@ -11,14 +11,19 @@ import android.view.View
 import android.view.Window
 import android.view.WindowManager
 import android.view.accessibility.AccessibilityEvent
+import org.graphiks.kadre.input.KeyState
 
 /**
  * Les observations copiées de la couche SDK — SDK-free par construction : le wrapper ne
  * livre jamais un type `android.*` à la session, seulement ces valeurs primitives.
  *
- * - [Key] : une touche matérielle vue à [Window.Callback.dispatchKeyEvent], les cinq
- *   primitives telles quelles — `unicodeChar` est `null` quand la plateforme ne rapporte
- *   pas de caractère fiable (l'absence reste une absence, jamais un `'\u0000'` inventé).
+ * - [Key] : une touche matérielle vue à [Window.Callback.dispatchKeyEvent], les primitives
+ *   telles quelles — `unicodeChar` est `null` quand la plateforme ne rapporte pas de
+ *   caractère fiable (l'absence reste une absence, jamais un `'\u0000'` inventé) ;
+ *   [Key][Key.keyState] porte le press/release de l'action (`ACTION_UP` → `Released`, toute
+ *   autre action — `DOWN`, `MULTIPLE` — → `Pressed`), ajouté par la Task 3 : la livraison au
+ *   réducteur ne peut pas inventer l'état qu'un `KeyChanged` exige, et un press éternellement
+ *   collé dans l'état du clavier serait un mensonge d'état.
  * - [WindowFocusLost] : la fenêtre a perdu le focus — l'homologue de l'observation web
  *   `FocusLost`, la seule observée côté fenêtre à cette phase.
  */
@@ -29,6 +34,7 @@ internal sealed interface AndroidInputObservation {
         val metaState: Int,
         val unicodeChar: Int?,
         val isSystemKey: Boolean,
+        val keyState: KeyState,
     ) : AndroidInputObservation
 
     public data object WindowFocusLost : AndroidInputObservation
@@ -69,6 +75,7 @@ internal class AndroidInputWindowCallback(
         metaState: Int,
         unicodeChar: Int?,
         isSystemKey: Boolean,
+        keyState: KeyState,
     ): Boolean {
         if (isTargetFocused()) {
             onObservation(
@@ -78,6 +85,7 @@ internal class AndroidInputWindowCallback(
                     metaState = metaState,
                     unicodeChar = unicodeChar,
                     isSystemKey = isSystemKey,
+                    keyState = keyState,
                 ),
             )
         }
@@ -99,16 +107,22 @@ internal class AndroidInputWindowCallback(
  *
  * Chaque méthode de [Window.Callback] (y compris les méthodes par défaut) est déléguée
  * TELLE QUELLE au callback wrappé — le wrapper est transparent par construction. Seuls
- * cinq points dévient, tous côté entrée :
+ * quatre points dévient, tous côté entrée :
  *
- * - [dispatchKeyEvent] : les cinq primitives sont copiées puis remises au cœur
- *   ([AndroidInputWindowCallback]) ; le forward réel du `KeyEvent` — celui du callback
+ * - [dispatchKeyEvent] : les primitives sont copiées puis remises au cœur
+ *   ([AndroidInputWindowCallback]) — l'état press/release est lu sur l'action de l'événement
+ *   (`ACTION_UP` → `Released`, toute autre action → `Pressed` ; `ACTION_MULTIPLE` est du
+ *   texte qui entre, jamais une relève) ; le forward réel du `KeyEvent` — celui du callback
  *   wrappé — est le [forwardKey] du cœur, l'événement original voyage entier ;
  * - [onWindowFocusChanged] : la perte passe par le cœur (observation + un seul forward) ;
- * - [dispatchKeyShortcutEvent], [dispatchTouchEvent], [dispatchTrackballEvent],
- *   [dispatchGenericMotionEvent] : les quatre autres points d'entrée d'événements,
- *   forwardés intacts — le touch est le sujet de la tâche 2, qui étendra
- *   l'interception sans changer ce contrat.
+ * - [dispatchTouchEvent] et [dispatchGenericMotionEvent] : les deux points d'entrée motion —
+ *   les primitives de [MotionEvent] sont copiées AVANT le forward (l'événement est recyclé
+ *   par le système au retour du dispatch) et remises à [onMotion] ; le forward, lui, reste
+ *   intact, tel quel — l'observation n'est jamais une interception ;
+ * - [dispatchKeyShortcutEvent], [dispatchTrackballEvent] : forwardés intacts, NON observés —
+ *   le trackball est le chemin des périphériques hérités dont le routage de lane (un MOVE
+ *   d'outil inconnu est un contact, pas un pointeur) serait une invention ; le chemin
+ *   moderne de ces périphériques est le generic, observé lui.
  *
  * L'événement en cours est retenu dans [pendingKeyEvent] le temps du dispatch : le
  * `forwardKey` du cœur ne transporte que des primitives, le `KeyEvent` original est donc
@@ -136,6 +150,7 @@ internal class AndroidWindowCallbackForwarder(
     isTargetFocused: () -> Boolean,
     onObservation: (AndroidInputObservation) -> Unit,
     shouldConsumeKey: (nativeKeyCode: Int) -> Boolean,
+    private val onMotion: (AndroidMotionObservation) -> Unit = {},
 ) : Window.Callback {
     private var installed: Boolean = false
     private var pendingKeyEvent: KeyEvent? = null
@@ -185,6 +200,7 @@ internal class AndroidWindowCallbackForwarder(
                 // est l'absence de caractère, portée comme `null` et jamais comme '\u0000'.
                 unicodeChar = event.getUnicodeChar().takeIf { it != 0 },
                 isSystemKey = event.isSystem,
+                keyState = if (event.action == KeyEvent.ACTION_UP) KeyState.Released else KeyState.Pressed,
             )
         } finally {
             pendingKeyEvent = previous
@@ -202,15 +218,53 @@ internal class AndroidWindowCallbackForwarder(
         }
     }
 
-    // ---- Les quatre autres points d'entrée d'événements, forwardés intacts. ----
+    // ---- Les points d'entrée motion : copier les primitives, observer, forwarder intact. ----
 
     override fun dispatchKeyShortcutEvent(event: KeyEvent): Boolean = wrapped.dispatchKeyShortcutEvent(event)
 
-    override fun dispatchTouchEvent(event: MotionEvent): Boolean = wrapped.dispatchTouchEvent(event)
+    override fun dispatchTouchEvent(event: MotionEvent): Boolean {
+        onMotion(motionObservation(event))
+        return wrapped.dispatchTouchEvent(event)
+    }
 
     override fun dispatchTrackballEvent(event: MotionEvent): Boolean = wrapped.dispatchTrackballEvent(event)
 
-    override fun dispatchGenericMotionEvent(event: MotionEvent): Boolean = wrapped.dispatchGenericMotionEvent(event)
+    override fun dispatchGenericMotionEvent(event: MotionEvent): Boolean {
+        onMotion(motionObservation(event))
+        return wrapped.dispatchGenericMotionEvent(event)
+    }
+
+    /**
+     * La copie des primitives motion AU POINT DE DISPATCH — toutes les lectures SDK ont lieu
+     * AVANT que le forward ne rende l'événement au callback wrappé, donc avant que le
+     * système ne le recycle : rien de ce qui traverse vers la delivery n'est une référence
+     * SDK (le contrat de [AndroidMotionObservation]).
+     *
+     * La pression est portée telle quelle (le tracker filtre hors domaine — Task 2, F2) ;
+     * les axes relatifs (`AXIS_RELATIVE_X/Y`, API 26) sont lus par constante inlinée — un
+     * axe inconnu d'une vieille plateforme répond zéro, le zéro honnête.
+     */
+    private fun motionObservation(event: MotionEvent): AndroidMotionObservation {
+        val count = event.pointerCount
+        return AndroidMotionObservation(
+            actionMasked = event.actionMasked,
+            actionIndex = event.actionIndex,
+            pointerCount = count,
+            pointerIds = IntArray(count) { event.getPointerId(it) },
+            xs = FloatArray(count) { event.getX(it) },
+            ys = FloatArray(count) { event.getY(it) },
+            pressures = Array(count) { event.getPressure(it) },
+            toolTypes = IntArray(count) { event.getToolType(it) },
+            buttons = event.buttonState,
+            actionButton = event.actionButton,
+            axisHscroll = event.getAxisValue(MotionEvent.AXIS_HSCROLL),
+            axisVscroll = event.getAxisValue(MotionEvent.AXIS_VSCROLL),
+            axisXrelative = event.getAxisValue(MotionEvent.AXIS_RELATIVE_X),
+            axisYrelative = event.getAxisValue(MotionEvent.AXIS_RELATIVE_Y),
+            deviceId = event.deviceId,
+            metaState = event.metaState,
+        )
+    }
 
     // ---- ActionMode du panneau, forwardé intact. ----
 

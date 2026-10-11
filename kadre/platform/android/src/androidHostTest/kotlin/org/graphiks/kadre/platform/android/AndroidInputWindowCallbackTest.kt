@@ -11,6 +11,7 @@ import android.view.View
 import android.view.Window
 import android.view.WindowManager
 import android.view.accessibility.AccessibilityEvent
+import org.graphiks.kadre.input.KeyState
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -52,6 +53,7 @@ class AndroidInputWindowCallbackTest {
             metaState = KeyEvent.META_SHIFT_ON,
             unicodeChar = 'A'.code,
             isSystemKey = false,
+            keyState = KeyState.Pressed,
         )
         assertTrue(delivered, "the forward decision IS the dispatch result")
         assertEquals(1, recorder.forwards.size, "exactly one forward, never two")
@@ -66,6 +68,7 @@ class AndroidInputWindowCallbackTest {
             metaState = 0,
             unicodeChar = null,
             isSystemKey = false,
+            keyState = KeyState.Released,
         )
         assertFalse(refused, "a false forward decision propagates")
         assertEquals(1, refusing.forwards.size)
@@ -104,6 +107,7 @@ class AndroidInputWindowCallbackTest {
                     metaState = meta,
                     unicodeChar = 'a'.code,
                     isSystemKey = false,
+                    keyState = KeyState.Pressed,
                 )
             },
             forwardFocusLost = {},
@@ -115,6 +119,7 @@ class AndroidInputWindowCallbackTest {
             metaState = 0,
             unicodeChar = 'a'.code,
             isSystemKey = false,
+            keyState = KeyState.Pressed,
         )
 
         assertTrue(delivered, "the chain ends in the wrapped original, which accepted")
@@ -140,6 +145,7 @@ class AndroidInputWindowCallbackTest {
             metaState = 0,
             unicodeChar = 'k'.code,
             isSystemKey = false,
+            keyState = KeyState.Pressed,
         )
         assertTrue(delivered, "the key is forwarded regardless of the target focus")
         assertEquals(0, unfocused.observations.size, "no observation without the target focus")
@@ -153,6 +159,7 @@ class AndroidInputWindowCallbackTest {
             metaState = KeyEvent.META_CTRL_ON,
             unicodeChar = null,
             isSystemKey = false,
+            keyState = KeyState.Released,
         )
         val observed = assertIs<AndroidInputObservation.Key>(focused.observations.single())
         assertEquals(KeyEvent.KEYCODE_K, observed.nativeKeyCode)
@@ -160,6 +167,7 @@ class AndroidInputWindowCallbackTest {
         assertEquals(KeyEvent.META_CTRL_ON, observed.metaState)
         assertEquals(null, observed.unicodeChar)
         assertFalse(observed.isSystemKey)
+        assertEquals(KeyState.Released, observed.keyState, "the observation carries the press/release of the event")
     }
 
     // -----------------------------------------------------------------------
@@ -175,6 +183,7 @@ class AndroidInputWindowCallbackTest {
             metaState = 0,
             unicodeChar = null,
             isSystemKey = false,
+            keyState = KeyState.Pressed,
         )
         assertTrue(delivered, "a consumed key reports true to the system")
         assertEquals(0, consuming.forwards.size, "a consumed key is NEVER forwarded")
@@ -182,7 +191,7 @@ class AndroidInputWindowCallbackTest {
 
         // Le seam par défaut de la tâche 1 — policy toujours fausse — forward tout.
         val passthrough = CoreRecorder(consumeKeys = false)
-        assertTrue(passthrough.core.dispatchKeyEvent(KeyEvent.KEYCODE_PAGE_DOWN, false, 0, null, false))
+        assertTrue(passthrough.core.dispatchKeyEvent(KeyEvent.KEYCODE_PAGE_DOWN, false, 0, null, false, KeyState.Pressed))
         assertEquals(1, passthrough.forwards.size)
     }
 
@@ -217,6 +226,7 @@ class AndroidInputWindowCallbackTest {
             metaState = 0,
             unicodeChar = null,
             isSystemKey = true,
+            keyState = KeyState.Pressed,
         )
         assertTrue(delivered, "a system key is forwarded (its acceptance decides)")
         assertEquals(1, recorder.forwards.size, "a system key is NEVER consumed")

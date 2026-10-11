@@ -339,10 +339,22 @@ internal object AndroidHostSession {
             },
         )
         binding = lifecycleBinding
-        // Le branchement métriques meurt avec le binding lifecycle : tout chemin qui démonte
-        // celui-ci (rollback d'admission, terminal, révocation) démonte celui-là — le zéro-
-        // résidu tient à un seul endroit ([AndroidLifecycleBinding.onTeardown]).
-        lifecycleBinding.onTeardown { observationBinding.teardown() }
+        // Le branchement d'entrée (Task 3) : le wrapper T1 (`Window.Callback` enchaîné) et,
+        // derrière lui, le tracker T2 nourrissent la delivery que l'installSessionConfiguration
+        // de la surface a construite pendant l'attach. La forme ACTIVITY seule a un
+        // `Window.Callback` à enchaîner — la forme View n'a pas de fenêtre (l'admission ne
+        // réserve un `decorRootIdentity` que pour l'Activity) : l'observation clavier/tactile
+        // vit là où la couture peut enchaîner, la forme View en reste dépourvue à cette phase.
+        val inputForwarder = inputForwarderFor(request.form, owner, view, sessionSurface)
+        // Le retrait du wrapper ET du branchement métriques meurt avec le binding lifecycle :
+        // tout chemin qui démonte celui-ci (rollback d'admission, terminal, révocation)
+        // restaure le callback d'origine exact et démonte l'observation métrique — le zéro-
+        // résidu tient à un seul endroit ([AndroidLifecycleBinding.onTeardown]), jamais une
+        // exception dans la boucle de teardown.
+        lifecycleBinding.onTeardown {
+            inputForwarder?.restoreOrReport()
+            observationBinding.teardown()
+        }
 
         // 4+5. L'installation du binding puis l'attach du runtime, sous le garde post-
         //      réservation : rejet du contrôleur → rollback intégral puis `Failure` ;
@@ -366,7 +378,12 @@ internal object AndroidHostSession {
                     // deviennent honnêtes. La surface existe — la factory de composants a
                     // tourné pendant l'attach ; la double garde de `observationInstalled`
                     // absorbe une installation qui suivrait un terminal déjà passé.
+                    // L'installation d'entrée (Task 3) courra DERRIÈRE : le stimulus
+                    // structurel d'abord, le replay du buffer ensuite — et le wrapper, posé
+                    // ENSUITE seulement, ne peut jamais observer avant que la delivery
+                    // n'existe (le thread principal sérialise l'attach tout entier).
                     sessionSurface.surface?.observationInstalled()
+                    inputForwarder?.install()
                 }
                 attached
             },
@@ -418,6 +435,75 @@ internal object AndroidHostSession {
     /** La surface de la session, créée par la factory de composants au moment de l'attach. */
     private class SessionSurface {
         var surface: AndroidHostSurface? = null
+    }
+
+    /**
+     * Le wrapper d'entrée de CETTE attach, et l'état qui rend son retrait sûr : l'installation
+     * n'a lieu qu'après un attach réussi (la delivery existe alors — construite pendant
+     * l'attach par `installSessionConfiguration`), et le retrait suit l'installation pas à
+     * pas — un [restore][AndroidWindowCallbackForwarder.restore] qui lance (le callback de la
+     * fenêtre a été remplacé par un tiers) est REPORTÉ sur le journal de la couture, jamais
+     * propagé dans la boucle de teardown.
+     */
+    private class InputForwarder(private val forwarder: AndroidWindowCallbackForwarder) {
+        var installed: Boolean = false
+            private set
+
+        fun install() {
+            forwarder.install()
+            installed = true
+        }
+
+        fun restoreOrReport() {
+            if (!installed) return
+            installed = false
+            try {
+                forwarder.restore()
+            } catch (cause: Throwable) {
+                runCatching { AndroidAttachDiagnostics.report(cause) }
+            }
+        }
+    }
+
+    /**
+     * Le wrapper T1 construit pour la forme ACTIVITY : enchaîné sur le callback EXISTANT de
+     * la fenêtre de l'activité (la paire publique get/set — jamais de remplacement), nourri
+     * des trois décisions que la couture seule peut répondre :
+     *
+     * - [AndroidInputWindowCallback.isTargetFocused] = `view.hasFocus()` — l'observation
+     *   clavier ne vit que sur la vue attachée focalisée (le câblage documenté du wrapper) ;
+     * - l'observation (touches, perte de focus) et la motion (les primitives copiées au
+     *   dispatch) partent vers la delivery de la surface — qui n'existe pas avant l'attach,
+     *   mais le wrapper n'est POSÉ qu'après un attach réussi : la course est structurellement
+     *   impossible, le thread principal sérialise l'attach tout entier ;
+     * - [AndroidInputWindowCallback.shouldConsumeKey] lit l'état COMMIS de la surface (le
+     *   `suppressDefaultFor` web côté surface) — sans surface, rien n'est consommé.
+     *
+     * La forme View n'a pas de fenêtre : `null`, l'observation clavier/tactile y est dépourvue
+     * à cette phase (documenté au point d'appel).
+     */
+    private fun inputForwarderFor(
+        form: AndroidAttachForm,
+        owner: LifecycleOwner,
+        view: View,
+        sessionSurface: SessionSurface,
+    ): InputForwarder? {
+        if (form != AndroidAttachForm.Activity) return null
+        val window = (owner as ComponentActivity).window
+        val wrapped = window.callback ?: return null
+        return InputForwarder(
+            AndroidWindowCallbackForwarder(
+                wrapped = wrapped,
+                getWindowCallback = { window.callback },
+                setWindowCallback = { window.callback = it },
+                isTargetFocused = { view.hasFocus() },
+                onObservation = { observation -> sessionSurface.surface?.onInputObservation(observation) },
+                shouldConsumeKey = { nativeKeyCode -> sessionSurface.surface?.shouldConsumeKey(nativeKeyCode) ?: false },
+                onMotion = { observation ->
+                    sessionSurface.surface?.onMotionObservation(observation, view.width, view.height)
+                },
+            ),
+        )
     }
 
     /**
