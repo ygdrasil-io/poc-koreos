@@ -33,6 +33,19 @@ internal class AndroidLifecycleBinding(
     private var attachListener: View.OnAttachStateChangeListener? = null
     private var tornDown = false
 
+    /**
+     * Les retraits compagnons — la couture y enregistre le binding d'observation métriques
+     * ([AndroidSurfaceObservationBinding]) pour que CHAQUE chemin qui démonte CE binding
+     * (rollback d'admission, terminal lifecycle, révocation) démonte aussi les listeners de
+     * l'observation : le zéro-résidu tient à un seul endroit. Main-thread only, comme le reste.
+     */
+    private val teardownCompanions = mutableListOf<() -> Unit>()
+
+    /** Enregistre un retrait compagnon, exécuté par [teardown] avant sa fin. */
+    internal fun onTeardown(companion: () -> Unit) {
+        teardownCompanions += companion
+    }
+
     /** Journal des installations — vidé par [teardown] (vérification zéro-résidu AND-001). */
     var installedCallbacks: List<String> = emptyList()
         private set
@@ -110,6 +123,13 @@ internal class AndroidLifecycleBinding(
         lifecycleObserver = null
         attachListener = null
         installedCallbacks = emptyList()
+        // Les compagnons d'abord vidés, puis exécutés — la même honnêteté que les retraits
+        // propres du binding : un retrait SDK qui lancerait se propage, il n'est pas absorbé.
+        val companions = teardownCompanions.toList()
+        teardownCompanions.clear()
+        for (companion in companions) {
+            companion()
+        }
     }
 
     /**

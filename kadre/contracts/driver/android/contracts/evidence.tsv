@@ -12,3 +12,12 @@ AND-002	android	scenario	android-attach-detach-reparent	org.graphiks.kadre.consu
 AND-002	android	scenario	android-attach-recreation-isolation	org.graphiks.kadre.consumer.KadreConsumerAttachContractTest	androidAttachRecreationIsolation
 AND-002	android	sentinel	android-attach-rollback-restores-state	org.graphiks.kadre.consumer.KadreConsumerAttachContractTest	androidAttachParentCancelled
 AND-002	android	sentinel	android-attach-isolation-per-identity	org.graphiks.kadre.consumer.KadreConsumerAttachContractTest	androidAttachRecreationIsolation
+AND-003	android	scenario	android-surface-metrics-match-view	org.graphiks.kadre.consumer.KadreConsumerSurfaceContractTest	androidSurfaceMetricsMatchView
+AND-003	android	scenario	android-surface-resize-propagates	org.graphiks.kadre.consumer.KadreConsumerSurfaceContractTest	androidSurfaceResizePropagates
+AND-003	android	scenario	android-surface-redraw-coalesced	org.graphiks.kadre.consumer.KadreConsumerSurfaceContractTest	androidSurfaceRedrawCoalesced
+AND-003	android	scenario	android-surface-redraw-after-close	org.graphiks.kadre.consumer.KadreConsumerSurfaceContractTest	androidSurfaceRedrawAfterClose
+AND-003	android	scenario	android-surface-lease-boundaries	org.graphiks.kadre.consumer.KadreConsumerSurfaceContractTest	androidSurfaceLeaseBoundaries
+AND-003	android	scenario	android-surface-no-window-handle	org.graphiks.kadre.consumer.KadreConsumerSurfaceContractTest	androidSurfaceNoWindowHandle
+AND-003	android	sentinel	android-metrics-generation-stale	org.graphiks.kadre.consumer.KadreConsumerSurfaceContractTest	androidSurfaceMetricsMatchView
+AND-003	android	sentinel	android-redraw-single-per-frame	org.graphiks.kadre.consumer.KadreConsumerSurfaceContractTest	androidSurfaceRedrawCoalesced
+AND-003	android	sentinel	android-lease-closed-after-terminal	org.graphiks.kadre.consumer.KadreConsumerSurfaceContractTest	androidSurfaceLeaseBoundaries

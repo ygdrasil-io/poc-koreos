@@ -21,7 +21,6 @@ import org.graphiks.kadre.diagnostics.KadreResourceKind
 import org.graphiks.kadre.diagnostics.KadreResult
 import org.graphiks.kadre.internal.runtime.RuntimeFailureReporter
 import org.graphiks.kadre.internal.runtime.RuntimeHostController
-import org.graphiks.kadre.internal.runtime.RuntimeHostSurface
 import org.graphiks.kadre.internal.runtime.RuntimePrimarySurface
 import org.graphiks.kadre.internal.runtime.RuntimeProcessIds
 import org.graphiks.kadre.internal.runtime.RuntimeSessionComponents
@@ -235,6 +234,17 @@ internal object AndroidHostSession {
         //    principal est le seul à attacher, dispatcher et terminer).
         var binding: AndroidLifecycleBinding? = null
         val sessionSurface = SessionSurface()
+        // Le branchement métriques (Task 5) : le réducteur démarre de la MÊME vérité initiale
+        // que la surface (le même instantané, la même fonction, le même instant du thread
+        // principal) — ses décisions et les publications de la surface ne peuvent pas diverger.
+        // La surface peut ne pas exister encore au moment d'une observation (installation du
+        // binding avant l'attach du contrôleur) : elle est alors perdue, la suivante rétablit.
+        val metricsReducer = AndroidSurfaceMetricsReducer(initialSurfaceState(view, initial))
+        val observationBinding = AndroidSurfaceObservationBinding(
+            view = view,
+            reducer = metricsReducer,
+            surface = { sessionSurface.surface },
+        )
         val controller = when (request.form) {
             AndroidAttachForm.Activity -> RuntimeHostController.withComponents(
                 platform = KadrePlatform.Android,
@@ -243,10 +253,12 @@ internal object AndroidHostSession {
                     // UNE instance de surface par session, passée au manager de fenêtres ET à
                     // la surface primaire : l'invariant de topologie
                     // `windows.state.value.primary?.surface === primarySurface` est un fait de
-                    // session, pas une coïncidence de construction.
-                    val surface = RuntimeHostSurface(
+                    // session, pas une coïncidence de construction. `leasedView` est LA source
+                    // du bail natif (Task 4) : la View est relue à chaque lease, jamais capturée.
+                    val surface = AndroidHostSurface(
                         RuntimeProcessIds.nextSurfaceId(),
                         initialSurfaceState(view, initial),
+                        leasedView = { view },
                     )
                     sessionSurface.surface = surface
                     RuntimeSessionComponents(
@@ -266,7 +278,11 @@ internal object AndroidHostSession {
                 failureReporter = AndroidAttachDiagnostics,
                 sessionObserver = RuntimeSessionObserver { _, _ -> reservation.release() },
                 primarySurfaceFactory = { id ->
-                    val surface = RuntimeHostSurface(id, initialSurfaceState(view, initial))
+                    val surface = AndroidHostSurface(
+                        id,
+                        initialSurfaceState(view, initial),
+                        leasedView = { view },
+                    )
                     sessionSurface.surface = surface
                     RuntimePrimarySurface(surface, surface::close)
                 },
@@ -323,6 +339,10 @@ internal object AndroidHostSession {
             },
         )
         binding = lifecycleBinding
+        // Le branchement métriques meurt avec le binding lifecycle : tout chemin qui démonte
+        // celui-ci (rollback d'admission, terminal, révocation) démonte celui-là — le zéro-
+        // résidu tient à un seul endroit ([AndroidLifecycleBinding.onTeardown]).
+        lifecycleBinding.onTeardown { observationBinding.teardown() }
 
         // 4+5. L'installation du binding puis l'attach du runtime, sous le garde post-
         //      réservation : rejet du contrôleur → rollback intégral puis `Failure` ;
@@ -331,9 +351,24 @@ internal object AndroidHostSession {
         return installBindingAndAttach(
             reservation = reservation,
             binding = lifecycleBinding,
-            installBinding = { lifecycleBinding.install(owner, view) },
+            // Les deux installations SDK de la couture : le binding lifecycle PUIS le
+            // branchement d'observation (listener de layout + lecture initiale). Un throwable
+            // de l'une roule tout le chemin en arrière via le garde ci-dessus.
+            installBinding = {
+                lifecycleBinding.install(owner, view)
+                observationBinding.install()
+            },
             attachController = {
-                controller.attach(parentScope, applicationFactory, policy, launch = null)
+                val attached = controller.attach(parentScope, applicationFactory, policy, launch = null)
+                if (attached is KadreResult.Success) {
+                    // L'observation et le scheduling vivent (le listener est posé, la clock de
+                    // frame est le Choreographer par défaut de la surface) : les capabilities
+                    // deviennent honnêtes. La surface existe — la factory de composants a
+                    // tourné pendant l'attach ; la double garde de `observationInstalled`
+                    // absorbe une installation qui suivrait un terminal déjà passé.
+                    sessionSurface.surface?.observationInstalled()
+                }
+                attached
             },
         )
     }
@@ -382,7 +417,7 @@ internal object AndroidHostSession {
 
     /** La surface de la session, créée par la factory de composants au moment de l'attach. */
     private class SessionSurface {
-        var surface: RuntimeHostSurface? = null
+        var surface: AndroidHostSurface? = null
     }
 
     /**
@@ -432,12 +467,15 @@ internal object AndroidHostSession {
      * de la phase 0, tenu courant. Minimal et honnête : attachment/visibility/focus seulement,
      * les Unknown restent Unknown, aucun input ni IME. La surface peut ne pas exister encore
      * (publication plus précoce que l'attach) : l'instantané est alors simplement perdu, le
-     * suivant rétablit l'état — et `RuntimeHostSurface.publish` absorbe tout ce qui suit la
-     * fermeture.
+     * suivant rétablit l'état — et `AndroidHostSurface.publishMetrics` absorbe tout ce qui suit
+     * la fermeture.
      */
     private fun publish(snapshot: AndroidHostSnapshot, sessionSurface: SessionSurface) {
         val surface = sessionSurface.surface ?: return
-        surface.publish { current ->
+        // Publication muette (pas d'eventFor) : les publications lifecycle sont des observations
+        // d'état du binding, pas des stimuli — Task 2 n'émet des événements typés que pour les
+        // observations métriques du réducteur.
+        surface.publishMetrics(update = { current ->
             current.copy(
                 attachment = if (snapshot.attachment) {
                     SurfaceAttachmentState.Attached
@@ -447,7 +485,7 @@ internal object AndroidHostSession {
                 visibility = if (snapshot.foreground) SurfaceVisibility.Visible else SurfaceVisibility.Hidden,
                 focus = if (snapshot.active) SurfaceFocus.Focused else SurfaceFocus.Unfocused,
             )
-        }
+        })
     }
 
     /** L'état lifecycle du runtime pour un instantané — initial ET publications (RUN-004). */
@@ -462,13 +500,17 @@ internal object AndroidHostSession {
      * (`WebHostPort.initialSnapshot`), borné au minimum valide (base 1×1 — une View attachée
      * mais pas encore mesurée rapporte des dimensions nulles et le modèle de surface exige des
      * tailles strictement positives). Les champs observés (attachment/visibility/focus)
-     * viennent du même instantané que le réducteur ; l'observation réelle des métriques
-     * suivra les mêmes callbacks.
+     * viennent du même instantané que le réducteur ; les insets viennent de `rootWindowInsets`
+     * — le même instantané partagé par la surface ET le réducteur, de sorte que la lecture
+     * initiale du binding (installé avant que la surface n'existe) retombe sur une observation
+     * identique : aucune divergence, aucune publication fantôme.
      */
+    @Suppress("DEPRECATION")
     private fun initialSurfaceState(view: View, snapshot: AndroidHostSnapshot): SurfaceState {
         val density = view.resources.displayMetrics.density.toDouble()
         val scaleFactor = if (density.isFinite() && density > 0.0) density else 1.0
         val physical = PhysicalSize(maxOf(1, view.width), maxOf(1, view.height))
+        val insets = view.rootWindowInsets
         return SurfaceState(
             attachment = if (snapshot.attachment) {
                 SurfaceAttachmentState.Attached
@@ -478,7 +520,12 @@ internal object AndroidHostSession {
             logicalSize = LogicalSize(physical.width / scaleFactor, physical.height / scaleFactor),
             physicalSize = physical,
             scaleFactor = scaleFactor,
-            safeAreaInsets = LogicalInsets(0.0, 0.0, 0.0, 0.0),
+            safeAreaInsets = LogicalInsets(
+                top = (insets?.systemWindowInsetTop ?: 0) / scaleFactor,
+                right = (insets?.systemWindowInsetRight ?: 0) / scaleFactor,
+                bottom = (insets?.systemWindowInsetBottom ?: 0) / scaleFactor,
+                left = (insets?.systemWindowInsetLeft ?: 0) / scaleFactor,
+            ),
             visibility = if (snapshot.foreground) SurfaceVisibility.Visible else SurfaceVisibility.Hidden,
             occlusion = SurfaceOcclusion.Visible,
             focus = if (snapshot.active) SurfaceFocus.Focused else SurfaceFocus.Unfocused,
