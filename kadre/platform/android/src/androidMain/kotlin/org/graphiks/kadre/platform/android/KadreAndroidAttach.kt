@@ -264,23 +264,28 @@ internal object AndroidHostSession {
                     // wrapper T1) est retenu pour le livrer au listener du seam.
                     val captureNative = AndroidViewPointerCaptureNative(view)
                     sessionSurface.capture = captureNative
+                    // Le seam natif de la fenêtre (phase 4, Task 1) câblé sur CETTE Activity —
+                    // construit UNE fois et remis aux DEUX consommateurs : le manager (les
+                    // commandes de fenêtre) et la surface (les interactions
+                    // `EnterFullscreen`/`ExitFullscreen` de Task 4) — le MÊME insets
+                    // controller, une seule vérité de readback pour le champ et l'interaction.
+                    val windowSeam = AndroidActivityWindowNative(owner as ComponentActivity)
                     val surface = AndroidHostSurface(
                         RuntimeProcessIds.nextSurfaceId(),
                         initialSurfaceState(view, initial),
                         leasedView = { view },
                         cursorNative = AndroidViewCursorNative(view),
                         pointerCaptureNative = captureNative,
+                        windowNative = windowSeam,
                     )
                     sessionSurface.surface = surface
-                    // Le seam natif de la fenêtre (phase 4, Task 1) câblé sur CETTE Activity —
-                    // la forme Activity seule (le cast est le même que `inputForwarderFor`).
                     // Le manager implémente `RuntimeSessionWindowManager` : le runtime lui
                     // installe la configuration de session (LA MÊME source de stamps que la
                     // surface) pendant l'attach, et `closeAction` termine le flux d'événements
                     // de la fenêtre à la teardown (après la fermeture de la surface).
                     val manager = AndroidActivityWindowManager(
                         primarySurface = surface,
-                        native = AndroidActivityWindowNative(owner as ComponentActivity),
+                        native = windowSeam,
                     )
                     RuntimeSessionComponents(
                         windows = manager,

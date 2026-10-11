@@ -33,7 +33,11 @@ import org.graphiks.kadre.surface.PointerCaptureMode
  * - [focusLost] est le pont P1 : la perte de focus fenêtre que la couture observe déjà (phase 3,
  *   `WindowFocusLost`) emprunte le MÊME chemin que la perte rapportée par le listener — le SDK
  *   libère la capture de lui-même à la perte de focus et le listener le rapportera ; le pont
- *   couvre la cohérence du seam propre.
+ *   couvre la cohérence du seam propre ;
+ * - [requestLock]/[releaseLock] sont la voie d'INTERACTION (phase 4, tâche 4) —
+ *   `InteractionAction.LockPointer`/`UnlockPointer`, D13 : la MÊME primitive de capture que le
+ *   champ, lancée du chemin d'activation transitoire, la confirmation toujours celle du
+ *   listener (le verrou Android EST une capture ; le mot publié reste `Confined`).
  *
  * Une capture demandée qui n'est jamais confirmée ne commite rien : l'état dit `None`, la
  * vérité publiée reste celle du SDK. Une confirmation que plus personne n'attend (le gain
@@ -170,6 +174,52 @@ internal class AndroidPointerCapture(
      */
     public fun focusLost() {
         listenerChanged(hasCapture = false)
+    }
+
+    /**
+     * L'admission du verrou par la voie d'INTERACTION (phase 4, tâche 4) —
+     * `InteractionAction.LockPointer` : la MÊME primitive de capture que le champ (Android n'a
+     * qu'une capture de pointeur ; le mot publié, à la confirmation du listener, reste
+     * `Confined`), lancée depuis le chemin d'activation transitoire que le champ ne peut pas
+     * porter (D13 — `applyMode` refuse `Locked` pour LE CHAMP, et c'est ici que le verrou vit).
+     *
+     * `null` dit « requête admise » — JAMAIS « capture prise » : la confirmation reste celle du
+     * listener, exactement comme pour le champ. La demande est retenue dans [pending], de sorte
+     * que la confirmation du SDK commite l'état publié par le chemin ordinaire (un gain sans
+     * demande vivante serait sinon absorbé). Un refus (`Unsupported(Interaction)` sous l'API 26
+     * — inatteignable par la voie publique : la kind d'interaction n'est annoncée qu'à partir
+     * de 26, mais le mot reste total) est rapporté tel quel, zéro appel natif.
+     */
+    public fun requestLock(): KadreFailure? = synchronized(gate) {
+        when {
+            apiLevel < 26 -> KadreFailure.Unsupported(KadreOperation.Interaction)
+            // Déjà en effet, ou tentative déjà en vol : rien de nouveau à demander — un second
+            // `requestCapture` serait un appel sans nouvelle décision derrière lui.
+            held || pending -> null
+            else -> {
+                native.requestCapture()
+                pending = true
+                null
+            }
+        }
+    }
+
+    /**
+     * La libération par la voie d'INTERACTION — `InteractionAction.UnlockPointer` : la
+     * primitive est posée SANS réduction (le miroir web, qui émet `exitPointerLock` tel quel —
+     * la voie d'interaction n'a pas d'état de réconciliation à consulter, et un release du SDK
+     * sur un pointeur non capturé est un no-op), la demande en vol est retirée, et `held` reste
+     * porté JUSQU'À la perte que le listener rapportera — c'est la perte rapportée qui publie
+     * le retour à `None` (le commit vit au listener, le même canal que le champ ; le chemin
+     * champ, lui, commite `None` DANS la passe `apply` qui dispose d'un commit synchrone et de
+     * SA réduction « rien à rendre » — la voie d'interaction n'en a ni l'un ni l'autre, son
+     * outcome ne porte que l'admission).
+     */
+    public fun releaseLock() {
+        synchronized(gate) {
+            native.releaseCapture()
+            pending = false
+        }
     }
 }
 

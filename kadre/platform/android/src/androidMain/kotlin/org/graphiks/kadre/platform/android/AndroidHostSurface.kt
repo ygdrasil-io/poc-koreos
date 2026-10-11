@@ -35,6 +35,9 @@ import org.graphiks.kadre.input.SurfaceInput
 import org.graphiks.kadre.input.SurfaceInputState
 import org.graphiks.kadre.input.TextInputConfig
 import org.graphiks.kadre.input.TextInputSession
+import org.graphiks.kadre.interaction.InteractionHandler
+import org.graphiks.kadre.interaction.InteractionKind
+import org.graphiks.kadre.interaction.InteractionRegistration
 import org.graphiks.kadre.internal.runtime.RawInputPort
 import org.graphiks.kadre.internal.runtime.RuntimeDropTransferBudget
 import org.graphiks.kadre.internal.runtime.RuntimeEventCollectorAllocator
@@ -87,6 +90,16 @@ import org.graphiks.kadre.surface.SurfaceUpdateOutcome
  * branche on-row. Task 4 a ajouté `: AndroidViewLeasePort` à cette déclaration : la View du host
  * n'est exposée qu'au block du bail ([withAndroidView], double opt-in), jamais ailleurs.
  *
+ * Depuis la phase 4 (Task 4), cette surface porte AUSSI le moteur d'interactions transitoires
+ * ([AndroidInteractionEngine], construit dans [installSessionConfiguration] de la même
+ * configuration de session que le réducteur d'entrée) : l'override
+ * `installInteractionHandler` y délègue (un handler par surface, `AlreadyInUse(Interaction)`
+ * — le mot du runtime), la delivery y dispatche les triggers `PointerPressed`/`KeyPressed`/
+ * `TouchStarted` dérivés de ses propres stimuli AVANT le stimulus ordinaire de chacun (le
+ * miroir web), et la capability `handlerInteractions` suit le MÊME fait câblé que l'entrée
+ * (`inputWired`) — l'ensemble annoncé y est une décision de construction : les fullscreen
+ * quand le seam fenêtre ([windowNative]) est câblé, la capture en PLUS à partir de l'API 26.
+ *
  * La source des stamps est celle de la session : comme la surface web, cette surface reçoit la
  * configuration de session par [RuntimePrimarySurfaceConfiguration.installSessionConfiguration],
  * que le runtime appelle pendant `controller.attach` — après la factory de surface (qui ne
@@ -126,6 +139,18 @@ internal class AndroidHostSurface(
      * tests de commit injectent un recorder.
      */
     private val pointerCaptureNative: AndroidPointerCapture.Native? = null,
+    /**
+     * Le seam natif de la fenêtre (phase 4, tâche 1) — les primitives [AndroidWindowNative]
+     * que le commit des champs supportés de la FENÊTRE pose, câblé par la couture sur
+     * l'Activity de la forme Activity seule (une View n'a pas de fenêtre). Depuis la phase 4
+     * (Task 4), la PRÉSENCE du seam est aussi le fait de construction qui décide de
+     * l'annonce des kinds d'interaction `EnterFullscreen`/`ExitFullscreen` — pas de seam, pas
+     * de promesse de plein écran, la même discipline que le `cursorNative`, le
+     * `pointerCaptureNative` et le `inputWired` de l'entrée : on n'annonce jamais un commit
+     * qui ne peut pas arriver. Le MÊME slot que le manager de fenêtres reçoit de la couture —
+     * une seule vérité de readback pour le champ et pour l'interaction.
+     */
+    private val windowNative: AndroidWindowNative? = null,
     /**
      * La révision de la plateforme, lue au construction en production ([Build.VERSION.SDK_INT])
      * et injectée par les tests : le niveau d'API décide de la DISPONIBILITÉ publiée de
@@ -236,6 +261,29 @@ internal class AndroidHostSurface(
      */
     @Volatile
     private var inputDelivery: AndroidInputDelivery? = null
+
+    /**
+     * Le moteur d'interactions transitoires (phase 4, Task 4) — construit par
+     * [installSessionConfiguration] de la MÊME configuration de session que le réducteur
+     * d'entrée (la policy fenêtre, une gate du même allocateur, le handler d'échec de
+     * session, le budget des requêtes pendentives — le miroir web
+     * `WebHostSession.kt:1002-1011`), possédé par cette surface, partagé avec la delivery qui
+     * y dispatche les triggers dérivés de ses propres stimuli. Volatile, la même discipline
+     * que [surfaceInput] : écrit une fois sur le thread principal de l'attach, lu par les
+     * coroutines applicatives (via l'override `installInteractionHandler`).
+     */
+    @Volatile
+    private var interactionEngine: AndroidInteractionEngine? = null
+
+    /**
+     * Le fait câblé des interactions (phase 4, Task 4) — le MÊME fait [inputWired] que
+     * l'observation d'entrée : les triggers d'interaction ne naissent QUE du chemin d'entrée
+     * (la delivery les dérive des stimuli qu'elle accepte), un attach sans wrapper n'en verra
+     * jamais aucune — on n'annonce pas une autorité qui ne peut jamais s'exercer. Posé par
+     * [observationInstalled], retiré par [close]. Volatile, la discipline commune.
+     */
+    @Volatile
+    private var interactionsWired: Boolean = false
 
     /**
      * L'entrée pré-install de CETTE surface — un instantané honnête par surface (toutes les
@@ -551,11 +599,18 @@ internal class AndroidHostSurface(
      * - `sessionFailureHandler` : tel quel ; les diagnostics d'entrée (débordements) partent
      *   sur le [failureReporter] de la surface.
      *
-     * Les interactions synchrones (`RuntimeSynchronousInteraction`) ne sont PAS câblées : le
-     * seam ne les expose pas (elles vivent derrière `RuntimeWindowManager.
-     * dispatchSynchronousInteraction` et le port d'interaction du port web, sans homologue
-     * Android en phase 3) — le différé est épinglé par le test cas 6, les interactions armées
-     * restent la phase 4.
+     * Depuis la phase 4 (Task 4), la MÊME configuration construit le moteur d'interactions
+     * transitoires ([AndroidInteractionEngine] — le miroir web
+     * `WebHostSession.kt:1002-1011` : la policy FENÊTRE, une gate de plus du même allocateur,
+     * le handler d'échec de session, le budget `resources.maxPendingInteractionRequests`, LA
+     * MÊME source de stamps) et le remet à la delivery, qui y dispatche les triggers dérivés
+     * de ses stimuli AVANT le stimulus ordinaire de chacun. L'ensemble annoncé y est une
+     * décision de construction — les fullscreen quand le seam fenêtre ([windowNative], la
+     * forme Activity) est câblé, la capture (`LockPointer`/`UnlockPointer`) en PLUS à partir
+     * de l'API 26 ; `OpenWindow`, `BeginWindowMove`/`BeginWindowResize` et `AcceptDrop` n'y
+     * sont jamais (pas de seconde Activity, pas de primitive de fenêtre, le drop est phase 6).
+     * La capability suit plus tard le FAIT câblé ([observationInstalled]) — la construction
+     * seule ne promet rien, le miroir du réducteur d'entrée.
      *
      * La source des stamps reste la seule valeur dont Task 1 a besoin au-delà de l'entrée.
      * Une surface qui a cessé d'admettre abandonne la configuration avec les stimuli qui
@@ -596,10 +651,27 @@ internal class AndroidHostSurface(
             sessionFailureHandler = sessionFailureHandler,
         )
         surfaceInput = input
+        // Le moteur d'interactions (phase 4, Task 4) — la même configuration, une gate de plus
+        // du même allocateur, le miroir web : la construction seule ne publie RIEN, la
+        // capability suivra le fait câblé à l'installation de l'observation.
+        val engine = AndroidInteractionEngine(
+            surfaceId = id,
+            windowNative = windowNative,
+            pointerCapture = pointerCapture,
+            apiLevel = apiLevel,
+            deliveryPolicy = deliveryPolicy,
+            eventCollectorGate = allocator.newGate(maxCollectorsPerFlow),
+            failureReporter = failureReporter,
+            sessionFailureHandler = sessionFailureHandler,
+            maxPendingInteractionRequests = resources.maxPendingInteractionRequests,
+            stampSource = source,
+        )
+        interactionEngine = engine
         inputDelivery = AndroidInputDelivery(
             surfaceId = id,
             surfaceInput = input,
             committedState = { mutableState.value },
+            interactions = engine,
         )
     }
 
@@ -638,15 +710,27 @@ internal class AndroidHostSurface(
             }
             // Le fait câblé de la capture (Task 3) : le SEAM porte les primitives, mais le
             // commit vit au LISTENER d'état du SDK — le canal `Window.Callback.
-            // onPointerCaptureChanged`, enchaîné par le MÊME wrapper que l'observation d'entrée.
-            // `inputWired` nomme CE canal : sans lui (forme View, ou Activity dont `window.
-            // callback` est null) la confirmation ne peut jamais arriver et la capability reste
-            // à son refus — on n'annonce jamais un commit qui ne peut pas arriver.
+            // onPointerCaptureChanged`, enchaîné par ce wrapper-là. `inputWired` nomme CE
+            // canal : sans lui (forme View, ou Activity dont `window.callback` est null) la
+            // confirmation ne peut jamais arriver et la capability reste à son refus — on
+            // n'annonce jamais un commit qui ne peut pas arriver.
+            //
+            // Le MÊME fait porte la capability d'interactions (phase 4, Task 4) : les triggers
+            // d'interaction naissent du chemin d'entrée seul (la delivery les dérive des
+            // stimuli qu'elle accepte), donc « pas de wrapper, pas d'autorité d'interaction »
+            // — l'annonce exacte du moteur (le miroir web : handler interactions = annoncé,
+            // armé = refusé, jamais l'inverse).
+            val engine = interactionEngine
+            interactionsWired = inputWired && engine != null
             mutableCapabilities.value = androidSurfaceCapabilities(
                 cursorCommittable = cursorNative != null,
                 pointerCapture = pointerCaptureCapability(
                     wired = pointerCaptureNative != null && inputWired,
                     apiLevel = apiLevel,
+                ),
+                handlerInteractions = handlerInteractionsCapability(
+                    wired = interactionsWired,
+                    advertised = engine?.advertised,
                 ),
             )
         }
@@ -686,6 +770,10 @@ internal class AndroidHostSurface(
             // M-3 : la source de la View meurt avec la surface — un bail admis avant close
             // mais dont la lecture suit le teardown ne reçoit jamais la View démontée.
             viewSource = null
+            // Le fait câblé des interactions meurt avec la surface (phase 4, Task 4) :
+            // l'override consulte l'admission d'abord (Closed) — le drapeau est remis pour la
+            // même honnêteté que les capabilities, pas pour la garde.
+            interactionsWired = false
             redrawScheduler.cancel()
             // Les capabilities d'abord : indisponibles au plus tard au détached, ici avant.
             mutableCapabilities.value = unsupportedSurfaceCapabilities()
@@ -698,6 +786,11 @@ internal class AndroidHostSurface(
                 )
             }
         }
+        // Le moteur d'interactions ferme ICI (phase 4, Task 4) — le miroir de
+        // `MinimalWindowSurface.detach` : la registration vivante est fermée, les requêtes
+        // pendentives abandonnées `Closed(Interaction)`, plus aucun dispatch n'informe
+        // quiconque. Idempotent (le drapeau du moteur et celui du runtime).
+        interactionEngine?.close()
         // Le réducteur d'entrée ferme EN DERNIER — l'état terminal qu'il ne peut plus
         // publier est déjà dehors ; sa fermeture achève le flux d'événements d'entrée et
         // refuse tout stimulus ultérieur, une fois et une seule (idempotent).
@@ -756,6 +849,38 @@ internal class AndroidHostSurface(
                 SurfaceEvent.RedrawRequested(mutableState.value.revision, source()),
             )
         }
+    }
+
+    /**
+     * L'admission de l'unique handler d'interactions de cette surface (phase 4, Task 4) — le
+     * miroir web (`WebHostSession.installInteractionHandler :1065-1080`), la délégation au
+     * moteur commun étant toute l'histoire (le runtime porte le token single-use, la
+     * sérialisation et la règle d'unicité `AlreadyInUse(Interaction)`). Les gardes, dans
+     * l'ordre :
+     *
+     * 1. l'admission d'abord — une surface terminale répond `Closed(Surface)`, partout pareil ;
+     * 2. sans moteur (la configuration de session n'a pas installé) —
+     *    `Unsupported(InstallInteractionHandler)`, la failure que la capability pré-install
+     *    décrit (le miroir web exact) ;
+     * 3. sans fait câblé ([interactionsWired] — pas de wrapper d'entrée) ou sans annonce
+     *    (aucun kind annoncé : les seams de construction manquent) — le même refus : on ne
+     *    donne jamais une autorité dont les triggers ne peuvent jamais naître.
+     *
+     * Une registration fermée libère la place (le mot du runtime) ; les interactions armées
+     * restent le refus hérité ([armInteraction] n'est PAS surchargé — aucune plateforme
+     * n'arme, le miroir web et le mot `Unsupported(ArmInteraction)` de la capability).
+     */
+    @OptIn(DelicateKadreApi::class)
+    override fun installInteractionHandler(
+        handler: InteractionHandler,
+    ): KadreResult<InteractionRegistration> {
+        admissionFailure()?.let { return it }
+        val engine = interactionEngine
+            ?: return KadreResult.Failure(KadreFailure.Unsupported(KadreOperation.InstallInteractionHandler))
+        if (!interactionsWired || engine.advertised.isEmpty()) {
+            return KadreResult.Failure(KadreFailure.Unsupported(KadreOperation.InstallInteractionHandler))
+        }
+        return engine.install(handler)
     }
 
     /**
@@ -982,6 +1107,7 @@ private fun PropertyChange<*>.requireRefused(property: SurfaceProperty) {
 private fun androidSurfaceCapabilities(
     cursorCommittable: Boolean,
     pointerCapture: Capability<Set<PointerCaptureMode>>,
+    handlerInteractions: Capability<Set<InteractionKind>>,
 ): SurfaceCapabilities =
     unsupportedSurfaceCapabilities().copy(
         platformAccess = Capability.Supported(Unit, FeatureAvailability.Available),
@@ -995,7 +1121,27 @@ private fun androidSurfaceCapabilities(
             Capability.Unsupported(KadreFailure.Unsupported(KadreOperation.UpdateSurface))
         },
         pointerCapture = pointerCapture,
+        handlerInteractions = handlerInteractions,
     )
+
+/**
+ * La capability `handlerInteractions` publiée (phase 4, Task 4) — l'annonce EXACTE du moteur
+ * quand le fait câblé tient (le miroir web `WebHostSession.kt:1041-1043` : `Supported(<les
+ * kinds annoncés>, Available)` — `Available` seulement après une installation réelle, la
+ * sémantique C de BACKEND-CAPABILITIES), le refus d'origine sinon : pre-install, attach sans
+ * wrapper d'entrée, ou construction sans aucun kind annoncé (un ensemble vide serait une
+ * promesse que rien ne peut honorer). `armedInteractions` reste le refus de la table de base —
+ * AUCUNE plateforme n'arme, la token du handler est la seule autorité d'interaction.
+ */
+private fun handlerInteractionsCapability(
+    wired: Boolean,
+    advertised: Set<InteractionKind>?,
+): Capability<Set<InteractionKind>> =
+    if (wired && !advertised.isNullOrEmpty()) {
+        Capability.Supported(advertised, FeatureAvailability.Available)
+    } else {
+        Capability.Unsupported(KadreFailure.Unsupported(KadreOperation.InstallInteractionHandler))
+    }
 
 /**
  * La capability `pointerCapture` publiée — les DEUX modes que la plateforme peut honorer,

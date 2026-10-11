@@ -6,8 +6,11 @@ import org.graphiks.kadre.diagnostics.KadreFailure
 import org.graphiks.kadre.diagnostics.KadreOperation
 import org.graphiks.kadre.diagnostics.KadreResult
 import org.graphiks.kadre.input.KeyState
+import org.graphiks.kadre.input.PointerButtonState
+import org.graphiks.kadre.input.TouchPhase
 import org.graphiks.kadre.internal.runtime.RuntimeEventCollectorAllocator
 import org.graphiks.kadre.internal.runtime.RuntimeSurfaceInput
+import org.graphiks.kadre.internal.runtime.RuntimeSynchronousInteraction
 import org.graphiks.kadre.internal.runtime.SurfaceStimulus
 import org.graphiks.kadre.internal.runtime.TextInputCursorCommand
 import org.graphiks.kadre.internal.runtime.TextInputDocumentCommand
@@ -113,6 +116,22 @@ internal fun sessionCollectorAllocator(allocator: Any): RuntimeEventCollectorAll
  *   PHYSIQUES de la View et le scale factor de l'état COMMIS de la surface, et chaque
  *   stimulus rendu est `accept()` dans l'ordre.
  *
+ * **Les interactions synchrones (phase 4, Task 4)** — l'ordre AppKit (`DESIGN.md:983-989`), le
+ * miroir web « dans le callback DOM, avant le stimulus ordinaire » : CHAQUE stimulus porteur
+ * d'un fait déclencheur — une pression bouton du lane pointeur (`PointerButtonChanged` Pressed,
+ * `ACTION_BUTTON_PRESS` d'une souris comme la pression `Primary` d'un stylet), un down de
+ * contact (`TouchChanged` Started), un key down (`KeyChanged` d'une touche en pression, les
+ * auto-repeats du même voyage que le web : chaque keydown dispatch) — est PRÉCÉDÉ de la
+ * dispatch de son trigger ([AndroidInteractionEngine.dispatchInteraction]) : le handler
+ * applicatif est informé, son token consommé éventuellement, PUIS le stimulus ordinaire du
+ * MÊME fait est accepté dans le réducteur. Les triggers sont dérivés des STIMULI mêmes — les
+ * réductions du tracker (down doublon, contact hors bornes, geste muet) décident donc aussi
+ * du trigger, les deux lanes ne peuvent pas diverger sur l'événement observé (le mot du miroir
+ * web : « the contact table is what the ordinary path reads right after »). Une touche hors
+ * table ne déclenche rien : il n'y a pas de stimulus ordinaire à précéder. Sans handler
+ * installé, la dispatch du moteur sort tôt — le stimulus ordinaire coule seul (le miroir web
+ * : la dispatch ne court que derrière un handler vivant).
+ *
  * Contrat de thread : la delivery est construite et possédée par
  * `AndroidHostSurface.installSessionConfiguration` (le thread principal de l'attach) et
  * n'est appelée que depuis le thread principal Android — la même discipline que le wrapper
@@ -122,11 +141,25 @@ internal class AndroidInputDelivery(
     private val surfaceId: SurfaceId,
     private val surfaceInput: RuntimeSurfaceInput,
     private val committedState: () -> SurfaceState,
+    /**
+     * Le moteur d'interactions (Task 4) — construit avec la MÊME configuration de session par
+     * `installSessionConfiguration`, présent dès que cette delivery existe : la dispatch d'un
+     * trigger n'informe que derrière un handler vivant (le filtre du runtime), jamais derrière
+     * une promesse.
+     */
+    private val interactions: AndroidInteractionEngine,
 ) {
     private val tracker = AndroidMotionTracker(surfaceId)
 
     /** Les observations qui précèdent l'install — l'ordre d'arrivée est l'ordre de replay. */
     private val pending = ArrayDeque<PendingObservation>()
+
+    /**
+     * L'allocateur d'identités tactiles des triggers (Task 4) — un `TouchStarted` est
+     * dispatché avant le stimulus ordinaire du même down, rien d'autre n'a alloué d'identité
+     * (le miroir `WebTouchInteractions`).
+     */
+    private val touchTriggers = AndroidTouchInteractionTriggers()
 
     private var installed: Boolean = false
 
@@ -195,13 +228,25 @@ internal class AndroidInputDelivery(
         }
     }
 
-    /** Une touche mappée → `KeyChanged` complet ; hors table → rien (forwarded-only, T1). */
+    /**
+     * Une touche mappée → `KeyPressed` en interaction PUIS `KeyChanged` complet ; hors table →
+     * rien (forwarded-only, T1). La relation physique est celle que le stimulus ordinaire du
+     * MÊME down porte — le trigger ne lit jamais une identité que l'ordinaire ne porterait pas.
+     * Une RELÈVE ne déclenche pas (le miroir web : keydown seul) ; un auto-repeat, oui — chaque
+     * keydown dispatch, le voyage du web est le même.
+     */
     private fun deliverKey(observation: AndroidInputObservation.Key) {
+        val physicalKey = AndroidKeyMapper.physicalKey(observation.nativeKeyCode)
         if (AndroidKeyMapper.hidUsage(observation.nativeKeyCode) == null) return
+        if (observation.keyState == KeyState.Pressed) {
+            // L'interaction informe le handler AVANT que le stimulus ordinaire du même down
+            // n'atteigne le réducteur (l'ordre AppKit, le miroir web).
+            interactions.dispatchInteraction(RuntimeSynchronousInteraction.KeyPressed(physicalKey))
+        }
         surfaceInput.accept(
             SurfaceStimulus.KeyChanged(
                 surfaceId = surfaceId,
-                physicalKey = AndroidKeyMapper.physicalKey(observation.nativeKeyCode),
+                physicalKey = physicalKey,
                 logicalKey = AndroidKeyMapper.logicalKey(observation.nativeKeyCode, observation.unicodeChar),
                 location = AndroidKeyMapper.location(observation.isSystemKey, observation.metaState),
                 keyState = observation.keyState,
@@ -226,7 +271,8 @@ internal class AndroidInputDelivery(
     }
 
     /**
-     * Une motion : le tracker décide, chaque stimulus rendu part dans l'ordre. L'offset
+     * Une motion : le tracker décide, chaque stimulus rendu part dans l'ordre — PRÉCÉDÉ, quand
+     * il porte un fait déclencheur ([triggerFor]), de la dispatch de son interaction. L'offset
      * ([offsetX]/[offsetY] — l'origine de la View dans l'espace fenêtre, échantillonné par la
      * couture au moment du dispatch) voyage avec l'observation : le tracker convertit les
      * coordonnées fenêtre du dispatch en view-local AVANT ses gates et son mapping.
@@ -246,7 +292,44 @@ internal class AndroidInputDelivery(
             scaleFactor = state.scaleFactor,
             viewOffsetX = offsetX,
             viewOffsetY = offsetY,
-        ).forEach(surfaceInput::accept)
+        ).forEach { stimulus ->
+            // L'interaction informe le handler AVANT que le stimulus ordinaire du MÊME fait
+            // n'atteigne le réducteur (l'ordre du noyau : interaction d'abord, stimulus
+            // ordinaire ensuite). Sans handler vivant, la dispatch du moteur sort tôt et le
+            // stimulus ordinaire coule seul.
+            val trigger = triggerFor(stimulus)
+            if (trigger != null) interactions.dispatchInteraction(trigger)
+            surfaceInput.accept(stimulus)
+        }
+    }
+
+    /**
+     * Le trigger d'interaction d'un stimulus ordinaire, ou `null` — la dérivation lit le
+     * STIMULUS même, jamais l'observation brute : les réductions du tracker (down doublon,
+     * contact hors bornes, geste muet, position non finie) décident aussi du trigger, les deux
+     * lanes ne peuvent pas diverger sur l'événement observé (le miroir web : « the contact
+     * table is what the ordinary path reads right after »). Les deux familles du plan :
+     *
+     * - une pression bouton du lane pointeur (`ACTION_BUTTON_PRESS` d'une souris comme la
+     *   pression `Primary` d'un stylet) → `PointerPressed(button, position, pressure)` — la
+     *   pression du modèle voyage TELLE QUELLE, jamais narquée ;
+     * - un down de contact (le lane touch) → `TouchStarted(touchId, position)` — l'identité
+     *   tactile est celle du trigger ([AndroidTouchInteractionTriggers]), allouée ici car rien
+     *   d'autre n'a encore alloué la sienne.
+     */
+    private fun triggerFor(stimulus: SurfaceStimulus): RuntimeSynchronousInteraction? = when {
+        stimulus is SurfaceStimulus.PointerButtonChanged &&
+            stimulus.buttonState == PointerButtonState.Pressed ->
+            RuntimeSynchronousInteraction.PointerPressed(
+                button = stimulus.button,
+                position = stimulus.position,
+                pressure = stimulus.pressure,
+            )
+
+        stimulus is SurfaceStimulus.TouchChanged && stimulus.phase == TouchPhase.Started ->
+            touchTriggers.started(stimulus.position)
+
+        else -> null
     }
 
     /** Une observation bufferisée : key/focus telle quelle, motion avec ses bornes et son offset copiés. */
