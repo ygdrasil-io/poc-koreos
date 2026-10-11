@@ -46,8 +46,12 @@ internal class DemoNoteWindows(private val noteLayer: HTMLElement) : NoteWindowH
         val key = NoteKey(nextKey.incrementAndFetch())
         val element = (document.createElement("div") as HTMLElement).also { note ->
             note.className = NOTE_CLASS
-            // Cascade : chaque note se décale de la précédente, comme des fenêtres empilées.
-            val offset = notes.size * NOTE_CASCADE_STEP
+            // Cascade : la place suit la CLÉ monotone de la note, pas le nombre de notes
+            // vivantes — fermer puis rouvrir ne rejoue jamais la place d'une note encore
+            // ouverte (un décompte vivant renotait la même place après chaque fermeture).
+            // Huit places cyclent ; une neuvième note VIVANTE réutiliserait la première —
+            // borne honnête d'une démo, jamais atteinte par le scénario de la visite.
+            val offset = ((key.value - 1) % CASCADE_SLOTS) * NOTE_CASCADE_STEP
             note.style.left = "${NOTE_MARGIN + offset}px"
             note.style.top = "${NOTE_MARGIN + offset}px"
         }
@@ -111,5 +115,6 @@ internal class DemoNoteWindows(private val noteLayer: HTMLElement) : NoteWindowH
         const val NOTE_TITLE = "Notes"
         const val NOTE_MARGIN = 48
         const val NOTE_CASCADE_STEP = 32
+        const val CASCADE_SLOTS = 8
     }
 }
