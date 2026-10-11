@@ -35,7 +35,7 @@ Erreur `wl_display` ou déconnexion du compositor après admission : terminaison
 
 ## F3 — Fermeture
 
-`stop` idempotent (retours multiples sûrs). Ordre de teardown : (1) plus aucun callback éligible — admission fermée, dernière callback admise attendue ; (2) destruction des proxies dans l'ordre d'ownership ; (3) flush final ; (4) fermeture des fds (socket ou fd `WAYLAND_SOCKET` — R7, réutilisé puis fermé exactement une fois — et fds du wake, chacun un owner idempotent `PosixWakeup`). Callback tardive après le retour de `stop` : interdite (quiescence en (1) la rend impossible). Arrêt depuis un autre thread et annulation : couverts par SN-5/SN-7 ; le wake sert de réveil du poll.
+`stop` idempotent (retours multiples sûrs). Ordre de teardown : (1) plus aucun callback éligible — admission fermée, dernière callback admise attendue ; (2) destruction des proxies dans l'ordre d'ownership ; (3) flush final ; (4) fermeture des fds (socket ou fd `WAYLAND_SOCKET` — R7, réutilisé puis fermé exactement une fois — et fds du wake, chacun un owner idempotent `PosixWakeup`). Callback tardive après le retour de `stop` : interdite (quiescence en (1) la rend impossible). Arrêt depuis un autre thread, annulation applicative et déconnexion : couverts par SN-5, SN-9 et SN-7 ; le wake sert de réveil du poll.
 
 ## Scénarios positifs/négatifs
 
@@ -54,8 +54,9 @@ Exécutés sur Weston headless (baseline B-3/B-5) ; l'observation passe uniqueme
 | SN-6 | flush saturé (`EAGAIN`) puis drain | surveillance de l'écriture, aucun blocage, aucun payload perdu | O2 |
 | SN-7 | déconnexion du compositor après admission | teardown ordonné + `SessionOutcome.Failed`, pas de reconnexion (F2) | O3 |
 | SN-8 | version annoncée < minimal requis (B-4) | failure avant session F1-5 avec versions en diagnostic | O3 |
+| SN-9 | annulation applicative (job parent cancel) pendant la session headless | teardown complet F3, outcome `Stopped`, zéro fd fui | O2 |
 
-Couverture des risques §7 de la roadmap (tranche 1) : lecture préparée abandonnée et stop pendant poll (SN-5), flush saturé (SN-6), wake perdu/répété (P-2), fds fermés (P-1, SN-3).
+Couverture des risques §7 de la roadmap (tranche 1) : lecture préparée abandonnée et stop pendant poll (SN-5), flush saturé (SN-6), wake perdu/répété (P-2), fds fermés (P-1, SN-3), annulation (SN-9).
 
 ## Allocation prévue de contrats
 
