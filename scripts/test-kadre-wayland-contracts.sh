@@ -72,6 +72,7 @@ rm -rf "$EVIDENCE_DIRECTORY"
 cd "$REPO_ROOT"
 
 # Compositor réel requis : indisponible = échec de gate, pas un skip.
+mkdir -p "$DIAGNOSTICS_DIRECTORY"
 "$SCRIPT_DIR/ci-wayland-runtime.sh" version | tee -a "$DIAGNOSTICS_DIRECTORY/weston-version.log"
 "$SCRIPT_DIR/ci-wayland-runtime.sh" start
 trap '$SCRIPT_DIR/ci-wayland-runtime.sh stop || true' EXIT

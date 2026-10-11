@@ -45,6 +45,7 @@ val waylandNativeTests = tasks.register<Test>("waylandNativeTests") {
     classpath = tasks.named<Test>("jvmTest").get().classpath
     jvmArgs(
         "--enable-native-access=ALL-UNNAMED",
+        "--add-opens=java.base/java.io=ALL-UNNAMED",
         "-XX:ErrorFile=${layout.buildDirectory.file("ci-diagnostics/hs_err_pid%p.log").get().asFile.absolutePath}",
     )
     filter.includeTestsMatching(
