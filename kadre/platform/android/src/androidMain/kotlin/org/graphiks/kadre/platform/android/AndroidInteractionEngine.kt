@@ -145,6 +145,14 @@ internal class AndroidInteractionEngine(
      * Sans handler installé, le dispatch du runtime sort tôt : le stamp est consommé (le miroir
      * exact de l'ordre web, qui mappe l'événement avant que `dispatch` ne filtre), le handler
      * n'est jamais invoqué, et le stimulus ordinaire coule seul — la règle du plan.
+     *
+     * Divergence web DÉLIBÉRÉE et bénigne : le web garde la PRÉSENCE du handler AVANT le
+     * mapping (un trigger sans handler ne mappe donc rien et ne consomme aucun stamp), quand
+     * Android mappe le trigger depuis son stimulus puis sort tôt du dispatch — un stamp de
+     * session est consommé PAR TRIGGER DÉLIVRÉ même sans handler. La séquence reste monotone
+     * et unique (une consommation par trigger, jamais partagée), aucun handler ne peut la
+     * voir, et aucun garde-fou du runtime n'en dépend : consommer sans témoin est exactement
+     * ce que le web fait d'un mapping dont le dispatch est filtré.
      */
     fun dispatchInteraction(trigger: RuntimeSynchronousInteraction) {
         if (closed) return

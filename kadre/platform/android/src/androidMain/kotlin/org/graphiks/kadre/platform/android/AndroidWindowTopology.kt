@@ -213,6 +213,15 @@ internal class AndroidActivityWindowManager(
     primarySurface: HostSurface,
     private val nextRequestId: () -> WindowRequestId = RuntimeProcessIds::nextWindowRequestId,
     native: AndroidWindowNative? = null,
+    /**
+     * Le dispatch du thread host de la fenêtre — les primitives du seam touchent la hiérarchie
+     * de vues de l'Activity (`setTitle` → Toolbar/TextView, les flags → la dispatch des
+     * attributs, les insets → le contrôleur), toutes main-thread Android : le commit passe par
+     * [AndroidMainThreadDispatch] (inline si l'appelant y est déjà, transfert annulable sinon).
+     * Les tests hôtes injectent un dispatch inline — aucun transfert, le corps court sur le
+     * thread d'appel comme avant.
+     */
+    private val hostThread: AndroidHostThreadDispatch = AndroidMainThreadDispatch,
 ) : WindowManager, RuntimeSessionWindowManager {
 
     /**
@@ -231,7 +240,9 @@ internal class AndroidActivityWindowManager(
     private val activityWindow: AndroidActivityWindow = AndroidActivityWindow(
         primarySurface,
         native,
-    ) { stampSource }
+        { stampSource },
+        hostThread,
+    )
 
     private val primaryWindow: Window = activityWindow
 
@@ -313,6 +324,7 @@ private class AndroidActivityWindow(
     surface: HostSurface,
     private val native: AndroidWindowNative?,
     private val stampSource: () -> (() -> EventStamp)?,
+    private val hostThread: AndroidHostThreadDispatch,
 ) : Window {
 
     override val id: WindowId = RuntimeProcessIds.nextWindowId()
@@ -404,20 +416,32 @@ private class AndroidActivityWindow(
      * P2) et `tryEmit` sur le flux borné (jamais bloquante, drop documenté au débordement).
      * Toute la décision tient sous [lock] : l'ordre du flux d'événements est l'ordre des
      * stamps, lui-même l'ordre des publications.
+     *
+     * Le DISPATCH DU THREAD HOST : tout le corps — admission, primitives du seam, readbacks,
+     * publication — court sur le thread principal Android ([hostThread], inline si l'appelant
+     * y est déjà, le miroir du bail de la surface) — les primitives touchent la hiérarchie de
+     * vues de l'Activity (`setTitle` → Toolbar/TextView, `addFlags` → la dispatch des
+     * attributs, `insetsController.hide` → le contrôleur), toutes main-thread
+     * (`ViewRootImpl.checkThread`). Le verrou reste pris DANS le dispatch : la mutation et
+     * son readback sont ATOMIQUES sur le même thread — l'état publié porte ce que le natif
+     * rapporte, jamais une valeur périmée d'un aller-retour de boucle.
      */
-    override suspend fun apply(update: WindowUpdate): KadreResult<WindowUpdateOutcome> = lock.withLock {
-        val current = mutableState.value
-        update.expectedRevision?.let { expected ->
-            if (expected != current.revision) {
-                return KadreResult.Failure(
-                    KadreFailure.StaleRevision(expected.value, current.revision.value),
-                )
-            }
-        }
-        invalidClearOnSupportedField(update)?.let { field ->
-            return KadreResult.Failure(KadreFailure.InvalidRequest(field))
-        }
-        val operationId = RuntimeProcessIds.nextWindowOperationId()
+    override suspend fun apply(update: WindowUpdate): KadreResult<WindowUpdateOutcome> = hostThread.dispatch {
+        lock.withLock {
+            val current = mutableState.value
+            val revisionRefusal: KadreResult<WindowUpdateOutcome>? = update.expectedRevision
+                ?.takeIf { expected -> expected != current.revision }
+                ?.let { expected ->
+                    KadreResult.Failure(
+                        KadreFailure.StaleRevision(expected.value, current.revision.value),
+                    )
+                }
+            val admissionRefusal: KadreResult<WindowUpdateOutcome>? = revisionRefusal
+                ?: invalidClearOnSupportedField(update)?.let { field ->
+                    KadreResult.Failure(KadreFailure.InvalidRequest(field))
+                }
+            if (admissionRefusal != null) return@withLock admissionRefusal
+            val operationId = RuntimeProcessIds.nextWindowOperationId()
         val rejected = mutableListOf<RejectedWindowField>()
         var next = current
 
@@ -535,6 +559,7 @@ private class AndroidActivityWindow(
                 WindowUpdateOutcome.PartiallyApplied(operationId, published, rejected)
             },
         )
+        }
     }
 
     override suspend fun requestAttention(attention: WindowAttention): KadreResult<Unit> =

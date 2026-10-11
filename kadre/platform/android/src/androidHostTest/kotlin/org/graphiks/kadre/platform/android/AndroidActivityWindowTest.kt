@@ -380,6 +380,12 @@ class AndroidActivityWindowTest {
             primarySurface = primarySurface(),
             nextRequestId = RuntimeProcessIds::nextWindowRequestId,
             native = native,
+            // Dispatch INLINE : le corps de `apply` court sur le thread d'appel comme avant —
+            // la production passe par AndroidMainThreadDispatch (les primitives du seam touchent
+            // la hiérarchie de vues, main-thread), les tests hôtes n'ont ni Looper ni vues.
+            hostThread = object : AndroidHostThreadDispatch {
+                override suspend fun <R> dispatch(block: suspend () -> R): R = block()
+            },
         )
 
     private fun primaryWindow(manager: AndroidActivityWindowManager): Window =

@@ -31,3 +31,11 @@ AND-004	android	scenario	android-input-stylus-mouse-boundary	org.graphiks.kadre.
 AND-004	android	sentinel	android-input-suppression-exact	org.graphiks.kadre.consumer.KadreConsumerInputContractTest	androidInputDefaultBehaviorSuppress
 AND-004	android	sentinel	android-input-no-double-delivery	org.graphiks.kadre.consumer.KadreConsumerInputContractTest	androidInputTwoSessionsIsolation
 AND-004	android	sentinel	android-input-contacts-reset	org.graphiks.kadre.consumer.KadreConsumerInputContractTest	androidInputFocusLossResets
+AND-005	android	scenario	android-window-commits-with-readback	org.graphiks.kadre.consumer.KadreConsumerWindowInteractionContractTest	androidWindowCommitsWithReadback
+AND-005	android	scenario	android-window-refused-fields-inert	org.graphiks.kadre.consumer.KadreConsumerWindowInteractionContractTest	androidWindowRefusedFieldsInert
+AND-005	android	scenario	android-window-back-host-owned	org.graphiks.kadre.consumer.KadreConsumerWindowInteractionContractTest	androidWindowBackHostOwned
+AND-005	android	scenario	android-surface-cursor-and-capture	org.graphiks.kadre.consumer.KadreConsumerWindowInteractionContractTest	androidSurfaceCursorAndCapture
+AND-005	android	scenario	android-interaction-token-authority	org.graphiks.kadre.consumer.KadreConsumerWindowInteractionContractTest	androidInteractionTokenAuthority
+AND-005	android	sentinel	android-window-native-gate	org.graphiks.kadre.consumer.KadreConsumerWindowInteractionContractTest	androidWindowRefusedFieldsInert
+AND-005	android	sentinel	android-capture-listener-confirmation	org.graphiks.kadre.consumer.KadreConsumerWindowInteractionContractTest	androidSurfaceCursorAndCapture
+AND-005	android	sentinel	android-interaction-unadvertised-refused	org.graphiks.kadre.consumer.KadreConsumerWindowInteractionContractTest	androidInteractionTokenAuthority
