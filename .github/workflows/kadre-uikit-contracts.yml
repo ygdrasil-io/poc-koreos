@@ -38,6 +38,19 @@ jobs:
       - name: Grant execute permission
         run: chmod +x gradlew scripts/test-uikit-simulator.sh
 
+      # H2 (diagnostic run PR 38109607559, run verte 38111601105) : sur le device FRAIS du
+      # runner, la première app lancée par XCTest peut rester connectée SANS jamais être
+      # activée (stall FrontBoard/SpringBoard du premier boot — trace : willConnectTo reçu,
+      # aucun didBecomeActive en ~5 min). Le pré-boot borne cette course : le device est
+      # booté et déclaré « fully booted » (bootstatus -b) AVANT le gate. Idempotent (déjà
+      # booté = no-op avalé) ; l'échec de la résolution du device reste fatal.
+      - name: Pre-boot the iPad simulator
+        run: |
+          set -euo pipefail
+          udid="$(xcrun simctl list devices available -j | python3 -c "import json, sys; devices = json.load(sys.stdin)['devices']; print(next(d['udid'] for ds in devices.values() for d in ds if d['name'] == 'iPad Pro 11-inch (M5)' and d.get('isAvailable', True)))")"
+          xcrun simctl boot "$udid" 2>/dev/null || true
+          xcrun simctl bootstatus "$udid" -b
+
       - name: Run iOS simulator UIKit contract gate
         run: ./scripts/test-uikit-simulator.sh ios
 
