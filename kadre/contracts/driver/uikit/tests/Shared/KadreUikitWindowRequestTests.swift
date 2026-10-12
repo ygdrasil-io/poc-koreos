@@ -238,6 +238,10 @@ final class KadreUikitWindowRequestTests: XCTestCase {
     /// seconde demande est refusée pareil : rien n'a été réservé par la première.
     func testWindowRequestWithoutProviderIsRejectedUnsupportedWithNoNativeEffect() throws {
         let providerCallsBefore = DriverWindowSceneProvider.shared.openCallCount
+        // Le compteur `connected` est GLOBAL au processus (accumulé sur toute la suite) :
+        // on fige la BASELINE au début du test — l'assertion porte sur le delta, pas sur
+        // une valeur absolue (sur iOS, les scénarios multi-scènes antérieurs l'ont gonflé).
+        let connectedBefore = DriverFixture.shared.connected.count
 
         let fixture = try primaryFixture()
         _ = try attach(fixture)
@@ -278,7 +282,7 @@ final class KadreUikitWindowRequestTests: XCTestCase {
         XCTAssertEqual(stateAfter.windows.count, 1, "no window may join the requester's list")
         XCTAssertTrue((stateAfter.primary?.surface as AnyObject?) === (stateBefore.primary?.surface as AnyObject?),
                       "the primary window must be untouched")
-        XCTAssertEqual(DriverFixture.shared.connected.count, 1,
+        XCTAssertEqual(DriverFixture.shared.connected.count, connectedBefore,
                        "no additional scene may connect on the refusal path")
 
         try stopAndAwaitTermination(fixture)
