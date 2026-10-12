@@ -30,7 +30,8 @@ val runtimeContractIds = listOf(
     "WIN-001", "WIN-002", "WIN-003", "WIN-004", "WIN-005", "WIN-006", "WIN-007", "WIN-008",
     "DSP-001", "RUN-007", "RUN-008", "INT-001", "CAP-001",
 )
-val contractEvidenceGateIds = appKitContractIds + runtimeContractIds + webContractIds + uikitContractIds
+val waylandContractIds = listOf("BCK-017", "SES-001", "SUR-001")
+val contractEvidenceGateIds = appKitContractIds + runtimeContractIds + webContractIds + uikitContractIds + waylandContractIds
 check(contractEvidenceGateIds.distinct().size == contractEvidenceGateIds.size) {
     "each configured contract evidence gate must have exactly one explicit producer"
 }
@@ -71,6 +72,7 @@ val validateContractRegistry by tasks.registering(JavaExec::class) {
             rootProject.file("kadre/backend/appkit/contracts/evidence.tsv"),
             rootProject.file("kadre/contracts/driver/web/contracts/evidence.tsv"),
             rootProject.file("kadre/contracts/driver/uikit/contracts/evidence.tsv"),
+            rootProject.file("kadre/backend/wayland/contracts/evidence.tsv"),
         ).joinToString(separator = ",") { it.absolutePath },
         contractEvidenceGateIds.joinToString(separator = ","),
     )
@@ -79,6 +81,7 @@ val validateContractRegistry by tasks.registering(JavaExec::class) {
         rootProject.file("kadre/backend/appkit/contracts/evidence.tsv"),
         rootProject.file("kadre/contracts/driver/web/contracts/evidence.tsv"),
         rootProject.file("kadre/contracts/driver/uikit/contracts/evidence.tsv"),
+        rootProject.file("kadre/backend/wayland/contracts/evidence.tsv"),
     )
 }
 
@@ -158,6 +161,86 @@ val generateAppKitContractEvidence by tasks.registering {
     description = "Generates and validates evidence for every active AppKit contract."
     dependsOn(validateAppKitContractEvidence)
     outputs.dir(appKitContractEvidenceDirectory)
+}
+
+val waylandContractRegistry = rootProject.file("kadre/contracts/registry/contracts.tsv")
+val waylandContractMapping = rootProject.file("kadre/backend/wayland/contracts/evidence.tsv")
+val waylandJvmJUnitReports = rootProject.file("kadre/backend/wayland/build/test-results/jvmTest")
+val waylandNativeJUnitReports = rootProject.file("kadre/backend/wayland/build/test-results/waylandNativeTests")
+val waylandContractEvidenceDirectory = rootProject.file("kadre/backend/wayland/build/contract-evidence")
+// La gate Wayland distingue adapter, libc, compositor/version et protocoles testés
+// (roadmap §7) : adapter `wayland-jvm`, cible `jvm`, preuves exécutées sous Linux.
+val waylandContractAdapter = "wayland-jvm"
+val waylandContractEvidenceTasks = waylandContractIds.filter(activeContractIds::contains).map { contractId ->
+    tasks.register<JavaExec>("generateWayland${contractId.replace("-", "")}ContractEvidence") {
+        group = "verification"
+        description = "Generates and validates $contractId evidence from the Wayland JUnit reports."
+        dependsOn("jvmMainClasses", ":kadre:backend:wayland:waylandContractTests")
+        classpath(jvmMain.output.allOutputs, jvmMain.runtimeDependencyFiles)
+        mainClass.set("org.graphiks.kadre.contracts.GenerateContractEvidenceKt")
+        val output = waylandContractEvidenceDirectory.resolve("$contractId.json")
+        args(
+            waylandContractRegistry.absolutePath,
+            waylandContractMapping.absolutePath,
+            listOf(waylandJvmJUnitReports, waylandNativeJUnitReports).joinToString(
+                separator = System.getProperty("path.separator"),
+            ) {
+                it.absolutePath
+            },
+            output.absolutePath,
+            contractEvidenceCommit.get(),
+            contractId,
+            contractEvidenceTarget,
+            waylandContractAdapter,
+        )
+        inputs.file(waylandContractRegistry)
+        inputs.file(waylandContractMapping)
+        inputs.dir(waylandJvmJUnitReports)
+        inputs.dir(waylandNativeJUnitReports)
+        inputs.property("contractCommit", contractEvidenceCommit)
+        inputs.property("contractTarget", contractEvidenceTarget)
+        inputs.property("contractAdapter", waylandContractAdapter)
+        outputs.file(output)
+    }
+}
+
+val validateWaylandContractEvidence by tasks.registering(JavaExec::class) {
+    group = "verification"
+    description = "Validates every active Wayland JVM contract evidence artifact."
+    dependsOn(waylandContractEvidenceTasks)
+    classpath(jvmMain.output.allOutputs, jvmMain.runtimeDependencyFiles)
+    mainClass.set("org.graphiks.kadre.contracts.ValidateContractEvidenceKt")
+    args(
+        waylandContractRegistry.absolutePath,
+        waylandContractMapping.absolutePath,
+        contractEvidenceCommit.get(),
+        contractEvidenceTarget,
+        "junit",
+        waylandContractIds.filter(activeContractIds::contains).joinToString(separator = ","),
+        rootProject.file("kadre/backend/wayland/build").absolutePath,
+        listOf(
+            "test-results/jvmTest",
+            "test-results/waylandNativeTests",
+        ).joinToString(separator = System.getProperty("path.separator")),
+    )
+    inputs.file(waylandContractRegistry)
+    inputs.file(waylandContractMapping)
+    inputs.dir(waylandContractEvidenceDirectory)
+    inputs.property("contractCommit", contractEvidenceCommit)
+    inputs.property("contractTarget", contractEvidenceTarget)
+    inputs.property("contractExecutions", "junit")
+    inputs.property("contractGateIds", waylandContractIds)
+    inputs.property(
+        "junitReportRelativeDirectories",
+        listOf("test-results/jvmTest", "test-results/waylandNativeTests"),
+    )
+}
+
+val generateWaylandContractEvidence by tasks.registering {
+    group = "verification"
+    description = "Generates and validates evidence for every active Wayland contract."
+    dependsOn(validateWaylandContractEvidence)
+    outputs.dir(waylandContractEvidenceDirectory)
 }
 
 val runtimeContractRegistry = rootProject.file("kadre/contracts/registry/contracts.tsv")
