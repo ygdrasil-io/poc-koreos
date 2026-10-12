@@ -278,6 +278,8 @@ final class KadreUikitWindowRequestTests: XCTestCase {
         XCTAssertEqual(stateAfter.windows.count, 1, "no window may join the requester's list")
         XCTAssertTrue((stateAfter.primary?.surface as AnyObject?) === (stateBefore.primary?.surface as AnyObject?),
                       "the primary window must be untouched")
+        XCTAssertEqual(DriverFixture.shared.connected.count, 1,
+                       "no additional scene may connect on the refusal path")
 
         try stopAndAwaitTermination(fixture)
     }
