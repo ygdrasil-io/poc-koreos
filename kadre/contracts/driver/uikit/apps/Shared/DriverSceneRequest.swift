@@ -24,6 +24,11 @@ enum DriverSceneRequest {
     /// toujours livrée (run sain : aucun « reçu » à +00.09s) — le délégué, lui, l'est toujours.
     private static var activationSeen = false
 
+    /// Une activation de lancement est-elle en vol ? Le provider de scènes (phase 4) y sur-
+    /// garde SES activations : jamais deux demandes d'activation mêlées (les connexions
+    /// arrivant pendant l'attente doivent rester corrélables à LEUR demande).
+    static var isBusy: Bool { inFlight }
+
     /// Le délégué de scène a vu une activation (`sceneDidBecomeActive`) — déverrouille les
     /// demandes et tente la suivante.
     static func sceneActivated() {

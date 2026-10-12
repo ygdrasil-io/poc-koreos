@@ -156,14 +156,18 @@ class UIKitWindowSceneManagerTest {
         override suspend fun awaitTermination(): SessionOutcome = SessionOutcome.Completed
     }
 
-    /** Un provider double — enregistre chaque `(requestId, spec)` ou jette une exception fixe. */
+    /** Un provider double — enregistre chaque `(requestId, spec, resolver)` ou jette une exception fixe. */
     private class RecordingProvider(
         private val exception: Throwable? = null,
     ) : UIKitWindowSceneProvider {
-        val opened = mutableListOf<Pair<WindowRequestId, WindowSpec>>()
+        val opened = mutableListOf<Triple<WindowRequestId, WindowSpec, UIKitWindowSceneRequestResolver>>()
 
-        override fun open(requestId: WindowRequestId, spec: WindowSpec) {
-            opened += requestId to spec
+        override fun open(
+            requestId: WindowRequestId,
+            spec: WindowSpec,
+            resolver: UIKitWindowSceneRequestResolver,
+        ) {
+            opened += Triple(requestId, spec, resolver)
             exception?.let { throw it }
         }
     }
@@ -278,9 +282,13 @@ class UIKitWindowSceneManagerTest {
 
         val request = assertIs<KadreResult.Success<WindowRequest>>(windows.requestWindow(spec)).value
 
-        val (providerRequestId, providerSpec) = provider.opened.single()
+        val (providerRequestId, providerSpec, providerResolver) = provider.opened.single()
         assertEquals(request.id, providerRequestId)
         assertEquals(spec, providerSpec)
+        // Le resolver de la demande est remis EN MÊME TEMPS (voie unique Task 3) : exactement
+        // celui que la requête porte (ses gestes cancel/detach abandonnent CE résolveur-là).
+        val sceneRequest = assertIs<UIKitSceneWindowRequest>(request)
+        assertSame(sceneRequest.resolver, providerResolver)
         // La demande reste Pending : aucun timeout synthétique, l'outcome viendra à la connexion.
         assertEquals(WindowRequestState.Pending, request.state.value)
 

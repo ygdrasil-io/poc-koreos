@@ -198,14 +198,20 @@ public object KadreIos {
         //    `admitPrimaryWindow` — commit synchrone, avant Running, après la configuration.
         //    `attachedPrimarySurface` n'est lu par la session qu'après cette installation.
         //
-        //    Avec un provider, le manager de demandes de scènes ENVELOPPE le delegate (ordre :
+        //    Le manager de demandes de scènes ENVELOPPE TOUJOURS le delegate (ordre :
         //    runtime.manager → admission différée → demandes de scènes) — la session installe sa
         //    configuration À TRAVERS lui (il implémente le fil `RuntimeSessionWindowManager` —
-        //    sinon l'admission différée n'a jamais lieu), intercepte `requestWindow` et route
-        //    provider ↔ session enfant. Sa fabrique enfant est le chemin ordinaire ci-dessus,
-        //    `launch` portant l'identité de la demande. `closeAction` : le drain des demandes
-        //    pendantes (propre au manager de scènes) PUIS le close du runtime (chaîne de teardown
-        //    des components, ordre inverse de la construction) — les deux à chaque terminaison.
+        //    sinon l'admission différée n'a jamais lieu). Avec un provider, il intercepte
+        //    `requestWindow` et route provider ↔ session enfant ; sa fabrique enfant est le
+        //    chemin ordinaire ci-dessus, `launch` portant l'identité de la demande. SANS
+        //    provider (tvOS, apps mono-fenêtre), il refuse toute demande AVANT TOUTE réservation
+        //    (`Rejected(Unsupported(RequestWindow))` — la décision figée du plan phase 4 et le
+        //    contrat documenté de cet attach) : sans lui, la demande atteindrait le manager
+        //    runtime qui ADMET puis committe un pair sur la UIWindow du host (fenêtre fantôme
+        //    sans native propre — défaut capturé au driver, Task 3). `closeAction` : le drain
+        //    des demandes pendantes (propre au manager de scènes) PUIS le close du runtime
+        //    (chaîne de teardown des components, ordre inverse de la construction) — les deux
+        //    à chaque terminaison ; le drain d'un manager sans pendante est un no-op.
         val controller = RuntimeHostController.withComponents(
             platform = KadrePlatform.UIKit,
             sessionRevocationHandler = RuntimeSessionRevocationHandler {
@@ -218,41 +224,39 @@ public object KadreIos {
                 val deferred = RuntimeDeferredAdmissionWindowManager(runtime.manager) {
                     runtime.admitPrimaryWindow()
                 }
-                val sceneManager = windowSceneProvider?.let { provider ->
-                    UIKitWindowSceneManager(
-                        runtimeManager = deferred,
-                        provider = provider,
-                        policy = policy,
-                        applicationFactory = applicationFactory,
-                        failureReporter = failureReporter,
-                        parentScope = rootScope,
-                        childSessionFactory = { host ->
-                            attachScene(
-                                windowScene = host.windowScene,
-                                window = host.window,
-                                surfaceView = host.surfaceView,
-                                applicationFactory = applicationFactory,
-                                policy = policy,
-                                windowSceneProvider = null,
-                                launch = KadreLaunchInfo(
-                                    KadreLaunchReason.AdditionalHostRequested,
-                                    host.requestId,
-                                ),
-                            )
-                        },
-                    )
-                }
+                val sceneManager = UIKitWindowSceneManager(
+                    runtimeManager = deferred,
+                    provider = windowSceneProvider,
+                    policy = policy,
+                    applicationFactory = applicationFactory,
+                    failureReporter = failureReporter,
+                    parentScope = rootScope,
+                    childSessionFactory = { host ->
+                        attachScene(
+                            windowScene = host.windowScene,
+                            window = host.window,
+                            surfaceView = host.surfaceView,
+                            applicationFactory = applicationFactory,
+                            policy = policy,
+                            windowSceneProvider = null,
+                            launch = KadreLaunchInfo(
+                                KadreLaunchReason.AdditionalHostRequested,
+                                host.requestId,
+                            ),
+                        )
+                    },
+                )
                 // L'ordre des wrappers, décidé au compile+test (plan Task 2) : la session porte sa
                 // configuration par un cast `as? RuntimeSessionWindowManager` — le manager de
                 // scènes la transmet au delegate d'admission différée SOUS lui, et son `state`
-                // substitue la seule capability `requestWindow`. Sans provider, le delegate nu
-                // reste `windows` : le chemin des phases 1-3, à l'octet près.
-                val windows: WindowManager = sceneManager ?: deferred
+                // substitue la seule capability `requestWindow` (`Unsupported` sans provider —
+                // le manager refuse ; `OpenedInNewSession` avec).
+                val windows: WindowManager = sceneManager
                 RuntimeSessionComponents(
                     windows = windows,
                     primarySurfaceProvider = { runtime.attachedPrimarySurface },
                     closeAction = {
-                        sceneManager?.close()
+                        sceneManager.close()
                         runtime.close()
                     },
                 )

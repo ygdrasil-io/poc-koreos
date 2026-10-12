@@ -17,12 +17,17 @@
 		4F0821B66EE40581CE13D280 /* KadreUikit.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 418337605D5B3199B7E05325 /* KadreUikit.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		4FEBA2C21E231C01192C778D /* DriverApplication.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1B21199F53FE2CA195F1EC3 /* DriverApplication.swift */; };
 		51AE1CE493CC7042782E6ED1 /* DriverApplication.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1B21199F53FE2CA195F1EC3 /* DriverApplication.swift */; };
+		564ABC48E0F09318F485B9BB /* KadreUikitWindowRequestTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6F4D1286C215A346482E6A1F /* KadreUikitWindowRequestTests.swift */; };
 		5BF1729E91D5C95BD0B4C26C /* KadreUikitDriverTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 34888DC507A9523344912ADC /* KadreUikitDriverTests.swift */; };
 		5D1B320938D1B7DE6A75EC39 /* KadreUikit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 418337605D5B3199B7E05325 /* KadreUikit.framework */; };
 		5FFF4CF409B518FE59B30608 /* KadreUikitAttachIosTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EF4BB6EECE039A378B8E072F /* KadreUikitAttachIosTests.swift */; };
+		76F7EF9FD14DC12FF4FF130D /* DriverWindowSceneProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A765D6361A5D02AF1DDD9A8 /* DriverWindowSceneProvider.swift */; };
+		80BBFF502824EF1428D86D1D /* KadreUikitWindowRequestIosTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 46A0C72F4B197DEC81A9625C /* KadreUikitWindowRequestIosTests.swift */; };
 		993798177928E45DD8DDF7E5 /* KadreUikitDriverTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 34888DC507A9523344912ADC /* KadreUikitDriverTests.swift */; };
+		9CC41F3F7883781321BAD223 /* KadreUikitWindowRequestTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6F4D1286C215A346482E6A1F /* KadreUikitWindowRequestTests.swift */; };
 		A2B6955939359F103409316F /* KadreUikitAttachTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB076B59B50782C75356E323 /* KadreUikitAttachTests.swift */; };
 		A4E05FA21538599220B2A46D /* KadreUikitSurfaceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 28AB0CD4DD2034DD313DB5B3 /* KadreUikitSurfaceTests.swift */; };
+		A994C38DD6BDA86C27E28AFE /* DriverWindowSceneProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A765D6361A5D02AF1DDD9A8 /* DriverWindowSceneProvider.swift */; };
 		AE3A2C494182A1D8939A3C0B /* DriverSceneDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1D37932D257E216FA8982CD /* DriverSceneDelegate.swift */; };
 		C7C57FE2E6827FC672C6BB25 /* KadreUikit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 0BE6A301E633DDEB145A1DBC /* KadreUikit.framework */; };
 		CC605EAC7648723B63A816A4 /* KadreUikit.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 0BE6A301E633DDEB145A1DBC /* KadreUikit.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
@@ -86,9 +91,12 @@
 		28AB0CD4DD2034DD313DB5B3 /* KadreUikitSurfaceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KadreUikitSurfaceTests.swift; sourceTree = "<group>"; };
 		34888DC507A9523344912ADC /* KadreUikitDriverTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KadreUikitDriverTests.swift; sourceTree = "<group>"; };
 		418337605D5B3199B7E05325 /* KadreUikit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = KadreUikit.framework; path = ../../../platform/uikit/build/bin/iosSimulatorArm64/debugFramework/KadreUikit.framework; sourceTree = "<group>"; };
+		46A0C72F4B197DEC81A9625C /* KadreUikitWindowRequestIosTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KadreUikitWindowRequestIosTests.swift; sourceTree = "<group>"; };
 		48C0BE32541B75BA9585E1B3 /* KadreUikitDriverTvOs.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = KadreUikitDriverTvOs.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		5A765D6361A5D02AF1DDD9A8 /* DriverWindowSceneProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DriverWindowSceneProvider.swift; sourceTree = "<group>"; };
 		5C8547E7BBD74CE87774008C /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		6AF300853AE2B8D0EFFD387F /* KadreUikitDriverIos.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = KadreUikitDriverIos.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		6F4D1286C215A346482E6A1F /* KadreUikitWindowRequestTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KadreUikitWindowRequestTests.swift; sourceTree = "<group>"; };
 		7158A2D7EE927CE0F564B5B7 /* KadreUikitDriverIosTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = KadreUikitDriverIosTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		91719BE8D2BEB7B9A16C9210 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		C1B21199F53FE2CA195F1EC3 /* DriverApplication.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DriverApplication.swift; sourceTree = "<group>"; };
@@ -144,6 +152,7 @@
 				1E444F71E79C711F6BF4ED11 /* DriverFixture.swift */,
 				D1D37932D257E216FA8982CD /* DriverSceneDelegate.swift */,
 				17F420D2055A050D2FA7B71F /* DriverSceneRequest.swift */,
+				5A765D6361A5D02AF1DDD9A8 /* DriverWindowSceneProvider.swift */,
 			);
 			name = Shared;
 			path = apps/Shared;
@@ -177,6 +186,7 @@
 			children = (
 				EF4BB6EECE039A378B8E072F /* KadreUikitAttachIosTests.swift */,
 				0B48BF1317CBEE3F8F731C20 /* KadreUikitSurfaceIosTests.swift */,
+				46A0C72F4B197DEC81A9625C /* KadreUikitWindowRequestIosTests.swift */,
 			);
 			name = Ios;
 			path = tests/Ios;
@@ -188,6 +198,7 @@
 				FB076B59B50782C75356E323 /* KadreUikitAttachTests.swift */,
 				34888DC507A9523344912ADC /* KadreUikitDriverTests.swift */,
 				28AB0CD4DD2034DD313DB5B3 /* KadreUikitSurfaceTests.swift */,
+				6F4D1286C215A346482E6A1F /* KadreUikitWindowRequestTests.swift */,
 			);
 			name = Shared;
 			path = tests/Shared;
@@ -343,6 +354,7 @@
 				28E4137FCEE717DC6770EEB4 /* KadreUikitAttachTests.swift in Sources */,
 				5BF1729E91D5C95BD0B4C26C /* KadreUikitDriverTests.swift in Sources */,
 				A4E05FA21538599220B2A46D /* KadreUikitSurfaceTests.swift in Sources */,
+				9CC41F3F7883781321BAD223 /* KadreUikitWindowRequestTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -355,6 +367,8 @@
 				993798177928E45DD8DDF7E5 /* KadreUikitDriverTests.swift in Sources */,
 				0FC29BEE66FB0AEBF6754ED6 /* KadreUikitSurfaceIosTests.swift in Sources */,
 				D4F50CB46FA8FDC71A32C3C2 /* KadreUikitSurfaceTests.swift in Sources */,
+				80BBFF502824EF1428D86D1D /* KadreUikitWindowRequestIosTests.swift in Sources */,
+				564ABC48E0F09318F485B9BB /* KadreUikitWindowRequestTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -367,6 +381,7 @@
 				07F945B2FBD4D75DBBCFF676 /* DriverFixture.swift in Sources */,
 				0F4DDB979A091F83D7DD43E9 /* DriverSceneDelegate.swift in Sources */,
 				E5B93085E4574BE844900F4D /* DriverSceneRequest.swift in Sources */,
+				A994C38DD6BDA86C27E28AFE /* DriverWindowSceneProvider.swift in Sources */,
 				034DDEAA05709F650A3B9E5E /* MainApp.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -380,6 +395,7 @@
 				447FB172AC08C6378923191F /* DriverFixture.swift in Sources */,
 				AE3A2C494182A1D8939A3C0B /* DriverSceneDelegate.swift in Sources */,
 				FEE8A6E4EDC759E8DBBFB21E /* DriverSceneRequest.swift in Sources */,
+				76F7EF9FD14DC12FF4FF130D /* DriverWindowSceneProvider.swift in Sources */,
 				CEFEE3910D583AB4D45A3A32 /* MainApp.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

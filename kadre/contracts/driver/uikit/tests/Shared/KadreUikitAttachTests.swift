@@ -61,12 +61,15 @@ final class KadreUikitAttachTests: XCTestCase {
         window: UIWindow,
         view: UIView,
     ) -> any KadreResult {
+        // Static framework : pas de convenience Swift de l'argument par défaut Kotlin
+        // (finding Task 2) — le chemin phases 1-3 passe `nil` explicitement.
         KadreIos.shared.attach(
             windowScene: fixture.scene,
             window: window,
             surfaceView: view,
             applicationFactory: DriverApplication(fixture: fixture),
             policy: KadrePolicies.shared.Default,
+            windowSceneProvider: nil,
         )
     }
 

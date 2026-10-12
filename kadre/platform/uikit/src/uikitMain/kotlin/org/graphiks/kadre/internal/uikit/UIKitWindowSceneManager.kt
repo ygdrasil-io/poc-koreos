@@ -308,11 +308,13 @@ internal class UIKitWindowSceneManager(
 
         // Le provider est du code host invoqué sur le main, HORS du lock : son throw est capturé
         // ici et devient l'outcome promis, jamais une exception qui s'échappe (web l.268-278).
+        // Le resolver émis à l'admission voyage AVEC l'identité (décision Task 3 : la remise à
+        // open est la seule voie — aucun registre, aucune seconde route vers le sink).
         // L'entrée RETIENT son slot (web-verbatim) jusqu'au close() du requérant — une
         // résolution tardive de cette demande sera refusée (claimResolve lit l'état de la
         // requête, pas la seule présence dans la carte) et le CAS interdit toute réécriture.
         try {
-            localProvider.open(request.id, spec)
+            localProvider.open(request.id, spec, request.resolver)
         } catch (_: Throwable) {
             request.terminate(WindowRequestOutcome.Rejected(callbackExceptionFailure()))
         }

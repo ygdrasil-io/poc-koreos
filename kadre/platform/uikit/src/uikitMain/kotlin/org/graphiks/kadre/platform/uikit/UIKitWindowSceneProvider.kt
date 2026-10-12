@@ -11,10 +11,12 @@ import platform.UIKit.UIWindowScene
  * `WebWindowProvider` web) : l'app — seule à connaître sa topologie de scènes — active une
  * nouvelle `UIWindowScene` à chaque demande admise.
  *
- * Appelé sur le thread principal à chaque `requestWindow` admis. L'app active la scène
- * (`UIApplication.requestSceneSessionActivation`) et la corréle à [requestId] (l'identité voyage
- * dans l'`userActivity`/les options d'activation) ; à la connexion de cette scène, l'app crée la
- * fenêtre et la vue de contenu puis résout via le [UIKitWindowSceneRequestResolver] de la demande.
+ * Appelé sur le thread principal à chaque `requestWindow` admis. L'app reçoit le
+ * [UIKitWindowSceneRequestResolver] de la demande EN MÊME TEMPS que son identité : le manager
+ * l'émet à l'admission et le remet ici — aucun registre, aucune seconde voie. L'app active la
+ * scène (`UIApplication.requestSceneSessionActivation`) et la corréle à [requestId] (l'identité
+ * voyage dans l'`userActivity`/les options d'activation) ; à la connexion de cette scène, l'app
+ * crée la fenêtre et la vue de contenu puis résout via le resolver reçu.
  *
  * La fonction ne rend RIEN : l'ouverture d'une scène est réellement asynchrone (FrontBoard), sans
  * timeout synthétique — la demande reste `Pending` jusqu'à la résolution, l'abandon app-side ou
@@ -23,7 +25,11 @@ import platform.UIKit.UIWindowScene
  * jamais une failure de l'appel `requestWindow`.
  */
 public fun interface UIKitWindowSceneProvider {
-    public fun open(requestId: WindowRequestId, spec: WindowSpec)
+    public fun open(
+        requestId: WindowRequestId,
+        spec: WindowSpec,
+        resolver: UIKitWindowSceneRequestResolver,
+    )
 }
 
 /**
@@ -49,8 +55,9 @@ internal interface UIKitWindowSceneRequestSink {
  * La résolution app-side d'une demande de scène admise : la scène corrélée à cette demande a
  * connecté avec ses objets host, ou ne connectera jamais.
  *
- * Une instance est émise par le manager pour chaque demande admise (`issue`, internal) ; l'app la
- * rejoint par le `WindowRequestId` que [UIKitWindowSceneProvider.open] lui a remis. Toute route
+ * Une instance est émise par le manager pour chaque demande admise (`issue`, internal) et remise
+ * à l'app PAR [UIKitWindowSceneProvider.open] — le resolver voyage avec l'identité de sa demande,
+ * aucune voie d'obtention supplémentaire n'existe. Toute route
  * arrive au manager, qui la garde : une résolution ou un abandon **tardif** (demande déjà
  * terminale — annulée, détachée, close) est un no-op — jamais une seconde résolution d'une requête
  * terminale (roadmap l.239). Les appels se font sur le thread principal, comme

@@ -290,6 +290,80 @@ final class SceneFixture {
     }
 }
 
+/// L'enregistrement d'UNE exécution applicative (une session Kadre = une entrée, à chaque
+/// `DriverKadreApplication.run`). C'est le canal par lequel les SESSIONS ENFANTS d'une demande
+/// de fenêtre (phase 4 : attachées PAR l'adaptateur, sans aucun handle Swift) publient leurs
+/// faits : identité de session (`isEqual` avec le `sessionId` de l'outcome `OpenedInNewSession`),
+/// scope capturé, surfaces, achèvement coopératif. La session REQUÉRANTE y figure AUSSI (les
+/// preuves d'indépendance comparent les deux) — mais ses faits de fixture restent portés par
+/// `SceneFixture.capture` (comportement phases 1-5 inchangé).
+final class DriverSessionRecord {
+    /// L'identité de la session — `scope.sessionId`, comparable `isEqual` avec l'outcome.
+    let sessionId: SessionId
+    let fixtureBound: Bool
+    private(set) var runs = 0
+    private(set) var scope: (any KadreScope)?
+    /// Référence objet de la surface primaire capturée (identité `===` entre enregistrements).
+    private(set) var primarySurfaceRef: AnyObject?
+    private(set) var primarySurfaceIdMatchesWindowSurfaceId = false
+    private(set) var primarySurfaceIsPrimaryWindowSurface = false
+    private(set) var primaryWindowContentWidth: Double?
+    private(set) var primaryWindowContentHeight: Double?
+    /// L'application a remis son handler de complétion (coopération au stop de SA session).
+    private(set) var applicationCompleted = false
+
+    init(sessionId: SessionId, fixtureBound: Bool) {
+        self.sessionId = sessionId
+        self.fixtureBound = fixtureBound
+    }
+
+    /// Miroir exact de `SceneFixture.capture` — les mêmes faits, sans écrire aucun fixture.
+    func capture(scope: any KadreScope) {
+        runs += 1
+        self.scope = scope
+
+        let primarySurface = scope.primarySurface.value as? (any HostSurface)
+        let managerState = scope.windows.state.value as? WindowManagerState
+        let primaryWindow = managerState?.primary
+        let windowSurface = primaryWindow?.surface
+        switch (primarySurface, windowSurface) {
+        case (let surface?, let windowSurface?):
+            primarySurfaceIdMatchesWindowSurfaceId = surface.id.isEqual(windowSurface.id)
+            primarySurfaceIsPrimaryWindowSurface = (surface as AnyObject) === (windowSurface as AnyObject)
+            primarySurfaceRef = surface as AnyObject
+        default:
+            primarySurfaceIdMatchesWindowSurfaceId = false
+            primarySurfaceIsPrimaryWindowSurface = false
+        }
+        if let windowState = primaryWindow?.state.value as? WindowState {
+            primaryWindowContentWidth = windowState.contentSize.width
+            primaryWindowContentHeight = windowState.contentSize.height
+        }
+    }
+
+    func lifecycleSnapshot() -> (visibility: VisibilityState, activation: ActivationState)? {
+        guard let scope, let state = scope.lifecycle.state.value as? LifecycleState else { return nil }
+        return (state.visibility, state.activation)
+    }
+
+    /// L'attachement du host de CETTE session (`.detached` = la scène qui la porte s'est
+    /// déconnectée — le signal de coopération des sessions enfants).
+    func lifecycleAttachment() -> AttachmentState? {
+        guard let scope, let state = scope.lifecycle.state.value as? LifecycleState else { return nil }
+        return state.attachment
+    }
+
+    func markCompleted() { applicationCompleted = true }
+
+    var summary: String {
+        let lifecycle = lifecycleSnapshot().map { "\($0.visibility)|\($0.activation)" } ?? "nil"
+        let attachment = lifecycleAttachment().map(String.init(describing:)) ?? "nil"
+        return "fixtureBound=\(fixtureBound) runs=\(runs) completed=\(applicationCompleted) "
+            + "surface=\(primarySurfaceRef.map { String(describing: ObjectIdentifier($0)) } ?? "nil") "
+            + "lifecycle=\(lifecycle) attachment=\(attachment)"
+    }
+}
+
 /// Store des fixtures, indexé par l'identité de la scène connectée. Accès exclusif au
 /// thread principal (callbacks de scène + tests unitaires main-thread).
 final class DriverFixture {
@@ -297,6 +371,9 @@ final class DriverFixture {
 
     private var byScene: [ObjectIdentifier: SceneFixture] = [:]
     private(set) var connected: [SceneFixture] = []
+    /// Les exécutions applicatives, DANS L'ORDRE (index 0 = la session du premier attach
+    /// testé) — le canal des faits des sessions enfants (phase 4).
+    private(set) var sessionRecords: [DriverSessionRecord] = []
     /// Erreurs d'activation de scène enregistrées par `DriverSceneRequest` — les tests les
     /// remontent telles quelles (aucun contournement factice).
     private(set) var sceneActivationErrors: [any Error] = []
@@ -310,6 +387,23 @@ final class DriverFixture {
 
     func recordSceneDestructionError(_ error: any Error) {
         sceneDestructionErrors.append(error)
+    }
+
+    /// Ouvre l'enregistrement d'une exécution applicative (une session = une entrée, ordre
+    /// des `run`). L'accumule d'un test à l'autre — les tests cherchent PAR IDENTITÉ de
+    /// session (isEqual avec l'outcome), jamais par index brut.
+    func beginSessionRecord(sessionId: SessionId, fixtureBound: Bool) -> DriverSessionRecord {
+        let record = DriverSessionRecord(sessionId: sessionId, fixtureBound: fixtureBound)
+        sessionRecords.append(record)
+        DriverTrace.record("session record #\(sessionRecords.count - 1) opened (fixtureBound=\(fixtureBound))")
+        return record
+    }
+
+    /// L'enregistrement de la session dont l'id est ÉGAL (isEqual) à celui donné — la
+    /// recherche par identité des faits enfants (l'outcome `OpenedInNewSession` est la seule
+    /// poignée Swift sur la session enfant).
+    func sessionRecord(sessionId: SessionId) -> DriverSessionRecord? {
+        sessionRecords.first { $0.sessionId.isEqual(sessionId) }
     }
 
     /// Ordre de connexion — la première scène est la scène primaire de l'app.
