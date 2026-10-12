@@ -32,7 +32,10 @@ const BROWSER_DIRECTORY = 'browser';
 const JUNIT_DIRECTORY = 'test-results';
 
 const GIT_SHA = /^(?:[0-9a-fA-F]{40}|[0-9a-fA-F]{64})$/;
-const CONTRACT_ID = /^[A-Z]{3}-[0-9]{3}$/;
+// W32-* (backend Win32, WIN32-IMPLEMENTATION-ROADMAP.md §1.2) requires a digit in
+// the prefix: [A-Z0-9]{3} stays strict at three uppercase alphanumeric characters,
+// mirroring the JVM validator's ContractIdPattern.
+const CONTRACT_ID = /^[A-Z0-9]{3}-[0-9]{3}$/;
 const DECIMAL = /^\d+(?:\.\d+)?$/;
 const EXPECTED_TARGETS = ['js', 'wasmJs'];
 const EXPECTED_ORACLES = ['O1', 'O2', 'O3'];
