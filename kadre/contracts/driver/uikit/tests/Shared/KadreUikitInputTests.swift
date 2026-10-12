@@ -119,11 +119,34 @@ final class KadreUikitInputTests: XCTestCase {
         return unsafeBitCast(imp, to: UnsafeRawPointer.self)
     }
 
+    /// La vérité par famille de la Task 3 : le nombre de recognizers que l'attach de Kadre
+    /// ajoute à la vue du host (touch + gestes + survol), et l'ENSEMBLE EXACT des classes
+    /// attendues. iOS : tap/pan/pinch/rotation + survol ; tvOS : tap/pan seuls — le klib tvOS
+    /// ne porte ni pinch ni rotation ni hover (vérifié linkdata/header, KDoc Kotlin).
+    private static var kadreRecognizerCount: Int { expectedRecognizerClasses.count }
+
+    /// Les recognizers de GESTE seuls (le compteur `gestureInstallCount` compte un pas par recognizer de geste, pas le touch ni le survol).
+    private static var gestureRecognizerCount: Int {
+        expectedRecognizerClasses.filter { $0 != "UIKitTouchRecognizer" && $0 != "UIHoverGestureRecognizer" }.count
+    }
+
+    private static var expectedRecognizerClasses: Set<String> {
+        #if os(tvOS)
+        return ["UITapGestureRecognizer", "UIPanGestureRecognizer", "UIKitTouchRecognizer"]
+        #else
+        return ["UITapGestureRecognizer", "UIPanGestureRecognizer", "UIPinchGestureRecognizer",
+                "UIRotationGestureRecognizer", "UIHoverGestureRecognizer", "UIKitTouchRecognizer"]
+        #endif
+    }
+
     /// uikit-input-touch-recognizer-additive — l'attach pose LE recognizer Kadre sur la vue du
     /// host : son IMP propre surcharge le hook de la base (le SPIKE, prouvé de façon
     /// DISCRIMINANTE), il ne peut pas annuler les touches du host (`cancelsTouchesInView ==
-    /// false`), il est actif, et il est le SEUL recognizer ajouté (compte total = baseline + 1).
-    /// L'annonce d'installation est publiée (compteur d'annonces, au-delà du baseline).
+    /// false`), il est actif, et les SEULS recognizers ajoutés sont ceux de Kadre
+    /// (compte total = baseline + la vérité par famille de la Task 3 : tap/pan/pinch/rotation
+    /// + survol en iOS, tap/pan seuls en tvOS — le klib tvOS ne porte ni pinch ni rotation ni
+    /// hover, cf. le KDoc Kotlin de `UIKitGestureBindings`). L'annonce d'installation est
+    /// publiée (compteurs d'annonces, au-delà du baseline).
     func testTouchRecognizerInstalledAdditivelyWithHonestAnnouncement() throws {
         let fixture = try primaryFixture()
         let view = try XCTUnwrap(fixture.observedView)
@@ -147,12 +170,73 @@ final class KadreUikitInputTests: XCTestCase {
         XCTAssertFalse(probe.cancelsTouchesInView,
                        "the traced additive policy: the host view keeps its touches")
         XCTAssertTrue(probe.recognizerEnabled, "the recognizer must be enabled")
-        XCTAssertEqual(probe.totalGestureRecognizers, baseline.totalGestureRecognizers + 1,
-                       "the Kadre recognizer is the only recognizer added to the host view")
+        XCTAssertEqual(probe.totalGestureRecognizers, baseline.totalGestureRecognizers + Int32(Self.kadreRecognizerCount),
+                       "the Kadre recognizers are the only recognizers added to the host view")
         XCTAssertGreaterThan(KadreUikitSurfaceDriver.shared.touchInstallCount, installsBefore,
                              "the install counter must have moved")
         XCTAssertGreaterThan(KadreUikitSurfaceDriver.shared.touchAnnouncementCount, announcementsBefore,
                              "the InputObservationChanged(touchInstalled = true) must have been published")
+
+        try stopAndAwaitTermination(fixture)
+    }
+
+    /// uikit-input-gesture-keyboard-sources-announced — Task 3 : les sources gestes/survol et
+    /// clavier sont posées à l'attach avec la vérité par famille et la politique additive, et
+    /// leurs compteurs d'installation/annonce bougent. Les recognizers de geste sont
+    /// STANDARD (les noms Obj-C de la vue sont ceux des classes Apple) ; la SURVOL est iOS
+    /// seul. Le clavier : une CONNEXION de source peut légitimement arriver sur un simulateur
+    /// automatisé — le pairing « Connect Hardware Keyboard » du Simulator livre un VRAI
+    /// `GCKeyboard.coalescedKeyboard`, que le scan d'install attache (un fait VRAI, jamais une
+    /// fabrication) ; ce qui reste IMPOSSIBLE sans charter manuel, ce sont les LIVRAISONS de
+    /// touches — `keyboardEventCount` et `keyboardStimulusCount` restent à zéro (aucune touche
+    /// n'est synthétisable in-process honnêtement, le charter manuel Task 4 incrémentera). Le
+    /// BINDING est installé et révoqué (compteurs).
+    func testGestureAndKeyboardSourcesInstalledAdditivelyPerFamily() throws {
+        let fixture = try primaryFixture()
+        let view = try XCTUnwrap(fixture.observedView)
+        let baseline = KadreUikitSurfaceDriver.shared.gestureRecognitionProbe(view: view)
+        XCTAssertTrue(baseline.recognizerClassNames.isEmpty,
+                      "no recognizer at all before attach (the host fixture view carries none)")
+        let keyboardInstallsBefore = KadreUikitSurfaceDriver.shared.keyboardInstallCount
+        let keyboardAnnouncementsBefore = KadreUikitSurfaceDriver.shared.keyboardAnnouncementCount
+        let keyboardConnectsBefore = KadreUikitSurfaceDriver.shared.keyboardConnectCount
+        let gestureInstallsBefore = KadreUikitSurfaceDriver.shared.gestureInstallCount
+        let hoverInstallsBefore = KadreUikitSurfaceDriver.shared.hoverInstallCount
+        let gestureAnnouncementsBefore = KadreUikitSurfaceDriver.shared.gestureAnnouncementCount
+
+        let (_, _, _) = try attachedSurface()
+
+        let probe = KadreUikitSurfaceDriver.shared.gestureRecognitionProbe(view: view)
+        XCTAssertEqual(Set(probe.recognizerClassNames), Self.expectedRecognizerClasses,
+                       "the exact set of recognizers installed by Kadre, per family")
+        XCTAssertTrue(probe.cancelsTouchesInViewAll,
+                      "the traced additive policy: every installed recognizer lets the host keep its touches")
+        XCTAssertGreaterThanOrEqual(KadreUikitSurfaceDriver.shared.gestureInstallCount,
+                                    gestureInstallsBefore + Int64(Self.gestureRecognizerCount),
+                                     "one counter step per gesture recognizer installed")
+        XCTAssertEqual(KadreUikitSurfaceDriver.shared.hoverInstallCount > hoverInstallsBefore,
+                       Self.expectedRecognizerClasses.contains("UIHoverGestureRecognizer"),
+                       "the hover installs only where the platform klib carries the class")
+        XCTAssertGreaterThan(KadreUikitSurfaceDriver.shared.keyboardInstallCount, keyboardInstallsBefore,
+                             "the keyboard binding install counter must have moved")
+        XCTAssertGreaterThanOrEqual(KadreUikitSurfaceDriver.shared.keyboardAnnouncementCount,
+                                    keyboardAnnouncementsBefore,
+                                    "the keyboard announcement counter must have moved")
+        XCTAssertGreaterThanOrEqual(KadreUikitSurfaceDriver.shared.gestureAnnouncementCount,
+                                    gestureAnnouncementsBefore,
+                                    "the gesture announcement counter must have moved")
+        XCTAssertGreaterThanOrEqual(KadreUikitSurfaceDriver.shared.keyboardConnectCount,
+                                    keyboardConnectsBefore,
+                                    "a connect counter never decreases; it may legitimately grow "
+                                        + "when the simulator pairs a real hardware keyboard — the "
+                                        + "install scan attaching to a REAL coalesced GCKeyboard is a "
+                                        + "true fact, not a fabrication")
+        XCTAssertEqual(KadreUikitSurfaceDriver.shared.keyboardEventCount, 0,
+                       "no GCKeyCode delivery can occur on an automated suite (charter manual Task 4)")
+        XCTAssertEqual(KadreUikitSurfaceDriver.shared.keyboardStimulusCount, 0,
+                       "no KeyChanged stimulus without a real key — never fabricated")
+        XCTAssertEqual(KadreUikitSurfaceDriver.shared.gestureStimulusCount, 0,
+                       "no Gesture/Pointer stimulus without a real gesture — never fabricated")
 
         try stopAndAwaitTermination(fixture)
     }
@@ -176,7 +260,9 @@ final class KadreUikitInputTests: XCTestCase {
     /// uikit-input-touch-recognizer-revoked — le close retire le recognizer de la vue du host
     /// (zéro recognizer résiduel : retour au baseline EXACT), publie l'annonce de révocation,
     /// et le compteur d'events de livraison reste figé (aucun handler résiduel — sur une suite
-    /// automatisée il n'y de toute façon pas de vrai touch, donc zéro partout).
+    /// automatisée il n'y de toute façon pas de vrai touch, donc zéro partout). Task 3 : les
+    /// recognizers de geste et le survol suivent le même retrait (compteurs de retrait par
+    /// famille), ainsi que le binding clavier.
     func testTouchRecognizerRemovedAndAnnouncementRevokedAtClose() throws {
         let (fixture, _, _) = try attachedSurface()
         let view = try XCTUnwrap(fixture.observedView)
@@ -185,22 +271,37 @@ final class KadreUikitInputTests: XCTestCase {
                       "precondition: the recognizer is installed by the attach")
         let teardownsBefore = KadreUikitSurfaceDriver.shared.touchTeardownCount
         let announcementsBefore = KadreUikitSurfaceDriver.shared.touchAnnouncementCount
+        let keyboardTeardownsBefore = KadreUikitSurfaceDriver.shared.keyboardTeardownCount
+        let gestureTeardownsBefore = KadreUikitSurfaceDriver.shared.gestureTeardownCount
+        let hoverTeardownsBefore = KadreUikitSurfaceDriver.shared.hoverTeardownCount
 
         try stopAndAwaitTermination(fixture)
 
         let probe = KadreUikitSurfaceDriver.shared.touchRecognitionProbe(view: view)
         XCTAssertFalse(probe.recognizerAttached,
                        "the Kadre touch recognizer must be gone after session close")
-        XCTAssertEqual(probe.totalGestureRecognizers, baseline.totalGestureRecognizers - 1,
+        XCTAssertEqual(probe.totalGestureRecognizers, baseline.totalGestureRecognizers - Int32(Self.kadreRecognizerCount),
                        "the host view is back to its own recognizers, nothing residual")
         XCTAssertGreaterThan(KadreUikitSurfaceDriver.shared.touchTeardownCount, teardownsBefore,
                              "the teardown counter must have moved")
         XCTAssertGreaterThanOrEqual(KadreUikitSurfaceDriver.shared.touchAnnouncementCount,
                                     announcementsBefore + 1,
                                     "the all-false revocation announcement must have been published")
+        XCTAssertGreaterThan(KadreUikitSurfaceDriver.shared.keyboardTeardownCount, keyboardTeardownsBefore,
+                             "the keyboard binding teardown counter must have moved")
+        XCTAssertGreaterThanOrEqual(KadreUikitSurfaceDriver.shared.gestureTeardownCount,
+                                    gestureTeardownsBefore + Int64(Self.gestureRecognizerCount),
+                                    "one teardown step per gesture recognizer removed")
+        XCTAssertEqual(KadreUikitSurfaceDriver.shared.hoverTeardownCount > hoverTeardownsBefore,
+                       Self.expectedRecognizerClasses.contains("UIHoverGestureRecognizer"),
+                       "the hover teardowns only where the platform klib carried the install")
         XCTAssertEqual(KadreUikitSurfaceDriver.shared.touchEventCount, 0,
                        "no UITouch delivery can occur on an automated suite (charter manual for real touch)")
         XCTAssertEqual(KadreUikitSurfaceDriver.shared.touchStimulusCount, 0,
                        "no TouchChanged stimulus without a real touch — never fabricated")
+        XCTAssertEqual(KadreUikitSurfaceDriver.shared.keyboardEventCount, 0,
+                       "no GCKeyCode delivery can occur on an automated suite (charter manual Task 4)")
+        XCTAssertEqual(KadreUikitSurfaceDriver.shared.gestureStimulusCount, 0,
+                       "no Gesture/Pointer stimulus without a real gesture — never fabricated")
     }
 }

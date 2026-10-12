@@ -333,10 +333,14 @@ internal class UIKitTouchAdapter(
  * le host garde ses touches, Kadre ne fait que lire — le recognizer ne reconnaît rien, la
  * vue ne peut de toute façon pas être annulée par lui.
  *
- * ANNONCE (miroir web l.1014-1036) : [install] publie `InputObservationChanged(touchInstalled
- * = true)` APRÈS l'ajout du recognizer à la vue, [teardown] publie l'annonce all-false +
- * `gestureKinds` vide. Le replay-before-announce du web (les stimuli en attente rejetés par
- * le sink avant l'annonce) n'a PAS d'équivalent nécessaire ici, et c'est prouvé par la
+ * ANNONCE (miroir web l.1014-1036, AGRÉGÉE Task 3) : [install] publie l'annonce
+ * `InputObservationChanged` APRÈS l'ajout du recognizer à la vue, [teardown] la révocation.
+ * Depuis la Task 3, la publication passe par le PORTE-UNIQUE de l'agrégat
+ * ([UIKitInputAnnouncement]) : le binding écrit SON fait (`touchInstalled`) et publie le
+ * snapshot COMPLET des quatre faits — une annonce touch-only publiée après l'installation des
+ * gestes ferait croire au runtime qu'ils n'existent pas (le runtime écrit les quatre champs en
+ * absolu à chaque annonce). Le replay-before-announce du web (les stimuli en attente rejetés
+ * par le sink avant l'annonce) n'a PAS d'équivalent nécessaire ici, et c'est prouvé par la
  * structure : toute la vie du binding vit sur la file principale (l'appelant d'[install] EST
  * sur le main, les handlers d'`UITouch` aussi) — AUCUN stimulus ne peut être produit entre la
  * création du recognizer (inerte tant qu'UIKit n'a pas livré un tour de run loop) et
@@ -352,6 +356,7 @@ internal class UIKitTouchBinding(
     private val view: UIView,
     private val surfaceId: SurfaceId,
     private val publish: (SurfaceStimulus) -> Boolean,
+    private val announcement: UIKitInputAnnouncement,
 ) {
     private val lock = RuntimeLock()
     private var tornDown: Boolean = false
@@ -397,15 +402,7 @@ internal class UIKitTouchBinding(
         }
         UIKitTouchCount.recordInstall()
         UIKitTouchCount.recordAnnouncement()
-        publish(
-            SurfaceStimulus.InputObservationChanged(
-                surfaceId = surfaceId,
-                keyboardInstalled = false,
-                pointerInstalled = false,
-                touchInstalled = true,
-                gestureKinds = emptySet(),
-            ),
-        )
+        publish(announcement.touch(true))
     }
 
     /**
@@ -430,15 +427,7 @@ internal class UIKitTouchBinding(
         adapter.clear()
         UIKitTouchCount.recordTeardown()
         UIKitTouchCount.recordAnnouncement()
-        publish(
-            SurfaceStimulus.InputObservationChanged(
-                surfaceId = surfaceId,
-                keyboardInstalled = false,
-                pointerInstalled = false,
-                touchInstalled = false,
-                gestureKinds = emptySet(),
-            ),
-        )
+        publish(announcement.touch(false))
     }
 
     /**
@@ -493,7 +482,7 @@ internal object UIKitTouchCount {
         lock.withLock { stimuli += count }
     }
 
-    /** Une publication `InputObservationChanged` (l'annonce d'installation OU de révocation). */
+    /** Une publication `InputObservationChanged` DÉCLENCHÉE par ce binding (l'installation OU la révocation — le snapshot complet est celui de l'agrégat du port, [UIKitInputAnnouncement]). */
     fun recordAnnouncement() {
         lock.withLock { announcements += 1L }
     }

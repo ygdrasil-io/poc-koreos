@@ -12,6 +12,7 @@ import org.graphiks.kadre.input.ScrollDelta
 import org.graphiks.kadre.input.TouchPhase
 import org.graphiks.kadre.internal.runtime.SurfaceStimulus
 import org.graphiks.kadre.surface.LogicalDelta
+import org.graphiks.kadre.surface.LogicalPoint
 import org.graphiks.kadre.surface.SurfaceId
 
 /**
@@ -179,6 +180,70 @@ internal fun uikitTouchPhase(phase: UIKitTouchPhase): TouchPhase = when (phase) 
 }
 
 /**
+ * Mappe l'état BRUT d'un recognizer de geste sur la phase du modèle, ou `null` quand l'état n'est
+ * pas une observation transmissible.
+ *
+ * Les valeurs brutes sont celles d'`UIGestureRecognizerState` (UIGestureRecognizer.h, vérifiées dans
+ * le SDK) : `Possible` = 0, `Began` = 1, `Changed` = 2, `Ended` = 3 — avec `Recognized`, l'alias des
+ * gestes discrets, ÉGAL à `Ended` (un tap n'archive jamais Began/Changed : il arrive `Ended`) —
+ * `Cancelled` = 4 et `Failed` = 5. Le klib livre l'état en `Long` brut (la même forme que
+ * `UITouch.type`).
+ *
+ * La politique des gestes reconnus (décision tracée du plan) : seules les trois phases PORTABLES
+ * passent — [UIKitTouchPhase.Began], [UIKitTouchPhase.Moved], [UIKitTouchPhase.Ended].
+ * `Possible` n'est pas une observation (l'état de repos d'un recognizer attaché). `Cancelled` et
+ * `Failed` n'ont PAS de chemin pour les gestes : l'observation est perdue explicitement plutôt que
+ * publiée en `Cancelled` — et cette perte est sûre par construction, le runtime ne retient AUCUN
+ * état de geste actif (les stimuli `Gesture` sont des notifications sans état), il ne peut donc
+ * rien rester suspendu sans fin ; ce qu'un `Cancelled` eût dit de plus (« le geste ne continue
+ * pas ») est le seul fait perdu, documenté ICI comme limite.
+ */
+internal fun uikitGesturePhaseForState(state: Long): UIKitTouchPhase? = when (state) {
+    1L -> UIKitTouchPhase.Began
+    2L -> UIKitTouchPhase.Moved
+    3L -> UIKitTouchPhase.Ended
+    else -> null
+}
+
+/**
+ * Mappe le code brut d'une touche GameController (`GCKeyCode` du `keyChangedHandler`, un `CFIndex`
+ * livré en `Long?` par le klib) sur la clé physique du modèle.
+ *
+ * **La page 0x07 est portée, pas inventée.** L'énumération `GCKeyCode` (GCKeyCodes.h, 137
+ * constantes) EST la table HID de la page Keyboard/Keypad (0x07) — les noms se correspondent un à
+ * un, des lettres A..Z (usages 0x04..0x1D) aux huit modificateurs gauche/droite (0xE0..0xE7), en
+ * passant par le keypad (0x53..0x65) et les blocs International (0x87..0x8F) et LANG (0x90..0x98)
+ * qui n'existent sur AUCUNE autre page — vérifié nom pour nom dans le SDK iPhoneOS27.0. Nommer la
+ * page est donc porter l'invariant documenté de la source ; l'USAGE, lui, est le brut de la
+ * source, jamais recalculé.
+ *
+ * Un brut hors du domaine d'une paire HID (0..65535), ou absent, n'a pas de token honnête :
+ * `Unidentified(null)` — jamais le `toInt()` silencieux de Kotlin, qui tronquerait un `Long` hors
+ * domaine en une paire FAUSSE.
+ */
+internal fun uikitKeyboardPhysicalKey(keyCodeRaw: Long?): PhysicalKey =
+    if (keyCodeRaw != null && keyCodeRaw in 0..65_535L) {
+        uikitHidKey(GC_HID_PAGE_KEYBOARD_OR_KEYPAD, keyCodeRaw.toInt())
+    } else {
+        PhysicalKey.Unidentified(null)
+    }
+
+/**
+ * Mappe deux observations consécutives de survol sur la delta du modèle, ou `null` quand il n'y a
+ * pas de delta honnête.
+ *
+ * Le stimulus `PointerMoved` du runtime EXIGE une `LogicalDelta` non nulle ; la delta du survol
+ * (`UIHoverGestureRecognizer` ne rapporte pas de delta propre) est l'ARITHMÉTIQUE de deux
+ * observations consécutives — courant − précédent, un calcul pur sur ce que la source a observé,
+ * pas un fait inventé. Un mouvement sans précédent (l'entrée a été perdue) n'a pas de delta :
+ * `null` — l'observation est perdue, jamais une zéro fabriquée.
+ */
+internal fun uikitHoverDelta(previous: LogicalPoint?, current: LogicalPoint): LogicalDelta? {
+    previous ?: return null
+    return LogicalDelta(current.x - previous.x, current.y - previous.y)
+}
+
+/**
  * Mappe la pression brute qu'une source rapporte sur la pression du modèle, ou `null` quand le
  * modèle ne peut pas la porter.
  *
@@ -318,3 +383,9 @@ private val UIKIT_TOKEN_CHARACTERS: IntRange = 0x21..0x7e
 
 /** `UITouchTypePencil` (= `UITouchTypeStylus`, son alias déprécié) : la valeur brute 2 d'UITouch.h. */
 private const val UI_TOUCH_TYPE_PENCIL: Int = 2
+
+/**
+ * La page HID des codes `GCKeyCode` : Keyboard/Keypad (0x07). L'invariant documenté de la source
+ * (GCKeyCodes.h = la table de CETTE page, cf. [uikitKeyboardPhysicalKey]), jamais une page forcée.
+ */
+private const val GC_HID_PAGE_KEYBOARD_OR_KEYPAD: Int = 0x07
