@@ -47,6 +47,9 @@ internal interface WaylandNativeBridge : AutoCloseable {
     /** Une erreur display a été constatée (toute primitive renvoyant -1). */
     fun connectionLost(): Boolean
 
+    /** Crée une fenêtre native (surface+xdg+toplevel+buffer) via kffi managé. */
+    fun createWindowing(width: Int, height: Int): WaylandNativeWindow
+
     override fun close()
 }
 

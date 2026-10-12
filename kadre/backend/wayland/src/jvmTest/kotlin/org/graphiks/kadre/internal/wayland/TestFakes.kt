@@ -62,6 +62,9 @@ internal class FakeBridge(
 
     override fun connectionLost(): Boolean = false
 
+    override fun createWindowing(width: Int, height: Int): WaylandNativeWindow =
+        throw UnsupportedOperationException("no windowing in this fake")
+
     override fun close() {
         closed = true
     }

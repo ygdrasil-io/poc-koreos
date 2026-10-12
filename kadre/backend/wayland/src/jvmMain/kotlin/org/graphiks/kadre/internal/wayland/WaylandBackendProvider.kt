@@ -9,6 +9,8 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.runBlocking
 import org.graphiks.kadre.application.ActivationState
 import org.graphiks.kadre.application.AttachmentState
+import org.graphiks.kadre.application.KadreApplication
+import org.graphiks.kadre.application.KadreApplicationFactory
 import org.graphiks.kadre.application.KadreSession
 import org.graphiks.kadre.application.LifecycleState
 import org.graphiks.kadre.application.SessionOutcome
@@ -18,6 +20,7 @@ import org.graphiks.kadre.diagnostics.KadreOperation
 import org.graphiks.kadre.diagnostics.KadrePlatform
 import org.graphiks.kadre.diagnostics.KadreResourceKind
 import org.graphiks.kadre.diagnostics.KadreResult
+import org.graphiks.kadre.internal.runtime.RuntimeFailureReporter
 import org.graphiks.kadre.internal.runtime.RuntimeHostController
 import org.graphiks.kadre.internal.runtime.RuntimeSessionComponents
 import org.graphiks.kadre.internal.runtime.RuntimeSessionStopHandler
@@ -26,8 +29,15 @@ import org.graphiks.kadre.internal.runtime.desktop.DesktopBackendProvider
 import org.graphiks.kadre.internal.runtime.desktop.DesktopEmbeddedRequest
 import org.graphiks.kadre.internal.runtime.desktop.DesktopIntegrationKind
 import org.graphiks.kadre.internal.runtime.desktop.DesktopStandaloneRequest
+import org.graphiks.kadre.policy.KadrePolicies
 import org.graphiks.kffi.posix.PosixWakeup
 
+/**
+ * Provider Wayland tranche 2 : session standalone avec fenêtres réelles.
+ * Le driver expose le [RuntimeWindowManager] réel à la place du manager
+ * headless de la phase 1 ; `stopWhenLastWindowClosed` passe par l'arming du
+ * runtime après la première fenêtre admise.
+ */
 public class WaylandBackendProvider private constructor(
     private val availability: () -> Boolean,
     private val environment: () -> WaylandProbeEnvironment,
@@ -54,9 +64,10 @@ public class WaylandBackendProvider private constructor(
     }
 
     /**
-     * Session standalone headless (tranche 1) : la pompe tourne sur le thread
-     * appelant ; `stopWhenLastWindowClosed` n'a pas d'effet tant qu'aucune
-     * fenêtre n'existe (la session ne s'arrête pas faute de fenêtre).
+     * Session standalone avec fenêtres réelles (tranche 2) : la pompe tourne
+     * sur le thread appelant, la file d'actions marshalle les créations vers
+     * ce thread, et `stopWhenLastWindowClosed` s'arme via le runtime après la
+     * première fenêtre admise.
      */
     override fun run(request: DesktopStandaloneRequest): KadreResult<SessionOutcome> {
         if (!availability()) {
@@ -89,10 +100,17 @@ public class WaylandBackendProvider private constructor(
     ): KadreResult<SessionOutcome> {
         val parentScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
         try {
+            val driver = WaylandWindowRuntimeDriver.create(
+                session = session,
+                resources = request.policy.resources,
+                failureReporter = RuntimeFailureReporter { },
+                publicWindowCapabilities = true,
+                onLastWindowClosed = { session.pump.requestStop() },
+            )
             val controller = RuntimeHostController.withComponents(
                 platform = KadrePlatform.Wayland,
                 componentsFactory = { _, _ ->
-                    RuntimeSessionComponents(windows = WaylandHeadlessWindowManager())
+                    RuntimeSessionComponents(windows = driver.manager)
                 },
                 initialLifecycleState = LifecycleState(
                     AttachmentState.Attached,
@@ -112,6 +130,7 @@ public class WaylandBackendProvider private constructor(
             loopStarted?.invoke(session.pump)
             var outcome: SessionOutcome? = null
             while (outcome == null) {
+                session.drainWindowActions()
                 outcome = when (session.pump.runOnce()) {
                     PumpStep.Dispatched, PumpStep.Rearm -> null
                     PumpStep.Stopped -> {
