@@ -80,7 +80,7 @@ source "$REPO_ROOT/build/wayland/weston.env"
 
 run_phase tests "$TEST_TIMEOUT_SECONDS" \
     "$GRADLEW" \
-    :kadre:backend:wayland:waylandNativeTests \
+    :kadre:backend:wayland:waylandContractTests \
     --refresh-dependencies \
     --rerun-tasks \
     --no-daemon \

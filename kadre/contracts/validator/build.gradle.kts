@@ -175,7 +175,7 @@ val waylandContractEvidenceTasks = waylandContractIds.filter(activeContractIds::
     tasks.register<JavaExec>("generateWayland${contractId.replace("-", "")}ContractEvidence") {
         group = "verification"
         description = "Generates and validates $contractId evidence from the Wayland JUnit reports."
-        dependsOn("jvmMainClasses", ":kadre:backend:wayland:waylandNativeTests")
+        dependsOn("jvmMainClasses", ":kadre:backend:wayland:waylandContractTests")
         classpath(jvmMain.output.allOutputs, jvmMain.runtimeDependencyFiles)
         mainClass.set("org.graphiks.kadre.contracts.GenerateContractEvidenceKt")
         val output = waylandContractEvidenceDirectory.resolve("$contractId.json")

@@ -55,6 +55,15 @@ val waylandNativeTests = tasks.register<Test>("waylandNativeTests") {
     reports.junitXml.outputLocation.set(layout.buildDirectory.dir("test-results/waylandNativeTests"))
 }
 
+// Les preuves contractuelles consomment les deux suites : O2 (portable) et
+// O3 (compositor réel). L'agrégat garantit que les deux répertoires JUnit
+// existent là où la gate tourne.
+val waylandContractTests = tasks.register("waylandContractTests") {
+    group = "verification"
+    description = "Runs the O2 suite and the Linux-only O3 proofs feeding the contract evidence."
+    dependsOn(tasks.named("jvmTest"), waylandNativeTests)
+}
+
 // Friend-wiring JVM : le backend construit des internals de foundation
 // (WindowManagerRevision pour l'état du WindowManager headless) — la même
 // couture que :kadre:runtime, qui friende le jvmJar (le répertoire brut
