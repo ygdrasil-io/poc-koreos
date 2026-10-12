@@ -1888,6 +1888,7 @@ public object KadreIos {
         surfaceView: UIView,
         applicationFactory: KadreApplicationFactory,
         policy: KadrePolicy = KadrePolicies.Default,
+        windowSceneProvider: UIKitWindowSceneProvider? = null,
     ): KadreResult<KadreSession>
 }
 ```
