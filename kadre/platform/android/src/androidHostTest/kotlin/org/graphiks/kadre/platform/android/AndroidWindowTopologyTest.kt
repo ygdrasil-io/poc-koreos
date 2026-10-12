@@ -106,6 +106,12 @@ class AndroidWindowTopologyTest {
         val manager = AndroidActivityWindowManager(
             primarySurface = primarySurface(),
             nextRequestId = RuntimeProcessIds::nextWindowRequestId,
+            // Dispatch INLINE : le corps d'`apply` court sur le thread d'appel — la production
+            // passe par AndroidMainThreadDispatch (les primitives du seam touchent la hiérarchie
+            // de vues), ce test n'a ni Looper ni vues réelles.
+            hostThread = object : AndroidHostThreadDispatch {
+                override suspend fun <R> dispatch(block: suspend () -> R): R = block()
+            },
         )
         val window = manager.state.value.windows.single()
 

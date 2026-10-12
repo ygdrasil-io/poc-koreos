@@ -495,7 +495,7 @@ class AndroidInputDeliveryTest {
     }
 
     // -----------------------------------------------------------------------
-    // Cas 6 — sonde d'interactions synchrones : le seam ne les expose pas (différé phase 4)
+    // Cas 6 — sans handler vivant, le stimulus ordinaire coule SEUL (le miroir web)
     // -----------------------------------------------------------------------
 
     @Test
@@ -506,11 +506,11 @@ class AndroidInputDeliveryTest {
         surface.observationInstalled(inputWired = true)
         val collector = collectEvents()
 
-        // La sonde : le seam `installSessionConfiguration` ne révèle aucun handler
-        // d'interactions synchrones (RuntimeSynchronousInteraction vit derrière
-        // RuntimeWindowManager.dispatchSynchronousInteraction, sans port Android en phase 3).
-        // Épinglé : un stimulus ordinaire ne produit que SON événement ordinaire — rien ne se
-        // tient à sa place. Les interactions armées restent la phase 4.
+        // Depuis la phase 4 (Task 4), le seam construit le moteur d'interactions — mais AUCUN
+        // handler n'est installé ici : la dispatch du runtime sort tôt (le miroir web — la
+        // dispatch ne court que derrière un handler vivant), et le stimulus ordinaire ne
+        // produit que SON événement ordinaire — rien ne se tient à sa place. L'ordre complet
+        // (handler avant stimulus) est épinglé par AndroidInteractionEngineTest.
         surface.onInputObservation(keyObservation(KeyEvent.KEYCODE_A, KeyState.Pressed))
         assertIs<InputEvent.Key>(collector.next())
         assertEquals(0, collector.drainCount(), "no interaction stands in for the ordinary stimulus")
