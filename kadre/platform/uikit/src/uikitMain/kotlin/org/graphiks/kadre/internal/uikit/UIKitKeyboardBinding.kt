@@ -46,6 +46,14 @@ import platform.GameController.GCKeyboardDidDisconnectNotification
  *   ([uikitKeyboardModifiers] sur six faux — exactement ce que la source rapporte comme
  *   modificateurs TRACÉS : rien), jamais un ensemble par défaut inventé.
  *
+ * LIMITE MONO-CONSUMATEUR (documentée, jamais masquée) : le handler `keyChangedHandler` est
+ * une propriété du clavier coalescé, donc PROCESS-GLOBAL — une seconde session attachée
+ * PREND la livraison des touches (dernière attachée gagne), et le teardown de la première
+ * coupe le handler pour la suivante ; les annonces peuvent alors sur-déclarer
+ * `keyboardInstalled` (le fait clavier s'écrit par session, la source ne se pose qu'une
+ * fois par process). Limite mono-consumateur documentée — l'arbitrage process-wide des
+ * sources d'entrée est un follow-up.
+ *
  * ANNONCE : le binding écrit SON fait dans l'agrégat du port ([UIKitInputAnnouncement]) et
  * publie le snapshot complet — au scan initial trouvé (keyboard=true), à la notification de
  * connexion (true) et de déconnexion (false), au teardown (false). APRÈS [teardown], rien
