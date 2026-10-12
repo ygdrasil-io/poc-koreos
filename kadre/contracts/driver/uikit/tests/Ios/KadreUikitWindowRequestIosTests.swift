@@ -313,11 +313,14 @@ extension KadreUikitWindowRequestTests {
         try stopAndAwaitTermination(primary)
     }
 
-    /// BCK-020 / uikit-window-request-cancel-before-connect — `cancel` du requérant AVANT
+    /// BCK-021 / uikit-window-request-cancel-before-connect — `cancel` du requérant AVANT
     /// que le provider n'active la moindre scène (gate `holdActivations`) : l'annulation est
     /// `CancelledBeforeCommit`, la demande reste terminale `Cancelled`, et quand la gate est
     /// relâchée la résolution TARDIVE (scène connectée après coup, si FrontBoard l'honore)
-    /// est un no-op : AUCUNE session enfant n'existe, l'outcome ne change jamais.
+    /// est un no-op : AUCUNE session enfant n'existe, l'outcome ne change jamais. (Registre
+    /// Task 4 : le scénario vit sous BCK-021, iOS-only — la règle de couverture du registre
+    /// exige chaque scénario sur chaque requiredTarget, et la mécanique provider/hold n'a
+    /// de sens qu'en multi-scènes.)
     func testWindowRequestCancelledBeforeTheSceneConnectsStaysTerminalWithNoChild() throws {
         let provider = DriverWindowSceneProvider.shared
         provider.holdActivations = true
@@ -347,6 +350,12 @@ extension KadreUikitWindowRequestTests {
         // demande DÉJÀ terminale — le no-op du manager (CAS Task 1) : aucun enfant n'apparaît.
         provider.holdActivations = false
         let lateResolve = try pumpUntil(timeout: 15) { provider.resolvedCalls.count >= 1 }
+        // Renforcement revue (Task 4) : la gate relâchée doit produire UN événement — la
+        // résolution tardive OU un refus d'activation explicite. Ni l'un ni l'autre et le
+        // scénario ne prouve plus rien : il échoue au lieu de passer vacuement.
+        XCTAssertTrue(lateResolve || !provider.activationErrors.isEmpty,
+                      "the released activation must materialize — resolved or explicitly refused; "
+                        + "errors=\(provider.activationErrors) timeouts=\(provider.resolutionTimeouts)")
         // Dans les deux cas (scène connectée et résolue tardivement, ou activation refusée),
         // les invariants sont les mêmes : AUCUN enfant, l'outcome reste terminal Cancelled.
         // (Le store d'enregistrements s'accumule d'un test à l'autre : seuls les NOUVEAUX

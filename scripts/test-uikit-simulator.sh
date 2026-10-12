@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# UIKit contract gate (BCK-012, BCK-013, BCK-014, BCK-015, BCK-016, WIN-009). Usage: test-uikit-simulator.sh [ios|tvos|all]
+# UIKit contract gate (BCK-012, BCK-013, BCK-014, BCK-015, BCK-016, BCK-020, BCK-021, WIN-009). Usage: test-uikit-simulator.sh [ios|tvos|all]
 # Sélectionne explicitement la famille et sa destination, vérifie la toolchain,
 # lance les tests, valide les preuves et retourne un code d'échec fidèle.
 set -euo pipefail
@@ -54,10 +54,11 @@ run_gradle() {
 # Contrats actifs du gate UIKit, par famille — miroir des requiredTargets du registre
 # (colonne 8 de kadre/contracts/registry/contracts.tsv) et de la liste
 # uikitRequiredTargetsByContractId de kadre/contracts/validator/build.gradle.kts :
-# BCK-014 (multi-scène iPadOS) et BCK-016 (rotation iPadOS) n'exigent QUE iosSimulatorArm64,
-# la suite tvOS reste mono-scène.
-IOS_CONTRACT_IDS=(BCK-012 BCK-013 BCK-014 BCK-015 BCK-016 WIN-009)
-TVOS_CONTRACT_IDS=(BCK-012 BCK-013 BCK-015 WIN-009)
+# BCK-014 (multi-scène iPadOS), BCK-016 (rotation iPadOS) et BCK-021 (scènes corrélées
+# iPadOS) n'exigent QUE iosSimulatorArm64, la suite tvOS reste mono-scène ; BCK-020
+# (refus de requestWindow sans provider) court sur les DEUX familles.
+IOS_CONTRACT_IDS=(BCK-012 BCK-013 BCK-014 BCK-015 BCK-016 BCK-020 BCK-021 WIN-009)
+TVOS_CONTRACT_IDS=(BCK-012 BCK-013 BCK-015 BCK-020 WIN-009)
 
 # Une SEULE invocation Gradle par famille : les tâches generate partagent le même
 # dependOn (export JUnit → xcodebuild) — une invocation exécute la suite simulateur UNE fois,
