@@ -84,6 +84,9 @@ val contractPublications = tasks.register("publishContractArtifacts") {
     dependsOn(":kadre:platform:web:publishAllPublicationsToContractTestRepository")
     dependsOn(":kadre:runtime:publishAllPublicationsToContractTestRepository")
     dependsOn(":kadre:platform:android:publishAllPublicationsToContractTestRepository")
+    // Le porteur on-device des scénarios drop AND-007 : l'AAR est consommé androidTestImplementation
+    // par le consumer — les classes de scénarios tournent dans le run connecté du consumer.
+    dependsOn(":kadre:platform:android-devicetest:publishAllPublicationsToContractTestRepository")
 }
 
 tasks.register<GradleBuild>("validateKotlinConsumer") {
