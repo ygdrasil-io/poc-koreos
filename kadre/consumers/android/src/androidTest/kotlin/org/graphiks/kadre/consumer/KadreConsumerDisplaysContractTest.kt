@@ -22,6 +22,9 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
@@ -104,27 +107,30 @@ import org.junit.runner.RunWith
  *    niveaux sont donc envoyés en ordre strictement croissant (5 → 15), un seul envoi par
  *    niveau, dans CE scénario seul — les scénarios se tiennent dans un budget qui ne se
  *    dépense pas deux fois.
- * 5. BACKGROUND JAMAIS (android-memory-background-never-maps) — deux faits. (a) LA DÉCISION
- *    DU SYSTÈME : les commandes RÉELLES `am send-trim-memory <pkg> COMPLETE` et `HIDDEN`
- *    (les DEUX noms de niveaux background que la commande accepte — relevé AOSP
+ * 5. BACKGROUND JAMAIS (android-memory-background-never-maps) — deux faits. (a) LA VOIE
+ *    RÉELLE : les commandes shell `am send-trim-memory <pkg> COMPLETE` et `HIDDEN` (les DEUX
+ *    noms de niveaux background que la commande accepte — relevé AOSP
  *    ActivityManagerShellCommand : HIDDEN, RUNNING_MODERATE, BACKGROUND, RUNNING_LOW,
- *    MODERATE, RUNNING_CRITICAL, COMPLETE) sur l'app au premier plan sont REFUSÉES par le
- *    system_server lui-même (« Unable to set a background trim level on a foreground
- *    process » — ActivityManagerService.setProcessMemoryTrimLevel) — les niveaux background
- *    (level ≥ TRIM_MEMORY_UI_HIDDEN) n'atteignent JAMAIS un processus au premier plan ; le
- *    refus est observé (texte exact de la commande, erreur stderr du shell fusionnée) et
- *    n'envoie AUCUN signal. (b) LA RÉCEPTION : la chaîne réceptrice est réellement vivante —
- *    le contrôle positif (`TRIM_MEMORY_RUNNING_MODERATE` dispatché par
- *    `Application.onTrimMemory`, la JAMBE Application de la chaîne réelle —
- *    `ActivityThread.handleTrimMemory` collecte l'Application parmi ses callbacks et son
- *    `onTrimMemory` public relaie à chaque callback enregistré, dont celui de la source
- *    kadre) monte `Moderate` — puis TOUS les niveaux background de la constante SDK
- *    (UI_HIDDEN 20, BACKGROUND 40, MODERATE 60, COMPLETE 80) passent par la MÊME chaîne
- *    SANS produire JAMAIS un signal : la perte de visibilité n'est pas de la pression, la
- *    table de mapping ne les parle pas. La sentinelle `android-memory-no-background-signal`
- *    garde ce silence (mapping background → signal → ce scénario seul échoue). Ce scénario
- *    ne dépense RIEN du budget shell du (4) : un envoi refusé n'écrit pas le niveau
- *    enregistré (la levée précède l'écriture), et le dispatch Application n'y passe pas.
+ *    MODERATE, RUNNING_CRITICAL, COMPLETE) partent de l'identité shell de l'UiAutomation —
+ *    la décision appartient au system_server, jamais au test. Sur l'API 35 de l'émulateur,
+ *    la commande ACCEPTE un nom background sur l'app au premier plan (la sortie capturée est
+ *    vide — le relevé « Unable to set a background trim level on a foreground process »
+ *    d'ActivityManagerService.setProcessMemoryTrimLevel décrit des arbres AOSP plus anciens ;
+ *    le refus observé est alors celui de l'ESCALADE, la contrainte monotone du (4)) — la
+ *    règle du contrat est le SILENCE qui SUIT chaque envoi : un niveau background accepté et
+ *    réellement délivré traverse `ActivityThread.handleTrimMemory` et la source kadre, dont
+ *    la table de mapping ne le parle pas — la perte de visibilité n'est pas de la pression.
+ *    (b) LA RÉCEPTION : la chaîne réceptrice est réellement vivante — le contrôle positif
+ *    (`TRIM_MEMORY_RUNNING_MODERATE` dispatché par `Application.onTrimMemory`, la JAMBE
+ *    Application de la chaîne réelle — `ActivityThread.handleTrimMemory` collecte
+ *    l'Application parmi ses callbacks et son `onTrimMemory` public relaie à chaque callback
+ *    enregistré, dont celui de la source kadre) monte `Moderate` — puis TOUS les niveaux
+ *    background de la constante SDK (UI_HIDDEN 20, BACKGROUND 40, MODERATE 60, COMPLETE 80)
+ *    passent par la MÊME chaîne SANS produire JAMAIS un signal. La sentinelle
+ *    `android-memory-no-background-signal` garde ce silence (mapping background → signal →
+ *    ce scénario seul échoue). Ce scénario ne dépense RIEN du budget shell du (4) : sous
+ *    l'orchestrateur chaque scénario repart d'un processus neuf, et le dispatch Application
+ *    du contrôle positif n'y passe pas.
  * 6. RAW INPUT (android-raw-input-noncall) — la preuve non-appel P3 re-épinglée : la demande
  *    d'accès brut répond `Failure(Unsupported(RawInputAccess))` — la taxonomie nomme
  *    l'opération, aucune primitive native n'est atteinte — et la capability publiée dit la
@@ -343,7 +349,7 @@ class KadreConsumerDisplaysContractTest {
 
             // L'énoncé tient dans le temps : sur la fenêtre d'observation, aucun événement
             // n'annonce une manette et l'état reste exactement ce que le système énonce.
-            val recorder = DeviceEventRecorder(scope.devices.events, this)
+            val recorder = DeviceEventRecorder(scope.devices.events)
             val deadline = System.currentTimeMillis() + QUIET_WINDOW_MILLIS
             while (System.currentTimeMillis() < deadline) {
                 val held = scope.devices.state.value.inventory
@@ -358,6 +364,7 @@ class KadreConsumerDisplaysContractTest {
                 )
                 Thread.sleep(POLL_INTERVAL_MILLIS)
             }
+            recorder.close()
             ConsumerTestSupport.onMain { ConsumerTestSupport.notNull(session).close() }
         }
     }
@@ -392,7 +399,7 @@ class KadreConsumerDisplaysContractTest {
             )
 
             val packageName = InstrumentationRegistry.getInstrumentation().targetContext.packageName
-            val recorder = SignalRecorder(scope.lifecycle.signals, this)
+            val recorder = SignalRecorder(scope.lifecycle.signals)
 
             // RUNNING_MODERATE (5) — la commande shell RÉELLE, le signal Moderate observé.
             val moderateOutput = shellCommand("am send-trim-memory $packageName RUNNING_MODERATE")
@@ -409,14 +416,16 @@ class KadreConsumerDisplaysContractTest {
                 levels,
                 "the real trims mapped exactly once each (outputs: '$moderateOutput', '$criticalOutput')",
             )
+            recorder.close()
             ConsumerTestSupport.onMain { ConsumerTestSupport.notNull(session).close() }
         }
     }
 
     /**
-     * android-memory-background-never-maps — la décision du système (la commande réelle
-     * refuse un niveau background sur l'app au premier plan) ET la réception (la chaîne
-     * réceptrice vivante, contrôle positif compris, ne mappe JAMAIS un niveau background).
+     * android-memory-background-never-maps — la voie shell RÉELLE des niveaux background
+     * (l'identité shell de l'UiAutomation, la décision du system_server) ne produit JAMAIS un
+     * signal, et la chaîne réceptrice vivante — contrôle positif compris — ne mappe JAMAIS un
+     * niveau background.
      */
     @Test
     fun androidMemoryBackgroundNeverMaps() = runBlocking {
@@ -438,24 +447,22 @@ class KadreConsumerDisplaysContractTest {
                 "the memory pressure source is installed by the real attach",
             )
 
-            // (a) LA DÉCISION DU SYSTÈME : les commandes RÉELLES refusent les niveaux
-            //     background sur l'app au premier plan — les DEUX noms que la commande
-            //     accepte (COMPLETE 80 et HIDDEN 20, le relevé AOSP) sont levés par le
-            //     system_server (« Unable to set a background trim level on a foreground
-            //     process ») ; le refus est observé sur la sortie exacte de chaque commande,
-            //     et il n'envoie AUCUN signal. Un envoi refusé n'écrit pas le niveau
-            //     enregistré : ce scénario ne dépense RIEN du budget shell du (4).
+            // (a) LA VOIE RÉELLE : les commandes shell des niveaux background — la décision
+            //     appartient au system_server (l'identité shell). La règle du contrat est le
+            //     SILENCE après chaque envoi : un nom background accepté et réellement
+            //     délivré (le relevé API 35 — sortie vide — montre que la commande accepte
+            //     COMPLETE sur l'app au premier plan) traverse handleTrimMemory et la source
+            //     kadre sans jamais parler ; un envoi refusé (l'escalade — la contrainte
+            //     monotone du system_server — lève l'exacte « Unable to set a trim level »)
+            //     n'écrit pas le niveau enregistré et n'envoie rien non plus. La sortie de
+            //     chaque commande est retenue pour le diagnostic, jamais affirmée : ni le
+            //     refus ni l'acceptation ne sont le contrat, le silence l'est.
             val packageName = InstrumentationRegistry.getInstrumentation().targetContext.packageName
-            val recorder = SignalRecorder(scope.lifecycle.signals, this)
+            val recorder = SignalRecorder(scope.lifecycle.signals)
             val completeOutput = shellCommand("am send-trim-memory $packageName COMPLETE")
+            awaitSilence(recorder, "after the shell COMPLETE send (output: '$completeOutput')")
             val hiddenOutput = shellCommand("am send-trim-memory $packageName HIDDEN")
-            for (output in listOf(completeOutput, hiddenOutput)) {
-                assertTrue(
-                    output.contains("Unable to set a background trim level"),
-                    "the platform refuses background trim levels on a foreground process (output: '$output')",
-                )
-            }
-            awaitSilence(recorder, "after the platform's own background-level refusals")
+            awaitSilence(recorder, "after the shell HIDDEN send (output: '$hiddenOutput')")
 
             // (b) LA RÉCEPTION — le contrôle positif d'abord : la chaîne réceptrice est
             //     vivante. Le dispatch Application est l'appel exact que
@@ -484,6 +491,7 @@ class KadreConsumerDisplaysContractTest {
                 levels,
                 "background trim levels never map to a signal: ${recorder.snapshot()}",
             )
+            recorder.close()
             ConsumerTestSupport.onMain { ConsumerTestSupport.notNull(session).close() }
         }
     }
@@ -585,11 +593,14 @@ class KadreConsumerDisplaysContractTest {
     /**
      * La commande shell du device — l'[UiAutomation][androidx.test.platform.app.
      * InstrumentationRegistry] de l'instrumentation parle avec l'identité shell, la seule
-     * voie qui force la décision du system_server (`am send-trim-memory`). La fusion `2>&1`
-     * est POSÉE par le scénario : l'erreur d'un refus (`am` imprime la levée du
-     * system_server sur stderr) doit figurer dans la sortie capturée, quel que soit le
-     * câblage du descripteur de l'UiAutomation. La sortie (stdout et erreur confondus) est
-     * drainée jusqu'à EOF — la commande est terminée au retour.
+     * voie qui force la décision du system_server (`am send-trim-memory`, relevé AOSP :
+     * « Only shell can call it » — un uid d'application se voit répondre SecurityException).
+     * La fusion `2>&1` est POSÉE par le scénario : l'erreur d'un refus (la levée du
+     * system_server sur stderr) doit figurer dans la sortie capturée. Le drainage garde un
+     * PLAFOND BORNÉ : la livraison du trim est observée en quelques dizaines de
+     * millisecondes et un refus s'imprime en un éclair, mais le descripteur de l'UiAutomation
+     * peut rester ouvert sans jamais EOF (câblage émulateur, exécution asynchrone) — le
+     * plafond ne coupe jamais une réponse réelle, il borne seulement un descripteur muet.
      */
     private fun shellCommand(command: String): String {
         val descriptor =
@@ -598,10 +609,17 @@ class KadreConsumerDisplaysContractTest {
             FileInputStream(fd.fileDescriptor).use { stream ->
                 val output = StringBuilder()
                 val buffer = ByteArray(8192)
+                val deadline = System.currentTimeMillis() + SHELL_DRAIN_TIMEOUT_MILLIS
                 while (true) {
-                    val read = stream.read(buffer)
-                    if (read < 0) break
-                    output.append(String(buffer, 0, read, Charsets.UTF_8))
+                    val available = stream.available()
+                    if (available > 0) {
+                        val read = stream.read(buffer)
+                        if (read < 0) break
+                        output.append(String(buffer, 0, read, Charsets.UTF_8))
+                        continue
+                    }
+                    if (System.currentTimeMillis() > deadline) break
+                    Thread.sleep(SHELL_DRAIN_POLL_MILLIS)
                 }
                 return output.toString()
             }
@@ -690,28 +708,56 @@ class KadreConsumerDisplaysContractTest {
 
     /**
      * Le recueil de signaux du test : souscrit en UNDISPATCHED (la souscription est engagée
-     * au retour), accumule sous verrou — les publications arrivent du looper main via le
-     * relais hors pile de la source mémoire.
+     * au retour) sur un DISPATCHER DÉDIÉ ([Dispatchers.IO]) — le polling du test reste sur le
+     * thread d'instrumentation (Thread.sleep, jamais une suspension) : un collecteur resté sur
+     * la boucle runBlocking ne serait repris qu'AU RETOUR du bloc de test, chaque publication
+     * dormirait dans le buffer pendant toute l'attente. Sur son dispatcher, le collecteur
+     * traite chaque publication dès son arrivée ; l'accumulation sous verrou rend le recueil
+     * visible au polling. Les publications arrivent du looper main via le relais hors pile de
+     * la source mémoire. Le scope est CELUI DU RECUEIL ([ownScope]) : le scénario le plus
+     * souvent passe par le scope runBlocking du test, dont le retour attend la fin des
+     * enfants — un recueil vivant au retour (jamais atteint un point de suspension pendant
+     * l'épilogue du runner) y est suspendu indéfiniment ; le scope dédié, ANNULÉ par le
+     * scénario dès que la fenêtre d'observation est close ([close]), détache l'épilogue du
+     * runner de la vie du collecteur.
      */
-    private class SignalRecorder(flow: Flow<HostSignal>, scope: CoroutineScope) {
+    private class SignalRecorder(flow: Flow<HostSignal>) {
         private val lock = Any()
         private val signals = mutableListOf<HostSignal>()
-        private val job = scope.launch(start = CoroutineStart.UNDISPATCHED) {
-            flow.collect { signal -> synchronized(lock) { signals += signal } }
+        private val ownScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+        init {
+            ownScope.launch(start = CoroutineStart.UNDISPATCHED) {
+                flow.collect { signal -> synchronized(lock) { signals += signal } }
+            }
         }
 
         fun snapshot(): List<HostSignal> = synchronized(lock) { signals.toList() }
+
+        /** Termine la fenêtre d'observation : le collecteur est annulé, le recueil figé. */
+        fun close() {
+            ownScope.cancel()
+        }
     }
 
     /** Le recueil d'événements devices du test — le miroir du recueil de signaux. */
-    private class DeviceEventRecorder(flow: Flow<DeviceLifecycleEvent>, scope: CoroutineScope) {
+    private class DeviceEventRecorder(flow: Flow<DeviceLifecycleEvent>) {
         private val lock = Any()
         private val events = mutableListOf<DeviceLifecycleEvent>()
-        private val job = scope.launch(start = CoroutineStart.UNDISPATCHED) {
-            flow.collect { event -> synchronized(lock) { events += event } }
+        private val ownScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+        init {
+            ownScope.launch(start = CoroutineStart.UNDISPATCHED) {
+                flow.collect { event -> synchronized(lock) { events += event } }
+            }
         }
 
         fun snapshot(): List<DeviceLifecycleEvent> = synchronized(lock) { events.toList() }
+
+        /** Termine la fenêtre d'observation : le collecteur est annulé, le recueil figé. */
+        fun close() {
+            ownScope.cancel()
+        }
     }
 
     private companion object {
@@ -723,5 +769,11 @@ class KadreConsumerDisplaysContractTest {
 
         /** La fenêtre bornée du calme : l'inventaire gamepad tient, aucun événement. */
         const val QUIET_WINDOW_MILLIS = 1_500L
+
+        /** Le plafond du drainage d'une commande shell : le refus ou l'accusé arrive en ms. */
+        const val SHELL_DRAIN_TIMEOUT_MILLIS = 5_000L
+
+        /** L'intervalle du drainage borné d'une commande shell. */
+        const val SHELL_DRAIN_POLL_MILLIS = 20L
     }
 }
