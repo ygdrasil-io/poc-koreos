@@ -232,9 +232,10 @@ internal class AndroidProcessMemoryPressure {
 
     /**
      * La terminaison du host (ou le rollback de son attach) : le créneau quitte. Le dernier
-     * libéré ferme la source process — la déregistration est HORS du lock, un register qui
-     * lance remonte à l'appelant (la couture d'attach l'absorbe sur son canal de reporting,
-     * comme toute perte de terminal).
+     * libéré ferme la source process — la fermeture est HORS du lock, et l'opération qui peut
+     * y lancer est l'UNREGISTER (le register n'intervient qu'à l'install, où son échec
+     * répond `false`). La couture d'attach absorbe ce lancement sur son canal de reporting
+     * sur TOUS ses chemins — terminal ET rollback — comme toute perte de terminal.
      */
     internal fun hostTerminated(key: Any) {
         val dying = lock.withLock {

@@ -509,7 +509,19 @@ internal object AndroidHostSession {
             },
             // Le rollback libère le créneau mémoire pris avant le contrôleur (Task 3) :
             // un attach qui échoue ne laisse la source process installée pour personne.
-            onRollback = { pressureClaim.hostTerminated() },
+            // L'absorption est SYMÉTRIQUE au chemin terminal (onTerminal, ci-dessus) : une
+            // déregistration lançante ne remplace JAMAIS l'issue de l'attach — le rejet du
+            // contrôleur reste un `KadreResult.Failure` retourné, le throwable du chemin
+            // catch reste CELUI qui est documenté — elle est SIGNALÉE sur le canal de
+            // reporting, comme toute perte de terminal. Le MÊME lambda couvre les DEUX
+            // chemins de rollback de `installBindingAndAttach`.
+            onRollback = {
+                try {
+                    pressureClaim.hostTerminated()
+                } catch (cause: Throwable) {
+                    runCatching { AndroidAttachDiagnostics.report(cause) }
+                }
+            },
         )
     }
 
@@ -531,7 +543,10 @@ internal object AndroidHostSession {
      * la remplace par une étape lançante pour épingler le rollback sans construire de View
      * réelle. `onRollback` (Task 3) accompagne le rollback intégral sur ses deux chemins —
      * le rejet du contrôleur et le throwable : il libère ce que l'attach a pu prendre avant
-     * l'échec (le créneau mémoire process) sans que l'appelant ait à intercepter.
+     * l'échec (le créneau mémoire process). CONTRAT : `onRollback` absorbe ses propres
+     * échecs (l'appel de la couture le passe enveloppé, symétrique au chemin terminal) —
+     * un lancement de rollback ne doit ni remplacer le `Failure` retourné ni masquer le
+     * throwable documenté du chemin catch.
      */
     internal fun installBindingAndAttach(
         reservation: AndroidAttachReservation,
