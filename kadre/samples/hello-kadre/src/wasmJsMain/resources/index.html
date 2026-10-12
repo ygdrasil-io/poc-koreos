@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<!--
+  La page hôte de Hello Kadre (cible web).
+
+  Le conteneur `hello-kadre` est LA fenêtre du sample web : il remplit la fenêtre
+  du navigateur et Kadre y attache la session (les écouteurs d'entrée et
+  l'observateur de taille vivent sur le conteneur lui-même). Son contenu est un
+  simple texte d'accueil — le sample n'a aucun rendu : tout se passe dans la
+  console du navigateur (DevTools).
+
+  Le script est le chargeur webpack émis par la distribution wasm ; il charge
+  lui-même le binaire Kotlin/Wasm — aucun autre élément n'est nécessaire.
+-->
+<html lang="fr">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Hello Kadre — web</title>
+    <link rel="stylesheet" href="hello-kadre.css">
+</head>
+<body>
+    <div id="hello-kadre" tabindex="0">
+        <h1>Hello Kadre — web</h1>
+        <p>Ce conteneur est la « fenêtre » du sample : la session Kadre y est attachée.</p>
+        <p>
+            Ouvrez la console du navigateur (F12) : chaque événement de surface et d'entrée
+            y est imprimé — bougez la souris, cliquez dans la page, tapez au clavier,
+            redimensionnez la fenêtre du navigateur.
+        </p>
+    </div>
+    <script src="hello-kadre.js"></script>
+</body>
+</html>

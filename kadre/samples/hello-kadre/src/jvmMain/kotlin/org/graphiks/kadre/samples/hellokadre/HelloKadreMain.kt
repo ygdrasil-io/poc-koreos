@@ -6,15 +6,12 @@ import kotlinx.coroutines.flow.filterIsInstance
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import org.graphiks.kadre.application.KadreApplication
-import org.graphiks.kadre.application.KadreScope
 import org.graphiks.kadre.application.SessionOutcome
 import org.graphiks.kadre.diagnostics.KadreResult
-import org.graphiks.kadre.display.DisplayInventory
 import org.graphiks.kadre.platform.desktop.DesktopBackend
 import org.graphiks.kadre.platform.desktop.DesktopHostOptions
 import org.graphiks.kadre.platform.desktop.runKadreApplication
 import org.graphiks.kadre.surface.LogicalSize
-import org.graphiks.kadre.surface.SurfaceEvent
 import org.graphiks.kadre.window.WindowCloseDecision
 import org.graphiks.kadre.window.WindowCloseResponseOutcome
 import org.graphiks.kadre.window.WindowEvent
@@ -22,19 +19,20 @@ import org.graphiks.kadre.window.WindowRequestOutcome
 import org.graphiks.kadre.window.WindowSpec
 
 /**
- * Hello Kadre : le plus petit programme fenêtré du dépôt.
+ * Hello Kadre sur le bureau : le plus petit programme fenêtré du dépôt.
  *
  * Aucun rendu, aucun Compose : une fenêtre native s'ouvre et tout ce qui lui
  * arrive — géométrie, focus, touches, souris, scroll — est imprimé dans la
  * console. Fermer la fenêtre (bouton rouge du système) achève la session.
  *
- * Le fil conducteur suit six étapes numérotées dans [main] ; chaque étape
- * n'utilise que l'API publique de `:kadre`, sans dépendance supplémentaire.
+ * Le fil conducteur suit six étapes numérotées dans [main] ; les libellés et
+ * l'impression des écrans sont partagés avec la variante web ([HelloKadreWebMain]).
  */
 public fun main() {
     // Étape 1 — le runtime démarre, choisit le backend natif de la plateforme
-    // (AppKit sur macOS) et exécute le bloc `application` dans le scope de la
-    // session. `stopWhenLastWindowClosed` : la dernière fenêtre fermée arrête tout.
+    // (AppKit sur macOS, Wayland sous Linux…) et exécute le bloc `application`
+    // dans le scope de la session. `stopWhenLastWindowClosed` : la dernière
+    // fenêtre fermée arrête tout.
     val outcome = runKadreApplication(
         options = DesktopHostOptions.Standalone(
             backend = DesktopBackend.Auto,
@@ -97,43 +95,4 @@ public fun main() {
         },
     )
     if (outcome is SessionOutcome.Failed) error("Hello Kadre a échoué : ${outcome.failure}")
-}
-
-/** Étape 0 — sortie console : les écrans connus au démarrage de la session. */
-private fun KadreScope.printDisplays() {
-    when (val inventory = displays.state.value.inventory) {
-        is DisplayInventory.Enumerated -> inventory.displays.forEach { display ->
-            val state = display.state.value
-            val role = if (display.id == inventory.primary?.id) " (principale)" else ""
-            println(
-                "[écran] ${state.name ?: "sans nom"}$role : " +
-                    "${state.bounds.size.width}×${state.bounds.size.height} px, échelle ×${state.scaleFactor}",
-            )
-        }
-        // Sur macOS, l'énumération des écrans peut attendre une permission ;
-        // le sample reste observateur et ne la demande pas de lui-même.
-        DisplayInventory.PermissionRequired ->
-            println("[écran] énumération bloquée par une permission (voir displays.requestAccess())")
-        is DisplayInventory.PermissionDenied ->
-            println("[écran] énumération refusée par le système")
-        is DisplayInventory.Unavailable ->
-            println("[écran] énumération indisponible : ${inventory.failure}")
-    }
-}
-
-/** Un libellé court par événement de fenêtre, au lieu du `toString()` complet. */
-private fun describe(event: WindowEvent): String = when (event) {
-    is WindowEvent.GeometryChanged -> "géométrie : contenu=${event.state.contentSize}"
-    is WindowEvent.PropertiesChanged -> "propriétés modifiées : ${event.changed}"
-    is WindowEvent.CloseRequested -> "demande de fermeture (raison=${event.reason}, rejet possible=${event.canReject})"
-    is WindowEvent.Closing -> "en fermeture (raison=${event.reason})"
-}
-
-/** Un libellé court par événement de surface, au lieu du `toString()` complet. */
-private fun describe(event: SurfaceEvent): String = when (event) {
-    is SurfaceEvent.MetricsChanged -> "métriques : ${event.state.logicalSize} @ ×${event.state.scaleFactor}"
-    is SurfaceEvent.FocusChanged -> "focus : ${event.state.focus}"
-    is SurfaceEvent.VisibilityChanged -> "visibilité : ${event.state.visibility}, occlusion : ${event.state.occlusion}"
-    is SurfaceEvent.AppearanceChanged -> "apparence : ${event.state.appearance}"
-    is SurfaceEvent.RedrawRequested -> "redessin demandé"
 }
