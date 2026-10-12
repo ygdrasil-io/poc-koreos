@@ -1,11 +1,9 @@
 name: Kadre Wayland Contracts
 
-# Gate désactivée sur push/PR tant que KFFI-WAYLAND-004 (binding managé kffi)
-# n'est pas publiée sur Central Portal Snapshots : sans le snapshot managé,
-# `:kadre:backend:wayland` ne compile pas sur une machine propre. Basculer sur
-# push/PR dès la publication (retrait du mavenLocal() de settings.gradle.kts).
 on:
-  workflow_dispatch:
+  push:
+    branches: [master]
+  pull_request:
 
 jobs:
   wayland-contracts:
