@@ -1,10 +1,6 @@
 package org.graphiks.kadre.platform.android
 
 import android.view.KeyEvent
-import org.graphiks.kadre.diagnostics.Capability
-import org.graphiks.kadre.diagnostics.KadreFailure
-import org.graphiks.kadre.diagnostics.KadreOperation
-import org.graphiks.kadre.diagnostics.KadreResult
 import org.graphiks.kadre.input.KeyState
 import org.graphiks.kadre.input.PointerButtonState
 import org.graphiks.kadre.input.TouchPhase
@@ -12,11 +8,6 @@ import org.graphiks.kadre.internal.runtime.RuntimeEventCollectorAllocator
 import org.graphiks.kadre.internal.runtime.RuntimeSurfaceInput
 import org.graphiks.kadre.internal.runtime.RuntimeSynchronousInteraction
 import org.graphiks.kadre.internal.runtime.SurfaceStimulus
-import org.graphiks.kadre.internal.runtime.TextInputCursorCommand
-import org.graphiks.kadre.internal.runtime.TextInputDocumentCommand
-import org.graphiks.kadre.internal.runtime.TextInputOpenCommand
-import org.graphiks.kadre.internal.runtime.TextInputOwner
-import org.graphiks.kadre.internal.runtime.TextInputPort
 import org.graphiks.kadre.surface.SurfaceId
 import org.graphiks.kadre.surface.SurfaceState
 
@@ -55,28 +46,6 @@ internal val ANDROID_DOCUMENT_SCROLL_KEYS: Set<Int> = setOf(
     KeyEvent.KEYCODE_MOVE_END,
     KeyEvent.KEYCODE_SPACE,
 )
-
-/**
- * Le port texte qui refuse — le miroir structurel inverse de `WebTextInputPort` : la phase 3
- * n'a AUCUN IME (le drop est phase 6, l'IME sa phase propre), et le paramètre
- * `textInputPort` du réducteur runtime n'est pas nullable : le refus `Unsupported(TextInput)`
- * est la seule promesse honnête — la capability dit Unsupported dès la construction, et
- * `openTextInput` du réducteur refuse AVANT même de consulter [open].
- */
-internal object RefusingTextInputPort : TextInputPort {
-    private val refusal = KadreFailure.Unsupported(KadreOperation.TextInput)
-
-    override val capability: Capability<Unit> = Capability.Unsupported(refusal)
-
-    override fun open(command: TextInputOpenCommand): KadreResult<TextInputOwner> =
-        KadreResult.Failure(refusal)
-
-    override suspend fun updateCursor(command: TextInputCursorCommand): KadreResult<Unit> =
-        KadreResult.Failure(refusal)
-
-    override suspend fun updateDocument(command: TextInputDocumentCommand): KadreResult<Unit> =
-        KadreResult.Failure(refusal)
-}
 
 /**
  * L'allocateur de collecteurs que le runtime passe au seam est runtime-interne : le SPI le

@@ -583,9 +583,14 @@ internal class AndroidHostSurface(
      * - `eventCollectorGate` / `textInputEventCollectorGate` = DEUX gates du même allocateur
      *   de session (l'[Any] runtime-interne, rendu inchangé — le miroir
      *   `sessionCollectorAllocator` web, qui [error] sur un type invalide) ;
-     * - `textInputPort` = le port qui refuse — le paramètre runtime n'est pas nullable et la
-     *   phase 3 n'a AUCUN IME (le miroir inverse du port web structurellement supporté) : la
-     *   capability dit `Unsupported(TextInput)` dès la construction ;
+     * - `textInputPort` = le port Android ([AndroidTextInputPort]) — le pont IME transposé
+     *   (phase 5) : la MACHINERIE de mapping IME → `TextInputObservation` vers la vraie
+     *   session, prouvée contre elle, mais dont la capability reste
+     *   `Unsupported(TextInput)` TOUJOURS — le SDK exige une sous-classe de View que kadre
+     *   ne possède pas, donc aucun canal d'intégration conforme n'existe (le fait central
+     *   de la phase 5, la décision normative garée) : le réducteur refuse `openTextInput`
+     *   AVANT d'appeler `open`, exactement comme le port qui refusait — la promesse
+     *   honnête n'a pas changé, seule la machinerie qu'elle gare existe désormais ;
      * - `rawInputCoordinator = null` + `rawInputCapability = Unsupported(RawInputAccess)` —
      *   l'accès natif n'est pas activé, la capability le dit structurellement (le miroir web) ;
      * - `dragAndDropAvailable = false` — le paramètre est la capability `dragAndDrop` de
@@ -639,7 +644,7 @@ internal class AndroidHostSurface(
             deliveryPolicy = inputDeliveryPolicy,
             eventStampSource = source,
             eventCollectorGate = allocator.newGate(maxCollectorsPerFlow),
-            textInputPort = RefusingTextInputPort,
+            textInputPort = AndroidTextInputPort(source),
             rawInputCoordinator = null,
             rawInputCapability = Capability.Unsupported(KadreFailure.Unsupported(KadreOperation.RawInputAccess)),
             dragAndDropAvailable = false,

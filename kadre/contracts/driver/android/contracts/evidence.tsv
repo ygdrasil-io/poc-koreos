@@ -39,3 +39,6 @@ AND-005	android	scenario	android-interaction-token-authority	org.graphiks.kadre.
 AND-005	android	sentinel	android-window-native-gate	org.graphiks.kadre.consumer.KadreConsumerWindowInteractionContractTest	androidWindowRefusedFieldsInert
 AND-005	android	sentinel	android-capture-listener-confirmation	org.graphiks.kadre.consumer.KadreConsumerWindowInteractionContractTest	androidSurfaceCursorAndCapture
 AND-005	android	sentinel	android-interaction-unadvertised-refused	org.graphiks.kadre.consumer.KadreConsumerWindowInteractionContractTest	androidInteractionTokenAuthority
+AND-006	android	scenario	android-text-input-channel-absent	org.graphiks.kadre.consumer.KadreConsumerTextContractTest	androidTextInputChannelAbsent
+AND-006	android	scenario	android-text-input-ime-key-deduplication	org.graphiks.kadre.consumer.KadreConsumerTextContractTest	androidTextInputImeKeyDeduplication
+AND-006	android	sentinel	android-text-input-no-synthesis	org.graphiks.kadre.consumer.KadreConsumerTextContractTest	androidTextInputImeKeyDeduplication

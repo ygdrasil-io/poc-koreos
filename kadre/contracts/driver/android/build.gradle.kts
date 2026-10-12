@@ -45,7 +45,7 @@ val gateEvidenceDir = layout.buildDirectory
 /** Le registre et le mapping qui décident des documents canoniques qu'un smoke écrit. */
 val contractRegistry = rootProject.file("kadre/contracts/registry/contracts.tsv")
 val contractMapping = layout.projectDirectory.file("contracts/evidence.tsv")
-val androidContractIds = listOf("AND-001", "AND-002", "AND-003", "AND-004", "AND-005")
+val androidContractIds = listOf("AND-001", "AND-002", "AND-003", "AND-004", "AND-005", "AND-006")
 
 /**
  * Le commit auquel la preuve canonique appartient.
