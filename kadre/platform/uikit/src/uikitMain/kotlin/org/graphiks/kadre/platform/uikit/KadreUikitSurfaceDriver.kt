@@ -134,9 +134,13 @@ public class KadreUikitSurfaceEventCapture private constructor(surface: HostSurf
 
 /**
  * La sonde de CONDUITE de surface du driver UIKit/tvOS (phase 2) — le prolongement naturel de
- * [KadreUikitProbe] (phase 0) : les chemins Kotlin-only du module (`withUIKitView`, le `Flow`
+ * [KadreUikitProbe] (phase 0) : les chemins Kotlin-only du module (le bail natif de la
+ * surface — l'extension d'accès plateforme d'`UIKitSurfaceAccess` — et le `Flow`
  * d'événements) et les compteurs internes (diagnostics d'attach, re-lectures) rendus
- * lisibles du fixture Swift. Scaffolding du driver, même posture que la sonde : opt-in
+ * lisibles du fixture Swift. Scaffolding du driver, même posture que la sonde :
+ * VOLONTAIREMENT VISIBLE dans l'en-tête framework (aucun masquage Obj-C — les suites
+ * XCTest phase 2 le pilotent depuis Swift), hors de la surface promise §5, listé comme tel
+ * dans l'inventaire d'audit de l'en-tête (`capabilities/uikit.md` §3) ; opt-in
  * explicite du consumer ([KadrePlatformApi]), aucune entrée dans l'API contractuelle.
  *
  * Le bail est conduit en `runBlocking` depuis le thread appelant (le principal UIKit, contrat

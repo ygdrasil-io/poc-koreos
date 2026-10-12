@@ -403,7 +403,7 @@ lease déjà admise lors de la fermeture, et un appel ultérieur à
 ses contraintes, ni un renderer; cette possibilité n'ajoute aucun handle aux
 exports Swift, Java ou TypeScript.
 
-Ces extensions sont Kotlin-only. Aucun pointer/adresse n’apparaît dans Swift, Java, TypeScript, diagnostics, equality ou snapshots communs.
+Ces extensions sont Kotlin-only et masquées des exports Obj-C/Swift (`@HiddenFromObjC`, appliqué depuis la phase 3 de l’adapter UIKit : la règle vaut pour la façade ET pour l’en-tête framework généré, conformément à §2). Aucun pointer/adresse n’apparaît dans Swift, Java, TypeScript, diagnostics, equality ou snapshots communs.
 
 ## 8. Nommage et compatibilité
 

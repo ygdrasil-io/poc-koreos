@@ -27,7 +27,10 @@ public data class KadreUikitObservation(
 /**
  * Sonde de conduite de la phase 0 : prouve que le code Kotlin/Native observe des objets UIKit
  * réels reçus du host. Scaffolding du driver — complété par `KadreIos.attach` (phase 1).
- * Marqué platform-api : opt-in explicite du consumer.
+ * Scaffolding VOLONTAIREMENT VISIBLE dans l'en-tête framework (aucun masquage Obj-C) :
+ * instrumentation des suites XCTest des phases 0-3, hors de la surface promise §5
+ * (INTEROP-EXPORTS), listée comme telle dans l'inventaire d'audit de l'en-tête
+ * (`capabilities/uikit.md` §3). Marqué platform-api : opt-in explicite du consumer.
  */
 @KadrePlatformApi
 public object KadreUikitProbe {
