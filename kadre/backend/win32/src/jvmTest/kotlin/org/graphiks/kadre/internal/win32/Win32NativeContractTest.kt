@@ -12,7 +12,9 @@ import kotlin.test.assertTrue
 /**
  * W32-001/002/003 native half (spec R4, R6): real Windows message queue,
  * injection through the external driver only, observation through the
- * Kadre-internal dispatch records.
+ * Kadre-internal dispatch records. Every owner is registered for teardown at
+ * creation so one failing test can never leak the single WndProc route into
+ * the following tests.
  */
 class Win32NativeContractTest {
     private val cleanups = ArrayList<AutoCloseable>()
@@ -23,28 +25,34 @@ class Win32NativeContractTest {
         cleanups.clear()
     }
 
-    private fun drainUntil(condition: () -> Boolean) {
+    private fun newHost(): Win32ControlHost = Win32ControlHost().also(cleanups::add)
+
+    private fun newInjector(): Win32MessageInjector = Win32MessageInjector().also(cleanups::add)
+
+    /**
+     * Pumps the thread message queue while waiting: a posted message only
+     * reaches the WndProc when this thread drains it through pollOne
+     * (PeekMessageW + DispatchMessageW).
+     */
+    private fun drainUntil(host: Win32ControlHost, condition: () -> Boolean) {
         val deadline = System.currentTimeMillis() + 5_000
         while (System.currentTimeMillis() < deadline && !condition()) {
-            Thread.sleep(25)
+            if (!host.pollOne(25)) Thread.sleep(25)
         }
         assertTrue(condition(), "expected condition within 5s")
     }
 
     @Test
     fun controlWindowCreated() {
-        val host = Win32ControlHost()
-        cleanups.add(host)
+        val host = newHost()
         host.open { _, _, _, _ -> 0L }
         assertTrue(host.hwnd != 0L, "control window must expose a non-null hwnd")
     }
 
     @Test
     fun injectedMessageIsObserved() {
-        val host = Win32ControlHost()
-        cleanups.add(host)
-        val injector = Win32MessageInjector()
-        cleanups.add(injector)
+        val host = newHost()
+        val injector = newInjector()
         val observed = CountDownLatch(1)
         host.open { _, message, _, _ ->
             assertEquals(Win32ControlWindow.TEST_MESSAGE, message)
@@ -52,15 +60,13 @@ class Win32NativeContractTest {
             0L
         }
         assertTrue(injector.postTestMessage(host.hwnd, wParam = 1L, lParam = 2L))
-        drainUntil { observed.await(0, TimeUnit.MILLISECONDS) }
+        drainUntil(host) { observed.await(0, TimeUnit.MILLISECONDS) }
     }
 
     @Test
     fun injectedPayloadIsCopied() {
-        val host = Win32ControlHost()
-        cleanups.add(host)
-        val injector = Win32MessageInjector()
-        cleanups.add(injector)
+        val host = newHost()
+        val injector = newInjector()
         host.open { _, message, wParam, lParam ->
             assertEquals(Win32ControlWindow.TEST_MESSAGE, message)
             assertEquals(777L, wParam)
@@ -68,7 +74,7 @@ class Win32NativeContractTest {
             0L
         }
         assertTrue(injector.postTestMessage(host.hwnd, wParam = 777L, lParam = 42L))
-        drainUntil { host.dispatches.isNotEmpty() }
+        drainUntil(host) { host.dispatches.isNotEmpty() }
         val dispatch = host.dispatches.single()
         assertEquals(777L, dispatch.wParam)
         assertEquals(42L, dispatch.lParam)
@@ -76,13 +82,11 @@ class Win32NativeContractTest {
 
     @Test
     fun injectedMessageIsDispatchedExactlyOnce() {
-        val host = Win32ControlHost()
-        cleanups.add(host)
-        val injector = Win32MessageInjector()
-        cleanups.add(injector)
+        val host = newHost()
+        val injector = newInjector()
         host.open { _, _, _, _ -> 0L }
         assertTrue(injector.postTestMessage(host.hwnd, wParam = 9L, lParam = 9L))
-        drainUntil { host.dispatches.isNotEmpty() }
+        drainUntil(host) { host.dispatches.isNotEmpty() }
         val countAfterFirst = host.dispatches.size
         // Drain complet sans nouvelle injection : aucune redelivery.
         val deadline = System.currentTimeMillis() + 500
@@ -95,11 +99,11 @@ class Win32NativeContractTest {
 
     @Test
     fun closeReachesQuiescenceWithoutLateDelivery() {
-        val host = Win32ControlHost()
-        val injector = Win32MessageInjector()
+        val host = newHost()
+        val injector = newInjector()
         host.open { _, _, _, _ -> 0L }
         assertTrue(injector.postTestMessage(host.hwnd, wParam = 5L, lParam = 5L))
-        drainUntil { host.dispatches.isNotEmpty() }
+        drainUntil(host) { host.dispatches.isNotEmpty() }
         host.close()
         assertTrue(host.isClosed)
         // Quiescence (décisions D2) : après close, aucun dispatch ne peut plus
@@ -114,8 +118,8 @@ class Win32NativeContractTest {
 
     @Test
     fun postCloseInjectionDeliversNothing() {
-        val host = Win32ControlHost()
-        val injector = Win32MessageInjector()
+        val host = newHost()
+        val injector = newInjector()
         host.open { _, _, _, _ -> 0L }
         // Message en vol au moment du close : ni pompé avant, ni après.
         assertTrue(injector.postTestMessage(host.hwnd, wParam = 6L, lParam = 6L))
@@ -126,8 +130,8 @@ class Win32NativeContractTest {
 
     @Test
     fun staleHwndAfterCloseDeliversNothing() {
-        val host = Win32ControlHost()
-        val injector = Win32MessageInjector()
+        val host = newHost()
+        val injector = newInjector()
         host.open { _, _, _, _ -> 0L }
         val staleHwnd = host.hwnd
         host.close()
@@ -142,8 +146,7 @@ class Win32NativeContractTest {
 
     @Test
     fun doubleCloseLeavesWindowDestroyedWithoutError() {
-        val host = Win32ControlHost()
-        cleanups.add(host)
+        val host = newHost()
         host.open { _, _, _, _ -> 0L }
         val hwnd = host.hwnd
         host.close()

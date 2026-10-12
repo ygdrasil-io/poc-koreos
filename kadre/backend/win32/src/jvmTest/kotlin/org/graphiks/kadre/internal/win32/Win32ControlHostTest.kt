@@ -18,7 +18,7 @@ class Win32ControlHostTest {
         assertEquals(false, host.isSupported)
         val failure = runCatching { host.open { _, _, _, _ -> 0L } }.exceptionOrNull()
         assertTrue(failure is IllegalStateException, "got $failure")
-        assertTrue(failure?.message?.contains("Windows") == true)
+        assertTrue(failure.message?.contains("Windows") == true)
         assertTrue(host.dispatches.isEmpty())
         assertTrue(host.hwnd == 0L)
     }

@@ -15,8 +15,8 @@ class Win32PortabilityContractTest {
         val failure = runCatching { host.open { _, _, _, _ -> 0L } }.exceptionOrNull()
         assertTrue(failure is IllegalStateException, "expected actionable failure, got $failure")
         assertTrue(
-            failure?.message?.contains("Windows") == true,
-            "failure must name the platform requirement: ${failure?.message}",
+            failure.message?.contains("Windows") == true,
+            "failure must name the platform requirement: ${failure.message}",
         )
         assertTrue(host.dispatches.isEmpty(), "no dispatch may be recorded before the OS gate passes")
         host.close()
