@@ -42,3 +42,7 @@ AND-005	android	sentinel	android-interaction-unadvertised-refused	org.graphiks.k
 AND-006	android	scenario	android-text-input-channel-absent	org.graphiks.kadre.consumer.KadreConsumerTextContractTest	androidTextInputChannelAbsent
 AND-006	android	scenario	android-text-input-ime-key-deduplication	org.graphiks.kadre.consumer.KadreConsumerTextContractTest	androidTextInputImeKeyDeduplication
 AND-006	android	sentinel	android-text-input-no-synthesis	org.graphiks.kadre.consumer.KadreConsumerTextContractTest	androidTextInputImeKeyDeduplication
+AND-007	android	scenario	android-drop-channel-absent	org.graphiks.kadre.consumer.KadreConsumerDropContractTest	androidDropChannelAbsent
+AND-007	android	scenario	android-drop-real-transfer-bounded	org.graphiks.kadre.platform.android.AndroidDropDeviceContractTest	androidDropRealTransferBounded
+AND-007	android	scenario	android-drop-stream-released-on-close	org.graphiks.kadre.platform.android.AndroidDropDeviceContractTest	androidDropStreamReleasedOnClose
+AND-007	android	sentinel	android-drop-no-public-channel	org.graphiks.kadre.consumer.KadreConsumerDropContractTest	androidDropChannelAbsent

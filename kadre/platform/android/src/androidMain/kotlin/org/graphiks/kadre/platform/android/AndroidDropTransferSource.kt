@@ -1,5 +1,7 @@
 package org.graphiks.kadre.platform.android
 
+import android.content.ContentResolver
+import android.net.Uri
 import java.io.IOException
 import java.io.InputStream
 import kotlin.coroutines.cancellation.CancellationException
@@ -83,6 +85,19 @@ internal fun interface AndroidDropStreamOpener {
     /** Ouvre le contenu de l'URI ; `null` si le resolver refuse (permission absente). */
     public fun open(uri: String): InputStream?
 }
+
+/**
+ * La construction de PRODUCTION de l'opener — le `ContentResolver` réel de l'app : chaque
+ * lecture opener-backed passe par `openInputStream` sur l'uri du clip, la seule voie honnête
+ * du contenu droppé (les grants vivent dans le resolver, jamais dans kadre).
+ *
+ * Le resolver refuse par l'exception — `FileNotFoundException` d'un uri absent,
+ * `SecurityException` d'un grant absent — jamais par `null` : les deux formes du contrat de
+ * l'[AndroidDropStreamOpener] (`null`, exception) sont le MÊME refus pour l'item, et la
+ * production choisit la forme du SDK, que l'item honnêtifie en `resolver-refused` fermé.
+ */
+internal fun androidDropResolverOpener(resolver: ContentResolver): AndroidDropStreamOpener =
+    AndroidDropStreamOpener { uri -> resolver.openInputStream(Uri.parse(uri)) }
 
 /**
  * Whether [value] is a media type the foundation's own rule accepts as canonical.

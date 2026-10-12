@@ -48,6 +48,13 @@ dependencies {
     androidTestImplementation("androidx.test.ext:junit:1.2.1")
     androidTestImplementation("androidx.test:runner:1.6.2")
     androidTestImplementation("androidx.test:core:1.6.1")
+    // Les scénarios drop ON-DEVICE de l'AND-007 (transfert réel + sentinelle stream-on-close) :
+    // ils exigent la construction runtime-friend (source Task 1 + réducteur Task 2 — invisibles
+    // des artefacts publiés) et voyagent donc dans CET AAR (module kadre
+    // platform/android-devicetest, ami des internals) : leurs classes sont fusionnées dans l'APK
+    // androidTest et tournent sous CE runner — le XML JUnit du run connecté reste la source
+    // unique de la chaîne de preuves.
+    androidTestImplementation("org.graphiks.kadre.internal:android-devicetest-android:$kadreVersion")
     // kotlin-test-junit (et non kotlin-test seul) : l'annotation kotlin.test.Test est un
     // `actual typealias Test = org.junit.Test` qui ne vit que dans l'adaptateur junit —
     // kotlin-test seul n'apporte que les assertions et échoue en « Unresolved reference 'Test' ».
