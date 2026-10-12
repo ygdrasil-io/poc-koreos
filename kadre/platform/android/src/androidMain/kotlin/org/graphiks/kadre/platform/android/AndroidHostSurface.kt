@@ -263,6 +263,15 @@ internal class AndroidHostSurface(
     private var inputDelivery: AndroidInputDelivery? = null
 
     /**
+     * Le routage gamepad de la session (phase 7) — le port construit par l'attach pour cette
+     * surface, retenu ICI pour que [installSessionConfiguration] le câble à la delivery qu'il
+     * construit, et que [attachGamepadRoute] le (re)pousse à une delivery vivante. La delivery
+     * ne consulte le routage QUE pour les events porteurs des flags source gamepad/joystick, et
+     * SEULEMENT s'il existe — sans port, le chemin ordinaire reste entier.
+     */
+    private var gamepadRoute: AndroidGamepadRoute? = null
+
+    /**
      * Le moteur d'interactions transitoires (phase 4, Task 4) — construit par
      * [installSessionConfiguration] de la MÊME configuration de session que le réducteur
      * d'entrée (la policy fenêtre, une gate du même allocateur, le handler d'échec de
@@ -677,7 +686,20 @@ internal class AndroidHostSurface(
             surfaceInput = input,
             committedState = { mutableState.value },
             interactions = engine,
-        )
+        ).also { delivery -> delivery.gamepadRoute = gamepadRoute }
+    }
+
+    /**
+     * Attache le routage gamepad de la session (phase 7) — le port gamepad construit pour
+     * CETTE surface par l'attach (le même seam InputManager que le port des devices
+     * génériques). La delivery vivante, s'il y en a une, le reçoit immédiatement ; une
+     * configuration installée plus tard le câblera à la sienne. `null` détache — sans route,
+     * les events source gamepad/joystick suivent à nouveau le chemin ordinaire ENTIER.
+     * Main thread : la discipline commune de la couture d'entrée.
+     */
+    internal fun attachGamepadRoute(route: AndroidGamepadRoute?) {
+        gamepadRoute = route
+        inputDelivery?.gamepadRoute = route
     }
 
     /**
