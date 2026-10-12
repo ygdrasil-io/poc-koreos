@@ -36,7 +36,7 @@ jobs:
           if [ -f kadre/backend/wayland/build/ci-diagnostics/tests.log ]; then
             tail -5 kadre/backend/wayland/build/ci-diagnostics/tests.log
           fi
-          test -s kadre/backend/wayland/build/contract-evidence/BCK-015.json
+          test -s kadre/backend/wayland/build/contract-evidence/BCK-017.json
           test -s kadre/backend/wayland/build/contract-evidence/SES-001.json
           test -s kadre/backend/wayland/build/contract-evidence/SUR-001.json
 
