@@ -29,6 +29,7 @@ import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.StandardOpenOption
 import java.time.Instant
+import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
@@ -78,6 +79,7 @@ public fun main(args: Array<String>) {
 
                 val latestRevision = AtomicLong(window.state.value.revision.value)
                 val observedEventCount = AtomicInteger()
+                val eventLedger = CopyOnWriteArrayList<WindowEvent>()
                 val stateCollector = launch(start = CoroutineStart.UNDISPATCHED) {
                     window.state.collect { state ->
                         latestRevision.set(state.revision.value)
@@ -87,6 +89,7 @@ public fun main(args: Array<String>) {
                 val eventCollector = launch(start = CoroutineStart.UNDISPATCHED) {
                     window.events.collect { event ->
                         observedEventCount.incrementAndGet()
+                        eventLedger.add(event)
                         recorder.line(
                             "EVENT\t${event::class.simpleName}" +
                                 "\tstateRevisionVisible=${stateRevisionVisible(window.state.value.revision.value, event)}" +
@@ -117,13 +120,25 @@ public fun main(args: Array<String>) {
                     delay(250.milliseconds)
                     val noLateRevision =
                         latestRevision.get() == terminal.revision.value && window.state.value == terminal
-                    val noLateEvent = observedEventCount.get() == terminalEventCount
+                    // DESIGN.md §395 : à la fermeture normale, les événements déjà admis
+                    // drainent vers les collectors actifs après le snapshot terminal. Un
+                    // événement décrivant une révision antérieure au snapshot terminal est
+                    // donc une livraison en retard légitime ; seul un événement décrivant
+                    // une révision égale ou postérieure au snapshot terminal contredit la
+                    // stabilité terminale.
+                    val trailingEvents = eventLedger.drop(terminalEventCount)
+                    val noLateEvent = trailingEvents.none { it.stateRevision.value >= terminal.revision.value }
                     recorder.line(
                         "TERMINAL_STABILITY\tnoLateRevision=$noLateRevision\tnoLateEvent=$noLateEvent" +
-                            "\tobservationMillis=250",
+                            "\ttrailingEvents=${trailingEvents.size}\tobservationMillis=250",
                     )
                     check(noLateRevision) { "window revision changed after terminal close" }
-                    check(noLateEvent) { "window event arrived after terminal close" }
+                    check(noLateEvent) {
+                        "event described revision >= terminal after close: " +
+                            trailingEvents
+                                .filter { it.stateRevision.value >= terminal.revision.value }
+                                .joinToString(separator = ", ")
+                    }
                     recorder.line("TERMINAL\t$terminal")
                     terminalObserved = true
                 }
