@@ -151,7 +151,13 @@ internal class WaylandWindowCommandPort internal constructor(
                 contentHeight = height,
                 title = spec.title,
                 appId = "org.graphiks.kadre.wayland",
-                onNativeClosed = { driver.unregister(command.windowId) },
+                // le stimulus nativeClosed finalise la fenêtre côté runtime
+                // (acceptNativeClose : fin de closing, membership, arrêt
+                // stopWhenLastWindowClosed) ; les stimuli tardifs sont acceptés.
+                onNativeClosed = { windowId ->
+                    driver.unregister(windowId)
+                    command.nativeClosed()
+                },
             )
             driver.register(peer)
             command.commit(owner = peer, effectiveSpec = spec)

@@ -103,9 +103,16 @@ internal class WaylandWindowPeer(
             onNativeClosed: (WindowId) -> Unit,
         ): WaylandWindowPeer {
             val window = factory(contentWidth, contentHeight)
-            return WaylandWindowPeer(windowId, window, onNativeClosed).also { peer ->
+            lateinit var peer: WaylandWindowPeer
+            peer = WaylandWindowPeer(windowId, window, onNativeClosed).also { created ->
                 val configured = java.util.concurrent.CountDownLatch(1)
                 window.onConfigure { _ -> configured.countDown() }
+                // L914 : le close compositor n'est pas interceptable — il est
+                // signalé au runtime comme fermeture native, sans CloseRequested.
+                window.onToplevelEvents(
+                    onConfigure = { _, _, _ -> },
+                    onClose = { created.nativeClosed() },
+                )
                 window.setTitle(title)
                 window.setAppId(appId)
                 window.commitInitial()
@@ -114,6 +121,7 @@ internal class WaylandWindowPeer(
                 }
                 window.ackLatestConfigure()
             }
+            return peer
         }
     }
 }
