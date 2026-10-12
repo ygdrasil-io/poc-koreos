@@ -15,6 +15,11 @@ kotlin {
             api(project(":kadre:runtime"))
             implementation(libs.kffi.win32)
         }
+        val jvmTest by getting {
+            dependencies {
+                implementation(kotlin("test"))
+            }
+        }
     }
 }
 
