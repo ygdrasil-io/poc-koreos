@@ -149,6 +149,16 @@ internal class UIKitWindowCommandPort(
     private var surfaceAppearance: SurfaceAppearance? = null
 
     /**
+     * Le branchement touch (phase 5, Task 2) : installé au MÊME point de cycle que le binding
+     * d'observation (après le commit du peer), retiré au MÊME retrait (requestOpenedClose /
+     * beginClose / finishClose). Un seul couple par port — la phase 5 est mono-surface comme
+     * la phase 2, le surfaceId de l'annonce est celui de l'unique peer committé. Tout se joue
+     * sur la file principale (l'appelant d'attach EST sur le main, les handlers d'`UITouch`
+     * aussi).
+     */
+    private var touchBinding: UIKitTouchBinding? = null
+
+    /**
      * Le drain coalescé du redraw (phase 2) : le ticket d'une commande admise est RETENU
      * (pending), au plus un drain est programmé sur la file principale, et la consommation —
      * le stimulus `RedrawConsumed` portant la génération exacte — n'arrive qu'au drain. Le
@@ -214,6 +224,12 @@ internal class UIKitWindowCommandPort(
         // objet UIKit touché) — le binding, lui, est Kadre-owned : c'est le PORT qui le retire
         // (requestOpenedClose / beginClose), jamais le destruct endogène.
         installSurfaceObservation(entry.surfaceId, snapshot)
+        // Task 2 (phase 5) : le binding touch au MÊME point de cycle — après le commit, la
+        // surface est vivante avant toute annonce et tout stimulus ; l'annonce
+        // `InputObservationChanged(touchInstalled = true)` suit l'ajout du recognizer à la
+        // vue (miroir web l.1028-1036, rien ne peut précéder — la sérialisation main
+        // d'UIKit rend le créneau d'installation vide, cf. KDoc du binding).
+        installTouchBinding(entry.surfaceId)
     }
 
     /**
@@ -247,6 +263,27 @@ internal class UIKitWindowCommandPort(
             binding.install()
             observer?.install()
         }.onFailure(failureReporter::report)
+    }
+
+    /**
+     * L'installation du branchement touch (phase 5, Task 2) — la même posture que
+     * [installSurfaceObservation] : une seule fois (garde sous verrou), l'exception
+     * d'installation est rapportée et absorbée (un attach ne casse jamais pour un
+     * recognizer). Le sink est celui du port — chaque `TouchChanged` et chaque annonce
+     * rejoignent la même route que les stimuli d'observation.
+     */
+    private fun installTouchBinding(surfaceId: SurfaceId) {
+        val binding = lock.withLock {
+            if (touchBinding != null) return
+            val created = UIKitTouchBinding(
+                view = view,
+                surfaceId = surfaceId,
+                publish = { stimulus -> stimulusSink(stimulus) },
+            )
+            touchBinding = created
+            created
+        }
+        runCatching { binding.install() }.onFailure(failureReporter::report)
     }
 
     /**
@@ -336,25 +373,29 @@ internal class UIKitWindowCommandPort(
 
     /**
      * Le retrait du branchement (requestOpenedClose / beginClose / finishClose) : zéro observer
-     * résiduel (teardown du binding = tokens retirés + génération périmée), miroir remis à zéro.
-     * Idempotent — les trois chemins peuvent converger.
+     * résiduel (teardown du binding = tokens retirés + génération périmée), miroir remis à zéro,
+     * recognizer touch retiré de la vue avec annonce all-false (Task 2 : la révocation suit le
+     * même point de cycle que l'installation). Idempotent — les trois chemins peuvent converger.
      */
     private fun teardownSurfaceObservation() {
         val stale = lock.withLock {
-            if (observationBinding == null && appearanceObserver == null) {
+            if (observationBinding == null && appearanceObserver == null && touchBinding == null) {
                 null
             } else {
                 val binding = observationBinding
                 val observer = appearanceObserver
+                val touch = touchBinding
                 observationBinding = null
                 appearanceObserver = null
                 surfaceMetrics = null
                 surfaceAppearance = null
-                binding to observer
+                touchBinding = null
+                Triple(binding, observer, touch)
             }
         } ?: return
         stale.first?.teardown()
         stale.second?.teardown()
+        stale.third?.teardown()
     }
 
     /**

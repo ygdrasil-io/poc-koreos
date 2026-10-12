@@ -6,6 +6,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.cinterop.ExperimentalForeignApi
 import org.graphiks.kadre.diagnostics.DelicateKadreApi
 import org.graphiks.kadre.diagnostics.KadreFailure
 import org.graphiks.kadre.diagnostics.KadreOperation
@@ -14,8 +15,11 @@ import org.graphiks.kadre.diagnostics.KadreResult
 import org.graphiks.kadre.internal.runtime.RuntimeLock
 import org.graphiks.kadre.internal.runtime.withLock
 import org.graphiks.kadre.internal.uikit.UIKitObservationCount
+import org.graphiks.kadre.internal.uikit.UIKitTouchCount
+import org.graphiks.kadre.internal.uikit.UIKitTouchRecognizer
 import org.graphiks.kadre.surface.HostSurface
 import org.graphiks.kadre.surface.SurfaceEvent
+import platform.Foundation.NSSelectorFromString
 import platform.UIKit.UIView
 
 /**
@@ -133,6 +137,25 @@ public class KadreUikitSurfaceEventCapture private constructor(surface: HostSurf
 }
 
 /**
+ * Résultat du probe STRUCTUREL du touch ([KadreUikitSurfaceDriver.touchRecognitionProbe]) :
+ * les faits copiés de la vue, jamais les objets. [recognizerAttached] — la vue porte bien LE
+ * recognizer Kadre (vérifié par le type Kotlin côté module, jamais par un nom) ;
+ * [cancelsTouchesInView] — la politique additive tracée (la vue du host garde ses touches,
+ * `false` attendu) ; [recognizerRespondsToTouchesBegan] — la preuve de SUBCLASSE du SPIKE :
+ * l'instance répond au sélecteur exact `touchesBegan:withEvent:` qu'UIKit dispatche (la
+ * livraison passe par ce sélecteur) ; [recognizerEnabled] — le recognizer est actif ;
+ * [totalGestureRecognizers] — le compte TOTAL des recognizers de la vue (l'additivité se
+ * lit ici : le host garde les siens, Kadre n'ajoute que le sien).
+ */
+public class KadreUikitTouchRecognitionProbe(
+    public val recognizerAttached: Boolean,
+    public val cancelsTouchesInView: Boolean,
+    public val recognizerRespondsToTouchesBegan: Boolean,
+    public val recognizerEnabled: Boolean,
+    public val totalGestureRecognizers: Int,
+)
+
+/**
  * La sonde de CONDUITE de surface du driver UIKit/tvOS (phase 2) — le prolongement naturel de
  * [KadreUikitProbe] (phase 0) : les chemins Kotlin-only du module (le bail natif de la
  * surface — l'extension d'accès plateforme d'`UIKitSurfaceAccess` — et le `Flow`
@@ -228,4 +251,56 @@ public object KadreUikitSurfaceDriver {
     /** Le compteur des re-lectures d'observation réellement exécutées (le compteur du fixture). */
     public val observationCount: Long
         get() = UIKitObservationCount.total()
+
+    /**
+     * Le probe STRUCTUREL du touch (phase 5, Task 2) : l'état des recognizers de [view] lu du
+     * côté Kotlin, où le recognizer Kadre est identifiable par son TYPE (interne au module —
+     * Swift ne peut pas le nommer, la sonde copie les faits, même discipline que les autres
+     * probes). La preuve du SPIKE ([KadreUikitTouchRecognitionProbe.recognizerRespondsToTouchesBegan])
+     * est une vérification D'EXÉCUTION du sous-classement : l'instance répond au sélecteur
+     * exact que la livraison d'UIKit dispatche.
+     */
+    @OptIn(ExperimentalForeignApi::class)
+    public fun touchRecognitionProbe(view: UIView): KadreUikitTouchRecognitionProbe {
+        val recognizers: List<*> = view.gestureRecognizers.orEmpty()
+        val kadre = recognizers.firstOrNull { it is UIKitTouchRecognizer }
+        val recognizer = kadre as? UIKitTouchRecognizer
+        return KadreUikitTouchRecognitionProbe(
+            recognizerAttached = recognizer != null,
+            cancelsTouchesInView = recognizer?.cancelsTouchesInView ?: false,
+            recognizerRespondsToTouchesBegan =
+                recognizer?.respondsToSelector(NSSelectorFromString("touchesBegan:withEvent:")) == true,
+            recognizerEnabled = recognizer?.isEnabled() ?: false,
+            totalGestureRecognizers = recognizers.size,
+        )
+    }
+
+    /** Les installations de recognizer touch réellement exécutées (le compteur du fixture). */
+    public val touchInstallCount: Long
+        get() = UIKitTouchCount.totalInstalls()
+
+    /** Les retraits de recognizer touch réellement exécutés (le compteur du fixture). */
+    public val touchTeardownCount: Long
+        get() = UIKitTouchCount.totalTeardowns()
+
+    /**
+     * Les livraisons d'`UITouch` réellement reçues par le recognizer (le compteur du SPIKE en
+     * vraies touches : zéro attendu sur toute suite automatisée — aucun touch n'est
+     * synthétisable in-process honnêtement ; son incrémentation sur le charter manuel est la
+     * preuve Task 4 de la livraison réelle).
+     */
+    public val touchEventCount: Long
+        get() = UIKitTouchCount.totalEvents()
+
+    /** Les stimuli `TouchChanged` réellement publiés par le binding. */
+    public val touchStimulusCount: Long
+        get() = UIKitTouchCount.totalStimuli()
+
+    /**
+     * Les annonces `InputObservationChanged` réellement publiées par le binding (l'installation
+     * ET la révocation — deux publications par cycle de session attendues). La RÉCEPTION par le
+     * runtime (capabilities d'input) reste la preuve contractuelle Task 4.
+     */
+    public val touchAnnouncementCount: Long
+        get() = UIKitTouchCount.totalAnnouncements()
 }
