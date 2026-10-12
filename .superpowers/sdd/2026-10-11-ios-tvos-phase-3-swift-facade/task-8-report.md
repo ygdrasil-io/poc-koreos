@@ -254,3 +254,85 @@ ios/tvos 'is implemented in both': 0                          (garde anti-duplic
 
 Le validator contract registry reste vert après commit (planned sans preuve). Aucun
 autre test du dépôt n'est touché par le diff (Swift consumer-side + TSV + doc).
+
+---
+
+## 6. Section de fix — test thème non déterministe en CI (fix post-sweep)
+
+Fix du rouge CI déterministe du job `uikit-ios-simulator` (PR #446) sur
+**HEAD `3c6c1130`** (branche `zcode/sess-56645e3f`, précédée du merge d'origine/master
+`27fd6198` concluant le pull resté en cours d'un dispatch antérieur). Portée du diff :
+exactement `kadre/contracts/driver/uikit/tests/Shared/KadreUikitSurfaceTests.swift`
+(113+/59−). Message : `fix(uikit): make the theme stimulus deterministic with trait overrides`.
+
+### Le fait CI (runs 38225688267/job 114732504419 et son prédécesseur)
+
+`testSurfaceThemePropagatesFromTheWindow` rouge deux fois de suite sur le runner
+xcode-27, signature identique. Le log réel du job montre **exactement deux échecs** :
+`:416` (« event drain not reached in 5.0s ») + le rethrow `:184` — et **AUCUN timeout de
+route** (aucun XCTFail de `triggeredSurfaceState`). Diagnostic du drain : `total=2
+redraw=1 metrics=0 appearance=1`, `liveState=theme=Dark revision=1`, événements capturés =
+RedrawRequested (amorce, +21ms) + **AppearanceChanged(theme=Dark, rev 1, +44ms)** ; test
+écoulé en 5.8s dont 5.0s de drain.
+
+### Diagnostic (deux défauts, même filet)
+
+1. **Course de baseline du drain (le rouge constaté)** : sur les boots sombres du runner,
+   la vue démarre Light et son trait bascule Dark SEULE à +44ms après le début de session
+   (stabilisation ambiante). Le sol est donc résolu `Light rev 0` AVANT la bascule ; la
+   publication `Dark rev 1` à +44ms — publication RÉELLE du kernel, stimulus fenêtre ou
+   stabilisation, indiscernable — satisfait la transition Dark sans publication propre, et
+   l'événement atterrit au collecteur avant la prise de `eventsBeforeDark` (baseline prise
+   APRÈS la tentative, l.415) : le drain exigeait une SECONDE publication d'apparence,
+   qui ne viendrait jamais (dédup ruled). Rouge à 5s, reproductiblement : le timing du
+   runner perd la course à chaque boot sombre.
+2. **Essai de repli empoisonné (latant, aurait tué toute échelle)** :
+   `triggeredSurfaceState` pose un `XCTFail` AVANT de jeter à l'expiration — le pattern
+   do/catch dégradé (et tout palier intermédiaire d'une échelle) enregistrait donc un
+   échec même quand le palier suivant publiait : un repli ne pouvait jamais rendre vert.
+
+### Le fix (échelle du contrôleur + ses deux compléments nécessaires)
+
+- **Échelle de stimuli en TROIS paliers par transition (Dark ET Light)** —
+  `themeStimulusLadder`, chaque palier UNE tentative `triggeredSurfaceState` bornée et
+  tracée (NSLog + DriverTrace.record avec le nom du palier) :
+  1. `window.overrideUserInterfaceStyle` — la route du brief (3s) ;
+  2. **NOUVEAU** `view.traitOverrides.userInterfaceStyle` (3s), sous gate
+     `if #available(iOS 17.0, tvOS 17.0, *)` — posé sur les overrides de trait PROPRES de
+     la vue, sans dépendance de la propagation fenêtre→vue d'UIKit ; sur le plancher 16.0
+     déclaré, l'échelle tombe au palier 3 exactement comme avant ;
+  3. `view.overrideUserInterfaceStyle` — le repli dégradé documenté (5s) ; DERNIER palier,
+     son expiration garde l'échec XCTest riche + rethrow (verdict de la transition).
+- **`triggeredSurfaceState(recordsTimeoutFailure:)`** (défaut `true` — aucun appelant
+  existant changé) : les paliers 1–2 passent `false` — une expiration intermédiaire ne
+  pose PAS d'échec XCTest ; le diagnostic complet part dans `userInfo["diagnostic"]` de
+  l'erreur et ressort au rethrow final. Sans cela, l'échelle du contrôleur est
+  auto-destructrice (tout palier expiré aurait condamné le test même vert ensuite).
+- **Baseline du drain prise AVANT le stimulus de chaque transition** : la publication de
+  la transition (stimulus OU stabilisation ambiante — la MÊME publication du kernel) est
+  ce que le drain prouve ; prise après coup, elle ratait l'événement déjà collecté (le
+  défaut 1). Aucune assertion affaiblie : chaque transition exige TOUJOURS une publication
+  (révision qui avance + drain d'un `AppearanceChanged` post-baseline + égalité de thème ;
+  la transition Light reste inconditionnelle, la Dark reste soumise au dédup ruled du sol).
+- **Nettoyage** : `view.traitOverrides.userInterfaceStyle = .unspecified` ajouté aux
+  resets existants (même gate `#available`).
+
+### Vérification (gate uikit, les deux familles — logs locaux 12/10)
+
+```
+### ./scripts/test-uikit-simulator.sh ios
+	 Executed 21 tests, with 0 failures (0 unexpected) in 14.987 (14.995) seconds
+** TEST SUCCEEDED **          (routes tracées : dark=window light=window ; evidence BCK-012…016 + WIN-009 générée et validée)
+### ./scripts/test-uikit-simulator.sh tvos
+	 Executed 17 tests, with 0 failures (0 unexpected) in 2.565 (2.573) seconds
+** TEST SUCCEEDED **          (routes tracées : dark=ambient (dedup — no transition) light=window ; evidence BCK-012/013/015 + WIN-009)
+```
+
+Le boot tvOS local était sombre : la transition Dark y a été dédupliquée (comportement
+ruled) et la publication Light est passée par la route fenêtre — la forme la plus proche
+du cas CI, verte. Les boots locaux ne reproduisent pas le timing du runner xcode-27 : la
+preuve finale est le run CI du push (job `uikit-ios-simulator`).
+
+### Résultat CI
+
+À remplir au suivi du run (job `uikit-ios-simulator` du push de `3c6c1130`).
