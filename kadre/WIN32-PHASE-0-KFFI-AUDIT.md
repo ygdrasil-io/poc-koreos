@@ -7,8 +7,8 @@ Modèle : `WAYLAND-PHASE-0-KFFI-AUDIT.md`. Ce document consigne l'artifact KFFI 
 | Élément | Valeur au moment de la phase 0 |
 |---|---|
 | Dépôt KFFI | `kffi` (fork `ygdrasil-io/kffi`, amont `Graphiks-org/kffi`) |
-| Branche | `feat/win32-managed-window-frontier` (depuis `origin/master` `0b2acf6`) |
-| Révision livrée | `cd752df` — couche managée complète (bridge ABI `WNDPROC` 4 arguments, structs, fenêtre de contrôle) |
+| Branche | `feat/win32-managed-window-frontier` (depuis `origin/master`, linéaire, PR `Graphiks-org/kffi#118`) |
+| Révision livrée | `759c9f5` — couche managée complète (bridge ABI `WNDPROC` 4 arguments, structs, fenêtre de contrôle) |
 | Publication locale | `org.graphiks:kffi-win32-jvm:1.0.0-SNAPSHOT` dans `~/.m2` (12 octobre 2026, 19:40) |
 | Résolution Kadre | `./gradlew :kadre:backend:win32:dependencyInsight --configuration jvmRuntimeClasspath --dependency kffi-win32-jvm` |
 | Dépôts de résolution | Central Portal Snapshots (settings hermétiques) + `mavenLocal` **uniquement en dev local** via init-script (voir ruling B1/B2 du registre d'exécution) ; après merge de la branche, le job `snapshot` de `publish.yml` publie `1.0.0-SNAPSHOT` sur Central et la résolution CI redevient exclusivement distante |
