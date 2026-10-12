@@ -38,8 +38,11 @@ class UIKitGestureStatePhaseTest {
     @Test
     fun recognizedAliasEqualsEndedRawValue() {
         // `UIGestureRecognizerStateRecognized = UIGestureRecognizerStateEnded` (header UIKit) :
-        // l'alias des gestes discrets EST la valeur 3 — un tap arrive en `Ended`.
-        assertEquals(uikitGesturePhaseForState(3L), uikitGesturePhaseForState(3L))
+        // l'alias des gestes discrets EST la valeur 3 — un tap n'archive jamais Began/Changed,
+        // il arrive `Ended`. L'assert porte la valeur documentée (3L → `Ended`), là où le test
+        // comparait f(3) à f(3) : un mutant qui déporte l'entrée 3 de la table (Began, Moved ou
+        // null) échoue ICI, exactement comme sur `endedRawValueMapsToEnded`.
+        assertEquals(UIKitTouchPhase.Ended, uikitGesturePhaseForState(3L))
     }
 
     @Test

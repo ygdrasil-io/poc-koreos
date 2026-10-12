@@ -123,6 +123,21 @@ class UIKitInputMappingTest {
         assertEquals(LogicalKey.Unidentified(null), uikitLogicalKey("éé"))
     }
 
+    @Test
+    fun nativeTokenLengthBoundIsTwoHundredFiftySixCodeUnits() {
+        // La borne de longueur de `uikitNativeToken` est 256 unités de code (le domaine que le
+        // modèle valide) : un token de 256 caractères ASCII valides reste LUI-MÊME — identité
+        // préservée, au kernel comme dans la clé logique qu'il porte ; 257 n'a plus de token
+        // honnête : `Unidentified(null)`, jamais une troncature. Cible de mutation : la borne
+        // déplacée (`< 256` tue la première moitié, `<= 257` tue la seconde).
+        val atBound = "k".repeat(256)
+        assertEquals(atBound, uikitNativeToken(atBound))
+        assertEquals(LogicalKey.Unidentified(atBound), uikitLogicalKey(atBound))
+        val beyondBound = "k".repeat(257)
+        assertNull(uikitNativeToken(beyondBound))
+        assertEquals(LogicalKey.Unidentified(null), uikitLogicalKey(beyondBound))
+    }
+
     // --------------------------------------------------------------------------------------------
     // uikitKeyState + uikitKeyboardModifiers : les booléens du binding → état du modèle.
     // --------------------------------------------------------------------------------------------
