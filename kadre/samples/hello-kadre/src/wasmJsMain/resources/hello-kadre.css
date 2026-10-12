@@ -1,0 +1,20 @@
+/*
+ * La page hôte de Hello Kadre : un seul conteneur plein écran, la « fenêtre »
+ * du sample web. Le thème sombre rappelle celui qu'AppKit publiait côté bureau.
+ */
+html,
+body {
+    margin: 0;
+    height: 100%;
+}
+
+#hello-kadre {
+    box-sizing: border-box;
+    height: 100vh;
+    padding: 2rem;
+    font-family: system-ui, -apple-system, sans-serif;
+    line-height: 1.5;
+    color: #f0f0f0;
+    background: #1e1e28;
+    outline: none; /* le focus clavier se lit dans la console, pas par un liseré */
+}
