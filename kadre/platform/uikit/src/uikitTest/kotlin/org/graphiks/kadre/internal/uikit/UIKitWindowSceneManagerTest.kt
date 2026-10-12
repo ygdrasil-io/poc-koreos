@@ -8,6 +8,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.filterIsInstance
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
+import org.graphiks.kadre.application.EventStamp
 import org.graphiks.kadre.application.KadreSession
 import org.graphiks.kadre.application.SessionId
 import org.graphiks.kadre.application.SessionOutcome
@@ -15,6 +16,7 @@ import org.graphiks.kadre.application.SessionState
 import org.graphiks.kadre.diagnostics.Capability
 import org.graphiks.kadre.diagnostics.FeatureAvailability
 import org.graphiks.kadre.diagnostics.InteractionFailureReason
+import org.graphiks.kadre.diagnostics.KadreDiagnostic
 import org.graphiks.kadre.diagnostics.KadreFailure
 import org.graphiks.kadre.diagnostics.KadreOperation
 import org.graphiks.kadre.diagnostics.KadrePlatform
@@ -22,8 +24,13 @@ import org.graphiks.kadre.diagnostics.KadrePolicyComponent
 import org.graphiks.kadre.diagnostics.KadreResourceKind
 import org.graphiks.kadre.diagnostics.KadreResult
 import org.graphiks.kadre.input.KadrePermission
+import org.graphiks.kadre.internal.runtime.ExclusiveDisplayTargetResolver
+import org.graphiks.kadre.internal.runtime.RawInputPort
+import org.graphiks.kadre.internal.runtime.RuntimeSessionWindowManager
+import org.graphiks.kadre.policy.InputDeliveryPolicy
 import org.graphiks.kadre.policy.KadrePolicies
 import org.graphiks.kadre.policy.KadrePolicy
+import org.graphiks.kadre.policy.WindowDeliveryPolicy
 import org.graphiks.kadre.platform.uikit.UIKitWindowSceneProvider
 import org.graphiks.kadre.platform.uikit.UIKitWindowSceneRequestResolver
 import org.graphiks.kadre.platform.uikit.UIKitWindowSceneRequestSink
@@ -89,6 +96,45 @@ class UIKitWindowSceneManagerTest {
 
         fun close() {
             closeCalls += 1
+        }
+    }
+
+    /** Le manager runtime qui PORTE le fil de configuration de session — enregistre les installs. */
+    private class SeamRecordingRuntimeManager : WindowManager, RuntimeSessionWindowManager {
+        var installed = 0
+        var resolvers = 0
+        private val mutableState = MutableStateFlow(
+            WindowManagerState(
+                primary = null,
+                windows = emptyList(),
+                capabilities = WindowManagerCapabilities(
+                    Capability.Unsupported(KadreFailure.Unsupported(KadreOperation.RequestWindow)),
+                ),
+                revision = WindowManagerRevision(0),
+            ),
+        )
+
+        override val state: StateFlow<WindowManagerState> = mutableState.asStateFlow()
+
+        override suspend fun requestWindow(spec: WindowSpec): KadreResult<WindowRequest> =
+            error("the scene manager must not delegate requestWindow")
+
+        override fun installSessionConfiguration(
+            deliveryPolicy: WindowDeliveryPolicy,
+            inputDeliveryPolicy: InputDeliveryPolicy,
+            source: () -> EventStamp,
+            sessionFailureHandler: (KadreFailure) -> Unit,
+            collectorAllocator: Any,
+            maxCollectorsPerFlow: Int,
+            dropTransferScope: CoroutineScope?,
+            diagnostics: (KadreDiagnostic) -> Unit,
+            rawInputPort: RawInputPort?,
+        ) {
+            installed += 1
+        }
+
+        override fun installExclusiveDisplayTargetResolver(resolver: ExclusiveDisplayTargetResolver) {
+            resolvers += 1
         }
     }
 
@@ -598,6 +644,65 @@ class UIKitWindowSceneManagerTest {
         windows.abandon(resolved.id, "activation-refused")
         assertEquals(WindowRequestOutcome.OpenedInNewSession(child.id), awaitOutcome(resolved))
         windows.close()
+    }
+
+    // -- le fil de configuration de session (câblage Task 2) -------------------------------------------------
+
+    @Test
+    fun theSessionConfigurationSeamReachesTheWrappedManagerThroughTheSceneManager() {
+        // Le pin de l'ordre des wrappers : `RuntimeSessionComponents` porte la configuration au
+        // `windows` par un cast `as? RuntimeSessionWindowManager` — une fois le manager de scènes
+        // posé comme `windows`, le fil doit l'atteindre SOUS lui (l'admission différée de la
+        // fenêtre primaire vit dans le delegate enveloppé), sinon la session démarre sans primaire.
+        val runtime = SeamRecordingRuntimeManager()
+        val scenes = UIKitWindowSceneManager(
+            runtimeManager = runtime,
+            provider = RecordingProvider(),
+            policy = policyWith(4),
+            applicationFactory = { error("Task 2 wires the real child factory") },
+            failureReporter = {},
+            parentScope = CoroutineScope(Dispatchers.Main),
+            childSessionFactory = { _ -> error("unit tests attach children through completeResolve") },
+        )
+
+        scenes.installSessionConfiguration(
+            KadrePolicies.Default.window,
+            KadrePolicies.Default.input,
+            { error("stamp source never read here") },
+            {},
+            Any(),
+            1,
+            null,
+            {},
+            null,
+        )
+        scenes.installExclusiveDisplayTargetResolver(
+            ExclusiveDisplayTargetResolver { _, _ ->
+                KadreResult.Failure(KadreFailure.InvalidRequest("never invoked"))
+            },
+        )
+
+        assertEquals(1, runtime.installed)
+        assertEquals(1, runtime.resolvers)
+    }
+
+    @Test
+    fun theConfigurationSeamIsSilentWhenTheWrappedManagerDoesNotCarryIt() {
+        // Un manager enveloppé sans ce fil (tout WindowManager nu, comme les doubles) : le cast
+        // côté components rendait l'installation muette — le manager de scènes fait pareil,
+        // sans jamais jeter.
+        val (scenes, _) = manager(provider = RecordingProvider())
+        scenes.installSessionConfiguration(
+            KadrePolicies.Default.window,
+            KadrePolicies.Default.input,
+            { error("stamp source never read here") },
+            {},
+            Any(),
+            1,
+            null,
+            {},
+            null,
+        )
     }
 
     // -- le noyau de pending ---------------------------------------------------------------------------------

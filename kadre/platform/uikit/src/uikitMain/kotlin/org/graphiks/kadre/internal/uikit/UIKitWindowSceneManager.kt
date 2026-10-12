@@ -7,20 +7,27 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.filterIsInstance
 import kotlinx.coroutines.flow.first
+import org.graphiks.kadre.application.EventStamp
 import org.graphiks.kadre.application.KadreApplicationFactory
 import org.graphiks.kadre.application.KadreSession
 import org.graphiks.kadre.diagnostics.Capability
 import org.graphiks.kadre.diagnostics.FeatureAvailability
+import org.graphiks.kadre.diagnostics.KadreDiagnostic
 import org.graphiks.kadre.diagnostics.KadreFailure
 import org.graphiks.kadre.diagnostics.KadreOperation
 import org.graphiks.kadre.diagnostics.KadrePlatform
 import org.graphiks.kadre.diagnostics.KadreResourceKind
 import org.graphiks.kadre.diagnostics.KadreResult
+import org.graphiks.kadre.internal.runtime.ExclusiveDisplayTargetResolver
+import org.graphiks.kadre.internal.runtime.RawInputPort
 import org.graphiks.kadre.internal.runtime.RuntimeFailureReporter
 import org.graphiks.kadre.internal.runtime.RuntimeLock
 import org.graphiks.kadre.internal.runtime.RuntimeProcessIds
+import org.graphiks.kadre.internal.runtime.RuntimeSessionWindowManager
 import org.graphiks.kadre.internal.runtime.withLock
+import org.graphiks.kadre.policy.InputDeliveryPolicy
 import org.graphiks.kadre.policy.KadrePolicy
+import org.graphiks.kadre.policy.WindowDeliveryPolicy
 import org.graphiks.kadre.platform.uikit.UIKitWindowSceneProvider
 import org.graphiks.kadre.platform.uikit.UIKitWindowSceneRequestResolver
 import org.graphiks.kadre.platform.uikit.UIKitWindowSceneRequestSink
@@ -223,6 +230,7 @@ internal class UIKitWindowSceneManager(
     private val parentScope: CoroutineScope,
     private val childSessionFactory: (UIKitWindowSceneHost) -> KadreResult<KadreSession>,
 ) : WindowManager by runtimeManager,
+    RuntimeSessionWindowManager,
     UIKitWindowSceneRequestSink {
 
     private val lock = RuntimeLock()
@@ -238,6 +246,41 @@ internal class UIKitWindowSceneManager(
      */
     override val state: StateFlow<WindowManagerState> =
         UIKitWindowSceneStateFlow(runtimeManager.state, sceneWindowCapability(provider))
+
+    /**
+     * Le fil de la configuration de session : `RuntimeSessionComponents` porte la configuration
+     * au manager par un cast `windows as? RuntimeSessionWindowManager` — une fois ce manager posé
+     * comme `windows`, le fil doit l'atteindre SOUS lui (en production le delegate d'admission
+     * différée, sinon l'admission de la fenêtre primaire n'a jamais lieu). Un manager enveloppé
+     * sans ce fil (doubles de test) rend le fil muet — exactement ce que le cast faisait déjà.
+     */
+    override fun installSessionConfiguration(
+        deliveryPolicy: WindowDeliveryPolicy,
+        inputDeliveryPolicy: InputDeliveryPolicy,
+        source: () -> EventStamp,
+        sessionFailureHandler: (KadreFailure) -> Unit,
+        collectorAllocator: Any,
+        maxCollectorsPerFlow: Int,
+        dropTransferScope: CoroutineScope?,
+        diagnostics: (KadreDiagnostic) -> Unit,
+        rawInputPort: RawInputPort?,
+    ) {
+        (runtimeManager as? RuntimeSessionWindowManager)?.installSessionConfiguration(
+            deliveryPolicy,
+            inputDeliveryPolicy,
+            source,
+            sessionFailureHandler,
+            collectorAllocator,
+            maxCollectorsPerFlow,
+            dropTransferScope,
+            diagnostics,
+            rawInputPort,
+        )
+    }
+
+    override fun installExclusiveDisplayTargetResolver(resolver: ExclusiveDisplayTargetResolver) {
+        (runtimeManager as? RuntimeSessionWindowManager)?.installExclusiveDisplayTargetResolver(resolver)
+    }
 
     override suspend fun requestWindow(spec: WindowSpec): KadreResult<WindowRequest> {
         // Sans provider, la demande est déjà terminée avant TOUTE réservation (web l.265-266) —

@@ -8,12 +8,14 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import org.graphiks.kadre.application.AttachmentState
 import org.graphiks.kadre.application.KadreApplicationFactory
+import org.graphiks.kadre.application.KadreLaunchReason
 import org.graphiks.kadre.application.KadreSession
 import org.graphiks.kadre.application.LifecycleState
 import org.graphiks.kadre.diagnostics.ExperimentalKadreApi
 import org.graphiks.kadre.diagnostics.KadreFailure
 import org.graphiks.kadre.diagnostics.KadrePlatform
 import org.graphiks.kadre.diagnostics.KadreResult
+import org.graphiks.kadre.internal.runtime.KadreLaunchInfo
 import org.graphiks.kadre.internal.runtime.RuntimeDeferredAdmissionWindowManager
 import org.graphiks.kadre.internal.runtime.RuntimeFailureReporter
 import org.graphiks.kadre.internal.runtime.RuntimeHostController
@@ -28,8 +30,10 @@ import org.graphiks.kadre.internal.uikit.UIKitLifecycleSnapshot
 import org.graphiks.kadre.internal.uikit.UIKitOwnership
 import org.graphiks.kadre.internal.uikit.UIKitSceneRegistry
 import org.graphiks.kadre.internal.uikit.UIKitWindowRuntime
+import org.graphiks.kadre.internal.uikit.UIKitWindowSceneManager
 import org.graphiks.kadre.policy.KadrePolicies
 import org.graphiks.kadre.policy.KadrePolicy
+import org.graphiks.kadre.window.WindowManager
 import platform.Foundation.NSThread
 import platform.UIKit.UISceneActivationStateUnattached
 import platform.UIKit.UIView
@@ -87,12 +91,49 @@ private fun toLifecycleState(snapshot: UIKitLifecycleSnapshot): LifecycleState =
  */
 @OptIn(ExperimentalKadreApi::class, ExperimentalAtomicApi::class)
 public object KadreIos {
+    /**
+     * L'attach UIKit/tvOS d'une session sur la scène primaire du host, avec l'échelle optionnelle
+     * multi-fenêtre : un [windowSceneProvider] non nul annonce `requestWindow` comme
+     * `OpenedInNewSession` (chaque demande admise active une scène enfant qui devient SA propre
+     * session, attachée par le chemin ordinaire ci-dessous avec l'identité
+     * `AdditionalHostRequested` de la demande qui l'a causée) ; `null` — le défaut, tvOS et apps
+     * mono-fenêtre — refuse toute demande AVANT réservation (`Unsupported(RequestWindow)`) et
+     * laisse le chemin exact des phases 1-3.
+     */
     public fun attach(
         windowScene: UIWindowScene,
         window: UIWindow,
         surfaceView: UIView,
         applicationFactory: KadreApplicationFactory,
         policy: KadrePolicy = KadrePolicies.Default,
+        windowSceneProvider: UIKitWindowSceneProvider? = null,
+    ): KadreResult<KadreSession> = attachScene(
+        windowScene = windowScene,
+        window = window,
+        surfaceView = surfaceView,
+        applicationFactory = applicationFactory,
+        policy = policy,
+        windowSceneProvider = windowSceneProvider,
+        launch = null,
+    )
+
+    /**
+     * Le chemin ordinaire de l'attach — le SEUL : une session enfant d'une demande de fenêtre
+     * admise s'y attache aussi ([launch] non nul), avec l'application et la policy du REQUÉRANT,
+     * la réservation de sa scène dans le registre partagé (pas de second mécanisme
+     * d'enregistrement — une scène qu'une session vivante possède refuse l'attach enfant) et le
+     * relais de lifecycle de SA scène (déconnexion → détach → terminaison → le teardown des
+     * components referme le runtime enfant). Sans provider : les enfants sont mono-fenêtre
+     * (miroir web — la fabrique enfant n'ouvre pas de fenêtres).
+     */
+    private fun attachScene(
+        windowScene: UIWindowScene,
+        window: UIWindow,
+        surfaceView: UIView,
+        applicationFactory: KadreApplicationFactory,
+        policy: KadrePolicy,
+        windowSceneProvider: UIKitWindowSceneProvider?,
+        launch: KadreLaunchInfo?,
     ): KadreResult<KadreSession> {
         check(NSThread.isMainThread()) {
             "KadreIos.attach doit être appelé depuis le thread principal (les lectures UIKit et le pont d'admission l'exigent)"
@@ -156,6 +197,15 @@ public object KadreIos {
         //    au manager (qui refuse toute admission avant le stamp source), PUIS appelle
         //    `admitPrimaryWindow` — commit synchrone, avant Running, après la configuration.
         //    `attachedPrimarySurface` n'est lu par la session qu'après cette installation.
+        //
+        //    Avec un provider, le manager de demandes de scènes ENVELOPPE le delegate (ordre :
+        //    runtime.manager → admission différée → demandes de scènes) — la session installe sa
+        //    configuration À TRAVERS lui (il implémente le fil `RuntimeSessionWindowManager` —
+        //    sinon l'admission différée n'a jamais lieu), intercepte `requestWindow` et route
+        //    provider ↔ session enfant. Sa fabrique enfant est le chemin ordinaire ci-dessus,
+        //    `launch` portant l'identité de la demande. `closeAction` : le drain des demandes
+        //    pendantes (propre au manager de scènes) PUIS le close du runtime (chaîne de teardown
+        //    des components, ordre inverse de la construction) — les deux à chaque terminaison.
         val controller = RuntimeHostController.withComponents(
             platform = KadrePlatform.UIKit,
             sessionRevocationHandler = RuntimeSessionRevocationHandler {
@@ -163,14 +213,48 @@ public object KadreIos {
                 // relayer ; la réservation reste à la terminaison.
                 ownership.releaseObserversOnly()
             },
-            componentsFactory = { _, _ ->
+            componentsFactory = { _, rootScope ->
                 val runtime = UIKitWindowRuntime(window, surfaceView, policy, failureReporter)
+                val deferred = RuntimeDeferredAdmissionWindowManager(runtime.manager) {
+                    runtime.admitPrimaryWindow()
+                }
+                val sceneManager = windowSceneProvider?.let { provider ->
+                    UIKitWindowSceneManager(
+                        runtimeManager = deferred,
+                        provider = provider,
+                        policy = policy,
+                        applicationFactory = applicationFactory,
+                        failureReporter = failureReporter,
+                        parentScope = rootScope,
+                        childSessionFactory = { host ->
+                            attachScene(
+                                windowScene = host.windowScene,
+                                window = host.window,
+                                surfaceView = host.surfaceView,
+                                applicationFactory = applicationFactory,
+                                policy = policy,
+                                windowSceneProvider = null,
+                                launch = KadreLaunchInfo(
+                                    KadreLaunchReason.AdditionalHostRequested,
+                                    host.requestId,
+                                ),
+                            )
+                        },
+                    )
+                }
+                // L'ordre des wrappers, décidé au compile+test (plan Task 2) : la session porte sa
+                // configuration par un cast `as? RuntimeSessionWindowManager` — le manager de
+                // scènes la transmet au delegate d'admission différée SOUS lui, et son `state`
+                // substitue la seule capability `requestWindow`. Sans provider, le delegate nu
+                // reste `windows` : le chemin des phases 1-3, à l'octet près.
+                val windows: WindowManager = sceneManager ?: deferred
                 RuntimeSessionComponents(
-                    windows = RuntimeDeferredAdmissionWindowManager(runtime.manager) {
-                        runtime.admitPrimaryWindow()
-                    },
+                    windows = windows,
                     primarySurfaceProvider = { runtime.attachedPrimarySurface },
-                    closeAction = runtime::close,
+                    closeAction = {
+                        sceneManager?.close()
+                        runtime.close()
+                    },
                 )
             },
             initialLifecycleState = toLifecycleState(initial),
@@ -185,7 +269,7 @@ public object KadreIos {
         // 5. attach — échec → rollback complet (patron Web : observers + réservation, le scope
         //    créé pour l'occasion est annulé). Le scope appartient à l'adaptateur.
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
-        val attached = controller.attach(scope, applicationFactory, policy)
+        val attached = controller.attach(scope, applicationFactory, policy, launch)
         return when (attached) {
             is KadreResult.Success -> attached
             is KadreResult.Failure -> {
