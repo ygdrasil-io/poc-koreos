@@ -33,6 +33,8 @@ internal class FakeBridge(
     var dispatchPendingResult = true
     var pollOutcome = PollOutcome.DisplayReady
     var beforePoll: (() -> Unit)? = null
+    var fakeWindow: WaylandNativeWindow? = null
+    val createWindowingCalls = java.util.concurrent.atomic.AtomicInteger(0)
 
     override val displayFd: Int = 7
 
@@ -62,8 +64,10 @@ internal class FakeBridge(
 
     override fun connectionLost(): Boolean = false
 
-    override fun createWindowing(width: Int, height: Int): WaylandNativeWindow =
-        throw UnsupportedOperationException("no windowing in this fake")
+    override fun createWindowing(width: Int, height: Int): WaylandNativeWindow {
+        createWindowingCalls.incrementAndGet()
+        return fakeWindow ?: throw UnsupportedOperationException("no windowing in this fake")
+    }
 
     override fun close() {
         closed = true

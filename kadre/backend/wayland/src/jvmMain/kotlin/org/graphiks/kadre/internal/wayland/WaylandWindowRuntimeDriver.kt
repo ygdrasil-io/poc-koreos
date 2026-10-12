@@ -45,11 +45,21 @@ internal class WaylandWindowRuntimeDriver private constructor(
         platform = KadrePlatform.Wayland,
         failureReporter = failureReporter,
         publicWindowCapabilities = publicWindowCapabilities,
-        enabledWindowUpdateCapabilities = emptySet(),
+        // propriétés initiales conformes tranche 2: titre, taille, resizable,
+        // Borderless. decorations=System reste rejeté normativement par le
+        // port (D1) même enabled ici (le runtime laisse passer le défaut).
+        enabledWindowUpdateCapabilities = setOf(
+            org.graphiks.kadre.window.WindowProperty.Title,
+            org.graphiks.kadre.window.WindowProperty.ContentSize,
+            org.graphiks.kadre.window.WindowProperty.Resizable,
+            org.graphiks.kadre.window.WindowProperty.Decorations,
+        ),
         onLastWindowClosed = onLastWindowClosed,
     )
 
     internal fun peer(windowId: WindowId): WaylandWindowPeer? = peers[windowId]
+
+    internal fun registeredPeerCount(): Int = peers.size
 
     internal fun register(peer: WaylandWindowPeer) {
         peers[peer.windowId] = peer

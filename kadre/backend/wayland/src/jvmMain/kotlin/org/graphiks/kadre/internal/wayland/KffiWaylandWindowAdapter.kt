@@ -19,7 +19,11 @@ internal class KffiWaylandWindowAdapter private constructor(
     private val buffer: WaylandShmBuffer,
     override val width: Int,
     override val height: Int,
+    private val displayProxyAddress: Long,
 ) : WaylandNativeWindow {
+
+    override val nativeAddresses: Pair<Long, Long>
+        get() = displayProxyAddress to surface.proxyAddress
 
     @Volatile
     private var latestConfigureSerial: Int = -1
@@ -83,7 +87,15 @@ internal class KffiWaylandWindowAdapter private constructor(
             val xdgSurface = client.createXdgSurface(surface)
             val toplevel = client.createToplevel(xdgSurface)
             val buffer = client.createShmBuffer(width, height)
-            return KffiWaylandWindowAdapter(surface, xdgSurface, toplevel, buffer, width, height)
+            return KffiWaylandWindowAdapter(
+                surface,
+                xdgSurface,
+                toplevel,
+                buffer,
+                width,
+                height,
+                client.displayProxyAddress,
+            )
         }
     }
 }

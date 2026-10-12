@@ -1,24 +1,32 @@
 package org.graphiks.kadre.internal.wayland
 
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicInteger
+import org.graphiks.kadre.diagnostics.KadreFailure
+import org.graphiks.kadre.diagnostics.KadreResourceKind
+import org.graphiks.kadre.diagnostics.KadreResult
 import org.graphiks.kadre.internal.runtime.OpenedWindowCloseOutcome
+import org.graphiks.kadre.internal.runtime.RuntimeDesktopNativeWindowHandle
+import org.graphiks.kadre.internal.runtime.RuntimeDesktopWindowHandleAccess
 import org.graphiks.kadre.internal.runtime.WindowPeerOwner
 import org.graphiks.kadre.window.WindowId
 
 /**
- * Pair d'une fenêtre Wayland réelle : état minimal côté backend, destruction
- * ordonnée (toplevel → xdg_surface → surface → buffer) et tracking du cycle
- * de vie pour les stimuli natifs. Aucun second snapshot public : le runtime
- * reste l'autorité d'état.
+ * Pair d'une fenêtre Wayland réelle : état minimal côté backend, lease
+ * `withDesktopHandle` (adresses valides uniquement pendant le callback,
+ * refusées dès la fermeture admise — D2) et destruction ordonnée
+ * (toplevel → xdg_surface → surface → buffer). Aucun second snapshot
+ * public : le runtime reste l'autorité d'état.
  */
 internal class WaylandWindowPeer(
     val windowId: WindowId,
     val window: WaylandNativeWindow,
     private val onNativeClosed: (WindowId) -> Unit,
-) : WindowPeerOwner, AutoCloseable {
+) : WindowPeerOwner, RuntimeDesktopWindowHandleAccess, AutoCloseable {
 
     private val closed = AtomicBoolean(false)
     private val commitAcknowledged = AtomicBoolean(false)
+    private val activeHandleLeases = AtomicInteger(0)
 
     fun markCommitted() {
         commitAcknowledged.set(true)
@@ -45,10 +53,37 @@ internal class WaylandWindowPeer(
         return OpenedWindowCloseOutcome.Accepted
     }
 
+    /**
+     * Lease des adresses natives (display + surface) pour un renderer
+     * externe: les adresses ne sont valides que pendant l'exécution de
+     * [block]; toute nouvelle lease est refusée dès que la fenêtre est
+     * fermée (D2 — course lease/close: le lease est invalidé avant la
+     * destruction des proxies).
+     */
+    override suspend fun <R> withDesktopHandle(
+        block: (RuntimeDesktopNativeWindowHandle) -> R,
+    ): KadreResult<R> {
+        val previous = activeHandleLeases.incrementAndGet()
+        try {
+            if (closed.get() || previous <= 0) {
+                return KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.Window))
+            }
+            val (display, surface) = window.nativeAddresses
+            return KadreResult.Success(
+                block(RuntimeDesktopNativeWindowHandle.Wayland(display.toULong(), surface.toULong())),
+            )
+        } finally {
+            activeHandleLeases.decrementAndGet()
+        }
+    }
+
     override fun close() {
         if (!closed.compareAndSet(false, true)) {
             return
         }
+        // D2/F3: les nouvelles leases sont refusées dès l'entrée (closed=true
+        // lu par withDesktopHandle) — les leases actives sont courtes et
+        // bornées au thread pompe; le destroy suit immédiatement.
         window.close()
     }
 

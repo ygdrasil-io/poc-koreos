@@ -11,6 +11,9 @@ internal interface WaylandNativeWindow : AutoCloseable {
     public val width: Int
     public val height: Int
 
+    /** Adresses natives (display, surface) pour le lease interop renderer. */
+    public val nativeAddresses: Pair<Long, Long>
+
     /** Vue directe sur le contenu ARGB8888 (stride = width × 4). */
     public fun content(): MemorySegment
 
