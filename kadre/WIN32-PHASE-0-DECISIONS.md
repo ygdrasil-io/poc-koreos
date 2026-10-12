@@ -34,11 +34,10 @@ La cible de référence reste Windows 11 x64 sur JVM 25 (`WIN32-IMPLEMENTATION-R
 - Copie bornée avant dispatch : `MSG` (`message`, `wParam`, `lParam`, coordonnées) est copié en valeurs sûres avant tout traitement applicatif ; aucune donnée native n'est retenue au-delà de l'appel.
 - Réutilisation d'adresse : une adresse `HWND` réutilisée par Windows ne réactive jamais un dispatch révoqué ni un owner détruit ; l'association owner/`HWND` est retirée avant toute libération du support natif.
 - Les messages non traités par Kadre suivent le comportement natif par défaut (`DefWindowProcW`) ; la fenêtre de contrôle n'intercepte que son message privé de test.
-
 ## D3 — Fenêtre de contrôle interne
 
 - Propriété : le module `:kadre:backend:win32` possède la fenêtre de contrôle ; elle n'est ni une `Window` publique, ni membre d'un `WindowManagerState`, ni annoncée dans une capability.
-- Cycle : classe enregistrée sous nom unique → `CreateWindowExW` (fenêtre message-only, parent `HWND_MESSAGE`) → message privé de test `WM_APP + 1` injecté via `PostMessageW` par le driver O3 → dispatch observé → `DestroyWindow`. La fermeture est idempotente : un second appel produit le même outcome terminal, sans erreur ni double libération.
+- Cycle : classe enregistrée sous nom unique → `CreateWindowExW` (fenêtre popup jamais affichée — aucun `ShowWindow`, parent bureau ; la fenêtre message-only stricte `HWND_MESSAGE` reste possible plus tard si un besoin d'isolation de diffusion apparaît, le handle négatif n'étant pas exprimable en FFM) → message privé de test `WM_APP + 1` injecté via `PostMessageW` par le driver O3 → dispatch observé → `DestroyWindow`. La fermeture est idempotente : un second appel produit le même outcome terminal, sans erreur ni double libération.
 - Initialisation paresseuse : aucun symbole ni DLL résolu hors Windows (`init()` générée jamais appelée) ; hors Windows, toute utilisation produit un échec actionnable immédiat, jamais une erreur de réflexion ni un succès fictif.
 
 ## Règles de preuve R1-R6
