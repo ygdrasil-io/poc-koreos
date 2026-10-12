@@ -26,10 +26,13 @@ import platform.UIKit.UIView
  * - **iOS** : `UITapGestureRecognizer` (double), `UIPanGestureRecognizer`,
  *   `UIPinchGestureRecognizer`, `UIRotationGestureRecognizer` — les quatre.
  * - **tvOS** : tap et pan seulement. `UIPinchGestureRecognizer` et
- *   `UIRotationGestureRecognizer` sont ABSENTS du klib tvOS (zéro occurrence dans son
- *   linkdata — bien que présents dans les headers du SDK tvOS, un trou de mapping K/N, même
- *   famille que le hover) : les installer est structurellement impossible, et les simuler
- *   serait un mensonge.
+ *   `UIRotationGestureRecognizer` sont `API_UNAVAILABLE(tvos)` (UIPinchGestureRecognizer.h:19
+ *   et UIRotationGestureRecognizer.h:19 du SDK AppleTVOS27.0 — Apple lui-même déclare ces
+ *   deux recognizers indisponibles sur tvOS, même famille que le hover) : leur absence du
+ *   klib tvOS est cette frontière de plateforme TELLE QUELLE, PAS un trou de mapping K/N.
+ *   Les installer est structurellement impossible — le binding n'existe pas et n'existera
+ *   pas sur tvOS tant qu'Apple ne portera pas ces classes — et les simuler serait un
+ *   mensonge.
  *
  * La liste rendue EST la vérité de ce qui sera installé — l'annonce `gestureKinds` la porte
  * telle quelle (la règle de l'ensemble exact : exactement les recognizers posés sur la vue,

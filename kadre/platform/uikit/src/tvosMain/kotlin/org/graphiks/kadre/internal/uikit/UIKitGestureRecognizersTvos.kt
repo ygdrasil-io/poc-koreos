@@ -14,10 +14,12 @@ import platform.UIKit.UITapGestureRecognizer
  * (2.4.20, vérifiée au compile ET dans le linkdata) :
  *
  * - `UITapGestureRecognizer` et `UIPanGestureRecognizer` existent : tap double + pan.
- * - `UIPinchGestureRecognizer` et `UIRotationGestureRecognizer` sont ABSENTS du klib (zéro
- *   occurrence dans le linkdata, bien que présents dans les headers du SDK tvOS — un trou de
- *   mapping K/N) : les lecteurs typés répondent `null`, les fabriques ne les construisent pas,
- *   l'annonce `gestureKinds` dit EXACTEMENT {DoubleTap, Pan}.
+ * - `UIPinchGestureRecognizer` et `UIRotationGestureRecognizer` sont `API_UNAVAILABLE(tvos)`
+ *   (UIPinchGestureRecognizer.h:19 et UIRotationGestureRecognizer.h:19 du SDK AppleTVOS27.0 —
+ *   Apple lui-même déclare ces deux recognizers indisponibles sur tvOS) : ABSENTS du klib par
+ *   frontière de plateforme TELLE QUELLE, PAS un trou de mapping K/N. Les lecteurs typés
+ *   répondent `null`, les fabriques ne les construisent pas, l'annonce `gestureKinds` dit
+ *   EXACTEMENT {DoubleTap, Pan}.
  * - `UIHoverGestureRecognizer` est `API_UNAVAILABLE(tvos)` : PAS de route pointeur tvOS en v1
  *   (décision tracée), `pointerInstalled` reste à faux.
  */
