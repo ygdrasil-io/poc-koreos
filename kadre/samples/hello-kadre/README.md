@@ -5,9 +5,11 @@ ou un conteneur (web), et tout ce qui lui arrive est imprimé dans la console.
 C'est le point d'entrée recommandé pour découvrir l'API Kadre avant d'ouvrir la
 démo complète (`kadre/samples/desk-tour`).
 
-Le module est multiplateforme : deux runtimes, la même idée, le même code
-d'observation partagé (`commonMain/HelloKadreShared.kt`). Chaque runtime
-n'écrit que son bootstrap.
+Le module est multiplateforme : deux runtimes, la même idée, et **tout le corps
+de l'application en commun** (`commonMain/HelloKadreSession.kt`) — observation
+des écrans, de la fenêtre (bureau), de la surface et des entrées, protocole de
+fermeture. Chaque runtime n'écrit que son bootstrap et la façon d'obtenir la
+fenêtre/surface (couture `openSurface`).
 
 ## Lancer
 
@@ -24,7 +26,10 @@ Deux arguments JVM sont configurés dans `build.gradle.kts` : `-XstartOnFirstThr
 autres OS refuseraient l'option) et `--enable-native-access=ALL-UNNAMED` (le pont
 kffi vers le backend natif).
 
-## Ce que montre le bureau (`jvmMain/HelloKadreMain.kt`)
+## Ce que montre le bureau (`jvmMain/HelloKadreMain.kt` + session commune)
+
+Le main bureau ne fait que démarrer la façade desktop et demander la fenêtre ;
+le reste vient de `helloKadreApplication` (commonMain).
 
 | Étape | Quoi | API |
 |---|---|---|
@@ -36,11 +41,12 @@ kffi vers le backend natif).
 | 6 | Imprimer les entrées (clavier, souris, scroll, gestes) | `window.surface.input.events` |
 | 7 | Répondre à la demande de fermeture du système | `WindowEvent.CloseRequested`, `window.respondToCloseRequest(..., Accept)` |
 
-## Ce que montre le web (`wasmJsMain/HelloKadreWebMain.kt`)
+## Ce que montre le web (`wasmJsMain/HelloKadreWebMain.kt` + session commune)
 
 Le web n'a pas de fenêtres OS : la session s'attache à un conteneur de la page
 (`index.html`) et **ce conteneur est la fenêtre**. Pas de `requestWindow` ni de
-fermeture système — la session vit tant que la page vit.
+fermeture système — la session vit tant que la page vit. Le main web passe
+`window = null` à la session commune : les parties fenêtre ne tournent pas.
 
 | Étape | Quoi | API |
 |---|---|---|
