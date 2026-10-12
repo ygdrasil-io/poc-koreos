@@ -180,9 +180,12 @@ final class KadreUikitInputTests: XCTestCase {
         try stopAndAwaitTermination(fixture)
     }
 
-    /// uikit-input-gesture-keyboard-sources-announced — Task 3 : les sources gestes/survol et
-    /// clavier sont posées à l'attach avec la vérité par famille et la politique additive, et
-    /// leurs compteurs d'installation/annonce bougent. Les recognizers de geste sont
+    /// uikit-input-gesture-keyboard-sources-announced (BCK-023) et
+    /// uikit-input-pointer-source-per-family (BCK-022 — le fait POINTEUR y est prouvé par
+    /// famille : le survol s'installe là où le klib le porte et nulle part ailleurs) —
+    /// Task 3 : les sources gestes/survol et clavier sont posées à l'attach avec la vérité
+    /// par famille et la politique additive, et leurs compteurs d'installation/annonce
+    /// bougent. Les recognizers de geste sont
     /// STANDARD (les noms Obj-C de la vue sont ceux des classes Apple) ; la SURVOL est iOS
     /// seul. Le clavier : une CONNEXION de source peut légitimement arriver sur un simulateur
     /// automatisé — le pairing « Connect Hardware Keyboard » du Simulator livre un VRAI
