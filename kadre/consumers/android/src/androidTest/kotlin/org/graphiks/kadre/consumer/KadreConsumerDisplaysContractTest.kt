@@ -128,9 +128,11 @@ import org.junit.runner.RunWith
  *    background de la constante SDK (UI_HIDDEN 20, BACKGROUND 40, MODERATE 60, COMPLETE 80)
  *    passent par la MÊME chaîne SANS produire JAMAIS un signal. La sentinelle
  *    `android-memory-no-background-signal` garde ce silence (mapping background → signal →
- *    ce scénario seul échoue). Ce scénario ne dépense RIEN du budget shell du (4) : sous
- *    l'orchestrateur chaque scénario repart d'un processus neuf, et le dispatch Application
- *    du contrôle positif n'y passe pas.
+ *    ce scénario seul échoue). Le budget d'escalade du (4) reste intact : les scénarios
+ *    partagent le processus et l'ordre d'exécution déterministe de la classe exerce (4)
+ *    AVANT (5) — COMPLETE (80) y est une escalade au-dessus du 15 du (4) et HIDDEN (20) y
+ *    rencontre le refus d'escalade — et le dispatch Application du contrôle positif ne
+ *    passe PAS par le niveau enregistré du system_server.
  * 6. RAW INPUT (android-raw-input-noncall) — la preuve non-appel P3 re-épinglée : la demande
  *    d'accès brut répond `Failure(Unsupported(RawInputAccess))` — la taxonomie nomme
  *    l'opération, aucune primitive native n'est atteinte — et la capability publiée dit la
