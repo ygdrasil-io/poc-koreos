@@ -102,12 +102,13 @@ class Win32NativeContractTest {
         drainUntil { host.dispatches.isNotEmpty() }
         host.close()
         assertTrue(host.isClosed)
-        // Quiescence : plus aucune livraison après fermeture (décisions D2).
+        // Quiescence (décisions D2) : après close, aucun dispatch ne peut plus
+        // être enregistré. Pas de pompe après fermeture (pollOne y retourne
+        // false par contrat) : une fuite de dispatch ne peut venir que d'une
+        // livraison en vol au moment du close — on laisse le temps s'écouler
+        // puis on constate l'immutabilité.
         val before = host.dispatches.size
-        val deadline = System.currentTimeMillis() + 300
-        while (System.currentTimeMillis() < deadline) {
-            if (!host.pollOne(50)) break
-        }
+        Thread.sleep(300)
         assertEquals(before, host.dispatches.size)
     }
 
@@ -116,15 +117,10 @@ class Win32NativeContractTest {
         val host = Win32ControlHost()
         val injector = Win32MessageInjector()
         host.open { _, _, _, _ -> 0L }
+        // Message en vol au moment du close : ni pompé avant, ni après.
+        assertTrue(injector.postTestMessage(host.hwnd, wParam = 6L, lParam = 6L))
         host.close()
-        val queued = injector.postTestMessage(host.hwnd, wParam = 6L, lParam = 6L)
-        // Le hwnd est fermé : PostMessageW échoue OU le message reste non distribué.
-        if (queued) {
-            val deadline = System.currentTimeMillis() + 300
-            while (System.currentTimeMillis() < deadline) {
-                if (!host.pollOne(50)) break
-            }
-        }
+        Thread.sleep(300)
         assertTrue(host.dispatches.isEmpty(), "closed host must never dispatch")
     }
 
@@ -137,11 +133,10 @@ class Win32NativeContractTest {
         host.close()
         // Réutilisation d'adresse (sentinelle win32-no-hwnd-resurrection) : un
         // message posté vers l'adresse fermée ne rejoint aucun owner Kadre.
+        // La fenêtre étant détruite par close(), Windows ne distribue plus rien
+        // vers elle ; l'assertion constate qu'aucun chemin Kadre ne réenregistre.
         injector.postTestMessage(staleHwnd, wParam = 7L, lParam = 7L)
-        val deadline = System.currentTimeMillis() + 300
-        while (System.currentTimeMillis() < deadline) {
-            if (!host.pollOne(50)) break
-        }
+        Thread.sleep(300)
         assertTrue(host.dispatches.isEmpty(), "stale hwnd must not resurrect a dispatch")
     }
 
