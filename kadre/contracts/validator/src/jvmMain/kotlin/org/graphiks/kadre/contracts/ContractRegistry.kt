@@ -34,7 +34,9 @@ internal data class ContractRecord(
 internal object ContractRegistry {
     private const val Header =
         "contractId\tstatus\tsource\tsubject\trisk\toracle\tscenarios\trequiredTargets\tconditionalCapabilities\tsentinels\tretirementRef"
-    private val ContractIdPattern = Regex("[A-Z]{3}-[0-9]{3}")
+    // W32-* (backend Win32, WIN32-IMPLEMENTATION-ROADMAP.md §1.2) exige un chiffre
+    // dans le préfixe : [A-Z0-9]{3} reste strict à trois caractères alphanumériques.
+    private val ContractIdPattern = Regex("[A-Z0-9]{3}-[0-9]{3}")
 
     fun parse(text: String): List<ContractRecord> {
         val lines = text.lineSequence()
