@@ -74,6 +74,7 @@ final class KadreUikitSurfaceTests: XCTestCase {
             surfaceView: view,
             applicationFactory: DriverApplication(fixture: fixture),
             policy: KadrePolicies.shared.Default,
+            windowSceneProvider: nil, // static framework : pas de convenience du défaut Kotlin
         )
         if let failure = (result as? KadreResultFailure)?.reason {
             XCTFail("attach failed unexpectedly: \(failure)", file: file, line: line)

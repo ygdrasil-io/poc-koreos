@@ -85,6 +85,10 @@ final class ConsumerSceneStore: NSObject {
             surfaceView: surfaceView,
             applicationFactory: factory,
             policy: KadrePolicies.shared.Default,
+            // Le framework est STATIQUE : aucune convenience Swift des arguments par défaut
+            // Kotlin — l'argument optionnel du provider de scènes (phase 4) doit être passé.
+            // `nil` = mono-fenêtre ; le driver multi-fenêtre le remplira (Task 3).
+            windowSceneProvider: nil,
         )
         if let failure = (result as? KadreResultFailure)?.reason {
             attachFailureDescription = "attach failed: \(failure)"

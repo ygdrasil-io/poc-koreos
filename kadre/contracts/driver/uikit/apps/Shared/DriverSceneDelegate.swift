@@ -12,6 +12,9 @@ final class DriverSceneDelegate: NSObject, UIWindowSceneDelegate {
             return
         }
         DriverFixture.shared.install(windowScene: windowScene)
+        // Phase 4 : si une activation du provider est en vol, CETTE scène lui est corrélée
+        // (après l'install — la fenêtre/vue que le provider résoudra existent déjà).
+        DriverWindowSceneProvider.shared.sceneConnected(windowScene)
     }
 
     func sceneDidBecomeActive(_ scene: UIScene) {
@@ -20,6 +23,13 @@ final class DriverSceneDelegate: NSObject, UIWindowSceneDelegate {
         // Les demandes de scènes secondaires ne partent JAMAIS avant une activation réelle
         // (garde anti-course iPadOS 27 — voir DriverSceneRequest.sceneActivated).
         DriverSceneRequest.sceneActivated()
+    }
+
+    func sceneWillEnterForeground(_ scene: UIScene) {
+        // Phase 4 : la sortie d'Unattached des scènes demandées programmatiquement passe par
+        // ici (elles restent ForegroundInactive — jamais didBecomeActive, preuve phase 1) ;
+        // tracé pour la lisibilité des échecs CI, la résolution lit l'État réel (pump provider).
+        DriverTrace.record("scene willEnterForeground session=\(sceneId(scene)) state=\(scene.activationState.rawValue)")
     }
 
     func sceneDidDisconnect(_ scene: UIScene) {

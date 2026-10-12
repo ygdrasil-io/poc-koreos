@@ -13,6 +13,12 @@ ligne, avec ses sentinelles. L'édition phase 3 ajoute la façade Swift `KadreHo
 (contrat §5 d'INTEROP-EXPORTS), le `KadreHostViewController`, la distribution XCFramework
 statique et l'audit de l'en-tête framework (§3 ci-dessous) — l'inventaire qui clôt la
 divergence F1 de la phase 2 par suppression (`@HiddenFromObjC` sur `withUIKitView`).
+L'édition phase 4 ajoute la demande de fenêtre `requestWindow` : le refus sans provider
+(`Rejected(Unsupported(RequestWindow))` avant toute réservation — le chemin tvOS et tout
+app mono-fenêtre, BCK-020) et la corrélation multi-scènes iPadOS via le provider app-owned
+(`OpenedInNewSession` d'une session enfant COMPLÈTE et indépendante, BCK-021) — les
+fenêtres enfants ne sont jamais des `Window` Kadre : `Window.apply`/`attention`/`close`
+restent hors périmètre.
 
 **Portée de lecture.** Deux targets Kotlin partagent la sonde (`KadreUikitProbe`,
 `uikitMain`) : `iosSimulatorArm64` et `tvosSimulatorArm64`. La preuve O3 court dans des
@@ -92,9 +98,13 @@ publié == vivant après le changement de géométrie), jamais par une rotation 
   la façade Swift `KadreHost` (contrat §5), le `KadreHostViewController`, la distribution
   XCFramework statique et l'audit de l'en-tête framework sont livrés — et l'appel Swift du
   bail RESTE ABSENT par décision : `withUIKitView` est Kotlin-only strict, masqué des
-  exports Obj-C/Swift (`@HiddenFromObjC`, audit §3) ; restent absents sur
-  ce target IME, drop, displays, devices, capture — et toute surface au-delà de la fenêtre
-  primaire fournie par le host. Le CHANGEMENT D'ÉCHELLE d'écran (`displayScale`) et le
+  exports Obj-C/Swift (`@HiddenFromObjC`, audit §3) ; depuis la phase 4, la demande de
+  fenêtre `requestWindow` est livrée — refus pur sans provider (BCK-020) et corrélation
+  multi-scènes via provider app-owned (BCK-021) — mais une fenêtre enfant n'est JAMAIS une
+  `Window` Kadre : `Window.apply`/`attention`/`close` et toute opération sur l'enfant
+  restent hors périmètre (l'enfant est sa propre session UIKit complète) ; restent absents
+  sur ce target IME, drop, displays, devices, capture.
+  Le CHANGEMENT D'ÉCHELLE d'écran (`displayScale`) et le
   mode-change tvOS (`UIScreenModeDidChangeNotification` — observé mais sans stimulus
   programmatique sur simulateur) n'ont pas de preuve sur simulateur : charter manuel
   (matériel de la phase 10). Aucun module applicatif Kadre ne référence
@@ -102,7 +112,9 @@ publié == vivant après le changement de géométrie), jamais par une rotation 
 - **tests** — la classe Xcode qui porte la ligne (`KadreUikitDriverTests` phase 0,
   `KadreUikitAttachTests` phase 1, `KadreUikitSurfaceTests` phase 2 — extension iOS-only
   `tests/Ios/KadreUikitSurfaceIosTests.swift` compilée DANS la même classe XCTest pour la
-  rotation), exécutée par
+  rotation, `KadreUikitWindowRequestTests` phase 4 — extension iOS-only
+  `tests/Ios/KadreUikitWindowRequestIosTests.swift` compilée DANS la même classe XCTest
+  pour les scénarios multi-scènes), exécutée par
   `./gradlew :kadre:contracts:driver:uikit:simulatorTests` et consommée par le validateur
   via l'export JUnit (`tools/xctest_to_junit.py`).
 
@@ -120,6 +132,8 @@ publié == vivant après le changement de géométrie), jamais par une rotation 
 | façade Swift `KadreHost` (contrat INTEROP §5 : `KadreIosHost.attach`, `KadreSessionHandle`, value model fermé) + inventaire d'audit de l'en-tête (§3) | iosSimulatorArm64, tvosSimulatorArm64 (sources Swift `platform/uikit/swift/Sources/KadreHost`, compilées dans l'app consumer) | iOS 16.0 / tvOS 16.0 | compile du consumer `KadreSwiftConsumer.xcodeproj` (les symboles Kotlin traversent par `swift_name`, xcframework lié sans embed) | consumer gate (`iosSimulatorTests`/`tvosSimulatorTests` — la factory du module Kotlin applicatif traverse jusqu'à l'attach ; pré-absence de `Flow`/`Continuation`/`Throwable` dans la façade épinglée) | `withUIKitView` depuis Swift : NON promis — Kotlin-only strict (`@HiddenFromObjC`, audit phase 3, §3) ; module `integration:swiftui` : non matérialisé (le wrapper `UIViewControllerRepresentable` ~10 lignes est possédé par l'app, INTEROP §5) ; managers/flows/frames : non promis | suites consumer-app (`KadreHostMappingTests`, `KadreSessionHandleTests`, `ConsumerAttachTests`) |
 | `KadreHostViewController` (attach exactement une fois quand sa view appartient à une `UIWindow`/`UIWindowScene` ; la view passée EST `self.view`) | iosSimulatorArm64, tvosSimulatorArm64 | iOS 16.0 / tvOS 16.0 | compile du consumer `KadreSwiftConsumer.xcodeproj` | consumer gate (`iosSimulatorTests`/`tvosSimulatorTests`) | zéro layout Kadre (promesse §5) ; re-attach après `close` hors promesse (budget d'attach unique) ; déconnexion observer seulement au `deinit` (close la laisse — bénin, weak self) | suite consumer-app (`KadreHostViewControllerTests`) |
 | distribution XCFramework STATIQUE `KadreUikit.xcframework` (4 slices : `ios-arm64`, `ios-arm64-simulator`, `tvos-arm64`, `tvos-arm64-simulator` — `AvailableLibraries` du Info.plist) | iosArm64, iosSimulatorArm64, tvosArm64, tvosSimulatorArm64 | iOS 16.0 / tvOS 16.0 | `assembleKadreUikit{Debug,Release}XCFramework` (l'en-tête audité de §3 est celui des slices) | l'app consumer SE LANCE avec les DEUX archives statiques liées sans embed — toute duplication Obj-C au lancement (« Class … is implemented in both ») fait échouer le run | pas de publication binaire signée (artefact local de preuve, `build/` non commité) ; slices device (arm64) non exercées — simulateurs seuls ; l'en-tête ne porte aucun symbole surface-access (§3) | consumer gate (`iosSimulatorTests`/`tvosSimulatorTests`, garde `doLast` anti-duplication) |
+| `requestWindow` sans provider — refus `Rejected(Unsupported(RequestWindow))` avant toute réservation, aucun effet natif (chemin tvOS et tout app mono-fenêtre) | iosSimulatorArm64, tvosSimulatorArm64 | iOS 16.0 / tvOS 16.0 | `:kadre:platform:uikit:compileKotlin*` | BCK-020 (2 simulateurs) | le chemin provider (corrélation de scène, `OpenedInNewSession`) : hors sujet sans provider (BCK-021, iOS seul) ; `Window.apply`/`attention`/`close` : hors périmètre (une fenêtre enfant n'est jamais une `Window` Kadre) ; IME, drop, displays, devices, capture : non livré | `KadreUikitWindowRequestTests` |
+| `requestWindow` corrélé multi-scènes — provider app-owned, `OpenedInNewSession` d'une session enfant COMPLÈTE et indépendante (sa propre scène/surface/lifecycle ; le close du requérant détache l'enfant du destin du requérant — l'enfant survit) | iosSimulatorArm64 | iOS 16.0 (iPad) | `:kadre:platform:uikit:compileKotlin*` | BCK-021 (iPad Pro 11-inch (M5)) | tvOS : mono-scène par design (DESIGN.md §15.2) — le refus BCK-020 y porte le contrat ; `Window.apply`/`attention`/`close` sur une fenêtre enfant : hors périmètre (l'enfant n'est jamais une `Window` Kadre) ; IME, drop, displays, devices, capture : non livré | `KadreUikitWindowRequestTests` (extension `tests/Ios`) |
 
 Note de gate des lignes phase 3 (façade Swift, `KadreHostViewController`, distribution
 XCFramework) : le gate consumer (`consumers/swift`, 2 familles) tourne localement via
@@ -214,6 +228,50 @@ portant les deux morts). Le kill est PORTÉ PAR LA FIDÉLITÉ GÉOMÉTRIQUE DU C
 réelle : la rotation réelle est réservée à un runtime qui accepte
 `requestGeometryUpdate` (charter manuel / runtime futur) — la branche réelle du test
 (fidélité exacte de l'échange portrait↔paysage) reste codée et s'exécutera alors.
+
+La ligne BCK-020 se lit : sur une session SANS provider (le défaut tvOS — mono-scène par
+design, DESIGN.md §15.2 — et tout app mono-fenêtre), la capability `requestWindow` est
+annoncée `Unsupported(RequestWindow)` et toute demande rend au requérant une requête DÉJÀ
+terminale `Rejected(Unsupported(RequestWindow))` AVANT toute réservation : aucun provider
+invoqué (compteur), aucune scène activée, aucune corrélation, état du manager intact, et
+une seconde demande est refusée pareil (rien n'a été consommé par la première). La
+sentinelle `uikit-window-request-tvos-refusal-faithful` (mutation : la capability
+null-provider annonce `Supported({OpenedInNewSession})` — le refus ne dit plus la vérité)
+est tuée par `testWindowRequestWithoutProviderIsRejectedUnsupportedWithNoNativeEffect` sur
+les DEUX familles (même binaire Kotlin, même couture `sceneWindowCapability`) ; le refus
+reste par ailleurs pur : toute réservation ou route provider sur ce chemin échoue aux
+asserts de pureté du même test (compteur provider, corrélations, résolutions, primaire).
+
+La ligne BCK-021 se lit : sur iPad, `requestWindow` sur un requérant portant le provider
+app-owned reste `Pending` jusqu'à la connexion de la NOUVELLE scène corrélée à la demande
+(activation `requestSceneSessionActivation` côté app, corrélation par identité — jamais
+par index), puis l'enfant s'attache par le chemin ordinaire et l'outcome est
+`OpenedInNewSession(childId)` : la chaîne requestId ↔ scène ↔ session enfant est prouvée
+deux à deux distincte sur une paire concurrente, le requérant reste unique-fenêtre
+(l'enfant n'entre JAMAIS dans sa liste), l'arrêt et le `close()` du requérant détachent
+l'enfant du destin du requérant — l'enfant déjà résolu SURVIT (attaché, app vivante,
+surface intacte ; « detach » = séparé du sort du requérant, jamais « enfant terminé ») —,
+une seconde demande repart du même requérant (slot libéré), et une UIWindow overlay de la
+scène requérante survit intacte (visible, toujours key, jamais une fenêtre Kadre).
+`uikit-window-request-cancel-before-connect` prouve le cancel avant connexion :
+`CancelledBeforeCommit`, demande terminale `Cancelled` pour toujours, et la résolution
+tardive de la scène (si FrontBoard l'honore) est un no-op — AUCUN enfant ; le
+renforcement de revue (Task 4) fait échouer le scénario quand la gate relâchée ne produit
+NI résolution NI refus d'activation explicite (plus de passe vacue). Deux sentinelles :
+`uikit-window-request-correlation-crossed` (mutation : `claim` ignore le registre — il
+rend la DERNIÈRE entrée pendante au lieu de l'entrée de l'identité demandée) est tuée par
+`testConcurrentWindowRequestsCorrelateEachSceneToItsOwnRequest`, seul scénario à porter
+deux demandes pendantes EN MÊME TEMPS (les scénarios mono-demande ne voient jamais la
+différence) ; `uikit-window-request-cancel-terminal-faithful` (mutation : le `cancel` ne
+publie plus l'outcome terminal — le CAS de terminaison est court-circuité, l'annulation
+répond `CancelledBeforeCommit` sans jamais terminer la requête) est tuée par
+`testWindowRequestCancelledBeforeTheSceneConnectsStaysTerminalWithNoChild` (l'`await` de
+l'outcome ne délivre jamais — seul scénario du driver à annuler). La résurrection d'une
+demande annulée par la résolution tardive est défendue à DEUX coutures (retrait de
+l'entrée au cancel + garde de terminalité au `claimResolve` — chaque couture prouvée en
+uikitTest kernel) ; aucune mutation à couture unique ne peut la traverser, et la borne de
+pending (`maxPendingWindowRequests`) est du ressort kernel (uikitTest), sans test de borne
+au driver.
 
 ## 3. Audit de l'en-tête framework (phase 3 — clôture de la divergence F1)
 

@@ -58,7 +58,12 @@ public enum KadreIosHost {
             window: window,
             surfaceView: surfaceView,
             applicationFactory: applicationFactory,
-            policy: kadrePolicy)
+            policy: kadrePolicy,
+            // Le paramètre optionnel du provider de scènes (phase 4) n'a de valeur par défaut
+            // QUE côté Kotlin : un framework statique n'embarque pas les conveniences Swift
+            // des arguments par défaut — l'argument doit être passé explicitement. `nil` = le
+            // comportement mono-fenêtre (tvOS) ; le driver multi-fenêtre le remplira (Task 3).
+            windowSceneProvider: nil)
 
         if let failure = (result as? KadreUikit.KadreResultFailure)?.reason {
             throw KadreError(failure: KadreFailureMapper.make(failure))
