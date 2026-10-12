@@ -197,13 +197,17 @@ internal class UIKitWindowScenePending(
  *    (web l.265-266) ;
  * 3. le provider est invoqué avec l'id et la spéc, dans un try/catch : un throw devient
  *    `PlatformFailure(UIKit, "UIKitWindowSceneProvider", "callback-exception")` (web l.268-278) ;
+ *    la demande terminée à l'handoff RETIENT son entrée (web-verbatim) — sa résolution tardive
+ *    est refusée par [claimResolve], jamais un enfant sans owner ;
  * 4. à la connexion corrélée, [resolve] attache la session enfant par la fabrique injectée
  *    ([childSessionFactory] — le chemin ordinaire de l'attach, miroir `WebChildSessionFactory`) :
  *    succès → `OpenedInNewSession(child.id)` et le slot est libéré ; failure → `Rejected` de
  *    l'ensemble fermé (`invalid-failure` pour tout ce qui en sort) ;
  * 5. une résolution arrivant sur une requête déjà terminale est un no-op (l'outcome d'origine
  *    tient, jamais deux résolutions) ; l'enfant qui vient de s'attacher dans la course est
- *    détaché proprement — jamais de ressource transitoire sans owner (roadmap l.239).
+ *    détaché proprement — jamais de ressource transitoire sans owner (roadmap l.239). Le CAS
+ *    de `UIKitSceneWindowRequest.terminate` arbitre les écrivains concurrents sous et hors du
+ *    lock : le premier outcome publié tient, quoi qu'il arrive.
  *
  * L'enfant attaché est une session INDÉPENDANTE du requérant (roadmap l.240) : la fermeture du
  * manager ne touche pas les enfants déjà résolus — elle termine les pendants `RequesterDetached`
@@ -261,6 +265,9 @@ internal class UIKitWindowSceneManager(
 
         // Le provider est du code host invoqué sur le main, HORS du lock : son throw est capturé
         // ici et devient l'outcome promis, jamais une exception qui s'échappe (web l.268-278).
+        // L'entrée RETIENT son slot (web-verbatim) jusqu'au close() du requérant — une
+        // résolution tardive de cette demande sera refusée (claimResolve lit l'état de la
+        // requête, pas la seule présence dans la carte) et le CAS interdit toute réécriture.
         try {
             localProvider.open(request.id, spec)
         } catch (_: Throwable) {
@@ -281,6 +288,8 @@ internal class UIKitWindowSceneManager(
             pending.drain()
         }
         drained.forEach { entry ->
+            // CAS : une entrée retenue dont la demande est déjà terminale (throw du provider)
+            // garde son outcome publié — le drain ne le retourne pas en RequesterDetached.
             entry.request.sceneRequest.terminate(WindowRequestOutcome.RequesterDetached)
             entry.resolver.abandon("manager-closed")
         }
@@ -312,15 +321,25 @@ internal class UIKitWindowSceneManager(
 
     /**
      * La couture testable de la résolution : l'entrée si la demande est encore pendante, `null`
-     * sinon (résolution tardive — no-op, jamais de second attach).
+     * sinon (résolution tardive — no-op, jamais de second attach). La présence dans la carte ne
+     * suffit PAS : une demande terminée à l'handoff (throw du provider) RETIENT son entrée
+     * (web-verbatim, jusqu'au `close()` du requérant) — sa résolution est refusée AVANT tout
+     * attach, jamais un enfant sans owner (roadmap l.238-239).
      */
     internal fun claimResolve(requestId: WindowRequestId): UIKitWindowScenePending.Entry? =
-        lock.withLock { pending.claim(requestId) }
+        lock.withLock {
+            val entry = pending.claim(requestId)
+            when {
+                entry == null || entry.request.sceneRequest.terminalOutcome() != null -> null
+                else -> entry
+            }
+        }
 
     /**
      * La fin de la résolution : [attach] court HORS du lock (comme l'échelle web), puis le
-     * settle arbitre la course — une terminaison (cancel/close/drain) arrivée pendant l'attach
-     * garde son outcome d'origine et l'enfant qui vient de s'attacher est détaché.
+     * settle arbitre — l'entrée partie (cancel/detach/drain pendant l'attach) OU le CAS de
+     * terminaison perdu (la demande était DÉJÀ terminale : throw du provider retenu dans la
+     * carte, ou toute terminaison hors lock arrivée pendant l'attach) sont des courses perdues.
      */
     internal fun completeResolve(
         entry: UIKitWindowScenePending.Entry,
@@ -329,18 +348,20 @@ internal class UIKitWindowSceneManager(
         val attached = attach()
         val raced = lock.withLock {
             val settled = pending.settle(entry.id)
-            if (settled != null) {
-                val outcome = when (attached) {
-                    is KadreResult.Success -> WindowRequestOutcome.OpenedInNewSession(attached.value.id)
-                    is KadreResult.Failure ->
-                        WindowRequestOutcome.Rejected(admittedWindowRequestFailureOrInvalid(attached.reason))
+            when (settled) {
+                null -> true
+                else -> {
+                    val outcome = when (attached) {
+                        is KadreResult.Success -> WindowRequestOutcome.OpenedInNewSession(attached.value.id)
+                        is KadreResult.Failure ->
+                            WindowRequestOutcome.Rejected(admittedWindowRequestFailureOrInvalid(attached.reason))
+                    }
+                    !settled.request.sceneRequest.terminate(outcome)
                 }
-                settled.request.sceneRequest.terminate(outcome)
             }
-            settled == null
         }
-        // La course est perdue : l'enfant fraîchement attaché est une ressource sans owner
-        // (roadmap l.239) — il est détaché et l'outcome terminal d'origine tient.
+        // Course perdue : l'enfant fraîchement attaché est une ressource sans owner (roadmap
+        // l.239) — il est détaché et l'outcome terminal d'origine tient, jamais réécrit.
         if (raced && attached is KadreResult.Success) attached.value.requestStop()
     }
 
@@ -350,13 +371,17 @@ internal class UIKitWindowSceneManager(
         val resolver = lock.withLock {
             request.terminalOutcome()?.let { return WindowCancellationOutcome.AlreadyTerminated(it) }
             val entry = pending.remove(request.id)
+            // Le CAS arbitre tout écrivain hors lock (throw du provider, drain du close,
+            // abandon) : si la publication est perdue, l'outcome publié est celui du gagnant —
+            // l'annulation le rapporte honnêtement au lieu de le retourner ni de le réécrire.
+            if (!request.terminate(WindowRequestOutcome.Cancelled)) {
+                return WindowCancellationOutcome.AlreadyTerminated(checkNotNull(request.terminalOutcome()))
+            }
             if (entry == null) {
                 // Course drain/terminaison : une requête que personne n'a terminée est annulée
                 // pré-handoff — le cas dégénéré mais total du web (l.321-327).
-                request.terminate(WindowRequestOutcome.Cancelled)
                 return WindowCancellationOutcome.CancelledBeforeCommit
             }
-            request.terminate(WindowRequestOutcome.Cancelled)
             entry.resolver
         }
         // HORS du lock : l'abandon re-rentre dans ce manager (no-op garanti — entrée déjà sortie).
@@ -368,6 +393,8 @@ internal class UIKitWindowSceneManager(
         val resolver = lock.withLock {
             val entry = pending.remove(request.id)
             if (request.terminalOutcome() == null) {
+                // Le CAS garantit de ne jamais réécrire un outcome publié entre-temps par un
+                // écrivain hors lock : le vaincu laisse intact le terminal d'origine.
                 request.terminate(WindowRequestOutcome.RequesterDetached)
             }
             entry?.resolver
@@ -411,8 +438,12 @@ private val WindowRequest.sceneRequest: UIKitSceneWindowRequest
 
 /**
  * La requête qu'un requérant possède. Son outcome est publié par le manager (résolution, abandon,
- * cancel, close) sous le lock du manager ; le garde de `terminate` rend les doubles terminaisons
- * (provider + session, deux corrélations concurrentes) des no-ops — le terminal d'origine tient.
+ * cancel, close) ; [UIKitSceneWindowRequest.terminate] est un CAS `Pending → Terminated` ATOMIQUE
+ * — le premier écrivain gagne, les suivants perdent sans jamais réécrire un terminal publié.
+ * C'est ce qui rend sûre la cohabitation d'écrivains sous le lock du manager (cancel, detach,
+ * settle de la résolution) et HORS de lui (throw du provider, drain du close, abandon) : sur
+ * Kotlin/Native, le check-then-act du miroir web — sûr seulement sur le JS mono-thread —
+ * laissait deux écrivains publier, le dernier gagnant retournant l'outcome.
  */
 internal class UIKitSceneWindowRequest internal constructor(
     override val id: WindowRequestId,
@@ -432,11 +463,12 @@ internal class UIKitSceneWindowRequest internal constructor(
     override suspend fun await(): WindowRequestOutcome =
         state.filterIsInstance<WindowRequestState.Terminated>().first().outcome
 
-    internal fun terminate(outcome: WindowRequestOutcome) {
-        if (mutableState.value is WindowRequestState.Pending) {
-            mutableState.value = WindowRequestState.Terminated(outcome)
-        }
-    }
+    /**
+     * Publie [outcome] si la requête est encore `Pending` — atomiquement. Rend `true` quand CETTE
+     * publication a gagné ; `false` signifie « déjà terminale, l'outcome publié est celui-là ».
+     */
+    internal fun terminate(outcome: WindowRequestOutcome): Boolean =
+        mutableState.compareAndSet(WindowRequestState.Pending, WindowRequestState.Terminated(outcome))
 
     internal fun terminalOutcome(): WindowRequestOutcome? =
         (mutableState.value as? WindowRequestState.Terminated)?.outcome

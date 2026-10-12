@@ -147,6 +147,9 @@ class UIKitWindowSceneManagerTest {
     private fun manager(
         provider: UIKitWindowSceneProvider?,
         maxPending: Int = 4,
+        childSessionFactory: (UIKitWindowSceneHost) -> KadreResult<KadreSession> = { _ ->
+            error("unit tests attach children through completeResolve")
+        },
     ): Pair<UIKitWindowSceneManager, FakeRuntimeManager> {
         val runtime = FakeRuntimeManager()
         val scenes = UIKitWindowSceneManager(
@@ -156,7 +159,7 @@ class UIKitWindowSceneManagerTest {
             applicationFactory = { error("Task 2 wires the real child factory") },
             failureReporter = {},
             parentScope = CoroutineScope(Dispatchers.Main),
-            childSessionFactory = { _ -> error("unit tests attach children through completeResolve") },
+            childSessionFactory = childSessionFactory,
         )
         return scenes to runtime
     }
@@ -255,6 +258,87 @@ class UIKitWindowSceneManagerTest {
         // Le slot reste détenu jusqu'au geste du requérant (miroir web) : close() le libère.
         request.close()
         assertIs<KadreResult.Success<WindowRequest>>(windows.requestWindow(WindowSpec()))
+        windows.close()
+    }
+
+    @Test
+    fun aProviderThrowRetainsItsSlotUntilTheRequesterReleasesIt() = runBlocking {
+        val (windows, _) = manager(
+            RecordingProvider(exception = IllegalStateException("activation refused")),
+            maxPending = 1,
+        )
+
+        val request = assertIs<KadreResult.Success<WindowRequest>>(windows.requestWindow(WindowSpec())).value
+        assertEquals(
+            WindowRequestOutcome.Rejected(
+                KadreFailure.PlatformFailure(KadrePlatform.UIKit, UIKitWindowProviderDomain, "callback-exception"),
+            ),
+            request.await(),
+        )
+
+        // Rétention web-verbatim : la demande terminée à l'handoff RETIENT son slot tant que le
+        // requérant ne l'a pas libéré — c'est ce qui rend la garde du resolve tardif nécessaire.
+        assertEquals(
+            KadreFailure.ResourceLimitExceeded(KadreResourceKind.WindowRequest, 1L),
+            assertIs<KadreResult.Failure>(windows.requestWindow(WindowSpec())).reason,
+        )
+        request.close()
+        assertIs<KadreResult.Success<WindowRequest>>(windows.requestWindow(WindowSpec()))
+        windows.close()
+    }
+
+    @Test
+    fun aResolveAfterProviderThrowNeverAttachesAChildAndNeverOverwritesTheOutcome() = runBlocking {
+        val child = fakeChildSession()
+        var factoryCalls = 0
+        val (windows, _) = manager(
+            RecordingProvider(exception = IllegalStateException("activation blew up")),
+            childSessionFactory = { _ ->
+                factoryCalls += 1
+                KadreResult.Success(child)
+            },
+        )
+
+        val request = assertIs<KadreResult.Success<WindowRequest>>(windows.requestWindow(WindowSpec())).value
+        val rejected = WindowRequestOutcome.Rejected(
+            KadreFailure.PlatformFailure(KadrePlatform.UIKit, UIKitWindowProviderDomain, "callback-exception"),
+        )
+        assertEquals(rejected, request.await())
+
+        // Présence dans la carte ≠ état de la requête : l'entrée est retenue, la requête est
+        // déjà terminale — la résolution tardive doit être refusée AVANT tout attach d'enfant.
+        assertNull(windows.claimResolve(request.id))
+        assertEquals(0, factoryCalls)
+        assertEquals(rejected, request.await())
+
+        // Le pire cas — un resolve déjà engagé quand la terminaison est tombée (l'entrée
+        // réclamée avant le throw) : l'attach éventuel est STOPPÉ, l'outcome reste Rejected.
+        val retainedEntry = UIKitWindowScenePending.Entry(
+            id = request.id,
+            spec = WindowSpec(),
+            request = request,
+            resolver = UIKitWindowSceneRequestResolver.issue(request.id, RecordingSink()),
+        )
+        windows.completeResolve(retainedEntry) { KadreResult.Success(child) }
+
+        assertEquals(rejected, request.await())
+        assertEquals(listOf("requestStop"), child.stops)
+        windows.close()
+    }
+
+    @Test
+    fun terminateIsAtomicAndTheFirstPublishedOutcomeWins() = runBlocking {
+        val (windows, _) = manager(RecordingProvider())
+        val request = assertIs<UIKitSceneWindowRequest>(
+            assertIs<KadreResult.Success<WindowRequest>>(windows.requestWindow(WindowSpec())).value,
+        )
+
+        assertTrue(request.terminate(WindowRequestOutcome.Cancelled))
+        // Un second écrivain (hors lock : drain du close, abandon, throw du provider) perd le
+        // CAS et ne réécrit plus jamais l'outcome publié — le check-then-act non atomique
+        // laissait le dernier écrivain retourner l'outcome (sûr en JS, pas sur Kotlin/Native).
+        assertFalse(request.terminate(WindowRequestOutcome.RequesterDetached))
+        assertEquals(WindowRequestOutcome.Cancelled, request.await())
         windows.close()
     }
 
