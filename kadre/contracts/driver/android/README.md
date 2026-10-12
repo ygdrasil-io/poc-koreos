@@ -323,6 +323,32 @@ PUBLISHED artifacts like the rest of the consumer's androidTest sources.
 | `android-display-no-invented-workarea` | sentinel | a build that publishes bounds as workArea (invented desktop geometry) kills `androidDisplayInventoryReal` alone |
 | `android-memory-no-background-signal` | sentinel | a mapping that turns a background trim level into a signal kills `androidMemoryBackgroundNeverMaps` alone (the shell path may really deliver a background level and the Application leg replays all four SDK constants — only the receiving chain could ever speak, and the mapping never does) |
 
+**The honest-availability transitions the run carries.** The four capabilities the phase
+delivers move from the matrix's C (deferred) to their real published values after a real
+install, read in the same run: the display `enumerationCapability` is
+`Supported(Unit, Available)` (the `DisplayManager` is structurally observable — multi-cast
+listener, no permission, no gesture); the device inventory publishes the system's real
+`InputManager` enumeration and the gamepad inventory publishes `gamepads = 0` and HOLDS it
+(the emulator has no gamepad — the emptiness is verified honest against the SDK itself, not
+vacuous); `lifecycle.capabilities.memoryPressure` reads `Available` once the process-wide
+source is installed by `Application.registerComponentCallbacks` (the transition pinned
+host-side by `AndroidMemoryPressureTest.installPublishesAvailableTransition`, the install
+failure `Unavailable(PlatformFailure(Android, "memory-pressure", "source-exception"))` by
+`.installFailureIsUnavailable`); `rawInput` stays `Unsupported(RawInputAccess)` — decided
+separately and refused before and at the call.
+
+**The hardware limits the emulator cannot stage — the manual charter.** The proof engine has
+exactly one `Physical` display and no gamepad: everything a REAL device adds is outside the
+deterministic evidence by construction, and the register states it honestly (`gamepads = 0`
+held, one display). The hardware guarantees — a real USB/BT gamepad (hot-plug, real rumble
+motors, disconnect during an effect), a second real display (the Developer options
+"Simulate secondary displays" Overlay), and what the emulator cannot prove at all — have
+their targeted manual procedures in
+[manual/phase-7-displays-devices.md](manual/phase-7-displays-devices.md), and per
+`TEST-STRATEGY.md` the material guarantees pass on the DECLARED device pool
+(« le pool de devices déclaré supporté ») when one is qualified. The phase 7 gate needs
+no manual pass: the roadmap checklist items are carried by the evidence itself.
+
 ## Running the gate locally
 
 Prerequisites: an Android SDK with the **AVD `Kadre_API_35`** (system image
@@ -825,6 +851,50 @@ for the user: a host-delegated `OnDragListener` (option A, via the existing
 its design belongs to the same future decision
 ([capabilities/android.md](../../../capabilities/android.md) §2 and §4).
 
+Since phase 7, the display, device and gamepad inventories and the memory-pressure source
+are live machinery, scoped to the session (the memory source is process-wide): the
+`AndroidDisplayPort` publishes the COMPLETE `DisplayManager` inventory — the initial
+snapshot published synchronously at install, every fire re-reading the whole inventory
+(never a delta), types `Physical`/`Virtual` (the `FLAG_PRESENTATION`/`FLAG_PRIVATE` flags),
+bounds = the real size at the ORIGIN, `workArea` `null` ALWAYS (Android has no desktop — the
+geometry is never invented), the SDK's modes, correlation keys = the displayIds — and an
+unmeasurable read answers `TemporarilyUnavailable(retryable = true)` which WITHDRAWS the
+previous inventory, never a partial snapshot (the admitted unavailability state; the
+`HostViewport` fallback was not needed). The `AndroidInputDevicePort` publishes the real
+`InputManager` enumeration with kinds from the sources' identity bits (class bits stripped —
+`SOURCE_TOUCHSCREEN` and `SOURCE_MOUSE` share `SOURCE_CLASS_POINTER`), the gamepad/joystick
+carve-out to `Other`, and correlation keys = the unsigned image of the deviceId (negative
+virtual ids included — the emulator's `VIRTUAL_KEYBOARD = -1` is a `Keyboard` keyed
+non-negatively). The `AndroidGamepadPort` carries the kadre-old predicate CORRECTED to
+identity bits (the literal old table flags every keyboard as a gamepad through the shared
+`SOURCE_CLASS_BUTTON` bit; the consequence is assumed and documented: a DPAD-only device —
+the TV remote — is no longer a gamepad, kadre-old flagged it only by accident), the state
+ROUTED out of the ordinary key path (gamepad/joystick-source events leave `KeyChanged` the
+moment a port is attached — the gamepad state never enters `SurfaceInput`; without a port
+the ordinary path stays whole), descriptor and effects capability FROZEN at connection
+(reconnection is a new connection: fresh facts, neutral state), disconnect neutralizing,
+and effects per REAL device — API 31+ the device's `VibratorManager` managed rumble, API
+26–30 the device's one-shot, below or without observable motors `Unsupported(GamepadEffect)`
+pinned; the phone vibrator NEVER claims a gamepad's motors, `DualRumble` is the only offered
+kind (the SDK names no per-role motors), a native refusal is
+`PlatformFailure(Android, "gamepad-effect", "refused")`, and an effect never outlives the
+session that asked. The View form has NO gamepad port: no `Window.Callback`, therefore no
+state channel — the generic inventory stays honest there (a pad would read `Other`).
+Memory pressure follows the AppKit model: ONE process-wide source installed through
+`Application.registerComponentCallbacks(ComponentCallbacks2)` at the first session, reused
+by later ones, NEVER closed by a session close, closed by the last living host's
+termination; the normative mapping 5 → `Moderate`, 10/15 → `Critical`, background levels
+(20/40/60/80) and off-table values NEVER speak (visibility loss is not pressure), the native
+callback never runs host code in its own stack (the relay is posted to the main looper), and
+an attach that cannot reach an `Application` attempts nothing — the default runtime
+capability, never an invented `PlatformFailure`. Raw input stays the decided
+`Unsupported(RawInputAccess)` with its non-call proof re-pinned at the boundary
+(`android-raw-input-noncall`). The hardware itself — a real USB/BT gamepad, a second real
+display — does not exist on the proof emulator; the honest inventory states it, the manual
+charter [manual/phase-7-displays-devices.md](manual/phase-7-displays-devices.md) carries the
+procedures, and per `TEST-STRATEGY.md` the material guarantees pass on the declared device
+pool ([capabilities/android.md](../../../capabilities/android.md) §2 and §4).
+
 **The View form has no input observation — a structural, declared limit.**
 `View.getWindow()` is `@hide`: a View-form attach has no `Window.Callback` to
 chain, so no observation path exists. The input capabilities there stay
@@ -875,8 +945,20 @@ authoritative list with the owning phase lives in
   opaque `DropOfferId` — is parked for the user (see the phase 6 paragraph
   above); a real cross-app drag (two apps, `FileProvider` + grant, system drag
   UI) is documented in the AND-007 section as what a manual pass would add;
-- **Phase 7** — displays, devices, gamepads, memory pressure, raw-input
-  decision; **Phase 8** — capture; **Phase 9** — Java facade, Compose;
+- **Phase 7 — delivered; what remains is hardware, not a deferral of code.**
+  The display inventory, the device/gamepad observation, the per-device effects,
+  the memory-pressure source and the raw-input decision are live and proven by
+  `AND-008` (see the phase 7 paragraph above). The remaining items are MATERIAL:
+  a real USB/BT gamepad (hot-plug, real rumble, disconnect during an effect) and
+  a second real display do not exist on the emulator — the honest inventory states
+  it, the manual charter
+  [manual/phase-7-displays-devices.md](manual/phase-7-displays-devices.md)
+  carries the procedures, and per `TEST-STRATEGY.md` the material guarantees pass
+  on the declared device pool (« le pool de devices déclaré supporté ») when one
+  is qualified; a View-form gamepad state channel (no P3 wrapper there — the
+  generic inventory is the honest shape) and raw input (decided
+  `Unsupported(RawInputAccess)`, proven non-call) are recorded limits, not
+  deferrals; **Phase 8** — capture; **Phase 9** — Java facade, Compose;
 - **Phase 10** — the mandatory `android-contracts` CI job.
 
 Two boundary lines are not deferrals at all. **Rendering itself** is out of
