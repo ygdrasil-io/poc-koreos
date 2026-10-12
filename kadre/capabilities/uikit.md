@@ -121,6 +121,11 @@ publié == vivant après le changement de géométrie), jamais par une rotation 
 | `KadreHostViewController` (attach exactement une fois quand sa view appartient à une `UIWindow`/`UIWindowScene` ; la view passée EST `self.view`) | iosSimulatorArm64, tvosSimulatorArm64 | iOS 16.0 / tvOS 16.0 | compile du consumer `KadreSwiftConsumer.xcodeproj` | consumer gate (`iosSimulatorTests`/`tvosSimulatorTests`) | zéro layout Kadre (promesse §5) ; re-attach après `close` hors promesse (budget d'attach unique) ; déconnexion observer seulement au `deinit` (close la laisse — bénin, weak self) | suite consumer-app (`KadreHostViewControllerTests`) |
 | distribution XCFramework STATIQUE `KadreUikit.xcframework` (4 slices : `ios-arm64`, `ios-arm64-simulator`, `tvos-arm64`, `tvos-arm64-simulator` — `AvailableLibraries` du Info.plist) | iosArm64, iosSimulatorArm64, tvosArm64, tvosSimulatorArm64 | iOS 16.0 / tvOS 16.0 | `assembleKadreUikit{Debug,Release}XCFramework` (l'en-tête audité de §3 est celui des slices) | l'app consumer SE LANCE avec les DEUX archives statiques liées sans embed — toute duplication Obj-C au lancement (« Class … is implemented in both ») fait échouer le run | pas de publication binaire signée (artefact local de preuve, `build/` non commité) ; slices device (arm64) non exercées — simulateurs seuls ; l'en-tête ne porte aucun symbole surface-access (§3) | consumer gate (`iosSimulatorTests`/`tvosSimulatorTests`, garde `doLast` anti-duplication) |
 
+Note de gate des lignes phase 3 (façade Swift, `KadreHostViewController`, distribution
+XCFramework) : le gate consumer (`consumers/swift`, 2 familles) tourne localement via
+l'agrégateur `kadre/consumers/swift` ; le câblage CI (job xcode-27 dédié ou job macOS
+consolidé) est un follow-up enregistré (revue finale F-2).
+
 La ligne phase 0 se lit : `KadreUikitProbe.observe(window:view:)` publie une
 `KadreUikitObservation` copiée (appartenance à la fenêtre via `isEqual`, connexion de la
 scène, dimensions `bounds` et `displayScale`) et ne retient aucune référence native — le
