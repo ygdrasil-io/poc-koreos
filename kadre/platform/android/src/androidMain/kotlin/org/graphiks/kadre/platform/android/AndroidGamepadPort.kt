@@ -336,7 +336,7 @@ internal class AndroidGamepadPort(
     override public fun onGamepadKeyEvent(nativeKeyCode: Int, pressed: Boolean, deviceId: Int) {
         val button = AndroidGamepadMapping.button(nativeKeyCode) ?: return
         val outcome = lock.withLock {
-            val pad = pads[deviceId.toLong()] ?: return@withLock null
+            val pad = pads[inputDeviceKey(deviceId)] ?: return@withLock null
             if (closed) return@withLock null
             val next = pad.lastState.withButton(button, pressed)
             if (next == pad.lastState) return@withLock null
@@ -344,7 +344,7 @@ internal class AndroidGamepadPort(
             pad.lastState = next
             val deliver = observer ?: return@withLock null
             if (!routed) return@withLock null
-            deliver to listOf(GamepadPortEvent.StateChanged(deviceId.toLong(), next))
+            deliver to listOf(GamepadPortEvent.StateChanged(inputDeviceKey(deviceId), next))
         } ?: return
         outcome.second.forEach { event -> outcome.first(event) }
     }
@@ -352,7 +352,7 @@ internal class AndroidGamepadPort(
     /** La motion du dispatch joystick : les axes natifs lus au point de dispatch, canoniques. */
     override public fun onGamepadMotion(axes: List<Pair<Int, Float>>, deviceId: Int) {
         val outcome = lock.withLock {
-            val pad = pads[deviceId.toLong()] ?: return@withLock null
+            val pad = pads[inputDeviceKey(deviceId)] ?: return@withLock null
             if (closed) return@withLock null
             var next = pad.lastState
             for ((nativeAxis, value) in axes) {
@@ -364,7 +364,7 @@ internal class AndroidGamepadPort(
             pad.lastState = next
             val deliver = observer ?: return@withLock null
             if (!routed) return@withLock null
-            deliver to listOf(GamepadPortEvent.StateChanged(deviceId.toLong(), next))
+            deliver to listOf(GamepadPortEvent.StateChanged(inputDeviceKey(deviceId), next))
         } ?: return
         outcome.second.forEach { event -> outcome.first(event) }
     }
@@ -393,6 +393,7 @@ internal class AndroidGamepadPort(
         if (pad.capabilities.effects is Capability.Unsupported) {
             return@withLock KadreResult.Failure(KadreFailure.InvalidRequest("effect"))
         }
+        // L'image non signée, retournée — `toInt()` est l'inverse exact de [inputDeviceKey].
         val deviceId = key.toInt()
         val durationMs = rumble.duration.inWholeMilliseconds.coerceIn(1L, Int.MAX_VALUE.toLong())
         val started = if (apiLevel >= 31) {
@@ -434,13 +435,13 @@ internal class AndroidGamepadPort(
     private fun syncLocked() {
         val ids = deviceSource.deviceIds()
         for (id in ids) {
-            val key = id.toLong()
+            val key = inputDeviceKey(id)
             if (pads.containsKey(key)) continue
             val info = deviceSource.deviceInfo(id) ?: continue
             if (!isGamepadSource(info.sources)) continue
             pads[key] = connectedPad(info)
         }
-        pads.keys.retainAll(ids.map { it.toLong() }.toSet())
+        pads.keys.retainAll(ids.map(::inputDeviceKey).toSet())
     }
 
     /** Une connexion NEUVE : descripteur et capability gelés ici, état neutre (la règle runtime). */

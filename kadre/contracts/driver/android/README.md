@@ -1,17 +1,17 @@
 # Android emulator contract driver
 
 This non-published JVM project runs the public Android host-attachment proof of
-phases 0 through 6 on a real emulator. It is a contract driver, not an
+phases 0 through 7 on a real emulator. It is a contract driver, not an
 implementation API: it forks the instrumented consumer build, executes its
 scenarios on the attached device, and turns the JUnit output into the canonical
-`AND-001` through `AND-007` evidence with the validator's own
+`AND-001` through `AND-008` evidence with the validator's own
 generator. English
 prose, like the Web driver README it mirrors; everything else in this phase is
 documented in French in the sources.
 
 ## What the driver proves
 
-Seven contracts, all active in the registry
+Eight contracts, all active in the registry
 ([contracts.tsv](../../registry/contracts.tsv)), oracle `O3`, mapped in
 [evidence.tsv](contracts/evidence.tsv):
 
@@ -303,6 +303,26 @@ lands, the expected Kadre-side observation of such a drag remains the recorded
 silence — the manual pass would qualify grant propagation and the sender side,
 not a Kadre reception.
 
+**`AND-008`** — the phase 7 display, device, gamepad inventory and memory
+pressure proof (source `ANDROID-IMPLEMENTATION-ROADMAP.md#Phase 7 — Displays,
+devices, gamepads et pression mémoire`). Six scenarios and two sentinels, all
+in the instrumented test class
+`org.graphiks.kadre.consumer.KadreConsumerDisplaysContractTest`; every
+scenario reads PUBLIC state only (`KadreScope.displays` / `.devices` /
+`.lifecycle` / the primary surface's input), so the class compiles against the
+PUBLISHED artifacts like the rest of the consumer's androidTest sources.
+
+| evidenceId | kind | what it exercises |
+|---|---|---|
+| `android-display-inventory-real` | scenario | the published `DisplayManager.state` reflects the REAL emulator display, fact-by-fact re-pinned against the scenario's own SDK read of `DisplayManager.getDisplay(DEFAULT_DISPLAY)`: type `Physical`, real bounds at the origin, `workArea` NULL (Android has no desktop — the never-invent-geometry pin), the SDK's own modes and current mode, the observed scale factor; `requestAccess` carries the same honest inventory |
+| `android-devices-inventory-and-kinds` | scenario | the published `DeviceManager.state` carries one device per REAL `InputDevice.getDeviceIds()` entry, the SDK's exact names, and the kinds of the normative sources table (identity bits, keyboard → mouse → touchscreen → touchpad → stylus order, gamepad/joystick carved out to `Other`); the emulator's virtual keyboard (`Virtual`, sources KEYBOARD\|DPAD) is a `Keyboard` — its NEGATIVE SDK deviceId (`VIRTUAL_KEYBOARD = -1`) rides the unsigned-image runtime key (`inputDeviceKey`), pinned host-side by `AndroidInputDevicePortTest.negativeVirtualDeviceIdTranslatesToNonNegativeKey` |
+| `android-gamepad-empty-inventory-honest` | scenario | with no gamepad attached, the inventory states `gamepads = 0` and HOLDS it over a bounded observation window (zero `GamepadAdded`), the web `web-gamepad-empty-inventory-honest` precedent; the emptiness is verified honest against the SDK itself — no current device id carries the gamepad/joystick sources — and since effects capabilities live only INSIDE a published Gamepad snapshot, zero gamepads means zero effects announcements |
+| `android-memory-pressure-real-mapping` | scenario | the REAL trim delivery: `UiAutomation.executeShellCommand("am send-trim-memory <package> RUNNING_MODERATE")` — the instrumentation's shell identity forces the system_server decision (`setProcessMemoryTrimLevel` → `scheduleTrimMemory` → `ActivityThread.handleTrimMemory` → the registered callbacks) — maps exactly `Moderate` on the session's `KadreLifecycle.signals`, then `RUNNING_CRITICAL` exactly `Critical`; the sends ride the command's own escalation constraint (a lower-or-equal re-send is refused by the system_server), so the levels are spent 5 → 15 once each, in order |
+| `android-memory-background-never-maps` | scenario | the background-never rule pinned two ways with the real commands the tool accepts: `am send-trim-memory <package> COMPLETE` and `HIDDEN` (the two background-level names of the AOSP switch) are REFUSED by the system_server itself on a foreground process ("Unable to set a background trim level on a foreground process" — the refusal observed verbatim on the merged shell output, no signal); the receiving chain is proven alive by a positive control (`TRIM_MEMORY_RUNNING_MODERATE` through `Application.onTrimMemory`, the exact Application leg `ActivityThread.handleTrimMemory` dispatches to), and all four SDK background constants (UI_HIDDEN, BACKGROUND, MODERATE, COMPLETE) traverse that same leg in TOTAL silence — visibility loss is not pressure |
+| `android-raw-input-noncall` | scenario | the P3 non-call proof re-pinned: `requestRawInput` answers `Failure(Unsupported(RawInputAccess))` — the taxonomy names the operation, no native primitive is reached — and the published `capabilities.rawInput` refuses the same way BEFORE the call |
+| `android-display-no-invented-workarea` | sentinel | a build that publishes bounds as workArea (invented desktop geometry) kills `androidDisplayInventoryReal` alone |
+| `android-memory-no-background-signal` | sentinel | a mapping that turns a background trim level into a signal kills `androidMemoryBackgroundNeverMaps` alone (the shell path cannot deliver background levels — the system refuses them — so only the receiving chain could ever speak) |
+
 ## Running the gate locally
 
 Prerequisites: an Android SDK with the **AVD `Kadre_API_35`** (system image
@@ -325,9 +345,9 @@ emulator-5554`). The Gradle run inside is bounded by a portable 900 s watchdog
 (GNU `timeout` is absent on stock macOS — background Gradle, bounded wait,
 `SIGTERM` at expiry with exit code 124; commit `76229d58`). The gate task is
 `:kadre:contracts:validator:androidContractsCheck`: registry validation plus
-Android contract evidence validation against **`AND-001` through `AND-007`** —
+Android contract evidence validation against **`AND-001` through `AND-008`** —
 one canonical JSON per contract, all from the same instrumented emulator run
-(32 instrumented tests).
+(38 instrumented tests).
 
 The wrapper chains two steps, each of which can also be run on its own — one
 Gradle invocation per shell command:
@@ -576,6 +596,43 @@ carried by the evidence itself:
   `androidDropStreamReleasedOnClose` from the `platform/android-devicetest`
   AAR riding the same androidTest APK).
 
+### Exit gate of roadmap phase 7
+
+Same commands, one contract more. From a cold start (kill any running emulator,
+`adb emu kill`, wait for zero devices, then let the script boot the AVD itself):
+publish (1), consumer compile (2), emulator smoke + evidence + validator (the
+script — **38** instrumented tests green, `AND-001.json` through
+`AND-008.json` — eight canonical JSONs), the same transitive-resolution purity
+check (grep exit 1, redone cold), and the no-device sanity tasks above. The
+roadmap checklist is carried by the evidence itself:
+
+- the display inventory is the emulator's REAL display, never invented desktop
+  geometry — `android-display-inventory-real` (fact-by-fact against the
+  scenario's own SDK read; `workArea` null is the pinned refusal), guarded by
+  the sentinel `android-display-no-invented-workarea`;
+- the device inventory is the system's REAL devices with the normative kinds —
+  `android-devices-inventory-and-kinds` (the virtual keyboard's negative SDK
+  deviceId rides its unsigned-image runtime key, host-pinned by
+  `AndroidInputDevicePortTest.negativeVirtualDeviceIdTranslatesToNonNegativeKey`);
+- no gamepad is invented where the system reports none, and no effects
+  capability is announced outside a real pad — `android-gamepad-empty-inventory-honest`
+  (the `web-gamepad-empty-inventory-honest` precedent);
+- memory pressure arrives from the system's own trim decision, mapped
+  normatively — `android-memory-pressure-real-mapping` (MODERATE → `Moderate`,
+  CRITICAL → `Critical`, exactly once each, in escalation order the
+  system_server itself enforces);
+- background levels NEVER map — `android-memory-background-never-maps` (the
+  real `COMPLETE`/`HIDDEN` commands refused on a foreground process, the
+  receiving chain proven alive by a positive control and silent for all four
+  SDK background constants), guarded by the sentinel
+  `android-memory-no-background-signal`;
+- raw input stays a refused non-call — `android-raw-input-noncall`
+  (`Unsupported(RawInputAccess)` before and at the call);
+- `AND-001` through `AND-008` together — 38 instrumented tests, one canonical
+  JSON per contract, all from the same instrumented emulator run (the 32
+  previous testcases plus the six displays/devices/gamepad/memory ones of
+  `KadreConsumerDisplaysContractTest`).
+
 ## Engine labeling
 
 The engine label is **never hardcoded**. The evidence producer
@@ -587,7 +644,7 @@ writes `emulator-api-<sdk>-<abi>`. On the phase 0 AVD this is
 are attached. Every run resets the per-engine JUnit copy directory first, so a
 stale XML from an earlier run can never inflate the evidence identity. The
 producer writes one canonical JSON per active android contract (currently
-`AND-001` through `AND-007`), each pinned to the current HEAD
+`AND-001` through `AND-008`), each pinned to the current HEAD
 commit.
 
 ## Evidence mapping
@@ -603,8 +660,9 @@ arguments as the runtime/AppKit producers — no format reimplementation) with:
   `KadreConsumerSurfaceContractTest` (`AND-003`),
   `KadreConsumerInputContractTest` (`AND-004`),
   `KadreConsumerWindowInteractionContractTest` (`AND-005`),
-  `KadreConsumerTextContractTest` (`AND-006`) or
-  `KadreConsumerDropContractTest` (`AND-007`) — the AND-007 transfer scenarios
+  `KadreConsumerTextContractTest` (`AND-006`),
+  `KadreConsumerDropContractTest` (`AND-007`) or
+  `KadreConsumerDisplaysContractTest` (`AND-008`) — the AND-007 transfer scenarios
   (`androidDropRealTransferBounded`, `androidDropStreamReleasedOnClose`) are
   mapped to `AndroidDropDeviceContractTest`, whose classes arrive in the same
   XML from the `platform/android-devicetest` AAR consumed
@@ -614,11 +672,11 @@ arguments as the runtime/AppKit producers — no format reimplementation) with:
 - the current HEAD commit (the same `git rev-parse HEAD` rule the validator
   uses — a document pinned to a commit is stale by definition once HEAD moves).
 
-Outputs: `build/contract-evidence/android/<engine>/AND-{001,002,003,004,005,006,007}.json`
+Outputs: `build/contract-evidence/android/<engine>/AND-{001,002,003,004,005,006,007,008}.json`
 (canonical), `build/test-results/android/<engine>/TEST-*.xml` (the JUnit copy
 the validator cross-checks), `build/contract-evidence/android/engines.txt` (the
 engines this run actually produced), and the gate copies
-`build/contract-evidence/AND-{001,002,003,004,005,006,007}.json` that
+`build/contract-evidence/AND-{001,002,003,004,005,006,007,008}.json` that
 `validateContractEvidence` reads.
 
 ## `androidContractsCheck` is deliberately not in `:kadre:check`

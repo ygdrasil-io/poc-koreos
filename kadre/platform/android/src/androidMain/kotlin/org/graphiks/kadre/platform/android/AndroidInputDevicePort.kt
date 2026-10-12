@@ -90,6 +90,17 @@ internal data class AndroidInputDeviceInfo(
 )
 
 /**
+ * La clé runtime d'un deviceId SDK — l'image NON SIGNÉE 32 bits du deviceId. Le SDK Android
+ * attribue des ids NÉGATIFS aux périphériques virtuels (`VIRTUAL_KEYBOARD = -1`, présent sur
+ * chaque émulateur) ; l'espace de clés des ports runtime (`InputDevicePortDevice`,
+ * `GamepadPort*`) exige des clés non négatives. L'image non signée est la traduction stable
+ * et lossless — des ints distincts restent distincts — partagée par les DEUX ports (devices
+ * génériques et manette) et par chaque relecture : la corrélation par deviceId tient à vie du
+ * device, la clé publiée reste l'identité du device réel.
+ */
+internal fun inputDeviceKey(deviceId: Int): Long = deviceId.toLong() and 0xFFFF_FFFFL
+
+/**
  * Le port des périphériques d'entrée GÉNÉRIQUES Android : l'inventaire complet du multi-cast
  * [InputManager] — claviers, souris, écrans tactiles, touchpads, stylets, et TOUT le reste en
  * `Other`. Le carve-out de la règle : un device porteur des sources gamepad/joystick est
@@ -208,7 +219,7 @@ internal class AndroidInputDevicePort(private val source: AndroidInputDeviceSour
                 for (id in deliveredKeys.toList()) {
                     if (id !in table.keys) {
                         deliveredKeys.remove(id)
-                        add(InputDevicePortEvent.Disconnected(id.toLong()))
+                        add(InputDevicePortEvent.Disconnected(inputDeviceKey(id)))
                     }
                 }
             }
@@ -226,11 +237,11 @@ internal class AndroidInputDevicePort(private val source: AndroidInputDeviceSour
         }
     }
 
-    /** La traduction d'un device : la clé = le deviceId, le kind = le carve-out de la règle. */
+    /** La traduction d'un device : la clé = l'image non signée du deviceId, le kind = le carve-out de la règle. */
     private fun translated(deviceId: Int): InputDevicePortDevice? {
         val info = source.deviceInfo(deviceId) ?: return null
         return InputDevicePortDevice(
-            key = info.deviceId.toLong(),
+            key = inputDeviceKey(info.deviceId),
             descriptor = InputDeviceDescriptor(name = info.name, kind = genericDeviceKind(info.sources)),
         )
     }

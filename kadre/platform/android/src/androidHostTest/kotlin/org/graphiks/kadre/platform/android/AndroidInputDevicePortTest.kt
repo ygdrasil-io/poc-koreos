@@ -213,4 +213,36 @@ class AndroidInputDevicePortTest {
         assertEquals(0, events.size, "a late fire after close publishes nothing")
         assertEquals(listOf(1L, 2L, 4L), port.devices.map { it.key }, "the inventory read stays honest after close")
     }
+
+    // -----------------------------------------------------------------------
+    // Cas 4 — l'id SDK NÉGATIF du périphérique virtuel (VIRTUAL_KEYBOARD = -1,
+    // présent sur chaque émulateur) : la clé runtime est son image non signée,
+    // non négative, stable, et l'inventaire le porte — un device virtuel réel
+    // n'est jamais écarté de l'inventaire (la couture attach entière échouait
+    // sur ce require avant la traduction, observé sur l'émulateur API 35).
+    // -----------------------------------------------------------------------
+
+    @Test
+    fun negativeVirtualDeviceIdTranslatesToNonNegativeKey() {
+        val source = FakeInputDeviceSource()
+        source.devices[-1] = keyboard(-1)
+        source.devices[1] = keyboard(1)
+        val port = AndroidInputDevicePort(source)
+
+        // La traduction : l'image non signée 32 bits — lossless, non négative, stable.
+        assertEquals(0xFFFF_FFFFL, inputDeviceKey(-1), "the unsigned image of -1 is the virtual device key")
+        assertEquals(-1L, inputDeviceKey(-1).toInt().toLong(), "toInt() is the exact inverse image")
+
+        // L'inventaire porte le device virtuel, avec une clé que le runtime admet.
+        val virtual = port.devices.single { it.key == 0xFFFF_FFFFL }
+        assertEquals(0xFFFF_FFFFL, virtual.key, "the virtual keyboard's key is its unsigned deviceId")
+
+        // Le diff des fires parle la même clé : Connected puis Disconnected non négatifs.
+        val events = mutableListOf<InputDevicePortEvent>()
+        port.installObserver { events += it }
+        source.devices.remove(-1)
+        source.fire(-1)
+        val removed = assertIs<InputDevicePortEvent.Disconnected>(events.single())
+        assertEquals(0xFFFF_FFFFL, removed.key, "the Disconnected key is the same unsigned image")
+    }
 }

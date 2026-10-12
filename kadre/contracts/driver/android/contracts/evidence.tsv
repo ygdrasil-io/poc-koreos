@@ -46,3 +46,11 @@ AND-007	android	scenario	android-drop-channel-absent	org.graphiks.kadre.consumer
 AND-007	android	scenario	android-drop-real-transfer-bounded	org.graphiks.kadre.platform.android.AndroidDropDeviceContractTest	androidDropRealTransferBounded
 AND-007	android	scenario	android-drop-stream-released-on-close	org.graphiks.kadre.platform.android.AndroidDropDeviceContractTest	androidDropStreamReleasedOnClose
 AND-007	android	sentinel	android-drop-no-public-channel	org.graphiks.kadre.consumer.KadreConsumerDropContractTest	androidDropChannelAbsent
+AND-008	android	scenario	android-display-inventory-real	org.graphiks.kadre.consumer.KadreConsumerDisplaysContractTest	androidDisplayInventoryReal
+AND-008	android	scenario	android-devices-inventory-and-kinds	org.graphiks.kadre.consumer.KadreConsumerDisplaysContractTest	androidDevicesInventoryAndKinds
+AND-008	android	scenario	android-gamepad-empty-inventory-honest	org.graphiks.kadre.consumer.KadreConsumerDisplaysContractTest	androidGamepadEmptyInventoryHonest
+AND-008	android	scenario	android-memory-pressure-real-mapping	org.graphiks.kadre.consumer.KadreConsumerDisplaysContractTest	androidMemoryPressureRealMapping
+AND-008	android	scenario	android-memory-background-never-maps	org.graphiks.kadre.consumer.KadreConsumerDisplaysContractTest	androidMemoryBackgroundNeverMaps
+AND-008	android	scenario	android-raw-input-noncall	org.graphiks.kadre.consumer.KadreConsumerDisplaysContractTest	androidRawInputNoncall
+AND-008	android	sentinel	android-display-no-invented-workarea	org.graphiks.kadre.consumer.KadreConsumerDisplaysContractTest	androidDisplayInventoryReal
+AND-008	android	sentinel	android-memory-no-background-signal	org.graphiks.kadre.consumer.KadreConsumerDisplaysContractTest	androidMemoryBackgroundNeverMaps
