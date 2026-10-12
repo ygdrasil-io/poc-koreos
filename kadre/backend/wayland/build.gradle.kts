@@ -34,6 +34,9 @@ tasks.named<Test>("jvmTest") {
     filter.excludeTestsMatching(
         "org.graphiks.kadre.internal.wayland.WaylandNativeSessionLinuxTest",
     )
+    filter.excludeTestsMatching(
+        "org.graphiks.kadre.internal.wayland.WaylandWindowsLinuxTest",
+    )
 }
 
 val onLinux = System.getProperty("os.name", "").contains("Linux", ignoreCase = true)
@@ -50,6 +53,9 @@ val waylandNativeTests = tasks.register<Test>("waylandNativeTests") {
     )
     filter.includeTestsMatching(
         "org.graphiks.kadre.internal.wayland.WaylandNativeSessionLinuxTest",
+    )
+    filter.includeTestsMatching(
+        "org.graphiks.kadre.internal.wayland.WaylandWindowsLinuxTest",
     )
     forkEvery = 1
     reports.junitXml.outputLocation.set(layout.buildDirectory.dir("test-results/waylandNativeTests"))
