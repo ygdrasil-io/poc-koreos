@@ -127,7 +127,10 @@ internal class AndroidInputWindowCallback(
  * - [dispatchKeyEvent] : les primitives sont copiées puis remises au cœur
  *   ([AndroidInputWindowCallback]) — l'état press/release est lu sur l'action de l'événement
  *   (`ACTION_UP` → `Released`, toute autre action → `Pressed` ; `ACTION_MULTIPLE` est du
- *   texte qui entre, jamais une relève) ; le forward réel du `KeyEvent` — celui du callback
+ *   texte qui entre, jamais une relève — sous focus le wrapper publie bien une observation
+ *   `Pressed` PRIMITIVE pour elle, que la couche de delivery droppe avant toute dérivation
+ *   de stimulus, hors table : `AndroidInputDelivery.kt:209` — jamais un fait texte déduit) ;
+ *   le forward réel du `KeyEvent` — celui du callback
  *   wrappé — est le [forwardKey] du cœur, l'événement original voyage entier ;
  * - [onWindowFocusChanged] : la perte passe par le cœur (observation + un seul forward) ;
  * - [dispatchTouchEvent] et [dispatchGenericMotionEvent] : les deux points d'entrée motion —

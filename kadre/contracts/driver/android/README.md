@@ -1,17 +1,17 @@
 # Android emulator contract driver
 
 This non-published JVM project runs the public Android host-attachment proof of
-phases 0 through 4 on a real emulator. It is a contract driver, not an
+phases 0 through 5 on a real emulator. It is a contract driver, not an
 implementation API: it forks the instrumented consumer build, executes its
 scenarios on the attached device, and turns the JUnit output into the canonical
-`AND-001` through `AND-005` evidence with the validator's own
+`AND-001` through `AND-006` evidence with the validator's own
 generator. English
 prose, like the Web driver README it mirrors; everything else in this phase is
 documented in French in the sources.
 
 ## What the driver proves
 
-Five contracts, all active in the registry
+Six contracts, all active in the registry
 ([contracts.tsv](../../registry/contracts.tsv)), oracle `O3`, mapped in
 [evidence.tsv](contracts/evidence.tsv):
 
@@ -153,6 +153,68 @@ published) and the bar restore is a best-effort SDK cleanup. A graphical
 emulator can extend the scenario if a future registry row ever demands the
 reverse direction.
 
+**`AND-006`** — the phase 5 text-input channel qualification and IME
+non-deduction proof (source `ANDROID-IMPLEMENTATION-ROADMAP.md#Phase 5 —
+Text input, IME et gestures`). Two scenarios and one sentinel, all in the
+instrumented test class `org.graphiks.kadre.consumer.KadreConsumerTextContractTest`,
+injection at the same real boundary as phases 3–4
+(`activity.window.callback.dispatchKeyEvent(...)`):
+
+| evidenceId | kind | what it exercises |
+|---|---|---|
+| `android-text-input-channel-absent` | scenario | on the consumer's attached View, `view.onCreateInputConnection(EditorInfo())` returns **null** and `view.onCheckIsTextEditor()` returns **false** (the base-View SDK boundary, proven at the boundary itself); `capabilities.textInput` is `Capability.Unsupported(TextInput)` and `openTextInput(TextInputConfig())` is refused on-row — the channel an IME would bind to does not exist on the delivered attach form |
+| `android-text-input-ime-key-deduplication` | scenario | keys and an IME-shaped text carrier injected at the window callback: the mapped keys deliver their key facts in exact order (`Character("a")` press/release — the `getUnicodeChar()` fact — then `Named(Backspace)` press/release), the text-carrying `KeyEvent` delivers **nothing**, `capabilities.textInput` is unchanged after the injections, and `openTextInput` is still refused — the structural zero `TextInputEvent`: the only channel a text event could ride is an open session, and the refusal proves none ever existed during the exercise (DESIGN §10.3: composed text comes only from a `TextInputSession`, never deduced from key events) |
+| `android-text-input-no-synthesis` | sentinel | a wrapper that synthesizes a table identity from the string the text carrier holds kills `androidTextInputImeKeyDeduplication` alone (28 of 29 stay green — no other scenario injects a characters-carrying event) |
+
+**The SDK fact the scenario is built on.** The only public `KeyEvent`
+constructor that carries characters is
+`KeyEvent(long time, String characters, int deviceId, int flags)`; it FORCES
+`action = ACTION_MULTIPLE` and `keyCode = KEYCODE_UNKNOWN` — the canonical
+IME shape. The carrier is therefore out of the 65-key mapper table
+(`hidUsage(KEYCODE_UNKNOWN) == null`) and the delivery gate
+(`AndroidInputDelivery.kt:209`) returns before any stimulus derivation.
+
+**The ACTION_MULTIPLE rule (normative, written in phase 5).** A text-carrying
+`KeyEvent` is out of the mapper table and delivers NO observation; it is
+never deduced into a text observation. Read the code as a two-layer path: the
+wrapper DOES publish a primitive `Pressed` observation for it when the view is
+focused (the KDoc at `AndroidInputWindowCallback.kt` now says so in one line),
+and the DELIVERY layer then drops it before any stimulus.
+
+**The text-input decision: a recorded structural limit, and the normative
+proposal parked for the user.** Phase 5 delivers the IME bridge as internal
+machinery — `AndroidTextInputPort` (capability always
+`Unsupported(TextInput)`) and the pure mapper `AndroidImeEventMapper`,
+transposed from the kadre-old `BaseInputConnection` bridge and proven against
+the real `RuntimeTextInputSession` in the host suite `AndroidTextInputPortTest`
+(multi-step composition rebase, Unicode surrogate pairs, stale revision,
+focus suspend/resume, computed `deleteSurrounding`, silent finish, on-row
+refusal) — with NO public activation path: `textInput` stays
+`Capability.Unsupported(TextInput)` on both attach forms, a **recorded limit,
+not a deferral** (the web precedent: `capabilities/web.md` §2's `gestures`
+row, authorized by `BACKEND-CAPABILITIES.md` §4). The causal chain is
+structural: `onCreateInputConnection`/`onCheckIsTextEditor` require a View
+SUBCLASS; Kadre never owns or subclasses the host's View (DESIGN §15.1);
+`View.getWindow()` is `@hide`; and the SDK has no registration API. The
+normative proposal is PARKED for the user — stated, not implemented:
+option A, a host-delegated helper (the host's own View subclass overrides
+`onCreateInputConnection`/`onCheckIsTextEditor` and delegates to a
+Kadre-supplied `InputConnection` factory — reachable through the existing
+`withAndroidView` lease channel or as new public API); option B, a new attach
+form. Each with its implications, written in
+[capabilities/android.md](../../../capabilities/android.md) §2 and §4.
+Gestures stay `Unsupported(GestureInput)` for the same recorded-limit reason:
+a recognizer is host-owned or a normative hook, never deduced from the touch
+contacts.
+
+**The real-system complement.** The roadmap's phase 5 gate requires « L'IME
+système réel et les gestures matérielles ont une procédure manuelle ciblée en
+complément des tests automatisés » — that is the targeted manual procedure
+[manual/phase-5-text-input.md](manual/phase-5-text-input.md): the real Gboard
+composition, suggestion-strip commit and mid-composition blur on a qualified
+host (and what today's attach honestly does on a real device), plus the
+hardware-gesture pass and why the automation cannot stage either.
+
 ## Running the gate locally
 
 Prerequisites: an Android SDK with the **AVD `Kadre_API_35`** (system image
@@ -175,9 +237,9 @@ emulator-5554`). The Gradle run inside is bounded by a portable 900 s watchdog
 (GNU `timeout` is absent on stock macOS — background Gradle, bounded wait,
 `SIGTERM` at expiry with exit code 124; commit `76229d58`). The gate task is
 `:kadre:contracts:validator:androidContractsCheck`: registry validation plus
-Android contract evidence validation against **`AND-001` through `AND-005`** —
+Android contract evidence validation against **`AND-001` through `AND-006`** —
 one canonical JSON per contract, all from the same instrumented emulator run
-(27 instrumented tests).
+(29 instrumented tests).
 
 The wrapper chains two steps, each of which can also be run on its own — one
 Gradle invocation per shell command:
@@ -344,6 +406,44 @@ itself:
   instrumented tests, one canonical JSON per contract, all from the same
   instrumented emulator run.
 
+### Exit gate of roadmap phase 5
+
+Same commands, one contract more. From a cold start (kill any running emulator,
+`adb emu kill`, wait for zero devices, then let the script boot the AVD itself):
+publish (1), consumer compile (2), emulator smoke + evidence + validator (the
+script — **29** scenarios green, `AND-001.json` + `AND-002.json` +
+`AND-003.json` + `AND-004.json` + `AND-005.json` + `AND-006.json`), the same
+transitive-resolution purity check (grep exit 1, redone cold), and the
+no-device sanity tasks above. The roadmap checklist is carried by the
+evidence itself:
+
+- deterministic session outcomes — composition multi-step, Unicode, selection,
+  stale revision and focus change — the host record `AndroidTextInputPortTest`
+  proves the mapping against the REAL `RuntimeTextInputSession` (rebase
+  strictly checked against the accepted snapshot, surrogate-pair-exact UTF-16
+  offsets, `StaleRevision`/`InvalidRequest("text")`, suspend/resume around a
+  preserved composition, silent finish), and
+  `android-text-input-ime-key-deduplication` pins the same non-deduction at
+  the real boundary;
+- the channel absent on the current attach form —
+  `android-text-input-channel-absent` (`onCreateInputConnection` → null,
+  `onCheckIsTextEditor` → false, `textInput` = `Unsupported(TextInput)`, the
+  on-row refusal); no editor or callback survives teardown because the bridge
+  is internal machinery with no public activation path — nothing is ever
+  installed;
+- no IME commit also published as deduced key input — the exact-order silence
+  of `android-text-input-ime-key-deduplication` for the text-carrying
+  `KeyEvent` (`ACTION_MULTIPLE` + `KEYCODE_UNKNOWN`, out of table, dropped
+  before any stimulus), guarded by the sentinel
+  `android-text-input-no-synthesis`;
+- the real-system IME and hardware gestures — the targeted manual procedure
+  [manual/phase-5-text-input.md](manual/phase-5-text-input.md) (real Gboard
+  composition, suggestion strip, mid-composition blur, hardware gestures; the
+  complement the automation cannot stage);
+- `AND-001` + `AND-002` + `AND-003` + `AND-004` + `AND-005` + `AND-006`
+  together — 29 instrumented tests, one canonical JSON per contract, all from
+  the same instrumented emulator run.
+
 ## Engine labeling
 
 The engine label is **never hardcoded**. The evidence producer
@@ -355,7 +455,7 @@ writes `emulator-api-<sdk>-<abi>`. On the phase 0 AVD this is
 are attached. Every run resets the per-engine JUnit copy directory first, so a
 stale XML from an earlier run can never inflate the evidence identity. The
 producer writes one canonical JSON per active android contract (currently
-`AND-001` through `AND-005`), each pinned to the current HEAD
+`AND-001` through `AND-006`), each pinned to the current HEAD
 commit.
 
 ## Evidence mapping
@@ -369,18 +469,19 @@ arguments as the runtime/AppKit producers — no format reimplementation) with:
   scenario/sentinel `evidenceId` to `KadreConsumerSessionTest` (`AND-001`),
   `KadreConsumerAttachContractTest` (`AND-002`),
   `KadreConsumerSurfaceContractTest` (`AND-003`),
-  `KadreConsumerInputContractTest` (`AND-004`) or
-  `KadreConsumerWindowInteractionContractTest` (`AND-005`);
+  `KadreConsumerInputContractTest` (`AND-004`),
+  `KadreConsumerWindowInteractionContractTest` (`AND-005`) or
+  `KadreConsumerTextContractTest` (`AND-006`);
 - the JUnit XML the consumer produced under
   `kadre/consumers/android/build/outputs/androidTest-results/connected/`;
 - the current HEAD commit (the same `git rev-parse HEAD` rule the validator
   uses — a document pinned to a commit is stale by definition once HEAD moves).
 
-Outputs: `build/contract-evidence/android/<engine>/AND-{001,002,003,004,005}.json`
+Outputs: `build/contract-evidence/android/<engine>/AND-{001,002,003,004,005,006}.json`
 (canonical), `build/test-results/android/<engine>/TEST-*.xml` (the JUnit copy
 the validator cross-checks), `build/contract-evidence/android/engines.txt` (the
 engines this run actually produced), and the gate copies
-`build/contract-evidence/AND-{001,002,003,004,005}.json` that
+`build/contract-evidence/AND-{001,002,003,004,005,006}.json` that
 `validateContractEvidence` reads.
 
 ## `androidContractsCheck` is deliberately not in `:kadre:check`
@@ -471,6 +572,35 @@ BEFORE the ordinary stimulus of the same fact; single-use tokens;
 advertised and refused before any native call; `armedInteractions` stays
 `Unsupported(ArmInteraction)` — no platform arms).
 
+Since phase 5, the IME bridge exists as internal machinery with no public
+activation path: `AndroidTextInputPort` (capability always
+`Unsupported(TextInput)` — the reducer consults the capability before `open`
+and refuses on-row) and the pure mapper `AndroidImeEventMapper`, whose rules
+(commit → Replace, three-fact composition with strict rebase, Replace-then-
+terminal only for a differing final string, computed and bounded
+`deleteSurrounding`, per-touche deletes never mapped) are proven against the
+real `RuntimeTextInputSession` in the host suite `AndroidTextInputPortTest`,
+and whose channel absence is pinned at the boundary by `AND-006`.
+`textInput` stays `Capability.Unsupported(TextInput)` on both attach forms —
+a recorded structural limit, not a deferral: the IME entry points
+(`onCreateInputConnection`/`onCheckIsTextEditor`) require a View subclass,
+Kadre never owns or subclasses the host's View (DESIGN §15.1),
+`View.getWindow()` is `@hide`, and the SDK has no registration API. The
+normative proposal — a host-delegated `InputConnection` factory through the
+host's own View subclass (option A, via the existing `withAndroidView` lease
+channel or new public API) or a new attach form (option B) — is parked for
+the user, stated not implemented
+([capabilities/android.md](../../../capabilities/android.md) §2 and §4). The
+ACTION_MULTIPLE rule is written: a text-carrying `KeyEvent` (the only public
+characters-bearing constructor forces `ACTION_MULTIPLE` + `KEYCODE_UNKNOWN`)
+is out of the mapper table and delivers no observation — the wrapper's
+primitive `Pressed` (focused) is dropped by the delivery gate before any
+stimulus — never deduced into text. Gestures stay
+`Unsupported(GestureInput)` — the same recorded limit: a recognizer is
+host-owned or a normative hook, never deduced from the touch contacts. The
+real-system complement is the manual charter
+[manual/phase-5-text-input.md](manual/phase-5-text-input.md).
+
 **The View form has no input observation — a structural, declared limit.**
 `View.getWindow()` is `@hide`: a View-form attach has no `Window.Callback` to
 chain, so no observation path exists. The input capabilities there stay
@@ -505,8 +635,13 @@ authoritative list with the owning phase lives in
   `Window.close` row gains `Unsupported(CloseWindow)` for structurally
   non-closable windows — that is an edit to the normative operation contracts,
   never taken in passing;
-- **Phase 5** — text input/IME (`gestures` left the deferral list: phase 3
-  publishes the decided `Unsupported(GestureInput)`);
+- **Phase 5 — decided, with the normative question parked for the user.**
+  Text input/IME is no longer deferred: the channel is a recorded structural
+  limit (`Unsupported(TextInput)`, the internal bridge proven, no public
+  activation path) and the normative proposal — the host-delegated helper or
+  the new attach form — is parked for the user (see the phase 5 paragraph
+  above); gestures stay the decided `Unsupported(GestureInput)` recorded
+  limit, a recognizer being host-owned or a normative hook;
   **Phase 6** — drag-and-drop;
 - **Phase 7** — displays, devices, gamepads, memory pressure, raw-input
   decision; **Phase 8** — capture; **Phase 9** — Java facade, Compose;
