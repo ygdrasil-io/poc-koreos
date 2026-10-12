@@ -248,9 +248,8 @@ internal class AndroidInputDevicePort(private val source: AndroidInputDeviceSour
  */
 internal fun genericDeviceKind(sources: Int): InputDeviceKind {
     val identityBits = sources and InputDevice.SOURCE_CLASS_MASK.inv()
-    val gamepadFlags = (InputDevice.SOURCE_GAMEPAD or InputDevice.SOURCE_JOYSTICK) and InputDevice.SOURCE_CLASS_MASK.inv()
     return when {
-        identityBits and gamepadFlags != 0 -> InputDeviceKind.Other
+        isGamepadSource(sources) -> InputDeviceKind.Other
         identityBits and (InputDevice.SOURCE_KEYBOARD and InputDevice.SOURCE_CLASS_MASK.inv()) != 0 -> InputDeviceKind.Keyboard
         identityBits and (InputDevice.SOURCE_MOUSE and InputDevice.SOURCE_CLASS_MASK.inv()) != 0 -> InputDeviceKind.Mouse
         identityBits and (InputDevice.SOURCE_TOUCHSCREEN and InputDevice.SOURCE_CLASS_MASK.inv()) != 0 -> InputDeviceKind.Touchscreen

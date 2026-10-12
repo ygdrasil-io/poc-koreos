@@ -44,7 +44,8 @@ internal object AndroidGamepadMapping {
      * analogiques) les triggers, THUMBL/R les sticks. C'est la disposition standard complète :
      * le SDK n'énumère pas les boutons d'un device (les motion ranges ne parlent que d'axes),
      * la table est donc LE descripteur boutons de toute manette — fermée, comme la table des
-     * scroll-keys.
+     * scroll-keys. Choix SIGNÉ par le contrôleur (Task 2, fix 1) : Android n'offre aucune
+     * énumération des boutons et kadre-old utilisait la même table fixe.
      */
     internal val buttonTable: List<Pair<Int, GamepadButton>> = listOf(
         KeyEvent.KEYCODE_BUTTON_A to GamepadButton.South,
@@ -111,14 +112,21 @@ internal object AndroidGamepadMapping {
 }
 
 /**
- * Le prédicat manette — la FORME de kadre-old (`GamepadController.android.kt:38-39` : les
- * deux flags source, masqués, comparés à zéro) sur les bits d'IDENTITÉ, les bits de CLASSE
- * retirés ([InputDevice.SOURCE_CLASS_MASK]) : `SOURCE_GAMEPAD` (0x401) et `SOURCE_KEYBOARD`
- * (0x101) partagent le bit `SOURCE_CLASS_BUTTON` (0x1) — le masque littéral de la table old
- * sur les sources brutes connecterait chaque clavier comme manette. Une manette réelle
- * déclare toujours `SOURCE_GAMEPAD|SOURCE_JOYSTICK` parmi ses sources : le prédicat la voit.
+ * LE prédicat gamepad, source UNIQUE (le port d'events de la delivery et le kind générique du
+ * port devices l'utilisent tel quel) — la FORME de kadre-old
+ * (`GamepadController.android.kt:38-39` : les deux flags source, masqués, comparés à zéro) sur
+ * les bits d'IDENTITÉ, les bits de CLASSE retirés ([InputDevice.SOURCE_CLASS_MASK]) :
+ * `SOURCE_GAMEPAD` (0x401) et `SOURCE_KEYBOARD` (0x101) partagent le bit
+ * `SOURCE_CLASS_BUTTON` (0x1) — le masque littéral de la table old sur les sources brutes
+ * flaggerait chaque clavier comme manette (et chaque écran tactile comme souris via le
+ * `SOURCE_CLASS_POINTER` que `SOURCE_MOUSE` partage).
+ *
+ * Conséquence assumée du resserrement : un device DPAD-SEUL — la télécommande TV au
+ * `SOURCE_DPAD` nu — n'est plus détecté comme manette ; kadre-old ne le flaggeait que PAR
+ * ACCIDENT, via le bit de classe BUTTON partagé. Les manettes réelles déclarent toujours
+ * `SOURCE_GAMEPAD|SOURCE_JOYSTICK` parmi leurs sources, et le prédicat les voit.
  */
-internal fun isGamepadDevice(sources: Int): Boolean {
+internal fun isGamepadSource(sources: Int): Boolean {
     val identityBits = sources and InputDevice.SOURCE_CLASS_MASK.inv()
     val gamepadFlags = (InputDevice.SOURCE_GAMEPAD or InputDevice.SOURCE_JOYSTICK) and InputDevice.SOURCE_CLASS_MASK.inv()
     return identityBits and gamepadFlags != 0
@@ -159,12 +167,13 @@ internal object AndroidGamepadEffects {
  * Le port gamepad Android : l'inventaire des manettes du multi-cast [InputManager], l'état
  * routé depuis la chaîne d'entrée P3, et les effects par device réels.
  *
- * **L'inventaire** — le prédicat kadre-old (`isGamepadDevice`) sur chaque device de
+ * **L'inventaire** — le prédicat kadre-old ([isGamepadSource]) sur chaque device de
  * `getDeviceIds()` ; la clé de corrélation est le deviceId (stable à vie du device). Le
  * descripteur est GELÉ à la connexion (le miroir du hub web) : la table old des boutons, les
  * axes de `getMotionRanges()` lus par la table old portée (premier déclaré gagne quand deux
  * axes natifs parlent au même axe du modèle — Z et RX sont deux déclarations du même stick
- * droit), `mapping == Standard`. La capability d'effects est gelée à la MÊME connexion (le
+ * droit), `mapping == Standard`. Post-install, la lecture de `gamepads` est EXACTEMENT ce que
+ * l'observateur sait — une manette branchée entre deux fires attend son Connected. La capability d'effects est gelée à la MÊME connexion (le
  * miroir `WebGamepadEffects` :51) ; la RECONNEXION est une connexion neuve, qui gèle des faits
  * frais et repart à l'état neutre — jamais l'état mort de la connexion précédente (la règle de
  * neutralisation du runtime, tenue aussi côté port).
@@ -222,8 +231,22 @@ internal class AndroidGamepadPort(
 
     override val gamepads: List<GamepadPortGamepad>
         get() = lock.withLock {
-            syncLocked()
-            pads.map { (key, pad) -> projectionLocked(key, pad) }
+            if (observer == null) {
+                // Avant l'install (ou après le close) : la vérité vivante du seam, sans base
+                // de diff — une lecture n'est jamais une observation, il n'y a personne à qui
+                // courir devant.
+                syncLocked()
+                pads.map { (key, pad) -> projectionLocked(key, pad) }
+            } else {
+                // Après l'install : EXACTEMENT ce que l'observateur sait — une manette
+                // branchée ENTRE DEUX FIRES attend SON Connected pour paraître (la lecture ne
+                // devance jamais ses événements — la discipline du port devices génériques,
+                // le miroir du hub web où le poll qui mute la table émet le diff du même
+                // mouvement) ; les fires la tiennent à jour. Un id retiré disparaît de la
+                // lecture à la re-énumération, au plus un fire avant son Disconnected — le
+                // dédoublonnage du runtime rend l'avance inoffensive.
+                deliveredKeys.mapNotNull { key -> pads[key]?.let { pad -> projectionLocked(key, pad) } }
+            }
         }
 
     override fun installObserver(observer: (GamepadPortEvent) -> Unit): AutoCloseable = lock.withLock {
@@ -353,7 +376,10 @@ internal class AndroidGamepadPort(
      * sans moteur → `InvalidRequest("effect")`, refus plateforme → `PlatformFailure`. Le
      * chemin suit l'[apiLevel] du port : 31+ le rumble managé (le VibratorManager du device,
      * ses moteurs observables), 26-30 le one-shot createOneShot (amplitude = la magnitude
-     * dominante — un seul moteur n'a pas de rôles).
+     * dominante — un seul moteur n'a pas de rôles). Une durée non positive est BORNÉE à 1 ms
+     * au lieu d'être refusée : l'admission du runtime — la validation du modèle, qui exige une
+     * durée finie positive avant le port — est l'autorité ; le clamp n'est qu'une défense,
+     * jamais une policy.
      */
     override fun startEffect(key: Long, effect: GamepadEffect): KadreResult<GamepadPortEffect> = lock.withLock {
         if (closed) return@withLock KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.Gamepad))
@@ -411,7 +437,7 @@ internal class AndroidGamepadPort(
             val key = id.toLong()
             if (pads.containsKey(key)) continue
             val info = deviceSource.deviceInfo(id) ?: continue
-            if (!isGamepadDevice(info.sources)) continue
+            if (!isGamepadSource(info.sources)) continue
             pads[key] = connectedPad(info)
         }
         pads.keys.retainAll(ids.map { it.toLong() }.toSet())

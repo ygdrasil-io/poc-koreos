@@ -48,30 +48,13 @@ internal val ANDROID_DOCUMENT_SCROLL_KEYS: Set<Int> = setOf(
 )
 
 /**
- * Le prédicat des events gamepad — la FORME de kadre-old
- * (`GamepadController.android.kt:38-39` : les deux flags source, masqués, comparés à zéro) sur
- * les bits d'IDENTITÉ des flags, les bits de CLASSE retirés
- * ([android.view.InputDevice.SOURCE_CLASS_MASK]) : `SOURCE_GAMEPAD` (0x401) et
- * `SOURCE_KEYBOARD` (0x101) partagent le bit `SOURCE_CLASS_BUTTON` (0x1) — le masque littéral
- * de la table old sur les sources BRUTES flaggerait CHAQUE clavier, et la livraison
- * routerait le clavier ordinaire entier hors de son chemin (le sous-exact de la règle inverse : la
- * MÊME touche source clavier reste ordinaire, le test d'intégration l'épingle). Les
- * constantes `SOURCE_*` sont des constantes de compilation : le prédicat se teste sur l'hôte
- * JVM sans instancier aucun événement.
- */
-internal fun isGamepadSource(source: Int): Boolean {
-    val identityBits = source and android.view.InputDevice.SOURCE_CLASS_MASK.inv()
-    val gamepadFlags = (android.view.InputDevice.SOURCE_GAMEPAD or android.view.InputDevice.SOURCE_JOYSTICK) and
-        android.view.InputDevice.SOURCE_CLASS_MASK.inv()
-    return identityBits and gamepadFlags != 0
-}
-
-/**
  * La couture du routage gamepad de la phase 7 — ce que la delivery consulte AVANT le chemin
  * ordinaire pour tout event porteur des flags source gamepad/joystick. [AndroidGamepadPort]
  * l'implémente ; quand AUCUN routage n'est installé, le chemin ordinaire reste ENTIER (le
  * comportement pré-existant des events gamepad-sourcés, épinglé par le test d'intégration) —
- * le changement de routage ne vit que PAR LA PRÉSENCE du port.
+ * le changement de routage ne vit que PAR LA PRÉSENCE du port. Le prédicat des flags source
+ * est le prédicat gamepad unique ([isGamepadSource], la correction bits d'identité du masque
+ * kadre-old — la MÊME touche source clavier reste ordinaire, le test d'intégration l'épingle).
  */
 internal interface AndroidGamepadRoute {
     /** Le keycode du dispatch d'un bouton, l'état press/release, l'id du device source. */

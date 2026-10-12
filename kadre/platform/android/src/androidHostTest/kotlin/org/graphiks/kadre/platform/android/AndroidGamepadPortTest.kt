@@ -482,6 +482,43 @@ class AndroidGamepadPortTest {
         assertEquals(3, events.size)
     }
 
+    /**
+     * I-1 — le miroir EXACT de la discipline du port devices génériques : post-install, la
+     * lecture de `gamepads` est EXACTEMENT ce que l'observateur sait. Une manette branchée
+     * ENTRE DEUX FIRES (la table du seam mute sans que le fire du SDK soit livré) attend SON
+     * Connected pour paraître — le snapshot ne devance jamais ses événements ; le fire
+     * (ou le poll) suivant livre le Connected, et la manette paraît.
+     */
+    @Test
+    fun snapshotNeverRunsAheadOfDeliveredEvents() {
+        val source = FakeInputDeviceSource()
+        source.devices[7] = gamepad(7)
+        val port = AndroidGamepadPort(source, apiLevel = 31)
+
+        // Avant l'install : la vérité vivante du seam — personne à qui courir devant.
+        assertEquals(listOf(7L), port.gamepads.map { it.key })
+
+        val events = mutableListOf<GamepadPortEvent>()
+        port.installObserver { events += it }
+        assertEquals(listOf(7L), port.gamepads.map { it.key }, "the install's enumeration is the observer's base")
+
+        // La manette branchée entre deux fires : la table du fake mute, AUCUN fire —
+        // le snapshot NE LA CONTIENT PAS encore.
+        source.devices[8] = gamepad(8, name = "Late Pad")
+        assertEquals(
+            listOf(7L),
+            port.gamepads.map { it.key },
+            "a between-fires gamepad waits for its Connected — the snapshot never runs ahead",
+        )
+
+        // Le fire livre le Connected ; SEULEMENT ALORS la manette paraît dans la lecture.
+        source.fire(8)
+        val connected = assertIs<GamepadPortEvent.Connected>(events.single())
+        assertEquals(8L, connected.gamepad.key)
+        assertEquals("Late Pad", connected.gamepad.descriptor.name)
+        assertEquals(listOf(7L, 8L), port.gamepads.map { it.key })
+    }
+
     // -----------------------------------------------------------------------
     // Cas 6 (intégration P3) — les events source gamepad SORTENT du chemin ordinaire
     // -----------------------------------------------------------------------
@@ -579,7 +616,6 @@ class AndroidGamepadPortTest {
         port.installObserver { padEvents += it }
 
         val surface = surface()
-        surfaceUnderCollect = surface
         install(on = surface)
         surface.observationInstalled(inputWired = true)
         // Le route est attaché — la couture que l'attach réel (Task 3) câblera avec le port
@@ -665,7 +701,6 @@ class AndroidGamepadPortTest {
     @Test
     fun withoutAGamepadPortTheOrdinaryPathStaysWhole() = runBlocking {
         val surface = surface()
-        surfaceUnderCollect = surface
         install(on = surface)
         surface.observationInstalled(inputWired = true)
         val collector = EventCollector(this, surface.input)
@@ -688,7 +723,6 @@ class AndroidGamepadPortTest {
         collector.stop()
     }
 
-    private lateinit var surfaceUnderCollect: AndroidHostSurface
 }
 
 /** L'état initial de surface du test — le même instantané honnête que les autres tests hôtes. */
