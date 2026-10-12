@@ -73,6 +73,18 @@ class WaylandWindowO2Test {
         return AutoCloseable { running = false }
     }
 
+    /** La destruction native est marshalée au thread pompe : close() rend
+     *  `Accepted` et l'état terminal arrive avec le stimulus nativeClosed. */
+    private suspend fun awaitClosed(window: Window) {
+        val deadline = System.nanoTime() + 5_000_000_000L
+        while (window.state.value.phase != WindowPhase.Closed) {
+            if (System.nanoTime() > deadline) {
+                error("window never closed: ${window.state.value.phase}")
+            }
+            kotlinx.coroutines.delay(10)
+        }
+    }
+
     private suspend fun openedWindow(driver: WaylandWindowRuntimeDriver, title: String): Window =
         assertIs<WindowRequestOutcome.OpenedHere>(
             driver
@@ -216,7 +228,8 @@ class WaylandWindowO2Test {
         assertEquals(2, bridge.createWindowingCalls.get())
         assertEquals(2, driver.registeredPeerCount())
         runBlocking {
-            assertEquals(org.graphiks.kadre.window.WindowCloseOutcome.Closed, windowA.close().orThrow())
+            windowA.close().orThrow()
+            awaitClosed(windowA)
         }
         // P-1 : la destruction de A n'affecte pas B ; P-3 : l'arrêt ne tire
         // pas tant que la transition n'est pas non-vide → vide
@@ -224,7 +237,8 @@ class WaylandWindowO2Test {
         assertTrue(driver.peer(windowB.id) != null, "la fenêtre B a été perdue avec A")
         assertFalse(stopped.await(250, TimeUnit.MILLISECONDS), "arrêt prématuré alors que B vit")
         runBlocking {
-            assertEquals(org.graphiks.kadre.window.WindowCloseOutcome.Closed, windowB.close().orThrow())
+            windowB.close().orThrow()
+            awaitClosed(windowB)
         }
         assertTrue(stopped.await(5, TimeUnit.SECONDS), "l'arrêt n'a pas tiré après la dernière fermeture")
         assertEquals(0, driver.registeredPeerCount())
@@ -255,7 +269,8 @@ class WaylandWindowO2Test {
                 }
             }
             assertTrue(leaseStarted.await(2, TimeUnit.SECONDS), "le lease actif n'a jamais démarré")
-            assertEquals(org.graphiks.kadre.window.WindowCloseOutcome.Closed, window.close().orThrow())
+            window.close().orThrow()
+            awaitClosed(window)
             releaseLease.countDown()
             val honored = activeLease.await()
             assertIs<KadreResult.Success<*>>(honored)

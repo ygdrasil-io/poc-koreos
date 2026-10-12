@@ -78,6 +78,18 @@ class WaylandWindowsLinuxTest {
             else -> error("window $title was not opened: $outcome")
         }
 
+    /** La destruction native est marshalée au thread pompe : close() rend
+     *  `Accepted` et l'état terminal arrive avec le stimulus nativeClosed. */
+    private suspend fun awaitClosed(window: Window) {
+        val deadline = System.nanoTime() + 5_000_000_000L
+        while (window.state.value.phase != WindowPhase.Closed) {
+            if (System.nanoTime() > deadline) {
+                error("window never closed: ${window.state.value.phase}")
+            }
+            delay(10)
+        }
+    }
+
     private fun <T> KadreResult<T>.orThrow(): T = when (this) {
         is KadreResult.Success -> value
         is KadreResult.Failure -> error("expected success, got $reason")
@@ -94,7 +106,7 @@ class WaylandWindowsLinuxTest {
                         val b = openWindow("p1-b", 64.0, 64.0)
                         assertEquals(WindowPhase.Open, a.state.value.phase)
                         assertEquals(WindowPhase.Open, b.state.value.phase)
-                        assertEquals(org.graphiks.kadre.window.WindowCloseOutcome.Closed, a.close().orThrow())
+                        run { a.close().orThrow(); awaitClosed(a) }
                         // SN-5 : après le destroy de A, la pompe continue de
                         // tourner et B reste parfaitement saine
                         delay(300)
@@ -104,7 +116,7 @@ class WaylandWindowsLinuxTest {
                         val wayland = assertIs<DesktopNativeWindowHandle.Wayland>(handle)
                         assertTrue(wayland.displayAddress != 0uL, "adresse wl_display nulle")
                         assertTrue(wayland.surfaceAddress != 0uL, "adresse wl_surface nulle")
-                        assertEquals(org.graphiks.kadre.window.WindowCloseOutcome.Closed, b.close().orThrow())
+                        run { b.close().orThrow(); awaitClosed(b) }
                     }
                 },
                 stopWhenLastWindowClosed = true,
@@ -135,7 +147,7 @@ class WaylandWindowsLinuxTest {
                         assertEquals("p2", state.title)
                         assertEquals(LogicalSize(100.0, 50.0), state.contentSize)
                         assertEquals(WindowDecorations.Borderless, state.decorations)
-                        assertEquals(org.graphiks.kadre.window.WindowCloseOutcome.Closed, window.close().orThrow())
+                        run { window.close().orThrow(); awaitClosed(window) }
                     }
                 },
                 stopWhenLastWindowClosed = true,
@@ -153,7 +165,7 @@ class WaylandWindowsLinuxTest {
                 applicationFactory = KadreApplicationFactory {
                     KadreApplication {
                         val window = openWindow("sn6", 64.0, 64.0)
-                        assertEquals(org.graphiks.kadre.window.WindowCloseOutcome.Closed, window.close().orThrow())
+                        run { window.close().orThrow(); awaitClosed(window) }
                         assertEquals(WindowPhase.Closed, window.state.value.phase)
                         // SN-6 : une seconde fermeture après la terminaison ne
                         // casse rien et préserve l'état terminal

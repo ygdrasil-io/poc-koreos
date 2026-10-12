@@ -136,7 +136,17 @@ internal class WaylandWindowCommandPort internal constructor(
 
     override fun requestOpenedClose(command: OpenedWindowCloseCommand): OpenedWindowCloseOutcome {
         val peer = driver.peer(command.windowId) ?: return OpenedWindowCloseOutcome.NativeCloseAlreadyCommitted
-        return peer.requestProgrammaticClose()
+        if (peer.isClosed()) {
+            // fermeture déjà admise (compositor ou close programmatique en
+            // course) : une seule terminaison, le stimulus nativeClosed a
+            // déjà finalisé la fenêtre (SN-6)
+            return OpenedWindowCloseOutcome.NativeCloseAlreadyCommitted
+        }
+        // la destruction des proxies marshalée vers le thread pompe — aucun
+        // proxy n'est touché hors thread pompe ; l'issue est rendue
+        // immédiatement, la finalisation passe par le stimulus nativeClosed
+        session.asActionQueue().enqueue { peer.requestProgrammaticClose() }
+        return OpenedWindowCloseOutcome.Accepted
     }
 
     private fun createWindow(command: WindowOpenCommand) {
@@ -151,6 +161,10 @@ internal class WaylandWindowCommandPort internal constructor(
                 contentHeight = height,
                 title = spec.title,
                 appId = "org.graphiks.kadre.wayland",
+                // le handshake vit sur le thread pompe : le roundtrip y
+                // dispatche le configure attendu (aucune lecture préparée
+                // n'est active pendant une action marshalée)
+                dispatch = { session.bridge.roundtrip() },
                 // le stimulus nativeClosed finalise la fenêtre côté runtime
                 // (acceptNativeClose : fin de closing, membership, arrêt
                 // stopWhenLastWindowClosed) ; les stimuli tardifs sont acceptés.

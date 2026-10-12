@@ -32,6 +32,8 @@ internal class WaylandWindowPeer(
         commitAcknowledged.set(true)
     }
 
+    fun isClosed(): Boolean = closed.get()
+
     fun isCommitted(): Boolean = commitAcknowledged.get()
 
     /**
@@ -92,6 +94,9 @@ internal class WaylandWindowPeer(
          * Crée la fenêtre native et déroule le handshake xdg sur le thread
          * pompe: commit initial → configure → ack → buffer attaché → mappée.
          * La taille proposée est celle du spec (configure non-imposé = F1-4).
+         * [dispatch] fait vivre la connexion pendant l'attente : le thread
+         * pompe est occupé par ce handshake, personne d'autre ne dispatche
+         * les événements du configure.
          */
         fun create(
             windowId: WindowId,
@@ -100,6 +105,7 @@ internal class WaylandWindowPeer(
             contentHeight: Int,
             title: String,
             appId: String,
+            dispatch: () -> Unit,
             onNativeClosed: (WindowId) -> Unit,
         ): WaylandWindowPeer {
             val window = factory(contentWidth, contentHeight)
@@ -116,8 +122,12 @@ internal class WaylandWindowPeer(
                 window.setTitle(title)
                 window.setAppId(appId)
                 window.commitInitial()
-                check(configured.await(10, java.util.concurrent.TimeUnit.SECONDS)) {
-                    "no xdg configure within 10s for $windowId"
+                val deadline = System.nanoTime() + 10_000_000_000L
+                while (configured.count > 0L) {
+                    if (System.nanoTime() > deadline) {
+                        error("no xdg configure within 10s for $windowId")
+                    }
+                    dispatch()
                 }
                 window.ackLatestConfigure()
             }

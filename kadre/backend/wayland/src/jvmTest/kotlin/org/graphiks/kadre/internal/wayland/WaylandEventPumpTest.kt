@@ -88,33 +88,25 @@ class WaylandEventPumpTest {
     }
 
     @Test
-    fun repeatedWakeOnlyOutcomesKeepThePumpRearmable() {
-        val ops = RecordingOperations()
-        ops.pollResults = ArrayDeque(
-            listOf(PollOutcome.WakeOnly, PollOutcome.WakeOnly, PollOutcome.WakeOnly, PollOutcome.DisplayReady),
-        )
-        val wake = FakeWakeup()
-        val pump = WaylandEventPump(ops, wake)
-        // réveils répétés sans événement compositor : la pompe repoll sans
-        // re-préparer, puis termine le cycle par une lecture
-        assertEquals(PumpStep.Dispatched, pump.runOnce())
-        assertEquals(1, ops.prepareCount)
-        assertEquals(1, ops.readCount)
-        assertEquals(4, ops.pollWatchesWrite.size)
-        assertEquals(0, ops.cancelCount)
-    }
-
-    @Test
-    fun wakeOnlyDrainsTheWakeBeforeRearming() {
+    fun wakeOnlyReturnsToTheHostLoopForActionDraining() {
         val ops = RecordingOperations()
         ops.pollResults = ArrayDeque(listOf(PollOutcome.WakeOnly, PollOutcome.DisplayReady))
         val wake = FakeWakeup()
         val pump = WaylandEventPump(ops, wake)
-        // sans drain, un eventfd/pipe réveillé resterait lisible : la boucle
-        // tournerait à vide (P-2, roadmap §3.3)
-        assertEquals(PumpStep.Dispatched, pump.runOnce())
+        // Un réveil hors arrêt rend la main à la boucle hôte — c'est elle qui
+        // draine les actions marshalées (créations de fenêtres) ; repoller
+        // ici re-bloquerait le thread pompe sur un compositor silencieux.
+        // Le wake est drainé (sinon la boucle tournerait à vide) et la
+        // lecture préparée annulée (jamais deux prepare_read par cycle).
+        assertEquals(PumpStep.Rearm, pump.runOnce())
         assertEquals(1, wake.drainCount)
-        assertEquals(0, ops.cancelCount)
+        assertEquals(1, ops.cancelCount)
+        assertEquals(0, ops.readCount)
+        // le cycle suivant réarme proprement : prepare → poll → read
+        assertEquals(PumpStep.Dispatched, pump.runOnce())
+        assertEquals(2, ops.prepareCount)
+        assertEquals(1, ops.readCount)
+        assertEquals(1, wake.drainCount)
     }
 
     @Test

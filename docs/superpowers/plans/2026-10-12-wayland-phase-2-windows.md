@@ -65,10 +65,10 @@ public fun createToplevel(xdgSurface: WaylandXdgSurface): WaylandToplevel // xdg
 ```
 Sémantique : mêmes garanties que le listener registry (#115) — quiescence après revoke, copie des payloads (états = liste d'Int copiée, chaînes), exceptions isolées vers le reporter, destroy ordonné (toplevel → xdg_surface → surface), `close` idempotents.
 
-- [ ] **Step 1: RED — tests d'intégration Weston** (dans `WaylandClientIntegrationTest` ou nouvelle classe) : create surface + xdg + toplevel, `setTitle`, commit initial sans buffer, configure reçu (serial > 0), `ackConfigure`, attach d'un buffer shm 64×64 rempli, commit → (mapping constaté par un second configure/enter — pas de capture d'écran) ; close ordonné sans crash ; callback frame tuée après revoke.
-- [ ] **Step 2: implémentation** via `wlProxyMarshalFlags*` existants (opcodes : compositor.create_surface=0, wm_base.get_xdg_surface=1, xdg_surface.get_toplevel=1, toplevel.set_title=2, set_app_id=3, surface.commit=6, attach=1, damage=2, frame=3, xdg_surface.ack_configure=4) — vérifier chaque opcode dans les constantes générées kffi avant usage.
-- [ ] **Step 3: GREEN local + integration Weston** (Docker `kffi-clean-gradle`, `KFFI_WAYLAND_INTEGRATION=1`).
-- [ ] **Step 4: Commit** `feat(wayland): add the managed windowing layer (surface, xdg, toplevel)` + **PR kffi #2, publication du snapshot**, mise à jour `KFFI-WAYLAND-005` → `closed` + version pignée côté kadre.
+- [x] **Step 1: RED — tests d'intégration Weston** (dans `WaylandClientIntegrationTest` ou nouvelle classe) : create surface + xdg + toplevel, `setTitle`, commit initial sans buffer, configure reçu (serial > 0), `ackConfigure`, attach d'un buffer shm 64×64 rempli, commit → (mapping constaté par un second configure/enter — pas de capture d'écran) ; close ordonné sans crash ; callback frame tuée après revoke.
+- [x] **Step 2: implémentation** via `wlProxyMarshalFlags*` existants (opcodes : compositor.create_surface=0, wm_base.get_xdg_surface=1, xdg_surface.get_toplevel=1, toplevel.set_title=2, set_app_id=3, surface.commit=6, attach=1, damage=2, frame=3, xdg_surface.ack_configure=4) — vérifier chaque opcode dans les constantes générées kffi avant usage.
+- [x] **Step 3: GREEN local + integration Weston** (Docker `kffi-clean-gradle`, `KFFI_WAYLAND_INTEGRATION=1`).
+- [x] **Step 4: Commit** `feat(wayland): add the managed windowing layer (surface, xdg, toplevel)` + **PR kffi #2, publication du snapshot**, mise à jour `KFFI-WAYLAND-005` → `closed` + version pignée côté kadre.
 
 ### Task 2: kffi — buffers shm managés
 
@@ -86,7 +86,7 @@ public class WaylandShmBuffer internal constructor(...) : AutoCloseable {
 // sur WaylandClient:
 public fun createShmBuffer(width: Int, height: Int): WaylandShmBuffer  // memfd/ftruncate via kffi-posix + wl_shm.create_pool + wl_shm_pool.create_buffer via marshal
 ```
-- [ ] RED (intégration Weston : create → fill → commit via Task 1 → release listener après un frame) → GREEN → commit `feat(wayland): add managed shm buffers` (même PR #2) → publication → `KFFI-WAYLAND-006` → `closed`.
+- [x] RED (intégration Weston : create → fill → commit via Task 1 → release listener après un frame) → GREEN → commit `feat(wayland): add managed shm buffers` (même PR #2) → publication → `KFFI-WAYLAND-006` → `closed`.
 
 ### Task 3: kadre — variante handle runtime + rewiring provider
 
@@ -96,7 +96,7 @@ public fun createShmBuffer(width: Int, height: Int): WaylandShmBuffer  // memfd/
 - Modify: `WaylandHostSession.kt` — la pompe héberge le dispatch des événements fenêtres (les stimuli fenêtres sont émis depuis le thread pompe).
 - Tests: le provider headless existant reste vert (régression).
 
-- [ ] RED: provider branchant le driver réel ⇒ `RuntimeWindowManager` présent dans les composants (state `primary = null` tant que zéro fenêtre) → GREEN → commit `feat(wayland): wire the window driver into the standalone session (phase 2)`.
+- [x] RED: provider branchant le driver réel ⇒ `RuntimeWindowManager` présent dans les composants (state `primary = null` tant que zéro fenêtre) → GREEN → commit `feat(wayland): wire the window driver into the standalone session (phase 2)`.
 
 ### Task 4: kadre — driver, ports et peer de création
 
@@ -105,31 +105,31 @@ public fun createShmBuffer(width: Int, height: Int): WaylandShmBuffer  // memfd/
 - Modify: `WaylandWindowRuntimeDriver` construit `RuntimeWindowManager` (miroir AppKit L126-144).
 
 **Interfaces:** `WaylandWindowPeer.prepare(spec, admission: () -> Boolean): PreparedPeer` — créé via la facade kffi, `setTitle`, handshake complet (F1-4/F1-5 gérés dans la machine à états configure de la peer), retourne `owner: WindowPeerOwner + RuntimeDesktopWindowHandleAccess` (lease : compteur `activeHandleLeases` + `admitCallback`), `initialSurfaceSnapshot` (metrics effectifs). `WaylandSurfaceBufferSource(buffer: WaylandShmBuffer)` remplit le contenu (motif déterministe par défaut ; injectable par le driver de contrats).
-- [ ] RED (O2, fake kffi seam `WaylandWindowing` injectable): création admissible ⇒ `commit(owner, effectiveSpec, snapshot)` appelé exactement une fois, `primary` promu ; `decorations = System` ⇒ `fail(Unsupported(Decorations))` sans primitive (SN-1) ; `outerPosition` ⇒ SN-2 ; création native échouée ⇒ `fail` + destruction partielle (SN-7) → GREEN → commit `feat(wayland): add the window driver, ports and creation peer (phase 2)`.
+- [x] RED (O2, fake kffi seam `WaylandWindowing` injectable): création admissible ⇒ `commit(owner, effectiveSpec, snapshot)` appelé exactement une fois, `primary` promu ; `decorations = System` ⇒ `fail(Unsupported(Decorations))` sans primitive (SN-1) ; `outerPosition` ⇒ SN-2 ; création native échouée ⇒ `fail` + destruction partielle (SN-7) → GREEN → commit `feat(wayland): add the window driver, ports and creation peer (phase 2)`.
 
 ### Task 5: kadre — configure, titre, propriétés, close, succession
 
 **Files:** `…/WaylandWindowPeer.kt` (machine configure/serials, close), `WaylandWindowRuntimeDriver.kt` (observations → stimuli), tests O2.
 
-- [ ] RED: configure (w,h) non nul ⇒ observation géométrie ; (0,0) ⇒ taille spec conservée (F1-4) ; serial ancien ignoré (SN-5 O2) ; `toplevel.close` ⇒ `Closing` raison forcée sans `CloseRequested` (L914) ; close programmatique ⇒ destroy ordonné, `NativeCloseAlreadyCommitted` en course (SN-6 O2) ; destruction fenêtre A ⇒ fenêtre B intacte, `primary` = B (P-1 O2) ; `stopWhenLastWindowClosed` armé après première admission, transition vide ⇒ callback, headless sans fenêtre jamais (P-3 O2) → GREEN → commit `feat(wayland): configure handling, close path and primary succession (phase 2)`.
+- [x] RED: configure (w,h) non nul ⇒ observation géométrie ; (0,0) ⇒ taille spec conservée (F1-4) ; serial ancien ignoré (SN-5 O2) ; `toplevel.close` ⇒ `Closing` raison forcée sans `CloseRequested` (L914) ; close programmatique ⇒ destroy ordonné, `NativeCloseAlreadyCommitted` en course (SN-6 O2) ; destruction fenêtre A ⇒ fenêtre B intacte, `primary` = B (P-1 O2) ; `stopWhenLastWindowClosed` armé après première admission, transition vide ⇒ callback, headless sans fenêtre jamais (P-3 O2) → GREEN → commit `feat(wayland): configure handling, close path and primary succession (phase 2)`.
 
 ### Task 6: kadre — lease `withDesktopHandle`
 
 **Files:** `…/WaylandWindowPeer.kt` (lease), `RuntimeDesktopNativeWindowHandle.Wayland` retourné, tests.
 
-- [ ] RED: block exécuté sur le thread pompe avec le handle Wayland ; admission refusée après `closeAdmitted` (SN-8 O2) ; leases attendus avant destroy → GREEN → commit `feat(wayland): bound desktop-handle leases on window peers (phase 2)`.
+- [x] RED: block exécuté sur le thread pompe avec le handle Wayland ; admission refusée après `closeAdmitted` (SN-8 O2) ; leases attendus avant destroy → GREEN → commit `feat(wayland): bound desktop-handle leases on window peers (phase 2)`.
 
 ### Task 7: kadre — contrats, preuves et capabilities
 
 **Files:** `contracts.tsv` (`WIN-010`, `WIN-011`, `WIN-012`, `SUR-002` — **numéros à revérifier**), `kadre/backend/wayland/contracts/evidence.tsv` (mappings O2 + O3), bloc validateur wayland étendu, `kadre/capabilities/wayland.md` (lignes phase 2), design/roadmap références.
 
-- [ ] RED: validateContractRegistry (producteurs manquants) → lignes + mappings → GREEN → commit `feat(wayland): register the phase 2 window contracts and evidence (phase 2)`.
+- [x] RED: validateContractRegistry (producteurs manquants) → lignes + mappings → GREEN → commit `feat(wayland): register the phase 2 window contracts and evidence (phase 2)`.
 
 ### Task 8: kadre — tests O3 Linux fenêtres
 
 **Files:** `WaylandNativeSessionLinuxTest` (nouvelle classe `WaylandWindowsLinuxTest`).
 
-- [ ] Scénarios P-1 (deux fenêtres indépendantes, destruction A sans perte de B, primary successif), P-2, SN-4/SN-5/SN-6 sur Weston réel → commit `test(wayland): prove the two-window gate on weston (phase 2)`.
+- [x] Scénarios P-1 (deux fenêtres indépendantes, destruction A sans perte de B, primary successif), P-2, SN-4/SN-5/SN-6 sur Weston réel → commit `test(wayland): prove the two-window gate on weston (phase 2)`.
 
 ### Task 9: gate Docker sur la pointe + clôture
 
