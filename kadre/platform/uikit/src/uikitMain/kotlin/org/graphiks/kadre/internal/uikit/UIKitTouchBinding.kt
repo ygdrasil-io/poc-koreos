@@ -42,26 +42,29 @@ import platform.UIKit.UIView
  * des wrappers Kotlin d'objets Obj-C délègue à `isEqual` — donc à l'identité de pointeur pour
  * un `UITouch` ; preuve O3 phase 0 : deux wrappers d'une même instance, `===` faux, `hashCode`
  * et `isEqual` égaux). L'instance `UITouch` est stable et vivante pour la durée du contact
- * (contrat UIKit) : la table la retient jusqu'à la fin du contact — la rétention native du
- * binding est exactement la vie du contact, révoquée à `Ended`/`Cancelled`/teardown. Un même
- * doigt livre donc toujours le même jeton, jamais réalloué entre deux events ; un `Began`
- * redelivré pour une identité déjà connue réutilise le jeton existant ;
- * `Moved`/`Ended`/`Cancelled` pour une identité inconnue (recognizer attaché en pleine
- * séquence) rendent `null` — le contact est perdu, jamais inventé. La table se vide au
- * [detach] (aucun jeton ne survit au teardown).
+ * (contrat UIKit). La vie de la table ([UIKitTouchTokenTable]) est celle des contacts, pas de
+ * la session : le jeton est alloué au `Began`, stable pendant la vie du contact, et RÉVOQUÉ à
+ * l'event terminal — `Ended`/`Cancelled` portent le même jeton une DERNIÈRE fois (l'identité
+ * est stable DANS la livraison), puis l'entrée disparaît et le wrapper `UITouch` retenu est
+ * relâché : la table ne grossit plus avec les contacts. Un `Began` ultérieur pour la même
+ * référence est un NOUVEAU contact et reçoit un NOUVEAU jeton (jamais le jeton d'un contact
+ * révolué) ; un `Moved`/`Ended`/`Cancelled` pour une identité inconnue (recognizer attaché en
+ * pleine séquence, ou event tardif après la fin) rendent `null` — le contact est perdu, jamais
+ * inventé. [detach] vide ce qui resterait (contacts vivants au moment du teardown).
  *
  * LE FAIT DU SPIKE (Task 2, Step 1, preuve compile + binaire) : le klib K/N 2.4.20 ne porte
  * PAS les quatre handlers protégés d'`UIGestureRecognizer` (`touchesBegan:withEvent:` et
  * voisins — catégorie `UIGestureRecognizerProtected` du header UIKitCore) comme MEMBRES de la
  * classe — ils arrivent en extensions, donc non-overrideables (`overrides nothing`, erreur du
  * compilateur relevée avant repli). Les quatre méthodes CI-DESSOUS sont donc des MEMBRES
- * propres de la sous-classe, SANS `override` : K/N enregistre les membres publics d'une
- * classe Kotlin héritant d'une classe Obj-C dans la paire de classes créée au démarrage, sous
- * les sélecteurs standard `touchesBegan:withEvent:` etc. — c'est le même sélecteur que
- * dispatche UIKit à tout recognizer attaché, la livraison ne passe PAS par la table virtuelle
- * Kotlin mais par `objc_msgSend` (preuves : la sonde du driver inspecte
- * `respondsToSelector("touchesBegan:withEvent:")` sur l'instance posée dans la vue, et le
- * compteur d'events du charter manuel Task 4 incrémente sur vraies touches).
+ * propres de la sous-classe, SANS `override`, EXPORTÉES par [ObjCAction] sous la classe
+ * enregistrée par [ExportObjCClass] : K/N y ajoute son trampoline sous les sélecteurs standard
+ * `touchesBegan:withEvent:` etc. — les mêmes sélecteurs que dispatche UIKit à tout recognizer
+ * attaché, la livraison passe par `objc_msgSend` (preuve exécutable : la sonde du driver
+ * compare l'IMP de la classe PROPRE de l'instance à celui de la base — différent seulement
+ * quand l'export est vivant, un `respondsToSelector:` ne discriminant rien puisque la base
+ * implémente les hooks ; preuve binaire complémentaire dans le rapport Task 2 ; le compteur
+ * d'events du charter manuel Task 4 incrémentera sur vraies touches).
  */
 @OptIn(ExperimentalForeignApi::class, BetaInteropApi::class)
 @ExportObjCClass
@@ -70,9 +73,8 @@ internal class UIKitTouchRecognizer(
     private val onObservation: (List<UIKitTouchPrimitive>) -> Unit,
 ) : UIGestureRecognizer(target = null, action = null) {
     private val lock = RuntimeLock()
-    private var nextToken: Int = 0
     private var observing: Boolean = true
-    private val tokensByIdentity: MutableMap<UITouch, Int> = mutableMapOf()
+    private val tokenTable = UIKitTouchTokenTable<UITouch>()
 
     init {
         // Nom de debug lisible dans tout dump Xcode des recognizers de la vue (iOS 11+) —
@@ -83,12 +85,13 @@ internal class UIKitTouchRecognizer(
     /**
      * Ferme le robinet des livraisons ([UIKitTouchBinding.teardown]) : un handler encore
      * appelé par un event déjà en file au moment du retrait est rejeté ICI (pattern Stale du
-     * binding lifecycle), et la table des jetons est vidée.
+     * binding lifecycle), et la table des jetons est vidée (les contacts vivants au moment du
+     * teardown n'ont plus de destinataire).
      */
     fun detach() {
         lock.withLock {
             observing = false
-            tokensByIdentity.clear()
+            tokenTable.clear()
         }
     }
 
@@ -167,25 +170,64 @@ internal class UIKitTouchRecognizer(
     }
 
     /**
-     * Le jeton stable du contact — alloué au `Began`, réutilisé à l'identique ensuite, perdu
-     * (`null`) pour une identité inconnue hors `Began`. Sous [lock] : le teardown (file
-     * principale) et les handlers (file principale également) ne se croisent que par cette
-     * garde.
+     * Le jeton du contact — alloué au `Began`, réutilisé à l'identique pendant la vie du
+     * contact, RÉVOQUÉ à l'event terminal (le `Ended`/`Cancelled` le porte une dernière fois,
+     * l'entrée disparaît ensuite) et perdu (`null`) pour une identité inconnue hors `Began`.
+     * Sous [lock] : le teardown (file principale) et les handlers (file principale également)
+     * ne se croisent que par cette garde.
      */
     private fun tokenFor(touch: UITouch, phase: UIKitTouchPhase): Int? = lock.withLock {
         if (!observing) return null
-        val existing = tokensByIdentity[touch]
-        when (phase) {
-            UIKitTouchPhase.Began -> existing ?: nextToken++.also { tokensByIdentity[touch] = it }
-            UIKitTouchPhase.Moved -> existing
-            UIKitTouchPhase.Ended -> existing
-            UIKitTouchPhase.Cancelled -> existing
-        }
+        tokenTable.tokenFor(touch, phase)
     }
 }
 
 /** Le nom de debug du recognizer (iOS 11+), visible dans les dumps Xcode des recognizers. */
 private const val TOUCH_RECOGNIZER_NAME = "KadreTouch"
+
+/**
+ * La table de jetons de contact — pure, sans aucun type UIKit, testée sans appareil
+ * ([UIKitTouchTokenTableTest]) : le recognizer UIKit-typed ([UIKitTouchRecognizer]) la tient et
+ * la consulte sous son verrou (la table N'EST PAS thread-safe, son propriétaire en répond).
+ *
+ * La sémantique est celle de la vie d'un contact (miroir `AppKitTouchAdapter`, et la contrepartie
+ * identitaire de la table de vie d'[UIKitTouchAdapter]) :
+ *
+ * - **`Began` alloue, une fois.** Une clé inconnue reçoit un jeton neuf ; une clé déjà connue
+ *   réutilise SON jeton (un `Began` redelivré ne réalloue jamais — l'identité du contact ne
+ *   change pas sous ses pieds) ;
+ * - **`Moved` lit.** Le jeton du contact vivant, ou `null` pour une clé inconnue ;
+ * - **`Ended`/`Cancelled` lisent puis RÉVOQUENT.** L'event terminal porte encore le jeton du
+ *   contact (l'identité est stable DANS la livraison qui la clôt), puis l'entrée disparaît —
+ *   la clé retenu dans la table (une référence native pour le recognizer) est relâchée avec
+ *   elle. La table contient donc au plus UN état par contact VIVANT ; elle ne grossit pas avec
+ *   les contacts de la session ;
+ * - **Un contact révolué est révolué.** Tout handler ultérieur pour la même clé rend `null`
+ *   jusqu'à un nouveau `Began`, qui reçoit un jeton neuf (jamais la valeur d'un contact
+ *   terminé — les jetons ne sont jamais réutilisés).
+ *
+ * [clear] est le teardown du propriétaire : tout ce qui survivrait (contacts vivants au moment
+ * du retrait) est jeté.
+ */
+internal class UIKitTouchTokenTable<Key : Any> {
+    private val tokensByKey = mutableMapOf<Key, Int>()
+    private var nextToken: Int = 0
+
+    /** Le jeton du contact [key] pour la phase [phase], ou `null` quand l'observation est perdue. */
+    fun tokenFor(key: Key, phase: UIKitTouchPhase): Int? {
+        val existing = tokensByKey[key]
+        return when (phase) {
+            UIKitTouchPhase.Began -> existing ?: nextToken++.also { tokensByKey[key] = it }
+            UIKitTouchPhase.Moved -> existing
+            UIKitTouchPhase.Ended,
+            UIKitTouchPhase.Cancelled,
+            -> existing.also { if (it != null) tokensByKey.remove(key) }
+        }
+    }
+
+    /** Teardown du propriétaire : aucune vie de contact ne survit. */
+    fun clear() = tokensByKey.clear()
+}
 
 /**
  * L'adaptateur de contacts du binding touch — le miroir exact de `AppKitTouchAdapter`
@@ -321,22 +363,37 @@ internal class UIKitTouchBinding(
      * l'annonce d'installation. Idempotent. Toute exception d'installation remonte à
      * l'appelant (le port l'enveloppe dans `runCatching` → rapport, sans jamais casser
      * l'attach — même posture que le binding d'observation).
+     *
+     * ORDRE DE GARDE (revue I1/M1) : la garde de binding mort (`tornDown`) et le tripwire de
+     * double-installation passent AVANT TOUTE écriture sur la vue — un second install ne peut
+     * jamais laisser un recognizer orphelin posé puis jeté par un check tardif. La pose sur la
+     * vue suit l'enregistrement sous verrou, et un teardown glissé entre les deux est absorbé
+     * par la re-lecture finale (le recognizer déjà posé est retiré dans la foulée).
      */
     fun install() {
+        lock.withLock {
+            if (tornDown) return
+            check(recognizer == null) { "duplicate UIKit touch recognizer install" }
+        }
         val binding = UIKitTouchRecognizer(view, onObservation = { primitives -> emit(primitives) })
         // La décision tracée du plan : le host garde ses touches — Kadre n'annule rien.
         binding.cancelsTouchesInView = false
+        lock.withLock { recognizer = binding }
         view.addGestureRecognizer(binding)
-        lock.withLock {
+        val live = lock.withLock {
             if (tornDown) {
-                // Course install/teardown (deux chemins main entrelacés) : le recognizer
-                // déjà posé est retiré dans la foulée, rien ne reste.
-                view.removeGestureRecognizer(binding)
-                binding.detach()
-                return
+                recognizer = null
+                false
+            } else {
+                true
             }
-            check(recognizer == null) { "duplicate UIKit touch recognizer install" }
-            recognizer = binding
+        }
+        if (!live) {
+            // Un teardown a passé la sienne entre l'enregistrement et la pose : son propre
+            // remove est tombé sur un recognizer pas encore posé (no-op), le nôtre achève le
+            // retrait ; aucun compteur ni annonce — le binding est mort.
+            view.removeGestureRecognizer(binding)
+            return
         }
         UIKitTouchCount.recordInstall()
         UIKitTouchCount.recordAnnouncement()
@@ -354,7 +411,8 @@ internal class UIKitTouchBinding(
     /**
      * Retrait : recognizer détaché (les handlers déjà en file sont rejetés par lui-même) puis
      * retiré de la vue, table de vie vidée, annonce all-false + `gestureKinds` vide.
-     * Idempotent.
+     * Idempotent. La référence est remise à `null` sous verrou : un install tardif sur un
+     * binding mort suit la garde `tornDown`, jamais le tripwire de double-installation.
      */
     fun teardown() {
         val stale = lock.withLock {
@@ -362,7 +420,9 @@ internal class UIKitTouchBinding(
                 null
             } else {
                 tornDown = true
-                recognizer
+                val stale = recognizer
+                recognizer = null
+                stale
             }
         } ?: return
         stale.detach()

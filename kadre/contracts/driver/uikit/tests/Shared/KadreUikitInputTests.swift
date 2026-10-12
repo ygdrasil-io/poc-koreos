@@ -13,9 +13,12 @@ import KadreUikit
 /// synthétisable in-process honnêtement (ruling pré-vol) : la livraison réelle reste le
 /// charter manuel — ces tests prouvent donc CE QUI EST PROUVABLE SANS VRAIE TOUCHE :
 ///
-/// - **Le SPIKE d'exécution** : l'instance posée dans la vue répond au sélecteur EXACT
-///   `touchesBegan:withEvent:` qu'UIKit dispatche (la sous-classe Kotlin exporte bien les
-///   quatre hooks, preuve binaire complémentaire dans le rapport Task 2) ;
+/// - **Le SPIKE d'exécution, DISCRIMINANT (revue I2)** : l'IMP du sélecteur de livraison
+///   `touchesBegan:withEvent:` sur la classe PROPRE de l'instance diffère de celui de la base
+///   (`class_getMethodImplementation` via la sonde Kotlin) — vrai UNIQUEMENT quand l'export
+///   `@ExportObjCClass` + `@ObjCAction` est vivant. Un `respondsToSelector:` ne discriminait
+///   rien (tout recognizer y répond : la base implémente les hooks) ; le CONTRÔLE en bas de
+///   classe prouve que le prédicat sait ÉCHOUER ;
 /// - **L'additivité** : `cancelsTouchesInView == false` (décision tracée — le host garde ses
 ///   touches), le recognizer est actif, et le compte total des recognizers de la vue ne
 ///   bouge que de UN (Kadres seul ajout, rien du host n'est modifié) ;
@@ -108,11 +111,19 @@ final class KadreUikitInputTests: XCTestCase {
 
     // MARK: - Preuves
 
+    /// L'IMP du sélecteur pour la CLASSE PROPRE de l'objet — le même prédicat que la sonde
+    /// Kotlin (`object_getClass` + `class_getMethodImplementation`), côté Swift pour le
+    /// CONTRÔLE qui prouve que le prédicat peut échouer (revue I2).
+    private func ownClassImp(_ object: NSObject, _ selector: Selector) -> UnsafeRawPointer {
+        let imp = class_getMethodImplementation(object_getClass(object), selector)
+        return unsafeBitCast(imp, to: UnsafeRawPointer.self)
+    }
+
     /// uikit-input-touch-recognizer-additive — l'attach pose LE recognizer Kadre sur la vue du
-    /// host : il répond au sélecteur exact que la livraison dispatche (le SPIKE, prouvé en
-    /// exécution), il ne peut pas annuler les touches du host (`cancelsTouchesInView == false`),
-    /// il est actif, et il est le SEUL recognizer ajouté (compte total = baseline + 1). L'annonce
-    /// d'installation est publiée (compteur d'annonces, au-delà du baseline du process).
+    /// host : son IMP propre surcharge le hook de la base (le SPIKE, prouvé de façon
+    /// DISCRIMINANTE), il ne peut pas annuler les touches du host (`cancelsTouchesInView ==
+    /// false`), il est actif, et il est le SEUL recognizer ajouté (compte total = baseline + 1).
+    /// L'annonce d'installation est publiée (compteur d'annonces, au-delà du baseline).
     func testTouchRecognizerInstalledAdditivelyWithHonestAnnouncement() throws {
         let fixture = try primaryFixture()
         let view = try XCTUnwrap(fixture.observedView)
@@ -127,8 +138,12 @@ final class KadreUikitInputTests: XCTestCase {
         let probe = KadreUikitSurfaceDriver.shared.touchRecognitionProbe(view: view)
         XCTAssertTrue(probe.recognizerAttached,
                       "the Kadre touch recognizer must be on the host view after attach")
-        XCTAssertTrue(probe.recognizerRespondsToTouchesBegan,
-                      "the recognizer must answer the exact UIKit delivery selector (the spike)")
+        XCTAssertTrue(probe.recognizerOverridesTouchesBeganImp,
+                      "the Kadre subclass's OWN imp must override the base hook — a recognizer "
+                          + "that merely inherits the empty base hook (a dropped @ObjCAction "
+                          + "export) FAILS this discriminating check")
+        XCTAssertEqual(probe.recognizerObjCClassName, "UIKitTouchRecognizer",
+                       "the @ExportObjCClass runtime registration name")
         XCTAssertFalse(probe.cancelsTouchesInView,
                        "the traced additive policy: the host view keeps its touches")
         XCTAssertTrue(probe.recognizerEnabled, "the recognizer must be enabled")
@@ -140,6 +155,22 @@ final class KadreUikitInputTests: XCTestCase {
                              "the InputObservationChanged(touchInstalled = true) must have been published")
 
         try stopAndAwaitTermination(fixture)
+    }
+
+    /// Le CONTRÔLE de la revue I2 : un recognizer de BASE ne surcharge rien — son IMP propre
+    /// EST celui de la base, donc le prédicat du probe (différence des IMP, le même que la
+    /// sonde Kotlin calcule pour le recognizer Kadre) sait ÉCHOUER. La vérification du SPIKE
+    /// n'est pas toujours-verte : elle distingue une sous-classe qui exporte ses hooks d'un
+    /// recognizer qui hérite le hook vide — la livraison y mourrait silencieusement.
+    func testExportProbeDiscriminatesABaseRecognizer() {
+        let touchSelector = NSSelectorFromString("touchesBegan:withEvent:")
+        let control = UIGestureRecognizer()
+        XCTAssertEqual(NSStringFromClass(type(of: control)), "UIGestureRecognizer",
+                       "control sanity: a base recognizer, not a subclass")
+        XCTAssertEqual(ownClassImp(control, touchSelector),
+                       ownClassImp(UIGestureRecognizer(), touchSelector),
+                       "a base recognizer only inherits the base imp — the probe's imp-difference "
+                           + "predicate is not always-true")
     }
 
     /// uikit-input-touch-recognizer-revoked — le close retire le recognizer de la vue du host

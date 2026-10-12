@@ -19,8 +19,18 @@ import org.graphiks.kadre.internal.uikit.UIKitTouchCount
 import org.graphiks.kadre.internal.uikit.UIKitTouchRecognizer
 import org.graphiks.kadre.surface.HostSurface
 import org.graphiks.kadre.surface.SurfaceEvent
+import kotlinx.cinterop.ObjCClass
+import kotlinx.cinterop.rawValue
+import kotlinx.cinterop.toKString
 import platform.Foundation.NSSelectorFromString
+import platform.objc.class_getMethodImplementation
+import platform.objc.class_getName
+import platform.objc.objc_getClass
+import platform.objc.object_getClass
 import platform.UIKit.UIView
+
+/** Le sélecteur exact de la livraison du premier contact (le hook que la base implémente vide). */
+private const val TOUCH_DELIVERY_SELECTOR = "touchesBegan:withEvent:"
 
 /**
  * Résultat du probe de bail ([KadreUikitSurfaceDriver.leaseProbe]) — les faits copiés, jamais
@@ -141,16 +151,23 @@ public class KadreUikitSurfaceEventCapture private constructor(surface: HostSurf
  * les faits copiés de la vue, jamais les objets. [recognizerAttached] — la vue porte bien LE
  * recognizer Kadre (vérifié par le type Kotlin côté module, jamais par un nom) ;
  * [cancelsTouchesInView] — la politique additive tracée (la vue du host garde ses touches,
- * `false` attendu) ; [recognizerRespondsToTouchesBegan] — la preuve de SUBCLASSE du SPIKE :
- * l'instance répond au sélecteur exact `touchesBegan:withEvent:` qu'UIKit dispatche (la
- * livraison passe par ce sélecteur) ; [recognizerEnabled] — le recognizer est actif ;
- * [totalGestureRecognizers] — le compte TOTAL des recognizers de la vue (l'additivité se
- * lit ici : le host garde les siens, Kadre n'ajoute que le sien).
+ * `false` attendu) ; [recognizerOverridesTouchesBeganImp] — la preuve DISCRIMINANTE du SPIKE
+ * (revue I2) : l'IMP du sélecteur de livraison `touchesBegan:withEvent:` sur LA CLASSE
+ * PROPRISSAIRE de l'instance diffère de l'IMP de la classe de base — ce qui n'est VRAI que si
+ * l'export `@ExportObjCClass` + `@ObjCAction` est vivant (le trampoline K/N remplace le hook
+ * vide hérité). Un `respondsToSelector:` ne discriminait RIEN (TOUT recognizer y répond, la
+ * base implémente les hooks) — un recognizer qui hériterait le hook vide sans l'exporter
+ * ÉCHOUE ce prédicat, la régression silencieuse devient rouge. [recognizerObjCClassName] — le
+ * nom Obj-C de la classe propriétaire (l'enregistrement `@ExportObjCClass` attendu) ;
+ * [recognizerEnabled] — le recognizer est actif ; [totalGestureRecognizers] — le compte TOTAL
+ * des recognizers de la vue (l'additivité se lit ici : le host garde les siens, Kadre
+ * n'ajoute que le sien).
  */
 public class KadreUikitTouchRecognitionProbe(
     public val recognizerAttached: Boolean,
     public val cancelsTouchesInView: Boolean,
-    public val recognizerRespondsToTouchesBegan: Boolean,
+    public val recognizerOverridesTouchesBeganImp: Boolean,
+    public val recognizerObjCClassName: String,
     public val recognizerEnabled: Boolean,
     public val totalGestureRecognizers: Int,
 )
@@ -256,9 +273,9 @@ public object KadreUikitSurfaceDriver {
      * Le probe STRUCTUREL du touch (phase 5, Task 2) : l'état des recognizers de [view] lu du
      * côté Kotlin, où le recognizer Kadre est identifiable par son TYPE (interne au module —
      * Swift ne peut pas le nommer, la sonde copie les faits, même discipline que les autres
-     * probes). La preuve du SPIKE ([KadreUikitTouchRecognitionProbe.recognizerRespondsToTouchesBegan])
-     * est une vérification D'EXÉCUTION du sous-classement : l'instance répond au sélecteur
-     * exact que la livraison d'UIKit dispatche.
+     * probes). La preuve du SPIKE ([KadreUikitTouchRecognitionProbe.recognizerOverridesTouchesBeganImp])
+     * est la vérification d'exécution DISCRIMINANTE du sous-classement : l'IMP propre de la
+     * classe de l'instance diffère de celui de la base pour le sélecteur de livraison.
      */
     @OptIn(ExperimentalForeignApi::class)
     public fun touchRecognitionProbe(view: UIView): KadreUikitTouchRecognitionProbe {
@@ -268,12 +285,36 @@ public object KadreUikitSurfaceDriver {
         return KadreUikitTouchRecognitionProbe(
             recognizerAttached = recognizer != null,
             cancelsTouchesInView = recognizer?.cancelsTouchesInView ?: false,
-            recognizerRespondsToTouchesBegan =
-                recognizer?.respondsToSelector(NSSelectorFromString("touchesBegan:withEvent:")) == true,
+            recognizerOverridesTouchesBeganImp = recognizer?.let(::overridesBaseTouchHook) == true,
+            recognizerObjCClassName = recognizer?.let(::objcClassNameOf).orEmpty(),
             recognizerEnabled = recognizer?.isEnabled() ?: false,
             totalGestureRecognizers = recognizers.size,
         )
     }
+
+    /**
+     * Le prédicat discriminant de la revue I2 : l'IMP du sélecteur de livraison sur la classe
+     * PROPRE de l'instance (`object_getClass` — pas la hiérarchie) diffère de l'IMP de la
+     * classe de base `UIGestureRecognizer`. VRAI uniquement quand l'export Kotlin
+     * (`@ExportObjCClass` + `@ObjCAction`) a posé son trampoline sur la sous-classe ; FAUX
+     * pour tout recognizer qui hériterait le hook vide de la base — exactement la régression
+     * silencieuse qu'un `respondsToSelector:` (toujours vrai, la base implémente les hooks)
+     * ne voyait pas.
+     */
+    @OptIn(ExperimentalForeignApi::class)
+    private fun overridesBaseTouchHook(recognizer: UIKitTouchRecognizer): Boolean {
+        val selector = NSSelectorFromString(TOUCH_DELIVERY_SELECTOR)
+        val ownClass = object_getClass(recognizer) ?: return false
+        val baseClass = objc_getClass("UIGestureRecognizer") as? ObjCClass ?: return false
+        val ownImp = class_getMethodImplementation(ownClass, selector) ?: return false
+        val baseImp = class_getMethodImplementation(baseClass, selector) ?: return false
+        return ownImp.rawValue != baseImp.rawValue
+    }
+
+    /** Le nom Obj-C de la classe propriétaire de [instance] (`class_getName`). */
+    @OptIn(ExperimentalForeignApi::class)
+    private fun objcClassNameOf(instance: Any): String =
+        object_getClass(instance)?.let { cls -> class_getName(cls)?.toKString() }.orEmpty()
 
     /** Les installations de recognizer touch réellement exécutées (le compteur du fixture). */
     public val touchInstallCount: Long
