@@ -149,6 +149,28 @@ internal class UIKitWindowCommandPort(
     private var surfaceAppearance: SurfaceAppearance? = null
 
     /**
+     * Le branchement touch (phase 5, Task 2) : installé au MÊME point de cycle que le binding
+     * d'observation (après le commit du peer), retiré au MÊME retrait (requestOpenedClose /
+     * beginClose / finishClose). Un seul couple par port — la phase 5 est mono-surface comme
+     * la phase 2, le surfaceId de l'annonce est celui de l'unique peer committé. Tout se joue
+     * sur la file principale (l'appelant d'attach EST sur le main, les handlers d'`UITouch`
+     * aussi).
+     */
+    private var touchBinding: UIKitTouchBinding? = null
+
+    /**
+     * Les branchements clavier (GCKeyboard) et gestes/survol (phase 5, Task 3) : le MÊME point
+     * de cycle que le touch — installés après le commit, retirés aux mêmes retraits, la phase
+     * 5 est mono-surface. L'AGGREGAT d'annonce ([UIKitInputAnnouncement]) est créé PAR ATTACH
+     * (le surfaceId n'existe qu'au commit) et filé aux TROIS bindings : un seul porteur de la
+     * publication `InputObservationChanged` — chaque binding écrit SON fait et publie le
+     * snapshot complet ; les snapshots se succèdent en séquence main et le dernier d'un cycle
+     * de teardown est le all-false + vide.
+     */
+    private var keyboardBinding: UIKitKeyboardBinding? = null
+    private var gestureBindings: UIKitGestureBindings? = null
+
+    /**
      * Le drain coalescé du redraw (phase 2) : le ticket d'une commande admise est RETENU
      * (pending), au plus un drain est programmé sur la file principale, et la consommation —
      * le stimulus `RedrawConsumed` portant la génération exacte — n'arrive qu'au drain. Le
@@ -214,6 +236,18 @@ internal class UIKitWindowCommandPort(
         // objet UIKit touché) — le binding, lui, est Kadre-owned : c'est le PORT qui le retire
         // (requestOpenedClose / beginClose), jamais le destruct endogène.
         installSurfaceObservation(entry.surfaceId, snapshot)
+        // Task 2 (phase 5) : le binding touch au MÊME point de cycle — après le commit, la
+        // surface est vivante avant toute annonce et tout stimulus ; l'annonce
+        // `InputObservationChanged(touchInstalled = true)` suit l'ajout du recognizer à la
+        // vue (miroir web l.1028-1036, rien ne peut précéder — la sérialisation main
+        // d'UIKit rend le créneau d'installation vide, cf. KDoc du binding).
+        // Task 3 (phase 5) : clavier GCKeyboard puis gestes/survol au MÊME point de cycle,
+        // dans l'ordre (touch → clavier → gestes) qui fait de la DERNIÈRE annonce d'install
+        // le snapshot complet ; l'agrégat d'annonce vit le temps de l'attach.
+        val announcement = UIKitInputAnnouncement(entry.surfaceId)
+        installTouchBinding(entry.surfaceId, announcement)
+        installKeyboardBinding(entry.surfaceId, announcement)
+        installGestureBindings(entry.surfaceId, announcement)
     }
 
     /**
@@ -247,6 +281,72 @@ internal class UIKitWindowCommandPort(
             binding.install()
             observer?.install()
         }.onFailure(failureReporter::report)
+    }
+
+    /**
+     * L'installation du branchement touch (phase 5, Task 2) — la même posture que
+     * [installSurfaceObservation] : une seule fois (garde sous verrou), l'exception
+     * d'installation est rapportée et absorbée (un attach ne casse jamais pour un
+     * recognizer). Le sink est celui du port — chaque `TouchChanged` et chaque annonce
+     * rejoignent la même route que les stimuli d'observation. Task 3 : l'annonce passe par
+     * l'agrégat [UIKitInputAnnouncement] (snapshot complet des quatre faits).
+     */
+    private fun installTouchBinding(surfaceId: SurfaceId, announcement: UIKitInputAnnouncement) {
+        val binding = lock.withLock {
+            if (touchBinding != null) return
+            val created = UIKitTouchBinding(
+                view = view,
+                surfaceId = surfaceId,
+                publish = { stimulus -> stimulusSink(stimulus) },
+                announcement = announcement,
+            )
+            touchBinding = created
+            created
+        }
+        runCatching { binding.install() }.onFailure(failureReporter::report)
+    }
+
+    /**
+     * L'installation du branchement clavier GCKeyboard (phase 5, Task 3) — la même posture
+     * qu'[installTouchBinding] : une seule fois (garde sous verrou), l'exception rapportée et
+     * absorbée (un attach ne casse jamais pour un branchement d'input). Le binding écrit son
+     * fait dans l'agrégat et publie le snapshot — « clavier attaché » quand le scan initial
+     * trouve le clavier coalesqué, puis à chaque notification de connexion/déconnexion.
+     */
+    private fun installKeyboardBinding(surfaceId: SurfaceId, announcement: UIKitInputAnnouncement) {
+        val binding = lock.withLock {
+            if (keyboardBinding != null) return
+            val created = UIKitKeyboardBinding(
+                surfaceId = surfaceId,
+                announcement = announcement,
+                publish = { stimulus -> stimulusSink(stimulus) },
+            )
+            keyboardBinding = created
+            created
+        }
+        runCatching { binding.install() }.onFailure(failureReporter::report)
+    }
+
+    /**
+     * L'installation des branchements gestes + survol (phase 5, Task 3) — la même posture :
+     * une seule fois, l'exception rapportée et absorbée. Le binding écrit le fait pointeur
+     * (le survol installé — iOS seul, l'actual tvOS répond `null` et `pointerInstalled`
+     * reste à faux) puis l'ensemble EXACT des genres installés, et publie UN snapshot — la
+     * DERNIÈRE annonce d'install, donc celle qui porte l'agrégat complet.
+     */
+    private fun installGestureBindings(surfaceId: SurfaceId, announcement: UIKitInputAnnouncement) {
+        val binding = lock.withLock {
+            if (gestureBindings != null) return
+            val created = UIKitGestureBindings(
+                view = view,
+                surfaceId = surfaceId,
+                announcement = announcement,
+                publish = { stimulus -> stimulusSink(stimulus) },
+            )
+            gestureBindings = created
+            created
+        }
+        runCatching { binding.install() }.onFailure(failureReporter::report)
     }
 
     /**
@@ -336,26 +436,50 @@ internal class UIKitWindowCommandPort(
 
     /**
      * Le retrait du branchement (requestOpenedClose / beginClose / finishClose) : zéro observer
-     * résiduel (teardown du binding = tokens retirés + génération périmée), miroir remis à zéro.
-     * Idempotent — les trois chemins peuvent converger.
+     * résiduel (teardown du binding = tokens retirés + génération périmée), miroir remis à zéro,
+     * recognizer touch retiré de la vue avec annonce de révocation (Task 2 : la révocation suit
+     * le même point de cycle que l'installation), branchements clavier et gestes/survol retirés
+     * avec LEURS annonces (Task 3). L'ordre touch → clavier → gestes fait de la DERNIÈRE
+     * annonce de révocation le all-false + vide. Idempotent — les trois chemins peuvent
+     * converger.
      */
     private fun teardownSurfaceObservation() {
         val stale = lock.withLock {
-            if (observationBinding == null && appearanceObserver == null) {
+            if (observationBinding == null && appearanceObserver == null &&
+                touchBinding == null && keyboardBinding == null && gestureBindings == null
+            ) {
                 null
             } else {
                 val binding = observationBinding
                 val observer = appearanceObserver
+                val touch = touchBinding
+                val keyboard = keyboardBinding
+                val gestures = gestureBindings
                 observationBinding = null
                 appearanceObserver = null
                 surfaceMetrics = null
                 surfaceAppearance = null
-                binding to observer
+                touchBinding = null
+                keyboardBinding = null
+                gestureBindings = null
+                TouchToGestureStale(binding, observer, touch, keyboard, gestures)
             }
         } ?: return
-        stale.first?.teardown()
-        stale.second?.teardown()
+        stale.observation?.teardown()
+        stale.appearance?.teardown()
+        stale.touch?.teardown()
+        stale.keyboard?.teardown()
+        stale.gestures?.teardown()
     }
+
+    /** Le lot des branchements retirés d'un coup ([teardownSurfaceObservation]). */
+    private class TouchToGestureStale(
+        val observation: UIKitSurfaceObservationBinding?,
+        val appearance: UIKitAppearanceObserver?,
+        val touch: UIKitTouchBinding?,
+        val keyboard: UIKitKeyboardBinding?,
+        val gestures: UIKitGestureBindings?,
+    )
 
     /**
      * Phase 1 = snapshot initial figé (plan : les updates arrivent en phase 2). Posture AppKit

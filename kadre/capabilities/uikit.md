@@ -18,7 +18,14 @@ L'édition phase 4 ajoute la demande de fenêtre `requestWindow` : le refus sans
 app mono-fenêtre, BCK-020) et la corrélation multi-scènes iPadOS via le provider app-owned
 (`OpenedInNewSession` d'une session enfant COMPLÈTE et indépendante, BCK-021) — les
 fenêtres enfants ne sont jamais des `Window` Kadre : `Window.apply`/`attention`/`close`
-restent hors périmètre.
+restent hors périmètre. L'édition phase 5 ajoute l'ANNONCE des sources d'entrée : le
+recognizer de touch Kadre-owned additif (BCK-022), le fait pointeur par famille (survol
+iOS seul), le clavier physique par la route `GCKeyboard.coalescedKeyboard` et l'ensemble
+EXACT des gestes par famille (BCK-023) — quatre faits publiés dans UN agrégat
+`InputObservationChanged` par attach, révoqué au teardown ; les LIVRAISONS réelles
+(touch, touches clavier, gestes, survol) restent des charters manuels — aucune n'est
+synthétisable in-process honnêtement (ruling pré-vol), les compteurs du driver le prouvent
+(`touchEventCount == 0`, `keyboardEventCount == 0`, `gestureStimulusCount == 0`).
 
 **Portée de lecture.** Deux targets Kotlin partagent la sonde (`KadreUikitProbe`,
 `uikitMain`) : `iosSimulatorArm64` et `tvosSimulatorArm64`. La preuve O3 court dans des
@@ -87,7 +94,8 @@ publié == vivant après le changement de géométrie), jamais par une rotation 
   que des membres toujours présents (`UIView.window`, `UIWindow.windowScene`,
   `UIView.bounds`, `UITraitCollection.displayScale`).
 - **runtime gate** — ce dont dépend la *publication* : un run xcodebuild sur le
-  simulateur de chaque famille (les preuves `BCK-012` à `WIN-009` puis `BCK-015`/`BCK-016`),
+  simulateur de chaque famille (les preuves `BCK-012` à `WIN-009` puis `BCK-015`/`BCK-016`,
+  `BCK-020`/`BCK-021` et `BCK-022`/`BCK-023`),
   jamais une permission hôte.
 - **état absent** — ce qui n'est pas livré à ce stade, dit intégralement : depuis la
   phase 1, l'attach (`KadreIos.attach`), le cycle de vie par scène, le multi-scène iPadOS
@@ -102,8 +110,16 @@ publié == vivant après le changement de géométrie), jamais par une rotation 
   fenêtre `requestWindow` est livrée — refus pur sans provider (BCK-020) et corrélation
   multi-scènes via provider app-owned (BCK-021) — mais une fenêtre enfant n'est JAMAIS une
   `Window` Kadre : `Window.apply`/`attention`/`close` et toute opération sur l'enfant
-  restent hors périmètre (l'enfant est sa propre session UIKit complète) ; restent absents
-  sur ce target IME, drop, displays, devices, capture.
+  restent hors périmètre (l'enfant est sa propre session UIKit complète) ; depuis la
+  phase 5, les sources d'entrée sont ANNONCÉES — le recognizer de touch additif, le fait
+  pointeur par famille (survol iOS seul), le clavier physique (`GCKeyboard.coalescedKeyboard`)
+  et l'ensemble exact des gestes par famille, dans un agrégat `InputObservationChanged`
+  publié après l'installation et révoqué au teardown (BCK-022/BCK-023) — mais les
+  LIVRAISONS réelles restent des charters manuels : un touch `UITouch`, une touche
+  `GCKeyCode`, un geste ou un survol ne sont pas synthétisables in-process honnêtement
+  (ruling pré-vol ; les compteurs driver prouvent les zéros — `touchEventCount == 0`,
+  `keyboardEventCount == 0`, `gestureStimulusCount == 0`) ; restent absents
+  sur ce target IME (texte = phase 6), drop, displays, devices, capture.
   Le CHANGEMENT D'ÉCHELLE d'écran (`displayScale`) et le
   mode-change tvOS (`UIScreenModeDidChangeNotification` — observé mais sans stimulus
   programmatique sur simulateur) n'ont pas de preuve sur simulateur : charter manuel
@@ -114,7 +130,8 @@ publié == vivant après le changement de géométrie), jamais par une rotation 
   `tests/Ios/KadreUikitSurfaceIosTests.swift` compilée DANS la même classe XCTest pour la
   rotation, `KadreUikitWindowRequestTests` phase 4 — extension iOS-only
   `tests/Ios/KadreUikitWindowRequestIosTests.swift` compilée DANS la même classe XCTest
-  pour les scénarios multi-scènes), exécutée par
+  pour les scénarios multi-scènes, `KadreUikitInputTests` phase 5 — classe partagée, la
+  vérité par famille est assertée DANS les tests), exécutée par
   `./gradlew :kadre:contracts:driver:uikit:simulatorTests` et consommée par le validateur
   via l'export JUnit (`tools/xctest_to_junit.py`).
 
@@ -134,6 +151,8 @@ publié == vivant après le changement de géométrie), jamais par une rotation 
 | distribution XCFramework STATIQUE `KadreUikit.xcframework` (4 slices : `ios-arm64`, `ios-arm64-simulator`, `tvos-arm64`, `tvos-arm64-simulator` — `AvailableLibraries` du Info.plist) | iosArm64, iosSimulatorArm64, tvosArm64, tvosSimulatorArm64 | iOS 16.0 / tvOS 16.0 | `assembleKadreUikit{Debug,Release}XCFramework` (l'en-tête audité de §3 est celui des slices) | l'app consumer SE LANCE avec les DEUX archives statiques liées sans embed — toute duplication Obj-C au lancement (« Class … is implemented in both ») fait échouer le run | pas de publication binaire signée (artefact local de preuve, `build/` non commité) ; slices device (arm64) non exercées — simulateurs seuls ; l'en-tête ne porte aucun symbole surface-access (§3) | consumer gate (`iosSimulatorTests`/`tvosSimulatorTests`, garde `doLast` anti-duplication) |
 | `requestWindow` sans provider — refus `Rejected(Unsupported(RequestWindow))` avant toute réservation, aucun effet natif (chemin tvOS et tout app mono-fenêtre) | iosSimulatorArm64, tvosSimulatorArm64 | iOS 16.0 / tvOS 16.0 | `:kadre:platform:uikit:compileKotlin*` | BCK-020 (2 simulateurs) | le chemin provider (corrélation de scène, `OpenedInNewSession`) : hors sujet sans provider (BCK-021, iOS seul) ; `Window.apply`/`attention`/`close` : hors périmètre (une fenêtre enfant n'est jamais une `Window` Kadre) ; IME, drop, displays, devices, capture : non livré | `KadreUikitWindowRequestTests` |
 | `requestWindow` corrélé multi-scènes — provider app-owned, `OpenedInNewSession` d'une session enfant COMPLÈTE et indépendante (sa propre scène/surface/lifecycle ; le close du requérant détache l'enfant du destin du requérant — l'enfant survit) | iosSimulatorArm64 | iOS 16.0 (iPad) | `:kadre:platform:uikit:compileKotlin*` | BCK-021 (iPad Pro 11-inch (M5)) | tvOS : mono-scène par design (DESIGN.md §15.2) — le refus BCK-020 y porte le contrat ; `Window.apply`/`attention`/`close` sur une fenêtre enfant : hors périmètre (l'enfant n'est jamais une `Window` Kadre) ; IME, drop, displays, devices, capture : non livré | `KadreUikitWindowRequestTests` (extension `tests/Ios`) |
+| sources d'entrée touch et pointeur — recognizer de touch Kadre-owned additif (`cancelsTouchesInView == false`), fait pointeur par famille (survol iOS seul), annonce agrégée publiée après l'install et révoquée au teardown | iosSimulatorArm64, tvosSimulatorArm64 | iOS 16.0 / tvOS 16.0 | `:kadre:platform:uikit:compileKotlin*` | BCK-022 (2 simulateurs) | la LIVRAISON réelle d'un touch (`UITouch`) : charter manuel (pas synthétisable in-process — `touchEventCount == 0` prouvé) ; le survol est iOS seul (`API_UNAVAILABLE(tvos)`, klib sans la classe — tvOS reste `pointerInstalled == false` sans faux écrit) ; IME (texte = phase 6), drop, displays, devices, capture : non livré | `KadreUikitInputTests` |
+| sources d'entrée clavier et gestes — binding `GCKeyboard.coalescedKeyboard` (notifications de connexion + scan d'install, handler `keyChangedHandler`), ensemble EXACT des gestes par famille (iOS tap/pan/pinch/rotation, tvOS tap/pan), annonce agrégée publiée après l'install et révoquée au teardown | iosSimulatorArm64, tvosSimulatorArm64 | iOS 16.0 / tvOS 16.0 | `:kadre:platform:uikit:compileKotlin*` | BCK-023 (2 simulateurs) | la LIVRAISON réelle de touches : charter manuel (`keyboardEventCount == 0`, `gestureStimulusCount == 0` prouvés) ; `LogicalKey` toujours `Unidentified(null)` et modifiers toujours vides (la route GC ne porte ni `characters` ni FlagsChanged — le texte est la route UIKeyInput, phase 6) ; le clavier intégré iPad (non-GameController) : couverture non prouvée (limite documentée) ; handler `keyChangedHandler` process-global : limite mono-consumateur documentée (une seconde session attachée prend la livraison des touches, le teardown de la première la coupe pour la suivante — les annonces peuvent alors sur-déclarer `keyboardInstalled` ; arbitrage process-wide = follow-up) ; pinch/rotation : iOS seuls (absents du klib tvOS) ; `Cancelled`/`Failed` de geste : PERDUS par politique explicite (aucun état de geste retenu — DESIGN §15.2 le documente) ; la télécommande (bout réel) : charter manuel (XCUIRemote = UI-testing) ; binding micro-gamepad (Siri Remote — `valueChangedHandler`/`controllerPausedHandler`) : non livré (suivi phase suivante) ; IME, drop, displays, devices, capture : non livré | `KadreUikitInputTests` |
 
 Note de gate des lignes phase 3 (façade Swift, `KadreHostViewController`, distribution
 XCFramework) : le gate consumer (`consumers/swift`, 2 familles) tourne localement via
@@ -273,6 +292,65 @@ uikitTest kernel) ; aucune mutation à couture unique ne peut la traverser, et l
 pending (`maxPendingWindowRequests`) est du ressort kernel (uikitTest), sans test de borne
 au driver.
 
+La ligne BCK-022 se lit : l'attach pose LE recognizer de touch Kadre (`UIKitTouchRecognizer`,
+sous-classe Kotlin de `UIGestureRecognizer` exportée `@ExportObjCClass` + `@ObjCAction`) sur
+la vue du host — ADDITIVEMENT (`cancelsTouchesInView == false`, la décision tracée : le host
+garde ses touches ; les SEULS recognizers ajoutés sont ceux de Kadre) — publie
+`InputObservationChanged(touchInstalled = true)` après l'installation, puis révoque tout au
+close (recognizer retiré, annonce all-false, zéro résiduel). Le fait POINTEUR est prouvé PAR
+FAMILLE dans le scénario partagé (`uikit-input-pointer-source-per-family`) : le survol
+s'installe LÀ OÙ LE KLIB LE PORTE (iOS : `hoverInstallCount` bouge ; tvOS : la classe est
+absente du klib — `pointerInstalled` reste faux sans faux écrit) et suit le même retrait. La
+LIVRAISON réelle d'un touch reste un charter manuel (ruling pré-vol : pas synthétisable
+in-process ; `touchEventCount == 0` et `touchStimulusCount == 0` sont des invariants PROUVÉS
+du driver, jamais un silence). Deux sentinelles : `uikit-input-touch-additive-policy`
+(mutation : le recognizer Kadre pose `cancelsTouchesInView = true` — le host perd ses
+touches) est tuée par `testTouchRecognizerInstalledAdditivelyWithHonestAnnouncement`
+(XCTAssertFalse « the traced additive policy: the host view keeps its touches », ligne 170) ;
+LE MÊME mutant tue `testGestureAndKeyboardSourcesInstalledAdditivelyPerFamily` (le prédicat
+`cancelsTouchesInViewAll` couvre le même recognizer — rayon DEUX tests, couture partagée,
+preuve citée sur tvOS, 22 exécutés / 2 échecs, même chemin binaire uikitMain sur iOS) ;
+`uikit-input-announcement-revoked-at-close` (mutation : le teardown du touch ne publie plus
+la révocation — l'annonce de morte ne part jamais) est tuée par
+`testTouchRecognizerRemovedAndAnnouncementRevokedAtClose` SEUL (XCTAssertGreaterThanOrEqual
+« ("11") is less than ("12") - the all-false revocation announcement must have been
+published », ligne 290 — les compteurs d'annonce sont PAR binding : les révocations
+clavier/gestes du même teardown ne masquent pas le trou ; preuve citée sur tvOS, 22
+exécutés / 1 échec).
+
+La ligne BCK-023 se lit : le binding clavier pose D'ABORD les observers de connexion
+(`GCKeyboardDidConnect/DidDisconnect`), puis scanne `GCKeyboard.coalescedKeyboard` — sur un
+simulateur qui appareille un clavier physique (« Connect Hardware Keyboard »), l'attach à ce
+VRAI objet est un fait vrai, jamais une fabrication (`keyboardConnectCount` ne décroît
+jamais, peut légitimement croître) ; l'ensemble EXACT des recognizers de geste par famille
+(iOS tap/pan/pinch/rotation, tvOS tap/pan — le klib tvOS ne porte ni pinch ni rotation, ni
+le survol) est sur la vue, chaque recognizer `cancelsTouchesInView == false`, et
+`gestureKinds` PORTE cet ensemble exact (jamais un de plus). Les LIVRAISONS réelles restent
+des charters manuels : `keyboardEventCount == 0`, `keyboardStimulusCount == 0` et
+`gestureStimulusCount == 0` sont des invariants PROUVÉS du driver — et la payload d'une
+future livraison est bornée par le kernel : `LogicalKey` toujours `Unidentified(null)` et
+modifiers toujours vides sur la route GC (pas de `characters`, pas de FlagsChanged — le
+texte attend la route UIKeyInput, phase 6), le mapping code inconnu/hors-domaine →
+`Unidentified(null)` est prouvé en uikitTest (`UIKitKeyboardHoverMappingTest`) HORS du
+pipeline driver (aucune livraison automatisable — aucune sentinelle driver n'est donc
+enregistrée pour ce fait, choix documenté), de même que la perte explicite des phases
+`Cancelled`/`Failed` de geste (`UIKitGestureStatePhaseTest` — aucun état de geste retenu au
+runtime ; la perte est documentée au DESIGN §15.2, Task 5). Deux sentinelles :
+`uikit-input-keyboard-binding-live` (mutation : l'`install()` du clavier retourne immédiatement
+— binding mort, ni observers, ni scan, ni annonce) est tuée par
+`testGestureAndKeyboardSourcesInstalledAdditivelyPerFamily` SEUL (XCTAssertGreaterThan
+« ("0") is not greater than ("0") - the keyboard binding install counter must have moved »,
+ligne 223 ; le compteur de teardown, indépendant, bouge encore — le test de révocation reste
+vert ; preuve citée sur tvOS, 22 exécutés / 1 échec) ; `uikit-input-gesture-set-exact`
+(mutation : l'install pose tous les recognizers SAUF le pan — l'ensemble de la vue dérive de
+l'ensemble annoncé) est tuée par `testGestureAndKeyboardSourcesInstalledAdditivelyPerFamily`
+(XCTAssertEqual — « UIPanGestureRecognizer » absent de l'ensemble de la vue, ligne 213) ;
+le MÊME mutant tue les DEUX tests touch (compte total de la vue : 2 ≠ 3, ligne 173 ; retour
+au baseline : 0 ≠ −1, ligne 286) — rayon TROIS tests, physiquement inévitable et honnête :
+l'inventaire des recognizers de la vue est UNE couture portée par les trois assertions
+(miroir du rayon de la sentinelle rotation, phase 2) ; preuve citée sur tvOS, 22 exécutés /
+3 échecs.
+
 ## 3. Audit de l'en-tête framework (phase 3 — clôture de la divergence F1)
 
 La phase 2 avait enregistré une divergence (F1) : la règle Kotlin-only d'INTEROP-EXPORTS
@@ -302,10 +380,22 @@ Inventaire d'audit de l'en-tête régénéré (grep du 2026-10-11, cible
 - **Scaffolding driver — visible VOLONTAIREMENT** : les sondes de conduite
   (`KadreUikitProbe`, `KadreUikitObservation`, `KadreUikitWindowMembership`,
   `KadreUikitSurfaceDriver` et ses résultats `KadreUikitLeaseProbe` /
-  `KadreUikitClosedLeaseProbe` / `KadreUikitSurfaceEventCapture`) — instrumentation des
-  suites XCTest (phases 0-3), hors de la surface promise §5, opt-in `@KadrePlatformApi`,
-  documentées comme telles dans leur KDoc. Les masquer casserait les gates phase 2/3 (les
-  tests Swift les pilotent directement) — elles restent donc listées ici, pas cachées.
+  `KadreUikitClosedLeaseProbe` / `KadreUikitSurfaceEventCapture`), la sonde de
+  reconnaissance du touch (`touchRecognitionProbe` — résultat portant
+  `recognizerAttached`/`recognizerOverridesTouchesBeganImp`/`recognizerObjCClassName`/
+  `cancelsTouchesInView`/`recognizerEnabled`/`totalGestureRecognizers`, phase 5) et la
+  sonde des recognizers de geste (`gestureRecognitionProbe` — `recognizerClassNames` +
+  `cancelsTouchesInViewAll`, phase 5), plus les compteurs d'entrée du driver
+  (`KadreUikitSurfaceDriver` : touch `touchInstallCount`/`touchTeardownCount`/
+  `touchEventCount`/`touchStimulusCount`/`touchAnnouncementCount` ; clavier
+  `keyboardInstallCount`/`keyboardTeardownCount`/`keyboardConnectCount`/
+  `keyboardEventCount`/`keyboardStimulusCount`/`keyboardAnnouncementCount` ; gestes et
+  survol `gestureInstallCount`/`gestureTeardownCount`/`hoverInstallCount`/
+  `hoverTeardownCount`/`gestureStimulusCount`/`gestureAnnouncementCount`) —
+  instrumentation des suites XCTest (phases 0-5), hors de la surface promise §5, opt-in
+  `@KadrePlatformApi`, documentées comme telles dans leur KDoc. Les masquer casserait les
+  gates phase 2/3/5 (les tests Swift les pilotent directement) — elles restent donc
+  listées ici, pas cachées.
 - **Masqué (`@HiddenFromObjC`)** : `withUIKitView` — grep d'audit `withUIKitView` = **0**
   sur les deux en-têtes simulateur post-édition (la classe porteuse
   `KadreUikitUIKitSurfaceAccessKt` a disparu de l'en-tête) : aucun symbole surface-access

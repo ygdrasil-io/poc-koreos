@@ -6,6 +6,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.cinterop.ExperimentalForeignApi
 import org.graphiks.kadre.diagnostics.DelicateKadreApi
 import org.graphiks.kadre.diagnostics.KadreFailure
 import org.graphiks.kadre.diagnostics.KadreOperation
@@ -13,10 +14,26 @@ import org.graphiks.kadre.diagnostics.KadrePlatformApi
 import org.graphiks.kadre.diagnostics.KadreResult
 import org.graphiks.kadre.internal.runtime.RuntimeLock
 import org.graphiks.kadre.internal.runtime.withLock
+import org.graphiks.kadre.internal.uikit.UIKitGestureCount
+import org.graphiks.kadre.internal.uikit.UIKitKeyboardCount
 import org.graphiks.kadre.internal.uikit.UIKitObservationCount
+import org.graphiks.kadre.internal.uikit.UIKitTouchCount
+import org.graphiks.kadre.internal.uikit.UIKitTouchRecognizer
 import org.graphiks.kadre.surface.HostSurface
 import org.graphiks.kadre.surface.SurfaceEvent
+import kotlinx.cinterop.ObjCClass
+import kotlinx.cinterop.rawValue
+import kotlinx.cinterop.toKString
+import platform.Foundation.NSSelectorFromString
+import platform.objc.class_getMethodImplementation
+import platform.objc.class_getName
+import platform.objc.objc_getClass
+import platform.objc.object_getClass
+import platform.UIKit.UIGestureRecognizer
 import platform.UIKit.UIView
+
+/** Le sélecteur exact de la livraison du premier contact (le hook que la base implémente vide). */
+private const val TOUCH_DELIVERY_SELECTOR = "touchesBegan:withEvent:"
 
 /**
  * Résultat du probe de bail ([KadreUikitSurfaceDriver.leaseProbe]) — les faits copiés, jamais
@@ -133,6 +150,45 @@ public class KadreUikitSurfaceEventCapture private constructor(surface: HostSurf
 }
 
 /**
+ * Résultat du probe STRUCTUREL du touch ([KadreUikitSurfaceDriver.touchRecognitionProbe]) :
+ * les faits copiés de la vue, jamais les objets. [recognizerAttached] — la vue porte bien LE
+ * recognizer Kadre (vérifié par le type Kotlin côté module, jamais par un nom) ;
+ * [cancelsTouchesInView] — la politique additive tracée (la vue du host garde ses touches,
+ * `false` attendu) ; [recognizerOverridesTouchesBeganImp] — la preuve DISCRIMINANTE du SPIKE
+ * (revue I2) : l'IMP du sélecteur de livraison `touchesBegan:withEvent:` sur LA CLASSE
+ * PROPRISSAIRE de l'instance diffère de l'IMP de la classe de base — ce qui n'est VRAI que si
+ * l'export `@ExportObjCClass` + `@ObjCAction` est vivant (le trampoline K/N remplace le hook
+ * vide hérité). Un `respondsToSelector:` ne discriminait RIEN (TOUT recognizer y répond, la
+ * base implémente les hooks) — un recognizer qui hériterait le hook vide sans l'exporter
+ * ÉCHOUE ce prédicat, la régression silencieuse devient rouge. [recognizerObjCClassName] — le
+ * nom Obj-C de la classe propriétaire (l'enregistrement `@ExportObjCClass` attendu) ;
+ * [recognizerEnabled] — le recognizer est actif ; [totalGestureRecognizers] — le compte TOTAL
+ * des recognizers de la vue (l'additivité se lit ici : le host garde les siens, Kadre
+ * n'ajoute que le sien).
+ */
+public class KadreUikitTouchRecognitionProbe(
+    public val recognizerAttached: Boolean,
+    public val cancelsTouchesInView: Boolean,
+    public val recognizerOverridesTouchesBeganImp: Boolean,
+    public val recognizerObjCClassName: String,
+    public val recognizerEnabled: Boolean,
+    public val totalGestureRecognizers: Int,
+)
+
+/**
+ * Résultat du probe STRUCTUREL des gestes et du survol ([KadreUikitSurfaceDriver.gestureRecognitionProbe])
+ * — les faits copiés de la vue, jamais les objets : le NOM Obj-C de CHAQUE recognizer posé
+ * (`class_getName` — les recognizers Kadre de Task 3 sont des recognizers STANDARD, le nom est
+ * celui de la classe Apple : le test distingue par le compte et par l'ensemble exact) et la
+ * politique additive de TOUS ([cancelsTouchesInViewAll] — chaque recognizer posé par Kadre porte
+ * `false` : le host garde ses touches).
+ */
+public class KadreUikitGestureRecognitionProbe(
+    public val recognizerClassNames: List<String>,
+    public val cancelsTouchesInViewAll: Boolean,
+)
+
+/**
  * La sonde de CONDUITE de surface du driver UIKit/tvOS (phase 2) — le prolongement naturel de
  * [KadreUikitProbe] (phase 0) : les chemins Kotlin-only du module (le bail natif de la
  * surface — l'extension d'accès plateforme d'`UIKitSurfaceAccess` — et le `Flow`
@@ -228,4 +284,167 @@ public object KadreUikitSurfaceDriver {
     /** Le compteur des re-lectures d'observation réellement exécutées (le compteur du fixture). */
     public val observationCount: Long
         get() = UIKitObservationCount.total()
+
+    /**
+     * Le probe STRUCTUREL du touch (phase 5, Task 2) : l'état des recognizers de [view] lu du
+     * côté Kotlin, où le recognizer Kadre est identifiable par son TYPE (interne au module —
+     * Swift ne peut pas le nommer, la sonde copie les faits, même discipline que les autres
+     * probes). La preuve du SPIKE ([KadreUikitTouchRecognitionProbe.recognizerOverridesTouchesBeganImp])
+     * est la vérification d'exécution DISCRIMINANTE du sous-classement : l'IMP propre de la
+     * classe de l'instance diffère de celui de la base pour le sélecteur de livraison.
+     */
+    @OptIn(ExperimentalForeignApi::class)
+    public fun touchRecognitionProbe(view: UIView): KadreUikitTouchRecognitionProbe {
+        val recognizers: List<*> = view.gestureRecognizers.orEmpty()
+        val kadre = recognizers.firstOrNull { it is UIKitTouchRecognizer }
+        val recognizer = kadre as? UIKitTouchRecognizer
+        return KadreUikitTouchRecognitionProbe(
+            recognizerAttached = recognizer != null,
+            cancelsTouchesInView = recognizer?.cancelsTouchesInView ?: false,
+            recognizerOverridesTouchesBeganImp = recognizer?.let(::overridesBaseTouchHook) == true,
+            recognizerObjCClassName = recognizer?.let(::objcClassNameOf).orEmpty(),
+            recognizerEnabled = recognizer?.isEnabled() ?: false,
+            totalGestureRecognizers = recognizers.size,
+        )
+    }
+
+    /**
+     * Le probe STRUCTUREL des gestes et du survol (phase 5, Task 3) : le NOM Obj-C de chaque
+     * recognizer posé sur [view] (`class_getName` — les recognizers de Task 3 sont des
+     * recognizers STANDARD, le test lit l'ensemble exact des noms et la politique additive de
+     * tous). Le compte par famille est la vérité du klib : iOS = tap/pan/pinch/rotation +
+     * survol ; tvOS = tap/pan seuls (pinch/rotation absents du klib tvOS, survol
+     * `API_UNAVAILABLE` — cf. le KDoc de `UIKitGestureBindings`).
+     */
+    @OptIn(ExperimentalForeignApi::class)
+    public fun gestureRecognitionProbe(view: UIView): KadreUikitGestureRecognitionProbe {
+        val recognizers: List<*> = view.gestureRecognizers.orEmpty()
+        val names = recognizers.mapNotNull { recognizer ->
+            recognizer?.let(::objcClassNameOf)?.takeIf { it.isNotEmpty() }
+        }
+        val cancellations = recognizers.mapNotNull { recognizer ->
+            (recognizer as? UIGestureRecognizer)?.cancelsTouchesInView
+        }
+        return KadreUikitGestureRecognitionProbe(
+            recognizerClassNames = names,
+            cancelsTouchesInViewAll = cancellations.isNotEmpty() && cancellations.all { !it },
+        )
+    }
+
+    /**
+     * Le prédicat discriminant de la revue I2 : l'IMP du sélecteur de livraison sur la classe
+     * PROPRE de l'instance (`object_getClass` — pas la hiérarchie) diffère de l'IMP de la
+     * classe de base `UIGestureRecognizer`. VRAI uniquement quand l'export Kotlin
+     * (`@ExportObjCClass` + `@ObjCAction`) a posé son trampoline sur la sous-classe ; FAUX
+     * pour tout recognizer qui hériterait le hook vide de la base — exactement la régression
+     * silencieuse qu'un `respondsToSelector:` (toujours vrai, la base implémente les hooks)
+     * ne voyait pas.
+     */
+    @OptIn(ExperimentalForeignApi::class)
+    private fun overridesBaseTouchHook(recognizer: UIKitTouchRecognizer): Boolean {
+        val selector = NSSelectorFromString(TOUCH_DELIVERY_SELECTOR)
+        val ownClass = object_getClass(recognizer) ?: return false
+        val baseClass = objc_getClass("UIGestureRecognizer") as? ObjCClass ?: return false
+        val ownImp = class_getMethodImplementation(ownClass, selector) ?: return false
+        val baseImp = class_getMethodImplementation(baseClass, selector) ?: return false
+        return ownImp.rawValue != baseImp.rawValue
+    }
+
+    /** Le nom Obj-C de la classe propriétaire de [instance] (`class_getName`). */
+    @OptIn(ExperimentalForeignApi::class)
+    private fun objcClassNameOf(instance: Any): String =
+        object_getClass(instance)?.let { cls -> class_getName(cls)?.toKString() }.orEmpty()
+
+    /** Les installations de recognizer touch réellement exécutées (le compteur du fixture). */
+    public val touchInstallCount: Long
+        get() = UIKitTouchCount.totalInstalls()
+
+    /** Les retraits de recognizer touch réellement exécutés (le compteur du fixture). */
+    public val touchTeardownCount: Long
+        get() = UIKitTouchCount.totalTeardowns()
+
+    /**
+     * Les livraisons d'`UITouch` réellement reçues par le recognizer (le compteur du SPIKE en
+     * vraies touches : zéro attendu sur toute suite automatisée — aucun touch n'est
+     * synthétisable in-process honnêtement ; son incrémentation sur le charter manuel est la
+     * preuve Task 4 de la livraison réelle).
+     */
+    public val touchEventCount: Long
+        get() = UIKitTouchCount.totalEvents()
+
+    /** Les stimuli `TouchChanged` réellement publiés par le binding. */
+    public val touchStimulusCount: Long
+        get() = UIKitTouchCount.totalStimuli()
+
+    /**
+     * Les annonces `InputObservationChanged` réellement publiées par le binding (l'installation
+     * ET la révocation — deux publications par cycle de session attendues). La RÉCEPTION par le
+     * runtime (capabilities d'input) reste la preuve contractuelle Task 4.
+     */
+    public val touchAnnouncementCount: Long
+        get() = UIKitTouchCount.totalAnnouncements()
+
+    // MARK: - Compteurs clavier GCKeyboard (phase 5, Task 3) — le proxy du driver, même posture.
+
+    /** Les installations du binding clavier réellement exécutées (le compteur du fixture). */
+    public val keyboardInstallCount: Long
+        get() = UIKitKeyboardCount.totalInstalls()
+
+    /** Les retraits du binding clavier réellement exécutés (le compteur du fixture). */
+    public val keyboardTeardownCount: Long
+        get() = UIKitKeyboardCount.totalTeardowns()
+
+    /**
+     * Les connexions de source clavier réellement ACCEPTÉES (le handler posé sur le clavier
+     * coalesqué — zéro attendu sur toute suite automatisée : aucun clavier physique ne se
+     * connecte à un simulateur ; son incrémentation sur le charter manuel est la preuve Task 4).
+     */
+    public val keyboardConnectCount: Long
+        get() = UIKitKeyboardCount.totalConnects()
+
+    /**
+     * Les livraisons de touches réellement reçues du `keyChangedHandler` (zéro attendu sur une
+     * suite automatisée — cf. [keyboardConnectCount] ; l'incrémentation sur le charter manuel
+     * Task 4 est la preuve de la vraie touche).
+     */
+    public val keyboardEventCount: Long
+        get() = UIKitKeyboardCount.totalEvents()
+
+    /** Les stimuli `KeyChanged` réellement publiés par le binding clavier. */
+    public val keyboardStimulusCount: Long
+        get() = UIKitKeyboardCount.totalStimuli()
+
+    /** Les annonces `InputObservationChanged` déclenchées par le binding clavier. */
+    public val keyboardAnnouncementCount: Long
+        get() = UIKitKeyboardCount.totalAnnouncements()
+
+    // MARK: - Compteurs gestes + survol (phase 5, Task 3) — même posture.
+
+    /** Les recognizers de geste réellement posés sur la vue (un compteur par recognizer). */
+    public val gestureInstallCount: Long
+        get() = UIKitGestureCount.totalInstalls()
+
+    /** Les recognizers de geste réellement retirés de la vue. */
+    public val gestureTeardownCount: Long
+        get() = UIKitGestureCount.totalTeardowns()
+
+    /** Les installations du recognizer de survol (iOS ; zéro côté tvOS par construction). */
+    public val hoverInstallCount: Long
+        get() = UIKitGestureCount.totalHoverInstalls()
+
+    /** Les retraits du recognizer de survol (iOS ; zéro côté tvOS par construction). */
+    public val hoverTeardownCount: Long
+        get() = UIKitGestureCount.totalHoverTeardowns()
+
+    /**
+     * Les stimuli `Gesture`/`Pointer*` réellement publiés par les bindings de gestes (zéro
+     * attendu sur une suite automatisée — aucun geste n'est synthétisable in-process
+     * honnêtement ; le charter manuel Task 4 incrémentera).
+     */
+    public val gestureStimulusCount: Long
+        get() = UIKitGestureCount.totalStimuli()
+
+    /** Les annonces `InputObservationChanged` déclenchées par le binding gestes/survol. */
+    public val gestureAnnouncementCount: Long
+        get() = UIKitGestureCount.totalAnnouncements()
 }
