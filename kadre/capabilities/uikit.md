@@ -6,10 +6,13 @@ implémentation, un fichier public `capabilities/<adapter>.md` à sept colonnes 
 format est celui de `kadre/capabilities/web.md` ; la première édition (phase 0) ne portait
 qu'une ligne — la preuve O3 qu'un hôte UIKit réel peut transmettre des objets
 `UIWindow`/`UIView` à du code Kotlin/Native et que celui-ci en publie une lecture immédiate,
-copiée et honnête. La présente édition (phase 1) ajoute la livraison d'`KadreIos.attach` :
+copiée et honnête. L'édition phase 1 a ajouté la livraison d'`KadreIos.attach` :
 une session par `UIWindowScene`, le cycle de vie conduit par les notifications de scène
 réelles, le multi-scène iPadOS et l'identité de la fenêtre primaire — chacune portée par sa
-ligne, avec ses sentinelles.
+ligne, avec ses sentinelles. L'édition phase 3 ajoute la façade Swift `KadreHost`
+(contrat §5 d'INTEROP-EXPORTS), le `KadreHostViewController`, la distribution XCFramework
+statique et l'audit de l'en-tête framework (§3 ci-dessous) — l'inventaire qui clôt la
+divergence F1 de la phase 2 par suppression (`@HiddenFromObjC` sur `withUIKitView`).
 
 **Portée de lecture.** Deux targets Kotlin partagent la sonde (`KadreUikitProbe`,
 `uikitMain`) : `iosSimulatorArm64` et `tvosSimulatorArm64`. La preuve O3 court dans des
@@ -85,7 +88,11 @@ publié == vivant après le changement de géométrie), jamais par une rotation 
   et l'identité de la fenêtre primaire sont livrés ; depuis la phase 2, les observations
   dynamiques de surface (métriques, thème, visibilité — re-lectures sur déclencheurs SDK
   réels), le redraw coalescé, l'`apply` fermé, le bail d'accès natif `withUIKitView` et la
-  rotation iPadOS (stimulus dégradé, cf. note ci-dessus) sont livrés ; restent absents sur
+  rotation iPadOS (stimulus dégradé, cf. note ci-dessus) sont livrés ; depuis la phase 3,
+  la façade Swift `KadreHost` (contrat §5), le `KadreHostViewController`, la distribution
+  XCFramework statique et l'audit de l'en-tête framework sont livrés — et l'appel Swift du
+  bail RESTE ABSENT par décision : `withUIKitView` est Kotlin-only strict, masqué des
+  exports Obj-C/Swift (`@HiddenFromObjC`, audit §3) ; restent absents sur
   ce target IME, drop, displays, devices, capture — et toute surface au-delà de la fenêtre
   primaire fournie par le host. Le CHANGEMENT D'ÉCHELLE d'écran (`displayScale`) et le
   mode-change tvOS (`UIScreenModeDidChangeNotification` — observé mais sans stimulus
@@ -110,6 +117,9 @@ publié == vivant après le changement de géométrie), jamais par une rotation 
 | observations dynamiques de surface, redraw coalescé et `apply` fermé | iosSimulatorArm64, tvosSimulatorArm64 | iOS 16.0 / tvOS 16.0 | `:kadre:platform:uikit:compileKotlin*` | BCK-015 (2 simulateurs) | occlusion (restera `Visible`), changement d'échelle d'écran et mode-change tvOS : pas de stimulus programmatique sur simulateur (charter manuel) ; IME, drop, displays, devices, capture : non livré | `KadreUikitSurfaceTests` |
 | bail d'accès natif `withUIKitView` (platformAccess) | iosSimulatorArm64, tvosSimulatorArm64 | iOS 16.0 / tvOS 16.0 | `:kadre:platform:uikit:compileKotlin*` | BCK-015 (2 simulateurs) | la UIView n'est valide qu'au retour du block (jamais retenue) ; après close : `Unsupported(PlatformSurfaceAccess)` déterministe ; IME, drop, displays, devices, capture : non livré | `KadreUikitSurfaceTests` |
 | rotation iPadOS de la surface | iosSimulatorArm64 | iOS 16.0 (iPad) | `:kadre:platform:uikit:compileKotlin*` | BCK-016 (iPad Pro 11-inch (M5)) | rotation RÉELLE non exercée : `requestGeometryUpdate` refusé 3 voies sur ce runtime — kill porté par la branche DÉGRADÉE (resize à changement d'aspect, fidélité géométrique publié == vivant) ; rotation réelle = runtime qui accepte `requestGeometryUpdate` (charter manuel / runtime futur) ; tvOS : hors sujet (pas de rotation) ; IME, drop, displays, devices, capture : non livré | `KadreUikitSurfaceTests` (extension `tests/Ios`) |
+| façade Swift `KadreHost` (contrat INTEROP §5 : `KadreIosHost.attach`, `KadreSessionHandle`, value model fermé) + inventaire d'audit de l'en-tête (§3) | iosSimulatorArm64, tvosSimulatorArm64 (sources Swift `platform/uikit/swift/Sources/KadreHost`, compilées dans l'app consumer) | iOS 16.0 / tvOS 16.0 | compile du consumer `KadreSwiftConsumer.xcodeproj` (les symboles Kotlin traversent par `swift_name`, xcframework lié sans embed) | consumer gate (`iosSimulatorTests`/`tvosSimulatorTests` — la factory du module Kotlin applicatif traverse jusqu'à l'attach ; pré-absence de `Flow`/`Continuation`/`Throwable` dans la façade épinglée) | `withUIKitView` depuis Swift : NON promis — Kotlin-only strict (`@HiddenFromObjC`, audit phase 3, §3) ; module `integration:swiftui` : non matérialisé (le wrapper `UIViewControllerRepresentable` ~10 lignes est possédé par l'app, INTEROP §5) ; managers/flows/frames : non promis | suites consumer-app (`KadreHostMappingTests`, `KadreSessionHandleTests`, `ConsumerAttachTests`) |
+| `KadreHostViewController` (attach exactement une fois quand sa view appartient à une `UIWindow`/`UIWindowScene` ; la view passée EST `self.view`) | iosSimulatorArm64, tvosSimulatorArm64 | iOS 16.0 / tvOS 16.0 | compile du consumer `KadreSwiftConsumer.xcodeproj` | consumer gate (`iosSimulatorTests`/`tvosSimulatorTests`) | zéro layout Kadre (promesse §5) ; re-attach après `close` hors promesse (budget d'attach unique) ; déconnexion observer seulement au `deinit` (close la laisse — bénin, weak self) | suite consumer-app (`KadreHostViewControllerTests`) |
+| distribution XCFramework STATIQUE `KadreUikit.xcframework` (4 slices : `ios-arm64`, `ios-arm64-simulator`, `tvos-arm64`, `tvos-arm64-simulator` — `AvailableLibraries` du Info.plist) | iosArm64, iosSimulatorArm64, tvosArm64, tvosSimulatorArm64 | iOS 16.0 / tvOS 16.0 | `assembleKadreUikit{Debug,Release}XCFramework` (l'en-tête audité de §3 est celui des slices) | l'app consumer SE LANCE avec les DEUX archives statiques liées sans embed — toute duplication Obj-C au lancement (« Class … is implemented in both ») fait échouer le run | pas de publication binaire signée (artefact local de preuve, `build/` non commité) ; slices device (arm64) non exercées — simulateurs seuls ; l'en-tête ne porte aucun symbole surface-access (§3) | consumer gate (`iosSimulatorTests`/`tvosSimulatorTests`, garde `doLast` anti-duplication) |
 
 La ligne phase 0 se lit : `KadreUikitProbe.observe(window:view:)` publie une
 `KadreUikitObservation` copiée (appartenance à la fenêtre via `isEqual`, connexion de la
@@ -199,3 +209,52 @@ portant les deux morts). Le kill est PORTÉ PAR LA FIDÉLITÉ GÉOMÉTRIQUE DU C
 réelle : la rotation réelle est réservée à un runtime qui accepte
 `requestGeometryUpdate` (charter manuel / runtime futur) — la branche réelle du test
 (fidélité exacte de l'échange portrait↔paysage) reste codée et s'exécutera alors.
+
+## 3. Audit de l'en-tête framework (phase 3 — clôture de la divergence F1)
+
+La phase 2 avait enregistré une divergence (F1) : la règle Kotlin-only d'INTEROP-EXPORTS
+§7 était tenue par la façade promise, mais l'en-tête généré du framework
+(`KadreUikit.framework/Headers/KadreUikit.h`) exportait physiquement
+`UIKitSurfaceAccessKt.withUIKitView(_:block:completionHandler:)` — symbole porteur de
+`UIView*`. L'audit façade de la phase 3 la clôt PAR SUPPRESSION : `@HiddenFromObjC`
+(`kotlin.native`, opt-in `ExperimentalObjCRefinement` — le mécanisme stable qu'INTEROP §2
+attendait pour appliquer l'annotation aux actuals) masque la fonction des exports
+Obj-C/Swift. La preuve phase 2 ne passe PAS par cet export (vérifié par grep des sources
+Swift driver et consumer avant édition : zéro appel — les suites pilotent la sonde Kotlin
+`KadreUikitSurfaceDriver.leaseProbe`/`closedLeaseProbe`), donc aucun gate n'est affaibli.
+INTEROP §7 est amendé dans le même changement : la règle Kotlin-only vaut pour la façade
+ET pour l'en-tête framework.
+
+Inventaire d'audit de l'en-tête régénéré (grep du 2026-10-11, cible
+`iosSimulatorArm64/debugFramework` ; tvOS identique) — 7197 lignes, 483 `@interface`,
+101 `@protocol` (contre 7228 / 484 / 101 AVANT l'audit) :
+
+- **Contrat — la surface promise §5, visible et supportée** : `KadreIos.attach`
+  (`KadreUikitKadreIos`, `attachWindowScene:window:surfaceView:applicationFactory:policy:completionHandler:`),
+  la factory (`@protocol KadreUikitKadreApplicationFactory` — référence passée par le
+  module applicatif Kotlin), la session (`@protocol KadreUikitKadreSession`), les types de
+  policy (`KadrePolicy` et builders) et le value model session/état/outcome + failures
+  (famille `KadreResult`/`KadreFailure`, exportée avec foundation pour que la session
+  rendue par `attach` soit utilisable depuis Swift).
+- **Scaffolding driver — visible VOLONTAIREMENT** : les sondes de conduite
+  (`KadreUikitProbe`, `KadreUikitObservation`, `KadreUikitWindowMembership`,
+  `KadreUikitSurfaceDriver` et ses résultats `KadreUikitLeaseProbe` /
+  `KadreUikitClosedLeaseProbe` / `KadreUikitSurfaceEventCapture`) — instrumentation des
+  suites XCTest (phases 0-3), hors de la surface promise §5, opt-in `@KadrePlatformApi`,
+  documentées comme telles dans leur KDoc. Les masquer casserait les gates phase 2/3 (les
+  tests Swift les pilotent directement) — elles restent donc listées ici, pas cachées.
+- **Masqué (`@HiddenFromObjC`)** : `withUIKitView` — grep d'audit `withUIKitView` = **0**
+  sur les deux en-têtes simulateur post-édition (la classe porteuse
+  `KadreUikitUIKitSurfaceAccessKt` a disparu de l'en-tête) : aucun symbole surface-access
+  n'apparaît plus dans l'en-tête, la règle INTEROP §7 y est désormais vraie.
+- **Détail généré toléré** : tout le reste — l'export transitif de foundation (les 483
+  interfaces/101 protocoles incluent les types window/surface/input/capture non promis) —
+  statut INTEROP §1 (« détail généré ») et §2 (« les symboles non promis peuvent
+  physiquement apparaître dans un bytecode/header généré tant que le toolchain ne permet
+  pas de les cacher ») ; les tests interop les ignorent, aucun sample/document ne les
+  utilise.
+
+La distribution XCFramework statique (Task 1) porte le même en-tête audité : ses quatre
+slices (`ios-arm64`, `ios-arm64-simulator`, `tvos-arm64`, `tvos-arm64-simulator`, listés
+dans `AvailableLibraries` du `Info.plist`) sont rassemblées depuis le même binaire
+`KadreUikit` — le grep = 0 vaut pour les slices du xcframework réassemblé.

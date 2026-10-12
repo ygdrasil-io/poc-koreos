@@ -592,11 +592,12 @@ final class KadreUikitSurfaceTests: XCTestCase {
     /// (la route du registre est retirée au close — `Closed(Surface)` n'est que la course en vol).
     /// Tue la sentinelle uikit-lease-closed-after-terminal.
     ///
-    /// VOIE : `withUIKitView` EST exporté vers Swift (KadreUikit.h,
-    /// `KadreUikitUIKitSurfaceAccessKt.withUIKitView(_:block:completionHandler:)`) ; la preuve
-    /// passe par la sonde Kotlin car l'exigence de bail concurrent DANS le premier callback est
-    /// matériellement plus propre en Kotlin (closures + vérification single-flight), pas parce
-    /// que l'API est inexportable.
+    /// VOIE (audit façade phase 3) : `withUIKitView` n'est PLUS exporté vers Swift — masqué
+    /// des exports Obj-C/Swift (`@HiddenFromObjC`, Kotlin-only strict, INTEROP §7 ; la
+    /// divergence F1 phase 2 est résolue par suppression). La preuve passe par la sonde
+    /// Kotlin (`KadreUikitSurfaceDriver.leaseProbe`/`closedLeaseProbe`) — l'exigence de bail
+    /// concurrent DANS le premier callback y est matériellement plus propre (closures +
+    /// vérification single-flight) et c'est depuis la phase 3 la SEULE route Swift du bail.
     func testLeaseBoundariesHonoursFlightAndClose() throws {
         let (fixture, _, surface) = try attachedSurface()
         let view = try XCTUnwrap(fixture.observedView)
