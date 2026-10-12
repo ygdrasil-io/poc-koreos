@@ -112,10 +112,15 @@ final class KadreUikitSurfaceTests: XCTestCase {
     /// style imposé, une frame) reste VRAI pendant toute l'attente. L'échec embarque les faits
     /// de diagnostic : traits vivants de la vue, compteur de re-lectures Kotlin, journal du
     /// reporter réel et derniers événements capturés.
+    /// `recordsTimeoutFailure` (fix CI xcode-27, échelle thème) : à `false`, une expiration NE
+    /// pose PAS d'échec XCTest — c'est le mode des essais INTERMÉDIAIRES d'une échelle de
+    /// stimuli (seul le verdict final de l'échelle fait foi) ; le diagnostic complet part dans
+    /// l'erreur jetée (`userInfo["diagnostic"]`) et ressort au rethrow du palier final.
     func triggeredSurfaceState(
         _ fixture: SceneFixture,
         timeout: TimeInterval = 5,
         stimulus: (() -> Void)? = nil,
+        recordsTimeoutFailure: Bool = true,
         file: StaticString = #filePath,
         line: UInt = #line,
         _ predicate: @escaping (SurfaceState) -> Bool,
@@ -143,13 +148,17 @@ final class KadreUikitSurfaceTests: XCTestCase {
                 } else {
                     viewTraits = "nil"
                 }
-                XCTFail("triggered surface state not reached in \(timeout)s — last=\(String(describing: last)) "
+                let diagnostic = "triggered surface state not reached in \(timeout)s — last=\(String(describing: last)) "
                     + "viewTraits=\(viewTraits) "
                     + "observations=\(KadreUikitSurfaceDriver.shared.observationCount) "
                     + "failures=\(KadreUikitSurfaceDriver.shared.recentFailureDescriptions) "
-                    + "trace=\(DriverTrace.recent())", file: file, line: line)
+                    + "trace=\(DriverTrace.recent())"
+                if recordsTimeoutFailure {
+                    XCTFail(diagnostic, file: file, line: line)
+                }
                 throw NSError(domain: "KadreUikitDriver", code: 6,
-                              userInfo: ["what": "triggered surface state not reached"])
+                              userInfo: ["what": "triggered surface state not reached",
+                                         "diagnostic": diagnostic])
             }
             RunLoop.current.run(until: Date().addingTimeInterval(0.05))
         }
@@ -347,22 +356,94 @@ final class KadreUikitSurfaceTests: XCTestCase {
         try stopAndAwaitTermination(fixture)
     }
 
+    /// La SÉRIE de stimuli d'un changement de thème, en échelle de TROIS paliers, chacun
+    /// tracé (NSLog + DriverTrace) et borné (fix CI xcode-27, runs 38225688267 : sur les
+    /// boots sombres du runner, la publication d'une transition n'était pas déterministe —
+    /// la propagation fenêtre→vue d'UIKit n'aboutit pas à tous les coups). Chaque palier est
+    /// UNE tentative `triggeredSurfaceState` (essais intermédiaires NON-empoisonnés — seul
+    /// le verdict du palier FINAL fait foi, par rethrow avec tout le diagnostic ; la preuve
+    /// de publication ne BOUGE pas : thème visé ET révision qui avance) :
+    /// 1. `window.overrideUserInterfaceStyle` — la route du brief (3s) ;
+    /// 2. `view.traitOverrides.userInterfaceStyle` — iOS/tvOS 17+ : posé sur les overrides
+    ///    de trait PROPRES de la vue, SANS dépendance de la propagation fenêtre→vue (3s) ;
+    /// 3. `view.overrideUserInterfaceStyle` — le repli dégradé documenté (5s, échec final).
+    /// Sur le plancher 16.0 déclaré, le palier 2 est sauté (gate `#available`) et l'échelle
+    /// tombe au palier 3 exactement comme avant. Retourne l'état publié et la route gagnante.
+    func themeStimulusLadder(
+        _ style: UIUserInterfaceStyle,
+        label: String,
+        fixture: SceneFixture,
+        window: UIWindow,
+        view: UIView,
+        base: SurfaceState,
+    ) throws -> (state: SurfaceState, route: String) {
+        let target: SurfaceTheme = style == .dark ? SurfaceTheme.dark : SurfaceTheme.light
+
+        // Palier 1 — la route fenêtre du brief.
+        NSLog("KADRE-DRIVER theme \(label): stage 1 window.overrideUserInterfaceStyle attempt")
+        DriverTrace.record("theme \(label): stage 1 window override")
+        do {
+            let state = try triggeredSurfaceState(fixture, timeout: 3, stimulus: {
+                window.overrideUserInterfaceStyle = style
+                window.layoutIfNeeded()
+            }, recordsTimeoutFailure: false) { $0.appearance.theme === target && $0.revision > base.revision }
+            return (state, "window")
+        } catch {
+            NSLog("KADRE-DRIVER theme \(label): stage 1 window override never published "
+                + "(windowTrait=\(window.traitCollection.userInterfaceStyle.rawValue) "
+                + "view=\(view.traitCollection.userInterfaceStyle.rawValue)) — falling through")
+        }
+
+        // Palier 2 — les overrides de trait PROPRE de la vue (iOS/tvOS 17+) : le stimulus
+        // intermédiaire FIABLE, indépendant de la propagation fenêtre→vue d'UIKit.
+        if #available(iOS 17.0, tvOS 17.0, *) {
+            NSLog("KADRE-DRIVER theme \(label): stage 2 view.traitOverrides attempt")
+            DriverTrace.record("theme \(label): stage 2 view traitOverrides")
+            do {
+                let state = try triggeredSurfaceState(fixture, timeout: 3, stimulus: {
+                    view.traitOverrides.userInterfaceStyle = style
+                }, recordsTimeoutFailure: false) { $0.appearance.theme === target && $0.revision > base.revision }
+                return (state, "view.traitOverrides")
+            } catch {
+                NSLog("KADRE-DRIVER theme \(label): stage 2 view traitOverrides never published "
+                    + "(view traitCollection=\(view.traitCollection.userInterfaceStyle.rawValue)) — falling through")
+            }
+        }
+
+        // Palier 3 — le repli dégradé documenté (l'override posé sur la vue elle-même).
+        // DERNIER palier : son expiration est le verdict de la transition (échec XCTest
+        // riche + rethrow, comportement des essais simples).
+        NSLog("KADRE-DRIVER theme \(label): stage 3 view.overrideUserInterfaceStyle (degraded) attempt")
+        DriverTrace.record("theme \(label): stage 3 view override (degraded)")
+        let state = try triggeredSurfaceState(fixture, timeout: 5, stimulus: {
+            view.overrideUserInterfaceStyle = style
+            window.layoutIfNeeded()
+        }) { $0.appearance.theme === target && $0.revision > base.revision }
+        return (state, "view.overrideUserInterfaceStyle")
+    }
+
     /// uikit-surface-theme-propagates — le thème publié suit l'override réel de l'interface :
-    /// `window.overrideUserInterfaceStyle` d'abord (le stimulus du brief), puis — repli
-    /// DOCUMENTÉ, pattern du repli rotation du Step 2 — le MÊME override posé sur la VUE
-    /// observée (dont la traitCollection est gouvernée par son propre override, contrat
-    /// UIKit) quand la fenêtre ne publie pas. Chaque transition EXIGE une publication réelle
-    /// (thème visé ET révision qui avance) — jamais un match de l'état ambiant.
+    /// chaque transition passe par l'échelle de stimuli `themeStimulusLadder` (route fenêtre
+    /// du brief, puis `view.traitOverrides` iOS/tvOS 17+, puis le repli dégradé sur la vue).
+    /// Chaque transition EXIGE une publication réelle (thème visé ET révision qui avance,
+    /// prouvée AUSSI par l'événement drainé) — jamais un match de l'état ambiant.
+    ///
+    /// BASELINE DU DRAIN (fix CI xcode-27, run 38225688267) : la baseline d'apparence est
+    /// prise AVANT l'échelle — la publication de la transition (stimulus OU stabilisation
+    /// ambiante, la MÊME publication du kernel) doit atterrir APRÈS elle. Prise après coup,
+    /// elle ratait l'événement déjà collecté (boot sombre : la vue démarre Light et bascule
+    /// Dark seule à +44ms — l'état publiait Dark rev 1, le drain exigeait une SECONDE
+    /// publication qui ne viendrait jamais) : course de baseline, rouge déterministe.
     ///
     /// FAITS CAPTURÉS (Task 5) : sur iPadOS 27 la fenêtre propage vers la vue (route fenêtre
-    /// prouvée) ; sur tvOS 27 l'override fenêtre n'atteint PAS la traitCollection de la vue
-    /// observée (windowTrait bascule, vue non — zéro publication, zéro drop) ET le thème
-    /// AMBIANT du simulateur varie d'un boot à l'autre (Light ou Dark — l'état initial du
-    /// runtime porte Dark). Le test s'adapte honnêtement : le sol est la VÉRITÉ VIVANTE de la
-    /// vue ; la transition Dark→Light est TOUJOURS exigée avec publication + événement ;
-    /// la transition retour vers Dark n'est exigée QUE si le sol n'était pas déjà Dark (un
-    /// thème inchangé est dédupliqué par le kernel — comportement ruled, jamais un événement
-    /// fabriqué). La route retenue est tracée (NSLog + DriverTrace) et rapportée.
+    /// prouvée) ; le thème AMBIANT du simulateur varie d'un boot à l'autre (Light ou Dark —
+    /// l'état initial du runtime porte Dark) et les boots sombres du runner xcode-27
+    /// stabilisent leur trait en course avec le test. Le test s'adapte honnêtement : le sol
+    /// est la VÉRITÉ VIVANTE de la vue ; la transition Dark→Light est TOUJOURS exigée avec
+    /// publication + événement ; la transition retour vers Dark n'est exigée QUE si le sol
+    /// n'était pas déjà Dark (un thème inchangé est dédupliqué par le kernel — comportement
+    /// ruled, jamais un événement fabriqué). La route retenue est tracée (NSLog + DriverTrace)
+    /// et rapportée.
     func testSurfaceThemePropagatesFromTheWindow() throws {
         let (fixture, _, surface) = try attachedSurface()
         let window = try XCTUnwrap(fixture.window)
@@ -389,34 +470,19 @@ final class KadreUikitSurfaceTests: XCTestCase {
 
         // Transition Light → Dark (exigée SEULEMENT si le sol n'est pas déjà Dark — un thème
         // inchangé est dédupliqué par le kernel, comportement ruled sans événement fabriqué).
-        var degradedRoute = false
+        // Baseline AVANT le stimulus : la publication de la transition est prouvée APRÈS elle.
+        var darkRoute = "ambient (dedup — no transition)"
         if base.appearance.theme !== SurfaceTheme.dark {
+            let eventsBeforeDark = capture.appearanceCount
             window.overrideUserInterfaceStyle = .dark
             window.layoutIfNeeded()
-            var dark: SurfaceState
-            do {
-                dark = try triggeredSurfaceState(fixture, timeout: 3, stimulus: {
-                    window.overrideUserInterfaceStyle = .dark
-                    window.layoutIfNeeded()
-                }) { $0.appearance.theme === SurfaceTheme.dark && $0.revision > base.revision }
-            } catch {
-                degradedRoute = true
-                NSLog("KADRE-DRIVER uikit-surface-theme-propagates DEGRADED (dark): the window "
-                    + "override never published (windowTrait=\(window.traitCollection.userInterfaceStyle.rawValue) "
-                    + "view=\(view.traitCollection.userInterfaceStyle.rawValue)) — applying the override "
-                    + "on the observed view itself (documented degraded stimulus)")
-                DriverTrace.record("theme degraded (dark): window override did not publish; view override applied")
-                view.overrideUserInterfaceStyle = .dark
-                dark = try triggeredSurfaceState(fixture, timeout: 5, stimulus: {
-                    view.overrideUserInterfaceStyle = .dark
-                    window.layoutIfNeeded()
-                }) { $0.appearance.theme === SurfaceTheme.dark && $0.revision > base.revision }
-            }
-            let eventsBeforeDark = capture.appearanceCount
+            let (dark, route) = try themeStimulusLadder(
+                .dark, label: "dark", fixture: fixture, window: window, view: view, base: base)
+            darkRoute = route
             try drain(capture, until: { $0.appearanceCount >= eventsBeforeDark + 1 }, timeout: 5, liveState: {
                 fixture.primarySurface?.state.value as? SurfaceState
             })
-            NSLog("KADRE-DRIVER theme Dark published (route=\(degradedRoute ? "view" : "window")) state=\(dark)")
+            NSLog("KADRE-DRIVER theme Dark published (route=\(route)) state=\(dark)")
         } else {
             NSLog("KADRE-DRIVER theme Dark already ambient at base — the Dark transition is a "
                 + "ruled dedup (no publication expected); Light→Dark proof is carried by the "
@@ -425,38 +491,26 @@ final class KadreUikitSurfaceTests: XCTestCase {
 
         // Transition → Light : TOUJOURS exigée avec publication réelle (le Dark est acquis —
         // ambiant ou publié — la publication Light est la preuve de propagation de la paire).
+        // Baseline AVANT le stimulus, même discipline que la transition Dark.
+        let eventsBeforeLight = capture.appearanceCount
         window.overrideUserInterfaceStyle = .light
         window.layoutIfNeeded()
-        let eventsBeforeLight = capture.appearanceCount
-        var light: SurfaceState
-        do {
-            light = try triggeredSurfaceState(fixture, timeout: 3, stimulus: {
-                window.overrideUserInterfaceStyle = .light
-                window.layoutIfNeeded()
-            }) { $0.appearance.theme === SurfaceTheme.light && $0.revision > base.revision }
-        } catch {
-            degradedRoute = true
-            NSLog("KADRE-DRIVER uikit-surface-theme-propagates DEGRADED (light): the window "
-                + "override never published — applying the override on the observed view itself "
-                + "(documented degraded stimulus)")
-            DriverTrace.record("theme degraded (light): window override did not publish; view override applied")
-            view.overrideUserInterfaceStyle = .light
-            light = try triggeredSurfaceState(fixture, timeout: 5, stimulus: {
-                view.overrideUserInterfaceStyle = .light
-                window.layoutIfNeeded()
-            }) { $0.appearance.theme === SurfaceTheme.light && $0.revision > base.revision }
-        }
+        let (light, lightRoute) = try themeStimulusLadder(
+            .light, label: "light", fixture: fixture, window: window, view: view, base: base)
         XCTAssertEqual(light.appearance.theme, SurfaceTheme.light)
         try drain(capture, until: { $0.appearanceCount >= eventsBeforeLight + 1 }, timeout: 5, liveState: {
             fixture.primarySurface?.state.value as? SurfaceState
         })
         XCTAssertGreaterThan(capture.appearanceCount, eventsBeforeLight,
                              "the Light publication must emit AppearanceChanged")
-        NSLog("KADRE-DRIVER uikit-surface-theme-propagates route: "
-            + (degradedRoute ? "DEGRADED (view override on tvOS)" : "WINDOW override"))
+        NSLog("KADRE-DRIVER uikit-surface-theme-propagates routes: dark=\(darkRoute) light=\(lightRoute)")
+        DriverTrace.record("theme routes: dark=\(darkRoute) light=\(lightRoute)")
 
         window.overrideUserInterfaceStyle = .unspecified
         view.overrideUserInterfaceStyle = .unspecified
+        if #available(iOS 17.0, tvOS 17.0, *) {
+            view.traitOverrides.userInterfaceStyle = .unspecified
+        }
         assertNoDroppedObservations()
 
         try stopAndAwaitTermination(fixture)
