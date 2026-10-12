@@ -39,7 +39,9 @@ import KadreUikit
 ///     `HeldApplication`) sont lus avec la sentinelle de fraîcheur `runCount` — jamais un
 ///     reliquat d'une session précédente ;
 ///  7. un retrait temporaire NE ferme PAS la session (roadmap l.227) : non-nil, toujours
-///     Running, même handle au re-add.
+///     Running, même handle au re-add ;
+///  8. un `close()` AVANT tout attach consomme le budget d'attach : le join ultérieur ne
+///     pose AUCUNE session (zéro appel d'attach réel) et le deinit reste net.
 ///
 /// NB de nommage : ce bundle importe DEUX modules qui exportent des noms communs — le
 /// fichier n'écrit jamais ces noms nus pour le KOTLIN (`KadreUikit.X` partout dans la
@@ -335,6 +337,67 @@ final class KadreHostViewControllerTests: XCTestCase {
                        "the session must still be Running after the re-add; state=\(handle.state)")
 
         await settle(controller)
+    }
+
+    // MARK: — (h) Le close AVANT tout attach consomme le budget
+
+    /// uikit-facade-controller-close-before-attach-consumes-the-budget — `close()` appelé
+    /// AVANT tout join de fenêtre (l'état d'attach est encore `waiting`) consomme malgré
+    /// tout le budget d'attach : le join ULTÉRIEUR — fenêtre de la scène Active, le moment
+    /// valide se présente — n'attache RIEN (pas de session, ZÉRO appel d'attach réel, aucun
+    /// réessai armé qui ressusciterait une session après une fermeture explicite), et la
+    /// vie du controller reste nette jusqu'au deinit (désallocation prouvée, sans session).
+    func testCloseBeforeAttachConsumesTheAttachBudget() async throws {
+        guard let scene = ConsumerSceneStore.shared.window?.windowScene else {
+            return XCTFail("the host app scene disappeared")
+        }
+        // L'antichambre (miroir `makeAttachedController`) : la session de lancement doit
+        // être terminée AVANT la création — sans elle, un attach INDU par le bug cherché
+        // répondrait `AlreadyInUse(Host)` et brouillerait la lecture du rouge.
+        let store = ConsumerSceneStore.shared
+        let launchGone = await waitUntil {
+            store.sessionObject == nil || store.lastStateDescription == "Terminated"
+        }
+        XCTAssertTrue(launchGone,
+                      "the launch session must be terminated before a controller attach; "
+                          + "state=\(store.lastStateDescription)")
+
+        weak var weakController: KadreHostViewController?
+        do {
+            let controller = KadreHostViewController(applicationFactory: HeldApplicationFactory())
+            weakController = controller
+            // Le filet ENTRE tests : dans la vie ROUGE (le bug), la session induite par le
+            // join tiendrait la réservation de scène — le tearDown doit pouvoir la régler.
+            liveControllers.append(controller)
+
+            // LE CLOSE AVANT TOUT ATTACH — la view n'a jamais rejoint de fenêtre : l'état
+            // d'attach est encore `waiting`.
+            controller.close()
+
+            // LE JOIN ULTÉRIEUR — fenêtre de la scène Active : le moment valide se
+            // présente, `didMoveToWindow` repart — et ne doit PLUS RIEN faire.
+            let window = UIWindow(windowScene: scene)
+            window.addSubview(controller.view)
+            window.isHidden = false
+
+            // Une attente bornée laisse toute livraison (attach indu, réessai armé à
+            // l'activation) se manifester — au-delà, plus RIEN ne doit arriver.
+            _ = await waitUntil(timeout: 2) { controller.kadreSession != nil }
+
+            XCTAssertNil(controller.kadreSession,
+                         "a close before attach must consume the budget — "
+                             + "no session after a later window join")
+            XCTAssertEqual(controller.attachAttempts, 0,
+                           "a close before attach must consume the budget — "
+                               + "zero real attach attempts")
+
+            // Le controller quitte le registre ICI — sinon CE registre (une référence
+            // forte) l'empêcherait de se désallouer au sortir du scope.
+            liveControllers.removeAll { $0 === controller }
+        } // la dernière référence forte du controller meurt ICI
+
+        let gone = await waitUntil(timeout: 5) { weakController == nil }
+        XCTAssertTrue(gone, "the controller must deallocate after a close-before-attach life")
     }
 }
 

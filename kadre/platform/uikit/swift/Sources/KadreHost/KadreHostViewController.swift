@@ -23,7 +23,9 @@ import KadreUikit
  *    fois. Tout autre refus (`AlreadyInUse(Host)` — la scène porte déjà une session, etc.)
  *    est DÉFINITIF : le controller n'insiste jamais ;
  *  — l'attach est EXACTEMENT UNE FOIS par controller, à vie : après le succès, après un
- *    échec définitif et APRÈS close, aucun re-add à une hiérarchie ne ré-attache.
+ *    échec définitif et APRÈS close, aucun re-add à une hiérarchie ne ré-attache ; un
+ *    close AVANT tout attach consomme lui aussi ce budget (aucun join postérieur — ni
+ *    activation armée — ne pose de session).
  *
  * LE ROUTAGE DES NOTIFICATIONS — le miroir Swift d'`UIKitLifecycleSource` (phase 1) : UN
  * observer par notification, filtré `object = la scène attachée` ET double vérification
@@ -53,8 +55,9 @@ public final class KadreHostViewController: UIViewController {
     ///  — `waiting` : la view n'a pas encore rencontré le moment valide ;
     ///  — `retryArmed(scene)` : premier essai refusé `InvalidRequest("window")` — la scène
     ///    n'était pas encore valide (Unattached) ; UN réessai armé à son activation ;
-    ///  — `settled` : attach réussi OU échec définitif OU réessai consommé — plus AUCUNE
-    ///    tentative, à vie (un re-add après close ne ré-attache pas).
+    ///  — `settled` : attach réussi OU échec définitif OU réessai consommé OU close sans
+    ///    session (le budget est consommé) — plus AUCUNE tentative, à vie (un re-add
+    ///    après close ne ré-attache pas).
     private enum AttachState {
         case waiting
         case retryArmed(scene: UIWindowScene)
@@ -217,8 +220,14 @@ public final class KadreHostViewController: UIViewController {
     /// La fermeture explicite (§5) — idempotente : le close du handle l'est (il résilie les
     /// observations vivantes, ferme la session Kotlin — arrêt host demandé —, no-op sur
     /// session déjà terminée). `attachState` reste `settled` : AUCUN re-attach, y compris
-    /// après un re-add à une hiérarchie.
+    /// après un re-add à une hiérarchie. Un close SANS session — AVANT tout attach —
+    /// consomme lui aussi le budget (revue finale F-3) : l'état non réglé devient réglé,
+    /// afin qu'aucun join de fenêtre postérieur — ni l'activation armée d'un réessai — ne
+    /// pose une session fraîche après une fermeture explicite (un réessai armé qui arrive
+    /// ensuite retombe sur le garde `retryArmed` de `fireActivationRetry` : inerte, et le
+    /// token part au deinit).
     public func close() {
+        if case .settled = attachState {} else { attachState = .settled }
         kadreSession?.close()
     }
 
