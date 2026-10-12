@@ -175,3 +175,35 @@ Prérequis : `./gradlew --console=plain publishContractArtifacts :kadre:platform
 - **Portée** : 1 fichier, +2 lignes — commit `723f7b80`
   (`test(uikit): assert no extra scene connects on the tvOS refusal path`), parent
   `90550a15` ; arbre propre.
+
+## 8. Fix CI (suivi Finding C — compteur global, pas valeur absolue)
+
+- **Échec CI** (iOS — run 38271527018, job 114886678316) : le test ciblé échoue sur
+  l'assertion posée au §7 — `XCTAssertEqual failed: ("11") is not equal to ("1") - no
+  additional scene may connect on the refusal path`
+  (`KadreUikitWindowRequestTests.swift:281`). tvOS passait (le test y court tôt), iOS non.
+- **Cause racine** : `DriverFixture.shared.connected` est un accumulateur GLOBAL au
+  processus — les fixtures de scènes y sont appendus dans l'ordre de connexion sur TOUTE
+  la suite et jamais retirés. Sur iOS, les scénarios multi-scènes ANTÉRIEURS du même
+  bundle (`KadreUikitAttachTests` + `KadreUikitWindowRequestIosTests`, scènes secondaires
+  demandées par l'app via `TEST_RUNNER_KADRE_DRIVER_REQUEST_SECOND_SCENE=2`) ont déjà
+  porté le compteur à 11 quand le test de refus s'exécute ; la valeur absolue « 1 »
+  n'était atteignable que sur tvOS. L'intention du Finding C restait : AUCUNE scène
+  supplémentaire ne se connecte PENDANT CE test — un delta nul, pas un compte figé.
+- **Fix** : la baseline est figée au début du test (avant l'attach) et l'assertion porte
+  sur le delta :
+  `let connectedBefore = DriverFixture.shared.connected.count` puis
+  `XCTAssertEqual(DriverFixture.shared.connected.count, connectedBefore, "no additional
+  scene may connect on the refusal path")`. Rien d'autre ne change.
+- **Vérification** : suite Shared complète sur LES DEUX destinations —
+  iOS `platform=iOS Simulator,name=iPad Pro 11-inch (M5),OS=27.0` (avec
+  `TEST_RUNNER_KADRE_DRIVER_REQUEST_SECOND_SCENE=2`, requis par le mécanisme
+  launch-time des scènes secondaires) → `Executed 28 tests, with 0 failures (0
+  unexpected)`, `** TEST SUCCEEDED **`, test ciblé passe (0.023 s) APRÈS les scénarios
+  multi-scènes (compteur 11+, delta 0) ; tvOS `platform=tvOS Simulator,name=Apple TV 4K
+  (3rd generation),OS=27.0` → `Executed 18 tests, with 0 failures (0 unexpected)`,
+  `** TEST SUCCEEDED **`, test ciblé passe (0.045 s). Logs : `/tmp/fixc2-ios2-build.log`,
+  `/tmp/fixc2-tvos-build.log` ; bundles `build/xcresult/fix-c2-ios2.xcresult`,
+  `build/xcresult/fix-c2-tvos.xcresult`.
+- **Portée** : 1 fichier, +4/−1 lignes — commit `5f135b9e` (`fix(uikit): assert the
+  refusal path connects no additional scene, not a fixed count`), parent `2eb070f5`.
