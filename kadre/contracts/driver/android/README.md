@@ -1,17 +1,17 @@
 # Android emulator contract driver
 
 This non-published JVM project runs the public Android host-attachment proof of
-phases 0 through 5 on a real emulator. It is a contract driver, not an
+phases 0 through 6 on a real emulator. It is a contract driver, not an
 implementation API: it forks the instrumented consumer build, executes its
 scenarios on the attached device, and turns the JUnit output into the canonical
-`AND-001` through `AND-006` evidence with the validator's own
+`AND-001` through `AND-007` evidence with the validator's own
 generator. English
 prose, like the Web driver README it mirrors; everything else in this phase is
 documented in French in the sources.
 
 ## What the driver proves
 
-Six contracts, all active in the registry
+Seven contracts, all active in the registry
 ([contracts.tsv](../../registry/contracts.tsv)), oracle `O3`, mapped in
 [evidence.tsv](contracts/evidence.tsv):
 
@@ -215,6 +215,94 @@ composition, suggestion-strip commit and mid-composition blur on a qualified
 host (and what today's attach honestly does on a real device), plus the
 hardware-gesture pass and why the automation cannot stage either.
 
+**`AND-007`** — the phase 6 drop transfer machinery and channel qualification
+proof (source `ANDROID-IMPLEMENTATION-ROADMAP.md#Phase 6 — Drag-and-drop et
+ownership des transferts`). Three scenarios and one sentinel. The public
+boundary scenario lives in the instrumented test class
+`org.graphiks.kadre.consumer.KadreConsumerDropContractTest`; the two on-device
+transfer scenarios live in
+`org.graphiks.kadre.platform.android.AndroidDropDeviceContractTest`, carried by
+the internal proof module `platform/android-devicetest` (see below), whose
+testcase classes ride the consumer's own androidTest APK and report through the
+same connected-run JUnit XML.
+
+| evidenceId | kind | what it exercises |
+|---|---|---|
+| `android-drop-channel-absent` | scenario | the drop RECEPTION channel does not exist on the delivered attach form, pinned three ways at the public boundary: `capabilities.dragAndDrop` stays `FeatureAvailability.Unsupported` (the drop does not even get a terminal `Capability` — the production surface builds with `dragAndDropAvailable = false`); the P4 interaction engine announces `handlerInteractions` `Available` WITHOUT `InteractionKind.AcceptDrop` (refused `Unsupported(Interaction)` before any native call — the AND-005 mechanics, re-confirmed here); and the silence proof — a REAL drag started by the app on its own View (`View.startDragAndDrop`, API 24+, the system drag session genuinely lives in the window: the window manager requires the touch-focus transfer, so the scenario plants a real injected touch — the `INJECT_EVENTS` harness path — and holds it during the listening window) delivers ZERO drop observations (`DropEntered`/`DropMoved`/`DropExited`/`Dropped`) in a bounded listening window; the capability is re-asserted unchanged after the drag |
+| `android-drop-real-transfer-bounded` | scenario | the COMPLETE drop path over REAL content on the device: a file written into the app's own dir, its `file://` uri in a COPIED clip snapshot (same-app, a real `ContentResolver` reads a file uri of the app's own dir on API 24+ without grant or provider — cross-app would need a `FileProvider`; the test itself is the probe: every byte flows through the real resolver, an inadequate uri would fail the scenario), the REAL Task-1 source opened by the PRODUCTION resolver opener, the Task-2 reducer construction (`dragAndDropAvailable = true` — the parked normative decision), and the exact chain the future glue will deliver: `presentDrop` → `acceptDrop` → `DropPerformed` → `claimTransfer` → `collectBytes`; the FULL read returns bytes IDENTICAL to the file (chunks ≤ `maxDropChunkBytes`), the BOUNDED read returns the exact prefix and fails exactly `ResourceLimitExceeded(DropItem, maxBytes)` (an unknown-size read may deliver a prefix before failing, DESIGN §10.4), through a FRESH offer on the same real file — uri items are single-use |
+| `android-drop-stream-released-on-close` | scenario | the gate's resource sentinel: a stream OPEN with its first chunk read, the collector suspended mid-read → `close()` on the owner → the stream is closed EXACTLY ONCE (behavioral proof through the opener's wrapper — the Task-1 host-side close counter does not exist here) and a subsequent read answers exactly `Closed(DropItem)` |
+| `android-drop-no-public-channel` | sentinel | a build that advertises or wires a public drop reception channel (capability flipped without the normative decision, `AcceptDrop` advertised, or a drag observed through the silence) kills `androidDropChannelAbsent` alone |
+
+**The drop decision: a recorded structural limit, and the normative proposal
+parked for the user.** Phase 6 delivers the CONTENT side as internal machinery
+and records the RECEPTION channel as a structural limit — the same shape as the
+phase 5 text-input decision, a recorded limit and NOT a deferral (the web
+precedent, authorized by `BACKEND-CAPABILITIES.md` §4). The causal chain is
+structural: `View.setOnDragListener` is a SINGLE silent-replacement slot (never
+used — the phase 3 discipline for single-slot listeners), `View.onDragEvent`
+is `protected` (subclass-only, and Kadre never owns or subclasses the host's
+View, DESIGN §15.1), and `Window.Callback` has no drag hook (probed against
+android-35). The silence is proven at the real boundary by
+`android-drop-channel-absent`. The content side is proven:
+`AndroidDropTransferSource` translates a COPIED clip snapshot into common
+offers (no `DragEvent`/`ClipData`/`ContentResolver` crosses publicly; mimes
+canonicalized lowercase-or-dropped; an item with no readable content dropped
+whole; uri items `SingleUse`, pure-text items `Replayable`; sizes always
+unknown), bounded reads honor `maxBytes` (exact
+`ResourceLimitExceeded(DropItem, maxBytes)`), a resolver refusal — all THREE
+shapes: `null`, a throw, a read `IOException` — honestly becomes the persistent
+`PlatformFailure(Android, "drop", "resolver-refused")`, so a missing permission
+NEVER becomes a fake readable drop, and streams are closed exactly once,
+released with the owner. The drop contract itself runs through the REAL
+reducer in test construction (`RuntimeSurfaceInput` built with the exact
+`installSessionConfiguration` arguments, only `dragAndDropAvailable` flipped):
+single-active presentation (a second `presentDrop` terminates the first offer
+`LeftSurface`, its source closed with it), `acceptDrop` through the P4
+synchronous interaction shape, single-winner claim (`AlreadyInUse(DropTransfer)`),
+the `maxConcurrentDropTransfers` budget (`ResourceLimitExceeded(DropTransfer, n)`
+until close frees it), `ClaimTimedOut` on the policy timeout (source closed,
+budget freed), and owner teardown → `OwnerClosed` with transfers kept closed
+(`Closed(DropTransfer)` on re-read). Production stays honest: the flag is
+`false`, pinned by the anti-regression host record
+`AndroidDropContractTest.productionStaysUnsupported`.
+
+**The normative proposal is PARKED for the user — stated, not implemented.**
+Option A: a host-delegated `OnDragListener` (the HOST sets the listener on its
+own view and delegates into Kadre — reachable through the existing
+`withAndroidView` lease channel or as new public API, mirroring the text-input
+option A). Option B: a new attach form. Each with its implications, written in
+[capabilities/android.md](../../../capabilities/android.md) §2 and §4. Related,
+and parked in the SAME future decision: arming `AcceptDrop` requires a
+delivered `DropOfferId` — the id is opaque with an internal constructor, it can
+only come from a delivered offer, and no offer can be delivered without the
+reception channel — so the arming design belongs to that decision too.
+
+**The devicetest module.** The two on-device scenarios need a REAL
+`ContentResolver` — a JVM host test has none — and the runtime-friend
+construction (the Task-1 source + the Task-2 reducer) cannot live in the
+consumer, which compiles against the PUBLISHED artifacts where those internals
+are invisible. The internal module `platform/android-devicetest`
+(`org.graphiks.kadre.internal` group, `androidTestImplementation`-only, never
+consumed by production) is the friend compilation of the three concerned
+modules — the exact mirror of the `androidHostTest` friend wiring — and
+publishes an AAR the consumer consumes `androidTestImplementation`: the
+scenario classes travel INSIDE the consumer's androidTest APK and run under ITS
+connected runner, so the JUnit XML of the evidence chain stays the consumer's
+and the driver is unchanged.
+
+**The real-system complement.** The real transfer is already automated
+(`android-drop-real-transfer-bounded` runs on-device through the real
+resolver), so the phase gate needs no manual charter. A real CROSS-APP drag is
+what a manual pass would add, if one is ever needed, and it cannot be staged by
+single-app instrumentation: it requires two apps — a sender exercising
+`startDragAndDrop` with real content shared through a `FileProvider`
+(`FLAG_GRANT_READ_URI_PERMISSION`: cross-app, the same-app `file://` uri of the
+automated scenario no longer suffices), a second app as the drop target, and
+the system drag UI across activities. Until the parked reception decision
+lands, the expected Kadre-side observation of such a drag remains the recorded
+silence — the manual pass would qualify grant propagation and the sender side,
+not a Kadre reception.
+
 ## Running the gate locally
 
 Prerequisites: an Android SDK with the **AVD `Kadre_API_35`** (system image
@@ -237,9 +325,9 @@ emulator-5554`). The Gradle run inside is bounded by a portable 900 s watchdog
 (GNU `timeout` is absent on stock macOS — background Gradle, bounded wait,
 `SIGTERM` at expiry with exit code 124; commit `76229d58`). The gate task is
 `:kadre:contracts:validator:androidContractsCheck`: registry validation plus
-Android contract evidence validation against **`AND-001` through `AND-006`** —
+Android contract evidence validation against **`AND-001` through `AND-007`** —
 one canonical JSON per contract, all from the same instrumented emulator run
-(29 instrumented tests).
+(32 instrumented tests).
 
 The wrapper chains two steps, each of which can also be run on its own — one
 Gradle invocation per shell command:
@@ -444,6 +532,50 @@ evidence itself:
   together — 29 instrumented tests, one canonical JSON per contract, all from
   the same instrumented emulator run.
 
+### Exit gate of roadmap phase 6
+
+Same commands, one contract more. From a cold start (kill any running emulator,
+`adb emu kill`, wait for zero devices, then let the script boot the AVD itself):
+publish (1), consumer compile (2), emulator smoke + evidence + validator (the
+script — **32** instrumented tests green, `AND-001.json` + `AND-002.json` +
+`AND-003.json` + `AND-004.json` + `AND-005.json` + `AND-006.json` +
+`AND-007.json`), the same transitive-resolution purity check (grep exit 1,
+redone cold), and the no-device sanity tasks above. The roadmap checklist is
+carried by the evidence itself:
+
+- drag events translated to common offers, only copied snapshots, no public
+  `DragEvent`/`ClipData` — the host record `AndroidDropTransferSourceTest`
+  (the clip→offer translation rules: canonicalized mimes, items without
+  readable content dropped whole, uri items single-use, text items replayable,
+  sizes always unknown) and `android-drop-channel-absent` (the published state
+  stays `Unsupported`, nothing public crosses, the real drag is a silence);
+- single claim / budget / teardown — the host record `AndroidDropContractTest`
+  (`presentedSingleActiveAndReplacedWithLeftSurface`,
+  `acceptSynchronousThroughTheInteractionShape`, `claimSingleWinnerAndBudget`,
+  `performedClaimTimedOut`, `teardownClosesOwnerClosed`,
+  `productionStaysUnsupported`) and `android-drop-real-transfer-bounded`
+  (claim, then bounded `collectBytes` on the real chain);
+- permissions acquired at the right moment, bounded reads, resources released
+  exactly once — `AndroidDropTransferSourceTest` (the three resolver-refusal
+  shapes honestified to the persistent `resolver-refused` failure,
+  close-exactly-once, reads off the lock), `android-drop-real-transfer-bounded`
+  (the real read bounded by `maxBytes`, exact `ResourceLimitExceeded(DropItem)`),
+  and the sentinel `android-drop-stream-released-on-close` (a stream kept after
+  close is detected, exactly-once behavioral proof);
+- a missing permission on a host View never becomes a fake readable drop —
+  `AndroidDropTransferSourceTest` (`resolver-refused`, never a partial offer)
+  and `android-drop-channel-absent` (the absent channel);
+- two claimants never read the same offer — the single-winner claim record
+  (`AndroidDropContractTest.claimSingleWinnerAndBudget`) plus the
+  already-claimed guard of `AndroidDropTransferSourceTest`
+  (`AlreadyInUse(DropTransfer)`);
+- `AND-001` through `AND-007` together — 32 instrumented tests, one canonical
+  JSON per contract, all from the same instrumented emulator run (the 29
+  previous testcases plus the three drop ones: `androidDropChannelAbsent` in
+  the consumer, `androidDropRealTransferBounded` and
+  `androidDropStreamReleasedOnClose` from the `platform/android-devicetest`
+  AAR riding the same androidTest APK).
+
 ## Engine labeling
 
 The engine label is **never hardcoded**. The evidence producer
@@ -455,7 +587,7 @@ writes `emulator-api-<sdk>-<abi>`. On the phase 0 AVD this is
 are attached. Every run resets the per-engine JUnit copy directory first, so a
 stale XML from an earlier run can never inflate the evidence identity. The
 producer writes one canonical JSON per active android contract (currently
-`AND-001` through `AND-006`), each pinned to the current HEAD
+`AND-001` through `AND-007`), each pinned to the current HEAD
 commit.
 
 ## Evidence mapping
@@ -470,18 +602,23 @@ arguments as the runtime/AppKit producers — no format reimplementation) with:
   `KadreConsumerAttachContractTest` (`AND-002`),
   `KadreConsumerSurfaceContractTest` (`AND-003`),
   `KadreConsumerInputContractTest` (`AND-004`),
-  `KadreConsumerWindowInteractionContractTest` (`AND-005`) or
-  `KadreConsumerTextContractTest` (`AND-006`);
+  `KadreConsumerWindowInteractionContractTest` (`AND-005`),
+  `KadreConsumerTextContractTest` (`AND-006`) or
+  `KadreConsumerDropContractTest` (`AND-007`) — the AND-007 transfer scenarios
+  (`androidDropRealTransferBounded`, `androidDropStreamReleasedOnClose`) are
+  mapped to `AndroidDropDeviceContractTest`, whose classes arrive in the same
+  XML from the `platform/android-devicetest` AAR consumed
+  `androidTestImplementation`;
 - the JUnit XML the consumer produced under
   `kadre/consumers/android/build/outputs/androidTest-results/connected/`;
 - the current HEAD commit (the same `git rev-parse HEAD` rule the validator
   uses — a document pinned to a commit is stale by definition once HEAD moves).
 
-Outputs: `build/contract-evidence/android/<engine>/AND-{001,002,003,004,005,006}.json`
+Outputs: `build/contract-evidence/android/<engine>/AND-{001,002,003,004,005,006,007}.json`
 (canonical), `build/test-results/android/<engine>/TEST-*.xml` (the JUnit copy
 the validator cross-checks), `build/contract-evidence/android/engines.txt` (the
 engines this run actually produced), and the gate copies
-`build/contract-evidence/AND-{001,002,003,004,005,006}.json` that
+`build/contract-evidence/AND-{001,002,003,004,005,006,007}.json` that
 `validateContractEvidence` reads.
 
 ## `androidContractsCheck` is deliberately not in `:kadre:check`
@@ -601,6 +738,32 @@ host-owned or a normative hook, never deduced from the touch contacts. The
 real-system complement is the manual charter
 [manual/phase-5-text-input.md](manual/phase-5-text-input.md).
 
+Since phase 6, the drop CONTENT side exists as internal machinery with no
+public activation path: `AndroidDropTransferSource` translates a COPIED clip
+snapshot into common drop offers (canonicalized mimes, uri items single-use,
+pure-text items replayable, an item without readable content dropped whole,
+sizes always unknown), reads are bounded (`collectBytes` honors `maxBytes`,
+exact `ResourceLimitExceeded(DropItem, maxBytes)`, chunks ≤ `maxDropChunkBytes`),
+the resolver refusal — `null`, a throw, a read `IOException` — is the persistent
+`PlatformFailure(Android, "drop", "resolver-refused")`, never a fake readable
+drop, and streams are closed exactly once, released with the owner. The drop
+contract is proven through the real reducer in test construction only (single
+active presentation with `LeftSurface` replacement, P4-shaped `acceptDrop`,
+single-winner claim, the `maxConcurrentDropTransfers` budget, `ClaimTimedOut`,
+owner teardown `OwnerClosed`); production builds with
+`dragAndDropAvailable = false`, pinned by
+`AndroidDropContractTest.productionStaysUnsupported`. The RECEPTION channel is
+a recorded structural limit, not a deferral: `setOnDragListener` is a single
+silent-replacement slot (never used), `onDragEvent` is `protected`, and
+`Window.Callback` has no drag hook — a real `startDragAndDrop` drag on the
+host's own view delivers zero observations, proven at the boundary by
+`android-drop-channel-absent` (`AND-007`). The normative proposal is parked
+for the user: a host-delegated `OnDragListener` (option A, via the existing
+`withAndroidView` lease channel or new public API) or a new attach form
+(option B); arming `AcceptDrop` requires a delivered opaque `DropOfferId`, so
+its design belongs to the same future decision
+([capabilities/android.md](../../../capabilities/android.md) §2 and §4).
+
 **The View form has no input observation — a structural, declared limit.**
 `View.getWindow()` is `@hide`: a View-form attach has no `Window.Callback` to
 chain, so no observation path exists. The input capabilities there stay
@@ -642,7 +805,15 @@ authoritative list with the owning phase lives in
   the new attach form — is parked for the user (see the phase 5 paragraph
   above); gestures stay the decided `Unsupported(GestureInput)` recorded
   limit, a recognizer being host-owned or a normative hook;
-  **Phase 6** — drag-and-drop;
+- **Phase 6 — decided, with the normative question parked for the user.**
+  Drag-and-drop is no longer deferred: the content side is delivered internal
+  machinery (proven on-device through the real resolver by `AND-007`) and the
+  reception channel is the recorded structural limit; the normative proposal —
+  the host-delegated `OnDragListener` (option A) or the new attach form
+  (option B), plus the `AcceptDrop` arming design that requires a delivered
+  opaque `DropOfferId` — is parked for the user (see the phase 6 paragraph
+  above); a real cross-app drag (two apps, `FileProvider` + grant, system drag
+  UI) is documented in the AND-007 section as what a manual pass would add;
 - **Phase 7** — displays, devices, gamepads, memory pressure, raw-input
   decision; **Phase 8** — capture; **Phase 9** — Java facade, Compose;
 - **Phase 10** — the mandatory `android-contracts` CI job.
