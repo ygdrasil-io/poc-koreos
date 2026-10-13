@@ -55,6 +55,15 @@ kotlin {
     }
 }
 
+// Les tests hôtes du bras HostChoice (phase 8, Task 2) pilotent la pompe de frames par le
+// scheduler du runTest — le même parti pris que les tests du flux web (le loopContext injecté
+// est le StandardTestDispatcher du TestScope, chaque tour de boucle est explicite). Le source
+// set `androidHostTest` est créé par le plugin AGP KMP (`withHostTest`) hors du conteneur KMP,
+// donc la dépendance passe par SA configuration Gradle, pas par `sourceSets`.
+dependencies {
+    "androidHostTestImplementation"(libs.kotlinx.coroutines.test)
+}
+
 // Friend-wiring Android : androidMain référence des internals du runtime (RuntimeHostController,
 // RuntimePrimarySurface, RuntimeHostSurface) pour construire la session — la même couture que
 // webMain (cf. platform/web/build.gradle.kts). AGP 9.0.0 nomme les compilations

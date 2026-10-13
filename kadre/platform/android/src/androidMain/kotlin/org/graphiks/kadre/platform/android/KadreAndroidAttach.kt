@@ -313,18 +313,30 @@ internal object AndroidHostSession {
                         windowNative = windowSeam,
                     )
                     sessionSurface.surface = surface
-                    // Le port de capture de CETTE session (phase 8, Task 1) : capabilities
-                    // sondées UNE fois à cette construction (l'API courante gèle la capability
-                    // surface — PixelCopy est 26+), sources HostPickerOnly, Source refusé avant
-                    // tout seam. La surface primaire y est enregistrée à sa création — le
-                    // miroir `registerPrimarySurface` du web, branche composants : l'admission
-                    // du runtime transfère l'id sans le vérifier, cet enregistrement est le
-                    // seul fait contre lequel la route `Surface` résout. Le bras HostChoice
-                    // (consentement) arrive avec la Task 2, le bras PixelCopy avec la Task 3 —
-                    // tous deux jetants à ce stade.
+                    // Le port de capture de CETTE session (phase 8) : capabilities sondées UNE
+                    // fois à cette construction (l'API courante gèle la capability surface —
+                    // PixelCopy est 26+), sources HostPickerOnly, Source refusé avant tout seam.
+                    // La surface primaire y est enregistrée à sa création — le miroir
+                    // `registerPrimarySurface` du web, branche composants. Les coutures de la
+                    // Task 2 : le consentement par le registre DIRECT de CETTE Activity (la
+                    // correction de l'anti-pattern kadre-old), le FGS `mediaProjection` Kadre
+                    // (le ruling P8-0 — le host ne déclare RIEN), l'ImageReader et les faits
+                    // d'affichage de CETTE vue. La forme View câble les mêmes coutures, le
+                    // consentement déplié du contexte de la vue.
                     val capturePort = AndroidCapturePort(
                         apiLevel = Build.VERSION.SDK_INT,
                         surfaces = AndroidHostCaptureSurfaceRegistry(),
+                        consent = AndroidActivityCaptureConsentSource(owner as ComponentActivity),
+                        projections = AndroidMediaProjectionSource(view.context.applicationContext),
+                        imageReaders = AndroidImageReaderSource(),
+                        foreground = AndroidServiceCaptureForeground(view.context.applicationContext),
+                        displayFacts = AndroidCaptureDisplayFacts(
+                            size = PhysicalSize(
+                                maxOf(1, view.resources.displayMetrics.widthPixels),
+                                maxOf(1, view.resources.displayMetrics.heightPixels),
+                            ),
+                            densityDpi = view.resources.displayMetrics.densityDpi,
+                        ),
                     )
                     capturePort.registerHostCaptureSurface(surface.id, view)
                     // Le routage gamepad de CETTE session — la delivery (construite plus tard,
@@ -370,17 +382,32 @@ internal object AndroidHostSession {
             // substitue (les devices génériques via le port vide), honnête et sans état.
             // Le display est observable depuis le contexte de la vue
             // (`getSystemService(DISPLAY_SERVICE)` n'exige pas de contexte d'activité).
-            // Le port de capture de CETTE forme (phase 8, Task 1) : construit AVANT le
-            // contrôleur — l'overload interne le place dans les composants de la session,
-            // fermé avec elle — et la surface primaire y est enregistrée à sa création dans
-            // la factory ci-dessous (le miroir `registerPrimarySurface` du web, branche sans
-            // fenêtre). Même capabilities gelées, mêmes sources HostPickerOnly, même refus
-            // structurel de `Source` ; les bras HostChoice et PixelCopy restent les stubs
-            // jetants des Tasks 2-3.
+            // Le port de capture de CETTE forme (phase 8) : construit AVANT le contrôleur —
+            // l'overload interne le place dans les composants de la session, fermé avec elle —
+            // et la surface primaire y est enregistrée à sa création dans la factory ci-dessous
+            // (le miroir `registerPrimarySurface` du web, branche sans fenêtre). Mêmes
+            // capabilities gelées, mêmes sources HostPickerOnly, même refus structurel de
+            // `Source` ; les coutures de la Task 2 : le consentement déplié de l'activité qui
+            // héberge la vue (`activityOf`, le registre DIRECT — la forme View n'a pas
+            // d'activité typée ; sans activité hébergeante, le port répond `Unsupported
+            // (CapturePermission)` à une demande plutôt que de deviner), le FGS Kadre sur le
+            // contexte applicatif, l'ImageReader, les faits d'affichage de CETTE vue. Le bras
+            // PixelCopy reste le stub jetant de la Task 3.
             AndroidAttachForm.View -> {
                 val capturePort = AndroidCapturePort(
                     apiLevel = Build.VERSION.SDK_INT,
                     surfaces = AndroidHostCaptureSurfaceRegistry(),
+                    consent = activityOf(view.context)?.let(::AndroidActivityCaptureConsentSource),
+                    projections = AndroidMediaProjectionSource(view.context.applicationContext),
+                    imageReaders = AndroidImageReaderSource(),
+                    foreground = AndroidServiceCaptureForeground(view.context.applicationContext),
+                    displayFacts = AndroidCaptureDisplayFacts(
+                        size = PhysicalSize(
+                            maxOf(1, view.resources.displayMetrics.widthPixels),
+                            maxOf(1, view.resources.displayMetrics.heightPixels),
+                        ),
+                        densityDpi = view.resources.displayMetrics.densityDpi,
+                    ),
                 )
                 RuntimeHostController.withPrimarySurface(
                     platform = KadrePlatform.Android,
