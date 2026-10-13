@@ -121,11 +121,6 @@ internal class Win32WindowRuntimeDriver internal constructor(
                         WM_CLOSE -> command.closeRequested()
                         WM_DESTROY -> command.nativeClosed()
                         WM_SIZE -> {
-                            java.nio.file.Files.write(
-                                java.nio.file.Paths.get("build/win32-integration/dispatch-debug.txt"),
-                                ("handler WM_SIZE hwnd=$hwnd\n").toByteArray(),
-                                java.nio.file.StandardOpenOption.CREATE, java.nio.file.StandardOpenOption.APPEND,
-                            )
                             val size = port.readClientPhysicalSize(hwnd)
                             val scale = port.readScaleFactor(hwnd)
                             val logical = org.graphiks.kadre.surface.LogicalSize(

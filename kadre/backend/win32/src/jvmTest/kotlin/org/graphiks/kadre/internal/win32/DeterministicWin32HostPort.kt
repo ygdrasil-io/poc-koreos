@@ -123,13 +123,7 @@ internal open class DeterministicWin32HostPort : Win32NativeHostPort {
             invalidated.remove(hwnd)
             paintCount.incrementAndGet()
         }
-        val handler = topLevelHandlers[hwnd]
-        java.nio.file.Files.write(
-            java.nio.file.Paths.get("build/win32-integration/dispatch-debug.txt"),
-            ("dispatch hwnd=$hwnd id=$id handler=${handler != null}\n").toByteArray(),
-            java.nio.file.StandardOpenOption.CREATE, java.nio.file.StandardOpenOption.APPEND,
-        )
-        handler?.invoke(hwnd, id, wParam, lParam)
+        topLevelHandlers[hwnd]?.invoke(hwnd, id, wParam, lParam)
     }
 
     fun errorIfWindowUnknown(hwnd: Long) {
