@@ -139,13 +139,27 @@ jobs:
           "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "${{ matrix.image }}" emulator platform-tools
 
       - name: Create the API ${{ matrix.api }} AVD
+        # ANDROID_AVD_HOME is pinned because avdmanager and the emulator resolve
+        # the AVD home through different env chains ($ANDROID_AVD_HOME /
+        # $ANDROID_SDK_HOME / $HOME/.android/avd) on the runner — the first
+        # contracts run died with `Unknown AVD name [kadre-api-35]` when the ini
+        # landed elsewhere. Pinning both steps to the same explicit dir makes
+        # creator and consumer agree.
+        env:
+          ANDROID_AVD_HOME: ${{ github.workspace }}/avd-home
         run: |
+          mkdir -p "$ANDROID_AVD_HOME"
           echo "no" | "$ANDROID_HOME/cmdline-tools/latest/bin/avdmanager" create avd --name kadre-api-${{ matrix.api }} --package "${{ matrix.image }}" --device pixel --force
 
       - name: Boot the emulator in the background
         # Same headless flags as the contract gate's local auto-boot path (plus
         # -no-snapshot: an ephemeral runner must cold-boot). The process outlives this
         # step; the next step waits for boot, the gate drives it.
+        # Same ANDROID_AVD_HOME as the create step: avdmanager/emulator resolve
+        # the AVD home differently on runners — the emulator must read the ini
+        # from the exact dir avdmanager wrote it to.
+        env:
+          ANDROID_AVD_HOME: ${{ github.workspace }}/avd-home
         run: |
           "$ANDROID_HOME/emulator/emulator" -avd kadre-api-${{ matrix.api }} -no-window -gpu swiftshader_indirect -no-audio -no-boot-anim -no-snapshot > /tmp/kadre-nightly-emulator.log 2>&1 &
 
