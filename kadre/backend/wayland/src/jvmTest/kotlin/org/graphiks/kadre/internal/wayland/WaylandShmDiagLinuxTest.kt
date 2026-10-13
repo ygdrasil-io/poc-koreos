@@ -12,7 +12,7 @@ class WaylandShmDiagLinuxTest {
     fun kffiExactFlowOnTestThread() {
         // DIAG3 : le même flux avec le NOM EXPLICITE que le provider kadre passe
         val explicitName = System.getenv("WAYLAND_DISPLAY")
-        println("DIAG3 explicitName=$explicitName")
+        println("DIAG3 v2 explicitName=$explicitName")
         val client = org.graphiks.kffi.wayland.managed.WaylandClient.connect(explicitName)
         checkNotNull(client) { "connect failed" }
         try {
