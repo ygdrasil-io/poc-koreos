@@ -1,5 +1,9 @@
+@file:OptIn(kotlinx.cinterop.ExperimentalForeignApi::class)
+
 package org.graphiks.kadre.internal.uikit
 
+import kotlinx.cinterop.addressOf
+import kotlinx.cinterop.usePinned
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.awaitCancellation
@@ -12,7 +16,10 @@ import org.graphiks.kadre.diagnostics.isSuccess
 import org.graphiks.kadre.diagnostics.message
 import org.graphiks.kadre.input.DropItemKind
 import org.graphiks.kadre.input.DropItemReadMode
+import platform.Foundation.NSData
 import platform.Foundation.NSItemProvider
+import platform.Foundation.NSURL
+import platform.Foundation.dataWithBytes
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
@@ -300,5 +307,71 @@ class UIKitDropTransferSourceTest {
             payload.readChunk(0, 8),
             "with no readable type the read resolves empty without ever touching the provider",
         )
+    }
+
+    // MARK: - les routes de livraison (ukitDropDeliveryBytes — la fix F-1 : l'URL n'est plus un mort-né)
+
+    /**
+     * La route URL : la livraison NORMALE de `public.url` ET de `public.file-url` (le fait du
+     * spike Task 1) est l'NSURL — sa chaîne ABSOLUE devient les octets de la lecture. Avant la
+     * fix, un drag d'URL annonçait `text/uri-list` dont AUCUNE lecture ne pouvait jamais rendre
+     * compte (le `when` sans branche NSURL jetait → `byte-read`) : le mensonge que la couture
+     * interdit.
+     */
+    @Test
+    fun anNSURLDeliveryBecomesItsAbsoluteStringBytes() {
+        val https = NSURL.URLWithString("https://example.com/kadre?q=1")!!
+        assertEquals(
+            "https://example.com/kadre?q=1".encodeToByteArray().toList(),
+            checkNotNull(ukitDropDeliveryBytes(https)).toList(),
+            "the absolute string of the URL is the honest content of a uri-list read",
+        )
+        val file = NSURL.URLWithString("file:///tmp/kadre-drop-spike.txt")!!
+        assertEquals(
+            "file:///tmp/kadre-drop-spike.txt".encodeToByteArray().toList(),
+            checkNotNull(ukitDropDeliveryBytes(file)).toList(),
+            "the file-url shape reads the same route — the consumer resolves the URL",
+        )
+    }
+
+    @Test
+    fun textAndDataDeliveriesKeepTheirRoutesAndAlienOnesStayNull() {
+        assertEquals(
+            "kilroy".encodeToByteArray().toList(),
+            checkNotNull(ukitDropDeliveryBytes("kilroy")).toList(),
+            "the text route is unchanged",
+        )
+        val raw = byteArrayOf(1, 2, 3)
+        val data = raw.usePinned { pinned ->
+            NSData.dataWithBytes(pinned.addressOf(0), raw.size.toULong())
+        }
+        assertEquals(
+            raw.toList(),
+            checkNotNull(ukitDropDeliveryBytes(data)).toList(),
+            "the data route is unchanged (owned bytes)",
+        )
+        assertNull(ukitDropDeliveryBytes(null), "a nil delivery is null — the caller makes the closed byte-read failure")
+        assertNull(ukitDropDeliveryBytes(42), "an alien delivery is null, never a fabricated value")
+    }
+
+    /**
+     * La forme exacte de la fix : un provider à `public.url` fait un descripteur qui annonce
+     * `text/uri-list` (kind Uri, type préféré `public.url`), et la lecture — branchée sur les
+     * octets qu'une livraison NSURL produit — RÉUSSIT et redonne l'URL. Le mort-né est parti.
+     */
+    @Test
+    fun aUriDescriptorAdvertisedMimeIsReadableThroughTheNSURLRoute() = runBlocking {
+        val types = listOf("public.url")
+        val snapshot = checkNotNull(ukitDropSnapshot(types, displayName = "kadre", sizeBytes = null))
+        assertEquals(listOf("text/uri-list"), snapshot.mimeTypes)
+        val item = UIKitDropItem(snapshot)
+        // Le chemin réel : le payload du port sert les octets de la livraison — ici la
+        // livraison NSURL, convertie par le kernel ([ukitDropDeliveryBytes]).
+        val delivered = checkNotNull(ukitDropDeliveryBytes(NSURL.URLWithString("https://kadre.example/drop")))
+        item.attach(UIKitDropPayload.ofBytes(delivered))
+
+        val chunks = mutableListOf<ByteArray>()
+        assertTrue(item.collectBytes(8) { chunks += it }.isSuccess, "the advertised mime is READABLE")
+        assertEquals("https://kadre.example/drop", chunks.flatMap { it.toList() }.toByteArray().decodeToString())
     }
 }

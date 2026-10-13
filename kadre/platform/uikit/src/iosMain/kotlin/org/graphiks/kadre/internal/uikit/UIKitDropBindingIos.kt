@@ -197,15 +197,17 @@ internal class UIKitDropDelegate(
      * item (descripteur = le snapshot Task 1, payload LAZY attaché — le handle ne quitte jamais
      * la closure) ; les autres sont SAUTÉS, jamais approximés. La taille est honnêtement
      * inconnue (`null`) : aucun entier de provider n'est lisible avant la livraison.
+     *
+     * Le type préféré du payload : le type que le GENRE du descripteur nomme
+     * ([ukitDropPreferredTypeFor]) — la lecture charge exactement un type du mime que le
+     * descripteur annonce, jamais l'un pour l'autre genre.
      */
     private fun entriesOf(session: UIDropSessionProtocol): List<UIKitDropItem> =
         providersOf(session).mapNotNull { provider ->
             val types = provider.registeredTypeIdentifiers.filterIsInstance<String>()
             val snapshot = ukitDropSnapshot(types, provider.suggestedName, null) ?: return@mapNotNull null
             val item = UIKitDropItem(snapshot)
-            // Le type préféré du payload : le PREMIER type enregistré que la table porte — la
-            // lecture charge exactement un type que le descripteur annonce.
-            item.attach(ukitPayloadFromProvider(provider, types.firstOrNull { ukitDropMimeForUti(it) != null }))
+            item.attach(ukitPayloadFromProvider(provider, ukitDropPreferredTypeFor(types, snapshot.kind)))
             item
         }
 }

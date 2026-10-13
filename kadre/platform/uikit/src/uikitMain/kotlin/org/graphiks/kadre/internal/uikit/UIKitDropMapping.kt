@@ -92,6 +92,25 @@ internal data class UIKitDropItemSnapshot(
     val kind: DropItemKind,
 )
 
+/**
+ * Le type PRÉFÉRÉ que la lecture du payload charge — le type que le GENRE du descripteur nomme,
+ * premier dans l'ordre enregistré du provider ; repli (totalité) sur le premier type mappé.
+ *
+ * La règle tient les deux colonnes de la table ENSEMBLE au moment de la lecture : le descripteur
+ * porte le genre de la précédence File > Uri > Text, la lecture doit donc charger un type DE CE
+ * GENRE — un provider qui enregistre `public.url` ET `public.file-url` (quelle que soit la forme
+ * du drag) fait un descripteur File, et la lecture doit prendre `public.file-url`, pas se faire
+ * hijacker par le `public.url` enregistré avant ; à l'inverse un drag d'URL (`public.url` +
+ * `public.utf8-plain-text`, genre Uri) lit `public.url` — la chaîne absolue que le mime
+ * `text/uri-list` annonce — JAMAIS le texte secondaire. Le repli n'est irréalisable tant que
+ * les colonnes restent coextensives (même garde que la précédence du snapshot).
+ */
+internal fun ukitDropPreferredTypeFor(providerRegisteredTypes: List<String>, kind: DropItemKind): String? {
+    val kindMatched = providerRegisteredTypes.firstOrNull { ukitDropItemKindForUti(it) == kind }
+    if (kindMatched != null) return kindMatched
+    return providerRegisteredTypes.firstOrNull { ukitDropMimeForUti(it) != null }
+}
+
 /** La table fermée UTI → (mime canonique, genre) — la vérité entière du mapping drop UIKit. */
 private val UIKIT_DROP_TABLE: Map<String, Pair<String, DropItemKind>> = mapOf(
     // `public.utf8-plain-text` → text/plain : le texte système (AppKit APPKIT_UTF8_TEXT_TYPE).

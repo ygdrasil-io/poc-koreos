@@ -339,4 +339,55 @@ class UIKitDropMappingTest {
         )
         assertEquals(1, fired.value, "the loadItem completion must fire when the run loop is pumped")
     }
+
+    // MARK: - le type préféré de la lecture (ukitDropPreferredTypeFor — le genre nomme le type)
+
+    /**
+     * La lecture doit charger le type du GENRE que le descripteur porte — jamais se faire
+     * hijacker par un `public.url` enregistré avant (la fix F-1 : un drag de fichier qui
+     * enregistre `public.url` d'abord reste un descripteur File lu PAR `public.file-url`), et
+     * un drag d'URL (genre Uri) lit `public.url` — la chaîne que `text/uri-list` annonce —
+     * JAMAIS le texte secondaire.
+     */
+    @Test
+    fun preferredTypeMatchesTheDescriptorKindRegardlessOfRegisteredOrder() {
+        val fileTypes = listOf("public.url", "public.file-url")
+        val fileSnapshot = checkNotNull(ukitDropSnapshot(fileTypes, null, null))
+        assertEquals(DropItemKind.File, fileSnapshot.kind)
+        assertEquals(
+            "public.file-url",
+            ukitDropPreferredTypeFor(fileTypes, fileSnapshot.kind),
+            "a File descriptor reads its own kind, not the earlier-registered public.url",
+        )
+        val reversedTypes = listOf("public.file-url", "public.url")
+        assertEquals(
+            "public.file-url",
+            ukitDropPreferredTypeFor(reversedTypes, fileSnapshot.kind),
+            "the rule is kind-driven, not order-driven",
+        )
+        val urlTypes = listOf("public.url", "public.utf8-plain-text")
+        val urlSnapshot = checkNotNull(ukitDropSnapshot(urlTypes, null, null))
+        assertEquals(DropItemKind.Uri, urlSnapshot.kind)
+        assertEquals(
+            "public.url",
+            ukitDropPreferredTypeFor(urlTypes, urlSnapshot.kind),
+            "a Uri descriptor reads public.url — the uri-list content — not the secondary text",
+        )
+        val textTypes = listOf("public.utf8-plain-text")
+        val textSnapshot = checkNotNull(ukitDropSnapshot(textTypes, null, null))
+        assertEquals("public.utf8-plain-text", ukitDropPreferredTypeFor(textTypes, textSnapshot.kind))
+    }
+
+    @Test
+    fun preferredTypeFallsBackToTheFirstMappableType() {
+        // Totalité du kernel : un genre sans type apparié (irréalisable tant que les colonnes
+        // restent coextensives) retombe sur le premier type mappé, jamais `null` ici.
+        val types = listOf("public.url")
+        val snapshot = checkNotNull(ukitDropSnapshot(types, null, null))
+        assertEquals("public.url", ukitDropPreferredTypeFor(types, snapshot.kind))
+        assertNull(
+            ukitDropPreferredTypeFor(listOf("org.chromium.source-url"), DropItemKind.Uri),
+            "no mappable type at all stays null — the honest absence",
+        )
+    }
 }

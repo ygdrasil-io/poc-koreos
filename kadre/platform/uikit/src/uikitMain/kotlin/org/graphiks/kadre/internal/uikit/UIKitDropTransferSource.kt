@@ -15,6 +15,7 @@ import org.graphiks.kadre.internal.runtime.DropItemSource
 import org.graphiks.kadre.internal.runtime.DropTransferSource
 import platform.Foundation.NSData
 import platform.Foundation.NSItemProvider
+import platform.Foundation.NSURL
 import platform.darwin.dispatch_async
 import platform.darwin.dispatch_get_main_queue
 import kotlin.coroutines.resume
@@ -138,17 +139,26 @@ internal typealias UkitDropDispatch = (block: () -> Unit) -> Unit
  *
  * - `totalBytes` reste `null` : les tailles de provider sont inconnues AVANT chargement, et le pont
  *   ne devine pas — l'EOF se découvre à la lecture, comme le contrat du payload le demande.
- * - La route texte : la completion livre un `String` → octets UTF-8. La route données : un
- *   `NSData` → octets possédés (copiés hors du handle natif, qui ne quitte jamais la closure).
- *   Toute autre livraison (y compris `nil`) est une lecture qui échoue — l'échec fermé `byte-read`
- *   de [UIKitDropItem.collectBytes], jamais une valeur fabriquée.
+ * - Les routes de livraison ([ukitDropDeliveryBytes]) : texte (`String`) → octets UTF-8 ;
+ *   données (`NSData`) → octets possédés (copiés hors du handle natif, qui ne quitte jamais la
+ *   closure) ; URL (`NSURL` — la livraison NORMALE de `public.url` ET de `public.file-url`, le
+ *   fait du spike Task 1) → la chaîne ABSOLUE de l'URL en octets UTF-8 — le mime que le
+ *   descripteur annonce (`text/uri-list`, ou l'octet-stream du File) est donc TOUJOURS
+ *   lisible, jamais un mort-né `byte-read` (le consommateur résout l'URL ; la lecture du
+ *   CONTENU disque d'un File — le miroir AppKit `KffiFileDropItemSource` et son security
+ *   scoping — reste l'exit roadmap, hors de la portée du pont). Toute autre livraison (y
+ *   compris `nil`) est une lecture qui échoue — l'échec fermé `byte-read` de
+ *   [UIKitDropItem.collectBytes], jamais une valeur fabriquée.
  * - Les octets livrés sont mis en cache DANS la closure : le provider livre l'item ENTIER (la
  *   plateforme ne sait pas trancher), une lecture `Replayable` relit donc le même cache sans
  *   recharger. La séquentialité est portée par l'appelant (le runtime n'admet qu'une lecture à la
  *   fois) ; une lecture échouée ne met rien en cache et réessaie.
- * - Le type chargé : le type préféré du port, sinon le premier type enregistré du provider — et
- *   s'il n'y en a aucun, une lecture résout vide SANS toucher le provider (un provider que
- *   [ukitDropSnapshot] a accepté en porte toujours un ; la route totale reste honnête).
+ * - Le type chargé : le type préféré du port — le type que le GENRE du descripteur nomme
+ *   ([ukitDropPreferredTypeFor] ; un provider qui enregistre `public.url` ET `public.file-url`
+ *   ne doit pas faire lire l'un pour un descripteur de l'autre genre) — sinon le premier type
+ *   enregistré du provider — et s'il n'y en a aucun, une lecture résout vide SANS toucher le
+ *   provider (un provider que [ukitDropSnapshot] a accepté en porte toujours un ; la route
+ *   totale reste honnête).
  *
  * La preuve de COMPORTEMENT asynchrone (le feu réel de la completion sous coroutine, la livraison
  * hors thread principal) vit dans les tests driver de la Task 4 : depuis pur Kotlin, la completion
@@ -180,8 +190,9 @@ private suspend fun loadProviderBytes(
 ): ByteArray {
     // Le paramètre `item` de la completion arrive du klib en conformer de protocole
     // (`id<NSSecureCoding>`) — la lecture réélle est ramenée en `Any?` AVANT le `when`, sinon les
-    // checks `is String`/`is NSData` seraient jugés impossibles à la compilation (la vérité du
-    // runtime est le pontage K/N : un texte livré EST un String).
+    // checks `is String`/`is NSData`/`is NSURL` seraient jugés impossibles à la compilation (la
+    // vérité du runtime est le pontage K/N : un texte livré EST un String, une URL livrée EST
+    // une NSURL).
     val delivered: Any? = suspendCancellableCoroutine<Any?> { continuation ->
         dispatch {
             provider.loadItemForTypeIdentifier(
@@ -191,11 +202,31 @@ private suspend fun loadProviderBytes(
             )
         }
     }
-    return when (delivered) {
-        is String -> delivered.encodeToByteArray()
-        is NSData -> delivered.toOwnedByteArray()
-        else -> throw IllegalStateException("uikit drop: the provider delivered no readable item for $type")
-    }
+    return ukitDropDeliveryBytes(delivered)
+        ?: throw IllegalStateException("uikit drop: the provider delivered no readable item for $type")
+}
+
+/**
+ * La conversion d'UNE livraison de provider en octets — le kernel PUR des routes de lecture
+ * (aucune suspension, testable sans appareil dans `uikitTest`) :
+ *
+ * - **texte** — un `String` livré : octets UTF-8 (la route `public.utf8-plain-text`) ;
+ * - **données** — un `NSData` livré : octets possédés, copiés hors du handle natif ;
+ * - **URL** — une `NSURL` livrée : la chaîne ABSOLUE de l'URL en octets UTF-8. C'est la
+ *   livraison NORMALE des types `public.url` (kind Uri, mime `text/uri-list` — la chaîne EST
+ *   le contenu que le mime annonce) et `public.file-url` (kind File — l'URL du fichier ;
+ *   le consommateur la résout, la lecture du contenu disque et son security scoping restant
+ *   l'exit roadmap, miroir AppKit `KffiFileDropItemSource`). Sans cette route, un drag d'URL —
+ *   la forme ordinaire — eût été un descripteur annonçant un mime ILLISIBLE : le mort-né
+ *   `byte-read` que la couture interdit ;
+ * - **tout le reste** (y compris `nil`) — `null` : l'appelant en fait l'échec fermé `byte-read`,
+ *   jamais une valeur fabriquée.
+ */
+internal fun ukitDropDeliveryBytes(delivered: Any?): ByteArray? = when (delivered) {
+    is String -> delivered.encodeToByteArray()
+    is NSData -> delivered.toOwnedByteArray()
+    is NSURL -> delivered.absoluteString?.encodeToByteArray()
+    else -> null
 }
 
 /** Copie les octets d'un `NSData` livré hors du handle natif — le handle reste dans la closure. */
