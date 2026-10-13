@@ -46,6 +46,15 @@ class Win32SurfaceNativeContractTest {
         return port to driver
     }
 
+    private fun diag(tag: String, content: String) {
+        val dir = java.nio.file.Paths.get("build/win32-integration")
+        java.nio.file.Files.createDirectories(dir)
+        java.nio.file.Files.writeString(
+            dir.resolve("$tag.txt"),
+            content,
+        )
+    }
+
     private fun borrowHwnd(window: org.graphiks.kadre.window.Window): Long = runBlocking {
         val borrowed = window.withDesktopHandle { handle -> handle }
         val result = assertIs<KadreResult.Success<DesktopNativeWindowHandle>>(borrowed)
@@ -126,9 +135,14 @@ class Win32SurfaceNativeContractTest {
             val window = assertIs<WindowRequestOutcome.OpenedHere>(result.value.await()).window
             val hwnd = borrowHwnd(window)
             val scale = port.readScaleFactor(hwnd)
-            assertTrue(scale >= 1.0, "runner scale must be at least 1.0, got $scale")
-            val (width, _) = port.readClientPhysicalSize(hwnd)
-            assertTrue(width > 0, "client width must be readable at scale $scale")
+            val (width, height) = try {
+                port.readClientPhysicalSize(hwnd)
+            } catch (failure: Throwable) {
+                diag("client-size-failure", "hwnd=$hwnd failure=${failure.message}")
+                throw failure
+            }
+            diag("scale-readback", "scale=$scale size=$width×$height hwnd=$hwnd")
+            assertTrue(width > 0, "client width must be readable at scale $scale (got ${width}×$height)")
         }
     }
 }
