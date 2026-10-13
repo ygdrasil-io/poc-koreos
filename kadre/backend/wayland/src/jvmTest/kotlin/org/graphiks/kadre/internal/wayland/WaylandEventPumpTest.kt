@@ -88,8 +88,6 @@ class WaylandEventPumpTest {
     }
 
     @Test
-
-    @Test
     fun wakeOnlyReturnsToTheHostLoopForActionDraining() {
         val ops = RecordingOperations()
         ops.pollResults = ArrayDeque(listOf(PollOutcome.WakeOnly, PollOutcome.DisplayReady))
