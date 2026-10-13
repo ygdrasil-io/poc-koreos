@@ -287,11 +287,11 @@ Apple transmet l’activité associée à une demande d’activation dans les op
 
 **But :** recevoir les données natives avec un transfert de propriété et des limites vérifiables.
 
-- [ ] Relier les callbacks de drop aux offres, métadonnées copiées et actions `AcceptDrop`, selon le timing natif effectivement disponible.
-- [ ] Réutiliser le moteur commun d’`InteractionContext` : token borné au callback, single-use (usage unique), vérification de surface et admission synchrone ; n’annoncer que les actions réellement exécutables.
-- [ ] Relier le chargement asynchrone des données du provider aux `DropTransfer`, avec un seul gagnant du claim (prise de possession), bornes en octets et fermeture idempotente.
-- [ ] Tester rejet, sortie, drop effectué, lecture interrompue, taille inconnue, dépassement de budget, fermeture pendant chargement et callback tardif.
-- [ ] Séparer les APIs de drop iOS des sources communes ; sur tvOS, prouver l’état absent exact en l’absence de primitive conforme, sans listener factice ni appel à un symbole indisponible. Auditer les interactions synchrones tvOS indépendamment du support de drop.
+- [x] Relier les callbacks de drop aux offres, métadonnées copiées et actions `AcceptDrop`, selon le timing natif effectivement disponible.
+- [x] Réutiliser le moteur commun d’`InteractionContext` : token borné au callback, single-use (usage unique), vérification de surface et admission synchrone ; n’annoncer que les actions réellement exécutables.
+- [x] Relier le chargement asynchrone des données du provider aux `DropTransfer`, avec un seul gagnant du claim (prise de possession), bornes en octets et fermeture idempotente.
+- [x] Tester rejet, sortie, drop effectué, lecture interrompue, taille inconnue, dépassement de budget, fermeture pendant chargement et callback tardif.
+- [x] Séparer les APIs de drop iOS des sources communes ; sur tvOS, prouver l’état absent exact en l’absence de primitive conforme, sans listener factice ni appel à un symbole indisponible. Auditer les interactions synchrones tvOS indépendamment du support de drop.
 
 **Fichiers principaux :** ports drop/interactions UIKit, mapping d’offres, tests et procédure de drag entre applications.
 

@@ -18,7 +18,7 @@ kotlin {
 
 val jvmMain = kotlin.targets.getByName("jvm").compilations.getByName("main")
 val webContractIds = listOf("BCK-001", "BCK-002", "BCK-003", "BCK-004", "BCK-005", "BCK-006", "BCK-007", "BCK-008", "BCK-009", "BCK-010", "BCK-011", "INT-002", "INT-003", "INT-004")
-val uikitContractIds = listOf("BCK-012", "BCK-013", "BCK-014", "BCK-015", "BCK-016", "BCK-020", "BCK-021", "BCK-022", "BCK-023", "BCK-024", "WIN-009")
+val uikitContractIds = listOf("BCK-012", "BCK-013", "BCK-014", "BCK-015", "BCK-016", "BCK-020", "BCK-021", "BCK-022", "BCK-023", "BCK-024", "BCK-026", "WIN-009")
 val appKitContractIds = listOf(
     "APK-001", "APK-002", "APK-003", "APK-004", "APK-005", "APK-006",
     "APK-007", "APK-008", "APK-009", "APK-010", "APK-011", "APK-012",
@@ -449,7 +449,9 @@ val browserContractEvidenceTasks = listOf("js", "wasmJs").map { target ->
 // phase 4 — demandes de fenêtres : refus sans provider sur les DEUX familles, scènes
 // corrélées iPadOS ; BCK-022/BCK-023 phase 5 — sources d'entrée annoncées : touch/pointeur
 // (survol) et clavier/gestes sur les DEUX familles ; BCK-024 phase 6 — la session texte
-// sur le receiver natif caché, les DEUX familles) : preuve O3
+// sur le receiver natif caché, les DEUX familles ; BCK-026 phase 7 — la destination de
+// drop native UIKit sur les DEUX familles : scénarios de flux sur iOS, sonde d'absence
+// sur tvOS où UIDropInteraction est API_UNAVAILABLE) : preuve O3
 // produite par xcodebuild sur simulateurs (:kadre:contracts:driver:uikit:simulatorTests),
 // exportée en JUnit par tools/xctest_to_junit.py. Miroir du bloc AppKit ci-dessus, par target
 // famille. BCK-014 (multi-scène iPadOS), BCK-016 (rotation iPadOS) et BCK-021 (scènes

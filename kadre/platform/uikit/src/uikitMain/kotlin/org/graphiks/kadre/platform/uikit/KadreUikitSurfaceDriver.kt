@@ -25,6 +25,7 @@ import org.graphiks.kadre.input.TextInputSession
 import org.graphiks.kadre.input.TextRange
 import org.graphiks.kadre.internal.runtime.RuntimeLock
 import org.graphiks.kadre.internal.runtime.withLock
+import org.graphiks.kadre.internal.uikit.UIKitDropCount
 import org.graphiks.kadre.internal.uikit.UIKitGestureCount
 import org.graphiks.kadre.internal.uikit.UIKitKeyboardCount
 import org.graphiks.kadre.internal.uikit.UIKitObservationCount
@@ -627,6 +628,30 @@ public object KadreUikitSurfaceDriver {
     /** Les annonces `InputObservationChanged` déclenchées par le binding gestes/survol. */
     public val gestureAnnouncementCount: Long
         get() = UIKitGestureCount.totalAnnouncements()
+
+    // MARK: - Compteurs drop (phase 7, Task 3) — le proxy du driver, même posture.
+
+    /**
+     * Les interactions `UIDropInteraction` réellement posées sur la vue (le compteur du
+     * fixture ; zéro côté tvOS par construction — le binding n'y existe pas).
+     */
+    public val dropInstallCount: Long
+        get() = UIKitDropCount.totalInstalls()
+
+    /** Les interactions drop réellement retirées de la vue. */
+    public val dropTeardownCount: Long
+        get() = UIKitDropCount.totalTeardowns()
+
+    /**
+     * Les livraisons que le delegate drop VIVANT reçoit (`canHandle`, entrée, mouvement,
+     * sortie, perform, conclude, fin de session — zéro sur toute suite automatisée SANS
+     * scénarios drop delegate-driven : tvOS, où le binding n'existe pas, ou les suites des
+     * autres familles d'entrée, où aucun drag n'est livré ; les scénarios drop
+     * delegate-driven du driver les incrémentent — l'install structurel posé par l'attach,
+     * puis chaque hook livré au vrai delegate par les fausses de session conformes).
+     */
+    public val dropEventCount: Long
+        get() = UIKitDropCount.totalEvents()
 
     // MARK: - Compteurs + probes texte (phase 6, Task 3) — le proxy du driver, même posture.
 

@@ -14,6 +14,9 @@ import org.graphiks.kadre.diagnostics.KadreOperation
 import org.graphiks.kadre.diagnostics.KadrePlatform
 import org.graphiks.kadre.diagnostics.KadreResourceKind
 import org.graphiks.kadre.diagnostics.KadreResult
+import org.graphiks.kadre.input.DropOfferId
+import org.graphiks.kadre.interaction.InteractionKind
+import org.graphiks.kadre.internal.runtime.DropTransferSource
 import org.graphiks.kadre.internal.runtime.OpenedWindowCloseCommand
 import org.graphiks.kadre.internal.runtime.OpenedWindowCloseOutcome
 import org.graphiks.kadre.internal.runtime.PendingWindowCancellationCommand
@@ -50,6 +53,7 @@ import org.graphiks.kadre.surface.CursorStyle
 import org.graphiks.kadre.surface.HitTestingMode
 import org.graphiks.kadre.surface.InputDefaultBehavior
 import org.graphiks.kadre.surface.LogicalInsets
+import org.graphiks.kadre.surface.LogicalPoint
 import org.graphiks.kadre.surface.LogicalSize
 import org.graphiks.kadre.surface.PhysicalSize
 import org.graphiks.kadre.surface.PointerCaptureMode
@@ -117,6 +121,7 @@ internal class UIKitWindowCommandPort(
     private val stimulusSink: (SurfaceStimulus) -> Boolean,
     private val windowStateSink: (WindowId, WindowState) -> Boolean,
     private val readySink: (SurfaceId) -> Unit,
+    private val synchronousDropSink: (SurfaceId, DropTransferSource, LogicalPoint) -> DropOfferId?,
 ) : WindowCommandPort, SurfaceCommandPort, UIKitViewLeasePort {
     // `resources` (paramètre constructeur ci-dessus) est filé pour la symétrie AppKit
     // (l.275-277) ; phase 1 n'a rien à pré-réserver, phase 2 en héritera.
@@ -175,6 +180,26 @@ internal class UIKitWindowCommandPort(
      */
     private var keyboardBinding: UIKitKeyboardBinding? = null
     private var gestureBindings: UIKitGestureBindings? = null
+
+    /**
+     * Le branchement drop (phase 7, Task 3) : le MÊME point de cycle que les trois bindings
+     * d'input — installé APRÈS eux ([requestOpen], le drop arrive en DERNIER : la dernière
+     * chose qu'un attach pose, la PREMIÈRE qu'un teardown retire — le drop doit cesser
+     * d'être annoncé avant que les sources touch ne s'en aillent), retiré aux mêmes retraits
+     * ([teardownSurfaceObservation]). L'actual tvOS ne construit PAS de binding
+     * ([createDropBinding] répond `null` — la couture `UIDropInteraction` n'existe pas dans
+     * son klib) : les hooks créés sont refermés sur-le-champ, inertes.
+     *
+     * Le binding n'écrit JAMAIS dans l'agrégat [UIKitInputAnnouncement] (décision tracée : le
+     * stimulus `InputObservationChanged` n'a pas de champ drop — la DISPONIBILITÉ du drop vit
+     * dans la capability `handlerInteractions` ([uikitHandlerInteractionKinds], la ladder de
+     * [uikitSurfaceCapabilities]), et le SUIVI d'un drag vit dans les stimuli
+     * `DropMoved`/`DropExited`/`DropPerformed` que la machine à états
+     * ([UIKitDropSessionHooks]) publie par [stimulusSink] ; l'ADMISSION d'un drag part par
+     * [synchronousDropSink], le second sink du port — l'appelant d'attach a filé la closure
+     * qui rejoint le manager, miroir du driver AppKit l.112-114).
+     */
+    private var dropBinding: UIKitDropBinding? = null
 
     /**
      * Le port texte (phase 6, Task 2) : résolu par surfaceId via [textInputPort] (la factory du
@@ -261,10 +286,14 @@ internal class UIKitWindowCommandPort(
         // Task 3 (phase 5) : clavier GCKeyboard puis gestes/survol au MÊME point de cycle,
         // dans l'ordre (touch → clavier → gestes) qui fait de la DERNIÈRE annonce d'install
         // le snapshot complet ; l'agrégat d'annonce vit le temps de l'attach.
+        // Phase 7 (Task 3) : le drop arrive en DERNIER — la pose la plus tardive de la chaîne,
+        // donc la première retirée au teardown (le drop doit cesser d'être annoncé avant que
+        // les sources touch ne s'en aillent).
         val announcement = UIKitInputAnnouncement(entry.surfaceId)
         installTouchBinding(entry.surfaceId, announcement)
         installKeyboardBinding(entry.surfaceId, announcement)
         installGestureBindings(entry.surfaceId, announcement)
+        installDropBinding(entry.surfaceId, announcement)
     }
 
     /**
@@ -367,6 +396,51 @@ internal class UIKitWindowCommandPort(
     }
 
     /**
+     * L'installation du branchement drop (phase 7, Task 3) — la même posture qu'
+     * [installGestureBindings] : une seule fois (garde sous verrou), l'exception d'installation
+     * rapportée et absorbée (un attach ne casse jamais pour un branchement d'input).
+     *
+     * Les hooks de la machine à états ([UIKitDropSessionHooks]) ferment sur les DEUX sinks du
+     * port : l'admission d'un drag part par [synchronousDropSink] (le rendu non-nul EST
+     * l'offerId retenu, `null` la source déjà fermée du chemin refusant) et le suivi publie par
+     * [stimulusSink]. Le paramètre [announcement] est reçu pour la symétrie de la chaîne
+     * d'installation mais DÉLIBÉRÉMENT jamais écrit (décision tracée : le drop n'a pas de fait
+     * `InputObservationChanged` — sa disponibilité vit dans la capability
+     * `handlerInteractions`, cf. KDoc du champ [dropBinding]).
+     */
+    private fun installDropBinding(surfaceId: SurfaceId, announcement: UIKitInputAnnouncement) {
+        val binding = lock.withLock {
+            if (dropBinding != null) return
+            val hooks = UIKitDropSessionHooks(
+                surfaceId = surfaceId,
+                dropSink = synchronousDropSink,
+                publish = { stimulus -> stimulusSink(stimulus) },
+            )
+            // La fabrique plateforme décide : le binding réel (iOS) ou `null` (tvOS — la
+            // couture `UIDropInteraction` n'existe pas dans son klib). Sur la branche null les
+            // hooks sont refermés SUR-LE-CHAMP : inertes, ils ne peuvent plus rien publier.
+            val created = createDropBinding(view, hooks, uikitDropDisplayScale()) ?: run {
+                hooks.close()
+                return
+            }
+            dropBinding = created
+            created
+        }
+        runCatching { binding.install() }.onFailure(failureReporter::report)
+    }
+
+    /**
+     * L'échelle d'affichage lue au moment de l'installation — la lecture du snapshot d'attach
+     * ([initialSnapshot]) : `displayScale` vaut 0 tant que la vue n'a pas de fenêtre effective,
+     * la garde borne à 1.0. Portée au binding pour la symétrie du kernel d'input ; la
+     * conversion de position ne l'applique JAMAIS (l'espace de la vue EST l'espace logique).
+     */
+    private fun uikitDropDisplayScale(): Double {
+        val scale = view.traitCollection.displayScale
+        return if (scale > 0.0) scale else 1.0
+    }
+
+    /**
      * Le chemin de publication du binding (Task 3) : le kernel pur juge l'observation contre le
      * miroir et la génération COURANTE du binding (lue au moment du traitement — une livraison
      * tardive après teardown est `Stale`, jamais publiée). Sur `Metrics`, le diff contre le
@@ -459,16 +533,24 @@ internal class UIKitWindowCommandPort(
      * avec LEURS annonces (Task 3). L'ordre touch → clavier → gestes fait de la DERNIÈRE
      * annonce de révocation le all-false + vide. Idempotent — les trois chemins peuvent
      * converger.
+     *
+     * Phase 7 (Task 3) : le drop est retiré EN PREMIER parmi les bindings d'input (la
+     * DERNIÈRE pose de la chaîne d'install, la PREMIÈRE retraite) — l'interaction quitte la
+     * vue et la machine à états s'éteint AVANT que le touch, le clavier et les gestes ne
+     * s'en aillent : le drop doit cesser d'être annoncé (et de livrer) pendant que les
+     * sources d'input existent encore.
      */
     private fun teardownSurfaceObservation() {
         val stale = lock.withLock {
             if (observationBinding == null && appearanceObserver == null &&
-                touchBinding == null && keyboardBinding == null && gestureBindings == null
+                touchBinding == null && keyboardBinding == null && gestureBindings == null &&
+                dropBinding == null
             ) {
                 null
             } else {
                 val binding = observationBinding
                 val observer = appearanceObserver
+                val drop = dropBinding
                 val touch = touchBinding
                 val keyboard = keyboardBinding
                 val gestures = gestureBindings
@@ -476,12 +558,14 @@ internal class UIKitWindowCommandPort(
                 appearanceObserver = null
                 surfaceMetrics = null
                 surfaceAppearance = null
+                dropBinding = null
                 touchBinding = null
                 keyboardBinding = null
                 gestureBindings = null
-                TouchToGestureStale(binding, observer, touch, keyboard, gestures)
+                StaleBindings(drop, binding, observer, touch, keyboard, gestures)
             }
         } ?: return
+        stale.drop?.teardown()
         stale.observation?.teardown()
         stale.appearance?.teardown()
         stale.touch?.teardown()
@@ -490,7 +574,8 @@ internal class UIKitWindowCommandPort(
     }
 
     /** Le lot des branchements retirés d'un coup ([teardownSurfaceObservation]). */
-    private class TouchToGestureStale(
+    private class StaleBindings(
+        val drop: UIKitDropBinding?,
         val observation: UIKitSurfaceObservationBinding?,
         val appearance: UIKitAppearanceObserver?,
         val touch: UIKitTouchBinding?,
@@ -820,17 +905,33 @@ private val APPLY_LADDER_STATE = SurfaceState(
 )
 
 /**
- * Les capabilities annoncées du surface UIKit (phase 2) : les quatre champs update refusés
- * `Unsupported(UpdateSurface)` (aucun chemin de commit natif — la vue du host se rend
- * elle-même), `handlerInteractions`/`armedInteractions` refusés, `platformAccess` `Supported`
+ * Les capabilities annoncées du surface UIKit (phase 2 ; phase 7 Task 3 pour les interactions) :
+ * les quatre champs update refusés `Unsupported(UpdateSurface)` (aucun chemin de commit natif —
+ * la vue du host se rend elle-même), `armedInteractions` refusé, `platformAccess` `Supported`
  * (la rangée UIKit du registre des capabilities, miroir d'`androidSurfaceCapabilities`
- * l.523-526 : les métriques publiées et le redraw coalescé vivent). Publiée par
- * `UIKitWindowRuntime` (`enabledSurfaceCapabilities`), consommée par le kernel d'`apply`.
+ * l.523-526 : les métriques publiées et le redraw coalescé vivent), et — phase 7 — les
+ * interactions de handler PAR TARGET via [uikitHandlerInteractionKinds] : iOS annonce
+ * EXACTEMENT `AcceptDrop` (aucun primitif fullscreen/pointer-lock/window-move n'existe sur
+ * UIKit ; le drag SORTANT n'est pas annoncé — sortie roadmap), tvOS l'ensemble VIDE (la
+ * capability garde son refus par défaut). Publiée par `UIKitWindowRuntime`
+ * (`enabledSurfaceCapabilities`), consommée par le kernel d'`apply` et — pour le drop — par
+ * `MinimalWindowSurface.supportsDropInteraction`, qui construit le handler et accepte le
+ * dispatch synchrone quand `AcceptDrop` est annoncé.
  */
-internal fun uikitSurfaceCapabilities(): SurfaceCapabilities =
-    unsupportedSurfaceCapabilities().copy(
-        platformAccess = Capability.Supported(Unit, FeatureAvailability.Available),
-    )
+internal fun uikitSurfaceCapabilities(): SurfaceCapabilities {
+    val kinds = uikitHandlerInteractionKinds()
+    val platformAccess = Capability.Supported(Unit, FeatureAvailability.Available)
+    return if (kinds.isEmpty()) {
+        unsupportedSurfaceCapabilities().copy(platformAccess = platformAccess)
+    } else {
+        // La ladder par target : un ensemble non vide annonce `handlerInteractions` porté par
+        // EXACTEMENT les genres installés (la règle de l'ensemble exact — jamais un de plus).
+        unsupportedSurfaceCapabilities().copy(
+            platformAccess = platformAccess,
+            handlerInteractions = Capability.Supported(kinds, FeatureAvailability.Available),
+        )
+    }
+}
 
 /**
  * Le champ d'un `Clear`, ou `null` — la garde du port, AVANT toute admission (miroir exact
