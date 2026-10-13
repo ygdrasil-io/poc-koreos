@@ -6,6 +6,11 @@ ordinaire — **aucune SurfaceView, aucun renderer GPU** — et une console text
 le cycle de vie de la fenêtre vu du runtime (attachement, visibilité, focus, dimensions,
 terminaison de session).
 
+**Attach unique, sans relance.** Le sample pose l'attach UNE fois (attach-once) : un
+refus (`KadreResult.Failure`) est journalisé tel quel et n'est jamais retenté — la
+sémantique d'erreur de programmation assumée d'une démo ; une vraie application
+déciderait sa propre politique de relance.
+
 ## Mapping kadre-old → nouveau
 
 | kadre-old | nouveau | note |

@@ -53,6 +53,14 @@ import org.graphiks.kadre.policy.KadrePolicy
  *    `Stopped(HostDetached)`) — la liaison ne double pas cet arrêt ; si le host compose à
  *    nouveau, l'attach suivant recrée une session sur la MÊME vue (la réservation P1 est
  *    libérée à la terminaison effective).
+ *  — **limite documentée — la course de re-attach rapide** : après un détachement
+ *    terminal, un re-attach tenté PENDANT que la réservation P1 est encore tenue (avant
+ *    sa libération à la terminaison effective) est refusé (`AlreadyInUse(Host)`) — et ce
+ *    refus laisse le créneau ouvert SANS qu'aucun nouvel événement d'attach ne survienne
+ *    (la vue est déjà dans la fenêtre) : le host reste sans session jusqu'au PROCHAIN
+ *    cycle détachement/rattachement, seul à re-déclencher la création. La liaison ne
+ *    retente pas d'elle-même ; un retry au niveau de la machine (ré-arme différée) est un
+ *    raffinement différé, pas une promesse de cette phase.
  *
  * Aucun type interne kadre ne traverse cette signature — la surface publique d'attach et
  * [KadreSession] (le slot [content], composé AU-DESSUS du conteneur tant qu'une session

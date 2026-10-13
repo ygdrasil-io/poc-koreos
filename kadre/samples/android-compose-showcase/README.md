@@ -10,12 +10,19 @@ l'observation du touch publiée par le runtime (`surface.input.events`).
 Le module porte aussi les **deux scénarios instrumentés** du contrat AND-010
 (`src/androidTest`, exécutés par la gate Android) :
 
-- `androidComposeShowcaseSingleSession` — recomposition ×3 → UNE session ; dispose →
-  fermée (`Stopped(HostRequested)`) ; re-compose → recréée (une NOUVELLE session sur une
+- `androidComposeShowcaseSingleSession` — recomposition ×3 → UNE session ; sortie de
+  composition → terminée par l'un des DEUX arrêts host documentés de la machine
+  (`Stopped(HostRequested)` quand le `onDispose` gagne la course,
+  `Stopped(HostDetached)` quand la fenêtre retire la vue d'abord — sur une fenêtre
+  réelle, le détachement précède) ; re-compose → recréée (une NOUVELLE session sur une
   nouvelle vue) ;
 - `androidLegacyTypesAbsent` — le scan du dex de l'APK réellement exécuté (où les classes
   de l'AAR `platform-android` publié sont fusionnées) : ni `AndroidKadreRuntime` ni
   `EventLoop` (les types kadre-old) — ils n'ont jamais été dans le nouveau build.
+
+Le sample n'ajoute aucune politique de relance au-dessus de la liaison : l'attach est
+posé une fois par host (attach-once), un refus persistant n'est jamais retenté par le
+sample — sémantique d'erreur de programmation assumée d'une démo.
 
 ## Mapping kadre-old → nouveau
 

@@ -7,6 +7,11 @@ du touch — les événements `SurfaceInput` publiés par le runtime (`InputEven
 `Key`, `Scrolled` : phases, identités stables, positions) journalisés dans une console
 simple.
 
+**Attach unique, sans relance.** Le sample pose l'attach UNE fois (attach-once) : un
+refus (`KadreResult.Failure`) est journalisé tel quel et n'est jamais retenté — la
+sémantique d'erreur de programmation assumée d'une démo ; une vraie application
+déciderait sa propre politique de relance.
+
 ## Mapping kadre-old → nouveau
 
 | kadre-old | nouveau | note |
