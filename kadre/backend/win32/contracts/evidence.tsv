@@ -41,3 +41,9 @@ W32-005	jvm	sentinel	win32-no-close-without-decision	org.graphiks.kadre.internal
 W32-006	jvm	scenario	win32-last-window-arms-stop	org.graphiks.kadre.internal.win32.Win32WindowsNativeContractTest	closingSecondaryKeepsTheSessionAliveThenLastWindowStopsIt
 W32-006	jvm	scenario	win32-hwnd-reuse-delivers-nothing	org.graphiks.kadre.internal.win32.DeterministicWin32WindowPortTest	destroyedWindowStopsRouting[jvm]
 W32-006	jvm	sentinel	win32-no-stop-without-windows	org.graphiks.kadre.internal.win32.Win32BackendProviderTest	emptyApplicationCompletesThroughThePump[jvm]
+W32-007	jvm	scenario	win32-resize-publishes-readback	org.graphiks.kadre.internal.win32.Win32SurfaceNativeContractTest	programmaticResizePublishesReadBackMetrics
+W32-007	jvm	scenario	win32-scale-readback-coherent	org.graphiks.kadre.internal.win32.Win32SurfaceNativeContractTest	scaleReadbackIsCoherent
+W32-008	jvm	scenario	win32-redraw-coalesced-drain	org.graphiks.kadre.internal.win32.Win32SurfaceFlowTest	redrawRequestsCoalesceDrainAndRearm[jvm]
+W32-008	jvm	scenario	win32-redraw-closed-fails	org.graphiks.kadre.internal.win32.Win32SurfaceFlowTest	redrawOnClosedWindowFailsClosed[jvm]
+W32-008	jvm	sentinel	win32-no-paint-at-rest	org.graphiks.kadre.internal.win32.Win32SurfaceFlowTest	paintDispatchRequiresPriorInvalidation[jvm]
+W32-007	jvm	sentinel	win32-no-requested-size-published	org.graphiks.kadre.internal.win32.Win32SurfaceNativeContractTest	programmaticResizePublishesReadBackMetrics
