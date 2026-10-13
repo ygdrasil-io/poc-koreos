@@ -104,6 +104,7 @@ internal class KffiWin32HostPort : Win32NativeHostPort {
         if (waitResult == WAIT_FAILED) {
             return Win32MessageWait.Error(GetLastError())
         }
+        if (msgArena == null) msgArena = Arena.ofShared()
         if (pendingMessage == null) {
             pendingMessage = checkNotNull(msgArena).allocate(Win32Structs.msg.layout)
         }
