@@ -18,7 +18,7 @@ kotlin {
 
 val jvmMain = kotlin.targets.getByName("jvm").compilations.getByName("main")
 val webContractIds = listOf("BCK-001", "BCK-002", "BCK-003", "BCK-004", "BCK-005", "BCK-006", "BCK-007", "BCK-008", "BCK-009", "BCK-010", "BCK-011", "INT-002", "INT-003", "INT-004")
-val uikitContractIds = listOf("BCK-012", "BCK-013", "BCK-014", "BCK-015", "BCK-016", "BCK-020", "BCK-021", "BCK-022", "BCK-023", "BCK-024", "BCK-025", "WIN-009")
+val uikitContractIds = listOf("BCK-012", "BCK-013", "BCK-014", "BCK-015", "BCK-016", "BCK-020", "BCK-021", "BCK-022", "BCK-023", "BCK-024", "BCK-026", "WIN-009")
 val appKitContractIds = listOf(
     "APK-001", "APK-002", "APK-003", "APK-004", "APK-005", "APK-006",
     "APK-007", "APK-008", "APK-009", "APK-010", "APK-011", "APK-012",
@@ -31,7 +31,7 @@ val runtimeContractIds = listOf(
     "DSP-001", "RUN-007", "RUN-008", "INT-001", "CAP-001",
 )
 val waylandContractIds = listOf("BCK-017", "SES-001", "SUR-001")
-val win32ContractIds = listOf("W32-001", "W32-002", "W32-003")
+val win32ContractIds = listOf("W32-001", "W32-002", "W32-003", "BCK-025", "SES-002", "PMP-001")
 val contractEvidenceGateIds = appKitContractIds + runtimeContractIds + webContractIds + uikitContractIds + waylandContractIds + win32ContractIds
 check(contractEvidenceGateIds.distinct().size == contractEvidenceGateIds.size) {
     "each configured contract evidence gate must have exactly one explicit producer"
@@ -449,7 +449,7 @@ val browserContractEvidenceTasks = listOf("js", "wasmJs").map { target ->
 // phase 4 — demandes de fenêtres : refus sans provider sur les DEUX familles, scènes
 // corrélées iPadOS ; BCK-022/BCK-023 phase 5 — sources d'entrée annoncées : touch/pointeur
 // (survol) et clavier/gestes sur les DEUX familles ; BCK-024 phase 6 — la session texte
-// sur le receiver natif caché, les DEUX familles ; BCK-025 phase 7 — la destination de
+// sur le receiver natif caché, les DEUX familles ; BCK-026 phase 7 — la destination de
 // drop native UIKit sur les DEUX familles : scénarios de flux sur iOS, sonde d'absence
 // sur tvOS où UIDropInteraction est API_UNAVAILABLE) : preuve O3
 // produite par xcodebuild sur simulateurs (:kadre:contracts:driver:uikit:simulatorTests),
@@ -555,7 +555,8 @@ val generateUikitContractEvidence by tasks.registering {
     dependsOn(uikitContractValidateTasks)
 }
 
-val androidContractIds = listOf("AND-001", "AND-002", "AND-003", "AND-004", "AND-005", "AND-006", "AND-007", "AND-008", "AND-009")
+// Phase 9 (AND-010) : le DÉCUPLE — les samples migrés entrent dans la gate Android.
+val androidContractIds = listOf("AND-001", "AND-002", "AND-003", "AND-004", "AND-005", "AND-006", "AND-007", "AND-008", "AND-009", "AND-010")
 val androidContractRegistry = rootProject.file("kadre/contracts/registry/contracts.tsv")
 val androidContractMappings = listOf(
     rootProject.file("kadre/contracts/driver/android/contracts/evidence.tsv"),

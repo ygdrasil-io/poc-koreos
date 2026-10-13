@@ -7118,6 +7118,10 @@ final object org.graphiks.kadre.policy/KadrePolicies { // org.graphiks.kadre.pol
         final fun <get-Realtime>(): org.graphiks.kadre.policy/KadrePolicy // org.graphiks.kadre.policy/KadrePolicies.Realtime.<get-Realtime>|<get-Realtime>(){}[0]
     final val Recording // org.graphiks.kadre.policy/KadrePolicies.Recording|{}Recording[0]
         final fun <get-Recording>(): org.graphiks.kadre.policy/KadrePolicy // org.graphiks.kadre.policy/KadrePolicies.Recording.<get-Recording>|<get-Recording>(){}[0]
+
+    final fun defaultPolicy(): org.graphiks.kadre.policy/KadrePolicy // org.graphiks.kadre.policy/KadrePolicies.defaultPolicy|defaultPolicy(){}[0]
+    final fun realtimePolicy(): org.graphiks.kadre.policy/KadrePolicy // org.graphiks.kadre.policy/KadrePolicies.realtimePolicy|realtimePolicy(){}[0]
+    final fun recordingPolicy(): org.graphiks.kadre.policy/KadrePolicy // org.graphiks.kadre.policy/KadrePolicies.recordingPolicy|recordingPolicy(){}[0]
 }
 
 final val org.graphiks.kadre.diagnostics/isFailure // org.graphiks.kadre.diagnostics/isFailure|@org.graphiks.kadre.diagnostics.KadreResult<*>{}isFailure[0]

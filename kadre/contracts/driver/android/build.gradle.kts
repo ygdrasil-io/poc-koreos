@@ -36,6 +36,11 @@ dependencies {
 val kadreRepository = rootProject.layout.buildDirectory.dir("kadre-contract-repository")
 val consumerProjectDir = rootProject.file("kadre/consumers/android")
 val consumerResultsDir = consumerProjectDir.resolve("build/outputs/androidTest-results/connected")
+// Phase 9 (AND-010) : les scénarios du sample compose-showcase tournent dans LEUR APK —
+// le consumer prouve les façades, le sample prouve la liaison Compose publiée et l'absence
+// des types kadre-old. Leurs XML partagent le même répertoire JUnit canonique par moteur.
+val showcaseProjectPath = ":kadre:samples:android-compose-showcase"
+val showcaseResultsDir = rootProject.file("kadre/samples/android-compose-showcase/build/outputs/androidTest-results/connected")
 val evidenceDir = layout.buildDirectory.dir("contract-evidence/android")
 val junitDir = layout.buildDirectory.dir("test-results/android")
 // Racine du gate : `validateContractEvidence` (exécution JUnit) lit l'artefact à
@@ -45,7 +50,8 @@ val gateEvidenceDir = layout.buildDirectory
 /** Le registre et le mapping qui décident des documents canoniques qu'un smoke écrit. */
 val contractRegistry = rootProject.file("kadre/contracts/registry/contracts.tsv")
 val contractMapping = layout.projectDirectory.file("contracts/evidence.tsv")
-val androidContractIds = listOf("AND-001", "AND-002", "AND-003", "AND-004", "AND-005", "AND-006", "AND-007", "AND-008", "AND-009")
+// Phase 9 (AND-010) : le DÉCUPLE — les samples migrés entrent dans la chaîne de preuves.
+val androidContractIds = listOf("AND-001", "AND-002", "AND-003", "AND-004", "AND-005", "AND-006", "AND-007", "AND-008", "AND-009", "AND-010")
 
 /**
  * Le commit auquel la preuve canonique appartient.
@@ -108,6 +114,25 @@ val androidDeviceSmokeRun = tasks.register<Exec>("androidDeviceSmokeRun") {
     environment("ANDROID_HOME", androidSdkHome.get())
 }
 
+// Phase 9 (AND-010) : le run instrumenté du sample compose-showcase — le MÊME parti pris
+// que le consumer ci-dessus (un fork client, l'invocation qui produit le XML connecté réel).
+// Le sample vit dans CE build racine : la coordonnée publiée et le repository contractuel
+// sont déclarés dans les settings ; `--refresh-dependencies` rejoue la même garde anti-AAR
+// périmé (version release).
+val androidSampleSmokeRun = tasks.register<Exec>("androidSampleSmokeRun") {
+    group = "verification"
+    description = "Runs the compose-showcase instrumented scenarios on the attached emulator."
+    dependsOn(":kadre:publishContractArtifacts")
+    workingDir(rootProject.projectDir)
+    commandLine(
+        rootProject.file("gradlew").absolutePath,
+        "${showcaseProjectPath}:connectedDebugAndroidTest",
+        "--console=plain",
+        "--refresh-dependencies",
+    )
+    environment("ANDROID_HOME", androidSdkHome.get())
+}
+
 // 2. Produire les preuves canoniques depuis le XML réel + étiqueter le moteur (adb getprop).
 //    `dependsOn` le run réel — jamais `mustRunAfter` (piège documenté des phases web : un gate
 //    qui valide des artefacts périmés ne passe que là où quelqu'un a déjà lancé le smoke à HEAD).
@@ -115,11 +140,15 @@ tasks.register<JavaExec>("androidDeviceSmoke") {
     group = "verification"
     description = "Runs the Android consumer smoke on the attached emulator and produces the ${androidContractIds.joinToString("/")} evidence."
     dependsOn(androidDeviceSmokeRun)
+    dependsOn(androidSampleSmokeRun)
     classpath(sourceSets.main.get().runtimeClasspath)
     mainClass.set("org.graphiks.kadre.contracts.android.AndroidContractEvidenceKt")
     environment("ANDROID_HOME", androidSdkHome.get())
     args(
         consumerResultsDir.absolutePath,
+        // Phase 9 (AND-010) : les résultats du sample compose-showcase, globés comme les
+        // résultats du consumer (les XML des deux APK alimentent le même moteur JUnit).
+        showcaseResultsDir.absolutePath,
         evidenceDir.get().asFile.absolutePath,
         junitDir.get().asFile.absolutePath,
         gateEvidenceDir.get().asFile.absolutePath,
@@ -128,6 +157,9 @@ tasks.register<JavaExec>("androidDeviceSmoke") {
         contractEvidenceCommit.get(),
     )
     inputs.dir(consumerResultsDir)
+        .withPathSensitivity(PathSensitivity.NONE)
+        .optional()
+    inputs.dir(showcaseResultsDir)
         .withPathSensitivity(PathSensitivity.NONE)
         .optional()
     inputs.file(contractRegistry)
