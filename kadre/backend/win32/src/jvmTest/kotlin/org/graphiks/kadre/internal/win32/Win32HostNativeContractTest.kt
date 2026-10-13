@@ -59,22 +59,21 @@ class Win32HostNativeContractTest {
         val session = Win32HostSession.start(port)
         cleanups.add(session)
         val stopped = CountDownLatch(1)
-        val loop = thread(isDaemon = true) {
-            var steps = 0
-            while (steps < 200) {
-                if (session.pump.runOnce(250) == PumpStep.Stopped) {
-                    stopped.countDown()
-                    return@thread
-                }
-                steps += 1
-            }
+        val stopRequested = CountDownLatch(1)
+        // Affinité Win32 : la pompe reste sur le thread propriétaire de la
+        // fenêtre ; le stop est posté depuis un thread distinct.
+        thread(isDaemon = true) {
+            stopRequested.await(10, TimeUnit.SECONDS)
+            port.requestStopFromAnyone(session.controlWindow.hwnd)
         }
-        // L'appelant n'est PAS le thread UI : le stop doit réveiller GetMessageW.
-        port.requestStopFromAnyone(session.controlWindow.hwnd)
-        assertTrue(stopped.await(10, TimeUnit.SECONDS), "stop must wake the blocked pump")
-        thread {
-            loop.join(5_000)
-        }.join(5_100)
-        assertTrue(session.pump.runOnce(0) == PumpStep.Stopped)
+        var steps = 0
+        var stoppedSeen = false
+        while (steps < 400 && !stoppedSeen) {
+            steps += 1
+            if (steps == 5) stopRequested.countDown()
+            stoppedSeen = session.pump.runOnce(250) == PumpStep.Stopped
+        }
+        assertTrue(stoppedSeen, "the stop posted from another thread must stop the pump")
+        assertTrue(stopped.await(1, TimeUnit.SECONDS))
     }
 }
