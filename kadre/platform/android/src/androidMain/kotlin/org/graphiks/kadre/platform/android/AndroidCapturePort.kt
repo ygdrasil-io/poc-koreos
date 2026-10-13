@@ -98,11 +98,13 @@ internal fun interface AndroidPixelCopyStreamFactory {
 }
 
 /**
- * Le seam SDK du jeton MediaProjection — la consommation du consentement UNE FOIS par session.
- * `createPending` est `MediaProjectionManager.getMediaProjection(resultCode, data)` suivi de
- * l'enregistrement du callback de révocation : le grant devient UN pending pour CETTE session,
- * jamais stocké au-delà (le jeton est single-use — la réutilisation d'un grant stocké est un
- * échec SDK, le port ne le tente jamais).
+ * Le seam SDK du jeton MediaProjection — la consommation du consentement UNE FOIS par
+ * demande. `createPending` est `MediaProjectionManager.getMediaProjection(resultCode, data)`
+ * suivi de l'enregistrement du callback de révocation : le grant devient UN pending pour
+ * CETTE session, jamais stocké au-delà (le jeton est single-use — la réutilisation d'un
+ * grant stocké est un échec SDK, le port ne le tente jamais). L'appel vit APRÈS le signal
+ * FGS-ready du `start` (l'ordre API 34+ : dialogue → startForeground → getMediaProjection,
+ * l'item I-1 de la review Task 2) — jamais au moment du consentement.
  */
 internal interface AndroidCaptureProjectionSource : AutoCloseable {
     /** Consomme le grant en un pending — la réalisation réelle enregistre aussi le callback. */
@@ -112,10 +114,10 @@ internal interface AndroidCaptureProjectionSource : AutoCloseable {
 }
 
 /**
- * Le MediaProjection consommé d'un grant, en attente de sa réservation. Le port le garde
- * jusqu'au `reserve(HostChoice)` qui le change en réservation ; `close` (le `stop()` SDK)
- * le libère sur tout chemin qui ne démarre jamais — jamais de capture vivante derrière un
- * port fermé ou un grant périmé.
+ * Le MediaProjection consommé du grant, vivant dans la pompe du `start` qui l'a créé.
+ * La pompe le garde jusqu'au terminal ; `close` (le `stop()` SDK) le libère sur tout
+ * chemin qui ne démarre jamais — jamais de capture vivante derrière un port fermé ou un
+ * grant périmé.
  */
 internal interface AndroidCapturePendingProjection : AutoCloseable {
     /**
@@ -194,24 +196,32 @@ internal data class AndroidCaptureDisplayFacts(
  * pompe ImageReader/`VirtualDisplay` à strides honests (le plumbing kadre-old :43-75 porté).
  *
  * **Le consentement vit à `requestPermission`** (l'unique chemin de dialogue, le miroir
- * exact du web) : un jeton par demande (`"kadre-capture-<token>"`, frais par session),
- * enregistré sur le registre direct SANS LifecycleOwner — légal après RESUMED — puis le
- * dialogue `createScreenCaptureIntent()`. `RESULT_OK` + données non nulles → le grant est
- * consommé IMMÉDIATEMENT en UN pending MediaProjection pour cette session (le jeton est
- * single-use, jamais stocké au-delà) ; refus (`RESULT_CANCELED`/sans données) →
+ * exact du web) : un jeton par demande (`"kadre-capture-<n>"`, frais par DEMANDE — un
+ * `AtomicLong` process-wide), enregistré sur le registre direct SANS LifecycleOwner —
+ * légal après RESUMED — puis le dialogue `createScreenCaptureIntent()`. `RESULT_OK` +
+ * données non nulles → **le grant est stocké BRUT (resultCode + data), PAS consommé** :
+ * sur l'API 34+, `getMediaProjection` exige le service foreground `mediaProjection`
+ * démarré (SecurityException sinon) — l'ordre officiel de la plateforme est dialogue →
+ * `startForeground(type = mediaProjection)` → `getMediaProjection` (l'item I-1 de la
+ * review Task 2), la consommation unique vit donc au `start` du flux, juste après le
+ * signal FGS-ready. Un port fermé pendant le dialogue fait repartir la demande
+ * `Closed(Host)` IMMÉDIATEMENT (jamais suspendue derrière un port fermé, jamais un
+ * `Success` postérieur au close — l'item I-2) ; refus (`RESULT_CANCELED`/sans données) →
  * `Success(Denied(canRequestAgain = true))` — JAMAIS une failure (CONTRACTS :64) ; un port
  * fermé → `Closed(Host)` d'abord (web :130). Une demande pendant qu'un dialogue attend, un
  * grant pèse ou une session vit → `InteractionRequired(Consumed)`, jamais le grant stocké
  * ni un second dialogue empilé.
  *
- * **`reserve(HostChoice)` ne lance jamais de dialogue** : il consomme le pending en une
+ * **`reserve(HostChoice)` ne lance jamais de dialogue** : il prend le grant BRUT en une
  * [CapturePortReservation] dont `start` (a) démarre le FGS et attend `startForeground(type
- * = mediaProjection)`, (b) pose la révocation `MediaProjection.Callback.onStop` →
- * `Stopped(PermissionRevoked)`, (c) crée l'ImageReader RGBA_8888 (pool borné au budget)
- * puis le `VirtualDisplay`, (d) lit la PREMIÈRE image pour dériver la configuration
- * complète (révision 0) AVANT tout callback listener — la discipline du web Pump :111-196.
- * Sans pending (jamais consenti, ou déjà consommé) → `PermissionDenied(CaptureScreen)`, un
- * refus honnête qui ne re-prompt jamais — le launcher ne part que de `requestPermission`.
+ * = mediaProjection)`, (a') re-vérifie le port ouvert PUIS consomme le grant en UN pending
+ * MediaProjection — `getMediaProjection`, le SEUL appel, jamais plus tôt —, (b) pose la
+ * révocation `MediaProjection.Callback.onStop` → `Stopped(PermissionRevoked)`, (c) crée
+ * l'ImageReader RGBA_8888 (pool borné au budget) puis le `VirtualDisplay`, (d) lit la
+ * PREMIÈRE image pour dériver la configuration complète (révision 0) AVANT tout callback
+ * listener — la discipline du web Pump :111-196. Sans grant (jamais consenti, ou déjà
+ * consommé) → `PermissionDenied(CaptureScreen)`, un refus honnête qui ne re-prompt
+ * jamais — le launcher ne part que de `requestPermission`.
  *
  * **Les frames copient les strides honests** : `rowStride` est le device-aligné du SDK, le
  * `byteCount` du layout est `(height-1)*rowStride + width*pixelStride` (la dernière ligne
@@ -267,8 +277,8 @@ internal class AndroidCapturePort(
     private var observer: ((KadreResult<CapturePortSnapshot>) -> Unit)? = null
     private var nextReservationKeyValue = 0L
 
-    /** Le grant consommé du consentement, en attente de son unique réservation. */
-    private var pendingGrant: PendingGrant? = null
+    /** Le grant BRUT du consentement (resultCode + data, PAS consommé), en attente de son unique réservation. */
+    private var pendingGrant: AndroidCapturePendingGrant? = null
 
     /** Le dialogue en vol — le launcher et la continuation qui porte la demande. */
     private var awaiting: AwaitingConsent? = null
@@ -369,25 +379,38 @@ internal class AndroidCapturePort(
             } catch (refused: AndroidCaptureConsentRefused) {
                 launcher.close()
                 return KadreResult.Failure(platformFailure(PERMISSION_DOMAIN, "consent-launch-refused", refused.reason))
+            } catch (closed: AndroidCaptureConsentClosed) {
+                // Le port a fermé pendant le dialogue (l'item I-2) : le close a déjà
+                // désenregistré le launcher et déposé tout état — la demande repart fermée.
+                return closedFailure()
             }
             // Le launcher est consommé avec le jeton : `onConsentResult` l'a désenregistré —
             // la clé n'existe plus, un second enregistrement en recrée une fraîche.
             return when (outcome.resultCode == ACTIVITY_RESULT_OK && outcome.data != null) {
-                true -> try {
-                    // Le grant est consommé IMMÉDIATEMENT — un seul pending pour CETTE session,
-                    // jamais stocké au-delà (le jeton MediaProjection est single-use).
-                    val pending = projections.createPending(outcome.resultCode, outcome.data)
-                    lock.withLock { pendingGrant = PendingGrant(token, pending) }
+                true -> {
+                    // Le grant est stocké BRUT, JAMAIS consommé ici : `getMediaProjection`
+                    // exige le FGS démarré sur l'API 34+ (l'ordre officiel dialogue →
+                    // startForeground → getMediaProjection) — la consommation unique vit au
+                    // `start`, après le signal FGS-ready (l'item I-1). Le stockage re-vérifie
+                    // le port : jamais un état qui survit à un close ni un `Success` post-close.
+                    val stored = lock.withLock {
+                        if (closed) {
+                            null
+                        } else {
+                            pendingGrant = AndroidCapturePendingGrant(token, outcome.resultCode, outcome.data)
+                            true
+                        }
+                    }
+                    if (stored == null) return closedFailure()
                     val snapshot = snapshotFor(PermissionState.Granted)
                     accept(snapshot)
                     KadreResult.Success(snapshot)
-                } catch (refused: Throwable) {
-                    KadreResult.Failure(platformFailure(PERMISSION_DOMAIN, "projection-refused", refused))
                 }
 
                 false -> {
                     // RESULT_CANCELED ou des données absentes : le refus utilisateur est un
                     // état, JAMAIS une failure (CONTRACTS :64), et l'utilisateur peut redemander.
+                    if (isClosed()) return closedFailure()
                     val snapshot = snapshotFor(PermissionState.Denied(canRequestAgain = true))
                     accept(snapshot)
                     KadreResult.Success(snapshot)
@@ -455,10 +478,12 @@ internal class AndroidCapturePort(
 
     /**
      * La réservation HostChoice — SANS aucune interaction utilisateur : le consentement a déjà
-     * vécu à `requestPermission`, le grant y fut consommé en UN pending. La région est refusée
-     * avant tout fait (MediaProjection capte l'affichage entier, la forme web :278-281) ; sans
-     * pending (jamais consenti, déjà consommé, ou révoqué) le refus est `PermissionDenied
-     * (CaptureScreen)` — un état honnête, JAMAIS un second dialogue ni le grant stocké re-servi.
+     * vécu à `requestPermission`, le grant BRUT y fut stocké (la consommation
+     * `getMediaProjection` vit au `start`, après le signal FGS — l'ordre API 34+, l'item
+     * I-1). La région est refusée avant tout fait (MediaProjection capte l'affichage entier,
+     * la forme web :278-281) ; sans grant (jamais consenti, déjà consommé, ou port fermé
+     * entre-temps) le refus est `PermissionDenied(CaptureScreen)` — un état honnête, JAMAIS
+     * un second dialogue ni le grant stocké re-servi.
      */
     private fun hostChoiceReservation(request: CaptureRequest): KadreResult<CapturePortReservation> {
         if (request.region != null) {
@@ -475,13 +500,6 @@ internal class AndroidCapturePort(
             if (current != null) pendingGrant = null
             current
         } ?: return KadreResult.Failure(KadreFailure.PermissionDenied(KadrePermission.CaptureScreen))
-        if (granted.projection.revoked) {
-            // La révocation a gagné la course avant la réservation : le jeton est mort, le
-            // snapshot retombe sur le refus (un futur open exigera un nouveau consentement).
-            granted.projection.close()
-            accept(snapshotFor(PermissionState.Denied(canRequestAgain = true)))
-            return KadreResult.Failure(KadreFailure.PermissionDenied(KadrePermission.CaptureScreen))
-        }
         lock.withLock { liveReservation = true }
         val keyValue = lock.withLock {
             val value = nextReservationKeyValue
@@ -496,13 +514,14 @@ internal class AndroidCapturePort(
                     name = null,
                     size = null,
                 ),
-                token = granted.token,
-                projection = granted.projection,
+                grant = granted,
+                projections = projections,
                 request = request,
                 foreground = foreground,
                 readerSource = readers,
                 facts = displayFacts,
                 loopContext = loopContext,
+                closedGate = ::isClosed,
                 onEnded = { lock.withLock { liveReservation = false } },
             ),
         )
@@ -531,18 +550,28 @@ internal class AndroidCapturePort(
     }
 
     override fun close() {
-        val dropped = lock.withLock {
+        val awaitingNow = lock.withLock {
             if (closed) {
                 null
             } else {
                 closed = true
                 observer = null
-                pendingGrant.also { pendingGrant = null }
+                val inFlight = awaiting
+                awaiting = null
+                // Le grant BRUT est déposé : rien de vivant à fermer — la consommation
+                // `getMediaProjection` n'a jamais eu lieu sans un `start` (l'item I-1).
+                pendingGrant = null
+                inFlight
             }
         }
-        // Un grant jamais réservé ne laisse pas de capture vivante derrière un port fermé —
-        // le pending est stoppé exactement comme un close de réservation l'aurait fait.
-        dropped?.projection?.close()
+        // Le close pendant un dialogue en vol (l'item I-2) : la demande qui attend repart
+        // MAINTENANT en `Closed(Host)` — jamais suspendue derrière un port fermé, jamais un
+        // `Success` postérieur au close. Le launcher est désenregistré ICI (le résultat
+        // tardif du dialogue n'a plus d'attente et sera absorbé par `onConsentResult`).
+        awaitingNow?.let { inFlight ->
+            inFlight.launcher.close()
+            inFlight.continuation.resumeWith(Result.failure(AndroidCaptureConsentClosed()))
+        }
         // Le registre meurt avec le port : la session entière le possède, aucun autre détenteur
         // n'existe — rien à déposer ici (le web n'a pas de déregistration non plus).
     }
@@ -636,12 +665,6 @@ internal class AndroidCapturePort(
         )
     }
 
-    /** Le grant consommé, en attente de son unique réservation — le jeton voyage au FGS. */
-    private data class PendingGrant(
-        val token: String,
-        val projection: AndroidCapturePendingProjection,
-    )
-
     /** Le dialogue en vol — la demande annulable qui attend le résultat de l'activité. */
     private class AwaitingConsent(
         val launcher: AndroidCaptureConsentLauncher,
@@ -657,6 +680,9 @@ internal class AndroidCapturePort(
         val reason: Throwable,
     ) : Exception(reason)
 
+    /** Le signal du close pendant un dialogue en vol — la demande repart `Closed(Host)`. */
+    private class AndroidCaptureConsentClosed : Exception("the capture port closed during the consent dialog")
+
     companion object {
         /** La séquence process-wide des jetons de session — chaque demande en mint un frais. */
         private val consentTokens = AtomicLong(0L)
@@ -667,21 +693,24 @@ internal class AndroidCapturePort(
 }
 
 /**
- * La réservation HostChoice : le pending MediaProjection devient une [CapturePortReservation].
- * Réserver n'a produit AUCUNE frame — [start] démarre le FGS (l'ordre P8-0), pose la
- * révocation, crée reader + display, lit la première image pour la configuration, puis remet
- * la pompe au collector unique du runtime. [close] libère exactement une fois, à n'importe
- * quelle profondeur atteinte.
+ * La réservation HostChoice : le grant BRUT du consentement devient une
+ * [CapturePortReservation]. Réserver n'a produit AUCUNE frame et AUCUNE consommation SDK —
+ * [start] démarre le FGS (l'ordre P8-0), re-vérifie le port ouvert, consomme le grant en UN
+ * pending MediaProjection (`getMediaProjection`, APRÈS le signal FGS-ready — l'ordre API
+ * 34+, l'item I-1), pose la révocation, crée reader + display, lit la première image pour
+ * la configuration, puis remet la pompe au collector unique du runtime. [close] libère
+ * exactement une fois, à n'importe quelle profondeur atteinte.
  */
 private class AndroidHostChoiceReservation(
     override val source: CapturePortSource,
-    private val token: String,
-    private val projection: AndroidCapturePendingProjection,
+    private val grant: AndroidCapturePendingGrant,
+    private val projections: AndroidCaptureProjectionSource,
     private val request: CaptureRequest,
     private val foreground: AndroidCaptureForeground,
     private val readerSource: AndroidCaptureImageReaderSource,
     private val facts: AndroidCaptureDisplayFacts,
     private val loopContext: CoroutineContext,
+    private val closedGate: () -> Boolean,
     private val onEnded: () -> Unit,
 ) : CapturePortReservation {
     private val lock = RuntimeLock()
@@ -705,13 +734,14 @@ private class AndroidHostChoiceReservation(
         }
         if (admission != null) return admission
         val ownedPump = AndroidCapturePump(
-            token = token,
-            projection = projection,
+            grant = grant,
+            projections = projections,
             request = request,
             foreground = foreground,
             readerSource = readerSource,
             facts = facts,
             loopContext = loopContext,
+            closedGate = closedGate,
         )
         lock.withLock { pump = ownedPump }
         return ownedPump.start(listener, maxFrameBytes)
@@ -729,14 +759,26 @@ private class AndroidHostChoiceReservation(
         if (ownedPump != null) {
             ownedPump.close()
         } else {
-            // Jamais de capture vivante derrière un handle fermé qui n'a jamais démarré —
-            // le terminal libère le FGS comme il l'avait démarré.
-            projection.stop()
+            // Jamais démarré : AUCUNE projection n'existe (la consommation vit au start),
+            // donc rien de SDK à libérer — le FGS, jamais acquis par cette réservation,
+            // n'est pas non plus arrêté (le contrôle de production ne relâche que ce
+            // qu'il a acquis, l'item I-3).
             foreground.stop()
         }
         onEnded()
     }
 }
+
+/**
+ * Le grant BRUT du consentement, en attente de son unique réservation — le jeton voyage au
+ * FGS, la consommation (`getMediaProjection`) vit au `start` après le signal FGS-ready
+ * (l'ordre API 34+, l'item I-1 de la review Task 2).
+ */
+private data class AndroidCapturePendingGrant(
+    val token: String,
+    val resultCode: Int,
+    val data: Any?,
+)
 
 /** La première image du start : soit la frame et sa configuration, soit le refus du start. */
 private sealed interface FirstFrameOutcome {
@@ -752,24 +794,30 @@ private sealed interface FirstFrameOutcome {
 
 /**
  * La pompe de frames MediaProjection — le miroir du WebCapturePump (:82-453) porté à
- * l'ImageReader : UNE image acquise à la fois (`acquireLatestImage` coalesce), chaque frame
- * bornée par `maxFrameBytes` AVANT toute copie (le never-copy invariant), les strides du SDK
- * rapportés honests, l'Image fermée exactement une fois, la configuration complète dérivée de
- * la PREMIÈRE image (révision 0) avant tout callback listener, une reconfiguration publiée
- * `onReconfigured` avant la frame qui la porte, et des terminations exactement une fois —
- * `Stopped(Requested)` pour l'arrêt propre (le close du stream), `Stopped(PermissionRevoked)`
- * pour la révocation `MediaProjection.Callback.onStop` qui n'est pas la nôtre, `Failed
- * (PlatformFailure)` pour un refus de lecture. Le FGS démarre AVANT le display virtuel
- * (l'attente du signal `startForeground` sérialise) et s'arrête au terminal.
+ * l'ImageReader : le grant BRUT y devient UN pending MediaProjection (`getMediaProjection`,
+ * APRÈS le signal FGS-ready — l'ordre API 34+ exige le service `mediaProjection` démarré
+ * AVANT la prise de projection, l'item I-1 de la review Task 2), UNE image acquise à la
+ * fois (`acquireLatestImage` coalesce), chaque frame bornée par `maxFrameBytes` AVANT toute
+ * copie (le never-copy invariant), les strides du SDK rapportés honests, l'Image fermée
+ * exactement une fois, la configuration complète dérivée de la PREMIÈRE image (révision 0)
+ * avant tout callback listener, une reconfiguration publiée `onReconfigured` avant la frame
+ * qui la porte, et des terminations exactement une fois — `Stopped(Requested)` pour l'arrêt
+ * propre (le close du stream), `Stopped(PermissionRevoked)` pour la révocation
+ * `MediaProjection.Callback.onStop` qui n'est pas la nôtre, `Failed(PlatformFailure)` pour
+ * un refus de lecture. Un terminal qui tombe PENDANT le `start` (la première image attend
+ * encore) revient PAR LA FAILURE du start — le listener n'entend rien (un start raté ne
+ * raconte rien), le signal reste unique. Le FGS démarre AVANT la prise de projection et le
+ * display virtuel (l'attente du signal `startForeground` sérialise) et s'arrête au terminal.
  */
 private class AndroidCapturePump(
-    private val token: String,
-    private val projection: AndroidCapturePendingProjection,
+    private val grant: AndroidCapturePendingGrant,
+    private val projections: AndroidCaptureProjectionSource,
     private val request: CaptureRequest,
     private val foreground: AndroidCaptureForeground,
     private val readerSource: AndroidCaptureImageReaderSource,
     private val facts: AndroidCaptureDisplayFacts,
     private val loopContext: CoroutineContext,
+    private val closedGate: () -> Boolean,
 ) {
     private val lock = RuntimeLock()
     private var listener: CapturePortStreamListener? = null
@@ -783,10 +831,22 @@ private class AndroidCapturePump(
     private var configuration: CaptureConfiguration? = null
     private var reader: AndroidCaptureImageReader? = null
     private var display: Any? = null
+
+    /** Le pending créé au `start` — null avant la consommation FGS-ready du grant. */
+    private var projection: AndroidCapturePendingProjection? = null
+
+    /**
+     * Le start n'est pas encore retourné : un terminal qui tombe ICI ne parle PAS au
+     * listener (le SPI n'autorise les callbacks qu'après un start réussi) — sa verdict
+     * devient la failure du start ([startFailure]), le signal reste unique.
+     */
+    private var startSettled = false
+    private var startFailure: KadreFailure? = null
     private val available = Channel<Unit>(Channel.CONFLATED)
 
     /**
-     * Démarre le flux : le FGS d'abord (l'ordre que la plateforme exige), puis reader et
+     * Démarre le flux : le FGS d'abord (l'ordre que la plateforme exige), la consommation
+     * du grant juste après le signal `startForeground` (JAMAIS plus tôt), puis reader et
      * display, puis la première image pour la configuration — retournée avant toute frame.
      */
     suspend fun start(
@@ -809,16 +869,46 @@ private class AndroidCapturePump(
         if (admission != null) return admission
         try {
             // (a) Le FGS Kadre, et l'attente de `startForeground(type = mediaProjection)` —
-            // l'ordre P8-0 que la plateforme (API 34+) exige avant toute prise de projection.
+            // l'ordre P8-0 que la plateforme exige avant toute prise de projection.
             try {
-                foreground.start(token)
+                foreground.start(grant.token)
             } catch (refused: AndroidCaptureForegroundRefused) {
                 return failedStart(KadreFailure.TemporarilyUnavailable(retryable = true))
             }
-            // (b) La révocation peut avoir gagné la course entre le consentement et le start :
+            // (a') L'item I-2 : le port a pu fermer pendant l'attente du FGS — jamais un
+            // MediaProjection vivant derrière un port fermé, jamais un Success d'un start
+            // dont le port est mort.
+            if (closedGate()) {
+                return failedStart(KadreFailure.Closed(KadreResourceKind.Host))
+            }
+            // (a'') L'item I-1 : LA consommation du grant — `getMediaProjection` ne peut
+            // légalement tourner qu'APRÈS le `startForeground` du service `mediaProjection`
+            // (l'API 34+ répond SecurityException sinon). Un seul appel, jamais plus tôt.
+            val ownedProjection = try {
+                projections.createPending(grant.resultCode, grant.data)
+            } catch (refused: Throwable) {
+                return failedStart(
+                    KadreFailure.PlatformFailure(
+                        KadrePlatform.Android,
+                        PERMISSION_DOMAIN,
+                        "projection-refused:${refused::class.java.simpleName}",
+                    ),
+                )
+            }
+            val proceed = lock.withLock {
+                projection = ownedProjection
+                !terminated && !released
+            }
+            if (!proceed) {
+                // Un terminal a couru pendant la consommation : release() est déjà passé et
+                // ne reverra jamais ce pending — il est stoppé ici, immédiatement.
+                ownedProjection.stop()
+                return failedStart(lock.withLock { startFailure } ?: KadreFailure.Closed(KadreResourceKind.Host))
+            }
+            // (b) La révocation peut avoir gagné la course entre le consentement et la prise :
             // le jeton est mort, le start échoue en refus de permission — jamais un display
             // fantôme derrière une projection arrêtée.
-            if (projection.revoked) {
+            if (ownedProjection.revoked) {
                 return failedStart(KadreFailure.PermissionDenied(KadrePermission.CaptureScreen))
             }
             // (c) L'ImageReader RGBA_8888, le pool borné au budget : une frame entière doit
@@ -837,7 +927,7 @@ private class AndroidCapturePump(
             lock.withLock { reader = ownedReader }
             ownedReader.setOnImageAvailable { available.trySend(Unit) }
             val ownedDisplay = try {
-                projection.createVirtualDisplay(
+                ownedProjection.createVirtualDisplay(
                     "KadreCapture",
                     size.width,
                     size.height,
@@ -849,13 +939,15 @@ private class AndroidCapturePump(
             }
             lock.withLock { display = ownedDisplay }
             // (b') La révocation, posée après le display : tout onStop qui n'est pas le nôtre
-            // termine le flux `Stopped(PermissionRevoked)`.
-            projection.onRevoked { revoke() }
+            // termine le flux — pendant le start, PAR SA failure ; après, au listener.
+            ownedProjection.onRevoked { revoke() }
 
             // (d) La PREMIÈRE image dérive la configuration complète (révision 0) — publiée en
             // valeur de retour du start, donc avant tout callback listener (web Pump :111-196).
             val first = acquireFirstImage()
-                ?: return failedStart(pipeFailure("image-reader-closed", null))
+                ?: return failedStart(
+                    lock.withLock { startFailure } ?: pipeFailure("image-reader-closed", null),
+                )
             val outcome = try {
                 firstFrameFrom(first)
             } finally {
@@ -863,6 +955,8 @@ private class AndroidCapturePump(
             }
             val ready = (outcome as? FirstFrameOutcome.Ready)
                 ?: return failedStart((outcome as FirstFrameOutcome.Refused).failure)
+            // Le start s'installe : à partir d'ICI les terminaux parlent au listener.
+            lock.withLock { startSettled = true }
             // La boucle de delivery porte la pompe hors du chemin du start : le collector
             // n'entend la première frame qu'après le retour de start.
             val pumpScope = CoroutineScope(loopContext + SupervisorJob())
@@ -929,11 +1023,14 @@ private class AndroidCapturePump(
 
     /**
      * Attend le premier signal de l'ImageReader et acquiert la première image — le point de
-     * suspension du start, annulable en libération propre par le catch du [start].
+     * suspension du start, annulable en libération propre par le catch du [start]. Un
+     * terminal qui tombe pendant l'attente (le [terminateTerminal] réveille le canal) est
+     * vu ici : `null`, et le start rendra SA failure — jamais un callback listener.
      */
     private suspend fun acquireFirstImage(): AndroidCaptureImage? {
         while (true) {
             available.receive()
+            if (lock.withLock { terminated }) return null
             val image = lock.withLock { reader }?.acquireLatest() ?: continue
             if (lock.withLock { terminated }) {
                 image.close()
@@ -1118,9 +1215,34 @@ private class AndroidCapturePump(
     private fun terminateTerminal(termination: CapturePortTermination) {
         val first = lock.withLock { if (terminated) false else { terminated = true; true } }
         if (!first) return
+        // Un terminal pendant le start (la première image attend encore) : sa verdict
+        // devient LA FAILURE du start — le listener n'entend rien (le SPI n'autorise les
+        // callbacks qu'après un start réussi), le signal reste unique.
+        val unsettled = lock.withLock {
+            if (startSettled) false else {
+                startFailure = failureFor(termination)
+                true
+            }
+        }
         release()
-        listener?.onTerminated(termination)
+        available.trySend(Unit) // réveille l'attente de la première image — elle verra `terminated`
+        if (!unsettled) listener?.onTerminated(termination)
         scope?.cancel()
+    }
+
+    /** Le verdict du terminal pendant le start, en failure de start. */
+    private fun failureFor(termination: CapturePortTermination): KadreFailure = when (termination) {
+        is CapturePortTermination.Outcome -> when (val outcome = termination.outcome) {
+            is CaptureOutcome.Stopped -> when (outcome.reason) {
+                CaptureStopReason.PermissionRevoked -> KadreFailure.PermissionDenied(KadrePermission.CaptureScreen)
+                else -> KadreFailure.Closed(KadreResourceKind.CaptureSession)
+            }
+
+            is CaptureOutcome.Failed -> outcome.failure
+            CaptureOutcome.SourceCompleted -> KadreFailure.Closed(KadreResourceKind.CaptureSession)
+        }
+
+        CapturePortTermination.SourceLost -> KadreFailure.Closed(KadreResourceKind.CaptureSession)
     }
 
     /** Le one release : display → reader → projection → FGS. Idempotent. */
@@ -1128,14 +1250,15 @@ private class AndroidCapturePump(
         val targets = lock.withLock {
             if (released) null else {
                 released = true
-                reader to display
+                Triple(reader, display, projection)
             }
         } ?: return
-        targets.second?.let(projection::releaseVirtualDisplay)
+        targets.second?.let { ownedProjection -> targets.third?.releaseVirtualDisplay(ownedProjection) }
         targets.first?.close()
         // Notre propre arrêt de projection déclenche onStop : la révocation est absorbée par
-        // le flag terminated — jamais un second terminal derrière notre propre stop.
-        projection.stop()
+        // le flag terminated — jamais un second terminal derrière notre propre stop. `null`
+        // si le start n'a jamais atteint la consommation : rien de vivant n'existe (I-1).
+        targets.third?.stop()
         foreground.stop()
     }
 

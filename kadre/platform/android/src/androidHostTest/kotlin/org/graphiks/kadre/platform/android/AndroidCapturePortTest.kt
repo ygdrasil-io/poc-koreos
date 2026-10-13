@@ -85,15 +85,29 @@ import kotlin.test.assertTrue
  *    `refreshSources`/les lectures d'état ne lancent JAMAIS le launcher (compteur launch) ;
  *    le close du stream → `Stopped(Requested)` exactement une fois, FGS/display/projection
  *    libérés au terminal ;
- * 7. `lateRegistryRegistrationIsLegal` — le registre DIRECT (SANS LifecycleOwner) appelé
- *    après RESUMED simulé ne throw pas — l'anti-pattern kadre-old épinglé :
- *    `ComponentActivity.registerForActivityResult` THROWS après STARTED, la forme trois-
- *    arguments du registre ne consulte aucun état lifecycle ; la clé est créée par jeton de
- *    session et désenregistrée à la consommation du résultat ;
+ * 7. `lateRegistryRegistrationIsLegal` — le port passe JAMAIS d'owner au registre (owner
+ *    `null` = la forme trois-arguments, celle qui ne consulte aucun état lifecycle —
+ *    l'anti-pattern kadre-old `ComponentActivity.registerForActivityResult` THROWS après
+ *    STARTED) ; la légalité du registre RÉEL après RESUMED reste l'item [verify-emulator] ;
  * 8. `serviceStartedBeforeVirtualDisplayAndStoppedAtTerminal` — le recorder FGS : le
  *    `startForeground(type=mediaProjection)` précède `createVirtualDisplay` (la responsabilité
  *    Kadre, ruling P8-0), le jeton du FGS EST la clé du consentement, et le terminal arrête le
  *    service — l'arrêt propre ET la révocation `onStop` (`Stopped(PermissionRevoked)`).
+ * 9. `grantIsConsumedAfterForegroundReadyNotAtConsent` — l'item I-1 de la review T2 : le
+ *    grant n'est PAS consommé au consentement — l'ordre officiel API 34+ est dialogue →
+ *    `startForeground(type=mediaProjection)` → `getMediaProjection` ; la consommation
+ *    unique vit au `start` du flux, entre le signal FGS et le display virtuel ;
+ * 10. `closeDuringInFlightConsentFailsTheRequestAndAbsorbsTheLateGrant` — l'item I-2 :
+ *    le close pendant un dialogue en vol fait repartir la demande `Closed(Host)`
+ *    IMMÉDIATEMENT, désenregistre le launcher, publie rien, et le résultat tardif du
+ *    dialogue est absorbé — jamais un `Success` depuis un port fermé ;
+ * 11. `closeBetweenReserveAndStartNeverCreatesTheProjection` — l'item I-2 (b) : un close
+ *    entre la réservation et le `start` fait échouer le `start` `Closed(Host)` AVANT
+ *    `getMediaProjection` — jamais de MediaProjection vivante derrière un port fermé ;
+ * 12. `revocationDuringFirstFrameWaitFailsTheStartWithoutTouchingTheListener` — la
+ *    révocation qui tombe pendant l'attente de la première image revient PAR LA FAILURE
+ *    du start (`PermissionDenied(CaptureScreen)`) — le listener n'entend RIEN (un start
+ *    raté ne raconte rien, le signal est unique).
  */
 @kotlinx.coroutines.ExperimentalCoroutinesApi
 class AndroidCapturePortTest {
@@ -417,7 +431,7 @@ class AndroidCapturePortTest {
         )
     }
 
-    // -- (7) le registre direct, sans LifecycleOwner, est légal après RESUMED -----------------------------
+    // -- (7) le port ne passe JAMAIS d'owner au registre (le point de l'anti-pattern corrigé) -------------
 
     @Test
     fun lateRegistryRegistrationIsLegal() = runTest {
@@ -430,11 +444,12 @@ class AndroidCapturePortTest {
             FakeForeground(events),
         )
 
-        // La demande arrive APRÈS le simulated RESUMED (toute la couture est déjà attachée) :
-        // le registre DIRECT — la forme trois-arguments, sans LifecycleOwner — ne consulte
-        // aucun état lifecycle et ne throw pas. L'anti-pattern kadre-old épinglé :
-        // `ComponentActivity.registerForActivityResult` THROWS après STARTED ; le point exact
-        // de la correction est le registre direct du KDoc d'AndroidActivityCaptureConsentSource.
+        // Ce que le test hôte PEUT épinger : le port enregistre au registre DIRECT avec
+        // owner = null — la forme trois-arguments, la seule qui ne consulte aucun état
+        // lifecycle (là où `ComponentActivity.registerForActivityResult` THROWS après
+        // STARTED). La légalité du registre RÉEL d'androidx après RESUMED n'est PAS
+        // prouvée ici (le double ne throw jamais) : c'est l'item [verify-emulator] du
+        // scénario `androidCaptureLateAttachConsent` sur l'émulateur réel.
         val request = async { port.requestPermission(CapturePermissionScope.Screen) }
         testScheduler.runCurrent()
         val registration = consent.registrations.single()
@@ -527,6 +542,147 @@ class AndroidCapturePortTest {
             port.reserve(CapturePortTarget.Surface(id), CaptureRequest()),
             "sous l'API 26, la surface enregistrée elle-même atteint le backstop — le même verdict que la capability gelée",
         )
+    }
+
+    // -- (9) FIX-1 (I-1) : le grant est consommé APRÈS le signal FGS, jamais au consentement -------------
+
+    @Test
+    fun grantIsConsumedAfterForegroundReadyNotAtConsent() = runTest {
+        val events = mutableListOf<String>()
+        val consent = FakeConsentSource()
+        val projections = FakeProjectionSource(events)
+        val readers = FakeImageReaderSource()
+        val foreground = FakeForeground(events)
+        val port = capturedPort(consent, projections, readers, foreground)
+
+        grantedConsent(port, consent, expectedLaunchCount = 1)
+        assertEquals(
+            0,
+            projections.createPendingCount,
+            "le consentement ne consomme PAS le grant : sur l'API 34+, getMediaProjection exige le FGS " +
+                "mediaProjection démarré (SecurityException sinon) — l'ordre officiel est dialogue → " +
+                "startForeground(type=mediaProjection) → getMediaProjection",
+        )
+        val listener = RecordingListener()
+        val reservation = assertIs<KadreResult.Success<CapturePortReservation>>(
+            port.reserve(CapturePortTarget.HostChoice, CaptureRequest()),
+        ).value
+        assertEquals(0, projections.createPendingCount, "réserver seul ne consomme pas davantage")
+
+        val start = startStream(reservation, listener, readers)
+        assertEquals(1, projections.createPendingCount, "la consommation est UNIQUE et vit au start")
+        val foregroundAt = events.indexOf("startForeground(type=mediaProjection)")
+        val pendingAt = events.indexOf("createPending")
+        val displayAt = events.indexOf("createVirtualDisplay")
+        assertTrue(foregroundAt in 0 until pendingAt, "startForeground précède getMediaProjection: $events")
+        assertTrue(pendingAt in foregroundAt until displayAt, "getMediaProjection précède createVirtualDisplay: $events")
+
+        start.stream.close()
+        assertEquals(1, projections.lastPending?.stopCount, "le pending créé au start est le même jusqu'au terminal")
+    }
+
+    // -- (10) FIX-2 (I-2, a) : close pendant le dialogue — la demande repart Closed(Host) ----------------
+
+    @Test
+    fun closeDuringInFlightConsentFailsTheRequestAndAbsorbsTheLateGrant() = runTest {
+        val events = mutableListOf<String>()
+        val consent = FakeConsentSource()
+        val projections = FakeProjectionSource(events)
+        val port = capturedPort(consent, projections, FakeImageReaderSource(), FakeForeground(events))
+        val received = mutableListOf<KadreResult<CapturePortSnapshot>>()
+        port.installObserver { received += it }
+
+        val request = async { port.requestPermission(CapturePermissionScope.Screen) }
+        testScheduler.runCurrent()
+        assertEquals(1, consent.launches.size, "le dialogue est en vol")
+
+        port.close()
+        assertEquals(
+            KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.Host)),
+            request.await(),
+            "la demande qui attend le dialogue repart MAINTENANT en Closed(Host) — jamais suspendue derrière un port fermé",
+        )
+        assertEquals(1, consent.unregisterCount, "le close désenregistre le launcher en vol")
+        assertTrue(received.isEmpty(), "aucun état n'est publié depuis un port fermé")
+
+        // Le résultat tardif du dialogue (le grant arrive après la fermeture) est absorbé :
+        // jamais un Success postérieur au close, jamais une projection vivante.
+        consent.grant()
+        assertEquals(0, projections.createPendingCount, "un grant tardif sur un port fermé ne consomme RIEN")
+        assertEquals(
+            KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.Host)),
+            port.requestPermission(CapturePermissionScope.Screen),
+            "le port fermé répond Closed(Host) avant tout fait",
+        )
+    }
+
+    // -- (11) FIX-2 (I-2, b) : close entre réserve et start — jamais de projection vivante ---------------
+
+    @Test
+    fun closeBetweenReserveAndStartNeverCreatesTheProjection() = runTest {
+        val events = mutableListOf<String>()
+        val consent = FakeConsentSource()
+        val projections = FakeProjectionSource(events)
+        val readers = FakeImageReaderSource()
+        val foreground = FakeForeground(events)
+        val port = capturedPort(consent, projections, readers, foreground)
+
+        grantedConsent(port, consent, expectedLaunchCount = 1)
+        val listener = RecordingListener()
+        val reservation = assertIs<KadreResult.Success<CapturePortReservation>>(
+            port.reserve(CapturePortTarget.HostChoice, CaptureRequest()),
+        ).value
+
+        port.close()
+        val started = async { reservation.start(listener, streamBudget) }
+        advanceUntilIdle()
+        assertEquals(
+            KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.Host)),
+            started.await(),
+            "un start sur un port fermé ne réussit JAMAIS — le grant ne devient jamais une projection vivante",
+        )
+        assertEquals(0, projections.createPendingCount, "getMediaProjection n'est jamais atteint derrière un port fermé")
+        assertEquals(0, readers.specs.size, "aucun ImageReader derrière un port fermé")
+        assertTrue(listener.events.isEmpty(), "un start raté ne touche JAMAIS le listener")
+        assertTrue(events.none { it == "createVirtualDisplay" }, "aucun display derrière un port fermé")
+    }
+
+    // -- (12) la révocation pendant l'attente de la première frame : la failure DU START -----------------
+
+    @Test
+    fun revocationDuringFirstFrameWaitFailsTheStartWithoutTouchingTheListener() = runTest {
+        val events = mutableListOf<String>()
+        val consent = FakeConsentSource()
+        val projections = FakeProjectionSource(events)
+        val readers = FakeImageReaderSource()
+        val foreground = FakeForeground(events)
+        val port = capturedPort(consent, projections, readers, foreground)
+
+        grantedConsent(port, consent, expectedLaunchCount = 1)
+        val listener = RecordingListener()
+        val reservation = assertIs<KadreResult.Success<CapturePortReservation>>(
+            port.reserve(CapturePortTarget.HostChoice, CaptureRequest()),
+        ).value
+        val started = async { reservation.start(listener, streamBudget) }
+        testScheduler.runCurrent() // la pompe a créé reader + display et attend sa première image
+        assertEquals(0, readers.reader?.acquireCount, "aucune image n'a été lue : le start attend")
+
+        // La révocation `MediaProjection.Callback.onStop` tombe PENDANT l'attente : elle
+        // revient PAR LA FAILURE du start — jamais un callback listener avant un start réussi.
+        projections.lastPending?.systemRevokes()
+        assertEquals(
+            KadreResult.Failure(KadreFailure.PermissionDenied(KadrePermission.CaptureScreen)),
+            started.await(),
+            "la révocation pendant l'attente de la première frame échoue le start en permission",
+        )
+        assertTrue(
+            listener.events.none { it == "terminated" },
+            "le signal est unique : la failure du start — le listener n'entend aucun terminal",
+        )
+        assertTrue(listener.frames.isEmpty())
+        assertEquals(1, foreground.stopCount, "le terminal libère le FGS")
+        assertEquals(1, projections.lastPending?.stopCount, "le terminal libère la projection")
+        assertEquals(1, readers.specs.size, "le reader créé est fermé, jamais recréé")
     }
 
     // -- les doubles et les coutures de pilotage ----------------------------------------------------------
@@ -624,15 +780,22 @@ private class FakeConsentSource : AndroidCaptureConsentSource {
     fun refuse() = onResult?.invoke(0, null)
 }
 
-/** Le double projection : les pendings pilotables, les faits d'affichage sur le recorder partagé. */
+/** Le double projection : les pendings pilotables, la consommation comptée, les faits sur le recorder partagé. */
 private class FakeProjectionSource(
     private val events: MutableList<String>,
 ) : AndroidCaptureProjectionSource {
     var lastPending: FakePendingProjection? = null
         private set
 
-    override fun createPending(resultCode: Int, data: Any?): FakePendingProjection =
-        FakePendingProjection(events).also { lastPending = it }
+    /** Le compteur de consommations `getMediaProjection` — le coeur de l'épingle FIX-1. */
+    var createPendingCount = 0
+        private set
+
+    override fun createPending(resultCode: Int, data: Any?): FakePendingProjection {
+        createPendingCount += 1
+        events += "createPending"
+        return FakePendingProjection(events).also { lastPending = it }
+    }
 
     override fun close() {}
 }
@@ -699,6 +862,8 @@ private class FakeImageReader(
         private set
     var closeCount = 0
         private set
+    var acquireCount = 0
+        private set
     private val staged = ArrayDeque<FakeImage>()
 
     override val surface: Any = Any()
@@ -707,7 +872,10 @@ private class FakeImageReader(
         availableListener = listener
     }
 
-    override fun acquireLatest(): AndroidCaptureImage? = staged.removeFirstOrNull()
+    override fun acquireLatest(): AndroidCaptureImage? {
+        acquireCount += 1
+        return staged.removeFirstOrNull()
+    }
 
     override fun close() {
         closeCount += 1

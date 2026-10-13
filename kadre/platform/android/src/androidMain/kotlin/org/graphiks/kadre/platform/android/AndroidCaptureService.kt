@@ -40,11 +40,44 @@ internal interface AndroidCaptureForeground : AutoCloseable {
     override public fun close()
 }
 
-/** Le refus d'un démarrage de FGS — le port le traduit en `Temporary(retryable = true)`. */
-internal class AndroidCaptureForegroundRefused(public val code: String) : Exception(code)
+/** Le refus d'un démarrage de FGS — le port le traduit en `Temporary(retryable = true)` ; la cause SDK voyage. */
+internal class AndroidCaptureForegroundRefused(
+    public val code: String,
+    cause: Throwable? = null,
+) : Exception(code, cause)
 
 /** La clef de l'extra du jeton de session dans l'intent du service. */
 internal const val ANDROID_CAPTURE_SERVICE_TOKEN = "kadre-capture-token"
+
+/**
+ * Le compteur process-wide des détenteurs du service foreground (l'item I-3 de la review
+ * Task 2) : le composant est UNIQUE par processus et la politique autorise quatre sessions
+ * de capture simultanées — QUATRE réservations vivantes partagent LE service, et le terminal
+ * de la première ne doit pas tuer le FGS sous les autres. Chaque `start` réussi ACQUIERT une
+ * détention ; chaque `stop` d'un contrôle qui a démarré RELÂCHE la sienne ; l'arrêt réel du
+ * service (`stopService`) ne part qu'à la DERNIÈRE relâche. Un contrôle qui n'a jamais
+ * démarré n'acquiert jamais — son `stop` (le close d'une réservation jamais lancée) est un
+ * no-op, là où l'ancien code arrêtait le service sous les sessions voisines.
+ */
+internal object AndroidCaptureForegroundOwnership {
+    private val lock = Any()
+    private var holders = 0
+
+    /** L'acquisition d'un contrôle dont le `start` vient de réussir. */
+    public fun acquire() {
+        synchronized(lock) { holders += 1 }
+    }
+
+    /**
+     * La relâche d'un détenteur ; `true` quand le DERNIER part — l'appelant doit alors
+     * arrêter réellement le service.
+     */
+    public fun release(): Boolean = synchronized(lock) {
+        check(holders > 0) { "the capture foreground service ownership is already released" }
+        holders -= 1
+        holders == 0
+    }
+}
 
 /**
  * Le registre process-wide de préparation du FGS — le service y signale que
@@ -56,14 +89,29 @@ internal object AndroidCaptureForegroundRegistry {
     private val lock = Any()
     private val armed = HashMap<String, CompletableDeferred<Unit>>()
 
-    /** Arme l'attente pour [token] — avant `startForegroundService`, aucune course possible. */
+    /**
+     * Arme l'attente pour [token] — avant `startForegroundService`, aucune course possible.
+     *
+     * `CompletableDeferred<Unit>()` — la forme SANS valeur, la seule qui crée une attente
+     * VIERGE : la fabrique `CompletableDeferred(Unit)` (l'ancien code) crée un deferred
+     * DÉJÀ COMPLÉTÉ, et l'attente du signal `startForeground` ne suspendait jamais —
+     * l'ordre P8-0 était espéré, pas sérialisé (piètre sérialisation, découverte par le
+     * pin du registre de la Task 4).
+     */
     public fun arm(token: String): CompletableDeferred<Unit> = synchronized(lock) {
-        armed.getOrPut(token) { CompletableDeferred(Unit) }
+        armed.getOrPut(token) { CompletableDeferred() }
     }
 
-    /** Le signal du service : `startForeground(type = mediaProjection)` a tourné pour [token]. */
+    /** Le signal du service : `startForeground(type = mediaProjection)` a tourné pour [token].
+     *
+     * L'entrée est CONSOMMÉE (le carry de la review Task 2) : le signal retire l'attente de
+     * la carte process-wide — un jeton signalé n'occupe plus rien, jamais d'accumulateur au
+     * fil des sessions. Un ré-armement du MÊME jeton après le signal créerait une attente
+     * neuve jamais signalée ; l'admission d'une réservation (un seul `start` par pompe)
+     * rend ce ré-armement impossible.
+     */
     public fun ready(token: String) {
-        synchronized(lock) { armed[token] }?.complete(Unit)
+        synchronized(lock) { armed.remove(token) }?.complete(Unit)
     }
 
     /** Oublie l'attente de [token] — le chemin du refus, sans fuite. */
@@ -130,10 +178,21 @@ public class AndroidCaptureService : Service() {
  * Le contrôle de production du FGS : `startForegroundService` vers [AndroidCaptureService],
  * l'attente bornée du signal `startForeground`, et le `stopService` du terminal. Le jeton de
  * session voyage dans l'extra — le service le rend au registre au retour de `onStartCommand`.
+ *
+ * **La détention est REFCOUNTÉE (l'item I-3 de la review Task 2)** : le service est unique
+ * par composant et la politique autorise quatre sessions de capture simultanées, chaque
+ * session vivant sur SON port et SON contrôle — quatre `start` réussis partagent LE même
+ * service. Chaque `start` réussi acquiert ([AndroidCaptureForegroundOwnership]) ; le
+ * `stopService` réel ne part qu'à la relâche du DERNIER détenteur. Un contrôle qui n'a
+ * jamais démarré (le close d'une réservation jamais lancée) ne relâche rien — l'ancien code
+ * arrêtait là le service sous les sessions voisines.
  */
 internal class AndroidServiceCaptureForeground(
     private val context: Context,
 ) : AndroidCaptureForeground {
+
+    /** La détention de CETTE instance — un `stop` sans `start` réussi ne relâche jamais rien. */
+    private var owned = false
 
     override suspend fun start(token: String) {
         val deferred = AndroidCaptureForegroundRegistry.arm(token)
@@ -143,7 +202,7 @@ internal class AndroidServiceCaptureForeground(
             context.startForegroundService(intent)
         } catch (refused: Throwable) {
             AndroidCaptureForegroundRegistry.forget(token)
-            throw AndroidCaptureForegroundRefused("foreground-start-refused")
+            throw AndroidCaptureForegroundRefused("foreground-start-refused", refused)
         }
         try {
             withTimeout(FGS_START_TIMEOUT) { deferred.await() }
@@ -152,12 +211,20 @@ internal class AndroidServiceCaptureForeground(
             // ensureActive relance l'annulation vraie ; sinon le FGS n'a jamais annoncé.
             AndroidCaptureForegroundRegistry.forget(token)
             currentCoroutineContext().ensureActive()
-            throw AndroidCaptureForegroundRefused("foreground-start-timeout")
+            throw AndroidCaptureForegroundRefused("foreground-start-timeout", timeout)
         }
+        // Le service répond : CETTE instance devient détentrice — le service ne s'arrête
+        // qu'à la relâche du dernier (les sessions simultanées le partagent, I-3).
+        AndroidCaptureForegroundOwnership.acquire()
+        owned = true
     }
 
     override fun stop() {
-        context.stopService(Intent(context, AndroidCaptureService::class.java))
+        if (!owned) return
+        owned = false
+        if (AndroidCaptureForegroundOwnership.release()) {
+            context.stopService(Intent(context, AndroidCaptureService::class.java))
+        }
     }
 
     override fun close() = stop()
