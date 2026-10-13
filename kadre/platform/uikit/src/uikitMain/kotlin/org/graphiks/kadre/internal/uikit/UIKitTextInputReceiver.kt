@@ -7,6 +7,7 @@ import kotlinx.cinterop.CValue
 import kotlinx.cinterop.ExportObjCClass
 import kotlinx.cinterop.ObjCAction
 import kotlinx.cinterop.useContents
+import org.graphiks.kadre.input.TextRange
 import org.graphiks.kadre.input.TextInputConfig
 import platform.CoreGraphics.CGRectMake
 import platform.Foundation.NSRange
@@ -122,6 +123,30 @@ internal class UIKitTextInputReceiver(
     /** Le champ vit-il dans une hiérarchie vivante — l'analogue D-X2 du seam élément web. */
     internal val isAddressable: Boolean
         get() = window != null
+
+    /**
+     * Le champ tient-il un texte marqué (composition IME VIVANTE) — l'état du CHAMP, lu à chaque
+     * hook : c'est la seule vérité de composition en v1 (l'ombre ne marque jamais — le port n'y
+     * écrit pas, la garde sur `shadow.markedRange` serait permanente et donc fausse).
+     */
+    internal val isMarkingText: Boolean
+        get() = markedTextRange != null
+
+    /**
+     * La sélection COURANTE du champ en offsets UTF-16 (`offsetFromPosition` depuis le début du
+     * document) — l'état que la reconciliation du commit IME ([UIKitTextInputOwner] — décision
+     * `CompositionCommit` du routeur) lit pour resynchroniser l'ombre. `null` quand le champ ne
+     * dit pas de sélection ou d'offsets incroyables (négatifs, inversés) : l'appelant retombe
+     * alors sur la fin du texte.
+     */
+    internal fun currentSelectionUtf16(): TextRange? {
+        val selected = selectedTextRange ?: return null
+        val begin = beginningOfDocument ?: return null
+        val start = offsetFromPosition(begin, toPosition = selected.start)
+        val end = offsetFromPosition(begin, toPosition = selected.end)
+        if (start < 0L || end < start) return null
+        return TextRange(start.toInt(), end.toInt())
+    }
 
     /**
      * Le write-back du port (Task 2, Step 3) : le texte et la sélection posés PROGRAMMATIQUEMENT

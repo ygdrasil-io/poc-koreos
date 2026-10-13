@@ -101,6 +101,23 @@ class UIKitTextInputShadowTest {
     }
 
     @Test
+    fun applyDocumentAdoptsTheFieldsCommittedViewAtTheSameRevision() {
+        // La licence de la resynchronisation du commit IME (fix round 1) : le champ a committé
+        // un texte que l'ombre ne porte pas (la composition n'est jamais entrée dans l'ombre en
+        // v1) ; à révision ÉGALE et texte DIFFÉRENT, l'ombre adopte la vue committée — la plage
+        // honnête du prochain appui se résoudra contre le document que le champ montre vraiment.
+        val shadow = shadow(text = "he", selection = TextRange(2, 2), revision = 7)
+        val update = shadow.applyDocument("helloé", TextRange(6, 6), TextDocumentRevision(7))
+        assertEquals(UIKitTextInputDocumentUpdate.Applied, update,
+            "same revision, different text: the field's committed view is adopted, not refused")
+        assertEquals("helloé", shadow.text)
+        assertEquals(TextRange(6, 6), shadow.selection)
+        assertEquals(TextDocumentRevision(7), shadow.documentRevision,
+            "the shadow NEVER mints a revision of its own — the runtime stays the authority")
+        assertNull(shadow.markedRange, "no composition is created by the reconciliation")
+    }
+
+    @Test
     fun applyDocumentRefusesAStaleSnapshotLeavingTheShadowUntouched() {
         val shadow = shadow(text = "hello", revision = 7)
         assertEquals(UIKitTextInputDocumentUpdate.Applied,

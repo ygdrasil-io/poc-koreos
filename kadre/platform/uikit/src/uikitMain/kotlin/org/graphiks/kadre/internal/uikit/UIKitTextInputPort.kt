@@ -190,6 +190,9 @@ internal class UIKitTextInputOwner(
 
     private var pendingUserEdit: PendingUserEdit? = null
 
+    /** Le routeur PUR des faits d'édition (écho / composition / commit IME / candidat) — testé sans appareil. */
+    private val editRouter = UIKitTextInputEditRouter()
+
     internal val isClosed: Boolean
         get() = lock.withLock { closed }
 
@@ -291,37 +294,97 @@ internal class UIKitTextInputOwner(
      * (« pas de plage » UIKit) se résout déjà en sélection par [UIKitTextInputShadow.resolveRange].
      * Le port rend toujours `true` : la suppression d'une édition n'est pas du ressort du
      * port v1 — la politique vit au runtime.
+     *
+     * Fix round 1 : la garde de composition porte sur l'état VIVANT du champ
+     * ([UIKitTextInputReceiver.isMarkingText]) — la garde d'origine lisait `shadow.markedRange`,
+     * permanent nul en v1 (le port n'y écrit pas), donc toujours fausse : un candidat pouvait
+     * être posé PENDANT une composition réelle, puis jeté au changement suivant sans jamais
+     * resynchroniser l'ombre.
      */
     private fun onShouldChange(range: UIKitNsRange, replacement: String): Boolean {
         if (lock.withLock { closed }) return true
-        if (shadow.markedRange != null) return true // une composition est vivante : son fait, pas une observation
+        // Une composition est vivante DANS LE CHAMP : son fait, pas une observation (règle web) —
+        // aucun candidat n'est posé, le champ applique, rien n'est publié.
+        if (!editRouter.shouldRecordCandidate(fieldMarked = receiver.isMarkingText)) return true
         val resolved = shadow.resolveRange(range) ?: return true // plage incroyable : rien à observer
         lock.withLock { pendingUserEdit = PendingUserEdit(resolved, replacement) }
         return true
     }
 
     /**
-     * L'après-modification (`.editingChanged`) : le candidat est committé contre l'ombre —
-     * `replaceText` porte la même mutation qu'UIKit vient d'appliquer au champ (elles étaient en
-     * accord, la plage était résolue sur cet accord), et l'observation part timbrée de la
-     * révision de l'ombre. Un marqué PRÉSENT DANS LE CHAMP à cet instant dit « composition IME »
-     * : le fait est à la composition, jamais une observation de sa propre cuisine (règle web) —
-     * le candidat est jeté, l'ombre reste en retard, le prochain write-back rétablit l'accord.
-     * Sans candidat : l'écho d'un write-back (garde [UIKitTextInputReceiver.writeBackInFlight]
-     * en vol) ou un fait non attribué (le stimulus Task 3 l'attribuera) — RIEN n'est publié.
+     * L'après-modification (`.editingChanged`) : la DÉCISION vit dans le routeur PUR
+     * ([UIKitTextInputEditRouter] — testé sans appareil), le port l'exécute :
+     *
+     * - **`EchoDrop`** (fix round 1) : l'écho d'un write-back ([UIKitTextInputReceiver.
+     *   writeBackInFlight] en vol) ne consomme JAMAIS le candidat — il le JETTE. Sans cette
+     *   garde explicite, un candidat qui traîne (un `shouldChange` sans `editingChanged` de
+     *   suite — remplaçement-à-l'identique plausible) aurait été consommé par le prochain
+     *   changement, y compris un écho : un `Replace` fantôme à la révision d'avant write-back,
+     *   admis par la session. L'ombre, elle, est déjà reconciliée par le write-back lui-même ;
+     * - **`CompositionDrop`** : une composition vit dans le champ — le fait est à la
+     *     composition, jamais une observation de sa propre cuisine (règle web) ; le candidat
+     *     éventuel est jeté, le routeur RETIENT le marqué ;
+     * - **`CompositionCommit`** (fix round 1) : le marqué du champ est passé à nul alors que le
+     *     routeur le retenait — le commit IME. Rien ne se publie (limite v1 documentée), mais
+     *     l'ombre est RESYNCHRONISÉE depuis le champ ([reconcileShadowFromField]) : sans elle,
+     *     le texte committé resterait hors de l'ombre et la PLAGE honnête du prochain appui se
+     *     résoudrait nulle (édition silencieusement perdue) ou fausse (mauvais `Replace`) —
+     *     l'ombre empoisonnée ;
+     * - **`CommitPending`** : l'édition utilisateur honnête — le candidat est committé contre
+     *     l'ombre (`replaceText` porte la même mutation qu'UIKit vient d'appliquer au champ :
+     *     elles étaient en accord, la plage était résolue sur cet accord) et l'observation part
+     *     timbrée de la révision de l'ombre ;
+     * - **`Nothing`** : un fait non attribué (le stimulus Task 3 l'attribuera) — rien.
      */
     private fun onTextDidChange() {
+        val pendingPresent = lock.withLock { pendingUserEdit != null }
+        when (
+            editRouter.onTextDidChange(
+                writeBackInFlight = receiver.writeBackInFlight,
+                fieldMarked = receiver.isMarkingText,
+                pendingPresent = pendingPresent,
+            )
+        ) {
+            UIKitTextInputEditDecision.EchoDrop,
+            UIKitTextInputEditDecision.CompositionDrop,
+            -> lock.withLock { pendingUserEdit = null }
+
+            UIKitTextInputEditDecision.CompositionCommit -> {
+                lock.withLock { pendingUserEdit = null }
+                reconcileShadowFromField()
+            }
+
+            UIKitTextInputEditDecision.CommitPending -> commitPendingUserEdit()
+
+            UIKitTextInputEditDecision.Nothing -> Unit
+        }
+    }
+
+    /** Le commit du candidat utilisateur : la mutation d'ombre, puis l'observation timbrée. */
+    private fun commitPendingUserEdit() {
         val pending = lock.withLock {
             val pending = pendingUserEdit
             pendingUserEdit = null
             pending
+        } ?: return
+        if (shadow.replaceText(pending.range, pending.replacement)) {
+            publish(TextInputObservation.Replace(pending.range, pending.replacement, shadow.documentRevision))
         }
-        if (receiver.markedTextRange != null) return
-        if (pending != null) {
-            if (shadow.replaceText(pending.range, pending.replacement)) {
-                publish(TextInputObservation.Replace(pending.range, pending.replacement, shadow.documentRevision))
-            }
-        }
+    }
+
+    /**
+     * La resynchronisation du commit IME : l'ombre adopte la vue COMMITTÉE du champ (texte et
+     * sélection lus dans le champ) À LA RÉVISION COURANTE de l'ombre — la même révision, jamais
+     * une révision propre (le runtime reste l'autorité ; `applyDocument` l'admet comme le
+     * restate idempotent, preuve `UIKitTextInputShadowTest`). Le champ montre ce fait ; l'ombre
+     * doit pouvoir y résoudre la prochaine plage honnête. Les refus (`Stale` — inatteignable à
+     * révision égale ; `CompositionActive`/`Closed` — l'ombre ne marque jamais en v1) laissent
+     * l'ombre en l'état : le prochain write-back rétablit l'accord (posture web inchangée).
+     */
+    private fun reconcileShadowFromField() {
+        val text = receiver.text ?: ""
+        val selection = receiver.currentSelectionUtf16() ?: TextRange(text.length, text.length)
+        shadow.applyDocument(text, selection, shadow.documentRevision)
     }
 
     /** La touche retour : l'action de la config — le miroir du keydown Enter web. */
@@ -362,6 +425,79 @@ internal class UIKitTextInputOwner(
         } catch (cause: Throwable) {
             close()
         }
+    }
+}
+
+/** Ce que le port exécute pour un fait `.editingChanged` — le verdict PUR du routeur. */
+internal enum class UIKitTextInputEditDecision {
+    /** Écho d'un write-back : le candidat éventuel est JETÉ, rien ne se publie (l'ombre est déjà au fait). */
+    EchoDrop,
+
+    /** Composition IME vivante dans le champ : le candidat éventuel est jeté, rien ne se publie, le marqué est retenu. */
+    CompositionDrop,
+
+    /** Le marqué du champ vient de passer à nul (commit IME) : le candidat éventuel est jeté, l'ombre est resynchronisée depuis le champ, rien ne se publie. */
+    CompositionCommit,
+
+    /** Édition utilisateur honnête : le candidat est committé contre l'ombre et publié en `Replace`. */
+    CommitPending,
+
+    /** Un fait sans candidat ni mémoire de marqué ni write-back en vol — rien. */
+    Nothing,
+}
+
+/**
+ * Le routeur PUR des faits d'édition du receiver (fix round 1) : il tient le SEUL état que la
+ * décision exige — la mémoire du marqué du champ au changement précédent — et rend le verdict
+ * que le port exécute. Zéro UIKit, testé sans appareil ([UIKitTextInputEditRouterTest]) : les
+ * deux hardenings (écho qui ne consomme jamais un candidat ; commit IME qui resynchronise
+ * l'ombre) sont des décisions ÉPINGLÉES ici, leur CÂBLAGE aux lectures réelles du champ
+ * ([UIKitTextInputReceiver.writeBackInFlight]/[UIKitTextInputReceiver.isMarkingText]) restant
+ * de la preuve driver (Task 3).
+ *
+ * L'ordre des gardes EST la sémantique : l'écho gagne sur tout (le write-back possède le champ,
+ * l'ombre vient d'y être écrite — il RESETTE aussi la mémoire de marqué, la transition qu'un
+ * write-back absorbe est consommée par le write-back lui-même) ; le marqué vivant retient sa
+ * mémoire ; la sortie de marqué (mémoire posée, champ nul) est LE commit IME, exactement une
+ * fois ; sans rien de tout cela, un candidat présent est l'édition utilisateur honnête.
+ */
+internal class UIKitTextInputEditRouter {
+
+    /** Le champ tenait-il un texte marqué au dernier changement. */
+    internal var fieldWasMarking: Boolean = false
+        private set
+
+    /**
+     * Un `shouldChange` enregistre-t-il un candidat ? Jamais pendant une composition vivante
+     * DANS LE CHAMP (le fait est à la composition — la garde sur `shadow.markedRange` était
+     * permanente-nulle en v1, donc toujours fausse).
+     */
+    fun shouldRecordCandidate(fieldMarked: Boolean): Boolean = !fieldMarked
+
+    /** Le verdict du changement courant, qui fait aussi avancer la mémoire du marqué. */
+    fun onTextDidChange(
+        writeBackInFlight: Boolean,
+        fieldMarked: Boolean,
+        pendingPresent: Boolean,
+    ): UIKitTextInputEditDecision = when {
+        writeBackInFlight -> {
+            fieldWasMarking = false
+            UIKitTextInputEditDecision.EchoDrop
+        }
+
+        fieldMarked -> {
+            fieldWasMarking = true
+            UIKitTextInputEditDecision.CompositionDrop
+        }
+
+        fieldWasMarking -> {
+            fieldWasMarking = false
+            UIKitTextInputEditDecision.CompositionCommit
+        }
+
+        pendingPresent -> UIKitTextInputEditDecision.CommitPending
+
+        else -> UIKitTextInputEditDecision.Nothing
     }
 }
 
