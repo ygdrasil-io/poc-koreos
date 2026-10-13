@@ -1633,6 +1633,12 @@ class AppKitWindowRuntimeDriverTest {
         openedWindow(driver, WindowSpec(title = "fullscreen-teardown"))
         driver.close()
 
+        // Peer teardown runs on the scheduled cleanup path, after driver.close() has
+        // returned: await the callbacks instead of assuming synchronous delivery.
+        withTimeout(2.seconds) {
+            while (teardown.size < 2) delay(10)
+        }
+
         assertEquals(
             listOf("revoked:fullscreen-teardown", "released:fullscreen-teardown"),
             teardown,

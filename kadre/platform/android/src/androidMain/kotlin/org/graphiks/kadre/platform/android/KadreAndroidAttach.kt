@@ -313,6 +313,32 @@ internal object AndroidHostSession {
                         windowNative = windowSeam,
                     )
                     sessionSurface.surface = surface
+                    // Le port de capture de CETTE session (phase 8) : capabilities sondées UNE
+                    // fois à cette construction (l'API courante gèle la capability surface —
+                    // PixelCopy est 26+), sources HostPickerOnly, Source refusé avant tout seam.
+                    // La surface primaire y est enregistrée à sa création — le miroir
+                    // `registerPrimarySurface` du web, branche composants. Les coutures de la
+                    // Task 2 : le consentement par le registre DIRECT de CETTE Activity (la
+                    // correction de l'anti-pattern kadre-old), le FGS `mediaProjection` Kadre
+                    // (le ruling P8-0 — le host ne déclare RIEN), l'ImageReader et les faits
+                    // d'affichage de CETTE vue. La forme View câble les mêmes coutures, le
+                    // consentement déplié du contexte de la vue.
+                    val capturePort = AndroidCapturePort(
+                        apiLevel = Build.VERSION.SDK_INT,
+                        surfaces = AndroidHostCaptureSurfaceRegistry(),
+                        consent = AndroidActivityCaptureConsentSource(owner as ComponentActivity),
+                        projections = AndroidMediaProjectionSource(view.context.applicationContext),
+                        imageReaders = AndroidImageReaderSource(),
+                        foreground = AndroidServiceCaptureForeground(view.context.applicationContext),
+                        displayFacts = AndroidCaptureDisplayFacts(
+                            size = PhysicalSize(
+                                maxOf(1, view.resources.displayMetrics.widthPixels),
+                                maxOf(1, view.resources.displayMetrics.heightPixels),
+                            ),
+                            densityDpi = view.resources.displayMetrics.densityDpi,
+                        ),
+                    )
+                    capturePort.registerHostCaptureSurface(surface.id, view)
                     // Le routage gamepad de CETTE session — la delivery (construite plus tard,
                     // pendant l'attach) copiera la route à sa naissance ; les events source
                     // gamepad/joystick ne rejoignent JAMAIS le chemin ordinaire de la surface.
@@ -333,6 +359,7 @@ internal object AndroidHostSession {
                         displayPort = displayPort,
                         gamepadPort = gamepadPort,
                         inputDevicePort = inputDevicePort,
+                        capturePort = capturePort,
                         closeAction = { manager.terminalise(); inputSeam.close() },
                     )
                 },
@@ -355,35 +382,70 @@ internal object AndroidHostSession {
             // substitue (les devices génériques via le port vide), honnête et sans état.
             // Le display est observable depuis le contexte de la vue
             // (`getSystemService(DISPLAY_SERVICE)` n'exige pas de contexte d'activité).
-            AndroidAttachForm.View -> RuntimeHostController.withPrimarySurface(
-                platform = KadrePlatform.Android,
-                sessionRevocationHandler = RuntimeSessionRevocationHandler { _ -> binding?.teardown() },
-                initialLifecycleState = lifecycleStateOf(initial),
-                initialLifecycleCapabilities = pressureClaim.capabilities,
-                failureReporter = AndroidAttachDiagnostics,
-                sessionObserver = RuntimeSessionObserver { _, _ -> reservation.release() },
-                primarySurfaceFactory = { id ->
-                    // Le seam du curseur câblé sur la View de CETTE forme aussi : la
-                    // propriété `View.pointerIcon` vit sur la vue, pas sur la fenêtre — la
-                    // forme View committe le curseur exactement comme la forme Activity. Le
-                    // seam de capture (phase 4, Task 3) de même pour les primitives — mais la
-                    // forme View n'a pas de fenêtre enchaînée : le canal d'état du SDK
-                    // (`Window.Callback.onPointerCaptureChanged`) n'existe pas ici, la
-                    // capability suit le fait câblé (`inputWired`) et le champ y reste refusé
-                    // plutôt que d'annoncer un commit qui ne peut pas arriver.
-                    val surface = AndroidHostSurface(
-                        id,
-                        initialSurfaceState(view, initial),
-                        leasedView = { view },
-                        cursorNative = AndroidViewCursorNative(view),
-                        pointerCaptureNative = AndroidViewPointerCaptureNative(view),
-                    )
-                    sessionSurface.surface = surface
-                    RuntimePrimarySurface(surface, surface::close)
-                },
-                displayPort = AndroidDisplayPort(AndroidDisplayManagerSource(view.context)),
-                inputDevicePort = AndroidInputDevicePort(AndroidInputManagerSource(view.context)),
-            )
+            // Le port de capture de CETTE forme (phase 8) : construit AVANT le contrôleur —
+            // l'overload interne le place dans les composants de la session, fermé avec elle —
+            // et la surface primaire y est enregistrée à sa création dans la factory ci-dessous
+            // (le miroir `registerPrimarySurface` du web, branche sans fenêtre). Mêmes
+            // capabilities gelées, mêmes sources HostPickerOnly, même refus structurel de
+            // `Source` ; les coutures de la Task 2 : le consentement déplié de l'activité qui
+            // héberge la vue (`activityOf`, le registre DIRECT — la forme View n'a pas
+            // d'activité typée ; sans activité hébergeante, le port répond `Unsupported
+            // (CapturePermission)` à une demande plutôt que de deviner), le FGS Kadre sur le
+            // contexte applicatif, l'ImageReader, les faits d'affichage de CETTE vue. Le bras
+            // PixelCopy est la réservation de production par défaut (`androidPixelCopyReservation`,
+            // le seam `AndroidPixelCopyNative` et son impl `AndroidLivePixelCopy`) : la surfaceView
+            // enregistrée par la factory ci-dessous est copiée par le `PixelCopy.request` réel.
+            AndroidAttachForm.View -> {
+                val capturePort = AndroidCapturePort(
+                    apiLevel = Build.VERSION.SDK_INT,
+                    surfaces = AndroidHostCaptureSurfaceRegistry(),
+                    consent = activityOf(view.context)?.let(::AndroidActivityCaptureConsentSource),
+                    projections = AndroidMediaProjectionSource(view.context.applicationContext),
+                    imageReaders = AndroidImageReaderSource(),
+                    foreground = AndroidServiceCaptureForeground(view.context.applicationContext),
+                    displayFacts = AndroidCaptureDisplayFacts(
+                        size = PhysicalSize(
+                            maxOf(1, view.resources.displayMetrics.widthPixels),
+                            maxOf(1, view.resources.displayMetrics.heightPixels),
+                        ),
+                        densityDpi = view.resources.displayMetrics.densityDpi,
+                    ),
+                )
+                RuntimeHostController.withPrimarySurface(
+                    platform = KadrePlatform.Android,
+                    sessionRevocationHandler = RuntimeSessionRevocationHandler { _ -> binding?.teardown() },
+                    initialLifecycleState = lifecycleStateOf(initial),
+                    initialLifecycleCapabilities = pressureClaim.capabilities,
+                    failureReporter = AndroidAttachDiagnostics,
+                    sessionObserver = RuntimeSessionObserver { _, _ -> reservation.release() },
+                    primarySurfaceFactory = { id ->
+                        // Le seam du curseur câblé sur la View de CETTE forme aussi : la
+                        // propriété `View.pointerIcon` vit sur la vue, pas sur la fenêtre — la
+                        // forme View committe le curseur exactement comme la forme Activity. Le
+                        // seam de capture (phase 4, Task 3) de même pour les primitives — mais la
+                        // forme View n'a pas de fenêtre enchaînée : le canal d'état du SDK
+                        // (`Window.Callback.onPointerCaptureChanged`) n'existe pas ici, la
+                        // capability suit le fait câblé (`inputWired`) et le champ y reste refusé
+                        // plutôt que d'annoncer un commit qui ne peut pas arriver.
+                        val surface = AndroidHostSurface(
+                            id,
+                            initialSurfaceState(view, initial),
+                            leasedView = { view },
+                            cursorNative = AndroidViewCursorNative(view),
+                            pointerCaptureNative = AndroidViewPointerCaptureNative(view),
+                        )
+                        sessionSurface.surface = surface
+                        // L'enregistrement miroir web : l'id que le runtime vient d'allouer est le
+                        // seul fait contre lequel la route `Surface` du port résout — la surfaceView
+                        // (en `Any` ici) est ce que la Task 3 lira par PixelCopy.
+                        capturePort.registerHostCaptureSurface(surface.id, view)
+                        RuntimePrimarySurface(surface, surface::close)
+                    },
+                    displayPort = AndroidDisplayPort(AndroidDisplayManagerSource(view.context)),
+                    inputDevicePort = AndroidInputDevicePort(AndroidInputManagerSource(view.context)),
+                    capturePort = capturePort,
+                )
+            }
         }
 
         // 4. Le binding — un par attach, construit à frais, installé exactement une fois.

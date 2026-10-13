@@ -54,3 +54,11 @@ AND-008	android	scenario	android-memory-background-never-maps	org.graphiks.kadre
 AND-008	android	scenario	android-raw-input-noncall	org.graphiks.kadre.consumer.KadreConsumerDisplaysContractTest	androidRawInputNoncall
 AND-008	android	sentinel	android-display-no-invented-workarea	org.graphiks.kadre.consumer.KadreConsumerDisplaysContractTest	androidDisplayInventoryReal
 AND-008	android	sentinel	android-memory-no-background-signal	org.graphiks.kadre.consumer.KadreConsumerDisplaysContractTest	androidMemoryBackgroundNeverMaps
+AND-009	android	scenario	android-capture-surface-stream-bounded	org.graphiks.kadre.consumer.KadreConsumerCaptureContractTest	androidCaptureSurfaceStreamBounded
+AND-009	android	scenario	android-capture-consent-denied-stateful	org.graphiks.kadre.consumer.KadreConsumerCaptureContractTest	androidCaptureConsentDeniedStateful
+AND-009	android	scenario	android-capture-token-single-use	org.graphiks.kadre.consumer.KadreConsumerCaptureContractTest	androidCaptureTokenSingleUse
+AND-009	android	scenario	android-capture-fgs-lifecycle	org.graphiks.kadre.consumer.KadreConsumerCaptureContractTest	androidCaptureFgsLifecycle
+AND-009	android	scenario	android-capture-source-refused	org.graphiks.kadre.platform.android.AndroidCaptureDeviceContractTest	androidCaptureSourceRefused
+AND-009	android	scenario	android-capture-late-attach-consent	org.graphiks.kadre.consumer.KadreConsumerCaptureContractTest	androidCaptureLateAttachConsent
+AND-009	android	sentinel	android-capture-no-prompt-on-readback	org.graphiks.kadre.consumer.KadreConsumerCaptureContractTest	androidCaptureTokenSingleUse
+AND-009	android	sentinel	android-capture-fgs-stopped-after-terminal	org.graphiks.kadre.consumer.KadreConsumerCaptureContractTest	androidCaptureFgsLifecycle

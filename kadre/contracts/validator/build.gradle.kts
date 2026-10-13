@@ -553,7 +553,7 @@ val generateUikitContractEvidence by tasks.registering {
     dependsOn(uikitContractValidateTasks)
 }
 
-val androidContractIds = listOf("AND-001", "AND-002", "AND-003", "AND-004", "AND-005", "AND-006", "AND-007", "AND-008")
+val androidContractIds = listOf("AND-001", "AND-002", "AND-003", "AND-004", "AND-005", "AND-006", "AND-007", "AND-008", "AND-009")
 val androidContractRegistry = rootProject.file("kadre/contracts/registry/contracts.tsv")
 val androidContractMappings = listOf(
     rootProject.file("kadre/contracts/driver/android/contracts/evidence.tsv"),
