@@ -25,6 +25,7 @@ import org.graphiks.kadre.input.TextInputSession
 import org.graphiks.kadre.input.TextRange
 import org.graphiks.kadre.internal.runtime.RuntimeLock
 import org.graphiks.kadre.internal.runtime.withLock
+import org.graphiks.kadre.internal.uikit.UIKitDropCount
 import org.graphiks.kadre.internal.uikit.UIKitGestureCount
 import org.graphiks.kadre.internal.uikit.UIKitKeyboardCount
 import org.graphiks.kadre.internal.uikit.UIKitObservationCount
@@ -627,6 +628,28 @@ public object KadreUikitSurfaceDriver {
     /** Les annonces `InputObservationChanged` déclenchées par le binding gestes/survol. */
     public val gestureAnnouncementCount: Long
         get() = UIKitGestureCount.totalAnnouncements()
+
+    // MARK: - Compteurs drop (phase 7, Task 3) — le proxy du driver, même posture.
+
+    /**
+     * Les interactions `UIDropInteraction` réellement posées sur la vue (le compteur du
+     * fixture ; zéro côté tvOS par construction — le binding n'y existe pas).
+     */
+    public val dropInstallCount: Long
+        get() = UIKitDropCount.totalInstalls()
+
+    /** Les interactions drop réellement retirées de la vue. */
+    public val dropTeardownCount: Long
+        get() = UIKitDropCount.totalTeardowns()
+
+    /**
+     * Les livraisons du delegate drop réellement acceptées (`canHandle`, entrée, mouvement,
+     * sortie, perform, conclude, fin de session — zéro attendu sur toute suite automatisée :
+     * aucun drag n'est synthétisable in-process honnêtement ; le charter manuel Task 4
+     * incrémentera).
+     */
+    public val dropEventCount: Long
+        get() = UIKitDropCount.totalEvents()
 
     // MARK: - Compteurs + probes texte (phase 6, Task 3) — le proxy du driver, même posture.
 
