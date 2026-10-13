@@ -1,15 +1,20 @@
 package org.graphiks.kadre.platform.android
 
 import android.app.Application
+import android.content.Context
+import android.hardware.display.DisplayManager
 import android.os.Build
 import android.os.Looper
+import android.view.Display
 import android.view.View
 import androidx.activity.ComponentActivity
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
 import org.graphiks.kadre.application.ActivationState
 import org.graphiks.kadre.application.AttachmentState
 import org.graphiks.kadre.application.KadreApplication
@@ -21,6 +26,7 @@ import org.graphiks.kadre.diagnostics.KadreFailure
 import org.graphiks.kadre.diagnostics.KadrePlatform
 import org.graphiks.kadre.diagnostics.KadreResourceKind
 import org.graphiks.kadre.diagnostics.KadreResult
+import org.graphiks.kadre.internal.runtime.DisplayPort
 import org.graphiks.kadre.internal.runtime.RuntimeFailureReporter
 import org.graphiks.kadre.internal.runtime.RuntimeHostController
 import org.graphiks.kadre.internal.runtime.RuntimePrimarySurface
@@ -50,7 +56,10 @@ import org.graphiks.kadre.surface.SurfaceTheme
 import org.graphiks.kadre.surface.SurfaceVisibility
 
 /**
- * Les quatre points d'entrée publics d'attach Android (DESIGN §15.1).
+ * Les points d'entrée publics d'attach Android (DESIGN §15.1) : les quatre formes
+ * Activity/View, et depuis la phase 11 les deux formes présentation
+ * ([attachKadreSecondaryDisplay]) — le média secondaire monté sur un écran dédié via le
+ * seam `Presentation`.
  *
  * Contrat de thread (décision de phase 0 maintenue) : appel sur le thread principal Android,
  * non suspendant, sans blocage ni relocation. La violation de thread est une erreur de
@@ -119,6 +128,57 @@ public fun View.attachKadre(
     parentScope = parentScope,
 )
 
+/**
+ * La forme présentation (phase 11) : monte `contentView` dans un média `Presentation` sur
+ * l'écran dédié `presentationDisplay` et y attache une session Kadre SECONDAIRE — la session
+ * principale de la même Activity peut vivre en parallèle (la forme présentation ne réserve
+ * JAMAIS l'identité de l'Activity ; elle revendique le contentView — qui doit être LIBRE,
+ * Kadre le monte dans la présentation — et le displayId).
+ *
+ * L'admission : thread principal (erreur de programmation sinon) ; `parentScope` actif ;
+ * contentView détaché sinon `InvalidRequest("contentView")` ; écran résolvable
+ * (`displayManager.getDisplay(displayId) != null`) sinon `InvalidRequest("presentationDisplay")` ;
+ * Activity non détruite sinon `Closed(Host)` ; contentView OU displayId déjà réservés sinon
+ * `AlreadyInUse(Host)` — tout ou rien.
+ *
+ * Un hôte déjà STARTED montre le média dès l'attach (premier show level-triggered) ; sinon
+ * le premier START le montre. Le STOP le cache — le média survit aux cycles, jamais deux
+ * présentations ; le retrait de l'écran ferme la surface et termine la session sans
+ * résurrection. La session ne revendique AUCUN champ fenêtre en v1 (`native = null` — la
+ * table des capabilities non supportées) ; appelable après `onCreate` (l'installation observe
+ * le lifecycle et le decorView de l'Activity).
+ */
+public fun ComponentActivity.attachKadreSecondaryDisplay(
+    presentationDisplay: Display,
+    contentView: View,
+    applicationFactory: KadreApplicationFactory,
+    policy: KadrePolicy = KadrePolicies.Default,
+    parentScope: CoroutineScope = lifecycleScope,
+): KadreResult<KadreSession> = AndroidHostSession.attachSecondaryDisplay(
+    request = presentationAttachRequest(presentationDisplay, contentView, parentScope),
+    parentScope = parentScope,
+    applicationFactory = applicationFactory,
+    policy = policy,
+    sourceFactory = { AndroidSdkPresentationSource(this, presentationDisplay, contentView) },
+    installHostLifecycle = { lifecycle -> lifecycle.install(this, window.decorView) },
+    displayPortFactory = { AndroidDisplayPort(AndroidDisplayManagerSource(contentView.context)) },
+)
+
+/** La variante « application » : délègue à la variante factory (le modèle exact des overloads web). */
+public fun ComponentActivity.attachKadreSecondaryDisplay(
+    presentationDisplay: Display,
+    contentView: View,
+    policy: KadrePolicy = KadrePolicies.Default,
+    parentScope: CoroutineScope = lifecycleScope,
+    application: KadreApplication,
+): KadreResult<KadreSession> = attachKadreSecondaryDisplay(
+    presentationDisplay = presentationDisplay,
+    contentView = contentView,
+    applicationFactory = KadreApplicationFactory { application },
+    policy = policy,
+    parentScope = parentScope,
+)
+
 /** L'entrée de l'échelle pour la forme Activity — identités natives = instances. */
 private fun ComponentActivity.activityAttachRequest(
     surfaceView: View,
@@ -152,6 +212,31 @@ private fun View.viewAttachRequest(
     parentScopeJob = parentScope.coroutineContext[Job],
     parentScopeJobIsActive = parentScope.coroutineContext[Job]?.isActive == true,
 )
+
+/**
+ * L'entrée de l'échelle pour la forme présentation — les faits SDK y sont lus UNE fois,
+ * avant l'échelle pure : le drapeau d'attachement du contentView (qui doit être LIBRE), la
+ * clé de l'écran visé et sa résolvabilité (le rung `presentationDisplay` de l'échelle).
+ */
+private fun ComponentActivity.presentationAttachRequest(
+    presentationDisplay: Display,
+    contentView: View,
+    parentScope: CoroutineScope,
+): AndroidPresentationAttachRequest = AndroidPresentationAttachRequest(
+    isMainThread = Looper.myLooper() == Looper.getMainLooper(),
+    contentView = contentView,
+    isContentViewAttachedToWindow = contentView.isAttachedToWindow,
+    displayKey = presentationDisplay.displayId.toLong(),
+    isDisplayResolvable = presentationDisplayResolvable(presentationDisplay),
+    ownerState = lifecycle.currentState.ordinal,
+    parentScopeJob = parentScope.coroutineContext[Job],
+    parentScopeJobIsActive = parentScope.coroutineContext[Job]?.isActive == true,
+)
+
+/** Le rung « écran résolvable » : le DisplayManager du process doit encore retourner l'écran visé. */
+private fun ComponentActivity.presentationDisplayResolvable(presentationDisplay: Display): Boolean =
+    (getSystemService(Context.DISPLAY_SERVICE) as DisplayManager)
+        .getDisplay(presentationDisplay.displayId) != null
 
 /**
  * La couture commune aux quatre overloads (DESIGN §15.1) : l'échelle d'admission, la
@@ -200,7 +285,11 @@ private fun View.viewAttachRequest(
  */
 internal object AndroidHostSession {
 
-    /** Le registre d'ownership process-wide — une seule instance pour toutes les attaches. */
+    /**
+     * Le registre d'ownership process-wide — une seule instance pour toutes les attaches, les
+     * formes Activity/View comme les formes présentation (c'est le PARTAGE des tables qui fait
+     * la coexistence : un contentView ou un displayId pris par une forme refute l'autre).
+     */
     private val ownership = AndroidViewOwnership()
 
     /**
@@ -588,6 +677,266 @@ internal object AndroidHostSession {
     }
 
     /**
+     * La couture d'attach de la forme PRÉSENTATION (`attachKadreSecondaryDisplay`, phase 11) :
+     * l'échelle, la réservation (contentView identité + displayId valeur, JAMAIS l'Activity),
+     * puis la composition du seam Task 1 avec le runtime — la structure de la branche Activity
+     * SANS seam natif fenêtre.
+     *
+     * Le chemin nominal :
+     * 1. l'échelle ([evaluateAndroidPresentationAttach], pure) — violation de thread :
+     *    `IllegalStateException` (le rung existant) ; toute autre denial : `Failure` sans
+     *    exception ;
+     * 2. la réservation atomique contentView+displayId
+     *    ([AndroidPresentationReservation.acquire]) — refus : `Failure(AlreadyInUse(Host))`,
+     *    l'état d'avant la demande intact. La session principale de la même Activity reste
+     *    libre : l'identité Activity n'est jamais revendiquée par cette forme ;
+     * 3. la composition : le seam [AndroidPresentationSource] (fabrique injectée — la
+     *    production y passe `AndroidSdkPresentationSource`, les tests hôtes un fake pilotable),
+     *    la surface [AndroidHostSurface] construite sur les FAITS du média (attachée — le
+     *    média existe dès la construction — mais CACHÉE jusqu'au premier START), le manager
+     *    `AndroidActivityWindowManager(native = null)` (la table honnête : la session
+     *    présentation ne revendique AUCUN champ fenêtre en v1), et `withComponents` — le
+     *    teardown de la surface primaire ferme le seam (`presentationSource.close()`), le
+     *    `closeAction` terminalise le flux d'événements du manager (l'exact miroir de la
+     *    branche Activity) ;
+     * 4. le pilotage lifecycle ([AndroidPresentationLifecycle], installé par l'étape injectée
+     *    — la production pose le binding SDK sur l'Activity et son decorView) : START montre,
+     *    STOP cache — le premier show est LEVEL-TRIGGERED (un hôte déjà STARTED à l'attach
+     *    montre le média immédiatement, ruling de la phase) ; le retrait d'écran (état
+     *    `Removed` du seam, observé en continu) et un show échoué ferment la surface puis
+     *    terminent la session — le MÊME chemin que la disparition de l'hôte dans les formes
+     *    existantes (`controller.detach()` → `Stopped(HostDetached)`), réservations libérées,
+     *    jamais de résurrection ;
+     * 5. l'installation puis l'attach sous le garde post-réservation (l'overload présentation
+     *    de [installBindingAndAttach]) : rollback intégral — `presentationSource.close()` +
+     *    réservation rendue, throwable SDK propagé TEL QUEL.
+     *
+     * Les paramètres injectés (`sourceFactory`, `installHostLifecycle`, `ownership`,
+     * `displayPortFactory`) sont les seuls qui touchent le SDK en production : les tests
+     * hôtes conduisent toute la machinerie sans android.jar — le modèle de
+     * `installBindingAndAttach`, dont l'étape d'installation reste LA seule couture SDK.
+     */
+    internal fun attachSecondaryDisplay(
+        request: AndroidPresentationAttachRequest,
+        parentScope: CoroutineScope,
+        applicationFactory: KadreApplicationFactory,
+        policy: KadrePolicy,
+        sourceFactory: () -> AndroidPresentationSource,
+        installHostLifecycle: (AndroidPresentationLifecycle) -> Unit,
+        registry: AndroidViewOwnership = ownership,
+        displayPortFactory: () -> DisplayPort? = { null },
+    ): KadreResult<KadreSession> {
+        // 1. L'échelle normative présentation : thread → scope → contentView LIBRE → écran →
+        //    owner détruit → conflit contentView/displayId.
+        val denial = evaluateAndroidPresentationAttach(request, registry)
+        if (denial != null) return KadreResult.Failure(toFailure(denial))
+
+        // 2. La réservation atomique contentView (identité) ET displayId (valeur) — refus :
+        //    Busy(Host), état intact. L'Activity n'est JAMAIS revendiquée : la coexistence
+        //    avec la session principale de la même Activity tient ici.
+        val reservation = AndroidPresentationReservation.acquire(registry, request.contentView, request.displayKey)
+            ?: return KadreResult.Failure(KadreFailure.AlreadyInUse(KadreResourceKind.Host))
+
+        // 3. La composition. Le média naît ici : le seam enregistre son listener SDK
+        //    (production) AVANT toute session — chaque chemin d'échec en dessous le ferme.
+        //    Une fabrique lançante ne fuit JAMAIS la réservation : rollback puis propagation
+        //    TELLE QUELLE — le contrat du garde post-réservation, étendu à sa première étape.
+        val presentationSource = try {
+            sourceFactory()
+        } catch (cause: Throwable) {
+            reservation.rollback()
+            throw cause
+        }
+        val surface = AndroidHostSurface(
+            RuntimeProcessIds.nextSurfaceId(),
+            presentationSurfaceState(presentationSource.facts),
+            leasedView = { request.contentView },
+        )
+
+        // Le binding n'existe pas encore : la révocation passe par la variable locale,
+        // assignée avant tout chemin qui peut la lire (le modèle de la branche Activity).
+        var installedBinding: AndroidLifecycleBinding? = null
+        val controller = RuntimeHostController.withComponents(
+            platform = KadrePlatform.Android,
+            sessionRevocationHandler = RuntimeSessionRevocationHandler { _ ->
+                installedBinding?.teardown()
+            },
+            componentsFactory = RuntimeSessionComponentsFactory { _, _ ->
+                // Le manager SANS seam natif : la fenêtre d'une présentation n'expose aucune
+                // des primitives de la fenêtre Activity — la table `unsupportedWindowCapabilities()`
+                // est un fait de construction, pas un défaut d'installation.
+                val manager = AndroidActivityWindowManager(primarySurface = surface, native = null)
+                RuntimeSessionComponents(
+                    windows = manager,
+                    // Le teardown de la surface primaire (la machinerie runtime l'invoque à la
+                    // terminaison de session, APRÈS la fermeture du flux d'événements côté
+                    // surface) : la surface d'abord, le seam ensuite (son dismiss est
+                    // idempotent — un retrait d'écran l'a peut-être déjà fait), le manager en
+                    // closeAction — l'ordre exact de la branche Activity.
+                    primarySurface = RuntimePrimarySurface(surface) {
+                        surface.close()
+                        presentationSource.close()
+                    },
+                    displayPort = displayPortFactory(),
+                    closeAction = { manager.terminalise() },
+                )
+            },
+            // La session présentation VIT : son média seulement naît caché. L'état lifecycle
+            // initial dit la vérité de l'Activity hôte (le runtime termine l'host sur un
+            // attachment Détaché — la « surface cachée » ne doit JAMAIS fuir ici).
+            initialLifecycleState = LifecycleState(
+                attachment = AttachmentState.Attached,
+                visibility = if (request.ownerState >= LIFECYCLE_STARTED) {
+                    VisibilityState.Foreground
+                } else {
+                    VisibilityState.Background
+                },
+                activation = if (request.ownerState >= LIFECYCLE_RESUMED) {
+                    ActivationState.Active
+                } else {
+                    ActivationState.Inactive
+                },
+            ),
+            failureReporter = AndroidAttachDiagnostics,
+            sessionObserver = RuntimeSessionObserver { _, _ -> reservation.release() },
+        )
+
+        // 4. Le terminal partagé : retrait d'écran (Removed), show échoué, disparition du
+        //    host — un seul chemin, idempotent, la MÊME proposition d'arrêt que les formes
+        //    existantes (controller.detach() → Stopped(HostDetached)) ; la fermeture de la
+        //    surface (closeSurface) n'accompagne que les morts du MÉDIA (« retrait display
+        //    ferme la surface et termine la session ») — la disparition du host laisse la
+        //    machinerie runtime faire son teardown ordonné.
+        var terminalPassed = false
+        fun sessionTerminal(closeSurface: Boolean) {
+            if (terminalPassed) return
+            terminalPassed = true
+            try {
+                if (closeSurface) surface.close()
+                installedBinding?.teardown() // aussi couvert par la révocation — idempotent
+                reservation.release() // la terminaison effective libère l'ownership — idempotent
+            } catch (cause: Throwable) {
+                // Absorbé : le terminal doit toujours traverser vers la proposition d'arrêt.
+            }
+            proposeHostStop(detach = { controller.detach() }, reporter = AndroidAttachDiagnostics)
+        }
+
+        val presentationLifecycle = AndroidPresentationLifecycle(
+            initial = AndroidHostSnapshot(
+                attachment = true,
+                foreground = request.ownerState >= LIFECYCLE_STARTED,
+                active = request.ownerState >= LIFECYCLE_RESUMED,
+            ),
+            showMedia = {
+                val shown = presentationSource.show()
+                if (shown is KadreResult.Success) {
+                    surface.publishMetrics(update = { current ->
+                        current.copy(visibility = SurfaceVisibility.Visible)
+                    })
+                }
+                shown
+            },
+            hideMedia = {
+                presentationSource.hide()
+                surface.publishMetrics(update = { current ->
+                    current.copy(visibility = SurfaceVisibility.Hidden)
+                })
+            },
+            onMediaGone = { sessionTerminal(closeSurface = true) },
+            onHostGone = { sessionTerminal(closeSurface = false) },
+        )
+        installedBinding = presentationLifecycle.binding
+        // L'observation du retrait d'écran : l'état `Removed` du seam est FINAL. Le collecteur
+        // Unconfined livre le fait au thread qui l'émet (le listener SDK du seam comme le fake
+        // du test hôte), la mort du média ne dépend d'aucun dispatcher. INVARIANT de
+        // réentrance : en production, l'émission courut SOUS le RuntimeLock du seam, et le
+        // terminal re-rentre dans ce même verrou via `presentationSource.close()` (le
+        // teardown des composants) — sûr parce que le RuntimeLock JVM est `synchronized`,
+        // donc réentrant ; le fake du test hôte, lui, n'a pas de verrou.
+        val removalWatch = parentScope.launch(Dispatchers.Unconfined) {
+            presentationSource.state.collect { state ->
+                if (state is AndroidPresentationState.Removed) sessionTerminal(closeSurface = true)
+            }
+        }
+        // Le retrait du binding emporte l'observation : chaque chemin qui démonte l'un
+        // (terminal, révocation, rollback) arrête l'autre — jamais de collecteur orphelin.
+        presentationLifecycle.binding.onTeardown { removalWatch.cancel() }
+
+        // 4+5. L'installation puis l'attach, sous le garde post-réservation (l'overload
+        //      présentation de [installBindingAndAttach]) : rollback intégral — la
+        //      présentation fermée, la réservation rendue, le throwable propagé TEL QUEL.
+        return installBindingAndAttach(
+            reservation = reservation,
+            binding = presentationLifecycle.binding,
+            installBinding = { installHostLifecycle(presentationLifecycle) },
+            attachController = {
+                val attached = controller.attach(parentScope, applicationFactory, policy, launch = null)
+                if (attached is KadreResult.Success) {
+                    // Le premier show LEVEL-TRIGGERED (ruling de la phase) : attacher depuis
+                    // un hôte déjà STARTED montre le média immédiatement — le cas nominal du
+                    // Tour — sinon le premier START le montre (les cycles restent edge-
+                    // triggered). Un échec ici emprunte le chemin du retrait d'écran.
+                    presentationLifecycle.showIfHostStarted()
+                }
+                attached
+            },
+            onRollback = { presentationSource.close() },
+        )
+    }
+
+    /**
+     * L'overload présentation du garde post-réservation — le contrat exact de
+     * [installBindingAndAttach] pour la réservation à deux clés (contentView + displayId) :
+     * le rejet du contrôleur roule tout en arrière (teardown du binding, rollback de la
+     * réservation, `onRollback` — qui ferme la présentation et son listener) puis
+     * `Failure(reason)` ; un throwable SDK roule tout en arrière puis se propage TEL QUEL.
+     */
+    internal fun installBindingAndAttach(
+        reservation: AndroidPresentationReservation,
+        binding: AndroidLifecycleBinding,
+        installBinding: () -> Unit,
+        attachController: () -> KadreResult<KadreSession>,
+        onRollback: () -> Unit = {},
+    ): KadreResult<KadreSession> = installBindingAndAttach(
+        binding = binding,
+        installBinding = installBinding,
+        attachController = attachController,
+        rollback = { reservation.rollback(); onRollback() },
+    )
+
+    /**
+     * Le corps commun du garde post-réservation, paramétré par le SEUL rollback (les deux
+     * réservations — paires Activity/View et paires contentView/displayId — y passent leur
+     * libération) : installer le binding, attacher le contrôleur, et garantir que CHAQUE
+     * issue laisse l'ownership propre. Le rejet du contrôleur roule tout en arrière puis
+     * `Failure(reason)` ; un throwable (SDK d'installation, erreur de programmation, échec
+     * brut d'attach) roule tout en arrière puis se propage TEL QUEL.
+     */
+    private fun installBindingAndAttach(
+        binding: AndroidLifecycleBinding,
+        installBinding: () -> Unit,
+        attachController: () -> KadreResult<KadreSession>,
+        rollback: () -> Unit,
+    ): KadreResult<KadreSession> {
+        try {
+            installBinding()
+            return when (val attached = attachController()) {
+                is KadreResult.Success -> attached
+
+                is KadreResult.Failure -> {
+                    binding.teardown()
+                    rollback()
+                    KadreResult.Failure(attached.reason)
+                }
+            }
+        } catch (cause: Throwable) {
+            binding.teardown()
+            rollback()
+            throw cause
+        }
+    }
+
+    /**
      * La couture post-réservation ([AndroidHostSession.attach], étapes 4 et 5) : installer le
      * binding, attacher le contrôleur, et garantir que CHAQUE issue laisse l'ownership propre.
      *
@@ -616,26 +965,12 @@ internal object AndroidHostSession {
         installBinding: () -> Unit,
         attachController: () -> KadreResult<KadreSession>,
         onRollback: () -> Unit = {},
-    ): KadreResult<KadreSession> {
-        try {
-            installBinding()
-            return when (val attached = attachController()) {
-                is KadreResult.Success -> attached
-
-                is KadreResult.Failure -> {
-                    binding.teardown()
-                    reservation.rollback()
-                    onRollback()
-                    KadreResult.Failure(attached.reason)
-                }
-            }
-        } catch (cause: Throwable) {
-            binding.teardown()
-            reservation.rollback()
-            onRollback()
-            throw cause
-        }
-    }
+    ): KadreResult<KadreSession> = installBindingAndAttach(
+        binding = binding,
+        installBinding = installBinding,
+        attachController = attachController,
+        rollback = { reservation.rollback(); onRollback() },
+    )
 
     /** La surface de la session, créée par la factory de composants au moment de l'attach. */
     private class SessionSurface {
@@ -835,6 +1170,36 @@ internal object AndroidHostSession {
     }
 
     /**
+     * L'état initial de la surface présentation, tiré des FAITS du média (Task 1) — pas de la
+     * View : le contentView est posé dans la présentation dès la construction, la surface
+     * naît donc ATTACHÉE (le média existe) mais CACHÉE (`visibility = false`, pas encore
+     * montrée — le premier START la rend Visible), à la géométrie logique de l'écran cible
+     * (`realWidth/scaleFactor × realHeight/scaleFactor`). Les insets d'une fenêtre de
+     * présentation dédiée sont nuls en v1 ; l'échelle invalide retombe sur 1 (le miroir de la
+     * garde densité de [initialSurfaceState]).
+     */
+    private fun presentationSurfaceState(facts: AndroidPresentationFacts): SurfaceState {
+        val scale = if (facts.scaleFactor.isFinite() && facts.scaleFactor > 0.0) facts.scaleFactor else 1.0
+        val physical = PhysicalSize(maxOf(1, facts.realWidth), maxOf(1, facts.realHeight))
+        return SurfaceState(
+            attachment = SurfaceAttachmentState.Attached,
+            logicalSize = LogicalSize(physical.width / scale, physical.height / scale),
+            physicalSize = physical,
+            scaleFactor = scale,
+            safeAreaInsets = LogicalInsets(top = 0.0, right = 0.0, bottom = 0.0, left = 0.0),
+            visibility = SurfaceVisibility.Hidden,
+            occlusion = SurfaceOcclusion.Visible,
+            focus = SurfaceFocus.Unfocused,
+            appearance = SurfaceAppearance(SurfaceTheme.Unknown, SurfaceContrast.Unknown),
+            cursor = CursorStyle.System(CursorIcon.Default),
+            pointerCapture = PointerCaptureMode.None,
+            hitTesting = HitTestingMode.Enabled,
+            inputDefaultBehavior = InputDefaultBehavior.HostDefault,
+            revision = SurfaceRevision(0L),
+        )
+    }
+
+    /**
      * L'instantané initial de la surface, copié de la View comme le port web copie le sien
      * (`WebHostPort.initialSnapshot`), borné au minimum valide (base 1×1 — une View attachée
      * mais pas encore mesurée rapporte des dimensions nulles et le modèle de surface exige des
@@ -876,6 +1241,92 @@ internal object AndroidHostSession {
             revision = SurfaceRevision(0L),
         )
     }
+}
+
+/**
+ * Le pilotage du média présentation par le lifecycle du host (phase 11, Task 2) : chaque
+ * décision du réducteur franchit la transition foreground — false→true : [showMedia] (le
+ * START montre le média), true→false : [hideMedia] (le STOP le cache ; le média SURVIT aux
+ * cycles, jamais deux présentations) — et le terminal du host (Activity détruite, fenêtre
+ * disparue) emprunte [onHostGone]. Un show qui échoue (l'écran est parti entre-temps) et le
+ * retrait d'écran observé en aval empruntent le MÊME chemin ([onMediaGone]).
+ *
+ * Le RÉDUCTEUR est partagé entre le binding SDK — [binding], que la production installe via
+ * [install] sur (l'Activity, son decorView) : le contentView de la présentation est LIBRE à
+ * l'attach, l'observer serait un terminal immédiat — et l'entrée [dispatch] des tests hôtes
+ * (le même réducteur, les mêmes décisions, sans SDK : deux traducteurs, une seule vérité).
+ * La transition foreground est gardée CÔTÉ pilote en plus de la déduplication du réducteur :
+ * un RESUMED qui suit un STARTED republie foreground=true sans être un START — le média ne
+ * se montre qu'aux transitions, une fois par cycle.
+ *
+ * Le premier show est LEVEL-TRIGGERED ([showIfHostStarted], ruling de la phase) : attacher
+ * depuis un hôte déjà ≥ STARTED — le cas nominal, une Activity RESUMED — montre le média
+ * immédiatement ; sinon le premier START le montre. Les cycles START/STOP suivants restent
+ * edge-triggerés, un show et un hide par cycle.
+ */
+internal class AndroidPresentationLifecycle(
+    initial: AndroidHostSnapshot,
+    private val showMedia: () -> KadreResult<Unit>,
+    private val hideMedia: () -> Unit,
+    private val onMediaGone: () -> Unit,
+    private val onHostGone: () -> Unit,
+) {
+    private val reducer = AndroidLifecycleReducer(initial)
+    private var foreground = initial.foreground
+
+    /** Le binding SDK de production — le même réducteur, les mêmes décisions, le même terminal. */
+    val binding = AndroidLifecycleBinding(reducer, ::onDecision, ::onTerminal)
+
+    /** L'installation de production : observer lifecycle + listener d'attachement du decorView. */
+    fun install(owner: LifecycleOwner, view: View) {
+        binding.install(owner, view)
+    }
+
+    /**
+     * Le premier show level-triggered — à appeler UNE fois, après l'attach RÉUSSI de la
+     * session : un hôte déjà ≥ STARTED montre le média immédiatement. Un échec emprunte le
+     * chemin du retrait d'écran ([onMediaGone]), comme tout show.
+     */
+    fun showIfHostStarted() {
+        if (foreground) showNow()
+    }
+
+    /** L'entrée de test hôte — le réducteur du binding, conduit sans toucher le SDK. */
+    fun dispatch(event: AndroidHostEvent) {
+        when (val decision = reducer.onEvent(event)) {
+            is AndroidLifecycleDecision.Ignore -> Unit
+
+            is AndroidLifecycleDecision.Publish -> onDecision(decision)
+
+            is AndroidLifecycleDecision.Terminate -> {
+                // Le même ordre que le binding : la décision AVANT l'événement terminal.
+                onDecision(decision)
+                onTerminal()
+            }
+        }
+    }
+
+    private fun onDecision(decision: AndroidLifecycleDecision) {
+        when (decision) {
+            is AndroidLifecycleDecision.Ignore -> Unit
+
+            is AndroidLifecycleDecision.Publish -> {
+                val target = decision.snapshot.foreground
+                if (target == foreground) return
+                foreground = target
+                if (target) showNow() else hideMedia()
+            }
+
+            is AndroidLifecycleDecision.Terminate -> Unit
+        }
+    }
+
+    private fun showNow() {
+        val shown = showMedia()
+        if (shown is KadreResult.Failure) onMediaGone()
+    }
+
+    private fun onTerminal() = onHostGone()
 }
 
 /**
