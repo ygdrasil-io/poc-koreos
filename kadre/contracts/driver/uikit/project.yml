@@ -46,6 +46,14 @@ targets:
         # (clé retirée aussi). Le stimulus retenu est le repli DOCUMENTÉ du brief Step 2 :
         # resize à changement d'aspect (240×320), tracé (NSLog + DriverTrace) et rapporté —
         # JAMAIS un faux vert rotation.
+        # Le drop (phase 7, BCK-025) : un drag CROSS-APP est IMPOSSIBLE sur Simulator (aucune API
+        # de drag système programmable — un UIDragItem ne peut pas être initié hors du process
+        # hôte). La preuve du driver est donc un stimulus IN-PROCESS honnête : le VRAI
+        # UIDropInteractionDelegate installé par l'attach (fetché de la vue) est appelé hook par
+        # hook dans l'ordre UIKit (canHandle → enter → update → exit/perform) avec une fausse de
+        # session conforme à `UIDropSession` (route épinglée par la spike Task 1) — le canal
+        # delegate RÉEL d'UIKit, jamais un événement fabriqué. Le drag physique cross-app reste
+        # le charter manuel Task 4.
         UIApplicationSceneManifest:
           UIApplicationSupportsMultipleScenes: true
           UISceneConfigurations:
