@@ -38,7 +38,7 @@ kotlin {
     explicitApi()
 
     // Discipline de baseline ABI, miroir de kadre/foundation/build.gradle.kts : le dump
-    // public (api/android.api) est commité et le check échoue le build si l'ABI publique
+    // public (api/android/android.api) est commité et le check échoue le build si l'ABI publique
     // bouge sans update de baseline. La surface publique de l'adapter (les quatre
     // overloads `attachKadre`, la façade Java `KadreAndroid`/`KadreSessionHandle`, les
     // types de session) est un contrat de consommation — sa régression se lit au build,

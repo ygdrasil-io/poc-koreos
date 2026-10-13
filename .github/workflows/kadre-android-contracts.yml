@@ -61,6 +61,18 @@ jobs:
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
 
+      - name: Put the Android SDK tools on the PATH
+        # The ubuntu runner preinstalls the SDK at $ANDROID_HOME but does NOT
+        # put platform-tools (adb) on the PATH — the first real run failed its
+        # boot wait with `timeout: failed to run command 'adb': No such file
+        # or directory` (exit 127). GITHUB_PATH exports persist into every
+        # later step: the boot waits, the gate script and any SDK tool resolve
+        # from here (sdkmanager/avdmanager keep their explicit paths; the bin
+        # dir is exported anyway so a future bare call cannot regress this).
+        run: |
+          echo "$ANDROID_HOME/platform-tools" >> "$GITHUB_PATH"
+          echo "$ANDROID_HOME/cmdline-tools/latest/bin" >> "$GITHUB_PATH"
+
       - name: Install the pinned Android 35 x86_64 emulator image
         # ANDROID_HOME is preinstalled on the runner (SDK at
         # /usr/local/lib/android/sdk, licenses pre-accepted); sdkmanager only

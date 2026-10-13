@@ -475,6 +475,7 @@ phase-0 "daemon survives" note is obsolete). The gate task is
 Android contract evidence validation against **`AND-001` through `AND-010`** —
 one canonical JSON per contract, all from the same instrumented emulator gate
 (48 consumer instrumented tests plus the compose-showcase sample's two — 50
+mapped — and the seven `AndroidLeakCyclesTest` leak-cycle testcases — 57
 total; the consumer count grew independently of the mapped scenarios:
 `KotlinFacadeConsumerTest` and `JavaAndroidFacadeConsumerTest` each carry one
 extra unmapped testcase beside the one evidence.tsv maps).
