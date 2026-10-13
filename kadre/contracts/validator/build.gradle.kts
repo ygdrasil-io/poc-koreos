@@ -31,7 +31,7 @@ val runtimeContractIds = listOf(
     "DSP-001", "RUN-007", "RUN-008", "INT-001", "CAP-001",
 )
 val waylandContractIds = listOf("BCK-017", "SES-001", "SUR-001")
-val win32ContractIds = listOf("W32-001", "W32-002", "W32-003")
+val win32ContractIds = listOf("W32-001", "W32-002", "W32-003", "BCK-025", "SES-002", "PMP-001")
 val contractEvidenceGateIds = appKitContractIds + runtimeContractIds + webContractIds + uikitContractIds + waylandContractIds + win32ContractIds
 check(contractEvidenceGateIds.distinct().size == contractEvidenceGateIds.size) {
     "each configured contract evidence gate must have exactly one explicit producer"

@@ -30,6 +30,9 @@ tasks.named<Test>("jvmTest") {
     filter.excludeTestsMatching(
         "org.graphiks.kadre.internal.win32.Win32NativeContractTest",
     )
+    filter.excludeTestsMatching(
+        "org.graphiks.kadre.internal.win32.Win32HostNativeContractTest",
+    )
 }
 
 val onWindows = System.getProperty("os.name", "").contains("Windows", ignoreCase = true)
@@ -46,6 +49,9 @@ val win32NativeTests = tasks.register<Test>("win32NativeTests") {
     filter.includeTestsMatching(
         "org.graphiks.kadre.internal.win32.Win32NativeContractTest",
     )
+    filter.includeTestsMatching(
+        "org.graphiks.kadre.internal.win32.Win32HostNativeContractTest",
+    )
     forkEvery = 1
     reports.junitXml.outputLocation.set(layout.buildDirectory.dir("test-results/win32NativeTests"))
 }
@@ -54,6 +60,17 @@ val win32ContractTests = tasks.register("win32ContractTests") {
     group = "verification"
     description = "Runs the O2 portable suite and the Windows-only O3 proofs feeding the contract evidence."
     dependsOn(tasks.named("jvmTest"), win32NativeTests)
+}
+
+// Friend-wiring JVM : le backend construit des internals de foundation
+// (WindowManagerRevision pour l'état du WindowManager headless) — la même
+// couture que :kadre:runtime et le backend wayland.
+val foundationJvmJar = project(":kadre:foundation").tasks.named<Jar>("jvmJar")
+tasks.withType<org.jetbrains.kotlin.gradle.tasks.BaseKotlinCompile>().configureEach {
+    if (name == "compileKotlinJvm" || name == "compileTestKotlinJvm") {
+        dependsOn(foundationJvmJar)
+        friendPaths.from(foundationJvmJar.flatMap(Jar::getArchiveFile))
+    }
 }
 
 publishing {
