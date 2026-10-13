@@ -10,7 +10,7 @@ class WaylandShmDiagLinuxTest {
 
     @Test
     fun kffiExactFlowOnTestThread() {
-        // DIAG4 : le flux kffi exact, PUIS un cycle pollForEvents (le downcall
+        // DIAG5 : le flux kffi exact, PUIS un cycle pollForEvents (le downcall
         // à tableau de structs de la pompe), PUIS une création de pool — si le
         // second pool échoue alors que le premier réussit, le downcall poll
         // corrompt le passage d'arguments des downcalls suivants.
@@ -28,7 +28,7 @@ class WaylandShmDiagLinuxTest {
                 client.roundtrip()
                 Thread.sleep(25)
             }
-            println("DIAG4 configure=$configureSerials")
+            println("DIAG5 configure=$configureSerials")
             val buffer = client.createShmBuffer(64, 64)
             val pixels = buffer.content()
             for (index in 0 until 64 * 64) {
@@ -43,9 +43,12 @@ class WaylandShmDiagLinuxTest {
                 wake.signal()
             }.start()
             val prepared = client.prepareRead()
-            println("DIAG4 prepared=$prepared poll=${client.pollForEvents(wake.readFd, false)}")
+            println("DIAG5 prepared=$prepared poll=${client.pollForEvents(wake.readFd, false)}")
             client.cancelRead()
-            wake.close()
+            // DIAG5 : le close du wake est SUSPENDU — si le second pool
+            // réussit sans lui, c'est la libération du wake qui corrompt
+            // (le memfd du second pool réutilise le numéro fraîchement clos)
+            // wake.close()
             val framed = CountDownLatch(1)
             surface.addFrameListener(onFrame = { framed.countDown() }, onFailure = {})
             surface.attachAndCommit(buffer)
@@ -55,9 +58,9 @@ class WaylandShmDiagLinuxTest {
                 Thread.sleep(25)
             }
             val secondBuffer = client.createShmBuffer(32, 32)
-            println("DIAG4 framed=${framed.count > 0} secondPool=${secondBuffer != null} healthy=${client.roundtrip()}")
+            println("DIAG5 framed=${framed.count > 0} secondPool=${secondBuffer != null} healthy=${client.roundtrip()}")
             secondBuffer.close()
-            assertTrue(framed.count > 0, "DIAG4: surface did not map")
+            assertTrue(framed.count > 0, "DIAG5: surface did not map")
             buffer.close()
             toplevel.close()
             xdg.close()
