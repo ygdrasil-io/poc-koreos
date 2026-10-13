@@ -137,14 +137,6 @@ internal class Win32WindowRuntimeDriver internal constructor(
                             } else {
                                 false
                             }
-                            run {
-                                val dir = java.nio.file.Paths.get("build/win32-integration")
-                                java.nio.file.Files.createDirectories(dir)
-                                java.nio.file.Files.writeString(
-                                    dir.resolve("wm-size-debug.txt"),
-                                    "size=$size scale=$scale logical=$logical current=${current?.contentSize} accepted=$accepted",
-                                )
-                            }
                         }
                         WM_DPICHANGED -> {
                             val scale = port.readScaleFactor(hwnd)
