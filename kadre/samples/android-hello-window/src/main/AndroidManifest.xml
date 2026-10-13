@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <application
+        android:label="kadre hello window"
+        android:theme="@android:style/Theme.Material.Light.NoActionBar">
+
+        <!-- Le contraste kadre-old assumé : AUCUN android:name d'Application — l'ancien
+             `EventLoop.runApp()` dans Application.onCreate() n'a plus d'équivalent, l'attach
+             est un appel ordinaire de l'Activity. -->
+        <activity
+            android:name=".MainActivity"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+    </application>
+
+</manifest>

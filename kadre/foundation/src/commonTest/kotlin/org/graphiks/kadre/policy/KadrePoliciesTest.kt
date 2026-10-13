@@ -2,6 +2,7 @@ package org.graphiks.kadre.policy
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertSame
 import kotlin.time.Duration.Companion.seconds
 
 class KadrePoliciesTest {
@@ -89,6 +90,17 @@ class KadrePoliciesTest {
             ),
             KadrePolicies.Recording,
         )
+    }
+
+    @Test
+    fun policyHelpersAreThePromisedLetters() {
+        // INTEROP-EXPORTS §4 : les helpers « lettres de policy » appelables depuis Java.
+        // Chacun rend LA MÊME instance que la constante publique (délégation triviale,
+        // jamais une copie) — le Java host voit `KadrePolicies.INSTANCE.defaultPolicy()`
+        // === `KadrePolicies.Default`.
+        assertSame(KadrePolicies.Default, KadrePolicies.defaultPolicy())
+        assertSame(KadrePolicies.Realtime, KadrePolicies.realtimePolicy())
+        assertSame(KadrePolicies.Recording, KadrePolicies.recordingPolicy())
     }
 
     private fun expectedPolicy(

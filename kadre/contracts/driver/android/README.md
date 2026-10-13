@@ -1,17 +1,17 @@
 # Android emulator contract driver
 
 This non-published JVM project runs the public Android host-attachment proof of
-phases 0 through 8 on a real emulator. It is a contract driver, not an
+phases 0 through 9 on a real emulator. It is a contract driver, not an
 implementation API: it forks the instrumented consumer build, executes its
 scenarios on the attached device, and turns the JUnit output into the canonical
-`AND-001` through `AND-009` evidence with the validator's own
+`AND-001` through `AND-010` evidence with the validator's own
 generator. English
 prose, like the Web driver README it mirrors; everything else in this phase is
 documented in French in the sources.
 
 ## What the driver proves
 
-Nine contracts, all active in the registry
+Ten contracts, all active in the registry
 ([contracts.tsv](../../registry/contracts.tsv)), oracle `O3`, mapped in
 [evidence.tsv](contracts/evidence.tsv):
 
@@ -461,9 +461,12 @@ emulator-5554`). The Gradle run inside is bounded by a portable 900 s watchdog
 (GNU `timeout` is absent on stock macOS — background Gradle, bounded wait,
 `SIGTERM` at expiry with exit code 124; commit `76229d58`). The gate task is
 `:kadre:contracts:validator:androidContractsCheck`: registry validation plus
-Android contract evidence validation against **`AND-001` through `AND-009`** —
-one canonical JSON per contract, all from the same instrumented emulator run
-(44 instrumented tests).
+Android contract evidence validation against **`AND-001` through `AND-010`** —
+one canonical JSON per contract, all from the same instrumented emulator gate
+(48 consumer instrumented tests plus the compose-showcase sample's two — 50
+total; the consumer count grew independently of the mapped scenarios:
+`KotlinFacadeConsumerTest` and `JavaAndroidFacadeConsumerTest` each carry one
+extra unmapped testcase beside the one evidence.tsv maps).
 
 The wrapper chains two steps, each of which can also be run on its own — one
 Gradle invocation per shell command:
@@ -809,7 +812,89 @@ carried by the evidence itself:
   JSON per contract, all from the same instrumented emulator run (the 38
   previous testcases plus the six capture/consent/frames ones of
   `KadreConsumerCaptureContractTest` and the friend-module
-  `AndroidCaptureDeviceContractTest`).
+  `AndroidCaptureDeviceContractTest`);
+- `AND-010` through the same gate — the phase 9 samples migration (below): the
+  consumer run carries the facade-consumer scenarios, and a SECOND forked run
+  executes the migrated compose-showcase sample's own instrumented APK
+  (`androidComposeShowcaseSingleSession`, `androidLegacyTypesAbsent`); the
+  producer globs BOTH APKs' XML into the same per-engine JUnit copy.
+
+**`AND-010`** — the phase 9 samples-migration and negative-consumer proof
+(source `ANDROID-IMPLEMENTATION-ROADMAP.md#Phase 9 — Façade Java, Compose et
+migration des samples`). Three scenarios and two sentinels:
+
+| evidenceId | kind | what it exercises |
+|---|---|---|
+| `android-facade-consumers-both-forms` | scenario | the Task-2 facade consumers run on the published umbrella against the real device — pinned by `KotlinFacadeConsumerTest.kotlinAttachKadreBothFormsExhaustiveOutcome`, which drives BOTH public `attachKadre` forms (Activity + View) to their exhaustive terminal outcome |
+| `android-compose-showcase-single-session` | scenario | the migrated compose sample (`kadre/samples/android-compose-showcase`, against the PUBLISHED compose binding AAR): recomposition ×3 records ONE session identity; leaving the composition terminates it (a real window detaches the view before the dispose — the runtime's host stop, `Stopped(HostDetached)`, wins the race over the dispose's `requestStop`; both are the machine's documented host stops); re-composing recreates a NEW session that reaches `Running` |
+| `android-legacy-types-absent` | scenario | the dex of the sample's executed APK (where the published `platform-android` AAR classes are merged) contains neither `AndroidKadreRuntime` nor the kadre-old `EventLoop` (exact FQNs; the kotlinx-coroutines `EventLoop` is not a false positive) — bounded by two coverage guards (the scan sees the real `platform.android`/`host.android` classes) |
+| `android-facade-no-leak` | sentinel | a facade that leaks coroutine types into the Java surface kills `javaFacadeAttachObserveStopAwait` alone |
+| `android-compose-no-double-attach` | sentinel | a binding that creates more than one session per host (recomposition or re-entry) kills `androidComposeShowcaseSingleSession` alone (the recorded identity set) |
+
+The migrated sample modules themselves are `kadre/samples/android-hello-window`
+(Activity-form attach on a plain View + a window-lifecycle console),
+`kadre/samples/android-hello-touch` (the same plus `SurfaceInput` touch
+observation) and `kadre/samples/android-compose-showcase` (the phase 9 binding
+plus touch). They resolve the PUBLISHED umbrella (`org.graphiks.kadre:
+kadre-android`) and the PUBLISHED binding (`org.graphiks.kadre.internal:
+compose-android`) from the contract repository declared in the root settings —
+never a project dependency — and grep zero kadre-old build references. Each
+plain sample attaches ONCE with no retry on refusal (programming-error
+semantics for a sample — the refusal is logged, never replayed). The old GPU
+sample (`hello-triangle-android-capture`) is NOT migrated: the wgpu4k
+renderer is sample responsibility, deferred with the phase 8 `CapturePort` as
+the future primitive.
+
+### Exit gate of roadmap phase 9
+
+Same commands, one contract more and a second forked run. From a cold start
+(kill any running emulator, `adb emu kill`, wait for zero devices, then let
+the script boot the AVD itself): publish (1), consumer compile (2), emulator
+evidence + validator (the script — **50** instrumented tests green — the 48
+consumer testcases of the forked consumer run plus the compose-showcase
+sample's two from the SECOND forked run — `AND-001.json` through
+`AND-010.json`, ten canonical JSONs), the same transitive-resolution purity
+check (grep exit 1, redone cold), and the no-device sanity tasks above. The
+roadmap checklist is carried by the evidence itself:
+
+- Kotlin AND Java compile against the PUBLISHED artifacts and drive both host
+  forms — `android-facade-consumers-both-forms` (`KotlinFacadeConsumerTest`
+  drives both public `attachKadre` forms to their exhaustive terminal
+  outcome) and the INTEROP §9 "Java Android" consumer row, landed:
+  `JavaAndroidFacadeConsumerTest` (attach, observer state, request stop, await
+  the `CompletionStage`, inspect failure — the admission refusal surfaces as
+  `KadreException`), guarded by the sentinel `android-facade-no-leak` (a
+  facade leaking coroutine types into the Java surface kills it alone);
+- Compose proves no double attach and no leak after dispose/recreation —
+  `android-compose-showcase-single-session` (recomposition ×3 records ONE
+  session identity; leaving the composition terminates the session — one of
+  the machine's two documented host stops, `Stopped(HostRequested)` via
+  onDispose or `Stopped(HostDetached)` when the real window detaches the view
+  first; re-composing recreates a NEW session that reaches `Running`),
+  guarded by the sentinel `android-compose-no-double-attach`;
+- every historical Android usage migrated or its removal explicitly
+  documented, no hidden `kadre-old` dependency — the three migrated sample
+  modules resolve only the PUBLISHED artifacts and grep zero kadre-old
+  references; `hello-triangle-android-capture` is the documented removal (see
+  above); the negative consumer `android-legacy-types-absent` scans the dex
+  of the EXECUTED sample APK (no `AndroidKadreRuntime`, no kadre-old
+  `EventLoop` — exact FQNs, the kotlinx-coroutines `EventLoop` not a false
+  positive), bounded by the two coverage guards;
+- `AND-001` through `AND-010` together — 50 instrumented tests, one canonical
+  JSON per contract, all from the same gate invocation (47 mapped scenarios
+  and 21 sentinels across the ten contracts; the executed testcase count grew
+  independently of the mapped scenarios — the facade-consumer classes carry
+  two unmapped extras).
+
+**The quick-reattach race the binding documents.** After a terminal detach,
+a re-attach attempted WHILE the P1 reservation is still held (before the
+effective termination releases it) is refused (`AlreadyInUse(Host)`) — and
+the refusal leaves the binding's slot open with NO further attach event
+incoming (the view is already in the window): the host stays session-less
+until the NEXT detach/attach cycle, the only thing that re-triggers the
+create. The binding recovers only on that next cycle; a machine-level retry
+(a deferred re-arm) is a documented deferred refinement, and the samples add
+no retry policy of their own.
 
 ## Engine labeling
 
@@ -822,7 +907,7 @@ writes `emulator-api-<sdk>-<abi>`. On the phase 0 AVD this is
 are attached. Every run resets the per-engine JUnit copy directory first, so a
 stale XML from an earlier run can never inflate the evidence identity. The
 producer writes one canonical JSON per active android contract (currently
-`AND-001` through `AND-009`), each pinned to the current HEAD
+`AND-001` through `AND-010`), each pinned to the current HEAD
 commit.
 
 ## Evidence mapping
@@ -846,17 +931,22 @@ arguments as the runtime/AppKit producers — no format reimplementation) with:
   for AND-007; `androidCaptureSourceRefused` for AND-009) are mapped to
   `AndroidDropDeviceContractTest` / `AndroidCaptureDeviceContractTest`, whose
   classes arrive in the same XML from the `platform/android-devicetest` AAR
-  consumed `androidTestImplementation`;
+  consumed `androidTestImplementation`; `AND-010` maps to
+  `KotlinFacadeConsumerTest` and `JavaAndroidFacadeConsumerTest` (the
+  facade-consumer scenario and its no-leak sentinel, in the consumer's own
+  androidTest sources) and to `ComposeShowcaseContractTest` (the migrated
+  compose sample's OWN instrumented APK — the SECOND forked run, whose XML
+  joins the same per-engine JUnit copy);
 - the JUnit XML the consumer produced under
   `kadre/consumers/android/build/outputs/androidTest-results/connected/`;
 - the current HEAD commit (the same `git rev-parse HEAD` rule the validator
   uses — a document pinned to a commit is stale by definition once HEAD moves).
 
-Outputs: `build/contract-evidence/android/<engine>/AND-{001,002,003,004,005,006,007,008,009}.json`
+Outputs: `build/contract-evidence/android/<engine>/AND-{001,002,003,004,005,006,007,008,009,010}.json`
 (canonical), `build/test-results/android/<engine>/TEST-*.xml` (the JUnit copy
 the validator cross-checks), `build/contract-evidence/android/engines.txt` (the
 engines this run actually produced), and the gate copies
-`build/contract-evidence/AND-{001,002,003,004,005,006,007,008,009}.json` that
+`build/contract-evidence/AND-{001,002,003,004,005,006,007,008,009,010}.json` that
 `validateContractEvidence` reads.
 
 ## `androidContractsCheck` is deliberately not in `:kadre:check`
@@ -1075,6 +1165,41 @@ sharing on a physical device and a real mid-stream revocation/rotation remain
 material [verify-device] items — the process-wide refcount and the
 reconfigure machinery are proven host-side.
 
+Since phase 9, the Java facade and the Compose binding are live wrappers over
+the unchanged Kotlin surface: `KadreAndroid.attach` — the two INTEROP §4
+statics verbatim (Activity form with an explicit `surfaceView`, View form with
+an explicit `lifecycleOwner`), the `KadreResult.Failure` translated to
+`KadreException` (the failure intact, never null) — and the
+`KadreSessionHandle`: the opaque facade-allocated id (never the Kotlin
+`SessionId`, the web model), the Java-safe snapshot, immediate-then-sequential
+observers in registration order (a throwing consumer unregisters ITSELF and
+reaches the host dispatcher's uncaught handler without touching the session),
+THE stable terminal `CompletionStage` whose derived waiters cancel without
+stopping the session and which survives `close()`, the motivated stop, the
+idempotent close — with the zero-leak scan pinning that no coroutine type
+crosses the facade, and the Java policy helpers
+`KadrePolicies.defaultPolicy()/realtimePolicy()/recordingPolicy()` landed with
+it (INTEROP §4's policy-letter sentence is true). The Compose binding
+`KadreComposeHost` keeps ONE session per host: the attach waits for the
+surface view's real attachment (the view itself is the trigger — Android
+dispatches attach events top-down BEFORE attaching children), recomposition is
+inert (creation captures held in unkeyed `remember`), composition exit closes
+(`onDispose` → the host stop request), a terminal detach recreates on the next
+attach (the runtime owns that stop, never doubled). The binding's documented
+limit is the quick-reattach race (see the phase 9 exit gate above): after a
+terminal detach, a re-attach while the P1 reservation is still held is refused
+and NO further attach event fires — the host stays session-less until the next
+detach/attach cycle; a machine-level retry is a deferred refinement. The
+samples migration retires the kadre-old Android usages: three modules rebuilt
+on the public surface and the PUBLISHED artifacts (`android-hello-window`,
+`android-hello-touch`, `android-compose-showcase`), each plain sample
+attach-once with no retry on refusal (programming-error semantics for a
+sample), and the negative consumer proving the executed APK carries no
+`AndroidKadreRuntime` and no kadre-old `EventLoop`; the GPU sample
+`hello-triangle-android-capture` is NOT migrated — the wgpu4k renderer is
+sample responsibility, documented as deferred with the phase 8 `CapturePort`
+as the future primitive.
+
 **The View form has no input observation — a structural, declared limit.**
 `View.getWindow()` is `@hide`: a View-form attach has no `Window.Callback` to
 chain, so no observation path exists. The input capabilities there stay
@@ -1154,7 +1279,17 @@ authoritative list with the owning phase lives in
   carries the procedures, and per `TEST-STRATEGY.md` they pass on the declared
   device pool when one is qualified; editor actions through the IME (phase 5
   text-input decision) stay parked with that decision;
-- **Phase 9** — Java facade, Compose;
+- **Phase 9 — delivered; what remains are refinements, not the facade or the
+  binding.** The Java facade, the Compose binding and the samples migration
+  are live and proven by `AND-010` (see the phase 9 paragraph above). The
+  remaining items: the quick-reattach race refinement (a machine-level retry
+  after a refused re-attach — today the binding recovers on the next
+  detach/attach cycle only), the migrated GPU sample's renderer
+  (`hello-triangle-android-capture` stays unmigrated — wgpu4k is sample
+  responsibility, the phase 8 `CapturePort` is the future primitive), real
+  gamepad hardware (the phase 7 material item, unchanged), and the editor
+  actions through the IME (parked with the phase 5 text-input decision,
+  unchanged);
 - **Phase 10** — the mandatory `android-contracts` CI job.
 
 Two boundary lines are not deferrals at all. **Rendering itself** is out of

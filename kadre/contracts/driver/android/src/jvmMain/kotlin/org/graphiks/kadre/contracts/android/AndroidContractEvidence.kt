@@ -17,26 +17,29 @@ import java.io.File
  * `contract-evidence/<contractId>.json` et le JUnit associé `test-results/android/<engine>`
  * résolus depuis la même racine.
  *
- * [args] : répertoire des résultats connectés du consumer, racine des preuves
- * (`contract-evidence/android`), racine des copies JUnit (`test-results/android`), racine du
- * gate (le `build` du driver), registre, mapping, commit.
+ * [args] : répertoire des résultats connectés du consumer, répertoire des résultats connectés
+ * du sample compose-showcase (phase 9), racine des preuves (`contract-evidence/android`),
+ * racine des copies JUnit (`test-results/android`), racine du gate (le `build` du driver),
+ * registre, mapping, commit.
  */
 fun main(args: Array<String>) {
-    require(args.size == 7) {
-        "expected consumer results, evidence root, JUnit root, gate root, registry, mapping and commit arguments"
+    require(args.size == 8) {
+        "expected consumer results, showcase results, evidence root, JUnit root, gate root, registry, mapping and commit arguments"
     }
     val consumerResultsDir = File(args[0])
-    val evidenceDir = File(args[1])
-    val junitDir = File(args[2])
-    val gateDir = File(args[3])
-    val registry = File(args[4])
-    val mapping = File(args[5])
-    val commit = args[6]
+    val showcaseResultsDir = File(args[1])
+    val evidenceDir = File(args[2])
+    val junitDir = File(args[3])
+    val gateDir = File(args[4])
+    val registry = File(args[5])
+    val mapping = File(args[6])
+    val commit = args[7]
 
-    // Phase 8 : les NEUF contrats actifs de target `android` — un JSON canonique par contrat,
+    // Phase 9 : les DIX contrats actifs de target `android` — un JSON canonique par contrat,
     // depuis le MÊME XML connecté copié ci-dessous (le générateur rejette de toute façon un
     // registre/mapping qui ne déclarerait pas exactement ces couples).
-    val contractIds = listOf("AND-001", "AND-002", "AND-003", "AND-004", "AND-005", "AND-006", "AND-007", "AND-008", "AND-009")
+    val contractIds =
+        listOf("AND-001", "AND-002", "AND-003", "AND-004", "AND-005", "AND-006", "AND-007", "AND-008", "AND-009", "AND-010")
     val target = "android"
     val adapter = "android-emulator"
 
@@ -60,12 +63,18 @@ fun main(args: Array<String>) {
     val abi = prop("ro.product.cpu.abi")
     val engine = "emulator-api-$sdk-$abi"
 
-    // Le nom du fichier XML varie avec l'AVD/device : GLOB sur TEST-*.xml.
-    val xmlFiles = consumerResultsDir.walkTopDown()
-        .filter { it.isFile && it.name.startsWith("TEST-") && it.extension == "xml" }
+    // Le nom du fichier XML varie avec l'AVD/device : GLOB sur TEST-*.xml — dans les DEUX
+    // racines (le consumer ET le sample compose-showcase, phase 9) : les classes de test des
+    // deux APK sont distinctes, aucune collision d'identité testcase.
+    val xmlFiles = sequenceOf(consumerResultsDir, showcaseResultsDir)
+        .flatMap { root ->
+            root.walkTopDown()
+                .filter { it.isFile && it.name.startsWith("TEST-") && it.extension == "xml" }
+        }
         .toList()
     require(xmlFiles.isNotEmpty()) {
-        "no JUnit XML found under ${consumerResultsDir.path} — the instrumented smoke did not run"
+        "no JUnit XML found under ${consumerResultsDir.path} or ${showcaseResultsDir.path} — " +
+            "the instrumented smokes did not run"
     }
 
     // Répertoire du moteur réinitialisé : les copies JUnit sont exactement celles de CE run

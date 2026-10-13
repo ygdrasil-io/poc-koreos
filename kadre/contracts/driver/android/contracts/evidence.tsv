@@ -62,3 +62,8 @@ AND-009	android	scenario	android-capture-source-refused	org.graphiks.kadre.platf
 AND-009	android	scenario	android-capture-late-attach-consent	org.graphiks.kadre.consumer.KadreConsumerCaptureContractTest	androidCaptureLateAttachConsent
 AND-009	android	sentinel	android-capture-no-prompt-on-readback	org.graphiks.kadre.consumer.KadreConsumerCaptureContractTest	androidCaptureTokenSingleUse
 AND-009	android	sentinel	android-capture-fgs-stopped-after-terminal	org.graphiks.kadre.consumer.KadreConsumerCaptureContractTest	androidCaptureFgsLifecycle
+AND-010	android	scenario	android-facade-consumers-both-forms	org.graphiks.kadre.consumer.KotlinFacadeConsumerTest	kotlinAttachKadreBothFormsExhaustiveOutcome
+AND-010	android	scenario	android-compose-showcase-single-session	org.graphiks.kadre.samples.composeshowcase.ComposeShowcaseContractTest	androidComposeShowcaseSingleSession
+AND-010	android	scenario	android-legacy-types-absent	org.graphiks.kadre.samples.composeshowcase.ComposeShowcaseContractTest	androidLegacyTypesAbsent
+AND-010	android	sentinel	android-facade-no-leak	org.graphiks.kadre.consumer.JavaAndroidFacadeConsumerTest	javaFacadeAttachObserveStopAwait
+AND-010	android	sentinel	android-compose-no-double-attach	org.graphiks.kadre.samples.composeshowcase.ComposeShowcaseContractTest	androidComposeShowcaseSingleSession
