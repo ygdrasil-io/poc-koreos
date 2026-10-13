@@ -13,7 +13,6 @@ import platform.GameController.GCHapticsLocalityDefault
 import platform.GameController.GCKeyboardDidConnectNotification
 import platform.GameController.GCMicroGamepad
 import platform.GameController.GCMouseDidConnectNotification
-import platform.UIKit.UIApplicationDidReceiveMemoryWarningNotification
 
 /**
  * Le probe de COMPILE de la spike phase 8 côté tvOS (Task 1) — le miroir iOS
@@ -27,19 +26,15 @@ import platform.UIKit.UIApplicationDidReceiveMemoryWarningNotification
  * (`UIScreenDidConnect/DidDisconnect/ModeDidChange` — les trois getters existent au klib tvOS,
  * contrairement à `preferredMode`/`availableModes` : 0-hit, le brief l'épingle ; l'écran unique
  * tvOS n'a qu'un mode, le kernel [uikitDisplayPortDisplay] en porte un seul — le port ne les
- * lira jamais, le verdict d'absence vit dans le rapport de spike).
+ * lira jamais, le verdict d'absence vit dans le rapport de spike). La PIÈCE MEMORY a été
+ * CONSOMMÉE par la Task 3 — la source réelle [UIKitMemoryPressureSource] porte
+ * `UIApplicationDidReceiveMemoryWarningNotification` désormais (uikitMain, la constante
+ * compile des DEUX cibles — le fait klib attendu de cette pièce, mapping Moderate-only).
  *
  * L'ABSENCE de discipline (tvOS absence discipline, gate Step 4) : aucun symbole référencé
  * ici ne doit manquer au klib tvOS — c'est le sens même du probe, la compile EST le fait.
  */
 internal object UIKitPhase8SpikeTvos {
-
-    /**
-     * Décision 2bis (le RESTE display de la spike, pour la Task 3) : la constante
-     * memory-warning (ruling Task 5 : mapping mémoire Moderate-only, même constant sur tvOS) —
-     * le retour n'a pas de sémantique, seuls les SYMBOLES référencés comptent.
-     */
-    fun memoryWarningConstant(): String = UIApplicationDidReceiveMemoryWarningNotification!!
 
     /**
      * Décision 1 (tvOS) : le chemin haptique exposé — le klib tvOS porte `controller.haptics`

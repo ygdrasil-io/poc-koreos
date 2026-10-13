@@ -13,7 +13,6 @@ import platform.GameController.GCHapticsLocalityDefault
 import platform.GameController.GCKeyboardDidConnectNotification
 import platform.GameController.GCMicroGamepad
 import platform.GameController.GCMouseDidConnectNotification
-import platform.UIKit.UIApplicationDidReceiveMemoryWarningNotification
 
 /**
  * Le probe de COMPILE de la spike phase 8 côté iOS (Task 1) — ce fichier ne SERVE à rien en
@@ -21,31 +20,22 @@ import platform.UIKit.UIApplicationDidReceiveMemoryWarningNotification
  * Kotlin (2.4.20, iOS simulator + device), et il est DESTINÉ à être consommé (ou supprimé) par
  * les ports réels. La PIÈCE DISPLAY (inventaire `UIScreen` + les trois notifications + les
  * modes iOS-only) a été CONSOMMÉE par la Task 2 — le port réel [UIKitDisplayPort] et sa
- * réalisation [UIKitScreenDisplaySource] portent ces symboles désormais (verdicts : spike
- * `task1-spike-report.md` §2 — `UIScreen.name` 0-hit, `localizedName` iOS-seul, d'où le nom
- * null honnête du port ; `preferredMode`/`availableModes` iOS-seuls, et le kernel T1 n'en porte
- * qu'un mode unique, donc aucun port ne les lira).
+ * réalisation [UIKitScreenDisplaySource] portent ces symboles désormais. La PIÈCE MEMORY
+ * (la constante memory-warning) a été CONSOMMÉE par la Task 3 — la source réelle
+ * [UIKitMemoryPressureSource] porte `UIApplicationDidReceiveMemoryWarningNotification`
+ * désormais (uikitMain, symboles des DEUX cibles).
  *
  * Les décisions de la spike ENCORE À CONSOMMER ICI côté iOS :
  * 1. [hapticsReachable] — le chemin `controller.haptics` → `createEngineWithLocality` (la
  *    création `createLocally*` du header est 0-hit au klib ; `createEngineWithLocality` est le
  *    SEUL chemin de `GCDeviceHaptics` exposé, vers la `CHHapticEngine` de CoreHaptics) ;
- * 2. [memoryWarningConstant] — la constante memory-warning (ruling Task 5 : le mapping mémoire
- *    Moderate-only s'abonne à elle) ;
- * 3. [controllerInventory] — `GCController.controllers()` + les notifications connect/disconnect
+ * 2. [controllerInventory] — `GCController.controllers()` + les notifications connect/disconnect
  *    de contrôleur, clavier et souris (le klib nomme GCMouse/GCKeyboard sur les DEUX cibles) ;
- * 4. [extendedProfileShape] — les éléments du profil étendu que la table du kernel
+ * 3. [extendedProfileShape] — les éléments du profil étendu que la table du kernel
  *    ([UIKitGamepadMapping]) traduit : boutons, croix, sticks, gâchettes, micro-gamepad, et
  *    les handlers de l'élément bouton (`pressedChangedHandler`/`valueChangedHandler`).
  */
 internal object UIKitPhase8SpikeIos {
-
-    /**
-     * Décision 2bis (le RESTE display de la spike, pour la Task 3) : la constante
-     * memory-warning — le retour n'a pas de sémantique, seuls les SYMBOLES référencés comptent
-     * (la compile EST le fait).
-     */
-    fun memoryWarningConstant(): String = UIApplicationDidReceiveMemoryWarningNotification!!
 
     /**
      * Décision 1 (iOS) : le chemin haptique RÉELLEMENT EXPOSÉ au klib — `controller.haptics`
