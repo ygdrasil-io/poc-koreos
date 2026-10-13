@@ -92,9 +92,25 @@ internal class SessionRuntime(
         eventCollectorAllocator,
         policy.resources.maxEventCollectorsPerFlow,
     )
-    private val runtimeComponents = try {
+    private val runtimeComponentsAndDisplayManager = try {
         val components = componentsFactory.create(id, rootScope)
+        // Le résolveur de cible fullscreen AVANT la configuration de session : l'install de
+        // configuration peut ADMETTRE la fenêtre primaire (uikit : l'admission différée qui
+        // termine `installSessionConfiguration`), et le résolveur doit exister avant TOUTE
+        // admission — `RuntimeWindowManager.installExclusiveDisplayTargetResolver` le vérifie
+        // (pending/committed vides). L'ordre ci-dessous EST le contrat ; le construire après
+        // coup jette `IllegalStateException` à la première session portant un display port
+        // (phase 8 uikit — l'intégration réelle driver, l'épingle de ce).
+        val displayManager = components.displayPort?.let { port ->
+            RuntimeDisplayManager(
+                port = port,
+                eventStampSource = ::nextStamp,
+                collectorAllocator = eventCollectorAllocator,
+                maxCollectorsPerFlow = policy.resources.maxEventCollectorsPerFlow,
+            )
+        }
         try {
+            displayManager?.let(components::installExclusiveDisplayTargetResolver)
             components.installSessionConfiguration(
                 policy.window,
                 policy.input,
@@ -111,27 +127,22 @@ internal class SessionRuntime(
             runCatching { components.close() }
             throw cause
         }
-        components
+        components to displayManager
     } catch (cause: Throwable) {
         rootJob.cancel()
         parentCancellationHandle.dispose()
         throw cause
     }
-    private val runtimeDisplayManager = runtimeComponents.displayPort?.let { port ->
-        RuntimeDisplayManager(
-            port = port,
-            eventStampSource = ::nextStamp,
-            collectorAllocator = eventCollectorAllocator,
-            maxCollectorsPerFlow = policy.resources.maxEventCollectorsPerFlow,
-        )
-    }
+    private val runtimeComponents get() = runtimeComponentsAndDisplayManager.first
+    private val runtimeDisplayManager: RuntimeDisplayManager? get() = runtimeComponentsAndDisplayManager.second
     private val runtimeDisplays: DisplayManager = runtimeDisplayManager ?: UnsupportedDisplayManager(
         eventCollectorAllocator,
         policy.resources.maxEventCollectorsPerFlow,
     )
-    private val runtimeWindows = runtimeComponents.windows.also {
-        runtimeDisplayManager?.let(runtimeComponents::installExclusiveDisplayTargetResolver)
-    }
+    // Le résolveur est déjà posé ci-dessus (avant la configuration, donc avant TOUTE admission) :
+    // un second install ici jetterait « exclusive display target resolver was already installed »
+    // à la première session portant un display port.
+    private val runtimeWindows = runtimeComponents.windows
     private val runtimeGamepadManager = (
         runtimeComponents.gamepadPort ?: runtimeComponents.inputDevicePort?.let { EmptyGamepadPort }
     )?.let { port ->

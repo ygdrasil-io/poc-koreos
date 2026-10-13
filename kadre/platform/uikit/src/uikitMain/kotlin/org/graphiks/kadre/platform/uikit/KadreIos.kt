@@ -11,6 +11,7 @@ import org.graphiks.kadre.application.KadreApplicationFactory
 import org.graphiks.kadre.application.KadreLaunchReason
 import org.graphiks.kadre.application.KadreSession
 import org.graphiks.kadre.application.LifecycleState
+import org.graphiks.kadre.application.LifecycleCapabilities
 import org.graphiks.kadre.display.DisplayType
 import org.graphiks.kadre.diagnostics.ExperimentalKadreApi
 import org.graphiks.kadre.diagnostics.KadreFailure
@@ -112,6 +113,16 @@ public object KadreIos {
      * créneaux de LA MÊME source : un seul observer, fan-out vers tous les hosts câblés.
      */
     private val memoryPressure = UIKitProcessMemoryPressure()
+
+    /**
+     * L'état vivant de la source mémoire process — l'observation du driver (phase 8, Task 6,
+     * scaffolding, même posture que les compteurs de [KadreUikitSurfaceDriver]) : `Unsupported`
+     * tant qu'aucune source n'a jamais été tentée ET après la fermeture par le DERNIER host
+     * vivant, `Available` pendant qu'UN host au moins vit, `Unavailable(PlatformFailure)` sur
+     * un échec d'install collant. Jamais une entrée dans l'API contractuelle.
+     */
+    internal val processMemoryPressureCapabilities: LifecycleCapabilities
+        get() = memoryPressure.currentCapabilities
 
     /**
      * L'inventaire contrôleurs process-wide (phase 8, Task 4, moule AppKit/Android — le

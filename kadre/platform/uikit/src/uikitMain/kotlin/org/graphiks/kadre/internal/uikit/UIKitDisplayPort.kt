@@ -246,6 +246,53 @@ internal class UIKitDisplayPort(
 }
 
 /**
+ * Les compteurs de la source display PRODUCTION (phase 8, Task 6 — le proxy du driver, le
+ * miroir exact d'[UIKitDropCount]) : les installations/retraits de listener (UNE registration
+ * `NSNotificationCenter` par install vivant du port), les tokens de notification posés/retirés
+ * (TROIS par install : connect/disconnect/mode — le fait code de la table ci-dessous) et les
+ * lectures du seam (`screens`/`factsOf`) avec leur fait de thread (la confinement MAIN de la
+ * voie applicative est l'engagement du port — le counter en garde la preuve exécutée).
+ * Scaffolding du driver : jamais une entrée dans l'API contractuelle.
+ */
+internal object UIKitDisplayCount {
+    private val lock = RuntimeLock()
+    private var installs: Long = 0L
+    private var teardowns: Long = 0L
+    private var tokensInstalled: Long = 0L
+    private var tokensRemoved: Long = 0L
+    private var seamReads: Long = 0L
+    private var seamReadsOffMain: Long = 0L
+
+    fun recordInstall(tokens: Int) {
+        lock.withLock {
+            installs += 1L
+            tokensInstalled += tokens.toLong()
+        }
+    }
+
+    fun recordTeardown(tokens: Int) {
+        lock.withLock {
+            teardowns += 1L
+            tokensRemoved += tokens.toLong()
+        }
+    }
+
+    fun recordSeamRead(offMain: Boolean) {
+        lock.withLock {
+            seamReads += 1L
+            if (offMain) seamReadsOffMain += 1L
+        }
+    }
+
+    fun totalInstalls(): Long = lock.withLock { installs }
+    fun totalTeardowns(): Long = lock.withLock { teardowns }
+    fun totalTokensInstalled(): Long = lock.withLock { tokensInstalled }
+    fun totalTokensRemoved(): Long = lock.withLock { tokensRemoved }
+    fun totalSeamReads(): Long = lock.withLock { seamReads }
+    fun totalSeamReadsOffMain(): Long = lock.withLock { seamReadsOffMain }
+}
+
+/**
  * La réalisation production du seam : le vrai inventaire `UIScreen` du process et ses TROIS
  * notifications (`UIScreenDidConnectNotification`, `UIScreenDidDisconnectNotification`,
  * `UIScreenModeDidChangeNotification` — les constantes klib des DEUX cibles, spike T1 §2),
@@ -269,12 +316,18 @@ internal class UIKitScreenDisplaySource : UIKitDisplaySource {
     private val lock = RuntimeLock()
     private var registrations: HashMap<() -> Unit, List<NSObjectProtocol>> = HashMap()
 
-    override fun screens(): List<Any> = UIScreen.screens.orEmpty().filterIsInstance<UIScreen>()
+    override fun screens(): List<Any> {
+        // Le fait de thread de CHAQUE lecture — l'engagement de confinement main du port
+        // (revue Task 2 Important-1), gardé exécuté par le counter du driver.
+        UIKitDisplayCount.recordSeamRead(offMain = !NSThread.isMainThread())
+        return UIScreen.screens.orEmpty().filterIsInstance<UIScreen>()
+    }
 
     override fun isMain(screen: Any): Boolean =
         (screen as? NSObjectProtocol)?.isEqual(UIScreen.mainScreen) == true
 
     override fun factsOf(screen: Any): UIKitDisplayFacts? {
+        UIKitDisplayCount.recordSeamRead(offMain = !NSThread.isMainThread())
         val uiScreen = screen as? UIScreen ?: return null
         val bounds = uiScreen.bounds.useContents { size.width to size.height }
         return UIKitDisplayFacts(
@@ -295,11 +348,13 @@ internal class UIKitScreenDisplaySource : UIKitDisplaySource {
         val tokens = NOTIFICATION_NAMES.map { name ->
             center.addObserverForName(name, null, NSOperationQueue.mainQueue()) { _ -> listener() }
         }
+        UIKitDisplayCount.recordInstall(tokens.size)
         lock.withLock { registrations[listener] = tokens }
     }
 
     override fun unregisterListener(listener: () -> Unit) {
         val tokens = lock.withLock { registrations.remove(listener) } ?: return
+        UIKitDisplayCount.recordTeardown(tokens.size)
         removeTokens(tokens)
     }
 

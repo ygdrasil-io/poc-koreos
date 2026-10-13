@@ -10,6 +10,10 @@ import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.CValue
 import kotlinx.cinterop.cValue
 import kotlinx.cinterop.useContents
+import org.graphiks.kadre.application.HostSignal
+import org.graphiks.kadre.application.KadreScope
+import org.graphiks.kadre.application.LifecycleCapabilities
+import org.graphiks.kadre.application.MemoryPressureLevel
 import org.graphiks.kadre.diagnostics.DelicateKadreApi
 import org.graphiks.kadre.diagnostics.KadreFailure
 import org.graphiks.kadre.diagnostics.KadreOperation
@@ -25,6 +29,7 @@ import org.graphiks.kadre.input.TextInputSession
 import org.graphiks.kadre.input.TextRange
 import org.graphiks.kadre.internal.runtime.RuntimeLock
 import org.graphiks.kadre.internal.runtime.withLock
+import org.graphiks.kadre.internal.uikit.UIKitDisplayCount
 import org.graphiks.kadre.internal.uikit.UIKitDropCount
 import org.graphiks.kadre.internal.uikit.UIKitGestureCount
 import org.graphiks.kadre.internal.uikit.UIKitKeyboardCount
@@ -370,6 +375,85 @@ public class KadreUikitTextInputEventCapture private constructor(session: TextIn
 }
 
 /**
+ * La capture des signaux du cycle de vie d'UNE session ([KadreUikitSurfaceDriver.captureLifecycleSignals],
+ * phase 8 Task 6) — le miroir exact de [KadreUikitSurfaceEventCapture] pour le `Flow<HostSignal>`
+ * du scope (`KadreLifecycle.signals`, le Flow exporté n'est pas consommable depuis Swift sans
+ * collecteur) : un collecteur sur [Dispatchers.Default] compte les signaux publiés par niveau et
+ * garde les dernières descriptions bornées. Le drain côté test est le pumping du run loop
+ * principal — la publication vit sur la file principale (le relais mémoire y est dispatché),
+ * aucun sommeil nu. [stop] annule la collecte (idempotent) ; les compteurs restent lus tels
+ * quels après l'arrêt. Compteurs en UN tableau unique : la leçon du rapport Task 5.
+ */
+public class KadreUikitLifecycleSignalCapture private constructor(scope: KadreScope) {
+    private val lock = RuntimeLock()
+
+    // Compteurs par forme (index = kind de `record`) — un IntArray unique, la leçon du rapport
+    // Task 5 (les écritures capturées par champs individuels ne sont pas fiables en K/N).
+    private val counts = IntArray(3)
+    private var descriptions: List<String> = emptyList()
+    private var collectAlive = false
+    private var collectError: String? = null
+    private val collectScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+
+    init {
+        collectScope.launch {
+            collectAlive = true
+            try {
+                scope.lifecycle.signals.collect { signal -> record(signal) }
+            } catch (t: Throwable) {
+                collectError = t.toString()
+            } finally {
+                collectAlive = false
+            }
+        }
+    }
+
+    private fun record(signal: HostSignal) {
+        val kind = when (signal) {
+            is HostSignal.MemoryPressure ->
+                if (signal.level == MemoryPressureLevel.Moderate) 1 else 2
+            else -> 2
+        }
+        lock.withLock {
+            counts[0] += 1
+            counts[kind] += 1
+            descriptions = (descriptions + signal.toString()).takeLast(DESCRIPTION_CAPACITY)
+        }
+    }
+
+    /** Le nombre TOTAL de signaux drainés (toutes formes). */
+    public val totalCount: Int get() = count(0)
+
+    /** Les signaux `MemoryPressure(Moderate)` drainés. */
+    public val moderateCount: Int get() = count(1)
+
+    /** Les signaux `MemoryPressure(Critical)` drainés — zéro attendu sur UIKit/tvOS, TOUJOURS. */
+    public val criticalCount: Int get() = count(2)
+
+    private fun count(index: Int): Int = lock.withLock { counts[index] }
+
+    public val recentDescriptions: List<String> get() = lock.withLock { descriptions }
+
+    /** Le collecteur tourne-t-il encore (faux = flow terminé ou jeté — le « pourquoi » suit). */
+    public val isCollectAlive: Boolean get() = lock.withLock { collectAlive }
+
+    /** L'exception qui a tué la collecte, s'il y en eut une (diagnostic d'échec CI). */
+    public val collectErrorDescription: String? get() = lock.withLock { collectError }
+
+    /** Arrête la collecte (idempotent) — les compteurs restent lus tels quels. */
+    public fun stop() {
+        collectScope.cancel()
+    }
+
+    internal companion object {
+        internal fun start(scope: KadreScope): KadreUikitLifecycleSignalCapture =
+            KadreUikitLifecycleSignalCapture(scope)
+
+        private const val DESCRIPTION_CAPACITY = 16
+    }
+}
+
+/**
  * La sonde de CONDUITE de surface du driver UIKit/tvOS (phase 2) — le prolongement naturel de
  * [KadreUikitProbe] (phase 0) : les chemins Kotlin-only du module (le bail natif de la
  * surface — l'extension d'accès plateforme d'`UIKitSurfaceAccess` — et le `Flow`
@@ -471,8 +555,8 @@ public object KadreUikitSurfaceDriver {
      * côté Kotlin, où le recognizer Kadre est identifiable par son TYPE (interne au module —
      * Swift ne peut pas le nommer, la sonde copie les faits, même discipline que les autres
      * probes). La preuve du SPIKE ([KadreUikitTouchRecognitionProbe.recognizerOverridesTouchesBeganImp])
-     * est la vérification d'exécution DISCRIMINANTE du sous-classement : l'IMP propre de la
-     * classe de l'instance diffère de celui de la base pour le sélecteur de livraison.
+     * est la vérification d'exécution DISCRIMINANTE du sous-classement : l'IMP propre de
+     * la classe de l'instance diffère de celui de la base pour le sélecteur de livraison.
      */
     @OptIn(ExperimentalForeignApi::class)
     public fun touchRecognitionProbe(view: UIView): KadreUikitTouchRecognitionProbe {
@@ -652,6 +736,57 @@ public object KadreUikitSurfaceDriver {
      */
     public val dropEventCount: Long
         get() = UIKitDropCount.totalEvents()
+
+    // MARK: - Compteurs + probes display/devices/mémoire (phase 8, Task 6) — le proxy du
+    //        driver, même posture (scaffolding, jamais l'API contractuelle).
+
+    /** Les registrations `NSNotificationCenter` du source display réellement posées (un install par session vivante). */
+    public val displayListenerInstallCount: Long
+        get() = UIKitDisplayCount.totalInstalls()
+
+    /** Les registrations du source display réellement retirées (au close du port — la session terminant). */
+    public val displayListenerTeardownCount: Long
+        get() = UIKitDisplayCount.totalTeardowns()
+
+    /**
+     * Les tokens de notification `UIScreen` réellement POSÉS (TROIS par install — connect,
+     * disconnect, modeDidChange : le fait code de la table du source production).
+     */
+    public val displayNotificationTokensInstalled: Long
+        get() = UIKitDisplayCount.totalTokensInstalled()
+
+    /** Les tokens de notification `UIScreen` réellement RETIRÉS (le retrait exact du close). */
+    public val displayNotificationTokensRemoved: Long
+        get() = UIKitDisplayCount.totalTokensRemoved()
+
+    /** Les lectures du seam `UIScreen` réellement exécutées (`screens`/`factsOf`). */
+    public val displaySeamReadCount: Long
+        get() = UIKitDisplayCount.totalSeamReads()
+
+    /**
+     * Les lectures du seam `UIScreen` exécutées HORS du thread principal — ZÉRO attendu sur
+     * toute suite verte : l'engagement de confinement main du port (revue Task 2 Important-1,
+     * le funnel `Dispatchers.Main.immediate` de la voie applicative). Toute lecture hors main
+     * est un comportement indéfini UIKit, jamais une lecture.
+     */
+    public val displaySeamReadOffMainCount: Long
+        get() = UIKitDisplayCount.totalSeamReadsOffMain()
+
+    /**
+     * L'état vivant de la source mémoire process (phase 8 Task 6) : la capability
+     * `memoryPressure` du moment — `Unsupported` hors session vivante (jamais tentée, ou
+     * fermée par la terminaison du DERNIER host), `Available` pendant qu'UN host au moins
+     * vit, `Unavailable(PlatformFailure)` collant sur échec d'install.
+     */
+    public val memoryPressureCapability: LifecycleCapabilities
+        get() = KadreIos.processMemoryPressureCapabilities
+
+    /**
+     * Ouvre une capture des signaux du cycle de vie de [scope] (le fixture la draine en
+     * pompant le run loop — les publications vivent sur la file principale).
+     */
+    public fun captureLifecycleSignals(scope: KadreScope): KadreUikitLifecycleSignalCapture =
+        KadreUikitLifecycleSignalCapture.start(scope)
 
     // MARK: - Compteurs + probes texte (phase 6, Task 3) — le proxy du driver, même posture.
 
