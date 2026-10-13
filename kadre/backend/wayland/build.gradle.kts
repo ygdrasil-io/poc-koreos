@@ -37,6 +37,9 @@ tasks.named<Test>("jvmTest") {
     filter.excludeTestsMatching(
         "org.graphiks.kadre.internal.wayland.WaylandWindowsLinuxTest",
     )
+    filter.excludeTestsMatching(
+        "org.graphiks.kadre.internal.wayland.WaylandShmDiagLinuxTest",
+    )
 }
 
 val onLinux = System.getProperty("os.name", "").contains("Linux", ignoreCase = true)
