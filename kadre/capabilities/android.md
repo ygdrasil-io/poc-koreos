@@ -265,7 +265,11 @@ l’identifiant exact **`emulator-api-35-arm64-v8a`** (les dix JSON `AND-001.jso
 `AND-010.json`, champ `adapter: "android-emulator"`). Aucun autre moteur n’est déclaré, et un moteur non relevé ne se
 déduit pas d’un passage manuel. Cette passe de preuve a été produite sur un hôte **macOS arm64**,
 qui est le contexte d’exécution de la preuve et non un minimum : la gate CI obligatoire (job
-`android-contracts`) est la phase 10 de la roadmap et n’existe pas encore ; le plancher déclaré de
+`android-contracts`) est livrée par la phase 10 — `.github/workflows/kadre-android-contracts.yml`
+démarre un émulateur API 35 **x86_64** (KVM, ubuntu) et le moteur y est étiqueté depuis le device
+réellement attaché, soit `emulator-api-35-x86_64` : un environnement DEUXIÈME et distinct du
+passe local arm64, dont les preuves ne sont jamais fusionnées avec les siennes (protocole du
+driver) ; le plancher déclaré de
 ce registre est l’API level (`minSdk = 24`), l’OS de l’hôte n’y entre pas.
 
 ## 1. Lecture des colonnes
@@ -286,8 +290,9 @@ ce registre est l’API level (`minSdk = 24`), l’OS de l’hôte n’y entre p
 - **runtime gate** — le device, le thread ou l’état du host dont dépend la *publication de la
   capability*. Pour les phases 1 à 9 c’est l’émulateur identifié : la preuve `AND-001` à
   `AND-010` n’existe que branchée à un device réel (`androidContractsCheck` exige un
-  émulateur démarré et n’est volontairement pas dans `:kadre:check` — aucun émulateur sur les
-  runners actuels, branchement CI = phase 10 ; les dix JSON produits par le même run
+  émulateur démarré et n’est volontairement pas dans `:kadre:check` — le branchement CI
+  est livré par la phase 10, `.github/workflows/kadre-android-contracts.yml`, job
+  `android-contracts`, qui démarre l’émulateur lui-même ; les dix JSON produits par le même run
   instrumenté — 48 testcases consumer plus les 2 du sample compose-showcase, seconde APK
   forkée par le driver — 50 tests).
 - **état absent** — la valeur exacte observée quand la feature est refusée, sans paraphrase. La
@@ -518,14 +523,73 @@ aujourd’hui.
 | inventaire display complet, fallback `HostViewport`, devices/gamepads (observation et effets), décision raw input, pression mémoire | inventaire/fallback/observation/effets/pression : C ; raw input : C (décision séparée, sinon N(RawInputAccess)) | **Phase 7** | **Phase 7 livrée** : l'inventaire display est COMPLET et observable (le multi-cast `DisplayManager`, types `Physical`/`Virtual`, `workArea` `null`, l'immeasurable → `TemporarilyUnavailable` qui retire — jamais un snapshot partiel ; le fallback `HostViewport` n'a pas été nécessaire : l'état d'indisponibilité admis est le chemin livré — §2, la ligne display), les devices génériques et les manettes sont observés (le multi-cast `InputManager`, kinds normatifs depuis les bits d'identité des sources, le carve-out manette), les effects gamepad sont par device RÉEL sous conditions API (31 `VibratorManager` / 26-30 one-shot / sans moteur `Unsupported` — le vibreur du téléphone ≠ manette, §2 la ligne manettes), la pression mémoire suit la mapping normative via `ComponentCallbacks2` (5→`Moderate`, 10/15→`Critical`, background JAMAIS — §2 sa ligne), raw input reste `Unsupported(RawInputAccess)` avec sa preuve de non-appel (`android-raw-input-noncall`, §2 sa ligne) ; **les garanties matérielles** — une manette USB/BT réelle (hot-plug, déconnexion pendant effet, rumble réel), un second display réel (l'option dev Overlay) — passent sur le pool de devices déclaré supporté (`TEST-STRATEGY.md`) : l'émulateur de preuve n'a ni l'un ni l'autre, l'inventaire honnête l'énonce, et le cahier manuel `manual/phase-7-displays-devices.md` porte les procédures |
 | capture targets `HostChoice`, `Source`, `Surface` | C | **Phase 8** | **Phase 8 livrée** : `screen`/`window` (`HostChoice`) `Supported` par le chemin RÉEL MediaProjection (consentement système par session, jeton single-use, refus utilisateur stateful `Denied` jamais une failure, révocation système → `Stopped(PermissionRevoked)`, retry `Temporary` contractuel) avec la DÉCISION DE RESPONSABILITÉ FERMÉE — le service foreground `mediaProjection` est KADRE (manifest merge, notification minimale apparaissant pendant la session, le host n'a RIEN à déclarer) ; `surface` `Supported` via PixelCopy API 26+ (le software rendering capturé, `FLAG_SECURE` redacté — limite SDK) ; `Source`/`sourceEnumeration` les refus STRUCTURELS (precedent web — `HostPickerOnly`, `refreshSources` no-op, `Source` refusé `Unsupported(CaptureOpen)` avant tout seam) — §2, les lignes capture ; **différés matériels, pas de code** : le consentement RÉEL en mode plein-écran (le spinner « A single app » de l'émulateur API 35 n'est pas atteignable à l'accessibilité — forme self-record) et le miroir d'affichage entier sur un device physique sont [verify-device] (cahier `manual/phase-8-capture.md`), le partage multi-session du FGS sur device réel (le refcount est prouvé en hôte) idem, et les editor actions IME restent garées avec la décision text input de phase 5 |
 | façade Java (`KadreAndroid.attach`, `KadreSessionHandle`), liaison Compose | §6.1 + `INTEROP-EXPORTS.md` | **Phase 9** | **Phase 9 livrée** : la façade Java — `KadreAndroid` (les deux statiques verbatim INTEROP §4, `@Throws(KadreException)` la failure intacte), le billet `KadreSessionHandle` (observation immédiate puis séquentielle dans l'ordre d'inscription, LE stage terminal stable et cancellation-safe survivant au `close()`, le scan zéro-fuite) et les helpers `KadrePolicies.defaultPolicy()/realtimePolicy()/recordingPolicy()` (la sentence policy d'INTEROP §4 vraie) — et la liaison Compose `KadreComposeHost` (une session par host, recomposition-inerte, close-on-exit, recreate-after-terminal ; la course de re-attach rapide = raffinement différé documenté) sont livrées et prouvées par `AND-010` (§2, les lignes de la phase) ; la ligne consumer « Java Android » d'INTEROP §9 est prouvée par `JavaAndroidFacadeConsumerTest` — la surface publique d'attach reste l'unique chemin, les wrappers n'en ouvrent aucun nouveau |
-| gate CI Android obligatoire (job `android-contracts`) | §9 (gate adapter officiel) | **Phase 10** | `androidContractsCheck` est un gate local à émulateur, volontairement hors `:kadre:check` |
+| gate CI Android obligatoire (job `android-contracts`) | §9 (gate adapter officiel) | **Phase 10 livrée** | `androidContractsCheck` reste un gate local à émulateur, volontairement hors `:kadre:check` ; le branchement CI est livré — `.github/workflows/kadre-android-contracts.yml` (émulateur API 35 x86_64 KVM sur ubuntu, chaque étape liante sous le watchdog de `scripts/test-kadre-android-device.sh`, gate `scripts/test-kadre-android-contracts.sh`) — et l’audit de couverture (§5) clôt le registre |
 
 Une ligne de frontière, pas une différée : **le rendu lui-même** est hors périmètre de l’adapter
 Android — la phase 2 livre une surface observable (`state`/`capabilities`/`events`, `requestRedraw`
 coalescé) **sans posséder son rendu** ; aucun renderer, aucune surface de rendu, aucun event loop
 public n’est ajouté, et aucune phase de la roadmap n’en ajoutera.
 
-## 5. Références
+## 5. Audit de couverture — registre §2 au regard des contrats AND-001 à AND-010 (clôture phase 10)
+
+Audit réalisé le **2026-10-13** (phase 10, tâche « baseline ABI + audit registre/catalogue ») : le
+registre §2 a été relu ligne à ligne (33 lignes de capability) et chaque contrat `AND-001` à
+`AND-010` du registre des contrats (`../contracts/registry/contracts.tsv`, dix lignes `active`)
+vérifié sur ses quatre obligés — ses lignes de capability, sa référence au registre, sa preuve
+double (scénarios instrumentés `evidence.tsv` + classes d’hôte `androidHostTest`) et ses limites
+documentées. Les comptes d’évidence sont exacts : **47 scénarios + 21 sentinelles** dans
+`../contracts/driver/android/contracts/evidence.tsv`, par contrat 3+2 / 6+2 / 6+3 / 7+3 / 5+3 /
+2+1 / 3+1 / 6+2 / 6+2 / 3+2 — les dix JSON `AND-001.json` à `AND-010.json` du même passage
+instrumenté (50 testcases). Quatre lignes ont été revérifiées contre les sources livrées
+(méthodes de test nommées présentes) : la réservation atomique (`AndroidAttachReservationTest`,
+AND-002), la capture (`AndroidCapturePortTest.deniedConsentIsAStatefulSuccess` et voisines,
+AND-009), le scan zéro-fuite de la façade (`KadreAndroidFacadeTest.noLeakedAsyncTypes`,
+AND-010) et la pression mémoire (`AndroidMemoryPressureTest.runningLevelsMapAndBackgroundNeverDo`,
+AND-008). La surface publique que le registre documente est désormais **figée par un baseline
+ABI** : `abiValidation()` est actif sur `:kadre:platform:android`, le dump commité
+`api/android/android.api` (les quatre overloads `attachKadre`, la façade `KadreAndroid`, le
+billet et ses types, `withAndroidView`, `AndroidCaptureService`) est comparé à chaque `check`
+— toute signature publique qui bouge sans update de baseline casse le build.
+
+| contrat (contracts.tsv) | lignes §2 | preuve instrumentée (scénarios + sentinelles) | preuve hôte (classes) | limites documentées |
+|---|---|---|---|---|
+| `AND-001` — session minimale, attach deux formes | attach Activity, attach View, échelle d’admission | 3 scénarios + 2 sentinelles (`KadreConsumerSessionTest`) | `AndroidAttachAdmissionTest`, `AndroidAttachReservationTest`, `AndroidHostSessionResultTest` | thread = exception de programmation ; re-parenting exige un nouvel attach |
+| `AND-002` — admission, ownership, lifecycle | échelle, réservation atomique, lifecycle/détachement terminal | 6 scénarios + 2 sentinelles (`KadreConsumerAttachContractTest`) | `AndroidAttachReservationTest`, `AndroidLifecycleReducerTest`, `AndroidHostLifecyclePropagationTest`, `AndroidHostSessionResultTest` | premier détachement/destroy terminal même scope survivant ; rollback intégral des échecs tardifs |
+| `AND-003` — surface, metrics, redraw, accès natif | surface observable, causes distinguées, `requestRedraw`, `apply`, `withAndroidView`, `platformAccess` | 6 scénarios + 3 sentinelles dont une host-pinned (`KadreConsumerSurfaceContractTest`) | `AndroidSurfaceMetricsTest`, `AndroidHostSurfaceTest`, `AndroidRedrawSchedulerTest`, `AndroidViewLeaseTest` | focus/visibilité propriété du lifecycle seul ; aucun handle `android.view.Window` ; rendu hors périmètre |
+| `AND-004` — clavier, pointeur, touch, stylet | observation chaînée, mapping clavier, motion/stylet, delivery, `inputDefaultBehavior` | 7 scénarios + 3 sentinelles (`KadreConsumerInputContractTest`) | `AndroidInputWindowCallbackTest`, `AndroidKeyMapperTest`, `AndroidMotionMapperTest`, `AndroidInputDeliveryTest`, `AndroidInputSuppressionTest` | forme View sans `Window.Callback` (entrée `Unsupported`) ; touch/pointer jamais consommés ; `gestures` `Unsupported(GestureInput)` |
+| `AND-005` — fenêtre Activity et interactions | topologies/fenêtre (3 champs + 11 refusés), `cursor`, `pointerCapture`, moteur d’interactions | 5 scénarios + 3 sentinelles (`KadreConsumerWindowInteractionContractTest`) | `AndroidWindowTopologyTest`, `AndroidActivityWindowTest`, `AndroidCursorTest`, `AndroidPointerCaptureTest`, `AndroidInteractionEngineTest` | onze champs host-imposed/sans primitive ; `close` `Temporary` (Back host-owned) ; `Locked`/`Exclusive` sans primitive ; restauration `Windowed` best-effort sur l’émulateur headless |
+| `AND-006` — text input, IME | décision `textInput` + pont IME internal | 2 scénarios + 1 sentinelle (`KadreConsumerTextContractTest`) | `AndroidTextInputPortTest`, `AndroidInputDeliveryTest` | `Unsupported(TextInput)` TOUJOURS — **limite enregistrée, pas un différé** ; options normatives A/B garées utilisateur |
+| `AND-007` — drag-and-drop | décision `dragAndDrop` + source de transfert internal | 3 scénarios + 1 sentinelle (`KadreConsumerDropContractTest` + `AndroidDropDeviceContractTest`, AAR interne) | `AndroidDropTransferSourceTest`, `AndroidDropContractTest` | canal de réception absent — **limite enregistrée** ; `FeatureAvailability.Unsupported` tous états ; drag cross-app réel = passe manuelle (README §AND-007) |
+| `AND-008` — displays, devices, gamepads, pression mémoire | inventaire display, inventaire devices, manettes, décision `rawInput`, pression mémoire | 6 scénarios + 2 sentinelles (`KadreConsumerDisplaysContractTest`) | `AndroidDisplayPortTest`, `AndroidInputDevicePortTest`, `AndroidGamepadPortTest`, `AndroidMemoryPressureTest` | `workArea` null TOUJOURS ; manette/second display réels hors émulateur (pool `TEST-STRATEGY.md`, cahier manuel) ; trims background jamais des signaux ; `rawInput` `Unsupported` (preuve de non-appel) |
+| `AND-009` — capture, consentement, frames | capture `HostChoice`, capture `Surface`, `sourceEnumeration`/`hostPicker` | 6 scénarios + 2 sentinelles (`KadreConsumerCaptureContractTest` + `AndroidCaptureDeviceContractTest`, AAR interne) | `AndroidCapturePortTest`, `AndroidCaptureForegroundTest` | mode émulateur « A single app » ([verify-device], cahier `manual/phase-8-capture.md`) ; `FLAG_SECURE` redacté par le SDK ; pointeur `EmbeddedWhenAvailable` ; `Source` refusé structurellement |
+| `AND-010` — façade Java, Compose, samples | façade Java, liaison Compose, migration samples/consumers négatifs | 3 scénarios + 2 sentinelles (`KotlinFacadeConsumerTest`, `JavaAndroidFacadeConsumerTest`, `ComposeShowcaseContractTest`) | `KadreAndroidFacadeTest`, `KadreSessionHandleTest`, `KadreComposeBindingTest`, `KadreComposeHostSurfaceTest` | course de re-attach rapide après détachement terminal (raffinement différé) ; `hello-triangle-android-capture` non migré (retrait documenté) |
+
+**Résultat : 10/10 contrats couverts** — chaque contrat possède ses lignes de capability §2, sa
+ligne de registre (`contracts.tsv:66,68,69,73,76,77,89,94,95,97`), sa preuve double et ses
+limites ; aucun gap de couverture restant. Trois familles d’items demeurent, toutes enregistrées
+et jamais silencieuses :
+
+1. **Limites enregistrées (définitives)** — `textInput`, canal de réception drag-and-drop,
+   `rawInput`, `gestures`, entrée de la forme View, les onze champs de fenêtre host-imposed :
+   ce sont des décisions de capability ou des faits SDK prouvés, pas des gaps d’implémentation.
+2. **Questions normatives garées utilisateur** — `Window.close` → `Unsupported(CloseWindow)`
+   (édition d’`OPERATION-CONTRACTS` exigée), options A/B de l’IME, option A/B du drag,
+   armement d’`AcceptDrop` : implémentation suspendue à la décision, jamais prise en passage.
+3. **Différés de phase (§4)** — les lignes de la matrice restantes (redraw en débordement par
+   policies, observation focus/visibilité SDK, routage owner de la forme View, affinement
+   multi-fenêtres), chacune avec sa phase propriétaire.
+
+**Items [verify-device] restants** (matériel ou flux système hors de l’émulateur de preuve,
+procédures au cahier du driver, exécution sur le pool de devices `TEST-STRATEGY.md`) : le
+consentement de capture en mode plein-écran et le miroir d’affichage entier sur device physique,
+le partage multi-session du service foreground sur device réel (`manual/phase-8-capture.md`) ;
+une manette USB/BT réelle (hot-plug, déconnexion pendant effet, rumble réel) et un second
+display réel, option dev Overlay (`manual/phase-7-displays-devices.md`) ; l’IME système réel et
+les gestures matérielles (`manual/phase-5-text-input.md`) ; le drag cross-app à deux apps
+(README §AND-007). Aucun de ces items ne porte une ligne `LIVRÉE` du registre : les lignes
+qu’ils bornent énoncent déjà la limite moteur exacte à leur colonne `état absent`.
+
+## 6. Références
 
 - [Contrats des adapters et matrice de capabilities](../BACKEND-CAPABILITIES.md) — mandat §8, matrice §4 (colonnes Android), topologie §3/§6.1
 - [Roadmap d’implémentation Android](../ANDROID-IMPLEMENTATION-ROADMAP.md) — §3.3 (frontière runtime/SDK, contrat de thread), §Phase 0 (décision de thread), §Phase 1 (gate de sortie), §Phase 2 (gate de sortie — metrics vs View réelle, identité de surface, redraw borné, zéro accès SDK après fermeture), §Phase 9 (façade Java, liaison Compose, migration des samples — gate de sortie)
