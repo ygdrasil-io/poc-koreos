@@ -11,6 +11,7 @@ import org.graphiks.kadre.application.KadreApplicationFactory
 import org.graphiks.kadre.application.KadreLaunchReason
 import org.graphiks.kadre.application.KadreSession
 import org.graphiks.kadre.application.LifecycleState
+import org.graphiks.kadre.display.DisplayType
 import org.graphiks.kadre.diagnostics.ExperimentalKadreApi
 import org.graphiks.kadre.diagnostics.KadreFailure
 import org.graphiks.kadre.diagnostics.KadrePlatform
@@ -24,11 +25,13 @@ import org.graphiks.kadre.internal.runtime.RuntimeSessionComponents
 import org.graphiks.kadre.internal.runtime.RuntimeSessionRevocationHandler
 import org.graphiks.kadre.internal.runtime.RuntimeSessionObserver
 import org.graphiks.kadre.internal.runtime.withLock
+import org.graphiks.kadre.internal.uikit.UIKitDisplayPort
 import org.graphiks.kadre.internal.uikit.UIKitLifecycleReducer
 import org.graphiks.kadre.internal.uikit.UIKitLifecycleSource
 import org.graphiks.kadre.internal.uikit.UIKitLifecycleSnapshot
 import org.graphiks.kadre.internal.uikit.UIKitOwnership
 import org.graphiks.kadre.internal.uikit.UIKitSceneRegistry
+import org.graphiks.kadre.internal.uikit.UIKitScreenDisplaySource
 import org.graphiks.kadre.internal.uikit.UIKitWindowRuntime
 import org.graphiks.kadre.internal.uikit.UIKitWindowSceneManager
 import org.graphiks.kadre.policy.KadrePolicies
@@ -252,9 +255,26 @@ public object KadreIos {
                 // substitue la seule capability `requestWindow` (`Unsupported` sans provider —
                 // le manager refuse ; `OpenedInNewSession` avec).
                 val windows: WindowManager = sceneManager
+                // Le port display de CETTE session (phase 8, Task 2) : l'inventaire `UIScreen`
+                // relu EN ENTIER à chaque fire, l'écran de LA fenêtre de la session réglé HostViewport par la
+                // ruling de la couture, les autres écrans Physical (tvOS : l'unique écran EST
+                // l'écran de la fenêtre — un seul HostViewport). Le resolver est relu à chaque
+                // relecture du port (un fire relit tout, la couture y comprise) ; le port est
+                // FERMÉ par les composants (RuntimeSessionComponents.close → displayPort) — le
+                // closeAction ci-dessous ne le referme jamais, et le seam qu'il possède meurt
+                // avec lui.
+                val displaySource = UIKitScreenDisplaySource()
+                val displayPort = UIKitDisplayPort(
+                    source = displaySource,
+                    hostScreenResolver = { displaySource.factsOf(window.screen) },
+                    displayTypeRuling = { isHostScreen ->
+                        if (isHostScreen) DisplayType.HostViewport else DisplayType.Physical
+                    },
+                )
                 RuntimeSessionComponents(
                     windows = windows,
                     primarySurfaceProvider = { runtime.attachedPrimarySurface },
+                    displayPort = displayPort,
                     closeAction = {
                         sceneManager.close()
                         runtime.close()

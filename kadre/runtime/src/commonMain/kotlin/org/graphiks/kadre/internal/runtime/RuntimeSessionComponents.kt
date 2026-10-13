@@ -85,6 +85,18 @@ public class RuntimeSessionComponents private constructor(
         closeAction: () -> Unit,
     ) : this(windows, null, null, null, null, null, closeAction, null, primarySurfaceProvider)
 
+    /**
+     * The deferred primary-surface form with one session-owned port. Same provider contract as
+     * the three-parameter form above; the display port is closed by [close] like every port of
+     * the all-ports forms — the backend never closes it from its own [closeAction].
+     */
+    public constructor(
+        windows: WindowManager,
+        primarySurfaceProvider: () -> RuntimePrimarySurface?,
+        displayPort: DisplayPort?,
+        closeAction: () -> Unit,
+    ) : this(windows, null, displayPort, null, null, null, closeAction, null, primarySurfaceProvider)
+
     private val lock = RuntimeLock()
     private var closed = false
 

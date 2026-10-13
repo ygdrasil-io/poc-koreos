@@ -2,7 +2,6 @@
 
 package org.graphiks.kadre.internal.uikit
 
-import kotlinx.cinterop.useContents
 import platform.GameController.GCController
 import platform.GameController.GCControllerButtonInput
 import platform.GameController.GCControllerDidConnectNotification
@@ -15,25 +14,24 @@ import platform.GameController.GCKeyboardDidConnectNotification
 import platform.GameController.GCMicroGamepad
 import platform.GameController.GCMouseDidConnectNotification
 import platform.UIKit.UIApplicationDidReceiveMemoryWarningNotification
-import platform.UIKit.UIScreen
-import platform.UIKit.UIScreenDidConnectNotification
-import platform.UIKit.UIScreenDidDisconnectNotification
-import platform.UIKit.UIScreenModeDidChangeNotification
 
 /**
  * Le probe de COMPILE de la spike phase 8 côté iOS (Task 1) — ce fichier ne SERVE à rien en
- * runtime : il prouve que les symboles klib dont les Tasks 2-4 dépendent compilent depuis
+ * runtime : il prouve que les symboles klib dont les Tasks 3-4 dépendent compilent depuis
  * Kotlin (2.4.20, iOS simulator + device), et il est DESTINÉ à être consommé (ou supprimé) par
- * les ports réels. Aucune fonction n'est appelée en production ; chaque lecture porte son
- * verdict dans le rapport de spike (`task1-spike-report.md`).
+ * les ports réels. La PIÈCE DISPLAY (inventaire `UIScreen` + les trois notifications + les
+ * modes iOS-only) a été CONSOMMÉE par la Task 2 — le port réel [UIKitDisplayPort] et sa
+ * réalisation [UIKitScreenDisplaySource] portent ces symboles désormais (verdicts : spike
+ * `task1-spike-report.md` §2 — `UIScreen.name` 0-hit, `localizedName` iOS-seul, d'où le nom
+ * null honnête du port ; `preferredMode`/`availableModes` iOS-seuls, et le kernel T1 n'en porte
+ * qu'un mode unique, donc aucun port ne les lira).
  *
- * Les quatre décisions de la spike attestées ICI côté iOS :
+ * Les décisions de la spike ENCORE À CONSOMMER ICI côté iOS :
  * 1. [hapticsReachable] — le chemin `controller.haptics` → `createEngineWithLocality` (la
  *    création `createLocally*` du header est 0-hit au klib ; `createEngineWithLocality` est le
  *    SEUL chemin de `GCDeviceHaptics` exposé, vers la `CHHapticEngine` de CoreHaptics) ;
- * 2. [uiscreenFacts] — `UIScreen.screens`/`mainScreen`/`bounds` + les TROIS notifications
- *    (DidConnect/DidDisconnect/ModeDidChange) + la constante memory-warning (ruling Task 5 :
- *    le mapping mémoire Moderate-only s'abonne à elle) compilent depuis Kotlin ;
+ * 2. [memoryWarningConstant] — la constante memory-warning (ruling Task 5 : le mapping mémoire
+ *    Moderate-only s'abonne à elle) ;
  * 3. [controllerInventory] — `GCController.controllers()` + les notifications connect/disconnect
  *    de contrôleur, clavier et souris (le klib nomme GCMouse/GCKeyboard sur les DEUX cibles) ;
  * 4. [extendedProfileShape] — les éléments du profil étendu que la table du kernel
@@ -43,33 +41,11 @@ import platform.UIKit.UIScreenModeDidChangeNotification
 internal object UIKitPhase8SpikeIos {
 
     /**
-     * Décision 2 (iOS) : l'inventaire UIScreen et les constantes de notification — le retour
-     * n'a pas de sémantique, seuls les SYMBOLES référencés comptent (la compile EST le fait).
+     * Décision 2bis (le RESTE display de la spike, pour la Task 3) : la constante
+     * memory-warning — le retour n'a pas de sémantique, seuls les SYMBOLES référencés comptent
+     * (la compile EST le fait).
      */
-    fun uiscreenFacts(): Int {
-        val screens: List<*> = UIScreen.screens
-        val main: UIScreen = UIScreen.mainScreen
-        val didConnect: String = UIScreenDidConnectNotification!!
-        val didDisconnect: String = UIScreenDidDisconnectNotification!!
-        val modeDidChange: String = UIScreenModeDidChangeNotification!!
-        val memoryWarning: String = UIApplicationDidReceiveMemoryWarningNotification!!
-        val bounds = main.bounds.useContents { size.width to size.height }
-        return screens.size + bounds.first.toInt() + bounds.second.toInt() +
-            didConnect.length + didDisconnect.length + modeDidChange.length + memoryWarning.length
-    }
-
-    /**
-     * Décision 2bis (iOS SEUL — le brief : `preferredMode`/`availableModes` sont iOS-only,
-     * 0-hit au klib tvOS) : les modes d'écran compilent côté iOS ; la couture tvOS ne les
-     * nomme PAS (l'écran unique tvOS n'a qu'un mode, le kernel en porte un seul).
-     */
-    fun iosScreenModes(): Int {
-        val main: UIScreen = UIScreen.mainScreen
-        val preferred = main.preferredMode
-        val available: List<*> = main.availableModes
-        val current = main.currentMode
-        return available.size + (preferred?.hashCode() ?: 0) + (current?.hashCode() ?: 0)
-    }
+    fun memoryWarningConstant(): String = UIApplicationDidReceiveMemoryWarningNotification!!
 
     /**
      * Décision 1 (iOS) : le chemin haptique RÉELLEMENT EXPOSÉ au klib — `controller.haptics`
@@ -101,7 +77,7 @@ internal object UIKitPhase8SpikeIos {
     /**
      * Décision 4 (iOS) : la forme du profil que la table du kernel traduit — chaque élément
      * référencé ici a sa ligne dans [UIKIT_GAMEPAD_BUTTON_TABLE]/[UIKIT_GAMEPAD_AXIS_TABLE].
-     * Les handlers de bouton sont posés (forme lambda inférée) : c'est le canal des Tasks 2-4
+     * Les handlers de bouton sont posés (forme lambda inférée) : c'est le canal des Tasks 3-4
      * pour les événements pression/valeur.
      */
     fun extendedProfileShape(controller: GCController): Int {

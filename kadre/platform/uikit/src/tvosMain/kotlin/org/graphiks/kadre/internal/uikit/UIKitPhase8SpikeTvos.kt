@@ -2,7 +2,6 @@
 
 package org.graphiks.kadre.internal.uikit
 
-import kotlinx.cinterop.useContents
 import platform.GameController.GCController
 import platform.GameController.GCControllerButtonInput
 import platform.GameController.GCControllerDidConnectNotification
@@ -15,19 +14,20 @@ import platform.GameController.GCKeyboardDidConnectNotification
 import platform.GameController.GCMicroGamepad
 import platform.GameController.GCMouseDidConnectNotification
 import platform.UIKit.UIApplicationDidReceiveMemoryWarningNotification
-import platform.UIKit.UIScreen
-import platform.UIKit.UIScreenDidConnectNotification
-import platform.UIKit.UIScreenDidDisconnectNotification
-import platform.UIKit.UIScreenModeDidChangeNotification
 
 /**
  * Le probe de COMPILE de la spike phase 8 côté tvOS (Task 1) — le miroir iOS
- * ([UIKitPhase8SpikeIos]), AMPUTÉ des symboles que le klib tvOS ne porte pas
- * (`preferredMode`/`availableModes` : 0-hit, le brief l'épingle ; l'écran unique tvOS n'a
- * qu'un mode, le kernel [uikitDisplayPortDisplay] en porte un seul). Il prouve que les
- * symboles dont les Tasks 2-4 dépendent compilent depuis Kotlin tvOS (2.4.20), et il est
- * destiné à être consommé (ou supprimé) par les ports réels — le rapport de spike
- * (`task1-spike-report.md`) porte chaque verdict.
+ * ([UIKitPhase8SpikeIos]). Il prouve que les symboles dont les Tasks 3-4 dépendent compilent
+ * depuis Kotlin tvOS (2.4.20), et il est destiné à être consommé (ou supprimé) par les ports
+ * réels — le rapport de spike (`task1-spike-report.md`) porte chaque verdict.
+ *
+ * La PIÈCE DISPLAY a été CONSOMMÉE par la Task 2 — le port réel [UIKitDisplayPort] et sa
+ * réalisation [UIKitScreenDisplaySource] (uikitMain, symboles des DEUX cibles) portent
+ * désormais l'inventaire `UIScreen` et les trois notifications
+ * (`UIScreenDidConnect/DidDisconnect/ModeDidChange` — les trois getters existent au klib tvOS,
+ * contrairement à `preferredMode`/`availableModes` : 0-hit, le brief l'épingle ; l'écran unique
+ * tvOS n'a qu'un mode, le kernel [uikitDisplayPortDisplay] en porte un seul — le port ne les
+ * lira jamais, le verdict d'absence vit dans le rapport de spike).
  *
  * L'ABSENCE de discipline (tvOS absence discipline, gate Step 4) : aucun symbole référencé
  * ici ne doit manquer au klib tvOS — c'est le sens même du probe, la compile EST le fait.
@@ -35,23 +35,11 @@ import platform.UIKit.UIScreenModeDidChangeNotification
 internal object UIKitPhase8SpikeTvos {
 
     /**
-     * Décision 2 (tvOS) : l'inventaire UIScreen et les constantes de notification —
-     * `screens`/`mainScreen`/`bounds` + les TROIS notifications (DidConnect/DidDisconnect/
-     * ModeDidChange — les trois getters existent au klib tvOS, contrairement à
-     * `preferredMode`/`availableModes`) + la constante memory-warning (ruling Task 5 : mapping
-     * mémoire Moderate-only, même constant sur tvOS).
+     * Décision 2bis (le RESTE display de la spike, pour la Task 3) : la constante
+     * memory-warning (ruling Task 5 : mapping mémoire Moderate-only, même constant sur tvOS) —
+     * le retour n'a pas de sémantique, seuls les SYMBOLES référencés comptent.
      */
-    fun uiscreenFacts(): Int {
-        val screens: List<*> = UIScreen.screens
-        val main: UIScreen = UIScreen.mainScreen
-        val didConnect: String = UIScreenDidConnectNotification!!
-        val didDisconnect: String = UIScreenDidDisconnectNotification!!
-        val modeDidChange: String = UIScreenModeDidChangeNotification!!
-        val memoryWarning: String = UIApplicationDidReceiveMemoryWarningNotification!!
-        val bounds = main.bounds.useContents { size.width to size.height }
-        return screens.size + bounds.first.toInt() + bounds.second.toInt() +
-            didConnect.length + didDisconnect.length + modeDidChange.length + memoryWarning.length
-    }
+    fun memoryWarningConstant(): String = UIApplicationDidReceiveMemoryWarningNotification!!
 
     /**
      * Décision 1 (tvOS) : le chemin haptique exposé — le klib tvOS porte `controller.haptics`
