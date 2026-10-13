@@ -15,7 +15,7 @@ class DeterministicWin32WindowPortTest {
             decorations = Win32WindowDecorations.System,
             width = 800,
             height = 600,
-        ) { id, _, _ ->
+        ) { _, id, _, _ ->
             seen.add(id)
             0L
         }
@@ -37,7 +37,7 @@ class DeterministicWin32WindowPortTest {
             decorations = Win32WindowDecorations.Borderless,
             width = 640,
             height = 480,
-        ) { id, _, _ ->
+        ) { _, id, _, _ ->
             seen.add(id)
             0L
         }
@@ -55,7 +55,7 @@ class DeterministicWin32WindowPortTest {
             decorations = Win32WindowDecorations.System,
             width = 100,
             height = 100,
-        ) { id, _, _ ->
+        ) { _, id, _, _ ->
             seen.add(id)
             0L
         }
@@ -68,9 +68,9 @@ class DeterministicWin32WindowPortTest {
     @Test
     fun duplicateHwndRegistrationIsImpossibleByConstruction() {
         val port = DeterministicWin32HostPort()
-        val first = port.createTopLevelWindow("a", Win32WindowDecorations.System, 10, 10) { _, _, _ -> 0L }
+        val first = port.createTopLevelWindow("a", Win32WindowDecorations.System, 10, 10) { _, _, _, _ -> 0L }
         port.destroyWindow(first.hwnd)
-        val second = port.createTopLevelWindow("b", Win32WindowDecorations.System, 10, 10) { _, _, _ -> 0L }
+        val second = port.createTopLevelWindow("b", Win32WindowDecorations.System, 10, 10) { _, _, _, _ -> 0L }
         // La réutilisation d'adresse ne doit pas héberger l'ancien handler.
         assertFailsWith<IllegalStateException> {
             port.errorIfWindowUnknown(first.hwnd)

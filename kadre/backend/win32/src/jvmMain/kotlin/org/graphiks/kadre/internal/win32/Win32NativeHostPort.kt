@@ -27,9 +27,12 @@ internal interface Win32NativeHostPort : AutoCloseable {
         decorations: Win32WindowDecorations,
         width: Int,
         height: Int,
-        messageHandler: (id: Int, wParam: Long, lParam: Long) -> Long,
+        messageHandler: (hwnd: Long, id: Int, wParam: Long, lParam: Long) -> Long,
     ): Win32TopLevelWindowHandle
 
     fun requestCloseWindow(hwnd: Long)
     fun destroyWindow(hwnd: Long)
+
+    /** Native default behavior for unhandled messages (real: DefWindowProcW; fake: 0L). */
+    fun defWindowProc(hwnd: Long, message: Int, wParam: Long, lParam: Long): Long
 }

@@ -84,10 +84,11 @@ internal class Win32WindowRuntimeDriver internal constructor(
                 decorations = Win32WindowDecorations.System,
                 width = command.spec.contentSize.width.toInt().coerceAtLeast(1),
                 height = command.spec.contentSize.height.toInt().coerceAtLeast(1),
-                messageHandler = { message, wParam, lParam ->
+                messageHandler = { hwnd, message, wParam, lParam ->
                     when (message) {
                         WM_CLOSE -> command.closeRequested()
                         WM_DESTROY -> command.nativeClosed()
+                        else -> port.defWindowProc(hwnd, message, wParam, lParam)
                     }
                     0L
                 },

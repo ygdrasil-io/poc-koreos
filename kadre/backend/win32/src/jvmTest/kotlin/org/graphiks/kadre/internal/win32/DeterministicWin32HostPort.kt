@@ -13,7 +13,7 @@ internal open class DeterministicWin32HostPort : Win32NativeHostPort {
     val createdTopLevelWindows = AtomicInteger(0)
     val destroyedTopLevelWindows = AtomicInteger(0)
     val postedCloses = AtomicInteger(0)
-    private val topLevelHandlers = java.util.concurrent.ConcurrentHashMap<Long, (Int, Long, Long) -> Long>()
+    private val topLevelHandlers = java.util.concurrent.ConcurrentHashMap<Long, (Long, Int, Long, Long) -> Long>()
     private val topLevelHwndOrder = java.util.concurrent.ConcurrentLinkedQueue<Long>()
     private var nextTopLevelHwnd = 10_000L
     val createdWindows = AtomicInteger(0)
@@ -98,7 +98,7 @@ internal open class DeterministicWin32HostPort : Win32NativeHostPort {
         decorations: Win32WindowDecorations,
         width: Int,
         height: Int,
-        messageHandler: (id: Int, wParam: Long, lParam: Long) -> Long,
+        messageHandler: (hwnd: Long, id: Int, wParam: Long, lParam: Long) -> Long,
     ): Win32TopLevelWindowHandle {
         synchronized(this) {
             check(!destroyed) { "host port already closed" }
@@ -112,7 +112,7 @@ internal open class DeterministicWin32HostPort : Win32NativeHostPort {
 
     fun dispatchWindowMessage(hwnd: Long, id: Int, wParam: Long = 0L, lParam: Long = 0L) {
         // Routage manquant = fallthrough silencieux (miroir du pont réel : 0L).
-        topLevelHandlers[hwnd]?.invoke(id, wParam, lParam)
+        topLevelHandlers[hwnd]?.invoke(hwnd, id, wParam, lParam)
     }
 
     fun errorIfWindowUnknown(hwnd: Long) {
@@ -136,6 +136,13 @@ internal open class DeterministicWin32HostPort : Win32NativeHostPort {
             destroyedTopLevelWindows.incrementAndGet()
             topLevelHwndOrder.remove(hwnd)
         }
+    }
+
+    val defWindowProcCalls = AtomicInteger(0)
+
+    override fun defWindowProc(hwnd: Long, message: Int, wParam: Long, lParam: Long): Long {
+        defWindowProcCalls.incrementAndGet()
+        return 0L
     }
 
     override fun close() {

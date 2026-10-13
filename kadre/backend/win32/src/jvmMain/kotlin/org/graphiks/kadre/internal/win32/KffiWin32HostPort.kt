@@ -2,6 +2,7 @@ package org.graphiks.kadre.internal.win32
 
 import org.graphiks.kffi.win32.generated.DispatchMessageW
 import org.graphiks.kffi.win32.generated.GetLastError
+import org.graphiks.kffi.win32.generated.DefWindowProcW
 import org.graphiks.kffi.win32.generated.DestroyWindow
 import org.graphiks.kffi.win32.generated.IsWindow
 import org.graphiks.kffi.win32.generated.MsgWaitForMultipleObjectsEx
@@ -121,15 +122,18 @@ internal class KffiWin32HostPort : Win32NativeHostPort {
         decorations: Win32WindowDecorations,
         width: Int,
         height: Int,
-        messageHandler: (id: Int, wParam: Long, lParam: Long) -> Long,
+        messageHandler: (hwnd: Long, id: Int, wParam: Long, lParam: Long) -> Long,
     ): Win32TopLevelWindowHandle {
         init()
         val window = Win32ManagedWindow.open(title) { hwnd, message, wParam, lParam ->
-            messageHandler(message, wParam, lParam)
+            messageHandler(hwnd, message, wParam, lParam)
         }
         topLevelWindows[Win32TopLevelWindowHandle(window.hwnd)] = window
         return Win32TopLevelWindowHandle(window.hwnd)
     }
+
+    override fun defWindowProc(hwnd: Long, message: Int, wParam: Long, lParam: Long): Long =
+        org.graphiks.kffi.win32.generated.DefWindowProcW(MemorySegment.ofAddress(hwnd), message, wParam, lParam)
 
     override fun requestCloseWindow(hwnd: Long) {
         PostMessageW(MemorySegment.ofAddress(hwnd), WM_CLOSE, 0L, 0L)
