@@ -35,8 +35,13 @@ class WaylandShmDiagLinuxTest {
                 pixels.set(java.lang.foreign.ValueLayout.JAVA_INT, index.toLong() * 4, 0xFF3366AA.toInt())
             }
             xdg.ackConfigure(configureSerials.last())
-            // un cycle de pompe complet AVANT le second pool
+            // un cycle de pompe complet AVANT le second pool (le poll est
+            // borné par un signal de wake temporisé sur un thread dédié)
             val wake = org.graphiks.kffi.posix.PosixWakeup.open()
+            Thread {
+                Thread.sleep(150)
+                wake.signal()
+            }.start()
             val prepared = client.prepareRead()
             println("DIAG4 prepared=$prepared poll=${client.pollForEvents(wake.readFd, false)}")
             client.cancelRead()
