@@ -63,6 +63,10 @@ kotlin {
             // de scénarios.
             compileOnly("junit:junit:4.13.2")
             compileOnly("androidx.test:monitor:1.6.1")
+            // Les cycles de fuites du nightly (Task 4) pilotent l'ActivityScenario — le
+            // runtime androidx.test:core est fourni par l'APK androidTest du consumer
+            // (androidx.test:core 1.6.1 y est déclaré), l'AAR ne publie que les classes.
+            compileOnly("androidx.test:core:1.6.1")
         }
     }
 }
