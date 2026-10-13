@@ -57,6 +57,11 @@ val waylandNativeTests = tasks.register<Test>("waylandNativeTests") {
     filter.includeTestsMatching(
         "org.graphiks.kadre.internal.wayland.WaylandWindowsLinuxTest",
     )
+    testLogging {
+        events("failed")
+        exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL
+        showStandardStreams = true
+    }
     forkEvery = 1
     reports.junitXml.outputLocation.set(layout.buildDirectory.dir("test-results/waylandNativeTests"))
 }
