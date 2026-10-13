@@ -103,10 +103,19 @@ class UIKitGamepadPortTest {
         val started = mutableListOf<Pair<Any, GamepadEffect.LocalizedHaptic>>()
         var failure: KadreFailure? = null
 
+        /**
+         * Le crochet de la FENÊTRE NATIVE : invoqué au tout début de `startEffect`, HORS du
+         * lock de l'inventaire — c'est la fenêtre exacte où le vrai CoreHaptics démarre, et
+         * donc celle où un teardown concurrent peut courir (le test de course I-1 l'utilise
+         * pour fermer l'inventaire PENDANT le démarrage natif, de façon déterministe).
+         */
+        var onNativeStart: (() -> Unit)? = null
+
         override fun startEffect(
             controller: Any,
             effect: GamepadEffect.LocalizedHaptic,
         ): KadreResult<UIKitGamepadEffectHandle> {
+            onNativeStart?.invoke()
             failure?.let { return KadreResult.Failure(it) }
             started += controller to effect
             return KadreResult.Success(FakeHandle().also { handles += it })
@@ -562,6 +571,66 @@ class UIKitGamepadPortTest {
         val port = inventory.openGamepadPort()
         port.installObserver { }
         assertFailsWith<IllegalStateException> { port.installObserver { } }
+    }
+
+    // MARK: - la course teardown/natif : l'issue est Closed, JAMAIS un lancer traversant le seam
+
+    @Test
+    fun aCloseDuringTheNativeStartIsAClosedFailureNeverAThrow() {
+        // I-1 : le close du DERNIER port (ou de l'inventaire) qui court pendant la fenêtre
+        // native hors lock a déjà vidé la comptabilité des réservations — la relivraison du
+        // démarrage doit répondre `Failure(Closed(Gamepad))` (contrat `GamepadPort.startEffect`
+        // : « Native failures must be mapped to KadreResult.Failure, never thrown across this
+        // seam »), pas lancer. Déterministe : le hook du seam ferme l'inventaire DANS la
+        // fenêtre native. La mutation (release non tolérant à l'absence) relancerait ici.
+        val source = FakeSource()
+        val effects = FakeEffects()
+        val inventory = UIKitControllerInventory(source, effects)
+        source.connect("pad", extendedFacts())
+        val port = inventory.openGamepadPort()
+        val key = port.gamepads.single().key
+        effects.onNativeStart = { inventory.close() }
+
+        val started = port.startEffect(key, GamepadEffect.LocalizedHaptic(GamepadHapticLocality.Default, 1.0, 100.milliseconds))
+
+        val outcome = assertIs<KadreResult.Failure>(
+            started,
+            "la course close/natif est un échec mappé, jamais un IllegalStateException",
+        )
+        assertEquals(KadreFailure.Closed(KadreResourceKind.Gamepad), outcome.reason)
+        // Le propriétaire natif déjà rendu par la fenêtre n'est PAS fracturé : le close
+        // d'après-livraison du handle reste un stop unique (le handle réel est gardé).
+        assertEquals(1, effects.handles.single().nativeStops)
+    }
+
+    @Test
+    fun keysNeverGoBackAcrossAReleaseAndReopen() {
+        // Le compteur de graines ne revient JAMAIS en arrière à travers la libération du
+        // DERNIER port (l'observation du seam relâchée, la table vidée) et la réouverture :
+        // une manette encore (re)branchée après réouverture obtient une clé STRICTEMENT
+        // supérieure à toute clé déjà délivrée. La mutation « nextSeed remis à zéro dans
+        // releaseLocked » fait échouer CE test.
+        val source = FakeSource()
+        val inventory = UIKitControllerInventory(source, FakeEffects())
+        source.connect("pad", extendedFacts())
+        val port = inventory.openGamepadPort()
+        val events = mutableListOf<GamepadPortEvent>()
+        port.installObserver { events += it }
+        val firstKey = port.gamepads.single().key
+
+        source.disconnect("pad")
+        source.fire()
+        port.close() // le DERNIER port : observation libérée, table vidée
+
+        val reopened = inventory.openGamepadPort()
+        val reopenedEvents = mutableListOf<GamepadPortEvent>()
+        reopened.installObserver { reopenedEvents += it }
+        source.connect("pad-again", extendedFacts())
+        source.fire()
+
+        val nextKey = connected(reopenedEvents).single().gamepad.key
+        assertTrue(nextKey > firstKey, "la clé post-réouverture ($nextKey) dépasse toute clé déjà délivrée ($firstKey)")
+        assertTrue(disconnected(events).map { it.key } == listOf(firstKey), "l'ancienne clé a bien terminé avant la réouverture")
     }
 
     // MARK: - le tampon d'ouverture : un fire PENDANT l'ouverture est replié, jamais perdu

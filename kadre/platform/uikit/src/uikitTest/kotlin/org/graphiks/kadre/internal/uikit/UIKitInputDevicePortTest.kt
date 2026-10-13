@@ -187,22 +187,31 @@ class UIKitInputDevicePortTest {
 
     @Test
     fun theKeyboardIsADeviceFactOnlyNeverADeliveryChannel() {
-        // La séparation de propriété (ruling Task 4) : le port publie le FAIT « clavier
-        // connecté » ; la livraison des touches reste au binding phase 5. Preuve structurelle
-        // ici : le type InputDevicePort ne porte AUCUN canal de livraison et le port n'émet
-        // que des événements de lifecycle — le scénario driver « zéro touche dupliquée »
-        // (Task 6) fermera la preuve matérielle.
+        // La séparation de propriété (ruling Task 4), prouvée par les observables SPLIT du
+        // seam : le clavier connecté produit (1) UN fait device côté générique et (2) AUCUN
+        // état côté manette (pas de projection, pas de clé gamepad), et (3) les relectures
+        // qui ne changent AUCUN fait ne livrent RIEN — un canal de livraison existerait
+        // forcément comme flux supplémentaire ici, et le type `InputDevicePort` n'en porte
+        // aucun. La LIVRAISON des touches reste exclusivement `UIKitKeyboardBinding`
+        // (phase 5) ; l'assert driver « clavier connecté ⇒ une entrée ET zéro touche
+        // dupliquée » est l'affaire du Task 6 (charter matériel).
         val source = FakeSource()
         val inventory = UIKitControllerInventory(source, FakeEffectsSeam())
         source.connect("kbd", keyboardFacts())
-        val port = inventory.openInputDevicePort()
-        val events = mutableListOf<InputDevicePortEvent>()
-        port.installObserver { events += it }
+        val devicePort = inventory.openInputDevicePort()
+        val gamepadPort = inventory.openGamepadPort()
+        val deviceEvents = mutableListOf<InputDevicePortEvent>()
+        val gamepadEvents = mutableListOf<org.graphiks.kadre.internal.runtime.GamepadPortEvent>()
+        devicePort.installObserver { deviceEvents += it }
+        gamepadPort.installObserver { gamepadEvents += it }
 
         source.fire()
         source.fire()
-        assertTrue(events.all { it is InputDevicePortEvent.Connected || it is InputDevicePortEvent.Disconnected })
-        assertEquals(1, port.devices.size, "le fait device reste, sans AUCUN flux de touches associé")
+
+        assertEquals(1, devicePort.devices.size, "le fait device : le clavier connecté est énoncé une fois")
+        assertEquals(InputDeviceKind.Keyboard, devicePort.devices.single().descriptor.kind)
+        assertTrue(gamepadPort.gamepads.isEmpty(), "AUCUN état côté manette pour le clavier — pas de projection volée")
+        assertTrue(deviceEvents.isEmpty() && gamepadEvents.isEmpty(), "les relectures sans changement de fait ne livrent RIEN : aucun flux de « livraison » n'existe pour le clavier")
     }
 
     // MARK: - le cycle de vie du port

@@ -589,9 +589,19 @@ internal class UIKitControllerInventory(
         }
     }
 
+    /**
+     * La libération de la réservation pendante — TOLÉRANTE à l'absence : un teardown qui a
+     * couru pendant la fenêtre native hors lock ([startEffect], le close du DERNIER port ou
+     * de l'inventaire) a déjà vidé la comptabilité ([releaseLocked]) ; ici, l'absence est
+     * cette course — un no-op, JAMAIS un lancer (le contrat `GamepadPort.startEffect` : les
+     * échecs natifs traversent le seam en `KadreResult`, jamais en exception). Les trois
+     * entrelacements restent exacts : sans teardown, la réservation est consommée ; close
+     * pendant le natif, elle a été vidée par le close et le guard d'après répond `Closed` ;
+     * déconnexion seule (l'inventaire vivant), la réservation orpheline est consommée ICI.
+     */
     private fun releasePendingEffectLocked(key: Long) {
-        val pending = checkNotNull(pendingEffects[key]) { "missing uikit gamepad effect reservation" }
-        if (pending == 1) pendingEffects.remove(key) else pendingEffects[key] = pending - 1
+        val pending = pendingEffects.remove(key) ?: return
+        if (pending != 1) pendingEffects[key] = pending - 1
     }
 
     private fun detachEffectsLocked(predicate: (UIKitGamepadPortEffect) -> Boolean): List<UIKitGamepadPortEffect> = buildList {
