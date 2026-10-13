@@ -1,17 +1,17 @@
 # Android emulator contract driver
 
 This non-published JVM project runs the public Android host-attachment proof of
-phases 0 through 5 on a real emulator. It is a contract driver, not an
+phases 0 through 8 on a real emulator. It is a contract driver, not an
 implementation API: it forks the instrumented consumer build, executes its
 scenarios on the attached device, and turns the JUnit output into the canonical
-`AND-001` through `AND-006` evidence with the validator's own
+`AND-001` through `AND-009` evidence with the validator's own
 generator. English
 prose, like the Web driver README it mirrors; everything else in this phase is
 documented in French in the sources.
 
 ## What the driver proves
 
-Six contracts, all active in the registry
+Nine contracts, all active in the registry
 ([contracts.tsv](../../registry/contracts.tsv)), oracle `O3`, mapped in
 [evidence.tsv](contracts/evidence.tsv):
 
@@ -215,6 +215,230 @@ composition, suggestion-strip commit and mid-composition blur on a qualified
 host (and what today's attach honestly does on a real device), plus the
 hardware-gesture pass and why the automation cannot stage either.
 
+**`AND-007`** — the phase 6 drop transfer machinery and channel qualification
+proof (source `ANDROID-IMPLEMENTATION-ROADMAP.md#Phase 6 — Drag-and-drop et
+ownership des transferts`). Three scenarios and one sentinel. The public
+boundary scenario lives in the instrumented test class
+`org.graphiks.kadre.consumer.KadreConsumerDropContractTest`; the two on-device
+transfer scenarios live in
+`org.graphiks.kadre.platform.android.AndroidDropDeviceContractTest`, carried by
+the internal proof module `platform/android-devicetest` (see below), whose
+testcase classes ride the consumer's own androidTest APK and report through the
+same connected-run JUnit XML.
+
+| evidenceId | kind | what it exercises |
+|---|---|---|
+| `android-drop-channel-absent` | scenario | the drop RECEPTION channel does not exist on the delivered attach form, pinned three ways at the public boundary: `capabilities.dragAndDrop` stays `FeatureAvailability.Unsupported` (the drop does not even get a terminal `Capability` — the production surface builds with `dragAndDropAvailable = false`); the P4 interaction engine announces `handlerInteractions` `Available` WITHOUT `InteractionKind.AcceptDrop` (refused `Unsupported(Interaction)` before any native call — the AND-005 mechanics, re-confirmed here); and the silence proof — a REAL drag started by the app on its own View (`View.startDragAndDrop`, API 24+, the system drag session genuinely lives in the window: the window manager requires the touch-focus transfer, so the scenario plants a real injected touch — the `INJECT_EVENTS` harness path — and holds it during the listening window) delivers ZERO drop observations (`DropEntered`/`DropMoved`/`DropExited`/`Dropped`) in a bounded listening window; the capability is re-asserted unchanged after the drag |
+| `android-drop-real-transfer-bounded` | scenario | the COMPLETE drop path over REAL content on the device: a file written into the app's own dir, its `file://` uri in a COPIED clip snapshot (same-app, a real `ContentResolver` reads a file uri of the app's own dir on API 24+ without grant or provider — cross-app would need a `FileProvider`; the test itself is the probe: every byte flows through the real resolver, an inadequate uri would fail the scenario), the REAL Task-1 source opened by the PRODUCTION resolver opener, the Task-2 reducer construction (`dragAndDropAvailable = true` — the parked normative decision), and the exact chain the future glue will deliver: `presentDrop` → `acceptDrop` → `DropPerformed` → `claimTransfer` → `collectBytes`; the FULL read returns bytes IDENTICAL to the file (chunks ≤ `maxDropChunkBytes`), the BOUNDED read returns the exact prefix and fails exactly `ResourceLimitExceeded(DropItem, maxBytes)` (an unknown-size read may deliver a prefix before failing, DESIGN §10.4), through a FRESH offer on the same real file — uri items are single-use |
+| `android-drop-stream-released-on-close` | scenario | the gate's resource sentinel: a stream OPEN with its first chunk read, the collector suspended mid-read → `close()` on the owner → the stream is closed EXACTLY ONCE (behavioral proof through the opener's wrapper — the Task-1 host-side close counter does not exist here) and a subsequent read answers exactly `Closed(DropItem)` |
+| `android-drop-no-public-channel` | sentinel | a build that advertises or wires a public drop reception channel (capability flipped without the normative decision, `AcceptDrop` advertised, or a drag observed through the silence) kills `androidDropChannelAbsent` alone |
+
+**The drop decision: a recorded structural limit, and the normative proposal
+parked for the user.** Phase 6 delivers the CONTENT side as internal machinery
+and records the RECEPTION channel as a structural limit — the same shape as the
+phase 5 text-input decision, a recorded limit and NOT a deferral (the web
+precedent, authorized by `BACKEND-CAPABILITIES.md` §4). The causal chain is
+structural: `View.setOnDragListener` is a SINGLE silent-replacement slot (never
+used — the phase 3 discipline for single-slot listeners), `View.onDragEvent`
+is `protected` (subclass-only, and Kadre never owns or subclasses the host's
+View, DESIGN §15.1), and `Window.Callback` has no drag hook (probed against
+android-35). The silence is proven at the real boundary by
+`android-drop-channel-absent`. The content side is proven:
+`AndroidDropTransferSource` translates a COPIED clip snapshot into common
+offers (no `DragEvent`/`ClipData`/`ContentResolver` crosses publicly; mimes
+canonicalized lowercase-or-dropped; an item with no readable content dropped
+whole; uri items `SingleUse`, pure-text items `Replayable`; sizes always
+unknown), bounded reads honor `maxBytes` (exact
+`ResourceLimitExceeded(DropItem, maxBytes)`), a resolver refusal — all THREE
+shapes: `null`, a throw, a read `IOException` — honestly becomes the persistent
+`PlatformFailure(Android, "drop", "resolver-refused")`, so a missing permission
+NEVER becomes a fake readable drop, and streams are closed exactly once,
+released with the owner. The drop contract itself runs through the REAL
+reducer in test construction (`RuntimeSurfaceInput` built with the exact
+`installSessionConfiguration` arguments, only `dragAndDropAvailable` flipped):
+single-active presentation (a second `presentDrop` terminates the first offer
+`LeftSurface`, its source closed with it), `acceptDrop` through the P4
+synchronous interaction shape, single-winner claim (`AlreadyInUse(DropTransfer)`),
+the `maxConcurrentDropTransfers` budget (`ResourceLimitExceeded(DropTransfer, n)`
+until close frees it), `ClaimTimedOut` on the policy timeout (source closed,
+budget freed), and owner teardown → `OwnerClosed` with transfers kept closed
+(`Closed(DropTransfer)` on re-read). Production stays honest: the flag is
+`false`, pinned by the anti-regression host record
+`AndroidDropContractTest.productionStaysUnsupported`.
+
+**The normative proposal is PARKED for the user — stated, not implemented.**
+Option A: a host-delegated `OnDragListener` (the HOST sets the listener on its
+own view and delegates into Kadre — reachable through the existing
+`withAndroidView` lease channel or as new public API, mirroring the text-input
+option A). Option B: a new attach form. Each with its implications, written in
+[capabilities/android.md](../../../capabilities/android.md) §2 and §4. Related,
+and parked in the SAME future decision: arming `AcceptDrop` requires a
+delivered `DropOfferId` — the id is opaque with an internal constructor, it can
+only come from a delivered offer, and no offer can be delivered without the
+reception channel — so the arming design belongs to that decision too.
+
+**The devicetest module.** The two on-device scenarios need a REAL
+`ContentResolver` — a JVM host test has none — and the runtime-friend
+construction (the Task-1 source + the Task-2 reducer) cannot live in the
+consumer, which compiles against the PUBLISHED artifacts where those internals
+are invisible. The internal module `platform/android-devicetest`
+(`org.graphiks.kadre.internal` group, `androidTestImplementation`-only, never
+consumed by production) is the friend compilation of the three concerned
+modules — the exact mirror of the `androidHostTest` friend wiring — and
+publishes an AAR the consumer consumes `androidTestImplementation`: the
+scenario classes travel INSIDE the consumer's androidTest APK and run under ITS
+connected runner, so the JUnit XML of the evidence chain stays the consumer's
+and the driver is unchanged.
+
+**The real-system complement.** The real transfer is already automated
+(`android-drop-real-transfer-bounded` runs on-device through the real
+resolver), so the phase gate needs no manual charter. A real CROSS-APP drag is
+what a manual pass would add, if one is ever needed, and it cannot be staged by
+single-app instrumentation: it requires two apps — a sender exercising
+`startDragAndDrop` with real content shared through a `FileProvider`
+(`FLAG_GRANT_READ_URI_PERMISSION`: cross-app, the same-app `file://` uri of the
+automated scenario no longer suffices), a second app as the drop target, and
+the system drag UI across activities. Until the parked reception decision
+lands, the expected Kadre-side observation of such a drag remains the recorded
+silence — the manual pass would qualify grant propagation and the sender side,
+not a Kadre reception.
+
+**`AND-008`** — the phase 7 display, device, gamepad inventory and memory
+pressure proof (source `ANDROID-IMPLEMENTATION-ROADMAP.md#Phase 7 — Displays,
+devices, gamepads et pression mémoire`). Six scenarios and two sentinels, all
+in the instrumented test class
+`org.graphiks.kadre.consumer.KadreConsumerDisplaysContractTest`; every
+scenario reads PUBLIC state only (`KadreScope.displays` / `.devices` /
+`.lifecycle` / the primary surface's input), so the class compiles against the
+PUBLISHED artifacts like the rest of the consumer's androidTest sources.
+
+| evidenceId | kind | what it exercises |
+|---|---|---|
+| `android-display-inventory-real` | scenario | the published `DisplayManager.state` reflects the REAL emulator display, fact-by-fact re-pinned against the scenario's own SDK read of `DisplayManager.getDisplay(DEFAULT_DISPLAY)`: type `Physical`, real bounds at the origin, `workArea` NULL (Android has no desktop — the never-invent-geometry pin), the SDK's own modes and current mode, the observed scale factor; `requestAccess` carries the same honest inventory |
+| `android-devices-inventory-and-kinds` | scenario | the published `DeviceManager.state` carries one device per REAL `InputDevice.getDeviceIds()` entry, the SDK's exact names, and the kinds of the normative sources table (identity bits, keyboard → mouse → touchscreen → touchpad → stylus order, gamepad/joystick carved out to `Other`); the emulator's virtual keyboard (`Virtual`, sources KEYBOARD\|DPAD) is a `Keyboard` — its NEGATIVE SDK deviceId (`VIRTUAL_KEYBOARD = -1`) rides the unsigned-image runtime key (`inputDeviceKey`), pinned host-side by `AndroidInputDevicePortTest.negativeVirtualDeviceIdTranslatesToNonNegativeKey` |
+| `android-gamepad-empty-inventory-honest` | scenario | with no gamepad attached, the inventory states `gamepads = 0` and HOLDS it over a bounded observation window (zero `GamepadAdded`), the web `web-gamepad-empty-inventory-honest` precedent; the emptiness is verified honest against the SDK itself — no current device id carries the gamepad/joystick sources — and since effects capabilities live only INSIDE a published Gamepad snapshot, zero gamepads means zero effects announcements |
+| `android-memory-pressure-real-mapping` | scenario | the REAL trim delivery: `UiAutomation.executeShellCommand("am send-trim-memory <package> RUNNING_MODERATE")` — the instrumentation's shell identity forces the system_server decision (`setProcessMemoryTrimLevel` → `scheduleTrimMemory` → `ActivityThread.handleTrimMemory` → the registered callbacks) — maps exactly `Moderate` on the session's `KadreLifecycle.signals`, then `RUNNING_CRITICAL` exactly `Critical`; the sends ride the command's own escalation constraint (a lower-or-equal re-send is refused by the system_server), so the levels are spent 5 → 15 once each, in order |
+| `android-memory-background-never-maps` | scenario | the background-never rule pinned two ways with the real commands the tool accepts: `am send-trim-memory <package> COMPLETE` and `HIDDEN` (the two background-level names of the AOSP switch) go out with the instrumentation's shell identity — the system_server decision, never the test's. On the API 35 emulator the command ACCEPTS a background name on the foreground app (empty merged output; the "Unable to set a background trim level on a foreground process" refusal of older AOSP trees is gone there — what can still refuse is the escalation constraint, a lower-level re-send), and THE CONTRACT IS THE SILENCE AFTER EACH SEND: a background level accepted and really delivered crosses `ActivityThread.handleTrimMemory` and the kadre source, whose mapping never speaks it. The receiving chain is proven alive by a positive control (`TRIM_MEMORY_RUNNING_MODERATE` through `Application.onTrimMemory`, the exact Application leg `ActivityThread.handleTrimMemory` dispatches to), and all four SDK background constants (UI_HIDDEN, BACKGROUND, MODERATE, COMPLETE) traverse that same leg in TOTAL silence — visibility loss is not pressure |
+| `android-raw-input-noncall` | scenario | the P3 non-call proof re-pinned: `requestRawInput` answers `Failure(Unsupported(RawInputAccess))` — the taxonomy names the operation, no native primitive is reached — and the published `capabilities.rawInput` refuses the same way BEFORE the call |
+| `android-display-no-invented-workarea` | sentinel | a build that publishes bounds as workArea (invented desktop geometry) kills `androidDisplayInventoryReal` alone |
+| `android-memory-no-background-signal` | sentinel | a mapping that turns a background trim level into a signal kills `androidMemoryBackgroundNeverMaps` alone (the shell path may really deliver a background level and the Application leg replays all four SDK constants — only the receiving chain could ever speak, and the mapping never does) |
+
+**`AND-009`** — the phase 8 capture, consent and frames proof (source
+`ANDROID-IMPLEMENTATION-ROADMAP.md#Phase 8 — Capture, consentement et frames`).
+Six scenarios and two sentinels. Five scenarios live in the instrumented test
+class `org.graphiks.kadre.consumer.KadreConsumerCaptureContractTest` (public
+state only: `KadreScope.capture`, the primary surface); the sixth
+(`android-capture-source-refused`) names a port internal and lives in the
+friend module class `org.graphiks.kadre.platform.android.
+AndroidCaptureDeviceContractTest` (the AND-007 precedent). THE CONSENT IS REAL:
+the system MediaProjection dialog is automated with the instrumentation's
+`UiAutomation` shell identity. The PRIMARY path is accessibility: the
+`UiAutomation` reads the INTERACTIVE windows
+(`FLAG_RETRIEVE_INTERACTIVE_WINDOWS`, set once — the systemui dialog is another
+process's window) and performs `ACTION_CLICK` on the button's node, CLICKABLE
+nodes first (the API 35 dialog title "Start recording or casting with…" matches
+the positive pattern, and clicking a title does nothing); when the label sits
+on a non-clickable TextView (the API 35 app-selector line "Camera") the click
+carries to the clickable ANCESTOR (the row). Progress is verified after every
+click — the result arrives or the node disappears (the API 35 flow continues
+through the app-selector screen before the projection starts). When a click
+does nothing, the FALLBACK presses the SAME button with a shell `input tap` at
+the node's SCREEN bounds — the shell identity is the only one that injects a
+touch INTO the systemui dialog. The interactive-window dump is the scenario's
+oracle: a button that is never pressed fails the scenario quoting the attempted
+labels and the current hierarchy. One consent re-attempt is made when the
+pressed state still reads `Denied` (a click can miss under load — a real
+automation difficulty fails the scenario's own assertion, never masked); the
+HOME window is rendered after every scenario (the gate's focus-sensitive
+classes must not inherit the projected app in the foreground), and
+`POST_NOTIFICATIONS` is granted by shell in the FGS scenario (the documented
+notification exists otherwise silently). The Kadre-owned foreground
+service (`mediaProjection`) is the documented ruling P8-0 decision: the
+library declares it, starts it before `getMediaProjection` (the API 34+ order
+consent dialog → FGS startForeground → projection), and stops it at the
+session terminal — the capture notification appears during HostChoice sessions.
+
+| evidenceId | kind | what it exercises |
+|---|---|---|
+| `android-capture-surface-stream-bounded` | scenario | the REAL `PixelCopy` of the attached SurfaceView (content actually rendered by the app: a red canvas posted into the holder): the full configuration (revision 0, the view's REAL size) is published as `Streaming` BEFORE the first frame; frames flow bounded, each carrying the drawn content (pixel (5,5) is the drawn red); `requestStop` → `Stopped(Requested)` and ZERO frames follow the terminal |
+| `android-capture-consent-denied-stateful` | scenario | the REAL dialog, "Don't allow" pressed by the UiAutomation → `requestPermission` answers a STATEFUL success (`Denied(canRequestAgain = true)` on BOTH scopes, CONTRACTS :64 — never a failure); a following `open` answers the permission refusal without a new prompt |
+| `android-capture-token-single-use` | scenario | consent granted (real "Start now") → the session streams real MediaProjection frames; the state readback (`refreshSources`) NEVER prompts (guarded by the sentinel below); a second `open` without fresh consent answers `PermissionDenied(CaptureScreen)` (the grant was consumed); a NEW consent (real dialog again) arms a second live session |
+| `android-capture-fgs-lifecycle` | scenario | the merged manifest declares the library's capture service (the host declared NOTHING — the responsibility fact); the session is first driven to `Streaming` (the pump started; when the FGS start is refused — the projected app in the foreground — the open answers the row's `Temporary(retryable = true)` and the scenario replays ONE fresh consent into a new session, the contractual retry), the service RUNS at that moment (`ActivityManager.getRunningServices` on the own process — the honest read; the P8-0 order guarantees `startForeground` preceded the first frame) plus the minimal "Screen capture" notification posted; and it is STOPPED at the terminal (service gone, notification withdrawn) |
+| `android-capture-source-refused` | scenario | the REAL production port at the device's real API level answers `reserve(Source(...))` → `Unsupported(CaptureOpen)` BEFORE any seam (zero seams wired — a structural refusal proven on device); sources stay `HostPickerOnly`, `refreshSources` is the honest no-op, a consent request without its seam answers the nominal `Unsupported(CapturePermission)` |
+| `android-capture-late-attach-consent` | scenario | the activity is RESUMED BEFORE the attach; consent through the direct registry (no LifecycleOwner) works on the REAL androidx registry — the kadre-old anti-pattern (`ComponentActivity.registerForActivityResult` THROWS after STARTED) is corrected on device, not only host-side |
+| `android-capture-no-prompt-on-readback` | sentinel | a build whose state readback launches the consent dialog kills `androidCaptureTokenSingleUse` alone (the mutant dialog wedges the port's consent path, so the scenario's second consent answers the consumed interaction instead of a fresh grant) |
+| `android-capture-fgs-stopped-after-terminal` | sentinel | a build whose terminal skips the FGS stop kills `androidCaptureFgsLifecycle` alone (the service-outlives-session assertion) |
+
+**The API 34+ consent order is load-bearing.** The grant returned by the
+system dialog is NOT consumed at consent time: `getMediaProjection` legally
+runs only AFTER the `mediaProjection` foreground service has called
+`startForeground` (the official order dialog → FGS → projection); the port
+stores the raw grant and the stream start consumes it right after the FGS-ready
+signal. Closing the port during the dialog fails the pending request
+`Closed(Host)` immediately; closing between reserve and start fails the start
+before any live projection exists. Concurrent sessions share the single
+service through a process-wide ownership refcount (the terminal of the first
+session must not kill the FGS under the second's live projection).
+
+**The emulator limits the run honestly records.** Three facts are bound to the
+API 35 proof engine and are documented, never hidden:
+
+- **The consent mode delivered by the emulator is "A single app."** The API 35
+  dialog opens in single-app mode (its whole-display spinner is not reachable
+  through the accessibility tree), the flow continues through the
+  app-selector screen ("Camera" — an independent, continuous-viewfinder
+  source), and the projected frames stream THAT task. The contractual facts —
+  real system consent, single-use token, real frames — do not depend on the
+  mode; a host expecting a WHOLE-DISPLAY mirror must drive the spinner, which
+  is a [verify-device] item for real hardware (the manual charter
+  [manual/phase-8-capture.md](manual/phase-8-capture.md) carries the
+  procedure). The instrumentation itself is the projected app in scenarios 1
+  and 3's second consent — the self-record shape the mode implies.
+- **The `createVirtualDisplay` fallback is NPE-shaped.** The production seam
+  tries the historical `AUTO_MIRROR` form first (the whole-display mirror of
+  the official sample); an APP-CONTENT projection — what the "A single app"
+  consent yields — refuses that flag with a coarse framework NPE, and the
+  catch is deliberately BROAD: ANY `NullPointerException` thrown by the
+  mirrored form downgrades the same call to the FLAGLESS form (the framework
+  then poses its own `OWN_CONTENT_ONLY` for the session). A `null` return from
+  either form fails the start (`PlatformFailure`); the fallback covers ONLY
+  this NPE failure mode — a real device in entire-screen mode takes the
+  historical `AUTO_MIRROR` path untouched.
+- **The FGS start refusal is the row's `Temporary`.** An `open` whose
+  foreground start is refused (`startForegroundService` throwing, or the
+  service never announcing `startForeground` within the 5 s budget — the
+  projected app being in the foreground is the observed shape) answers
+  `TemporarilyUnavailable(retryable = true)`: the grant of that open was
+  consumed by its reservation, so the contractual retry is a NEW consent into
+  a NEW session — the FGS scenario replays it once; the token-single-use
+  scenario instead relies on the background grace (2/2 full runs green).
+
+**The honest-availability transitions the run carries.** The four capabilities the phase
+delivers move from the matrix's C (deferred) to their real published values after a real
+install, read in the same run: the display `enumerationCapability` is
+`Supported(Unit, Available)` (the `DisplayManager` is structurally observable — multi-cast
+listener, no permission, no gesture); the device inventory publishes the system's real
+`InputManager` enumeration and the gamepad inventory publishes `gamepads = 0` and HOLDS it
+(the emulator has no gamepad — the emptiness is verified honest against the SDK itself, not
+vacuous); `lifecycle.capabilities.memoryPressure` reads `Available` once the process-wide
+source is installed by `Application.registerComponentCallbacks` (the transition pinned
+host-side by `AndroidMemoryPressureTest.installPublishesAvailableTransition`, the install
+failure `Unavailable(PlatformFailure(Android, "memory-pressure", "source-exception"))` by
+`.installFailureIsUnavailable`); `rawInput` stays `Unsupported(RawInputAccess)` — decided
+separately and refused before and at the call.
+
+**The hardware limits the emulator cannot stage — the manual charter.** The proof engine has
+exactly one `Physical` display and no gamepad: everything a REAL device adds is outside the
+deterministic evidence by construction, and the register states it honestly (`gamepads = 0`
+held, one display). The hardware guarantees — a real USB/BT gamepad (hot-plug, real rumble
+motors, disconnect during an effect), a second real display (the Developer options
+"Simulate secondary displays" Overlay), and what the emulator cannot prove at all — have
+their targeted manual procedures in
+[manual/phase-7-displays-devices.md](manual/phase-7-displays-devices.md), and per
+`TEST-STRATEGY.md` the material guarantees pass on the DECLARED device pool
+(« le pool de devices déclaré supporté ») when one is qualified. The phase 7 gate needs
+no manual pass: the roadmap checklist items are carried by the evidence itself.
+
 ## Running the gate locally
 
 Prerequisites: an Android SDK with the **AVD `Kadre_API_35`** (system image
@@ -237,9 +461,9 @@ emulator-5554`). The Gradle run inside is bounded by a portable 900 s watchdog
 (GNU `timeout` is absent on stock macOS — background Gradle, bounded wait,
 `SIGTERM` at expiry with exit code 124; commit `76229d58`). The gate task is
 `:kadre:contracts:validator:androidContractsCheck`: registry validation plus
-Android contract evidence validation against **`AND-001` through `AND-006`** —
+Android contract evidence validation against **`AND-001` through `AND-009`** —
 one canonical JSON per contract, all from the same instrumented emulator run
-(29 instrumented tests).
+(44 instrumented tests).
 
 The wrapper chains two steps, each of which can also be run on its own — one
 Gradle invocation per shell command:
@@ -444,6 +668,149 @@ evidence itself:
   together — 29 instrumented tests, one canonical JSON per contract, all from
   the same instrumented emulator run.
 
+### Exit gate of roadmap phase 6
+
+Same commands, one contract more. From a cold start (kill any running emulator,
+`adb emu kill`, wait for zero devices, then let the script boot the AVD itself):
+publish (1), consumer compile (2), emulator smoke + evidence + validator (the
+script — **32** instrumented tests green, `AND-001.json` + `AND-002.json` +
+`AND-003.json` + `AND-004.json` + `AND-005.json` + `AND-006.json` +
+`AND-007.json`), the same transitive-resolution purity check (grep exit 1,
+redone cold), and the no-device sanity tasks above. The roadmap checklist is
+carried by the evidence itself:
+
+- drag events translated to common offers, only copied snapshots, no public
+  `DragEvent`/`ClipData` — the host record `AndroidDropTransferSourceTest`
+  (the clip→offer translation rules: canonicalized mimes, items without
+  readable content dropped whole, uri items single-use, text items replayable,
+  sizes always unknown) and `android-drop-channel-absent` (the published state
+  stays `Unsupported`, nothing public crosses, the real drag is a silence);
+- single claim / budget / teardown — the host record `AndroidDropContractTest`
+  (`presentedSingleActiveAndReplacedWithLeftSurface`,
+  `acceptSynchronousThroughTheInteractionShape`, `claimSingleWinnerAndBudget`,
+  `performedClaimTimedOut`, `teardownClosesOwnerClosed`,
+  `productionStaysUnsupported`) and `android-drop-real-transfer-bounded`
+  (claim, then bounded `collectBytes` on the real chain);
+- permissions acquired at the right moment, bounded reads, resources released
+  exactly once — `AndroidDropTransferSourceTest` (the three resolver-refusal
+  shapes honestified to the persistent `resolver-refused` failure,
+  close-exactly-once, reads off the lock), `android-drop-real-transfer-bounded`
+  (the real read bounded by `maxBytes`, exact `ResourceLimitExceeded(DropItem)`),
+  and the sentinel `android-drop-stream-released-on-close` (a stream kept after
+  close is detected, exactly-once behavioral proof);
+- a missing permission on a host View never becomes a fake readable drop —
+  `AndroidDropTransferSourceTest` (`resolver-refused`, never a partial offer)
+  and `android-drop-channel-absent` (the absent channel);
+- two claimants never read the same offer — the single-winner claim record
+  (`AndroidDropContractTest.claimSingleWinnerAndBudget`) plus the
+  already-claimed guard of `AndroidDropTransferSourceTest`
+  (`AlreadyInUse(DropTransfer)`);
+- `AND-001` through `AND-007` together — 32 instrumented tests, one canonical
+  JSON per contract, all from the same instrumented emulator run (the 29
+  previous testcases plus the three drop ones: `androidDropChannelAbsent` in
+  the consumer, `androidDropRealTransferBounded` and
+  `androidDropStreamReleasedOnClose` from the `platform/android-devicetest`
+  AAR riding the same androidTest APK).
+
+### Exit gate of roadmap phase 7
+
+Same commands, one contract more. From a cold start (kill any running emulator,
+`adb emu kill`, wait for zero devices, then let the script boot the AVD itself):
+publish (1), consumer compile (2), emulator smoke + evidence + validator (the
+script — **38** instrumented tests green, `AND-001.json` through
+`AND-008.json` — eight canonical JSONs), the same transitive-resolution purity
+check (grep exit 1, redone cold), and the no-device sanity tasks above. The
+roadmap checklist is carried by the evidence itself:
+
+- the display inventory is the emulator's REAL display, never invented desktop
+  geometry — `android-display-inventory-real` (fact-by-fact against the
+  scenario's own SDK read; `workArea` null is the pinned refusal), guarded by
+  the sentinel `android-display-no-invented-workarea`;
+- the device inventory is the system's REAL devices with the normative kinds —
+  `android-devices-inventory-and-kinds` (the virtual keyboard's negative SDK
+  deviceId rides its unsigned-image runtime key, host-pinned by
+  `AndroidInputDevicePortTest.negativeVirtualDeviceIdTranslatesToNonNegativeKey`);
+- no gamepad is invented where the system reports none, and no effects
+  capability is announced outside a real pad — `android-gamepad-empty-inventory-honest`
+  (the `web-gamepad-empty-inventory-honest` precedent);
+- memory pressure arrives from the system's own trim decision, mapped
+  normatively — `android-memory-pressure-real-mapping` (MODERATE → `Moderate`,
+  CRITICAL → `Critical`, exactly once each, in escalation order the
+  system_server itself enforces);
+- background levels NEVER map — `android-memory-background-never-maps` (the
+  real `COMPLETE`/`HIDDEN` commands go out with shell identity and the rule is
+  the silence after each send — on the API 35 emulator the command accepts the
+  background name on a foreground app, and a delivered background level
+  crosses `handleTrimMemory` without ever speaking; the receiving chain is
+  proven alive by a positive control and stays silent for all four SDK
+  background constants), guarded by the sentinel
+  `android-memory-no-background-signal`;
+- raw input stays a refused non-call — `android-raw-input-noncall`
+  (`Unsupported(RawInputAccess)` before and at the call);
+- `AND-001` through `AND-008` together — 38 instrumented tests, one canonical
+  JSON per contract, all from the same instrumented emulator run (the 32
+  previous testcases plus the six display/device/gamepad/memory ones of
+  `KadreConsumerDisplaysContractTest`).
+
+### Exit gate of roadmap phase 8
+
+Same commands, one contract more. From a cold start (kill any running emulator,
+`adb emu kill`, wait for zero devices, then let the script boot the AVD itself):
+publish (1), consumer compile (2), emulator smoke + evidence + validator (the
+script — **44** instrumented tests green, `AND-001.json` through `AND-009.json`
+— nine canonical JSONs), the same transitive-resolution purity check (grep exit
+1, redone cold), and the no-device sanity tasks above. The roadmap checklist is
+carried by the evidence itself:
+
+- refusal produces the exact state — `android-capture-consent-denied-stateful`
+  (the real dialog, "Don't allow" pressed by the automation →
+  `Success(Denied(canRequestAgain = true))` on BOTH scopes, never a failure;
+  a following `open` answers the refusal without a new prompt);
+- no new consent from a state readback — the `refreshSources` no-op is pinned
+  host-side (`AndroidCapturePortTest.tokenConsumedOnceNoPromptOnReadback`) and
+  guarded on device by the sentinel `android-capture-no-prompt-on-readback`
+  (a readback that launches the dialog kills `androidCaptureTokenSingleUse`
+  alone);
+- the token is consumed once — `android-capture-token-single-use` (a second
+  `open` without fresh consent answers `PermissionDenied(CaptureScreen)`, a
+  NEW consent arms a second live session);
+- zero frames after the stop — `android-capture-surface-stream-bounded`
+  (`Stopped(Requested)`, then nothing follows); the buffer never outlives its
+  lease is the host record `AndroidCapturePortTest.surfaceStreamReleasedExactlyOnce`
+  (release exactly once across app stop, PixelCopy failure and collector
+  cancellation; a start on the closed stream refused `Closed(CaptureSession)`),
+  with `configurationPrecedesFrameAndNeverCopies` pinning the never-copy
+  invariant and `surfaceDestroyedTerminatesFailedAndReleasesOnce` pinning the
+  surface-destroyed terminal (`Failed(surface-size-unavailable)`, released once);
+- the consent dialog is closed, not leaked — the host records
+  `closeDuringInFlightConsentFailsTheRequestAndAbsorbsTheLateGrant`
+  (immediate `Closed(Host)`, the late dialog result absorbed) and
+  `closeBetweenReserveAndStartNeverCreatesTheProjection`;
+- the system revocation is the exact terminal — the host records
+  `AndroidCapturePortTest.serviceStartedBeforeVirtualDisplayAndStoppedAtTerminal`
+  (the `onStop` system revoke → `Stopped(PermissionRevoked)`, FGS stopped) and
+  `revocationDuringFirstFrameWaitFailsTheStartWithoutTouchingTheListener`
+  (`PermissionDenied(CaptureScreen)`, the listener untouched); the REAL
+  mid-stream revoke (the system cast stop) and a REAL rotation mid-stream are
+  device physics the emulator cannot stage deterministically — the manual
+  charter [manual/phase-8-capture.md](manual/phase-8-capture.md) carries both
+  procedures, and the resize-reconfigure machinery they exercise is pinned by
+  `resizeRepublishesReconfigureBeforeFrame`;
+- the service responsibility is proven, not promised —
+  `android-capture-fgs-lifecycle` (merged manifest, service up at `Streaming`,
+  minimal notification, down at the terminal), guarded by the sentinel
+  `android-capture-fgs-stopped-after-terminal`;
+- the late-attach consent is real — `android-capture-late-attach-consent`
+  (consent after RESUMED through the direct registry on the REAL androidx
+  registry); the `Source` refusal before any seam —
+  `android-capture-source-refused` (the friend-module scenario on the real
+  production port);
+- `AND-001` through `AND-009` together — 44 instrumented tests, one canonical
+  JSON per contract, all from the same instrumented emulator run (the 38
+  previous testcases plus the six capture/consent/frames ones of
+  `KadreConsumerCaptureContractTest` and the friend-module
+  `AndroidCaptureDeviceContractTest`).
+
 ## Engine labeling
 
 The engine label is **never hardcoded**. The evidence producer
@@ -455,7 +822,7 @@ writes `emulator-api-<sdk>-<abi>`. On the phase 0 AVD this is
 are attached. Every run resets the per-engine JUnit copy directory first, so a
 stale XML from an earlier run can never inflate the evidence identity. The
 producer writes one canonical JSON per active android contract (currently
-`AND-001` through `AND-006`), each pinned to the current HEAD
+`AND-001` through `AND-009`), each pinned to the current HEAD
 commit.
 
 ## Evidence mapping
@@ -470,18 +837,26 @@ arguments as the runtime/AppKit producers — no format reimplementation) with:
   `KadreConsumerAttachContractTest` (`AND-002`),
   `KadreConsumerSurfaceContractTest` (`AND-003`),
   `KadreConsumerInputContractTest` (`AND-004`),
-  `KadreConsumerWindowInteractionContractTest` (`AND-005`) or
-  `KadreConsumerTextContractTest` (`AND-006`);
+  `KadreConsumerWindowInteractionContractTest` (`AND-005`),
+  `KadreConsumerTextContractTest` (`AND-006`),
+  `KadreConsumerDropContractTest` (`AND-007`),
+  `KadreConsumerDisplaysContractTest` (`AND-008`) or
+  `KadreConsumerCaptureContractTest` (`AND-009`) — the friend-module
+  scenarios (`androidDropRealTransferBounded`, `androidDropStreamReleasedOnClose`
+  for AND-007; `androidCaptureSourceRefused` for AND-009) are mapped to
+  `AndroidDropDeviceContractTest` / `AndroidCaptureDeviceContractTest`, whose
+  classes arrive in the same XML from the `platform/android-devicetest` AAR
+  consumed `androidTestImplementation`;
 - the JUnit XML the consumer produced under
   `kadre/consumers/android/build/outputs/androidTest-results/connected/`;
 - the current HEAD commit (the same `git rev-parse HEAD` rule the validator
   uses — a document pinned to a commit is stale by definition once HEAD moves).
 
-Outputs: `build/contract-evidence/android/<engine>/AND-{001,002,003,004,005,006}.json`
+Outputs: `build/contract-evidence/android/<engine>/AND-{001,002,003,004,005,006,007,008,009}.json`
 (canonical), `build/test-results/android/<engine>/TEST-*.xml` (the JUnit copy
 the validator cross-checks), `build/contract-evidence/android/engines.txt` (the
 engines this run actually produced), and the gate copies
-`build/contract-evidence/AND-{001,002,003,004,005,006}.json` that
+`build/contract-evidence/AND-{001,002,003,004,005,006,007,008,009}.json` that
 `validateContractEvidence` reads.
 
 ## `androidContractsCheck` is deliberately not in `:kadre:check`
@@ -601,6 +976,105 @@ host-owned or a normative hook, never deduced from the touch contacts. The
 real-system complement is the manual charter
 [manual/phase-5-text-input.md](manual/phase-5-text-input.md).
 
+Since phase 6, the drop CONTENT side exists as internal machinery with no
+public activation path: `AndroidDropTransferSource` translates a COPIED clip
+snapshot into common drop offers (canonicalized mimes, uri items single-use,
+pure-text items replayable, an item without readable content dropped whole,
+sizes always unknown), reads are bounded (`collectBytes` honors `maxBytes`,
+exact `ResourceLimitExceeded(DropItem, maxBytes)`, chunks ≤ `maxDropChunkBytes`),
+the resolver refusal — `null`, a throw, a read `IOException` — is the persistent
+`PlatformFailure(Android, "drop", "resolver-refused")`, never a fake readable
+drop, and streams are closed exactly once, released with the owner. The drop
+contract is proven through the real reducer in test construction only (single
+active presentation with `LeftSurface` replacement, P4-shaped `acceptDrop`,
+single-winner claim, the `maxConcurrentDropTransfers` budget, `ClaimTimedOut`,
+owner teardown `OwnerClosed`); production builds with
+`dragAndDropAvailable = false`, pinned by
+`AndroidDropContractTest.productionStaysUnsupported`. The RECEPTION channel is
+a recorded structural limit, not a deferral: `setOnDragListener` is a single
+silent-replacement slot (never used), `onDragEvent` is `protected`, and
+`Window.Callback` has no drag hook — a real `startDragAndDrop` drag on the
+host's own view delivers zero observations, proven at the boundary by
+`android-drop-channel-absent` (`AND-007`). The normative proposal is parked
+for the user: a host-delegated `OnDragListener` (option A, via the existing
+`withAndroidView` lease channel or new public API) or a new attach form
+(option B); arming `AcceptDrop` requires a delivered opaque `DropOfferId`, so
+its design belongs to the same future decision
+([capabilities/android.md](../../../capabilities/android.md) §2 and §4).
+
+Since phase 7, the display, device and gamepad inventories and the memory-pressure source
+are live machinery, scoped to the session (the memory source is process-wide): the
+`AndroidDisplayPort` publishes the COMPLETE `DisplayManager` inventory — the initial
+snapshot published synchronously at install, every fire re-reading the whole inventory
+(never a delta), types `Physical`/`Virtual` (the `FLAG_PRESENTATION`/`FLAG_PRIVATE` flags),
+bounds = the real size at the ORIGIN, `workArea` `null` ALWAYS (Android has no desktop — the
+geometry is never invented), the SDK's modes, correlation keys = the displayIds — and an
+unmeasurable read answers `TemporarilyUnavailable(retryable = true)` which WITHDRAWS the
+previous inventory, never a partial snapshot (the admitted unavailability state; the
+`HostViewport` fallback was not needed). The `AndroidInputDevicePort` publishes the real
+`InputManager` enumeration with kinds from the sources' identity bits (class bits stripped —
+`SOURCE_TOUCHSCREEN` and `SOURCE_MOUSE` share `SOURCE_CLASS_POINTER`), the gamepad/joystick
+carve-out to `Other`, and correlation keys = the unsigned image of the deviceId (negative
+virtual ids included — the emulator's `VIRTUAL_KEYBOARD = -1` is a `Keyboard` keyed
+non-negatively). The `AndroidGamepadPort` carries the kadre-old predicate CORRECTED to
+identity bits (the literal old table flags every keyboard as a gamepad through the shared
+`SOURCE_CLASS_BUTTON` bit; the consequence is assumed and documented: a DPAD-only device —
+the TV remote — is no longer a gamepad, kadre-old flagged it only by accident), the state
+ROUTED out of the ordinary key path (gamepad/joystick-source events leave `KeyChanged` the
+moment a port is attached — the gamepad state never enters `SurfaceInput`; without a port
+the ordinary path stays whole), descriptor and effects capability FROZEN at connection
+(reconnection is a new connection: fresh facts, neutral state), disconnect neutralizing,
+and effects per REAL device — API 31+ the device's `VibratorManager` managed rumble, API
+26–30 the device's one-shot, below or without observable motors `Unsupported(GamepadEffect)`
+pinned; the phone vibrator NEVER claims a gamepad's motors, `DualRumble` is the only offered
+kind (the SDK names no per-role motors), a native refusal is
+`PlatformFailure(Android, "gamepad-effect", "refused")`, and an effect never outlives the
+session that asked. The View form has NO gamepad port: no `Window.Callback`, therefore no
+state channel — the generic inventory stays honest there (a pad would read `Other`).
+Memory pressure follows the AppKit model: ONE process-wide source installed through
+`Application.registerComponentCallbacks(ComponentCallbacks2)` at the first session, reused
+by later ones, NEVER closed by a session close, closed by the last living host's
+termination; the normative mapping 5 → `Moderate`, 10/15 → `Critical`, background levels
+(20/40/60/80) and off-table values NEVER speak (visibility loss is not pressure), the native
+callback never runs host code in its own stack (the relay is posted to the main looper), and
+an attach that cannot reach an `Application` attempts nothing — the default runtime
+capability, never an invented `PlatformFailure`. Raw input stays the decided
+`Unsupported(RawInputAccess)` with its non-call proof re-pinned at the boundary
+(`android-raw-input-noncall`). The hardware itself — a real USB/BT gamepad, a second real
+display — does not exist on the proof emulator; the honest inventory states it, the manual
+charter [manual/phase-7-displays-devices.md](manual/phase-7-displays-devices.md) carries the
+procedures, and per `TEST-STRATEGY.md` the material guarantees pass on the declared device
+pool ([capabilities/android.md](../../../capabilities/android.md) §2 and §4).
+
+Since phase 8, the capture targets are live machinery: `screen`/`window`
+(`HostChoice`) is the REAL MediaProjection path — system consent per session
+(the grant stored raw at consent, consumed ONCE by the stream start after the
+FGS-ready signal), the stateful refusal `Success(Denied(canRequestAgain =
+true))` never a failure, the system revocation the terminal
+`Stopped(PermissionRevoked)`; `surface` is the REAL `PixelCopy` of the
+attached SurfaceView (API 26+, the app's own rendered content, `FLAG_SECURE`
+content redacted by the SDK — a limit, not a choice); `Source` and
+`sourceEnumeration` are the structural refusals (nothing on Android enumerates
+capturable surfaces before a consent — `Source` refused
+`Unsupported(CaptureOpen)` before any seam, sources `HostPickerOnly`,
+`refreshSources` the honest no-op; the web precedent). The SERVICE
+RESPONSIBILITY DECISION IS CLOSED (the ruling P8-0): the `mediaProjection`
+foreground service is KADRE'S responsibility — the library declares it in its
+own manifest (merged), starts it before `getMediaProjection`, stops it at the
+session terminal, and posts the minimal "Screen capture" notification — the
+HOST DECLARES NOTHING, and the documented consequence is that the capture
+notification appears during HostChoice sessions. The engine-bound limits are
+the ones §AND-009 records: the "A single app" consent mode of the API 35
+emulator (self-record shape — [verify-device] for a whole-display mirror on
+real hardware, manual charter
+[manual/phase-8-capture.md](manual/phase-8-capture.md)), the broad-NPE
+`createVirtualDisplay` fallback (any NPE from the `AUTO_MIRROR` form
+downgrades that call to flagless), and the FGS `Temporary(retryable = true)`
+retry as a fresh consent into a fresh session; the real multi-session FGS
+sharing on a physical device and a real mid-stream revocation/rotation remain
+material [verify-device] items — the process-wide refcount and the
+reconfigure machinery are proven host-side.
+
 **The View form has no input observation — a structural, declared limit.**
 `View.getWindow()` is `@hide`: a View-form attach has no `Window.Callback` to
 chain, so no observation path exists. The input capabilities there stay
@@ -642,9 +1116,45 @@ authoritative list with the owning phase lives in
   the new attach form — is parked for the user (see the phase 5 paragraph
   above); gestures stay the decided `Unsupported(GestureInput)` recorded
   limit, a recognizer being host-owned or a normative hook;
-  **Phase 6** — drag-and-drop;
-- **Phase 7** — displays, devices, gamepads, memory pressure, raw-input
-  decision; **Phase 8** — capture; **Phase 9** — Java facade, Compose;
+- **Phase 6 — decided, with the normative question parked for the user.**
+  Drag-and-drop is no longer deferred: the content side is delivered internal
+  machinery (proven on-device through the real resolver by `AND-007`) and the
+  reception channel is the recorded structural limit; the normative proposal —
+  the host-delegated `OnDragListener` (option A) or the new attach form
+  (option B), plus the `AcceptDrop` arming design that requires a delivered
+  opaque `DropOfferId` — is parked for the user (see the phase 6 paragraph
+  above); a real cross-app drag (two apps, `FileProvider` + grant, system drag
+  UI) is documented in the AND-007 section as what a manual pass would add;
+- **Phase 7 — delivered; what remains is hardware, not a deferral of code.**
+  The display inventory, the device/gamepad observation, the per-device effects,
+  the memory-pressure source and the raw-input decision are live and proven by
+  `AND-008` (see the phase 7 paragraph above). The remaining items are MATERIAL:
+  a real USB/BT gamepad (hot-plug, real rumble, disconnect during an effect) and
+  a second real display do not exist on the emulator — the honest inventory states
+  it, the manual charter
+  [manual/phase-7-displays-devices.md](manual/phase-7-displays-devices.md)
+  carries the procedures, and per `TEST-STRATEGY.md` the material guarantees pass
+  on the declared device pool (« le pool de devices déclaré supporté ») when one
+  is qualified; a View-form gamepad state channel (no P3 wrapper there — the
+  generic inventory is the honest shape) and raw input (decided
+  `Unsupported(RawInputAccess)`, proven non-call) are recorded limits, not
+  deferrals;
+- **Phase 8 — delivered; what remains is consent-mode hardware, not a deferral
+  of code.** The three capture targets are decided and live: `HostChoice`
+  (`screen`/`window`) and `Surface` are `Supported` with their real paths
+  (MediaProjection consent, PixelCopy), `Source`/`sourceEnumeration` are the
+  recorded structural refusals, and the service responsibility is the closed
+  ruling P8-0 (Kadre-owned FGS + minimal notification, the host declares
+  nothing — see the phase 8 paragraph above). The remaining items are
+  MATERIAL: the whole-display consent spinner and a real entire-screen mirror,
+  a real mid-stream system revocation and rotation, and the real multi-session
+  FGS sharing do not exist on the proof emulator in exercisable form — the
+  manual charter
+  [manual/phase-8-capture.md](manual/phase-8-capture.md)
+  carries the procedures, and per `TEST-STRATEGY.md` they pass on the declared
+  device pool when one is qualified; editor actions through the IME (phase 5
+  text-input decision) stay parked with that decision;
+- **Phase 9** — Java facade, Compose;
 - **Phase 10** — the mandatory `android-contracts` CI job.
 
 Two boundary lines are not deferrals at all. **Rendering itself** is out of

@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- La responsabilité KADRE du service foreground `mediaProjection` (ruling P8-0, roadmap :246) :
+     la bibliothèque merge le service et ses permissions — le host n'a RIEN à déclarer pour une
+     session HostChoice. Conséquence documentée : la notification de capture (minimale, créée par
+     la bibliothèque) apparaît pendant les sessions HostChoice — exigence Android. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <application>
+        <service
+            android:name="org.graphiks.kadre.platform.android.AndroidCaptureService"
+            android:exported="false"
+            android:foregroundServiceType="mediaProjection" />
+    </application>
+</manifest>

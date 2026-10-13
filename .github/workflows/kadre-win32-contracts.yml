@@ -1,0 +1,50 @@
+name: Kadre Win32 Contracts
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  windows-contracts:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 25
+          cache: gradle
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      - name: Win32 contract gate
+        run: scripts/test-kadre-win32-contracts.sh
+
+      - name: Require the Win32 gate
+        if: always()
+        run: |
+          if [ -f kadre/backend/win32/build/ci-diagnostics/tests.log ]; then
+            tail -5 kadre/backend/win32/build/ci-diagnostics/tests.log
+          fi
+          test -s kadre/backend/win32/build/contract-evidence/W32-001.json
+          test -s kadre/backend/win32/build/contract-evidence/W32-002.json
+          test -s kadre/backend/win32/build/contract-evidence/W32-003.json
+
+      - name: Upload diagnostics and evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: win32-contract-diagnostics
+          if-no-files-found: error
+          path: |
+            kadre/backend/win32/build/contract-evidence/
+            kadre/backend/win32/build/test-results/
+            kadre/backend/win32/build/ci-diagnostics/

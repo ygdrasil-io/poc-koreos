@@ -33,10 +33,10 @@ fun main(args: Array<String>) {
     val mapping = File(args[5])
     val commit = args[6]
 
-    // Phase 5 : les six contrats actifs de target `android` — un JSON canonique par contrat,
+    // Phase 8 : les NEUF contrats actifs de target `android` — un JSON canonique par contrat,
     // depuis le MÊME XML connecté copié ci-dessous (le générateur rejette de toute façon un
     // registre/mapping qui ne déclarerait pas exactement ces couples).
-    val contractIds = listOf("AND-001", "AND-002", "AND-003", "AND-004", "AND-005", "AND-006")
+    val contractIds = listOf("AND-001", "AND-002", "AND-003", "AND-004", "AND-005", "AND-006", "AND-007", "AND-008", "AND-009")
     val target = "android"
     val adapter = "android-emulator"
 

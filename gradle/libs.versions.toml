@@ -25,6 +25,7 @@ kffi-objc = "1.0.0-SNAPSHOT"
 kffi-win32 = "1.0.0-SNAPSHOT"
 kffi-posix = "1.0.0-SNAPSHOT"
 coroutines = "1.10.1"
+kotlinx-browser = "0.5.0"
 koin = "4.0.0"
 ktor = "3.0.3"
 kotlinx-serialization = "1.8.0"
@@ -51,6 +52,11 @@ kffi-posix = { module = "org.graphiks:kffi-posix-jvm", version.ref = "kffi-posix
 kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "coroutines" }
 kotlinx-coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-test", version.ref = "coroutines" }
 kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "kotlinx-serialization" }
+
+# Bindings DOM du navigateur (wasm/js) — document, HTMLElement…
+# Séparé de la stdlib Kotlin/Wasm ; platform:web l'apporte aux samples qui
+# n'ont pas Compose.
+kotlinx-browser = { module = "org.jetbrains.kotlinx:kotlinx-browser", version.ref = "kotlinx-browser" }
 
 # Koin (Dependency Injection)
 koin-core = { module = "io.insert-koin:koin-core", version.ref = "koin" }

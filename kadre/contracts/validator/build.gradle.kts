@@ -18,7 +18,7 @@ kotlin {
 
 val jvmMain = kotlin.targets.getByName("jvm").compilations.getByName("main")
 val webContractIds = listOf("BCK-001", "BCK-002", "BCK-003", "BCK-004", "BCK-005", "BCK-006", "BCK-007", "BCK-008", "BCK-009", "BCK-010", "BCK-011", "INT-002", "INT-003", "INT-004")
-val uikitContractIds = listOf("BCK-012", "BCK-013", "BCK-014", "BCK-015", "BCK-016", "WIN-009")
+val uikitContractIds = listOf("BCK-012", "BCK-013", "BCK-014", "BCK-015", "BCK-016", "BCK-020", "BCK-021", "BCK-022", "BCK-023", "BCK-024", "WIN-009")
 val appKitContractIds = listOf(
     "APK-001", "APK-002", "APK-003", "APK-004", "APK-005", "APK-006",
     "APK-007", "APK-008", "APK-009", "APK-010", "APK-011", "APK-012",
@@ -31,7 +31,8 @@ val runtimeContractIds = listOf(
     "DSP-001", "RUN-007", "RUN-008", "INT-001", "CAP-001",
 )
 val waylandContractIds = listOf("BCK-017", "SES-001", "SUR-001", "WIN-010", "WIN-011", "WIN-012", "SUR-002")
-val contractEvidenceGateIds = appKitContractIds + runtimeContractIds + webContractIds + uikitContractIds + waylandContractIds
+val win32ContractIds = listOf("W32-001", "W32-002", "W32-003")
+val contractEvidenceGateIds = appKitContractIds + runtimeContractIds + webContractIds + uikitContractIds + waylandContractIds + win32ContractIds
 check(contractEvidenceGateIds.distinct().size == contractEvidenceGateIds.size) {
     "each configured contract evidence gate must have exactly one explicit producer"
 }
@@ -73,6 +74,7 @@ val validateContractRegistry by tasks.registering(JavaExec::class) {
             rootProject.file("kadre/contracts/driver/web/contracts/evidence.tsv"),
             rootProject.file("kadre/contracts/driver/uikit/contracts/evidence.tsv"),
             rootProject.file("kadre/backend/wayland/contracts/evidence.tsv"),
+            rootProject.file("kadre/backend/win32/contracts/evidence.tsv"),
         ).joinToString(separator = ",") { it.absolutePath },
         contractEvidenceGateIds.joinToString(separator = ","),
     )
@@ -82,6 +84,7 @@ val validateContractRegistry by tasks.registering(JavaExec::class) {
         rootProject.file("kadre/contracts/driver/web/contracts/evidence.tsv"),
         rootProject.file("kadre/contracts/driver/uikit/contracts/evidence.tsv"),
         rootProject.file("kadre/backend/wayland/contracts/evidence.tsv"),
+        rootProject.file("kadre/backend/win32/contracts/evidence.tsv"),
     )
 }
 
@@ -243,6 +246,86 @@ val generateWaylandContractEvidence by tasks.registering {
     outputs.dir(waylandContractEvidenceDirectory)
 }
 
+val win32ContractRegistry = rootProject.file("kadre/contracts/registry/contracts.tsv")
+val win32ContractMapping = rootProject.file("kadre/backend/win32/contracts/evidence.tsv")
+val win32JvmJUnitReports = rootProject.file("kadre/backend/win32/build/test-results/jvmTest")
+val win32NativeJUnitReports = rootProject.file("kadre/backend/win32/build/test-results/win32NativeTests")
+val win32ContractEvidenceDirectory = rootProject.file("kadre/backend/win32/build/contract-evidence")
+// La gate Win32 distingue l'adapter (décisions R3) : adapter `win32-jvm`, cible `jvm`,
+// preuves exécutées sur le runner Windows (décisions D1).
+val win32ContractAdapter = "win32-jvm"
+val win32ContractEvidenceTasks = win32ContractIds.filter(activeContractIds::contains).map { contractId ->
+    tasks.register<JavaExec>("generateWin32${contractId.replace("-", "")}ContractEvidence") {
+        group = "verification"
+        description = "Generates and validates $contractId evidence from the Win32 JUnit reports."
+        dependsOn("jvmMainClasses", ":kadre:backend:win32:win32ContractTests")
+        classpath(jvmMain.output.allOutputs, jvmMain.runtimeDependencyFiles)
+        mainClass.set("org.graphiks.kadre.contracts.GenerateContractEvidenceKt")
+        val output = win32ContractEvidenceDirectory.resolve("$contractId.json")
+        args(
+            win32ContractRegistry.absolutePath,
+            win32ContractMapping.absolutePath,
+            listOf(win32JvmJUnitReports, win32NativeJUnitReports).joinToString(
+                separator = System.getProperty("path.separator"),
+            ) {
+                it.absolutePath
+            },
+            output.absolutePath,
+            contractEvidenceCommit.get(),
+            contractId,
+            contractEvidenceTarget,
+            win32ContractAdapter,
+        )
+        inputs.file(win32ContractRegistry)
+        inputs.file(win32ContractMapping)
+        inputs.dir(win32JvmJUnitReports)
+        inputs.dir(win32NativeJUnitReports)
+        inputs.property("contractCommit", contractEvidenceCommit)
+        inputs.property("contractTarget", contractEvidenceTarget)
+        inputs.property("contractAdapter", win32ContractAdapter)
+        outputs.file(output)
+    }
+}
+
+val validateWin32ContractEvidence by tasks.registering(JavaExec::class) {
+    group = "verification"
+    description = "Validates every active Win32 JVM contract evidence artifact."
+    dependsOn(win32ContractEvidenceTasks)
+    classpath(jvmMain.output.allOutputs, jvmMain.runtimeDependencyFiles)
+    mainClass.set("org.graphiks.kadre.contracts.ValidateContractEvidenceKt")
+    args(
+        win32ContractRegistry.absolutePath,
+        win32ContractMapping.absolutePath,
+        contractEvidenceCommit.get(),
+        contractEvidenceTarget,
+        "junit",
+        win32ContractIds.filter(activeContractIds::contains).joinToString(separator = ","),
+        rootProject.file("kadre/backend/win32/build").absolutePath,
+        listOf(
+            "test-results/jvmTest",
+            "test-results/win32NativeTests",
+        ).joinToString(separator = System.getProperty("path.separator")),
+    )
+    inputs.file(win32ContractRegistry)
+    inputs.file(win32ContractMapping)
+    inputs.dir(win32ContractEvidenceDirectory)
+    inputs.property("contractCommit", contractEvidenceCommit)
+    inputs.property("contractTarget", contractEvidenceTarget)
+    inputs.property("contractExecutions", "junit")
+    inputs.property("contractGateIds", win32ContractIds)
+    inputs.property(
+        "junitReportRelativeDirectories",
+        listOf("test-results/jvmTest", "test-results/win32NativeTests"),
+    )
+}
+
+val generateWin32ContractEvidence by tasks.registering {
+    group = "verification"
+    description = "Generates and validates evidence for every active Win32 contract."
+    dependsOn(validateWin32ContractEvidence)
+    outputs.dir(win32ContractEvidenceDirectory)
+}
+
 val runtimeContractRegistry = rootProject.file("kadre/contracts/registry/contracts.tsv")
 val runtimeContractMapping = rootProject.file("kadre/runtime/contracts/evidence.tsv")
 val runtimeJUnitReports = rootProject.file("kadre/runtime/build/test-results/jvmTest")
@@ -362,10 +445,15 @@ val browserContractEvidenceTasks = listOf("js", "wasmJs").map { target ->
 }
 
 // UIKit driver contracts (BCK-012 phase 0 ; BCK-013/BCK-014/WIN-009 phase 1 ;
-// BCK-015/BCK-016 phase 2 — observations, redraw, lease et rotation) : preuve O3
+// BCK-015/BCK-016 phase 2 — observations, redraw, lease et rotation ; BCK-020/BCK-021
+// phase 4 — demandes de fenêtres : refus sans provider sur les DEUX familles, scènes
+// corrélées iPadOS ; BCK-022/BCK-023 phase 5 — sources d'entrée annoncées : touch/pointeur
+// (survol) et clavier/gestes sur les DEUX familles ; BCK-024 phase 6 — la session texte
+// sur le receiver natif caché, les DEUX familles) : preuve O3
 // produite par xcodebuild sur simulateurs (:kadre:contracts:driver:uikit:simulatorTests),
 // exportée en JUnit par tools/xctest_to_junit.py. Miroir du bloc AppKit ci-dessus, par target
-// famille. BCK-014 (multi-scène iPadOS) et BCK-016 (rotation iPadOS) n'exigent QUE
+// famille. BCK-014 (multi-scène iPadOS), BCK-016 (rotation iPadOS) et BCK-021 (scènes
+// corrélées iPadOS) n'exigent QUE
 // iosSimulatorArm64 : les tâches générées et les gate ids de validation sont filtrés par les
 // requiredTargets du registre (colonne 8) — un contrat actif hors cible ferait échouer
 // ValidateContractEvidence (« target is not required »).
@@ -465,7 +553,7 @@ val generateUikitContractEvidence by tasks.registering {
     dependsOn(uikitContractValidateTasks)
 }
 
-val androidContractIds = listOf("AND-001", "AND-002", "AND-003", "AND-004", "AND-005", "AND-006")
+val androidContractIds = listOf("AND-001", "AND-002", "AND-003", "AND-004", "AND-005", "AND-006", "AND-007", "AND-008", "AND-009")
 val androidContractRegistry = rootProject.file("kadre/contracts/registry/contracts.tsv")
 val androidContractMappings = listOf(
     rootProject.file("kadre/contracts/driver/android/contracts/evidence.tsv"),

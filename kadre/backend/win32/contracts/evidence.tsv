@@ -1,0 +1,12 @@
+contractId	target	kind	evidenceId	testClass	testName
+W32-001	jvm	scenario	win32-control-window-created	org.graphiks.kadre.internal.win32.Win32NativeContractTest	controlWindowCreated
+W32-001	jvm	scenario	win32-injected-message-observed	org.graphiks.kadre.internal.win32.Win32NativeContractTest	injectedMessageIsObserved
+W32-001	jvm	scenario	win32-injected-payload-copied	org.graphiks.kadre.internal.win32.Win32NativeContractTest	injectedPayloadIsCopied
+W32-001	jvm	sentinel	win32-no-double-delivery	org.graphiks.kadre.internal.win32.Win32NativeContractTest	injectedMessageIsDispatchedExactlyOnce
+W32-002	jvm	scenario	win32-revoke-quiescent	org.graphiks.kadre.internal.win32.Win32NativeContractTest	closeReachesQuiescenceWithoutLateDelivery
+W32-002	jvm	scenario	win32-post-revoke-no-dispatch	org.graphiks.kadre.internal.win32.Win32NativeContractTest	postCloseInjectionDeliversNothing
+W32-002	jvm	sentinel	win32-no-late-callback	org.graphiks.kadre.internal.win32.Win32NativeContractTest	closeReachesQuiescenceWithoutLateDelivery
+W32-002	jvm	sentinel	win32-no-hwnd-resurrection	org.graphiks.kadre.internal.win32.Win32NativeContractTest	staleHwndAfterCloseDeliversNothing
+W32-003	jvm	scenario	win32-close-idempotent	org.graphiks.kadre.internal.win32.Win32NativeContractTest	doubleCloseLeavesWindowDestroyedWithoutError
+W32-003	jvm	scenario	win32-init-off-windows-fails-actionably	org.graphiks.kadre.internal.win32.Win32PortabilityContractTest	unsupportedOsFailsActionablyBeforeNative[jvm]
+W32-003	jvm	sentinel	win32-no-native-load-off-windows	org.graphiks.kadre.internal.win32.Win32PortabilityContractTest	unsupportedOsFailsActionablyBeforeNative[jvm]

@@ -32,6 +32,14 @@ import org.graphiks.kadre.surface.SurfaceId
  * sur `IntArray`/`FloatArray`) : la couture construit une observation fraîche par événement,
  * et le tracker ne s'y fie jamais au-delà de l'appel — il copie à l'entrée (cf.
  * [AndroidMotionTracker.onObservation]).
+ *
+ * Depuis la phase 7 : [source] est le bitmask `source` du `MotionEvent` — le prédicat
+ * gamepad/joystick de la delivery le lit pour sortir la motion du chemin ordinaire ; les
+ * [gamepadAxes] ne sont portés que PAR UNE motion source gamepad/joystick — les dix axes de la
+ * table gamepad lus au point de dispatch, que la delivery rend au port de la session (une
+ * motion ordinaire les laisse vides, aucune lecture superflue). Les défauts (source 0, axes
+ * vides) sont le chemin ordinaire entier — le comportement pré-existant des observations
+ * construites sans elles.
  */
 internal data class AndroidMotionObservation(
     val actionMasked: Int,
@@ -50,6 +58,10 @@ internal data class AndroidMotionObservation(
     val axisYrelative: Float,
     val deviceId: Int,
     val metaState: Int,
+    /** Le bitmask `source` du `MotionEvent` — les flags gamepad/joystick de la livraison. */
+    val source: Int = 0,
+    /** Les axes natifs lus au dispatch, pour une motion source gamepad/joystick seulement. */
+    val gamepadAxes: List<Pair<Int, Float>> = emptyList(),
 )
 
 /**

@@ -1,0 +1,141 @@
+name: KadreSwiftConsumer
+options:
+  bundleIdPrefix: org.graphiks.kadre.consumer
+  deploymentTarget:
+    iOS: "16.0"
+    tvOS: "16.0"
+settings:
+  base:
+    CODE_SIGNING_ALLOWED: "NO"
+    CODE_SIGN_IDENTITY: ""
+    SWIFT_VERSION: "5.0"
+targets:
+  KadreConsumerIos:
+    type: application
+    platform: iOS
+    sources:
+      - path: apps/Shared
+      - path: apps/Ios
+      # Les sources KadreHost du DÉPÔT Kadre, câblées par chemin (le squelette Swift de
+      # la façade, rempli en Tasks 3–4) — compilées DANS l'app consumer.
+      - path: ../../../platform/uikit/swift/Sources/KadreHost
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: org.graphiks.kadre.consumer.ios
+        # LIEN DEUX-FRAMEWORKS STATIQUES (sans embed) : le framework Kotlin du module
+        # applicatif du consumer (Swift-visible, porte la factory ET l'API uikit
+        # exportée) + l'archive de la distribution `KadreUikit.xcframework` (Task 1),
+        # passée au lieur PAR CHEMIN dans OTHER_LDFLAGS. Pourquoi pas une seconde
+        # dépendance framework : Xcode résout les .xcframework en dépendances DANS
+        # Products/ (premier -F du compileur) — le module Swift `KadreUikit` aurait été
+        # celui de la distribution, qui ne porte PAS la factory du consumer. Les deux
+        # archives portent les MÊMES symboles Obj-C (même préfixe `KadreUikit`, exports
+        # identiques — vérifié : 478 classes en commun, la seule classe propre au
+        # consumer étant la factory). SÉMANTIQUE EXACTE du lien : ld ne refuse PAS un
+        # doublon — à sémantique d'archive paresseuse, il garde SILENCIEUSEMENT le
+        # PREMIER membre définissant chaque symbole, quelle que soit l'ordre des -F.
+        # Les vraies gardes sont : (1) la vérification au lancement — une classe Obj-C
+        # définie deux fois est loggée/crashée par le runtime (« Class X is implemented
+        # in both… », refusée par le doLast des tâches de test de
+        # consumers/swift/build.gradle.kts) ; (2) la recette des bundles de test —
+        # search paths SANS liaison (`BUNDLE_LOADER` fournit les symboles depuis l'app
+        # hôte) pour ne JAMAIS dupliquer les archives dans le process de test.
+        FRAMEWORK_SEARCH_PATHS:
+          - "$(inherited)"
+          - "$(SRCROOT)/../consumer-kmp/build/bin/iosSimulatorArm64/debugFramework"
+        OTHER_LDFLAGS:
+          - "$(inherited)"
+          # L'archive de la distribution (slice simulateur iOS), liée sans embed.
+          - "$(SRCROOT)/../../../platform/uikit/build/XCFrameworks/debug/KadreUikit.xcframework/ios-arm64-simulator/KadreUikit.framework/KadreUikit"
+    dependencies:
+      - framework: "../consumer-kmp/build/bin/iosSimulatorArm64/debugFramework/KadreUikit.framework"
+        embed: false
+    info:
+      path: apps/Ios/Info.plist
+      properties:
+        UILaunchStoryboardName: ""
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: false
+          UISceneConfigurations:
+            UIWindowSceneSessionRoleApplication:
+              - UISceneConfigurationName: default
+                UISceneDelegateClassName: $(PRODUCT_MODULE_NAME).ConsumerSceneDelegate
+  KadreConsumerTvOs:
+    type: application
+    platform: tvOS
+    sources:
+      - path: apps/Shared
+      - path: apps/Tvos
+      - path: ../../../platform/uikit/swift/Sources/KadreHost
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: org.graphiks.kadre.consumer.tvos
+        FRAMEWORK_SEARCH_PATHS:
+          - "$(inherited)"
+          - "$(SRCROOT)/../consumer-kmp/build/bin/tvosSimulatorArm64/debugFramework"
+        OTHER_LDFLAGS:
+          - "$(inherited)"
+          # L'archive de la distribution (slice simulateur tvOS), liée sans embed.
+          - "$(SRCROOT)/../../../platform/uikit/build/XCFrameworks/debug/KadreUikit.xcframework/tvos-arm64-simulator/KadreUikit.framework/KadreUikit"
+    dependencies:
+      - framework: "../consumer-kmp/build/bin/tvosSimulatorArm64/debugFramework/KadreUikit.framework"
+        embed: false
+    info:
+      path: apps/Tvos/Info.plist
+      properties:
+        UILaunchStoryboardName: ""
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: false
+          UISceneConfigurations:
+            UIWindowSceneSessionRoleApplication:
+              - UISceneConfigurationName: default
+                UISceneDelegateClassName: $(PRODUCT_MODULE_NAME).ConsumerSceneDelegate
+  KadreConsumerIosTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: tests/Shared
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: true
+        # Le swiftmodule de l'app référence le module KadreUikit : le bundle de test
+        # doit le RÉSOUDRE à la compilation (search paths) sans le LIER — BUNDLE_LOADER
+        # fournit les symboles depuis l'app hôte, l'archive liée sur `-framework` ne
+        # tire AUCUN membre (tout est déjà défini) : zéro copie Kotlin dans le bundle
+        # de test, donc aucune classe dupliquée dans le process de test.
+        FRAMEWORK_SEARCH_PATHS:
+          - "$(inherited)"
+          - "$(SRCROOT)/../consumer-kmp/build/bin/iosSimulatorArm64/debugFramework"
+    dependencies:
+      # L'app hôte seule — AUCUN framework Kotlin ici : les archives statiques sont liées
+      # exactement une fois, dans l'app ; les faits Kotlin traversent en descriptions
+      # Swift primitives (ConsumerSceneStore).
+      - target: KadreConsumerIos
+  KadreConsumerTvOsTests:
+    type: bundle.unit-test
+    platform: tvOS
+    sources:
+      - path: tests/Shared
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: true
+        FRAMEWORK_SEARCH_PATHS:
+          - "$(inherited)"
+          - "$(SRCROOT)/../consumer-kmp/build/bin/tvosSimulatorArm64/debugFramework"
+    dependencies:
+      - target: KadreConsumerTvOs
+schemes:
+  KadreConsumerIos:
+    build:
+      targets:
+        KadreConsumerIos: all
+    test:
+      targets:
+        - KadreConsumerIosTests
+  KadreConsumerTvOs:
+    build:
+      targets:
+        KadreConsumerTvOs: all
+    test:
+      targets:
+        - KadreConsumerTvOsTests

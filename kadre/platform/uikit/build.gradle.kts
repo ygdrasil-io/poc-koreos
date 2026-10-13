@@ -1,4 +1,5 @@
 import org.jetbrains.kotlin.gradle.plugin.mpp.KotlinNativeTarget
+import org.jetbrains.kotlin.gradle.plugin.mpp.apple.XCFramework
 import java.io.File
 
 plugins {
@@ -40,6 +41,10 @@ kotlin {
         }
     }
 
+    // Phase 3 : XCFramework de distribution STATIQUE (Debug + Release), assemblé par les tasks
+    // assembleKadreUikit{Debug,Release}XCFramework → build/XCFrameworks/<buildType>/KadreUikit.xcframework.
+    val kadreUikitXcFramework = XCFramework("KadreUikit")
+
     // Cadre de framework pour chaque target native : `binaries` n'existe pas au niveau de
     // l'extension KMP (KGP 2.4.20), seulement sur chaque target KotlinNativeTarget.
     targets.withType<KotlinNativeTarget>().configureEach {
@@ -51,6 +56,19 @@ kotlin {
                 // par `KadreIos.attach` est inutilisable depuis Swift — ni close(), ni
                 // requestStop(), ni awaitTermination(). L'export rend l'API publique foundation
                 // (KadreSession, KadreApplicationFactory, KadrePolicy…) visible du driver Swift.
+                export(project(":kadre:foundation"))
+            }
+            // Distribution phase 3 : l'app consumer lie (sans embed) ce xcframework ET son propre
+            // framework Kotlin (lui aussi statique) — une seule copie du runtime à l'édition de
+            // liens, et les symboles Obj-C gardent le préfixe exact `KadreUikit` (identité de
+            // types par swift_name + lien). Binaire nommé "KadreUikitDistribution" pour distinguer
+            // ses tasks de link de celles du driver dynamique ci-dessus ; baseName reste
+            // "KadreUikit" : c'est le nom du module/slices du xcframework, et KGP rassemble les
+            // slices sous le nom du XCFramework (noms identiques → pas de diagnostic).
+            framework("KadreUikitDistribution") {
+                baseName = "KadreUikit"
+                isStatic = true
+                kadreUikitXcFramework.add(this)
                 export(project(":kadre:foundation"))
             }
         }

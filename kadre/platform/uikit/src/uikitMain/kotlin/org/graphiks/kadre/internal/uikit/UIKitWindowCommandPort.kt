@@ -10,6 +10,7 @@ import kotlinx.coroutines.withContext
 import org.graphiks.kadre.diagnostics.Capability
 import org.graphiks.kadre.diagnostics.FeatureAvailability
 import org.graphiks.kadre.diagnostics.KadreFailure
+import org.graphiks.kadre.diagnostics.KadreOperation
 import org.graphiks.kadre.diagnostics.KadrePlatform
 import org.graphiks.kadre.diagnostics.KadreResourceKind
 import org.graphiks.kadre.diagnostics.KadreResult
@@ -28,6 +29,11 @@ import org.graphiks.kadre.internal.runtime.SurfaceRedrawGeneration
 import org.graphiks.kadre.internal.runtime.SurfaceStimulus
 import org.graphiks.kadre.internal.runtime.SurfaceUpdateCommand
 import org.graphiks.kadre.internal.runtime.SurfaceUpdateCommandOutcome
+import org.graphiks.kadre.internal.runtime.TextInputCursorCommand
+import org.graphiks.kadre.internal.runtime.TextInputDocumentCommand
+import org.graphiks.kadre.internal.runtime.TextInputOpenCommand
+import org.graphiks.kadre.internal.runtime.TextInputOwner
+import org.graphiks.kadre.internal.runtime.TextInputPort
 import org.graphiks.kadre.internal.runtime.WindowCommandPort
 import org.graphiks.kadre.internal.runtime.WindowOpenCommand
 import org.graphiks.kadre.internal.runtime.WindowPeerOwner
@@ -149,6 +155,39 @@ internal class UIKitWindowCommandPort(
     private var surfaceAppearance: SurfaceAppearance? = null
 
     /**
+     * Le branchement touch (phase 5, Task 2) : installé au MÊME point de cycle que le binding
+     * d'observation (après le commit du peer), retiré au MÊME retrait (requestOpenedClose /
+     * beginClose / finishClose). Un seul couple par port — la phase 5 est mono-surface comme
+     * la phase 2, le surfaceId de l'annonce est celui de l'unique peer committé. Tout se joue
+     * sur la file principale (l'appelant d'attach EST sur le main, les handlers d'`UITouch`
+     * aussi).
+     */
+    private var touchBinding: UIKitTouchBinding? = null
+
+    /**
+     * Les branchements clavier (GCKeyboard) et gestes/survol (phase 5, Task 3) : le MÊME point
+     * de cycle que le touch — installés après le commit, retirés aux mêmes retraits, la phase
+     * 5 est mono-surface. L'AGGREGAT d'annonce ([UIKitInputAnnouncement]) est créé PAR ATTACH
+     * (le surfaceId n'existe qu'au commit) et filé aux TROIS bindings : un seul porteur de la
+     * publication `InputObservationChanged` — chaque binding écrit SON fait et publie le
+     * snapshot complet ; les snapshots se succèdent en séquence main et le dernier d'un cycle
+     * de teardown est le all-false + vide.
+     */
+    private var keyboardBinding: UIKitKeyboardBinding? = null
+    private var gestureBindings: UIKitGestureBindings? = null
+
+    /**
+     * Le port texte (phase 6, Task 2) : résolu par surfaceId via [textInputPort] (la factory du
+     * manager, miroir AppKit driver l.139 `TextInputPortFactory(commandPort::textInputPort)`),
+     * MEMOISÉ ICI — le CAS de l'open exclusif ([UIKitTextInputPort.liveOwner]) ne tient que si
+     * la même instance sert tous les appels d'une surface. La phase 4 est mono-surface : le
+     * registre `bySurface` ne porte qu'un peer (le primaire), une seule instance suffit.
+     * L'arrêt vit dans [finishClose] (le retrait final du registre — tout owner vivant est
+     * fermé, le champ quitte la hiérarchie et le first responder).
+     */
+    private var textInput: UIKitTextInputPort? = null
+
+    /**
      * Le drain coalescé du redraw (phase 2) : le ticket d'une commande admise est RETENU
      * (pending), au plus un drain est programmé sur la file principale, et la consommation —
      * le stimulus `RedrawConsumed` portant la génération exacte — n'arrive qu'au drain. Le
@@ -214,6 +253,18 @@ internal class UIKitWindowCommandPort(
         // objet UIKit touché) — le binding, lui, est Kadre-owned : c'est le PORT qui le retire
         // (requestOpenedClose / beginClose), jamais le destruct endogène.
         installSurfaceObservation(entry.surfaceId, snapshot)
+        // Task 2 (phase 5) : le binding touch au MÊME point de cycle — après le commit, la
+        // surface est vivante avant toute annonce et tout stimulus ; l'annonce
+        // `InputObservationChanged(touchInstalled = true)` suit l'ajout du recognizer à la
+        // vue (miroir web l.1028-1036, rien ne peut précéder — la sérialisation main
+        // d'UIKit rend le créneau d'installation vide, cf. KDoc du binding).
+        // Task 3 (phase 5) : clavier GCKeyboard puis gestes/survol au MÊME point de cycle,
+        // dans l'ordre (touch → clavier → gestes) qui fait de la DERNIÈRE annonce d'install
+        // le snapshot complet ; l'agrégat d'annonce vit le temps de l'attach.
+        val announcement = UIKitInputAnnouncement(entry.surfaceId)
+        installTouchBinding(entry.surfaceId, announcement)
+        installKeyboardBinding(entry.surfaceId, announcement)
+        installGestureBindings(entry.surfaceId, announcement)
     }
 
     /**
@@ -247,6 +298,72 @@ internal class UIKitWindowCommandPort(
             binding.install()
             observer?.install()
         }.onFailure(failureReporter::report)
+    }
+
+    /**
+     * L'installation du branchement touch (phase 5, Task 2) — la même posture que
+     * [installSurfaceObservation] : une seule fois (garde sous verrou), l'exception
+     * d'installation est rapportée et absorbée (un attach ne casse jamais pour un
+     * recognizer). Le sink est celui du port — chaque `TouchChanged` et chaque annonce
+     * rejoignent la même route que les stimuli d'observation. Task 3 : l'annonce passe par
+     * l'agrégat [UIKitInputAnnouncement] (snapshot complet des quatre faits).
+     */
+    private fun installTouchBinding(surfaceId: SurfaceId, announcement: UIKitInputAnnouncement) {
+        val binding = lock.withLock {
+            if (touchBinding != null) return
+            val created = UIKitTouchBinding(
+                view = view,
+                surfaceId = surfaceId,
+                publish = { stimulus -> stimulusSink(stimulus) },
+                announcement = announcement,
+            )
+            touchBinding = created
+            created
+        }
+        runCatching { binding.install() }.onFailure(failureReporter::report)
+    }
+
+    /**
+     * L'installation du branchement clavier GCKeyboard (phase 5, Task 3) — la même posture
+     * qu'[installTouchBinding] : une seule fois (garde sous verrou), l'exception rapportée et
+     * absorbée (un attach ne casse jamais pour un branchement d'input). Le binding écrit son
+     * fait dans l'agrégat et publie le snapshot — « clavier attaché » quand le scan initial
+     * trouve le clavier coalesqué, puis à chaque notification de connexion/déconnexion.
+     */
+    private fun installKeyboardBinding(surfaceId: SurfaceId, announcement: UIKitInputAnnouncement) {
+        val binding = lock.withLock {
+            if (keyboardBinding != null) return
+            val created = UIKitKeyboardBinding(
+                surfaceId = surfaceId,
+                announcement = announcement,
+                publish = { stimulus -> stimulusSink(stimulus) },
+            )
+            keyboardBinding = created
+            created
+        }
+        runCatching { binding.install() }.onFailure(failureReporter::report)
+    }
+
+    /**
+     * L'installation des branchements gestes + survol (phase 5, Task 3) — la même posture :
+     * une seule fois, l'exception rapportée et absorbée. Le binding écrit le fait pointeur
+     * (le survol installé — iOS seul, l'actual tvOS répond `null` et `pointerInstalled`
+     * reste à faux) puis l'ensemble EXACT des genres installés, et publie UN snapshot — la
+     * DERNIÈRE annonce d'install, donc celle qui porte l'agrégat complet.
+     */
+    private fun installGestureBindings(surfaceId: SurfaceId, announcement: UIKitInputAnnouncement) {
+        val binding = lock.withLock {
+            if (gestureBindings != null) return
+            val created = UIKitGestureBindings(
+                view = view,
+                surfaceId = surfaceId,
+                announcement = announcement,
+                publish = { stimulus -> stimulusSink(stimulus) },
+            )
+            gestureBindings = created
+            created
+        }
+        runCatching { binding.install() }.onFailure(failureReporter::report)
     }
 
     /**
@@ -336,26 +453,50 @@ internal class UIKitWindowCommandPort(
 
     /**
      * Le retrait du branchement (requestOpenedClose / beginClose / finishClose) : zéro observer
-     * résiduel (teardown du binding = tokens retirés + génération périmée), miroir remis à zéro.
-     * Idempotent — les trois chemins peuvent converger.
+     * résiduel (teardown du binding = tokens retirés + génération périmée), miroir remis à zéro,
+     * recognizer touch retiré de la vue avec annonce de révocation (Task 2 : la révocation suit
+     * le même point de cycle que l'installation), branchements clavier et gestes/survol retirés
+     * avec LEURS annonces (Task 3). L'ordre touch → clavier → gestes fait de la DERNIÈRE
+     * annonce de révocation le all-false + vide. Idempotent — les trois chemins peuvent
+     * converger.
      */
     private fun teardownSurfaceObservation() {
         val stale = lock.withLock {
-            if (observationBinding == null && appearanceObserver == null) {
+            if (observationBinding == null && appearanceObserver == null &&
+                touchBinding == null && keyboardBinding == null && gestureBindings == null
+            ) {
                 null
             } else {
                 val binding = observationBinding
                 val observer = appearanceObserver
+                val touch = touchBinding
+                val keyboard = keyboardBinding
+                val gestures = gestureBindings
                 observationBinding = null
                 appearanceObserver = null
                 surfaceMetrics = null
                 surfaceAppearance = null
-                binding to observer
+                touchBinding = null
+                keyboardBinding = null
+                gestureBindings = null
+                TouchToGestureStale(binding, observer, touch, keyboard, gestures)
             }
         } ?: return
-        stale.first?.teardown()
-        stale.second?.teardown()
+        stale.observation?.teardown()
+        stale.appearance?.teardown()
+        stale.touch?.teardown()
+        stale.keyboard?.teardown()
+        stale.gestures?.teardown()
     }
+
+    /** Le lot des branchements retirés d'un coup ([teardownSurfaceObservation]). */
+    private class TouchToGestureStale(
+        val observation: UIKitSurfaceObservationBinding?,
+        val appearance: UIKitAppearanceObserver?,
+        val touch: UIKitTouchBinding?,
+        val keyboard: UIKitKeyboardBinding?,
+        val gestures: UIKitGestureBindings?,
+    )
 
     /**
      * Phase 1 = snapshot initial figé (plan : les updates arrivent en phase 2). Posture AppKit
@@ -562,6 +703,23 @@ internal class UIKitWindowCommandPort(
     }
 
     /**
+     * La factory du port texte (phase 6, Task 2 — le miroir AppKit `AppKitWindowRuntimeDriver.
+     * textInputPort` l.581-591) : le manager l'invoque au commit de la fenêtre
+     * (`RuntimeWindowManager.commitPendingLocked` l.1478) pour le surfaceId du peer. Une
+     * surface inconnue du registre (ou un port en fermeture) reçoit le port INDISPONIBLE —
+     * l'analogue AppKit `AppKitUnavailableTextInputPort` : la capacité ment son refus
+     * (`Unsupported(TextInput)`) au lieu d'ouvrir sur rien. Le port vivant est mémoïsé
+     * ([textInput]) : le CAS de l'open exclusif tient sur une instance stable.
+     */
+    internal fun textInputPort(surfaceId: SurfaceId): TextInputPort {
+        val present = lock.withLock { !closed && bySurface.containsKey(surfaceId) }
+        if (!present) {
+            return UIKitUnavailableTextInputPort
+        }
+        return lock.withLock { textInput ?: UIKitTextInputPort(view).also { textInput = it } }
+    }
+
+    /**
      * Fermeture du port (ordre AppKit l.600-608 adapté) : le scheduler est annulé AVANT le
      * verrou — aucun drain après fermeture, un ticket pendant est abandonné (la surface qui
      * le porte s'arrête de toute façon). Puis le branchement d'observation est retiré (Task 3 :
@@ -576,9 +734,14 @@ internal class UIKitWindowCommandPort(
 
     /** Sortie du registre des entries restantes ; les owners ne touchent aucun objet UIKit. */
     fun finishClose() {
-        // Défense en profondeur (idempotent) : si un chemin de close oubliait beginClose, le
+        // Défense en profondeur (idempotent) : si un chemin de close oublait beginClose, le
         // branchement d'observation ne survivrait pas au port.
         teardownSurfaceObservation()
+        // Phase 6, Task 2 : le port texte s'arrête avec le command port — un owner vivant (une
+        // session restée ouverte au démontage de la surface) est fermé : le champ resign et
+        // sort de la hiérarchie, aucune observation ne survit au registre.
+        lock.withLock { textInput }?.shutdown()
+        lock.withLock { textInput = null }
         val remaining = lock.withLock {
             val entries = byRequest.values.toList()
             byRequest.clear()
@@ -756,4 +919,23 @@ private fun PropertyChange<*>.fieldOutcome(
     this is PropertyChange.Unchanged -> SurfaceFieldOutcome.Unchanged
     rejected != null -> SurfaceFieldOutcome.Rejected(rejected)
     else -> error("${property.fieldName} arrived admitted without a commit path")
+}
+
+/**
+ * Le port texte d'une surface que le command port ne sert pas (miroir AppKit
+ * `AppKitUnavailableTextInputPort`) : la capacité PORTE son refus — `Unsupported(TextInput)` —
+ * et chaque commande répond la même failure. Le mensonge interdit serait d'ouvrir une session
+ * qui n'observe rien sur une surface sans peer vivant.
+ */
+private object UIKitUnavailableTextInputPort : TextInputPort {
+    override val capability: Capability<Unit> = Capability.Unsupported(KadreFailure.Unsupported(KadreOperation.TextInput))
+
+    override fun open(command: TextInputOpenCommand): KadreResult<TextInputOwner> =
+        KadreResult.Failure(KadreFailure.Unsupported(KadreOperation.TextInput))
+
+    override suspend fun updateCursor(command: TextInputCursorCommand): KadreResult<Unit> =
+        KadreResult.Failure(KadreFailure.Unsupported(KadreOperation.TextInput))
+
+    override suspend fun updateDocument(command: TextInputDocumentCommand): KadreResult<Unit> =
+        KadreResult.Failure(KadreFailure.Unsupported(KadreOperation.TextInput))
 }
