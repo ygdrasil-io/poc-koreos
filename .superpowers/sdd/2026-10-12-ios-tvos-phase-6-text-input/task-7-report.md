@@ -79,3 +79,18 @@ Two seams, both proven:
 ## Verdict
 
 Phase 6 exit criteria (roadmap l.283-284) are **satisfied and evidenced** at HEAD `6195156b`. All suites and both simulator gates green at final HEAD. Ready for push + PR (controller).
+
+---
+
+## Fix (revue finale) — la sentinelle `shouldChange` du spike (2026-10-13)
+
+**Finding (F1)** : la revue finale a relevé que la revendication sentinelle du spike était fausse en l'état livré — le task-1-report §3.4(4) affirmait qu'un iOS futur déclenchant `shouldChangeCharactersInRange` sur les appels programmatiques ferait « échouer CE test », mais `KadreUikitTextInputSpikeTests` journalisait `shouldChangeCalls` (NSLog `KADRE-SPIKE totals`) sans JAMAIS l'assertion : le compteur restait une preuve de console, pas une sentinelle.
+
+**Fix** (commit `15840b6fbfa5468ef487b6b74dcb25bb0ff2ec02`, option 1 du reviewer — l'assertion dans les totaux du spike) :
+
+- `kadre/contracts/driver/uikit/tests/Shared/KadreUikitTextInputSpikeTests.swift` — le bloc des totaux (fin de `testUITextFieldProgrammaticEditingSpike`) asserte désormais `XCTAssertEqual(delegate.shouldChangeCalls.count, 0, …)` avec un message citant le contrat de routage (task-1-report §3.4(2)) : les appels UIKeyInput programmatiques (`insertText`/`deleteBackward`/`setMarkedText`) ne doivent jamais tirer `shouldChangeCharactersInRange` — l'édition utilisateur passe par `shouldChange` (range nommé AVANT la modification), l'édition programmatique par `textDidChange`/`DidChangeSelection` (réconciliée APRÈS contre l'ombre du document) ; tout tir ici inverserait le routage du port. Plus le plancher trivial du canal d'observation : `XCTAssertGreaterThanOrEqual(delegate.didChangeSelectionCount, 6, …)` (au moins un `textFieldDidChangeSelection` par édition programmatique ; 7 observés, identiques ×2 familles). Le commentaire mi-test (d) est aligné (l'assert vit aux totaux).
+- `.superpowers/sdd/2026-10-12-ios-tvos-phase-6-text-input/task-1-report.md` §3.4(4) — **note de fix marquée** sous l'item 4 (l'item original est conservé tel quel ; l'amendement est explicite, pas une réécriture silencieuse) : la phrase sentinelle est maintenant adossée à l'assertion.
+
+**Vérification** : `xcodebuild -project KadreUikitDriver.xcodeproj -scheme KadreUikitDriverIos -destination 'platform=iOS Simulator,name=iPad Pro 11-inch (M5),OS=27.0' -only-testing:KadreUikitDriverIosTests/KadreUikitTextInputSpikeTests CODE_SIGNING_ALLOWED=NO test` (+ `TEST_RUNNER_KADRE_DRIVER_REQUEST_SECOND_SCENE=2`) → exit 0, `** TEST SUCCEEDED **` ; `Test Case … testUITextFieldProgrammaticEditingSpike' passed (2.830 seconds)` ; totaux observés `textDidChangeNotification=6 editingChanged=6 didChangeSelection=7 shouldChangeCalls=0 didBegin=2 didEnd=2` — l'assert (0 == 0) et le plancher (7 >= 6) passent sur le comportement iOS courant (le spike avait déjà prouvé le silence de `shouldChange` sur les appels programmatiques ; il l'épingle désormais).
+
+**Portée du commit** : 1 fichier (le test + son commentaire), message `test(uikit): pin the shouldchange silence of programmatic text edits` — les deux amendements de rapport (note de fix §3.4(4), présente section) restent des changements d'arborescence pour le passage docs du contrôleur (convention du dépôt : commits de fix = code, commits docs = rapports).
