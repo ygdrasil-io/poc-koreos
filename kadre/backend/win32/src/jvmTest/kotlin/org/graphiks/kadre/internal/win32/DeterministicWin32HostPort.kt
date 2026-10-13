@@ -9,7 +9,7 @@ import java.util.concurrent.atomic.AtomicReference
  * proven against this fake everywhere; the KFFI port proves the real frontier
  * on the Windows runner.
  */
-internal class DeterministicWin32HostPort : Win32NativeHostPort {
+internal open class DeterministicWin32HostPort : Win32NativeHostPort {
     val createdWindows = AtomicInteger(0)
     val destroyedWindows = AtomicInteger(0)
     val wakeCount = AtomicInteger(0)

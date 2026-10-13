@@ -56,6 +56,17 @@ val win32ContractTests = tasks.register("win32ContractTests") {
     dependsOn(tasks.named("jvmTest"), win32NativeTests)
 }
 
+// Friend-wiring JVM : le backend construit des internals de foundation
+// (WindowManagerRevision pour l'état du WindowManager headless) — la même
+// couture que :kadre:runtime et le backend wayland.
+val foundationJvmJar = project(":kadre:foundation").tasks.named<Jar>("jvmJar")
+tasks.withType<org.jetbrains.kotlin.gradle.tasks.BaseKotlinCompile>().configureEach {
+    if (name == "compileKotlinJvm" || name == "compileTestKotlinJvm") {
+        dependsOn(foundationJvmJar)
+        friendPaths.from(foundationJvmJar.flatMap(Jar::getArchiveFile))
+    }
+}
+
 publishing {
     repositories {
         maven {
