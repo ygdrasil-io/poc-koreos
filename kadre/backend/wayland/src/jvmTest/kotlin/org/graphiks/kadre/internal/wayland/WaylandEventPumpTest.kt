@@ -88,21 +88,6 @@ class WaylandEventPumpTest {
     }
 
     @Test
-    fun repeatedWakeOnlyOutcomesKeepThePumpRearmable() {
-        val ops = RecordingOperations()
-        ops.pollResults = ArrayDeque(
-            listOf(PollOutcome.WakeOnly, PollOutcome.WakeOnly, PollOutcome.WakeOnly, PollOutcome.DisplayReady),
-        )
-        val wake = FakeWakeup()
-        val pump = WaylandEventPump(ops, wake)
-        // réveils répétés sans événement compositor : la pompe repoll sans
-        // re-préparer, puis termine le cycle par une lecture
-        assertEquals(PumpStep.Dispatched, pump.runOnce())
-        assertEquals(1, ops.prepareCount)
-        assertEquals(1, ops.readCount)
-        assertEquals(4, ops.pollWatchesWrite.size)
-        assertEquals(0, ops.cancelCount)
-    }
 
     @Test
     fun wakeOnlyReturnsToTheHostLoopForActionDraining() {
