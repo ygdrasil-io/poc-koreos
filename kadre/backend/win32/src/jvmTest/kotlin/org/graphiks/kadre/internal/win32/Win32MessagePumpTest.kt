@@ -27,6 +27,18 @@ class Win32MessagePumpTest {
     }
 
     @Test
+    fun wakeAloneRearmsWithoutStopping() {
+        val port = DeterministicWin32HostPort()
+        val pump = Win32MessagePump(port, hwnd = 1L)
+        repeat(3) {
+            port.postWake(1L)
+            assertEquals(PumpStep.Rearm, pump.runOnce(50), "a wake without stop must re-arm")
+        }
+        assertEquals(3, port.wakeCount.get())
+        assertNull(pump.failureReason())
+    }
+
+    @Test
     fun postedStopYieldsStoppedExactlyOnce() {
         val port = DeterministicWin32HostPort()
         val pump = Win32MessagePump(port, hwnd = 1L)

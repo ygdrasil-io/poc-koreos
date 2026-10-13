@@ -20,6 +20,7 @@ SES-002	jvm	scenario	sess002-already-in-use	org.graphiks.kadre.internal.win32.Wi
 SES-002	jvm	scenario	sess002-sequential-reuse	org.graphiks.kadre.internal.win32.Win32BackendProviderTest	concurrentRunIsAlreadyInUse[jvm]
 SES-002	jvm	scenario	sess002-pump-failure-failed-outcome	org.graphiks.kadre.internal.win32.Win32BackendProviderTest	pumpFailureBecomesFailedOutcomeThroughControlledPort[jvm]
 SES-002	jvm	scenario	sess002-stop-from-another-thread	org.graphiks.kadre.internal.win32.Win32HostNativeContractTest	stopFromAnotherThreadWakesThePump
+SES-002	jvm	scenario	sess002-application-stop	org.graphiks.kadre.internal.win32.Win32BackendProviderTest	applicationRequestedStopStopsThePumpThroughTheWake[jvm]
 SES-002	jvm	scenario	sess002-host-cycles	org.graphiks.kadre.internal.win32.Win32HostNativeContractTest	hostCyclesThreeTimesOnWindows
 SES-002	jvm	sentinel	sess002-no-resurrection	org.graphiks.kadre.internal.win32.Win32HostSessionTest	teardownIsIdempotentAndUnwiresTheHandler[jvm]
 SES-002	jvm	sentinel	sess002-lease-released-on-failure	org.graphiks.kadre.internal.win32.Win32BackendProviderTest	controlWindowStartFailureBecomesPlatformFailureBeforeSession[jvm]
@@ -28,5 +29,6 @@ PMP-001	jvm	scenario	pmp-rearm	org.graphiks.kadre.internal.win32.Win32MessagePum
 PMP-001	jvm	scenario	pmp-stop-exactly-once	org.graphiks.kadre.internal.win32.Win32MessagePumpTest	postedStopYieldsStoppedExactlyOnce[jvm]
 PMP-001	jvm	scenario	pmp-error-path	org.graphiks.kadre.internal.win32.Win32MessagePumpTest	getErrorMessageYieldsPumpFailedWithReason[jvm]
 PMP-001	jvm	scenario	pmp-wake-releases-blocked-wait	org.graphiks.kadre.internal.win32.Win32MessagePumpTest	requestStopWakesABlockedWaitFromAnotherThread[jvm]
+PMP-001	jvm	scenario	pmp-wake-alone-rearms	org.graphiks.kadre.internal.win32.Win32MessagePumpTest	wakeAloneRearmsWithoutStopping[jvm]
 PMP-001	jvm	sentinel	pmp-no-error-swallow	org.graphiks.kadre.internal.win32.Win32MessagePumpTest	getErrorMessageYieldsPumpFailedWithReason[jvm]
 PMP-001	jvm	sentinel	pmp-stop-idempotent	org.graphiks.kadre.internal.win32.Win32MessagePumpTest	postedStopYieldsStoppedExactlyOnce[jvm]

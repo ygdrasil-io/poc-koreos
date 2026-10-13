@@ -125,7 +125,7 @@ internal class KffiWin32HostPort : Win32NativeHostPort {
     private companion object {
         const val WAKE_MESSAGE: Int = 0x8002 // WM_APP + 2, spec D2
         const val STOP_WPARAM: Long = 0x57494E // "WIN" marker distinguishing stop from wake
-        const val QS_ALLINPUT: Int = 0x00FF
+        const val QS_ALLINPUT: Int = 0x04FF
         const val MWMO_INPUTAVAILABLE: Int = 0x0004
         const val PM_REMOVE: Int = 0x1
         val WAIT_FAILED: Int = -1 // MsgWaitForMultipleObjectsEx failure return

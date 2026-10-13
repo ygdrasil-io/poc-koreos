@@ -6,6 +6,7 @@ import kotlin.coroutines.EmptyCoroutineContext
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 import kotlin.test.assertIs
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.awaitCancellation
@@ -14,6 +15,7 @@ import kotlinx.coroutines.runBlocking
 import org.graphiks.kadre.application.KadreApplication
 import org.graphiks.kadre.application.KadreApplicationFactory
 import org.graphiks.kadre.application.SessionOutcome
+import org.graphiks.kadre.application.SessionStopReason
 import org.graphiks.kadre.diagnostics.KadreFailure
 import org.graphiks.kadre.diagnostics.KadreOperation
 import org.graphiks.kadre.diagnostics.KadrePlatform
@@ -139,6 +141,26 @@ class Win32BackendProviderTest {
     }
 
     @Test
+    fun applicationRequestedStopStopsThePumpThroughTheWake() {
+        val port = DeterministicWin32HostPort()
+        val provider = Win32BackendProvider.forTesting(
+            availability = { true },
+            portFactory = { port },
+        )
+        val request = DesktopStandaloneRequest(
+            applicationFactory = KadreApplicationFactory {
+                KadreApplication { requestStop() }
+            },
+            stopWhenLastWindowClosed = true,
+            policy = KadrePolicies.Default,
+        )
+        val outcome = provider.run(request)
+        val success = assertIs<KadreResult.Success<SessionOutcome>>(outcome)
+        assertEquals(SessionOutcome.Stopped(SessionStopReason.ApplicationRequested), success.value)
+        assertTrue(port.wakeCount.get() >= 1, "the stop handler must wake the pump")
+    }
+
+    @Test
     fun emptyApplicationCompletesThroughThePump() {
         val provider = Win32BackendProvider.forTesting(
             availability = { true },
@@ -167,10 +189,16 @@ class Win32BackendProviderTest {
 
     @Test
     fun discoveryOnNonWindowsIsUnavailableWithoutNativeLoad() {
-        if (Win32BackendProvider.isWindows()) return
-        val provider = Win32BackendProvider()
+        // Portée portable : hors Windows, la gate réelle est consultée ; sur
+        // Windows, la gate injectée reproduit le refus — les deux prouvent
+        // que le refus précède toute création et tout chargement natif.
+        val realGate = Win32BackendProvider()
+        assertEquals(Win32BackendProvider.isWindows(), realGate.isAvailable())
+        val provider = Win32BackendProvider.forTesting(
+            availability = { false },
+            portFactory = { DeterministicWin32HostPort() },
+        )
         assertFalse(provider.isAvailable())
-        // La découverte n'a chargé aucun symbole : le run échoue actionnable (F1-1).
         assertEquals(
             KadreResult.Failure(KadreFailure.Unsupported(KadreOperation.HostAttach)),
             provider.run(standaloneRequest()),
