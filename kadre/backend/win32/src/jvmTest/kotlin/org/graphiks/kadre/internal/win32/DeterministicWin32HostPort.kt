@@ -10,6 +10,11 @@ import java.util.concurrent.atomic.AtomicReference
  * on the Windows runner.
  */
 internal open class DeterministicWin32HostPort : Win32NativeHostPort {
+    val createdTopLevelWindows = AtomicInteger(0)
+    val destroyedTopLevelWindows = AtomicInteger(0)
+    val postedCloses = AtomicInteger(0)
+    private val topLevelHandlers = java.util.concurrent.ConcurrentHashMap<Long, (Int, Long, Long) -> Long>()
+    private var nextTopLevelHwnd = 10_000L
     val createdWindows = AtomicInteger(0)
     val destroyedWindows = AtomicInteger(0)
     val wakeCount = AtomicInteger(0)
@@ -85,6 +90,43 @@ internal open class DeterministicWin32HostPort : Win32NativeHostPort {
     override fun destroyControlWindow(hwnd: Long) {
         createdHandlers.set(null)
         if (hwnds.remove(hwnd)) destroyedWindows.incrementAndGet()
+    }
+
+    override fun createTopLevelWindow(
+        title: String,
+        decorations: Win32WindowDecorations,
+        width: Int,
+        height: Int,
+        messageHandler: (id: Int, wParam: Long, lParam: Long) -> Long,
+    ): Win32TopLevelWindowHandle {
+        synchronized(this) {
+            check(!destroyed) { "host port already closed" }
+            createdTopLevelWindows.incrementAndGet()
+            val hwnd = nextTopLevelHwnd++
+            topLevelHandlers[hwnd] = messageHandler
+            return Win32TopLevelWindowHandle(hwnd)
+        }
+    }
+
+    fun dispatchWindowMessage(hwnd: Long, id: Int, wParam: Long = 0L, lParam: Long = 0L) {
+        // Routage manquant = fallthrough silencieux (miroir du pont réel : 0L).
+        topLevelHandlers[hwnd]?.invoke(id, wParam, lParam)
+    }
+
+    fun errorIfWindowUnknown(hwnd: Long) {
+        check(topLevelHandlers.containsKey(hwnd)) { "no live top-level window routes hwnd $hwnd" }
+    }
+
+    override fun requestCloseWindow(hwnd: Long) {
+        postedCloses.incrementAndGet()
+        // Miroir du réel : WM_CLOSE est POSTÉ dans la file ; la livraison
+        // n'a lieu que lorsqu'un pump draine et dispatche.
+        messages.add(Win32MessageWait.Message(0x0010, 0L, 0L))
+        synchronized(monitor) { monitor.notifyAll() }
+    }
+
+    override fun destroyWindow(hwnd: Long) {
+        if (topLevelHandlers.remove(hwnd) != null) destroyedTopLevelWindows.incrementAndGet()
     }
 
     override fun close() {
