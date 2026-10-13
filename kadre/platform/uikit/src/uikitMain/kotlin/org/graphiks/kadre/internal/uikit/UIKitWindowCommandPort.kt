@@ -10,6 +10,7 @@ import kotlinx.coroutines.withContext
 import org.graphiks.kadre.diagnostics.Capability
 import org.graphiks.kadre.diagnostics.FeatureAvailability
 import org.graphiks.kadre.diagnostics.KadreFailure
+import org.graphiks.kadre.diagnostics.KadreOperation
 import org.graphiks.kadre.diagnostics.KadrePlatform
 import org.graphiks.kadre.diagnostics.KadreResourceKind
 import org.graphiks.kadre.diagnostics.KadreResult
@@ -28,6 +29,11 @@ import org.graphiks.kadre.internal.runtime.SurfaceRedrawGeneration
 import org.graphiks.kadre.internal.runtime.SurfaceStimulus
 import org.graphiks.kadre.internal.runtime.SurfaceUpdateCommand
 import org.graphiks.kadre.internal.runtime.SurfaceUpdateCommandOutcome
+import org.graphiks.kadre.internal.runtime.TextInputCursorCommand
+import org.graphiks.kadre.internal.runtime.TextInputDocumentCommand
+import org.graphiks.kadre.internal.runtime.TextInputOpenCommand
+import org.graphiks.kadre.internal.runtime.TextInputOwner
+import org.graphiks.kadre.internal.runtime.TextInputPort
 import org.graphiks.kadre.internal.runtime.WindowCommandPort
 import org.graphiks.kadre.internal.runtime.WindowOpenCommand
 import org.graphiks.kadre.internal.runtime.WindowPeerOwner
@@ -169,6 +175,17 @@ internal class UIKitWindowCommandPort(
      */
     private var keyboardBinding: UIKitKeyboardBinding? = null
     private var gestureBindings: UIKitGestureBindings? = null
+
+    /**
+     * Le port texte (phase 6, Task 2) : résolu par surfaceId via [textInputPort] (la factory du
+     * manager, miroir AppKit driver l.139 `TextInputPortFactory(commandPort::textInputPort)`),
+     * MEMOISÉ ICI — le CAS de l'open exclusif ([UIKitTextInputPort.liveOwner]) ne tient que si
+     * la même instance sert tous les appels d'une surface. La phase 4 est mono-surface : le
+     * registre `bySurface` ne porte qu'un peer (le primaire), une seule instance suffit.
+     * L'arrêt vit dans [finishClose] (le retrait final du registre — tout owner vivant est
+     * fermé, le champ quitte la hiérarchie et le first responder).
+     */
+    private var textInput: UIKitTextInputPort? = null
 
     /**
      * Le drain coalescé du redraw (phase 2) : le ticket d'une commande admise est RETENU
@@ -686,6 +703,23 @@ internal class UIKitWindowCommandPort(
     }
 
     /**
+     * La factory du port texte (phase 6, Task 2 — le miroir AppKit `AppKitWindowRuntimeDriver.
+     * textInputPort` l.581-591) : le manager l'invoque au commit de la fenêtre
+     * (`RuntimeWindowManager.commitPendingLocked` l.1478) pour le surfaceId du peer. Une
+     * surface inconnue du registre (ou un port en fermeture) reçoit le port INDISPONIBLE —
+     * l'analogue AppKit `AppKitUnavailableTextInputPort` : la capacité ment son refus
+     * (`Unsupported(TextInput)`) au lieu d'ouvrir sur rien. Le port vivant est mémoïsé
+     * ([textInput]) : le CAS de l'open exclusif tient sur une instance stable.
+     */
+    internal fun textInputPort(surfaceId: SurfaceId): TextInputPort {
+        val present = lock.withLock { !closed && bySurface.containsKey(surfaceId) }
+        if (!present) {
+            return UIKitUnavailableTextInputPort
+        }
+        return lock.withLock { textInput ?: UIKitTextInputPort(view).also { textInput = it } }
+    }
+
+    /**
      * Fermeture du port (ordre AppKit l.600-608 adapté) : le scheduler est annulé AVANT le
      * verrou — aucun drain après fermeture, un ticket pendant est abandonné (la surface qui
      * le porte s'arrête de toute façon). Puis le branchement d'observation est retiré (Task 3 :
@@ -700,9 +734,14 @@ internal class UIKitWindowCommandPort(
 
     /** Sortie du registre des entries restantes ; les owners ne touchent aucun objet UIKit. */
     fun finishClose() {
-        // Défense en profondeur (idempotent) : si un chemin de close oubliait beginClose, le
+        // Défense en profondeur (idempotent) : si un chemin de close oublait beginClose, le
         // branchement d'observation ne survivrait pas au port.
         teardownSurfaceObservation()
+        // Phase 6, Task 2 : le port texte s'arrête avec le command port — un owner vivant (une
+        // session restée ouverte au démontage de la surface) est fermé : le champ resign et
+        // sort de la hiérarchie, aucune observation ne survit au registre.
+        lock.withLock { textInput }?.shutdown()
+        lock.withLock { textInput = null }
         val remaining = lock.withLock {
             val entries = byRequest.values.toList()
             byRequest.clear()
@@ -880,4 +919,23 @@ private fun PropertyChange<*>.fieldOutcome(
     this is PropertyChange.Unchanged -> SurfaceFieldOutcome.Unchanged
     rejected != null -> SurfaceFieldOutcome.Rejected(rejected)
     else -> error("${property.fieldName} arrived admitted without a commit path")
+}
+
+/**
+ * Le port texte d'une surface que le command port ne sert pas (miroir AppKit
+ * `AppKitUnavailableTextInputPort`) : la capacité PORTE son refus — `Unsupported(TextInput)` —
+ * et chaque commande répond la même failure. Le mensonge interdit serait d'ouvrir une session
+ * qui n'observe rien sur une surface sans peer vivant.
+ */
+private object UIKitUnavailableTextInputPort : TextInputPort {
+    override val capability: Capability<Unit> = Capability.Unsupported(KadreFailure.Unsupported(KadreOperation.TextInput))
+
+    override fun open(command: TextInputOpenCommand): KadreResult<TextInputOwner> =
+        KadreResult.Failure(KadreFailure.Unsupported(KadreOperation.TextInput))
+
+    override suspend fun updateCursor(command: TextInputCursorCommand): KadreResult<Unit> =
+        KadreResult.Failure(KadreFailure.Unsupported(KadreOperation.TextInput))
+
+    override suspend fun updateDocument(command: TextInputDocumentCommand): KadreResult<Unit> =
+        KadreResult.Failure(KadreFailure.Unsupported(KadreOperation.TextInput))
 }
