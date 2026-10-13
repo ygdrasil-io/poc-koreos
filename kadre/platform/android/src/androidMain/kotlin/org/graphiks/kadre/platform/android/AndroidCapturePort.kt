@@ -87,11 +87,11 @@ private const val HOST_CHOICE_SOURCE_NAMESPACE = "android-host-choice"
 private const val ACTIVITY_RESULT_OK = -1
 
 /**
- * La couture du bras Surface (Task 3) : la fabrique PixelCopy derrière un id résolu par le
- * registre. Le squelette l'injecte pour que la résolution du registre soit prouée sans SDK —
- * le défaut est le stub jetant de la Task 1, la Task 3 le remplace par le PixelCopy réel du
- * SurfaceView attaché. L'argument `Any` est le même parti pris que les seams du module : le
- * stub android.jar lance à la construction, le test hôte passe une valeur quelconque.
+ * La couture du bras Surface : la fabrique PixelCopy derrière un id résolu par le registre.
+ * Le défaut est la réalisation de production ([androidPixelCopyReservation] — le
+ * `PixelCopy.request` réel du SurfaceView attaché, le bras Task 3) ; les tests hôtes
+ * injectent leurs fabriques (le stub android.jar lance à la construction, l'argument `Any`
+ * est le même parti pris que les seams du module).
  */
 internal fun interface AndroidPixelCopyStreamFactory {
     public fun create(surfaceView: Any, request: CaptureRequest): KadreResult<CapturePortReservation>
@@ -267,9 +267,7 @@ internal class AndroidCapturePort(
     private val foreground: AndroidCaptureForeground? = null,
     private val displayFacts: AndroidCaptureDisplayFacts = AndroidCaptureDisplayFacts(PhysicalSize(1, 1), 160),
     private val pixelCopyStreamFactory: AndroidPixelCopyStreamFactory =
-        AndroidPixelCopyStreamFactory { _, _ ->
-            throw NotImplementedError("the Android PixelCopy surface arm lands with phase 8 task 3")
-        },
+        AndroidPixelCopyStreamFactory { surfaceView, request -> androidPixelCopyReservation(surfaceView, request) },
     private val loopContext: CoroutineContext = Dispatchers.Default,
 ) : CapturePort {
     private val lock = RuntimeLock()

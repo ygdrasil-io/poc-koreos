@@ -685,6 +685,170 @@ class AndroidCapturePortTest {
         assertEquals(1, readers.specs.size, "le reader créé est fermé, jamais recréé")
     }
 
+    // -- (13) le bras Surface (Task 3) : la configuration précède la frame, le never-copy ----------------
+
+    @Test
+    fun configurationPrecedesFrameAndNeverCopies() = runTest {
+        val native = FakePixelCopyNative(PhysicalSize(64, 32))
+        val stream = AndroidPixelCopyStream(Any(), CaptureRequest(), native, StandardTestDispatcher(testScheduler))
+        val listener = RecordingListener()
+        val started = async { stream.start(listener, 64L * 32L * 4L) }
+        advanceUntilIdle()
+        assertEquals(1, native.requestCount, "la copie est demandée AVANT le retour du start")
+        assertEquals(1, native.bitmapsCreated, "le bitmap existe : le budget passait AVANT l'allocation")
+        assertTrue(listener.events.isEmpty(), "aucun callback listener avant même la première copie complétée")
+
+        // La complétion SDK pilotée par le test — le start dérive la configuration d'ICI.
+        native.fireCompleted()
+        val start = assertIs<KadreResult.Success<CapturePortStreamStart>>(started.await()).value
+        assertEquals(1, native.readCount, "les octets lus exactement une fois pour la première frame")
+
+        // La configuration complète dérivée de la PREMIÈRE copie, révision 0, AUCUN callback
+        // listener au retour du start (la discipline du web Pump :111-196).
+        assertEquals(
+            CaptureConfiguration(
+                revision = CaptureConfigurationRevision(0L),
+                size = PhysicalSize(64, 32),
+                format = PixelFormat.Rgba8,
+                colorEncoding = ColorEncoding(
+                    ColorPrimaries.Unknown,
+                    TransferFunction.Unknown,
+                    MatrixCoefficients.Unknown,
+                    ColorRange.Unknown,
+                    HdrMetadata.Unknown,
+                ),
+                alphaMode = AlphaMode.Unknown,
+                orientation = CaptureOrientation.Upright,
+                cadence = CaptureCadence.Unknown,
+                region = null,
+                cursorMode = CaptureCursorMode.EmbeddedWhenAvailable,
+            ),
+            start.configuration,
+            "la configuration complète (révision 0) est la VALEUR DU START — avant tout callback",
+        )
+
+        advanceUntilIdle()
+        assertEquals(listOf("frame"), listener.events, "la première frame suit le start")
+        val frame = listener.frames.single()
+        assertEquals(0L, frame.configurationRevision)
+        assertEquals(256, frame.planes.single().layout.rowStride, "le stride serré du bitmap ARGB_8888")
+        assertEquals(64 * 32 * 4, frame.planes.single().layout.byteCount)
+
+        // OVERSIZE : une frame entière au-delà du budget → l'échec AVANT TOUT FAIT — aucun
+        // bitmap créé, aucune copie demandée, aucun octet lu (l'invariant never-copy prouvé
+        // par le fake : le pixel array n'a jamais été alloué).
+        val before = Triple(native.bitmapsCreated, native.requestCount, native.readCount)
+        val oversize = AndroidPixelCopyStream(Any(), CaptureRequest(), native, StandardTestDispatcher(testScheduler))
+        assertEquals(
+            KadreResult.Failure(KadreFailure.ResourceLimitExceeded(KadreResourceKind.CaptureBuffer, 100L)),
+            oversize.start(RecordingListener(), 100L),
+        )
+        assertEquals(
+            before,
+            Triple(native.bitmapsCreated, native.requestCount, native.readCount),
+            "le budget refuse AVANT toute allocation, toute copie demandée, toute lecture",
+        )
+        assertEquals(0, native.recycled.size, "rien à libérer : rien n'a jamais été créé pour l'oversize")
+    }
+
+    // -- (14) le resize : reconfiguration publiée AVANT la frame qui la porte ----------------------------
+
+    @Test
+    fun resizeRepublishesReconfigureBeforeFrame() = runTest {
+        val native = FakePixelCopyNative(PhysicalSize(64, 32))
+        val stream = AndroidPixelCopyStream(Any(), CaptureRequest(), native, StandardTestDispatcher(testScheduler))
+        val listener = RecordingListener()
+        val started = async { stream.start(listener, 64L * 1024L * 1024L) }
+        advanceUntilIdle()
+        native.fireCompleted()
+        assertIs<KadreResult.Success<CapturePortStreamStart>>(started.await())
+        advanceUntilIdle()
+        assertEquals(listOf("frame"), listener.events)
+
+        // La surface composée change de taille PENDANT la copie en vol : la copie périmée
+        // (la complétion arrive, la taille lue a changé) est JETÉE — jamais délivrée — le
+        // bitmap est recyclé, la copie suivante porte le resize avec sa reconfiguration
+        // publiée AVANT la frame.
+        native.size = PhysicalSize(48, 48)
+        native.fireCompleted() // la copie périmée se complète — jetée
+        advanceUntilIdle()
+        assertEquals(listOf("frame"), listener.events, "la copie périmée n'est JAMAIS délivrée")
+        assertEquals(1, native.recycled.size, "l'ancien bitmap est recyclé au resize")
+
+        native.fireCompleted() // la copie fraîche (48×48) se complète — la frame du resize
+        advanceUntilIdle()
+        assertEquals(
+            listOf("frame", "reconfigured", "frame"),
+            listener.events,
+            "la reconfiguration précède la frame qui la porte",
+        )
+        val reconfigured = listener.reconfigured.single()
+        assertEquals(1L, reconfigured.revision.value)
+        assertEquals(PhysicalSize(48, 48), reconfigured.size)
+        assertEquals(PhysicalSize(48, 48), listener.frames.last().size)
+        assertEquals(2, native.bitmapsCreated, "un bitmap par taille, jamais plus")
+        assertEquals(1, native.recycled.size, "l'ancien bitmap libéré exactement une fois")
+    }
+
+    // -- (15) les terminations du bras Surface : exactement une fois, rien après -------------------------
+
+    @Test
+    fun surfaceStreamReleasedExactlyOnce() = runTest {
+        val native = FakePixelCopyNative(PhysicalSize(64, 32))
+        val stream = AndroidPixelCopyStream(Any(), CaptureRequest(), native, StandardTestDispatcher(testScheduler))
+        val listener = RecordingListener()
+        val started = async { stream.start(listener, 64L * 1024L * 1024L) }
+        advanceUntilIdle()
+        native.fireCompleted()
+        val start = assertIs<KadreResult.Success<CapturePortStreamStart>>(started.await()).value
+        advanceUntilIdle()
+        assertEquals(listOf("frame"), listener.events)
+
+        // L'arrêt propre : `Stopped(Requested)` exactement une fois, le bitmap libéré
+        // exactement une fois, un double close ne raconte plus rien.
+        start.stream.close()
+        advanceUntilIdle()
+        assertEquals(listOf("frame", "terminated"), listener.events)
+        assertEquals(
+            CaptureOutcome.Stopped(CaptureStopReason.Requested),
+            (listener.terminations.single() as CapturePortTermination.Outcome).outcome,
+        )
+        assertEquals(1, native.recycled.size)
+        start.stream.close()
+        advanceUntilIdle()
+        assertEquals(1, native.recycled.size, "un close tardif ne libère jamais deux fois")
+
+        // Aucune frame ne suit le terminal, même quand la copie en vol se complète.
+        val framesBefore = listener.frames.size
+        native.fireCompleted()
+        advanceUntilIdle()
+        assertEquals(framesBefore, listener.frames.size, "aucune frame après le terminal")
+
+        // L'échec PixelCopy : `Failed(PlatformFailure)` exactement une fois, le bitmap libéré.
+        val failing = AndroidPixelCopyStream(Any(), CaptureRequest(), native, StandardTestDispatcher(testScheduler))
+        val failingListener = RecordingListener()
+        val failingStarted = async { failing.start(failingListener, 64L * 1024L * 1024L) }
+        advanceUntilIdle()
+        native.fireCompleted()
+        assertIs<KadreResult.Success<CapturePortStreamStart>>(failingStarted.await())
+        advanceUntilIdle()
+        assertEquals(1, failingListener.frames.size)
+        native.fireCompleted(result = 1) // un code d'erreur SDK (jamais `SUCCESS`)
+        advanceUntilIdle()
+        assertEquals(1, failingListener.terminations.size, "le terminal exactement une fois")
+        assertEquals(
+            CaptureOutcome.Failed(
+                KadreFailure.PlatformFailure(
+                    org.graphiks.kadre.diagnostics.KadrePlatform.Android,
+                    "capture-stream",
+                    "pixel-copy-refused:1",
+                ),
+            ),
+            (failingListener.terminations.single() as CapturePortTermination.Outcome).outcome,
+        )
+        assertEquals(2, native.recycled.size, "le bitmap du flux échoué est libéré")
+    }
+
     // -- les doubles et les coutures de pilotage ----------------------------------------------------------
 
     /** Le budget de frame des tests — une frame entière + le pool tiennent largement. */
@@ -928,6 +1092,56 @@ private class FakeForeground(
     }
 
     override fun close() = stop()
+}
+
+/**
+ * Le double PixelCopy : la taille composée pilotable (le resize), la copie complétée à la
+ * main par le test, les allocations/lectures/libérations comptées — l'oracle du never-copy.
+ */
+private class FakePixelCopyNative(
+    initialSize: PhysicalSize?,
+) : AndroidPixelCopyNative {
+    var size: PhysicalSize? = initialSize
+    var bitmapsCreated = 0
+        private set
+    var requestCount = 0
+        private set
+    var readCount = 0
+        private set
+    val recycled = mutableListOf<Any>()
+    var pendingCallback: ((Int) -> Unit)? = null
+        private set
+    private var currentBitmap: Pair<Int, Int>? = null
+
+    override fun composedSize(surfaceView: Any): PhysicalSize? = size
+
+    override fun createBitmap(width: Int, height: Int): Any {
+        bitmapsCreated += 1
+        currentBitmap = width to height
+        return Any()
+    }
+
+    override fun requestCopy(surfaceView: Any, bitmap: Any, onCompleted: (result: Int) -> Unit) {
+        requestCount += 1
+        pendingCallback = onCompleted
+    }
+
+    override fun readPixels(bitmap: Any): ByteArray {
+        readCount += 1
+        val (width, height) = currentBitmap ?: error("no bitmap to read")
+        return ByteArray(width * height * 4)
+    }
+
+    override fun recycle(bitmap: Any) {
+        recycled += bitmap
+    }
+
+    /** Le completed-callback SDK, piloté par le test — `result` 0 = `PixelCopy.SUCCESS`. */
+    fun fireCompleted(result: Int = 0) {
+        val callback = pendingCallback
+        pendingCallback = null
+        callback?.invoke(result)
+    }
 }
 
 /** Le listener enregistreur : l'ordre exact des callbacks, ce que les invariants mutent contre. */
