@@ -35,20 +35,15 @@ class WaylandShmDiagLinuxTest {
                 pixels.set(java.lang.foreign.ValueLayout.JAVA_INT, index.toLong() * 4, 0xFF3366AA.toInt())
             }
             xdg.ackConfigure(configureSerials.last())
-            // un cycle de pompe complet AVANT le second pool (le poll est
-            // borné par un signal de wake temporisé sur un thread dédié)
+            // DIAG6 : wake seul (open + signal + close) SANS le cycle
+            // prepare/poll/cancel — si le second pool échoue encore, le
+            // coupable est PosixWakeup ; s'il réussit, c'est le cycle read
+            // (le downcall poll à capture errno)
             val wake = org.graphiks.kffi.posix.PosixWakeup.open()
-            Thread {
-                Thread.sleep(150)
-                wake.signal()
-            }.start()
-            val prepared = client.prepareRead()
-            println("DIAG5 prepared=$prepared poll=${client.pollForEvents(wake.readFd, false)}")
-            client.cancelRead()
-            // DIAG5 : le close du wake est SUSPENDU — si le second pool
-            // réussit sans lui, c'est la libération du wake qui corrompt
-            // (le memfd du second pool réutilise le numéro fraîchement clos)
-            // wake.close()
+            wake.signal()
+            wake.drain()
+            wake.close()
+            println("DIAG6 wake exercised")
             val framed = CountDownLatch(1)
             surface.addFrameListener(onFrame = { framed.countDown() }, onFailure = {})
             surface.attachAndCommit(buffer)
