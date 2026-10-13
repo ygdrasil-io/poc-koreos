@@ -30,7 +30,7 @@ internal class Win32HostSession private constructor(
     val uiThread: Thread,
     val pump: Win32MessagePump,
     val controlWindow: Win32ControlWindowHandle,
-) {
+) : AutoCloseable {
     public companion object {
         public fun start(port: Win32NativeHostPort): Win32HostSession {
             check(port.isMainThread()) { "Win32HostSession.start must run on the calling UI thread" }
@@ -53,4 +53,6 @@ internal class Win32HostSession private constructor(
             port.destroyControlWindow(controlWindow.hwnd)
         }
     }
+
+    override fun close() = teardown()
 }
