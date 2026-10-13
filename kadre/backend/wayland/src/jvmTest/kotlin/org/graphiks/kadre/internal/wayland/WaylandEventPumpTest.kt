@@ -88,47 +88,56 @@ class WaylandEventPumpTest {
     }
 
     @Test
-    fun wakeOnlyReturnsToTheHostLoopForActionDraining() {
+    fun repeatedWakeOnlyOutcomesKeepThePumpRearmable() {
+        val ops = RecordingOperations()
+        ops.pollResults = ArrayDeque(
+            listOf(PollOutcome.WakeOnly, PollOutcome.WakeOnly, PollOutcome.WakeOnly, PollOutcome.DisplayReady),
+        )
+        val wake = FakeWakeup()
+        val pump = WaylandEventPump(ops, wake)
+        // réveils répétés sans événement compositor : la pompe repoll sans
+        // re-préparer, puis termine le cycle par une lecture
+        assertEquals(PumpStep.Dispatched, pump.runOnce())
+        assertEquals(1, ops.prepareCount)
+        assertEquals(1, ops.readCount)
+        assertEquals(4, ops.pollWatchesWrite.size)
+        assertEquals(0, ops.cancelCount)
+    }
+
+    @Test
+    fun wakeOnlyDrainsTheWakeBeforeRearming() {
         val ops = RecordingOperations()
         ops.pollResults = ArrayDeque(listOf(PollOutcome.WakeOnly, PollOutcome.DisplayReady))
         val wake = FakeWakeup()
         val pump = WaylandEventPump(ops, wake)
-        // Un réveil hors arrêt rend la main à la boucle hôte — c'est elle qui
-        // draine les actions marshalées (créations de fenêtres) ; repoller
-        // ici re-bloquerait le thread pompe sur un compositor silencieux.
-        // Le wake est drainé (sinon la boucle tournerait à vide) et la
-        // lecture préparée annulée (jamais deux prepare_read par cycle).
-        assertEquals(PumpStep.Rearm, pump.runOnce())
-        assertEquals(1, wake.drainCount)
-        assertEquals(1, ops.cancelCount)
-        assertEquals(0, ops.readCount)
-        // le cycle suivant réarme proprement : prepare → poll → read
+        // sans drain, un eventfd/pipe réveillé resterait lisible : la boucle
+        // tournerait à vide (P-2, roadmap §3.3)
         assertEquals(PumpStep.Dispatched, pump.runOnce())
-        assertEquals(2, ops.prepareCount)
-        assertEquals(1, ops.readCount)
         assertEquals(1, wake.drainCount)
+        assertEquals(0, ops.cancelCount)
     }
 
     @Test
     fun stopDuringPollExitsThroughTheWakeWithoutReading() {
         val ops = RecordingOperations()
-        val pollEntered = java.util.concurrent.CountDownLatch(1)
-        val stopArmed = java.util.concurrent.CountDownLatch(1)
+        val enteredPoll = CountDownLatch(1)
+        val released = CountDownLatch(1)
         ops.beforePoll = {
-            pollEntered.countDown()
-            stopArmed.await()
+            enteredPoll.countDown()
+            released.await()
+            // le vrai ops draine le wake ; le fake reflète juste l'issue
         }
         ops.pollResults = ArrayDeque(listOf(PollOutcome.WakeOnly))
         val wake = FakeWakeup()
         val pump = WaylandEventPump(ops, wake)
-        // l'ordre est déterministe : le stop est armé pendant que la pompe
-        // est bloquée dans poll — jamais avant runOnce (sinon la sortie
-        // immédiate ne passe pas par cancelRead), jamais après le réveil
-        // (sinon le chemin WakeOnly-sans-arrêt rend la main à la boucle hôte)
         val stopper = Thread {
-            assertTrue(pollEntered.await(5, java.util.concurrent.TimeUnit.SECONDS))
+            // La promesse « stop PENDANT le poll » doit être tenue par le
+            // test : on ne poste que la pompe est bloquée dans poll, sinon
+            // le flag posé avant prepareRead sort sans lecture préparée
+            // (cancelCount == 0) et le scénario prouvé n'est plus celui-ci.
+            enteredPoll.await()
+            released.countDown()
             pump.requestStop()
-            stopArmed.countDown()
         }
         stopper.start()
         assertEquals(PumpStep.Stopped, pump.runOnce())
