@@ -933,7 +933,7 @@ private class AndroidCapturePump(
                     ownedReader.surface,
                 )
             } catch (refused: Throwable) {
-                return failedStart(pipeFailure("virtual-display-refused", refused))
+                return failedStart(pipeFailure("virtual-display-refused", null, refusedDetail(refused)))
             }
             lock.withLock { display = ownedDisplay }
             // (b') La révocation, posée après le display : tout onStop qui n'est pas le nôtre
@@ -1060,11 +1060,8 @@ private class AndroidCapturePump(
                 KadreFailure.ResourceLimitExceeded(KadreResourceKind.CaptureBuffer, maxFrameBytes),
             )
         }
-        val bytes = try {
-            image.readPlane(0, layout.byteCount)
-        } catch (refused: Throwable) {
-            return FirstFrameOutcome.Refused(pipeFailure("image-read-refused", refused))
-        }
+        val bytes = readUnderLock(image, layout.byteCount)
+            ?: return FirstFrameOutcome.Refused(pipeFailure("image-read-refused", null))
         val frame = try {
             CapturePortFrame(
                 size = PhysicalSize(image.width, image.height),
@@ -1121,10 +1118,8 @@ private class AndroidCapturePump(
             )
             return null
         }
-        val bytes = try {
-            image.readPlane(0, layout.byteCount)
-        } catch (refused: Throwable) {
-            terminate(CaptureOutcome.Failed(pipeFailure("image-read-refused", refused)))
+        val bytes = readUnderLock(image, layout.byteCount) ?: run {
+            terminate(CaptureOutcome.Failed(pipeFailure("image-read-refused", null)))
             return null
         }
         return try {
@@ -1200,6 +1195,20 @@ private class AndroidCapturePump(
         revision
     }
 
+    /**
+     * La copie du plan SOUS LE VERROU de la pompe : le close du reader (le release du
+     * terminal) prend le même verrou — la copie et le close ne se croisent JAMAIS. `null`
+     * quand le terminal a gagné la course (déjà délivré, ou gagne ici).
+     */
+    private fun readUnderLock(image: AndroidCaptureImage, byteCount: Int): ByteArray? = lock.withLock {
+        if (terminated) return null
+        try {
+            image.readPlane(0, byteCount)
+        } catch (refused: Throwable) {
+            null
+        }
+    }
+
     /** La révocation système — `MediaProjection.Callback.onStop` qui n'est pas le nôtre. */
     private fun revoke() {
         terminate(CaptureOutcome.Stopped(CaptureStopReason.PermissionRevoked))
@@ -1243,16 +1252,29 @@ private class AndroidCapturePump(
         CapturePortTermination.SourceLost -> KadreFailure.Closed(KadreResourceKind.CaptureSession)
     }
 
-    /** Le one release : display → reader → projection → FGS. Idempotent. */
+    /**
+     * Le one release : display → reader → projection → FGS. Idempotent. Les champs sont
+     * NULLÉS sous le même verrou : la boucle de delivery peut se réveiller APRÈS le release
+     * (le réveil du terminal) — un `acquireLatest` sur un ImageReader FERMÉ est un crash
+     * NATIF (constaté sur l'émulateur), jamais ré-atteint quand le champ est null.
+     */
     private fun release() {
         val targets = lock.withLock {
             if (released) null else {
                 released = true
-                Triple(reader, display, projection)
+                val targets = Triple(reader, display, projection)
+                reader = null
+                display = null
+                projection = null
+                targets
             }
         } ?: return
         targets.second?.let { ownedProjection -> targets.third?.releaseVirtualDisplay(ownedProjection) }
-        targets.first?.close()
+        // LA FERMETURE DU READER SOUS LE VERROU : sérialisée avec la lecture de la frame en
+        // vol (lire une Image dont l'ImageReader vient d'être fermé est un SIGSEGV natif,
+        // constaté sur l'émulateur — le verrou rend la copie et le close mutuellement
+        // exclusifs, jamais concurrents).
+        lock.withLock { targets.first?.close() }
         // Notre propre arrêt de projection déclenche onStop : la révocation est absorbée par
         // le flag terminated — jamais un second terminal derrière notre propre stop. `null`
         // si le start n'a jamais atteint la consommation : rien de vivant n'existe (I-1).
@@ -1270,11 +1292,28 @@ private class AndroidCapturePump(
         return KadreResult.Failure(failure)
     }
 
-    private fun pipeFailure(code: String, cause: Throwable?): KadreFailure = KadreFailure.PlatformFailure(
+    private fun pipeFailure(code: String, cause: Throwable?, suffix: String? = null): KadreFailure = KadreFailure.PlatformFailure(
         KadrePlatform.Android,
         STREAM_DOMAIN,
-        if (cause == null) code else "$code:${cause::class.java.simpleName}",
+        when {
+            suffix != null -> "$code:$suffix"
+            cause != null -> "$code:${cause::class.java.simpleName}"
+            else -> code
+        },
     )
+
+    /**
+     * Le détail borné d'un refus SDK — le message du framework voyage dans le code, réduit
+     * à l'identifiant ASCII que la taxonomie exige (les non-identifiants deviennent `_`).
+     */
+    private fun refusedDetail(refused: Throwable): String {
+        val detail = (refused.message ?: refused::class.java.simpleName)
+            .map { character -> if (character.isLetterOrDigit() || character == '_' || character == '-') character else '_' }
+            .joinToString("")
+            .trim('_')
+            .take(160)
+        return detail.ifEmpty { refused::class.java.simpleName }
+    }
 
     private companion object {
         /** Le pool ImageReader le plus large que le budget justifie, borné honnêtement. */
@@ -1351,17 +1390,30 @@ private class AndroidLiveProjection(
         fire?.invoke()
     }
 
-    override fun createVirtualDisplay(name: String, width: Int, height: Int, dpi: Int, surface: Any): Any =
-        projection.createVirtualDisplay(
-            name,
-            width,
-            height,
-            dpi,
-            DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,
-            surface as Surface,
-            null,
-            mainHandler,
-        )
+    override fun createVirtualDisplay(name: String, width: Int, height: Int, dpi: Int, surface: Any): Any {
+        val ownedSurface = surface as Surface
+        // La forme historique : AUTO_MIRROR — le miroir du consentement AFFICHAGE ENTIER
+        // (le plumbing kadre-old :66-75). L'API 35 livre le consentement en mode « A single
+        // app » par défaut, et une projection APP-CONTENT refuse ce flag d'un NPE grossier
+        // du framework (constaté sur l'émulateur, l'item émulateur de la Task 4) : la forme
+        // app-content est alors reposée SANS flag de miroir — le framework y pose les siens
+        // (OWN_CONTENT_ONLY de la session). Le fallback ne couvre que CE mode d'échec exact.
+        return try {
+            projection.createVirtualDisplay(
+                name,
+                width,
+                height,
+                dpi,
+                DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,
+                ownedSurface,
+                null,
+                mainHandler,
+            ) ?: error("the virtual display was not created")
+        } catch (refused: NullPointerException) {
+            projection.createVirtualDisplay(name, width, height, dpi, 0, ownedSurface, null, mainHandler)
+                ?: error("the virtual display was not created")
+        }
+    }
 
     override fun releaseVirtualDisplay(display: Any) {
         (display as VirtualDisplay).release()

@@ -1,10 +1,10 @@
 # Android emulator contract driver
 
 This non-published JVM project runs the public Android host-attachment proof of
-phases 0 through 7 on a real emulator. It is a contract driver, not an
+phases 0 through 8 on a real emulator. It is a contract driver, not an
 implementation API: it forks the instrumented consumer build, executes its
 scenarios on the attached device, and turns the JUnit output into the canonical
-`AND-001` through `AND-008` evidence with the validator's own
+`AND-001` through `AND-009` evidence with the validator's own
 generator. English
 prose, like the Web driver README it mirrors; everything else in this phase is
 documented in French in the sources.
@@ -323,6 +323,46 @@ PUBLISHED artifacts like the rest of the consumer's androidTest sources.
 | `android-display-no-invented-workarea` | sentinel | a build that publishes bounds as workArea (invented desktop geometry) kills `androidDisplayInventoryReal` alone |
 | `android-memory-no-background-signal` | sentinel | a mapping that turns a background trim level into a signal kills `androidMemoryBackgroundNeverMaps` alone (the shell path may really deliver a background level and the Application leg replays all four SDK constants — only the receiving chain could ever speak, and the mapping never does) |
 
+**`AND-009`** — the phase 8 capture, consent and frames proof (source
+`ANDROID-IMPLEMENTATION-ROADMAP.md#Phase 8 — Capture, consentement et frames`).
+Six scenarios and two sentinels. Five scenarios live in the instrumented test
+class `org.graphiks.kadre.consumer.KadreConsumerCaptureContractTest` (public
+state only: `KadreScope.capture`, the primary surface); the sixth
+(`android-capture-source-refused`) names a port internal and lives in the
+friend module class `org.graphiks.kadre.platform.android.
+AndroidCaptureDeviceContractTest` (the AND-007 precedent). THE CONSENT IS REAL:
+the system MediaProjection dialog is automated with the instrumentation's
+`UiAutomation` shell identity — `uiautomator dump` (the real hierarchy XML) →
+find the button by its label (API 35: "Start now" / "Don't allow") → `input
+tap` at the bounds center. The dump is the scenario's oracle: a missing button
+fails the scenario quoting the current hierarchy. The Kadre-owned foreground
+service (`mediaProjection`) is the documented ruling P8-0 decision: the
+library declares it, starts it before `getMediaProjection` (the API 34+ order
+consent dialog → FGS startForeground → projection), and stops it at the
+session terminal — the capture notification appears during HostChoice sessions.
+
+| evidenceId | kind | what it exercises |
+|---|---|---|
+| `android-capture-surface-stream-bounded` | scenario | the REAL `PixelCopy` of the attached SurfaceView (content actually rendered by the app: a red canvas posted into the holder): the full configuration (revision 0, the view's REAL size) is published as `Streaming` BEFORE the first frame; frames flow bounded, each carrying the drawn content (pixel (5,5) is the drawn red); `requestStop` → `Stopped(Requested)` and ZERO frames follow the terminal |
+| `android-capture-consent-denied-stateful` | scenario | the REAL dialog, "Don't allow" pressed by the UiAutomation → `requestPermission` answers a STATEFUL success (`Denied(canRequestAgain = true)` on BOTH scopes, CONTRACTS :64 — never a failure); a following `open` answers the permission refusal without a new prompt |
+| `android-capture-token-single-use` | scenario | consent granted (real "Start now") → the session streams real MediaProjection frames; the state readback (`refreshSources`) NEVER prompts (guarded by the sentinel below); a second `open` without fresh consent answers `PermissionDenied(CaptureScreen)` (the grant was consumed); a NEW consent (real dialog again) arms a second live session |
+| `android-capture-fgs-lifecycle` | scenario | the merged manifest declares the library's capture service; it RUNS during the session (`ActivityManager.getRunningServices` on the own process — the honest read — plus the minimal "Screen capture" notification posted) and is STOPPED at the terminal (service gone, notification withdrawn) |
+| `android-capture-source-refused` | scenario | the REAL production port at the device's real API level answers `reserve(Source(...))` → `Unsupported(CaptureOpen)` BEFORE any seam (zero seams wired — a structural refusal proven on device); sources stay `HostPickerOnly`, `refreshSources` is the honest no-op, a consent request without its seam answers the nominal `Unsupported(CapturePermission)` |
+| `android-capture-late-attach-consent` | scenario | the activity is RESUMED BEFORE the attach; consent through the direct registry (no LifecycleOwner) works on the REAL androidx registry — the kadre-old anti-pattern (`ComponentActivity.registerForActivityResult` THROWS after STARTED) is corrected on device, not only host-side |
+| `android-capture-no-prompt-on-readback` | sentinel | a build whose state readback launches the consent dialog kills `androidCaptureTokenSingleUse` alone (the mutant dialog wedges the port's consent path, so the scenario's second consent answers the consumed interaction instead of a fresh grant) |
+| `android-capture-fgs-stopped-after-terminal` | sentinel | a build whose terminal skips the FGS stop kills `androidCaptureFgsLifecycle` alone (the service-outlives-session assertion) |
+
+**The API 34+ consent order is load-bearing.** The grant returned by the
+system dialog is NOT consumed at consent time: `getMediaProjection` legally
+runs only AFTER the `mediaProjection` foreground service has called
+`startForeground` (the official order dialog → FGS → projection); the port
+stores the raw grant and the stream start consumes it right after the FGS-ready
+signal. Closing the port during the dialog fails the pending request
+`Closed(Host)` immediately; closing between reserve and start fails the start
+before any live projection exists. Concurrent sessions share the single
+service through a process-wide ownership refcount (the terminal of the first
+session must not kill the FGS under the second's live projection).
+
 **The honest-availability transitions the run carries.** The four capabilities the phase
 delivers move from the matrix's C (deferred) to their real published values after a real
 install, read in the same run: the display `enumerationCapability` is
@@ -371,9 +411,9 @@ emulator-5554`). The Gradle run inside is bounded by a portable 900 s watchdog
 (GNU `timeout` is absent on stock macOS — background Gradle, bounded wait,
 `SIGTERM` at expiry with exit code 124; commit `76229d58`). The gate task is
 `:kadre:contracts:validator:androidContractsCheck`: registry validation plus
-Android contract evidence validation against **`AND-001` through `AND-008`** —
+Android contract evidence validation against **`AND-001` through `AND-009`** —
 one canonical JSON per contract, all from the same instrumented emulator run
-(38 instrumented tests).
+(44 instrumented tests).
 
 The wrapper chains two steps, each of which can also be run on its own — one
 Gradle invocation per shell command:
@@ -657,10 +697,11 @@ roadmap checklist is carried by the evidence itself:
   `android-memory-no-background-signal`;
 - raw input stays a refused non-call — `android-raw-input-noncall`
   (`Unsupported(RawInputAccess)` before and at the call);
-- `AND-001` through `AND-008` together — 38 instrumented tests, one canonical
-  JSON per contract, all from the same instrumented emulator run (the 32
-  previous testcases plus the six displays/devices/gamepad/memory ones of
-  `KadreConsumerDisplaysContractTest`).
+- `AND-001` through `AND-009` together — 44 instrumented tests, one canonical
+  JSON per contract, all from the same instrumented emulator run (the 38
+  previous testcases plus the six capture/consent/frames ones of
+  `KadreConsumerCaptureContractTest` and the friend-module
+  `AndroidCaptureDeviceContractTest`).
 
 ## Engine labeling
 
@@ -690,8 +731,13 @@ arguments as the runtime/AppKit producers — no format reimplementation) with:
   `KadreConsumerInputContractTest` (`AND-004`),
   `KadreConsumerWindowInteractionContractTest` (`AND-005`),
   `KadreConsumerTextContractTest` (`AND-006`),
-  `KadreConsumerDropContractTest` (`AND-007`) or
-  `KadreConsumerDisplaysContractTest` (`AND-008`) — the AND-007 transfer scenarios
+  `KadreConsumerDropContractTest` (`AND-007`),
+  `KadreConsumerDisplaysContractTest` (`AND-008`) or
+  `KadreConsumerCaptureContractTest` (`AND-009`) — the AND-007 transfer scenarios
+  and the AND-009 source-refusal scenario (`androidCaptureSourceRefused`) are
+  mapped to `AndroidDropDeviceContractTest` / `AndroidCaptureDeviceContractTest`,
+  whose classes arrive in the same XML from the `platform/android-devicetest` AAR
+  consumed `androidTestImplementation`; the AND-007 transfer scenarios
   (`androidDropRealTransferBounded`, `androidDropStreamReleasedOnClose`) are
   mapped to `AndroidDropDeviceContractTest`, whose classes arrive in the same
   XML from the `platform/android-devicetest` AAR consumed

@@ -833,8 +833,13 @@ class AndroidCapturePortTest {
         assertIs<KadreResult.Success<CapturePortStreamStart>>(failingStarted.await())
         advanceUntilIdle()
         assertEquals(1, failingListener.frames.size)
-        native.fireCompleted(result = 1) // un code d'erreur SDK (jamais `SUCCESS`)
-        advanceUntilIdle()
+        // Le refus SDK est RETRAYÉ borné (la surface transientement absente) : le même
+        // code d'erreur est reposé jusqu'à l'épuisement des tentatives — le terminal ne
+        // part qu'après, et il est exactement un.
+        repeat(9) {
+            native.fireCompleted(result = 1) // un code d'erreur SDK (jamais `SUCCESS`)
+            advanceUntilIdle()
+        }
         assertEquals(1, failingListener.terminations.size, "le terminal exactement une fois")
         assertEquals(
             CaptureOutcome.Failed(

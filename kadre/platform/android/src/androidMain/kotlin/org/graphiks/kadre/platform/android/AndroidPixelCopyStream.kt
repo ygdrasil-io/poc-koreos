@@ -227,6 +227,12 @@ internal class AndroidPixelCopyStream(
  * de [AndroidPixelCopyPump.copyFrame] — `null` y signifie refus-du-start enregistré ou
  * terminal déjà délivré).
  */
+/** La lecture d'une copie sous verrou : les octets, le refus SDK, ou le terminal (`null`). */
+private sealed interface PixelRead {
+    data class Ok(val bytes: ByteArray) : PixelRead
+    data class Refused(val reason: Throwable) : PixelRead
+}
+
 private class FirstCopyReady(
     val frame: CapturePortFrame,
     val configuration: CaptureConfiguration,
@@ -389,15 +395,17 @@ private class AndroidPixelCopyPump(
             // d'état) pendant la copie — le périmé est jeté, la boucle re-copie à la taille
             // fraîche ; un verdict d'erreur à taille INCHANGÉE est un refus genuine.
             val fresh = validSize()
-            if (result != PIXEL_COPY_SUCCESS && fresh != size) {
+            if (result != PIXEL_COPY_SUCCESS) {
+                // Le refus transient (`ERROR_SOURCE_INVALID` : la surface se recrée) et le
+                // changement de taille se traitent pareil — une RE-COPIE bornée, pas un
+                // échec du flux ; le refus genuine n'arrive qu'après l'épuisement des
+                // tentatives.
                 if (++attempts > MAX_COPY_ATTEMPTS) {
                     return refusedOrTerminal(pipeFailure("pixel-copy-refused", null, result.toString()))
                 }
+                delay(COPY_RETRY_MILLIS)
                 size = fresh ?: return refusedOrTerminal(pipeFailure("surface-size-unavailable", null))
                 continue
-            }
-            if (result != PIXEL_COPY_SUCCESS) {
-                return refusedOrTerminal(pipeFailure("pixel-copy-refused", null, result.toString()))
             }
             if (fresh != size) {
                 // Copie RÉUSSIE mais périmée (la taille a bougé pendant la copie) : jetée,
@@ -408,10 +416,24 @@ private class AndroidPixelCopyPump(
                 size = fresh ?: return refusedOrTerminal(pipeFailure("surface-size-unavailable", null))
                 continue
             }
-            val bytes = try {
-                native.readPixels(ownedBitmap)
-            } catch (refused: Throwable) {
-                return refusedOrTerminal(pipeFailure("pixel-read-refused", refused))
+            // La lecture SOUS LE VERROU de la pompe : le recycle du release prend le même
+            // verrou — copie et recycle ne se croisent JAMAIS (un bitmap recyclé relu est
+            // un crash natif).
+            val read = lock.withLock {
+                if (terminated) null else {
+                    try {
+                        PixelRead.Ok(native.readPixels(ownedBitmap))
+                    } catch (refused: Throwable) {
+                        PixelRead.Refused(refused)
+                    }
+                }
+            }
+            var bytes: ByteArray
+            when (read) {
+                null -> return null // le terminal a gagné la course
+                is PixelRead.Refused ->
+                    return refusedOrTerminal(pipeFailure("pixel-read-refused", read.reason))
+                is PixelRead.Ok -> bytes = read.bytes
             }
             return frameFrom(size, bytes)
         }
@@ -548,15 +570,24 @@ private class AndroidPixelCopyPump(
         CapturePortTermination.SourceLost -> KadreFailure.Closed(KadreResourceKind.CaptureSession)
     }
 
-    /** Le one release : le bitmap recyclé exactement une fois. Idempotent. */
+    /**
+     * Le one release : le bitmap recyclé exactement une fois. Le champ est NULLÉ sous le
+     * même verrou — un bitmap recyclé qui serait relu (la boucle réveillée après le release)
+     * est un crash natif, jamais ré-atteint quand le champ est null.
+     */
     private fun release() {
         val owned = lock.withLock {
             if (released) null else {
                 released = true
-                bitmap
+                val owned = bitmap
+                bitmap = null
+                bitmapSize = null
+                owned?.let(native::recycle)
+                owned
             }
         }
-        owned?.let(native::recycle)
+        // le recycle a tourné SOUS le verrou (la lecture de frame ne le croise jamais)
+        owned
     }
 
     /**
@@ -592,8 +623,11 @@ private class AndroidPixelCopyPump(
         )
 
     private companion object {
-        /** Le plafond des re-copies sur une surface qui change de taille pendant la copie. */
+        /** Le plafond des re-copies (surface qui change de taille, ou transientement absente). */
         const val MAX_COPY_ATTEMPTS = 8
+
+        /** L'attente entre deux re-copies — laisse la surface se recréer. */
+        const val COPY_RETRY_MILLIS = 50L
     }
 }
 
