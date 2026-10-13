@@ -381,6 +381,10 @@ public sealed interface RuntimeDesktopNativeWindowHandle {
         public val nsWindowAddress: ULong,
         public val nsViewAddress: ULong,
     ) : RuntimeDesktopNativeWindowHandle
+
+    public data class Win32(
+        public val hwnd: ULong,
+    ) : RuntimeDesktopNativeWindowHandle
 }
 
 /**

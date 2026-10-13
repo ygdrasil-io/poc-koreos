@@ -18,6 +18,7 @@ kotlin {
         val jvmTest by getting {
             dependencies {
                 implementation(kotlin("test"))
+                implementation(project(":kadre:platform:desktop"))
                 implementation(project(":kadre:contracts:driver:win32"))
             }
         }
@@ -32,6 +33,9 @@ tasks.named<Test>("jvmTest") {
     )
     filter.excludeTestsMatching(
         "org.graphiks.kadre.internal.win32.Win32HostNativeContractTest",
+    )
+    filter.excludeTestsMatching(
+        "org.graphiks.kadre.internal.win32.Win32WindowsNativeContractTest",
     )
 }
 
@@ -51,6 +55,9 @@ val win32NativeTests = tasks.register<Test>("win32NativeTests") {
     )
     filter.includeTestsMatching(
         "org.graphiks.kadre.internal.win32.Win32HostNativeContractTest",
+    )
+    filter.includeTestsMatching(
+        "org.graphiks.kadre.internal.win32.Win32WindowsNativeContractTest",
     )
     forkEvery = 1
     reports.junitXml.outputLocation.set(layout.buildDirectory.dir("test-results/win32NativeTests"))

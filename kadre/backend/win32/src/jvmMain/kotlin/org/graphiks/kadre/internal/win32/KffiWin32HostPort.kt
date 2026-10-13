@@ -2,6 +2,7 @@ package org.graphiks.kadre.internal.win32
 
 import org.graphiks.kffi.win32.generated.DispatchMessageW
 import org.graphiks.kffi.win32.generated.GetLastError
+import org.graphiks.kffi.win32.generated.DefWindowProcW
 import org.graphiks.kffi.win32.generated.DestroyWindow
 import org.graphiks.kffi.win32.generated.IsWindow
 import org.graphiks.kffi.win32.generated.MsgWaitForMultipleObjectsEx
@@ -10,6 +11,7 @@ import org.graphiks.kffi.win32.generated.PostMessageW
 import org.graphiks.kffi.win32.generated.TranslateMessage
 import org.graphiks.kffi.win32.generated.init
 import org.graphiks.kffi.win32.managed.Win32ControlWindow
+import org.graphiks.kffi.win32.managed.Win32ManagedWindow
 import org.graphiks.kffi.win32.managed.Win32Structs
 import java.lang.foreign.Arena
 import java.lang.foreign.MemorySegment
@@ -27,6 +29,7 @@ internal class KffiWin32HostPort : Win32NativeHostPort {
     private var controlWindow: Win32ControlWindow? = null
     private var msgArena: Arena? = null
     private var pendingMessage: MemorySegment? = null
+    private val topLevelWindows = java.util.concurrent.ConcurrentHashMap<Win32TopLevelWindowHandle, Win32ManagedWindow>()
 
     override fun isMainThread(): Boolean = Thread.currentThread() == createdThread
 
@@ -114,9 +117,39 @@ internal class KffiWin32HostPort : Win32NativeHostPort {
         }
     }
 
+    override fun createTopLevelWindow(
+        title: String,
+        decorations: Win32WindowDecorations,
+        width: Int,
+        height: Int,
+        messageHandler: (hwnd: Long, id: Int, wParam: Long, lParam: Long) -> Long,
+    ): Win32TopLevelWindowHandle {
+        init()
+        val window = Win32ManagedWindow.open(title) { hwnd, message, wParam, lParam ->
+            messageHandler(hwnd, message, wParam, lParam)
+        }
+        topLevelWindows[Win32TopLevelWindowHandle(window.hwnd)] = window
+        return Win32TopLevelWindowHandle(window.hwnd)
+    }
+
+    override fun defWindowProc(hwnd: Long, message: Int, wParam: Long, lParam: Long): Long =
+        org.graphiks.kffi.win32.generated.DefWindowProcW(MemorySegment.ofAddress(hwnd), message, wParam, lParam)
+
+    override fun requestCloseWindow(hwnd: Long) {
+        PostMessageW(MemorySegment.ofAddress(hwnd), WM_CLOSE, 0L, 0L)
+    }
+
+    override fun destroyWindow(hwnd: Long) {
+        val entry = topLevelWindows.entries.firstOrNull { it.key.hwnd == hwnd }
+        entry?.value?.close()
+        topLevelWindows.remove(entry?.key)
+    }
+
     override fun close() {
         controlWindow?.close()
         controlWindow = null
+        topLevelWindows.values.forEach { runCatching(it::close) }
+        topLevelWindows.clear()
         msgArena?.close()
         msgArena = null
         pendingMessage = null
@@ -130,5 +163,6 @@ internal class KffiWin32HostPort : Win32NativeHostPort {
         const val PM_REMOVE: Int = 0x1
         val WAIT_FAILED: Int = -1 // MsgWaitForMultipleObjectsEx failure return
         const val WM_QUIT: Int = 0x0012
+        const val WM_CLOSE: Int = 0x0010
     }
 }

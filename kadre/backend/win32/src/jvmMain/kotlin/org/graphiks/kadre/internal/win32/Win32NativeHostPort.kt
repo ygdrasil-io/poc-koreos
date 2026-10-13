@@ -20,4 +20,19 @@ internal interface Win32NativeHostPort : AutoCloseable {
     fun waitForMessage(timeoutMillis: Long): Win32MessageWait
     fun translateAndDispatch(wait: Win32MessageWait.Message)
     fun destroyControlWindow(hwnd: Long)
+
+    /** Phase 2: real top-level windows. Messages (WM_CLOSE et al.) reach the handler; wake/stop privates stay pump-owned. */
+    fun createTopLevelWindow(
+        title: String,
+        decorations: Win32WindowDecorations,
+        width: Int,
+        height: Int,
+        messageHandler: (hwnd: Long, id: Int, wParam: Long, lParam: Long) -> Long,
+    ): Win32TopLevelWindowHandle
+
+    fun requestCloseWindow(hwnd: Long)
+    fun destroyWindow(hwnd: Long)
+
+    /** Native default behavior for unhandled messages (real: DefWindowProcW; fake: 0L). */
+    fun defWindowProc(hwnd: Long, message: Int, wParam: Long, lParam: Long): Long
 }

@@ -32,3 +32,12 @@ PMP-001	jvm	scenario	pmp-wake-releases-blocked-wait	org.graphiks.kadre.internal.
 PMP-001	jvm	scenario	pmp-wake-alone-rearms	org.graphiks.kadre.internal.win32.Win32MessagePumpTest	wakeAloneRearmsWithoutStopping[jvm]
 PMP-001	jvm	sentinel	pmp-no-error-swallow	org.graphiks.kadre.internal.win32.Win32MessagePumpTest	getErrorMessageYieldsPumpFailedWithReason[jvm]
 PMP-001	jvm	sentinel	pmp-stop-idempotent	org.graphiks.kadre.internal.win32.Win32MessagePumpTest	postedStopYieldsStoppedExactlyOnce[jvm]
+W32-004	jvm	scenario	win32-window-lifecycle-cycles	org.graphiks.kadre.internal.win32.Win32WindowsNativeContractTest	windowLifecycleCyclesThroughThreeRealTopLevelWindows
+W32-004	jvm	scenario	win32-window-primary-follows-admission	org.graphiks.kadre.internal.win32.Win32WindowRuntimeDriverTest	openThreeWindowsAdmitsThemWithPrimaryFollowingAdmission[jvm]
+W32-004	jvm	sentinel	win32-window-destroyed-after-close	org.graphiks.kadre.internal.win32.Win32WindowsNativeContractTest	windowLifecycleCyclesThroughThreeRealTopLevelWindows
+W32-005	jvm	scenario	win32-close-app-accepted	org.graphiks.kadre.internal.win32.Win32WindowRuntimeDriverTest	refusedNativeCloseKeepsWindowAlive[jvm]
+W32-005	jvm	scenario	win32-close-secondary-keeps-session	org.graphiks.kadre.internal.win32.Win32WindowRuntimeDriverTest	closingSecondaryKeepsPumpAliveAndManagerConsistent[jvm]
+W32-005	jvm	sentinel	win32-no-close-without-decision	org.graphiks.kadre.internal.win32.Win32WindowRuntimeDriverTest	appCloseRunsClosingDetachesAndClosesInOrder[jvm]
+W32-006	jvm	scenario	win32-last-window-arms-stop	org.graphiks.kadre.internal.win32.Win32WindowsNativeContractTest	closingSecondaryKeepsTheSessionAliveThenLastWindowStopsIt
+W32-006	jvm	scenario	win32-hwnd-reuse-delivers-nothing	org.graphiks.kadre.internal.win32.DeterministicWin32WindowPortTest	destroyedWindowStopsRouting[jvm]
+W32-006	jvm	sentinel	win32-no-stop-without-windows	org.graphiks.kadre.internal.win32.Win32BackendProviderTest	emptyApplicationCompletesThroughThePump[jvm]
