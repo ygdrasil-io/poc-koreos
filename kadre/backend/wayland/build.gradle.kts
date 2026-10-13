@@ -60,10 +60,6 @@ val waylandNativeTests = tasks.register<Test>("waylandNativeTests") {
     filter.includeTestsMatching(
         "org.graphiks.kadre.internal.wayland.WaylandWindowsLinuxTest",
     )
-    // TEMPORARY (create_pool diagnosis)
-    filter.includeTestsMatching(
-        "org.graphiks.kadre.internal.wayland.WaylandShmDiagLinuxTest",
-    )
     testLogging {
         events("failed")
         exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL
