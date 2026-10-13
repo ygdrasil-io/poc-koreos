@@ -73,11 +73,18 @@ import org.junit.runner.RunWith
  * | android-capture-late-attach-consent | androidCaptureLateAttachConsent  | -                              |
  *
  * LE CONSENTEMENT RÉEL : la dialog système MediaProjection est automatisée par l'
- * UiAutomation de l'instrumentation — l'identité shell, la seule qui peut injecter un
- * `input tap` DANS la dialog de systemui. Le mécanisme : `uiautomator dump` (le XML de la
- * hiérarchie réelle) → recherche du bouton par son texte (les libellés API 35 : « Start
- * now » / « Don't allow ») → `input tap` au centre des bounds. Le dump est l'ORACLE : le
- * scénario échoue en citant la hiérarchie courante si le bouton attendu n'existe pas.
+ * UiAutomation de l'instrumentation — l'identité shell. LA VOIE PRIMAIRE est
+ * l'ACCESSIBILITÉ : l'[UiAutomation] lit les fenêtres INTERACTIVES
+ * (`FLAG_RETRIEVE_INTERACTIVE_WINDOWS` — la dialog de systemui est la fenêtre d'un autre
+ * process) et pose `ACTION_CLICK` sur le nœud du bouton — LES NŒUDS CLIQUABLES D'ABORD
+ * (le titre API 35 « Start recording or casting with… » matche le motif positif, cliquer
+ * un titre ne fait rien) ; quand le libellé porte sur un TextView non cliquable (la ligne
+ * « Camera » du sélecteur d'app), le clic porte sur l'ANCÊTRE CLIQUABLE (la rangée). Le
+ * PROGRÈS est vérifié après chaque clic — le résultat arrive ou le nœud disparaît ;
+ * sinon le RECUL presse le MÊME bouton par `input tap` shell aux bounds ÉCRAN du nœud
+ * (l'identité shell est la seule qui injecte un toucher DANS la dialog de systemui).
+ * Le dump des fenêtres interactives est l'ORACLE : un bouton jamais pressé fait échouer
+ * le scénario en citant les libellés essayés et la hiérarchie courante.
  *
  * LES FAITS AND-009, ÉPELÉS PAR SCÉNARIO :
  *
@@ -583,7 +590,7 @@ class KadreConsumerCaptureContractTest {
             PermissionState.Denied(canRequestAgain = true),
         )
 
-    // -- le consentement automatisé : dump + tap, l'identité shell ---------------------------------------
+    // -- le consentement automatisé : accessibilité (ACTION_CLICK) + recul shell, l'identité shell ----
 
     /**
      * La demande de consentement AVEC le dialogue système réel automatisé : la demande part
