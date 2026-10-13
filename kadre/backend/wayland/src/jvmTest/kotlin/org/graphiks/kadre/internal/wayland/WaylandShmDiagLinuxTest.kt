@@ -1,30 +1,52 @@
 package org.graphiks.kadre.internal.wayland
 
-import java.nio.file.Files
-import java.nio.file.Path
+import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.CountDownLatch
 import kotlin.test.Test
+import kotlin.test.assertTrue
 
-/** DIAGNOSTIC JETABLE : séquence kffi pure (thread test) dans l'env de la gate. */
+/** DIAGNOSTIC JETABLE : flux d'intégration kffi exact (64×64, attach, frame). */
 class WaylandShmDiagLinuxTest {
 
     @Test
-    fun directFacadeShmOnTestThread() {
-        val display = System.getenv("WAYLAND_DISPLAY") ?: error("no WAYLAND_DISPLAY")
-        println("DIAG display=$display xdg=${System.getenv("XDG_RUNTIME_DIR")}")
-        val client = org.graphiks.kffi.wayland.managed.WaylandClient.connect(display)
+    fun kffiExactFlowOnTestThread() {
+        val client = org.graphiks.kffi.wayland.managed.WaylandClient.connect(null)
         checkNotNull(client) { "connect failed" }
-        val fd = org.graphiks.kffi.wayland.createMemFd("kadre-diag", 4096)
-        println("DIAG fd=$fd open=" + Files.exists(Path.of("/proc/self/fd/" + fd)))
         try {
-            val buffer = client.createShmBuffer(16, 16)
-            println("DIAG buffer ok; roundtrip=" + client.roundtrip())
+            val surface = client.createSurface()
+            val xdg = client.createXdgSurface(surface)
+            val toplevel = client.createToplevel(xdg)
+            val configureSerials = CopyOnWriteArrayList<Int>()
+            xdg.addConfigureListener(onConfigure = { configureSerials.add(it) }, onFailure = {})
+            surface.commit()
+            val deadline = System.nanoTime() + 10_000_000_000L
+            while (configureSerials.isEmpty() && System.nanoTime() < deadline) {
+                client.roundtrip()
+                Thread.sleep(25)
+            }
+            println("DIAG2 configure=$configureSerials")
+            val buffer = client.createShmBuffer(64, 64)
+            val pixels = buffer.content()
+            for (index in 0 until 64 * 64) {
+                pixels.set(java.lang.foreign.ValueLayout.JAVA_INT, index.toLong() * 4, 0xFF3366AA.toInt())
+            }
+            xdg.ackConfigure(configureSerials.last())
+            val framed = CountDownLatch(1)
+            surface.addFrameListener(onFrame = { framed.countDown() }, onFailure = {})
+            surface.attachAndCommit(buffer)
+            val deadline2 = System.nanoTime() + 10_000_000_000L
+            while (System.nanoTime() < deadline2 && framed.count > 0L) {
+                client.roundtrip()
+                Thread.sleep(25)
+            }
+            println("DIAG2 framed=${framed.count > 0} healthy=${client.roundtrip()}")
+            assertTrue(framed.count > 0, "DIAG2: surface did not map")
             buffer.close()
-        } catch (t: Throwable) {
-            println("DIAG FAILED: $t")
-            throw t
+            toplevel.close()
+            xdg.close()
+            surface.close()
         } finally {
             client.close()
-            if (fd >= 0) org.graphiks.kffi.wayland.closeFd(fd)
         }
     }
 }
