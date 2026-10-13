@@ -47,8 +47,11 @@ import kotlin.math.min
  * pour qu'un drag terminé ne soit plus lisible. La sémantique de [collectBytes] est le miroir web
  * exact : au plus `maxChunkBytes` par tranche, EOF au PREMIER chunk `null` OU court (la taille
  * inconnue se découvre à la lecture), l'annulation de la coroutine collectrice relance
- * [CancellationException] (la livraison s'arrête, le close vient du transfert), et toute autre
- * erreur de lecture est l'échec fermé `byte-read` — le contenu de l'erreur reste côté plateforme.
+ * [CancellationException] ; une erreur DE LECTURE du payload est l'échec fermé `byte-read` —
+ * le contenu de l'erreur reste côté plateforme — tandis que toute exception qui s'échappe du
+ * COLLECTEUR est propagée TELLE QUELLE : c'est le flux de contrôle de l'appelant (le runtime y
+ * jette ses gardes de lecture et les rattrape autour de l'appel pour les typer), jamais une
+ * erreur de lecture à reconvertir (preuve driver Task 4 — le bornage `maxBytes` du runtime).
  */
 internal class UIKitDropItem(
     snapshot: UIKitDropItemSnapshot,
@@ -84,21 +87,29 @@ internal class UIKitDropItem(
             )
         val total = payload.totalBytes
         var offset = 0L
-        return try {
-            while (total == null || offset < total) {
-                val count = if (total == null) maxChunkBytes else min(maxChunkBytes.toLong(), total - offset).toInt()
-                val chunk = payload.readChunk(offset, count) ?: break
-                if (chunk.isEmpty()) break
-                collector(chunk)
-                offset += chunk.size
-                if (total == null && chunk.size < count) break
-            }
-            KadreResult.Success(Unit)
-        } catch (cancellation: CancellationException) {
-            throw cancellation
-        } catch (_: Throwable) {
-            KadreResult.Failure(KadreFailure.PlatformFailure(KadrePlatform.UIKit, "drop", "byte-read"))
+        while (total == null || offset < total) {
+            val count = if (total == null) maxChunkBytes else min(maxChunkBytes.toLong(), total - offset).toInt()
+            // La conversion d'échec `byte-read` couvre LA LECTURE DU PAYLOAD seule (Task 4,
+            // preuve driver end-to-end) : toute exception qui s'échappe du COLLECTEUR est le
+            // flux de contrôle de l'APPELANT (le runtime y jette ses gardes de lecture —
+            // limite `maxBytes`, limite de tranche, transfert clos — et les rattrape JUSTE
+            // AUTOUR de [DropItemSource.collectBytes] pour les convertir en échecs typés) ;
+            // l'avaler ici en ferait un mensonge `byte-read` — la garde `ResourceLimitExceeded`
+            // du runtime n'aurait jamais atteint l'application. L'annulation collectrice reste
+            // relancée telle quelle ; une erreur de lecture plateforme reste l'échec fermé.
+            val chunk = try {
+                payload.readChunk(offset, count)
+            } catch (cancellation: CancellationException) {
+                throw cancellation
+            } catch (_: Throwable) {
+                return KadreResult.Failure(KadreFailure.PlatformFailure(KadrePlatform.UIKit, "drop", "byte-read"))
+            } ?: break
+            if (chunk.isEmpty()) break
+            collector(chunk)
+            offset += chunk.size
+            if (total == null && chunk.size < count) break
         }
+        return KadreResult.Success(Unit)
     }
 }
 
