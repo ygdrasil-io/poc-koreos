@@ -18,6 +18,7 @@ kotlin {
         val jvmTest by getting {
             dependencies {
                 implementation(kotlin("test"))
+                implementation(project(":kadre:platform:desktop"))
                 implementation(project(":kadre:contracts:driver:win32"))
             }
         }

@@ -13,12 +13,16 @@ import kotlinx.coroutines.launch
 import org.graphiks.kadre.diagnostics.KadreFailure
 import org.graphiks.kadre.diagnostics.KadreResult
 import org.graphiks.kadre.diagnostics.KadrePlatform
+import org.graphiks.kadre.diagnostics.DelicateKadreApi
+import org.graphiks.kadre.diagnostics.KadrePlatformApi
 import org.graphiks.kadre.policy.KadrePolicies
+import org.graphiks.kadre.platform.desktop.withDesktopHandle
 import org.graphiks.kadre.window.WindowPhase
 import org.graphiks.kadre.window.WindowRequestOutcome
 import org.graphiks.kadre.window.WindowSpec
 import org.graphiks.kadre.internal.runtime.RuntimeFailureReporter
 
+@OptIn(KadrePlatformApi::class, DelicateKadreApi::class)
 class Win32WindowRuntimeDriverTest {
     private fun driver(
         port: DeterministicWin32HostPort,
@@ -129,6 +133,30 @@ class Win32WindowRuntimeDriverTest {
             }
             assertEquals(1, driver.manager.state.value.windows.size)
             assertTrue(driver.manager.state.value.primary?.id == first.id)
+        } finally {
+            driver.close()
+        }
+    }
+
+    @Test
+    fun desktopHandleLeaseExposesTheLiveHwndAndClosesWithTheWindow() = runBlocking {
+        val port = DeterministicWin32HostPort()
+        val driver = driver(port)
+        try {
+            val window = openWindow(driver, "leased")
+            val borrowed = window.withDesktopHandle { handle -> handle }
+            val handle = when (val result = borrowed) {
+                is KadreResult.Success -> assertIs<org.graphiks.kadre.platform.desktop.DesktopNativeWindowHandle.Win32>(result.value)
+                is KadreResult.Failure -> throw AssertionError(
+                    "lease failed: ${result.reason} (reason class: ${result.reason::class.simpleName})",
+                )
+            }
+            assertTrue(handle.hwnd != 0UL, "the borrowed hwnd must be live")
+            window.close()
+            val after = window.withDesktopHandle { handle -> handle }
+            val failure = assertIs<KadreResult.Failure>(after)
+            assertIs<KadreFailure.Closed>(failure.reason)
+            Unit
         } finally {
             driver.close()
         }

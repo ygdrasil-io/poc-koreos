@@ -85,10 +85,16 @@ public class Win32BackendProvider private constructor(
     ): KadreResult<SessionOutcome> {
         val parentScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
         try {
+            val lastWindowStop = Win32LastWindowStopBridge()
+            val driver = Win32WindowRuntimeDriverFactory.create(
+                port = portFactory(),
+                resources = request.policy.resources,
+                onLastWindowClosed = if (request.stopWhenLastWindowClosed) lastWindowStop::request else null,
+            )
             val controller = RuntimeHostController.withComponents(
                 platform = KadrePlatform.Win32,
                 componentsFactory = { _, _ ->
-                    RuntimeSessionComponents(windows = Win32HeadlessWindowManager())
+                    RuntimeSessionComponents(windows = driver.manager)
                 },
                 initialLifecycleState = LifecycleState(
                     AttachmentState.Attached,
@@ -106,6 +112,7 @@ public class Win32BackendProvider private constructor(
             }
             val kadreSession = (attached as KadreResult.Success).value
             loopStarted?.invoke(session.pump)
+            lastWindowStop.install(kadreSession)
             var outcome: SessionOutcome? = null
             while (outcome == null) {
                 outcome = when (session.pump.runOnce()) {
@@ -141,5 +148,30 @@ public class Win32BackendProvider private constructor(
 
         internal fun isWindows(): Boolean =
             System.getProperty("os.name", "").startsWith("Windows", ignoreCase = true)
+    }
+}
+
+/** Bridges the runtime's last-window-closed signal to the standalone session stop (once). */
+internal class Win32LastWindowStopBridge {
+    private val lock = Any()
+    private var session: KadreSession? = null
+    private var requested = false
+
+    fun install(value: KadreSession) {
+        val stop = synchronized(lock) {
+            check(session == null) { "win32 last-window session was already installed" }
+            session = value
+            requested
+        }
+        if (stop) value.close()
+    }
+
+    fun request() {
+        val target = synchronized(lock) {
+            if (requested) return
+            requested = true
+            session
+        }
+        target?.close()
     }
 }

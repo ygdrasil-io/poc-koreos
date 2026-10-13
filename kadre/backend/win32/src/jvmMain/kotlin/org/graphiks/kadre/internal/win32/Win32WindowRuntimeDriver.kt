@@ -197,7 +197,7 @@ internal class Win32WindowRuntimeDriver internal constructor(
         override suspend fun <R> withDesktopHandle(
             block: (RuntimeDesktopNativeWindowHandle) -> R,
         ): KadreResult<R> {
-            if (entry.closeAdmitted || !entries.contains(entry.command.requestId)) {
+            if (entry.closeAdmitted || !entries.containsKey(entry.command.requestId)) {
                 return KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.Window))
             }
             return KadreResult.Success(
