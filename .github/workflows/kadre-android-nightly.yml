@@ -41,8 +41,12 @@
 # since 17); the only >24 call on a reachable path is Context.startForegroundService
 # (since 26), reached only by the capture FGS control and wrapped there — it degrades
 # into the port's documented `foreground-start-refused` (Temporary, retryable) on API
-# 24; VibrationEffect (26), InputDevice.getVibratorManager (31) and the three-argument
-# Service.startForeground (29) are guarded by Build.VERSION.SDK_INT. The connected
+# 24; InputDevice.getVibratorManager (31) and the three-argument Service.startForeground
+# (29) are guarded by Build.VERSION.SDK_INT. VibrationEffect (26) is NOT guarded —
+# startOneShot reaches VibrationEffect.createOneShot unguarded, and its API-24
+# protection is the runCatching { }.isSuccess of the one-shot helper: the first use of
+# the missing class raises NoClassDefFoundError, which the runCatching swallows into the
+# documented graceful `false` (no rumble on API 24, never a crash). The connected
 # suite itself (ActivityScenario, UiAutomation consent dialogs, androidx.test:core
 # 1.6.1, minSdk 19) supports API 24. Should a leg still fail on the oldest image, it
 # fails red here first — that is the nightly doing its job, not a silent downgrade.

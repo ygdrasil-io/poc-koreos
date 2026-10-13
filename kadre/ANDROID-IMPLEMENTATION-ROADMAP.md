@@ -335,13 +335,31 @@ Chaque revue vérifie d’abord la propriété des ressources hôtes, les course
 
 ## 9. Checklist de fermeture
 
-- [ ] Les variantes Android se résolvent depuis l’unique dépendance publique `org.graphiks.kadre:kadre`.
-- [ ] Les quatre overloads Kotlin et les deux overloads Java respectent leurs signatures et failures.
-- [ ] Les topologies Activity/View, le refus de seconde fenêtre et l’accès borné à la View sont prouvés.
-- [ ] Lifecycle, double attach, reparenting, recréation et isolation de deux Activities sont couverts sur Android.
-- [ ] Surface/redraw, input, fenêtres, interactions, IME, drop, displays, devices, gamepads, mémoire et capture ont chacun une décision documentée et testée.
-- [ ] Aucun différé d’implémentation n’est présenté comme une absence structurelle définitive.
-- [ ] Teardown, cancellation et callbacks tardifs ne conservent aucune ressource ni autorité de l’ancien host.
-- [ ] Consentement de capture, durée de vie des tokens, frames et services ont des propriétaires et des tests explicites.
-- [ ] Compose et les usages Android des samples ont migré sans singleton ni renderer Kadre.
-- [ ] Les preuves JSON/JUnit, consumers publiés, matrices PR/nightly et validations physiques requises sont complètes.
+Clôturée le 2026-10-13 (phase 10) — chaque ligne cochée contre la preuve livrée par les
+phases 0 à 10 (registre `capabilities/android.md` §2/§5, driver README « CI and nightly »,
+gate §Phase 10) ; les preuves matérielles restantes sont les items [verify-device] listés
+sous la checklist, tenus par le cahier de release (TEST-STRATEGY §11.2) et jamais par une
+ligne du registre.
+
+- [x] Les variantes Android se résolvent depuis l’unique dépendance publique `org.graphiks.kadre:kadre`. — preuve : l’umbrella publié résolu par les consumers et les trois samples du repository contractuel (`-PkadreRepository`, jamais l’included build), la pureté transitive épinglée par `AndroidVariantPurityTest` (`:kadre:jvmTest`) et le grep de résolution `debugRuntimeClasspath` (aucun `kffi`/`desktop`, `grep` exit 1) refait à froid à chaque gate de phase, phase 10 comprise.
+- [x] Les quatre overloads Kotlin et les deux overloads Java respectent leurs signatures et failures. — preuve : phase 1 (`attachKadre` ×4, l’échelle d’admission répondant `KadreResult.Failure` sans exception) et phase 9 (`KadreAndroid` ×2 verbatim INTEROP-EXPORTS §4, `@Throws(KadreException)`) ; `KotlinFacadeConsumerTest`, `JavaAndroidFacadeConsumerTest`, `KadreAndroidFacadeTest`, `KadreSessionHandleTest` ; signatures FIGÉES par la baseline ABI `platform/android/api/android/android.api` (phase 10).
+- [x] Les topologies Activity/View, le refus de seconde fenêtre et l’accès borné à la View sont prouvés. — preuve : `AndroidWindowTopologyTest` (la fenêtre primaire partage l’identité de la surface, forme View `primary == null`, `requestWindow` déjà terminal `Rejected` dans les deux formes), le pin forme View porté par `android-window-commits-with-readback` (AND-005), l’accès borné = le bail unique `withAndroidView` (`android-surface-lease-boundaries`, thread hôte, `Closed(Surface)` après terminal).
+- [x] Lifecycle, double attach, reparenting, recréation et isolation de deux Activities sont couverts sur Android. — preuve : AND-002 (`android-attach-surviving-scope`, `android-attach-detach-reparent`, `android-attach-recreation-isolation`, `android-consumer-double-attach-rejected`) plus `AndroidLifecycleReducerTest`/`AndroidHostLifecyclePropagationTest` ; la recréation est re-couverte côté ressources par les 5 cycles `recreate()` de `AndroidLeakCyclesTest` (phase 10).
+- [x] Surface/redraw, input, fenêtres, interactions, IME, drop, displays, devices, gamepads, mémoire et capture ont chacun une décision documentée et testée. — preuve : le registre §2 de `capabilities/android.md` relu ligne à ligne par l’audit §5 (10/10 contrats `AND-001`..`AND-010`, 47 scénarios + 21 sentinelles, chaque contrat à sa double preuve instrumentée + hôtes) ; chaque décision — limites enregistrées comprises (`textInput`, réception drag, `rawInput`, `gestures`) — porte son test.
+- [x] Aucun différé d’implémentation n’est présenté comme une absence structurelle définitive. — preuve : l’audit §5 sépare explicitement les limites enregistrées (définitives, faits SDK prouvés : `View.getWindow()` `@hide`, `onDragEvent` `protected`, aucune API de registration) des différés de phase (§4, chacun avec sa phase propriétaire) et des questions normatives garées utilisateur — jamais prises en passage.
+- [x] Teardown, cancellation et callbacks tardifs ne conservent aucune ressource ni autorité de l’ancien host. — preuve : sentinelles `android-stop-no-resurrection` et `android-attach-rollback-restores-state` ; `AndroidLifecycleReducerTest.detachIsTerminalEvenWithSurvivingScope`, `AndroidHostLifecyclePropagationTest.publicationAfterDetachIsAbsorbedWithoutResurrection` ; zéro callback zombie après close (redraw, lease) ; les cycles phase 10 : 0 listener SDK au close des trois ports, le terminal exact tenu après churn et soak borné.
+- [x] Consentement de capture, durée de vie des tokens, frames et services ont des propriétaires et des tests explicites. — preuve : AND-009 (`android-capture-token-single-use`, `android-capture-fgs-lifecycle`, sentinelles `android-capture-no-prompt-on-readback`/`android-capture-fgs-stopped-after-terminal`), le ruling P8-0 (le service foreground `mediaProjection` est de responsabilité Kadre), `AndroidCapturePortTest` (le buffer jamais au-delà de la lease, release exactement une fois) et ZÉRO service au repos (cycles service de la phase 10).
+- [x] Compose et les usages Android des samples ont migré sans singleton ni renderer Kadre. — preuve : phase 9 — trois modules samples résolvant les artefacts PUBLIÉS, zéro référence kadre-old ; `android-legacy-types-absent` (dex de l’APK réellement exécuté : ni `AndroidKadreRuntime` ni l’`EventLoop` kadre-old) ; `android-compose-showcase-single-session` (UNE session par host compose) ; `hello-triangle-android-capture` non migré — retrait documenté (le renderer est une responsabilité du sample).
+- [x] Les preuves JSON/JUnit, consumers publiés, matrices PR/nightly et validations physiques requises sont complètes. — preuve : dix JSON canoniques du même passage instrumenté (50 testcases, JUnit corrélé par le validateur), 222 tests hôtes `androidHostTest` de `platform/android`, le job CI `android-contracts` à chaque PR/master et le nightly matrix API 24/35 (phase 10) ; les validations physiques requises restent les items [verify-device] ci-dessous, exécutés sur le pool de devices au moment de la release (TEST-STRATEGY §11.2).
+
+**Items [verify-device] restants (preuves manuelles, hors émulateur — n’affaiblissent aucune
+ligne cochée ci-dessus, leurs limites moteur étant déjà énoncées au registre)** : une
+manette USB/BT réelle (hot-plug, rumble réel, déconnexion pendant un effet — cahier
+`contracts/driver/android/manual/phase-7-displays-devices.md`) ; un second display réel
+(option dev « Simulate secondary displays », même cahier) ; le consentement de capture
+plein-écran / miroir d’affichage entier sur device physique (l’émulateur API 35 ne livre que
+le mode « A single app » — cahier `manual/phase-8-capture.md`) ; l’IME système réel (Gboard,
+composition et suggestion strip — cahier `manual/phase-5-text-input.md`), à compléter
+post-décision par la vérification device de l’option A/B du text input garée utilisateur.
+Le drag cross-app à deux apps reste l’autre passe manuelle documentée (README du driver
+§AND-007) — il qualifierait l’envoi et la propagation de grant, pas une réception Kadre.

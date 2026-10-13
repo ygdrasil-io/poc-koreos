@@ -302,7 +302,7 @@ public class AndroidLeakCyclesTest {
         val journalBaseline = AndroidAttachDiagnostics.failures().size
 
         repeat(SERVICE_CYCLES) { cycle ->
-            assertNoCaptureService(context)
+            assertNoCaptureServiceRunning(context)
 
             val token = "kadre-leak-cycle-$cycle"
             val armed = AndroidCaptureForegroundRegistry.arm(token)
@@ -316,7 +316,7 @@ public class AndroidLeakCyclesTest {
 
             val control = AndroidServiceCaptureForeground(context)
             control.close()
-            assertNoCaptureService(context)
+            assertNoCaptureServiceRunning(context)
             assertJournalAtRest(journalBaseline, "service cycle $cycle")
         }
     }
@@ -614,7 +614,7 @@ public class AndroidLeakCyclesTest {
      * depuis l'API 26 MAIS reste fonctionnel pour les services du PROPRE app (exactement ce
      * que la mesure lit) ; c'est la conséquence observable du refcount à zéro.
      */
-    private fun assertNoCaptureService(context: Context) {
+    private fun assertNoCaptureServiceRunning(context: Context) {
         val manager = context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
         val deadline = System.currentTimeMillis() + AWAIT_TIMEOUT_MILLIS
         while (System.currentTimeMillis() < deadline) {

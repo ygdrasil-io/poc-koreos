@@ -589,11 +589,96 @@ les gestures matérielles (`manual/phase-5-text-input.md`) ; le drag cross-app �
 (README §AND-007). Aucun de ces items ne porte une ligne `LIVRÉE` du registre : les lignes
 qu’ils bornent énoncent déjà la limite moteur exacte à leur colonne `état absent`.
 
-## 6. Références
+## 6. CI, nightly et cycles de fuite — la preuve à chaque livraison (phase 10)
+
+La phase 10 branche la preuve Android aux deux cadences de `TEST-STRATEGY.md`, avec les
+budgets normatifs intacts (§9.1 : p95 agrégat PR ≤ 10 minutes, p95 job ≤ 8 minutes CHAUD,
+timeout hard 15 minutes/job + timeout externe de chaque enfant — changer ces nombres est une
+modification revue de TEST-STRATEGY, aucun workflow n'y déroge) :
+
+**Gate PR — `.github/workflows/kadre-android-contracts.yml`** (job `android-contracts`, le
+même nom que la matrice §9 de TEST-STRATEGY). Chaque PR et chaque push master : ubuntu-latest
++ KVM, image émulateur ÉPINGLÉE `system-images;android-35;google_apis;x86_64` (AVD créé à
+chaque run, headless, `-no-snapshot` — un runner éphémère démarre à froid), boot attendu par
+bornes (`adb wait-for-device` plafonné 120 s, poll `sys.boot_completed` 300 s, échec expliqué
+avec le log émulateur), puis le MÊME gate local `scripts/test-kadre-android-contracts.sh
+--serial <booté>` (sélection re-validée, registre + preuve des dix contrats AND, watchdog
+process-group 900 s) sous le timeout hard du job (15 minutes ; le premier run à froid peut
+dépasser le SLO 8 minutes sans être une dérive — l'émulateur CI x86_64 boote plus vite que
+l'AVD arm64 local, la mesure p95 se fera sur les runs réels). Artifacts (preuves, JUnit, log
+émulateur) en `failure() || cancelled()` — le seul step conditionnel, la forme du workflow
+web. Le statut agrégé unique `kadre-pr-contracts` qui groupe ce job avec les six gates de
+plateforme existants est une configuration branch-protection du dépôt (action repo-settings,
+pas un workflow). **Étiquette moteur sur CI** : `emulator-api-35-x86_64`, lue du device
+réellement attaché (`getprop`, jamais codée en dur) — un DEUXIÈME environnement distinct du
+passe local arm64, les JSON ne s'écrasent jamais (protocole du driver).
+
+**Nightly — `.github/workflows/kadre-android-nightly.yml`** (cron `43 2 * * *` + dispatch,
+concurrency group + cancel-in-progress, timeout 40 minutes miroir web-nightly). Matrice
+**API 24** (le minSdk — la plus vieille surface tenue, §11.1 « versions minimum et courante »)
++ **API 35** (courante), `fail-fast: false` — deux mesures indépendantes du même commit, une
+jambe rouge ne cache pas l'autre. Chaque jambe exécute DEUX mesures sur son émulateur : le
+gate complet (les dix contrats, consentements réels compris) puis la classe de cycles de
+fuite SEULE (filtre AGP `-Pandroid.testInstrumentationRunnerArguments.class=...` sur le
+connected du consumer — le module devicetest est une bibliothèque sans connected propre).
+Upload `always()` : l'historique de mesure est le livrable d'une nuit rouge aussi. L'audit
+statique minSdk-24 (`api-versions.xml` d'android-35) : tout appel SDK non gardé des chemins
+attach/input/display/lifecycle est ≤ 24 ; `startForegroundService` (26) n'est atteint que par
+le contrôle FGS de capture, enveloppé — dégradation documentée
+`foreground-start-refused` (Temporary, retryable) ; `getVibratorManager` (31) et
+`startForeground` 3-args (29) sont gardés `Build.VERSION.SDK_INT` ; `VibrationEffect` (26)
+n'est PAS gardé — `startOneShot` atteint `createOneShot` sans guard, et sa protection API 24
+est le `runCatching { }.isSuccess` du one-shot : le premier usage de la classe manquante lève
+`NoClassDefFoundError`, avalé en `false` gracieux (pas de vibration sous l'API 26, jamais de
+crash). La première nuit API 24 est la vraie vérification — l'image x86_64 ne boote pas sur
+un hôte arm64 (règle dure QEMU2), le CI la runne pour de bon.
+
+**Les cycles de fuite — `AndroidLeakCyclesTest`** (module friend `platform/android-devicetest`,
+porté par l'APK androidTest du consumer — le wiring P6 ; exécuté par le gate PR ET le
+nightly, seul en jambe 2 du nightly). Sept mesures en cycles répétés, chacune rouge si la
+ressource fuit : 10 cycles attach/stop (5 Kotlin + 5 façade — le terminal exact TENU à travers
+churn et soak borné, la même view ré-attachée au cycle suivant, le journal de diagnostic
+inchangé), 5 `recreate()` (l'ancienne session reste exactement `Stopped(HostDetached)`
+pendant que la nouvelle instance est RESUMED), 4 allers-retours background (`moveToState` —
+la session SURVIT, les publications surface suivent chaque transition), 4 cycles service
+(ZÉRO `AndroidCaptureService` au repos — la conséquence comportementale du refcount à zéro ;
+le bras `arm→forget` du registre rend un deferred FRAIS), et 4 cycles par port display /
+input / gamepad (exactement 1 registration à l'install, 0 au close, l'inventaire borné).
+Rouge prouvé par mutation : l'unregister retiré du close du port display rend SA mesure rouge
+(`expected:<0> but was:<1>`), revert byte-identique, vert à nouveau. Documenté NON mesurable
+ici (nommé au KDoc) : la survie heap (Activity/View capturées, coroutines orphelines,
+buffers de livraison) et la lecture directe du compteur `holders` du FGS — la décision
+LeakCanary sample/debug différée (TEST-STRATEGY §11.1, « détection de leaks d'owners,
+handles, buffers et subscriptions natives ») ; la mesure service-at-rest en est la
+conséquence comportementale exacte côté FGS.
+
+**La règle cold-boot** (constat de la passe phase 9, Task 5, retenue pour toutes les
+cadences) : un émulateur laissé chaud longtemps peut aborter dans des composants PLATFORM —
+la pile Bluetooth de l'émulateur SIGABRT, puis `libhwui` `Readback::copySurfaceInto` →
+assert framework sur le RenderThread — le crash est dans la plateforme, pas dans Kadre.
+Toute relance après un échec de ce type se fait À FROID (`adb emu kill`, zéro devices, reboot
+par le script) et la branche verte à froid est le verdict (prouvé phase 9 : la même branche
+rouge sur émulateur chaud, verte au boot froid suivant). Un job CI/nightly n'a pas ce
+problème — son runner est éphémère et `-no-snapshot` impose le cold boot.
+
+**Divulgation ABI foundation (pré-existante, hors périmètre de phase)** :
+`:kadre:foundation:checkKotlinAbi` est ROUGE sur master indépendamment de la phase 10 — la
+baseline PLATE commitée (`foundation/api/foundation.api` + `foundation.klib.api`) est
+orpheline sous KGP 2.4.20, qui attend les chemins imbriqués canoniques (`api/jvm/…`,
+`api/android/…`), et le klib dump est stale. AUCUN job CI n'exécute ce check aujourd'hui
+(l'ABI enforce est local-only ; le baseline livré par la phase 10 est celui de
+`:kadre:platform:android`, vert, chemins imbriqués) — le problème est invisible en CI et ne
+bloque aucun merge ; la conséquence locale est que `:kadre:foundation:check` est cassé
+jusqu'au fix. Le fix (updateKotlinAbi foundation) est un changement d'ownership foundation
+avec sa propre revue — DIFFÉRÉ à un fix foundation dédié, tracké explicitement (ruling
+P10-T3).
+
+## 7. Références
 
 - [Contrats des adapters et matrice de capabilities](../BACKEND-CAPABILITIES.md) — mandat §8, matrice §4 (colonnes Android), topologie §3/§6.1
-- [Roadmap d’implémentation Android](../ANDROID-IMPLEMENTATION-ROADMAP.md) — §3.3 (frontière runtime/SDK, contrat de thread), §Phase 0 (décision de thread), §Phase 1 (gate de sortie), §Phase 2 (gate de sortie — metrics vs View réelle, identité de surface, redraw borné, zéro accès SDK après fermeture), §Phase 9 (façade Java, liaison Compose, migration des samples — gate de sortie)
+- [Roadmap d’implémentation Android](../ANDROID-IMPLEMENTATION-ROADMAP.md) — §3.3 (frontière runtime/SDK, contrat de thread), §Phase 0 (décision de thread), §Phase 1 (gate de sortie), §Phase 2 (gate de sortie — metrics vs View réelle, identité de surface, redraw borné, zéro accès SDK après fermeture), §Phase 9 (façade Java, liaison Compose, migration des samples — gate de sortie), §Phase 10 (le branchement CI/nightly, gate de sortie), §9 (la checklist de fermeture cochée avec ses preuves)
 - [Exports d’interopérabilité](../INTEROP-EXPORTS.md) — §4 (la façade Java `KadreAndroid`/`KadreSessionHandle` livrée verbatim, la sentence policy vraie), §9 (la ligne consumer « Java Android » prouvée par `JavaAndroidFacadeConsumerTest`)
+- [Workflows CI](../../.github/workflows/kadre-android-contracts.yml) et [nightly](../../.github/workflows/kadre-android-nightly.yml) — le job `android-contracts` de chaque PR (émulateur épinglé API 35 x86_64, hard timeout 15) et la matrice nightly API 24/35 (cron, cycles de fuite) — §6
 - [Registre des contrats](../contracts/registry/contracts.tsv) — lignes `AND-001` (source `ANDROID-IMPLEMENTATION-ROADMAP.md#Phase 0`), `AND-002` (source `ANDROID-IMPLEMENTATION-ROADMAP.md#Phase 1`), `AND-003` (source `ANDROID-IMPLEMENTATION-ROADMAP.md#Phase 2`), `AND-004` (source `ANDROID-IMPLEMENTATION-ROADMAP.md#Phase 3 — Clavier, pointeur, touch et stylet`), `AND-005` (source `ANDROID-IMPLEMENTATION-ROADMAP.md#Phase 4 — Fenêtre Activity et interactions transitoires`), `AND-006` (source `ANDROID-IMPLEMENTATION-ROADMAP.md#Phase 5 — Text input, IME et gestures`), `AND-007` (source `ANDROID-IMPLEMENTATION-ROADMAP.md#Phase 6 — Drag-and-drop et ownership des transferts`), `AND-008` (source `ANDROID-IMPLEMENTATION-ROADMAP.md#Phase 7 — Displays, devices, gamepads et pression mémoire`), `AND-009` (source `ANDROID-IMPLEMENTATION-ROADMAP.md#Phase 8 — Capture, consentement et frames`) et `AND-010` (source `ANDROID-IMPLEMENTATION-ROADMAP.md#Phase 9 — Façade Java, Compose et migration des samples`), preuve `android`
 - [Driver du contrat Android](../contracts/driver/android/README.md) — comment relancer le gate localement (dix JSON, 50 testcases instrumentés), étiquetage moteur, limites de phases 3 à 9 (la course de re-attach rapide de la liaison Compose, §gate de la phase 9), cahier manuel phase 5 (`manual/phase-5-text-input.md`), cahier manuel phase 7 (`manual/phase-7-displays-devices.md` — manette USB/BT réelle, second display Overlay), cahier manuel phase 8 (`manual/phase-8-capture.md` — consentement réel plein-écran sur device, rotation réelle, `FLAG_SECURE`, multi-fenêtres), la migration des samples et les consumers négatifs (§AND-010 du README) et ce qu'une passe drag cross-app réelle ajouterait (§AND-007 du README)
 - [Design Kadre](../DESIGN.md) — §15.1 (les quatre overloads Android que la phase 1 livre), lifecycle à trois axes (`Active` = attaché + foreground + fenêtre interactive)
