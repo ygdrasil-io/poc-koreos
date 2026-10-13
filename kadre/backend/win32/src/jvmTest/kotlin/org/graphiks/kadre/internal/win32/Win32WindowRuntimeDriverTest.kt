@@ -40,7 +40,6 @@ class Win32WindowRuntimeDriverTest {
             is KadreResult.Success -> runBlocking { result.value.await() }
             is KadreResult.Failure -> throw AssertionError("requestWindow('$title') failed: ${result.reason}")
         }
-        java.io.File("/tmp/p2-open-outcome.txt").appendText("$outcome\n")
         assertIs<WindowRequestOutcome.OpenedHere>(outcome).window
     }
 
