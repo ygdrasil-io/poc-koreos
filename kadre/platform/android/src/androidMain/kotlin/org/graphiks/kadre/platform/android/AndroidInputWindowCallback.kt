@@ -24,7 +24,11 @@ import org.graphiks.kadre.input.KeyState
  *   [Key][Key.keyState] porte le press/release de l'action (`ACTION_UP` → `Released`, toute
  *   autre action — `DOWN`, `MULTIPLE` — → `Pressed`), ajouté par la Task 3 : la livraison au
  *   réducteur ne peut pas inventer l'état qu'un `KeyChanged` exige, et un press éternellement
- *   collé dans l'état du clavier serait un mensonge d'état.
+ *   collé dans l'état du clavier serait un mensonge d'état. Depuis la phase 7, [Key][Key.source]
+ *   porte le bitmask `source` de l'événement et [Key][Key.deviceId] l'id du device source — les
+ *   deux primitives que le routage gamepad de la delivery lit pour sortir les events
+ *   gamepad/joystick du chemin ordinaire ; un event construit sans elles (les observations
+ *   des tests, source 0) reste sur le chemin ordinaire, exactement le comportement pré-existant.
  * - [WindowFocusLost] : la fenêtre a perdu le focus — l'homologue de l'observation web
  *   `FocusLost`, la seule observée côté fenêtre à cette phase.
  */
@@ -36,6 +40,10 @@ internal sealed interface AndroidInputObservation {
         val unicodeChar: Int?,
         val isSystemKey: Boolean,
         val keyState: KeyState,
+        /** Le bitmask `source` du `KeyEvent` — les flags gamepad/joystick de la livraison. */
+        val source: Int = 0,
+        /** L'id du device source — la clé avec laquelle le port gamepad nomme sa manette. */
+        val deviceId: Int = 0,
     ) : AndroidInputObservation
 
     public data object WindowFocusLost : AndroidInputObservation
@@ -87,6 +95,8 @@ internal class AndroidInputWindowCallback(
         unicodeChar: Int?,
         isSystemKey: Boolean,
         keyState: KeyState,
+        source: Int = 0,
+        deviceId: Int = 0,
     ): Boolean {
         // La porte de focus gouverne l'OBSERVATION et la CONSOMMATION ensemble : sans
         // focus, la touche est forwardée seule — jamais avalée au nom d'une policy qui ne
@@ -101,6 +111,8 @@ internal class AndroidInputWindowCallback(
                     unicodeChar = unicodeChar,
                     isSystemKey = isSystemKey,
                     keyState = keyState,
+                    source = source,
+                    deviceId = deviceId,
                 ),
             )
         }
@@ -239,6 +251,11 @@ internal class AndroidWindowCallbackForwarder(
                 unicodeChar = event.getUnicodeChar().takeIf { it != 0 },
                 isSystemKey = event.isSystem,
                 keyState = if (event.action == KeyEvent.ACTION_UP) KeyState.Released else KeyState.Pressed,
+                // Les primitives du routage gamepad (phase 7) : le bitmask source et l'id
+                // du device — la delivery en sort les events gamepad/joystick du chemin
+                // ordinaire vers le port de la session.
+                source = event.source,
+                deviceId = event.deviceId,
             )
         } finally {
             pendingKeyEvent = previous
@@ -287,9 +304,16 @@ internal class AndroidWindowCallbackForwarder(
      * La pression est portée telle quelle (le tracker filtre hors domaine — Task 2, F2) ;
      * les axes relatifs (`AXIS_RELATIVE_X/Y`, API 26) sont lus par constante inlinée — un
      * axe inconnu d'une vieille plateforme répond zéro, le zéro honnête.
+     *
+     * Depuis la phase 7, le bitmask `source` voyage toujours ; les DIX AXES de la table
+     * gamepad ([AndroidGamepadMapping.nativeAxes]) ne sont lus que pour une motion source
+     * gamepad/joystick — le routage de la delivery les rend au port de la session, et une
+     * motion ordinaire (souris, trackpad) ne paie aucune lecture superflue. Les lectures ont
+     * lieu ICI, au point de dispatch — l'événement est recyclé au retour.
      */
     private fun motionObservation(event: MotionEvent): AndroidMotionObservation {
         val count = event.pointerCount
+        val gamepadSourced = isGamepadSource(event.source)
         return AndroidMotionObservation(
             actionMasked = event.actionMasked,
             actionIndex = event.actionIndex,
@@ -307,6 +331,12 @@ internal class AndroidWindowCallbackForwarder(
             axisYrelative = event.getAxisValue(MotionEvent.AXIS_RELATIVE_Y),
             deviceId = event.deviceId,
             metaState = event.metaState,
+            source = event.source,
+            gamepadAxes = if (gamepadSourced) {
+                AndroidGamepadMapping.nativeAxes.map { axis -> axis to event.getAxisValue(axis) }
+            } else {
+                emptyList()
+            },
         )
     }
 

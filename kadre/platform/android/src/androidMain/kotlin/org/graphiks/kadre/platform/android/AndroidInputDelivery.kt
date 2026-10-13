@@ -48,6 +48,23 @@ internal val ANDROID_DOCUMENT_SCROLL_KEYS: Set<Int> = setOf(
 )
 
 /**
+ * La couture du routage gamepad de la phase 7 — ce que la delivery consulte AVANT le chemin
+ * ordinaire pour tout event porteur des flags source gamepad/joystick. [AndroidGamepadPort]
+ * l'implémente ; quand AUCUN routage n'est installé, le chemin ordinaire reste ENTIER (le
+ * comportement pré-existant des events gamepad-sourcés, épinglé par le test d'intégration) —
+ * le changement de routage ne vit que PAR LA PRÉSENCE du port. Le prédicat des flags source
+ * est le prédicat gamepad unique ([isGamepadSource], la correction bits d'identité du masque
+ * kadre-old — la MÊME touche source clavier reste ordinaire, le test d'intégration l'épingle).
+ */
+internal interface AndroidGamepadRoute {
+    /** Le keycode du dispatch d'un bouton, l'état press/release, l'id du device source. */
+    public fun onGamepadKeyEvent(nativeKeyCode: Int, pressed: Boolean, deviceId: Int)
+
+    /** Les axes natifs lus au point de dispatch, l'id du device source. */
+    public fun onGamepadMotion(axes: List<Pair<Int, Float>>, deviceId: Int)
+}
+
+/**
  * L'allocateur de collecteurs que le runtime passe au seam est runtime-interne : le SPI le
  * porte comme [Any], la surface le rend inchangé plutôt que l'interpréter — le miroir exact
  * de `sessionCollectorAllocator` (`WebHostSession.kt:1980`). Une implémentation qui ne peut
@@ -130,6 +147,14 @@ internal class AndroidInputDelivery(
      */
     private val touchTriggers = AndroidTouchInteractionTriggers()
 
+    /**
+     * Le routage gamepad de la phase 7 — le port de la session ([AndroidGamepadPort] par le
+     * biais d'[AndroidGamepadRoute]), attaché par la couture une fois la session connue.
+     * `null` (le défaut) : AUCUN port, le chemin ordinaire reste entier. Main thread seul —
+     * la même discipline que le reste de la delivery, aucun verrou.
+     */
+    @Volatile internal var gamepadRoute: AndroidGamepadRoute? = null
+
     private var installed: Boolean = false
 
     public fun onObservation(observation: AndroidInputObservation) {
@@ -198,6 +223,15 @@ internal class AndroidInputDelivery(
     }
 
     /**
+     * Le ROUTAGE GAMEPAD D'ABORD (phase 7) : un event porteur des flags source
+     * gamepad/joystick QUITTE le chemin ordinaire dès qu'un port gamepad est attaché — il
+     * alimente l'état du port et ne produit NI interaction, NI `KeyChanged` (le modèle web :
+     * l'état gamepad n'entre jamais dans SurfaceInput, elle vit session-scoped dans le port).
+     * Sans port, le chemin ordinaire reste ENTIER — le comportement pré-existant des events
+     * gamepad-sourcés, épinglé par le test d'intégration. La consultation vit ICI (dans la
+     * livraison, la même porte que le chemin ordinaire), pas dans le mapper : un keycode
+     * gamepad hors table du clavier ([AndroidKeyMapper]) doit quand même rejoindre le port.
+     *
      * Une touche mappée → `KeyPressed` en interaction PUIS `KeyChanged` complet ; hors table →
      * rien (forwarded-only, T1). La relation physique est celle que le stimulus ordinaire du
      * MÊME down porte — le trigger ne lit jamais une identité que l'ordinaire ne porterait pas.
@@ -205,6 +239,15 @@ internal class AndroidInputDelivery(
      * keydown dispatch, le voyage du web est le même.
      */
     private fun deliverKey(observation: AndroidInputObservation.Key) {
+        val route = gamepadRoute
+        if (route != null && isGamepadSource(observation.source)) {
+            route.onGamepadKeyEvent(
+                nativeKeyCode = observation.nativeKeyCode,
+                pressed = observation.keyState == KeyState.Pressed,
+                deviceId = observation.deviceId,
+            )
+            return
+        }
         val physicalKey = AndroidKeyMapper.physicalKey(observation.nativeKeyCode)
         if (AndroidKeyMapper.hidUsage(observation.nativeKeyCode) == null) return
         if (observation.keyState == KeyState.Pressed) {
@@ -240,9 +283,13 @@ internal class AndroidInputDelivery(
     }
 
     /**
-     * Une motion : le tracker décide, chaque stimulus rendu part dans l'ordre — PRÉCÉDÉ, quand
-     * il porte un fait déclencheur ([triggerFor]), de la dispatch de son interaction. L'offset
-     * ([offsetX]/[offsetY] — l'origine de la View dans l'espace fenêtre, échantillonné par la
+     * Une motion : le ROUTAGE GAMEPAD D'ABORD (phase 7) — les axes d'une motion source
+     * joystick alimentent le port, et la motion n'ouvre plus jamais la lane pointeur/tactile
+     * (un stick gauche n'est ni un pointeur ni un contact). Sans port, le chemin ordinaire
+     * reste entier — le comportement pré-existant, épinglé par le test d'intégration. Sinon le
+     * tracker décide, chaque stimulus rendu part dans l'ordre — PRÉCÉDÉ, quand il porte un
+     * fait déclencheur ([triggerFor]), de la dispatch de son interaction. L'offset
+     * ([offsetX]/[offsetY] — l'origine de la View dans l'espace fenêtre, échantillonnée par la
      * couture au moment du dispatch) voyage avec l'observation : le tracker convertit les
      * coordonnées fenêtre du dispatch en view-local AVANT ses gates et son mapping.
      */
@@ -253,6 +300,11 @@ internal class AndroidInputDelivery(
         offsetX: Int,
         offsetY: Int,
     ) {
+        val route = gamepadRoute
+        if (route != null && isGamepadSource(observation.source)) {
+            route.onGamepadMotion(observation.gamepadAxes, observation.deviceId)
+            return
+        }
         val state = committedState()
         tracker.onObservation(
             observation,

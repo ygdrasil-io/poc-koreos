@@ -1,5 +1,7 @@
 package org.graphiks.kadre.platform.android
 
+import android.app.Application
+import android.os.Build
 import android.os.Looper
 import android.view.View
 import androidx.activity.ComponentActivity
@@ -201,6 +203,14 @@ internal object AndroidHostSession {
     /** Le registre d'ownership process-wide — une seule instance pour toutes les attaches. */
     private val ownership = AndroidViewOwnership()
 
+    /**
+     * La source de pression mémoire process-wide (Task 3, modèle AppKit) — UNE source pour
+     * toutes les attaches du processus : installée à la première session, réutilisée par les
+     * suivantes, fermée par la terminaison du DERNIER host vivant (une fermeture de session
+     * n'y touche jamais).
+     */
+    private val memoryPressure = AndroidProcessMemoryPressure()
+
     /** Une denial de l'échelle devient le `KadreFailure` exact d'`attachKadre` — sans exception. */
     internal fun toFailure(denial: AndroidAttachDenial): KadreFailure = denial.failure
 
@@ -219,6 +229,16 @@ internal object AndroidHostSession {
         // 2. La réservation atomique des identités — refus : Busy(Host), état intact.
         val reservation = AndroidAttachReservation.acquire(ownership, request.activityIdentity, request.view)
             ?: return KadreResult.Failure(KadreFailure.AlreadyInUse(KadreResourceKind.Host))
+
+        // La source mémoire process (Task 3, modèle AppKit) : le créneau de CETTE attach est
+        // pris AVANT le contrôleur — sa capability (`Available` après l'install réussie de la
+        // source process, `Unavailable(PlatformFailure(Android, "memory-pressure",
+        // "source-exception"))` après un échec du register, le défaut runtime sans
+        // Application atteignable) devient le `initialLifecycleCapabilities` du contrôleur :
+        // la transition réelle exigée par la matrice C, publiée seulement après le succès
+        // d'install. La source vit au-delà des sessions ; le créneau meurt avec le host
+        // (ou le rollback d'un attach qui a fait installer).
+        val pressureClaim = memoryPressure.newHost(memoryPressureSeamFor(request.form, owner, view))
 
         // L'instantané initial honnête, partagé par la surface ET le réducteur : les deux
         // démarrent des mêmes faits observés, au même moment, sur le thread principal — la
@@ -270,6 +290,20 @@ internal object AndroidHostSession {
                     // `EnterFullscreen`/`ExitFullscreen` de Task 4) — le MÊME insets
                     // controller, une seule vérité de readback pour le champ et l'interaction.
                     val windowSeam = AndroidActivityWindowNative(owner as ComponentActivity)
+                    // Les ports P7 (Task 3) : UN seam InputManager partagé par les DEUX ports
+                    // d'entrée (devices génériques + manette — la même énumération, le même
+                    // listener multi-cast), fermé par la couture à la teardown des composants
+                    // (le contrat du seam : AUCUN des deux ports ne ferme). Le port display a
+                    // le sien, qu'il possède et ferme avec lui. La forme ACTIVITY passe les
+                    // trois : la chaîne d'entrée est câblée ici (le wrapper T1, Task 3 de la
+                    // phase d'entrée), l'état gamepad y est donc routé — les touches et les
+                    // axes source gamepad/joystick QUITTENT le chemin ordinaire pour nourrir
+                    // le port ([AndroidHostSurface.attachGamepadRoute], branché ci-dessous
+                    // avant l'installation de la configuration, la delivery qui naît le lira).
+                    val inputSeam = AndroidInputManagerSource(view.context)
+                    val displayPort = AndroidDisplayPort(AndroidDisplayManagerSource(view.context))
+                    val inputDevicePort = AndroidInputDevicePort(inputSeam)
+                    val gamepadPort = AndroidGamepadPort(inputSeam, Build.VERSION.SDK_INT)
                     val surface = AndroidHostSurface(
                         RuntimeProcessIds.nextSurfaceId(),
                         initialSurfaceState(view, initial),
@@ -279,10 +313,16 @@ internal object AndroidHostSession {
                         windowNative = windowSeam,
                     )
                     sessionSurface.surface = surface
+                    // Le routage gamepad de CETTE session — la delivery (construite plus tard,
+                    // pendant l'attach) copiera la route à sa naissance ; les events source
+                    // gamepad/joystick ne rejoignent JAMAIS le chemin ordinaire de la surface.
+                    surface.attachGamepadRoute(gamepadPort)
                     // Le manager implémente `RuntimeSessionWindowManager` : le runtime lui
                     // installe la configuration de session (LA MÊME source de stamps que la
                     // surface) pendant l'attach, et `closeAction` termine le flux d'événements
-                    // de la fenêtre à la teardown (après la fermeture de la surface).
+                    // de la fenêtre à la teardown (après la fermeture de la surface) ET ferme
+                    // le seam InputManager partagé (les ports, fermés après lui par le
+                    // runtime, désenregistrent alors dans un registre déjà vide — sans effet).
                     val manager = AndroidActivityWindowManager(
                         primarySurface = surface,
                         native = windowSeam,
@@ -290,18 +330,36 @@ internal object AndroidHostSession {
                     RuntimeSessionComponents(
                         windows = manager,
                         primarySurface = RuntimePrimarySurface(surface, surface::close),
-                        closeAction = { manager.terminalise() },
+                        displayPort = displayPort,
+                        gamepadPort = gamepadPort,
+                        inputDevicePort = inputDevicePort,
+                        closeAction = { manager.terminalise(); inputSeam.close() },
                     )
                 },
                 initialLifecycleState = lifecycleStateOf(initial),
+                initialLifecycleCapabilities = pressureClaim.capabilities,
                 failureReporter = AndroidAttachDiagnostics,
                 sessionObserver = RuntimeSessionObserver { _, _ -> reservation.release() },
             )
 
+            // Les ports P7 de la forme View (Task 3) : le display et les devices génériques,
+            // construits ici (leurs constructeurs ne posent AUCUNE registration SDK — les
+            // listeners ne naissent qu'à l'installation de l'observateur runtime) et remis à
+            // l'overload interne du runtime, qui les place dans les composants de la session :
+            // fermés avec elle. Chaque port reçoit SON seam — le runtime ne donne pas de
+            // `closeAction` ici, un port seul par seam fait de son close la désregistration
+            // SDK entière (rien ne reste posé). PAS de port gamepad : la forme View n'a pas
+            // de fenêtre, donc pas de `Window.Callback` à enchaîner — AUCUN canal d'état
+            // gamepad n'existe sur cette forme ; inventer le port y promettrait des états
+            // qui ne peuvent pas arriver. L'inventaire gamepad reste celui que le runtime
+            // substitue (les devices génériques via le port vide), honnête et sans état.
+            // Le display est observable depuis le contexte de la vue
+            // (`getSystemService(DISPLAY_SERVICE)` n'exige pas de contexte d'activité).
             AndroidAttachForm.View -> RuntimeHostController.withPrimarySurface(
                 platform = KadrePlatform.Android,
                 sessionRevocationHandler = RuntimeSessionRevocationHandler { _ -> binding?.teardown() },
                 initialLifecycleState = lifecycleStateOf(initial),
+                initialLifecycleCapabilities = pressureClaim.capabilities,
                 failureReporter = AndroidAttachDiagnostics,
                 sessionObserver = RuntimeSessionObserver { _, _ -> reservation.release() },
                 primarySurfaceFactory = { id ->
@@ -323,6 +381,8 @@ internal object AndroidHostSession {
                     sessionSurface.surface = surface
                     RuntimePrimarySurface(surface, surface::close)
                 },
+                displayPort = AndroidDisplayPort(AndroidDisplayManagerSource(view.context)),
+                inputDevicePort = AndroidInputDevicePort(AndroidInputManagerSource(view.context)),
             )
         }
 
@@ -373,6 +433,17 @@ internal object AndroidHostSession {
                 // Si elle est perdue (detach lançant), la perte est SIGNALÉE sur le canal de
                 // reporting — jamais avalée en silence.
                 proposeHostStop(detach = { controller.detach() }, reporter = AndroidAttachDiagnostics)
+                // La terminaison du host libère le créneau mémoire (Task 3) : la source
+                // process ne survit qu'à un host encore vivant — le DERNIER libéré ferme la
+                // registration. Une fermeture de session seule ne passe JAMAIS ici (la
+                // révocation démonte le binding sans terminer le host) : la source reste
+                // enregistrée, miroir AppKit. Une déregistration lançante est SIGNALÉE sur
+                // le canal de reporting, comme toute perte de terminal.
+                try {
+                    pressureClaim.hostTerminated()
+                } catch (cause: Throwable) {
+                    runCatching { AndroidAttachDiagnostics.report(cause) }
+                }
             },
         )
         binding = lifecycleBinding
@@ -410,6 +481,12 @@ internal object AndroidHostSession {
             attachController = {
                 val attached = controller.attach(parentScope, applicationFactory, policy, launch = null)
                 if (attached is KadreResult.Success) {
+                    // Le relais mémoire (Task 3) : branché sur l'attach RÉUSSI — chaque trim
+                    // RUNNING mappé par la source process atteint CE host. Le runCatching
+                    // absorbe la course signal/terminal (un `emitMemoryPressure` sur un host
+                    // déjà détaché jette ; le signal perdu est une observation, la suivante
+                    // rétablit — le même parti pris que la fenêtre post-detach du lifecycle).
+                    pressureClaim.wire { level -> runCatching { controller.emitMemoryPressure(level) } }
                     // L'observation et le scheduling vivent (le listener est posé, la clock de
                     // frame est le Choreographer par défaut de la surface) : les capabilities
                     // deviennent honnêtes. La surface existe — la factory de composants a
@@ -430,6 +507,21 @@ internal object AndroidHostSession {
                 }
                 attached
             },
+            // Le rollback libère le créneau mémoire pris avant le contrôleur (Task 3) :
+            // un attach qui échoue ne laisse la source process installée pour personne.
+            // L'absorption est SYMÉTRIQUE au chemin terminal (onTerminal, ci-dessus) : une
+            // déregistration lançante ne remplace JAMAIS l'issue de l'attach — le rejet du
+            // contrôleur reste un `KadreResult.Failure` retourné, le throwable du chemin
+            // catch reste CELUI qui est documenté — elle est SIGNALÉE sur le canal de
+            // reporting, comme toute perte de terminal. Le MÊME lambda couvre les DEUX
+            // chemins de rollback de `installBindingAndAttach`.
+            onRollback = {
+                try {
+                    pressureClaim.hostTerminated()
+                } catch (cause: Throwable) {
+                    runCatching { AndroidAttachDiagnostics.report(cause) }
+                }
+            },
         )
     }
 
@@ -449,13 +541,19 @@ internal object AndroidHostSession {
      * `installBinding` est la seule étape injectée — c'est la seule qui touche le SDK
      * Android ; le test hôte `AndroidHostSessionResultTest.throwingInstallStepRollsBackAndRethrowsRaw`
      * la remplace par une étape lançante pour épingler le rollback sans construire de View
-     * réelle.
+     * réelle. `onRollback` (Task 3) accompagne le rollback intégral sur ses deux chemins —
+     * le rejet du contrôleur et le throwable : il libère ce que l'attach a pu prendre avant
+     * l'échec (le créneau mémoire process). CONTRAT : `onRollback` absorbe ses propres
+     * échecs (l'appel de la couture le passe enveloppé, symétrique au chemin terminal) —
+     * un lancement de rollback ne doit ni remplacer le `Failure` retourné ni masquer le
+     * throwable documenté du chemin catch.
      */
     internal fun installBindingAndAttach(
         reservation: AndroidAttachReservation,
         binding: AndroidLifecycleBinding,
         installBinding: () -> Unit,
         attachController: () -> KadreResult<KadreSession>,
+        onRollback: () -> Unit = {},
     ): KadreResult<KadreSession> {
         try {
             installBinding()
@@ -465,12 +563,14 @@ internal object AndroidHostSession {
                 is KadreResult.Failure -> {
                     binding.teardown()
                     reservation.rollback()
+                    onRollback()
                     KadreResult.Failure(attached.reason)
                 }
             }
         } catch (cause: Throwable) {
             binding.teardown()
             reservation.rollback()
+            onRollback()
             throw cause
         }
     }
@@ -652,6 +752,25 @@ internal object AndroidHostSession {
         visibility = if (snapshot.foreground) VisibilityState.Foreground else VisibilityState.Background,
         activation = if (snapshot.active) ActivationState.Active else ActivationState.Inactive,
     )
+
+    /**
+     * Le seam mémoire de CETTE attach (Task 3) : l'Application est atteignable de la forme
+     * Activity (`activity.application`) et, pour la forme View, du contexte de la vue
+     * (`view.context.applicationContext as? Application` — l'Application est le SEUL
+     * récepteur public de `registerComponentCallbacks`, `Context.registerComponentCallbacks`
+     * n'est pas public). Un cast manqué reste honnête : `null`, l'attach ne tente RIEN et la
+     * capability memoryPressure y reste le défaut runtime — jamais une `PlatformFailure`
+     * inventée ; le prochain attach qui atteint l'Application installe.
+     */
+    private fun memoryPressureSeamFor(
+        form: AndroidAttachForm,
+        owner: LifecycleOwner,
+        view: View,
+    ): AndroidMemoryPressureSeam? = when (form) {
+        AndroidAttachForm.Activity -> AndroidApplicationMemoryPressureSeam((owner as ComponentActivity).application)
+        AndroidAttachForm.View -> (view.context.applicationContext as? Application)
+            ?.let(::AndroidApplicationMemoryPressureSeam)
+    }
 
     /**
      * L'instantané initial de la surface, copié de la View comme le port web copie le sien
