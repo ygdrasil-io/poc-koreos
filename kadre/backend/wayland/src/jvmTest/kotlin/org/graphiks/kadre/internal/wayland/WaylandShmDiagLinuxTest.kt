@@ -10,7 +10,10 @@ class WaylandShmDiagLinuxTest {
 
     @Test
     fun kffiExactFlowOnTestThread() {
-        val client = org.graphiks.kffi.wayland.managed.WaylandClient.connect(null)
+        // DIAG3 : le même flux avec le NOM EXPLICITE que le provider kadre passe
+        val explicitName = System.getenv("WAYLAND_DISPLAY")
+        println("DIAG3 explicitName=$explicitName")
+        val client = org.graphiks.kffi.wayland.managed.WaylandClient.connect(explicitName)
         checkNotNull(client) { "connect failed" }
         try {
             val surface = client.createSurface()
@@ -24,7 +27,7 @@ class WaylandShmDiagLinuxTest {
                 client.roundtrip()
                 Thread.sleep(25)
             }
-            println("DIAG2 configure=$configureSerials")
+            println("DIAG3 configure=$configureSerials")
             val buffer = client.createShmBuffer(64, 64)
             val pixels = buffer.content()
             for (index in 0 until 64 * 64) {
@@ -39,8 +42,8 @@ class WaylandShmDiagLinuxTest {
                 client.roundtrip()
                 Thread.sleep(25)
             }
-            println("DIAG2 framed=${framed.count > 0} healthy=${client.roundtrip()}")
-            assertTrue(framed.count > 0, "DIAG2: surface did not map")
+            println("DIAG3 framed=${framed.count > 0} healthy=${client.roundtrip()}")
+            assertTrue(framed.count > 0, "DIAG3: surface did not map")
             buffer.close()
             toplevel.close()
             xdg.close()
