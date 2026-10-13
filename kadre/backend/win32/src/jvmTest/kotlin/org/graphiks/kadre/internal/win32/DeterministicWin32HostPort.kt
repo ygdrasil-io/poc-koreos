@@ -83,6 +83,7 @@ internal class DeterministicWin32HostPort : Win32NativeHostPort {
     }
 
     override fun destroyControlWindow(hwnd: Long) {
+        createdHandlers.set(null)
         if (hwnds.remove(hwnd)) destroyedWindows.incrementAndGet()
     }
 
