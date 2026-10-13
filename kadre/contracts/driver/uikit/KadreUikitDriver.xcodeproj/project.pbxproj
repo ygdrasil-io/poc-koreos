@@ -9,7 +9,6 @@
 /* Begin PBXBuildFile section */
 		034DDEAA05709F650A3B9E5E /* MainApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = CEA47E7FE25F4B4C3C5A5A7B /* MainApp.swift */; };
 		07F945B2FBD4D75DBBCFF676 /* DriverFixture.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1E444F71E79C711F6BF4ED11 /* DriverFixture.swift */; };
-		0E01242ED47F64354862D738 /* KadreUikitPhase8SpikeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 714B20295C032915B2FACC20 /* KadreUikitPhase8SpikeTests.swift */; };
 		0F4DDB979A091F83D7DD43E9 /* DriverSceneDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1D37932D257E216FA8982CD /* DriverSceneDelegate.swift */; };
 		0FC29BEE66FB0AEBF6754ED6 /* KadreUikitSurfaceIosTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B48BF1317CBEE3F8F731C20 /* KadreUikitSurfaceIosTests.swift */; };
 		12F5830ECDAD286617F47017 /* KadreUikitInputTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 66F66836BD04B0F80C0C8430 /* KadreUikitInputTests.swift */; };
@@ -23,7 +22,6 @@
 		51AE1CE493CC7042782E6ED1 /* DriverApplication.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1B21199F53FE2CA195F1EC3 /* DriverApplication.swift */; };
 		564ABC48E0F09318F485B9BB /* KadreUikitWindowRequestTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6F4D1286C215A346482E6A1F /* KadreUikitWindowRequestTests.swift */; };
 		56E9A8196A2131F8F249E87B /* KadreUikitTextInputSpikeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C233CF6069EB6ECF2F1D8612 /* KadreUikitTextInputSpikeTests.swift */; };
-		5979C9B3E49BB14318BB9814 /* KadreUikitPhase8SpikeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 714B20295C032915B2FACC20 /* KadreUikitPhase8SpikeTests.swift */; };
 		5BF1729E91D5C95BD0B4C26C /* KadreUikitDriverTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 34888DC507A9523344912ADC /* KadreUikitDriverTests.swift */; };
 		5D1B320938D1B7DE6A75EC39 /* KadreUikit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 418337605D5B3199B7E05325 /* KadreUikit.framework */; };
 		5EEF504C068DAB0C12BA7048 /* KadreUikitDropSpikeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 363CEA648C72E453E7ACEC21 /* KadreUikitDropSpikeTests.swift */; };
@@ -115,7 +113,6 @@
 		66F66836BD04B0F80C0C8430 /* KadreUikitInputTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KadreUikitInputTests.swift; sourceTree = "<group>"; };
 		6AF300853AE2B8D0EFFD387F /* KadreUikitDriverIos.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = KadreUikitDriverIos.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		6F4D1286C215A346482E6A1F /* KadreUikitWindowRequestTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KadreUikitWindowRequestTests.swift; sourceTree = "<group>"; };
-		714B20295C032915B2FACC20 /* KadreUikitPhase8SpikeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KadreUikitPhase8SpikeTests.swift; sourceTree = "<group>"; };
 		7158A2D7EE927CE0F564B5B7 /* KadreUikitDriverIosTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = KadreUikitDriverIosTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		91719BE8D2BEB7B9A16C9210 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		B8101E012344AE673FE76468 /* KadreUikitTextInputTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KadreUikitTextInputTests.swift; sourceTree = "<group>"; };
@@ -222,7 +219,6 @@
 				31A70CAE1A1301CA944394E0 /* KadreUikitDropIosTests.swift */,
 				363CEA648C72E453E7ACEC21 /* KadreUikitDropSpikeTests.swift */,
 				66F66836BD04B0F80C0C8430 /* KadreUikitInputTests.swift */,
-				714B20295C032915B2FACC20 /* KadreUikitPhase8SpikeTests.swift */,
 				28AB0CD4DD2034DD313DB5B3 /* KadreUikitSurfaceTests.swift */,
 				C233CF6069EB6ECF2F1D8612 /* KadreUikitTextInputSpikeTests.swift */,
 				B8101E012344AE673FE76468 /* KadreUikitTextInputTests.swift */,
@@ -385,7 +381,6 @@
 				7C0DD448BAE04CDC08E3DB15 /* KadreUikitDropIosTests.swift in Sources */,
 				E07238EBCF1B34BC6261897D /* KadreUikitDropSpikeTests.swift in Sources */,
 				82F4157DA0877E6422C4CF61 /* KadreUikitInputTests.swift in Sources */,
-				0E01242ED47F64354862D738 /* KadreUikitPhase8SpikeTests.swift in Sources */,
 				A4E05FA21538599220B2A46D /* KadreUikitSurfaceTests.swift in Sources */,
 				AF9D706DFF5B8DC6F91A3755 /* KadreUikitTextInputSpikeTests.swift in Sources */,
 				4B69B3219CBC2BA5808FF7E0 /* KadreUikitTextInputTests.swift in Sources */,
@@ -404,7 +399,6 @@
 				2B0145306B788DF5672E44C4 /* KadreUikitDropIosTests.swift in Sources */,
 				5EEF504C068DAB0C12BA7048 /* KadreUikitDropSpikeTests.swift in Sources */,
 				12F5830ECDAD286617F47017 /* KadreUikitInputTests.swift in Sources */,
-				5979C9B3E49BB14318BB9814 /* KadreUikitPhase8SpikeTests.swift in Sources */,
 				0FC29BEE66FB0AEBF6754ED6 /* KadreUikitSurfaceIosTests.swift in Sources */,
 				D4F50CB46FA8FDC71A32C3C2 /* KadreUikitSurfaceTests.swift in Sources */,
 				56E9A8196A2131F8F249E87B /* KadreUikitTextInputSpikeTests.swift in Sources */,

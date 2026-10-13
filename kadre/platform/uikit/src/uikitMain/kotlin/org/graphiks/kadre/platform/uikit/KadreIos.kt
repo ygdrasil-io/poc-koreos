@@ -25,7 +25,10 @@ import org.graphiks.kadre.internal.runtime.RuntimeSessionComponents
 import org.graphiks.kadre.internal.runtime.RuntimeSessionRevocationHandler
 import org.graphiks.kadre.internal.runtime.RuntimeSessionObserver
 import org.graphiks.kadre.internal.runtime.withLock
+import org.graphiks.kadre.internal.uikit.UIKitControllerInventory
 import org.graphiks.kadre.internal.uikit.UIKitDisplayPort
+import org.graphiks.kadre.internal.uikit.UIKitGCControllerSource
+import org.graphiks.kadre.internal.uikit.UIKitGCDeviceHapticsEffectSeam
 import org.graphiks.kadre.internal.uikit.UIKitLifecycleReducer
 import org.graphiks.kadre.internal.uikit.UIKitLifecycleSource
 import org.graphiks.kadre.internal.uikit.UIKitLifecycleSnapshot
@@ -109,6 +112,22 @@ public object KadreIos {
      * créneaux de LA MÊME source : un seul observer, fan-out vers tous les hosts câblés.
      */
     private val memoryPressure = UIKitProcessMemoryPressure()
+
+    /**
+     * L'inventaire contrôleurs process-wide (phase 8, Task 4, moule AppKit/Android — le
+     * miroir exact de la source mémoire ci-dessus) : UNE source pour toutes les attaches du
+     * processus, UNE SEULE séquence de clés process-monotoniques (une manette revenue obtient
+     * une NOUVELLE clé, critère runtime « nouvel ID après disparition terminale »), les ports
+     * manette/device de chaque attach en sont des projections. La source vit au-delà des
+     * sessions (le GameController est un fait process, comme la scène) ; les OBSERVERS du
+     * seam ne vivent qu'avec le dernier port ouvert (miroir AppKit), et ni les ports ni
+     * l'inventaire ne ferment JAMAIS la source — elle appartient à cet objet, comme le
+     * centre de notifications appartient au process.
+     */
+    private val controllerInventory = UIKitControllerInventory(
+        source = UIKitGCControllerSource(),
+        effects = UIKitGCDeviceHapticsEffectSeam(),
+    )
 
     /**
      * L'attach UIKit/tvOS d'une session sur la scène primaire du host, avec l'échelle optionnelle
@@ -300,10 +319,23 @@ public object KadreIos {
                         if (isHostScreen) DisplayType.HostViewport else DisplayType.Physical
                     },
                 )
+                // Les ports manette/device de CETTE session (phase 8, Task 4) : projections de
+                // l'inventaire process ci-dessus — `gamepads` ne liste QUE les profils étendus
+                // (la micro-manette Siri Remote vit comme device `Other` du port générique,
+                // ruling tvOS), `devices` porte manettes + clavier coalescé + souris, le
+                // clavier comme FAIT SEUL (la livraison des touches reste au binding phase 5).
+                // Les deux ports sont FERMÉS par les composants (RuntimeSessionComponents.close
+                // → gamepadPort/inputDevicePort) — le closeAction ci-dessous ne les referme
+                // JAMAIS et ne ferme JAMAIS la source process ; le dernier port libère
+                // l'observation du seam (miroir AppKit), la prochaine attach la réinstalle.
+                val gamepadPort = controllerInventory.openGamepadPort()
+                val inputDevicePort = controllerInventory.openInputDevicePort()
                 RuntimeSessionComponents(
                     windows = windows,
                     primarySurfaceProvider = { runtime.attachedPrimarySurface },
                     displayPort = displayPort,
+                    gamepadPort = gamepadPort,
+                    inputDevicePort = inputDevicePort,
                     closeAction = {
                         sceneManager.close()
                         runtime.close()

@@ -1,9 +1,12 @@
 package org.graphiks.kadre.internal.uikit
 
 import org.graphiks.kadre.input.GamepadAxis
+import org.graphiks.kadre.input.GamepadAxisValue
 import org.graphiks.kadre.input.GamepadButton
+import org.graphiks.kadre.input.GamepadButtonValue
 import org.graphiks.kadre.input.GamepadDescriptor
 import org.graphiks.kadre.input.GamepadMapping
+import org.graphiks.kadre.input.GamepadState
 
 /**
  * Les kernels PURS de mapping GAMEPAD GameController → modèle kadre (phase 8, Task 1) — les
@@ -134,3 +137,55 @@ internal fun uikitGamepadDescriptorOf(
  * stables à vie du contrôleur process-lifetime.
  */
 internal fun uikitControllerKey(seed: Long): Long = seed and Long.MAX_VALUE
+
+/**
+ * La lecture PRÉ-EXTRAITE d'UN bouton du profil étendu — la valeur analogique (`value` 0-1)
+ * et l'état pressé (`pressed`) que le port lit sur l'élément `GCControllerButtonInput`. Le
+ * pattern jeton du module : les scalaires entrent, le modèle sort — rien ici n'importe un
+ * type GameController.
+ */
+internal data class UIKitButtonReading(val value: Double, val pressed: Boolean)
+
+/**
+ * Les tables inverses (kind → nom d'élément natif) — la clef de retour des lectures : le
+ * descripteur gelé porte des KINDS du modèle, l'état assemble la lecture de CHACUN depuis
+ * l'élément natif qui le porte. Les tables fermées ci-dessus portent des valeurs toutes
+ * distinctes (prouvé T1), donc chaque kind a exactement un nom.
+ */
+internal val UIKIT_GAMEPAD_BUTTON_NAMES_BY_KIND: Map<GamepadButton, String> =
+    UIKIT_GAMEPAD_BUTTON_TABLE.associate { (name, button) -> button to name }
+
+internal val UIKIT_GAMEPAD_AXIS_NAMES_BY_KIND: Map<GamepadAxis, String> =
+    UIKIT_GAMEPAD_AXIS_TABLE.associate { (name, axis) -> axis to name }
+
+/**
+ * L'état d'UNE manette depuis le descripteur (GELÉ à la connexion) et les lectures VIVANTES
+ * des éléments — la forme AppKit `stateFor` : l'état parle EXACTEMENT le vocabulaire du
+ * descripteur (un bouton/axe par entrée du descripteur, dans son ordre), chaque kind
+ * porté par sa lecture d'élément, Toute lecture absente restant NEUTRE (valeur 0, non
+ * pressé — jamais un bouton fabriqué, le miroir exact de la règle descripteur : l'absence
+ * reste une absence).
+ *
+ * La séparation des deux entrées EST la règle du gel : un élément apparu APRÈS la connexion
+ * coule dans l'état s'il porte un kind du descripteur gelé, n'entre JAMAIS dans le
+ * descripteur ; un élément disparu retombe au neutre. Rien ne jette : toute entrée, y
+ * compris hostile, produit un état bien formé pour l'init du modèle.
+ */
+internal fun uikitGamepadStateOf(
+    descriptor: GamepadDescriptor,
+    buttonReadings: Map<String, UIKitButtonReading>,
+    axisReadings: Map<String, Double>,
+): GamepadState = GamepadState(
+    buttons = descriptor.buttons.map { button ->
+        UIKIT_GAMEPAD_BUTTON_NAMES_BY_KIND[button]
+            ?.let { name -> buttonReadings[name] }
+            ?.let { reading -> GamepadButtonValue(button, reading.value, reading.pressed) }
+            ?: GamepadButtonValue(button, 0.0, false)
+    },
+    axes = descriptor.axes.map { axis ->
+        UIKIT_GAMEPAD_AXIS_NAMES_BY_KIND[axis]
+            ?.let { name -> axisReadings[name] }
+            ?.let { value -> GamepadAxisValue(axis, value) }
+            ?: GamepadAxisValue(axis, 0.0)
+    },
+)
