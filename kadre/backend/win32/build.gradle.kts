@@ -34,6 +34,9 @@ tasks.named<Test>("jvmTest") {
     filter.excludeTestsMatching(
         "org.graphiks.kadre.internal.win32.Win32HostNativeContractTest",
     )
+    filter.excludeTestsMatching(
+        "org.graphiks.kadre.internal.win32.Win32WindowsNativeContractTest",
+    )
 }
 
 val onWindows = System.getProperty("os.name", "").contains("Windows", ignoreCase = true)
@@ -52,6 +55,9 @@ val win32NativeTests = tasks.register<Test>("win32NativeTests") {
     )
     filter.includeTestsMatching(
         "org.graphiks.kadre.internal.win32.Win32HostNativeContractTest",
+    )
+    filter.includeTestsMatching(
+        "org.graphiks.kadre.internal.win32.Win32WindowsNativeContractTest",
     )
     forkEvery = 1
     reports.junitXml.outputLocation.set(layout.buildDirectory.dir("test-results/win32NativeTests"))
