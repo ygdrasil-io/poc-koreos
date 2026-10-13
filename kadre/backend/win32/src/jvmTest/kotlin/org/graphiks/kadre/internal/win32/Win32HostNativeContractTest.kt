@@ -58,7 +58,6 @@ class Win32HostNativeContractTest {
         val port = newPort()
         val session = Win32HostSession.start(port)
         cleanups.add(session)
-        val stopped = CountDownLatch(1)
         val stopRequested = CountDownLatch(1)
         // Affinité Win32 : la pompe reste sur le thread propriétaire de la
         // fenêtre ; le stop est posté depuis un thread distinct.
@@ -74,6 +73,5 @@ class Win32HostNativeContractTest {
             stoppedSeen = session.pump.runOnce(250) == PumpStep.Stopped
         }
         assertTrue(stoppedSeen, "the stop posted from another thread must stop the pump")
-        assertTrue(stopped.await(1, TimeUnit.SECONDS))
     }
 }
