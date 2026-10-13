@@ -449,17 +449,28 @@ module that shells out to `adb` and forks `gradlew`.
 Cold start — kill any running emulator first (`adb emu kill`), then let the
 script boot the AVD itself (headless: `-no-window -no-audio -no-boot-anim -gpu
 swiftshader_indirect`, log at `/tmp/kadre-emulator.log`) and wait for
-`sys.boot_completed == 1` before running anything. Boot can take minutes:
+`sys.boot_completed == 1` before running anything. Boot can take minutes; the
+wait is bounded (`KADRE_ANDROID_BOOT_TIMEOUT_S`, 300 s by default) and a device
+that never completes boot fails the gate instead of hanging it:
 
 ```shell
 scripts/test-kadre-android-contracts.sh
 ```
 
-If a device is already attached, the script skips the boot and waits for that
-device instead; pass a serial to pin it (`scripts/test-kadre-android-contracts.sh
-emulator-5554`). The Gradle run inside is bounded by a portable 900 s watchdog
-(GNU `timeout` is absent on stock macOS — background Gradle, bounded wait,
-`SIGTERM` at expiry with exit code 124; commit `76229d58`). The gate task is
+If a device is already attached, the script skips the boot and uses that
+device instead; pass a serial to pin it
+(`scripts/test-kadre-android-contracts.sh emulator-5554`, or export
+`ANDROID_SERIAL`). The selection itself is validated first
+(`scripts/test-kadre-android-device.sh`): an explicit serial must report the
+exact adb state `device` (offline/unauthorized are refused before Gradle), and
+without a serial exactly one eligible — booted — device must be attached, any
+ambiguity being refused. The Gradle run inside is bounded by a portable 900 s
+watchdog (`run_with_watchdog`, GNU `timeout` is absent on stock macOS): the
+client runs in its own process group (`setsid`, or a backgrounded subshell
+plus a `pgrep -P` walk where `setsid` is unavailable) and receives `SIGTERM`
+at expiry with exit code 124, escalated to `SIGKILL` for survivors — the
+Gradle daemon and its descendants no longer outlive the killed client (the
+phase-0 "daemon survives" note is obsolete). The gate task is
 `:kadre:contracts:validator:androidContractsCheck`: registry validation plus
 Android contract evidence validation against **`AND-001` through `AND-010`** —
 one canonical JSON per contract, all from the same instrumented emulator gate
