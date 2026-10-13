@@ -1,0 +1,230 @@
+# Kadre Android Nightly — the §11.1 nightly (TEST-STRATEGY: "le nightly exécute les
+# versions min + current" with "détection de leaks d'owners, handles, buffers et
+# subscriptions natives" (:369) and the permissions/hardware pool (:372)). Structure
+# mirrors kadre-web-nightly.yml: a scheduled + dispatchable run, one concurrency group,
+# ubuntu-latest, the 40-minute web-nightly hard timeout, no skips and no retries —
+# every step must succeed (TEST-STRATEGY §9), the only conditional step is the artifact
+# upload, in the always() form this nightly needs: the measurement history (JUnit XML,
+# contract evidence, emulator log) is the deliverable of a red night too.
+#
+# The matrix is the two emulator API levels of the mandate: API 24 (the consumer's
+# minSdk — the oldest surface the gate must hold) and API 35 (current). Both legs run
+# THE SAME two measurements on their booted emulator:
+#
+#   1. scripts/test-kadre-android-contracts.sh --serial <serial> — the full Android
+#      contract gate (registry + on-device evidence for the ten active AND contracts,
+#      including the permission/material scenarios AND-004/AND-009 with their real,
+#      automated consent dialogs). The gate script re-validates the serial, bounds the
+#      boot waits, and runs Gradle under the process-group watchdog (900 s TERM/KILL) —
+#      the external watchdog of TEST-STRATEGY §9. The gate's connected suite carries the
+#      AndroidLeakCyclesTest class (kadre/platform/android-devicetest, consumed by the
+#      consumer's androidTest APK — the P6 friend wiring), so the PR gate and this
+#      nightly both exercise it; leg 2 makes the :369 measurement EXPLICIT rather than
+#      incidental.
+#   2. The leak cycles class, run alone by instrumentation-argument filter — the probe
+#      of "how to run JUST the leak test": the devicetest module is a library consumed
+#      by the consumer (it has no connected task of its own — the
+#      :kadre:platform:android-devicetest:connectedDebugAndroidTest path of the brief
+#      does not exist), so the filter is AGP's
+#      -Pandroid.testInstrumentationRunnerArguments.class=... on the consumer's
+#      connectedDebugAndroidTest, the same fork shape the contract driver uses
+#      (repository + version properties, --refresh-dependencies). Bounded by GNU
+#      timeout: the same external-child discipline as the watchdog.
+#
+# API-24 probe (Task 4, honest): the system image
+# system-images;android-24;google_apis;x86_64 exists in the SDK repository (revision
+# 27.0.0 — sdkmanager fails loudly if that ever changes); sdkmanager cannot be probed
+# from the workflow itself. The static audit of the minSdk-24 surface
+# (platforms/android-35/data/api-versions.xml): every unguarded SDK call in the
+# attach/input/display/lifecycle paths is ≤ 24 (InputDevice.getVibrator since 16,
+# View.getRootWindowInsets since 23, View.setPointerIcon since 24, Display.getRealSize
+# since 17); the only >24 call on a reachable path is Context.startForegroundService
+# (since 26), reached only by the capture FGS control and wrapped there — it degrades
+# into the port's documented `foreground-start-refused` (Temporary, retryable) on API
+# 24; InputDevice.getVibratorManager (31) and the three-argument Service.startForeground
+# (29) are guarded by Build.VERSION.SDK_INT. VibrationEffect (26) is NOT guarded —
+# startOneShot reaches VibrationEffect.createOneShot unguarded, and its API-24
+# protection is the runCatching { }.isSuccess of the one-shot helper: the first use of
+# the missing class raises NoClassDefFoundError, which the runCatching swallows into the
+# documented graceful `false` (no rumble on API 24, never a crash). The connected
+# suite itself (ActivityScenario, UiAutomation consent dialogs, androidx.test:core
+# 1.6.1, minSdk 19) supports API 24. Should a leg still fail on the oldest image, it
+# fails red here first — that is the nightly doing its job, not a silent downgrade.
+#
+# Aggregate status: like the web nightly, this run is a scheduled snapshot of the
+# default branch; the two legs are independent measurements and both must be inspected,
+# so fail-fast is false and each leg uploads its own artifacts always().
+
+name: Kadre Android Nightly
+
+on:
+  schedule:
+    # 02:43 UTC daily — the same trough discipline as the web nightly (minute off the
+    # top of the hour, between the North-American evening and the European morning):
+    # two KVM emulators on one runner image do not want the scheduled-run peak, and a
+    # red night lands with the full working day ahead of it. Scheduled workflows only
+    # ever run on the default branch.
+    - cron: "43 2 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  # One nightly in flight — the mirror of the web nightly's rule: a run is an idempotent
+  # snapshot of the default branch, overlapping matrices double the emulator and Gradle
+  # load for the same commit and buy nothing. The older run is cancelled, not queued;
+  # its diagnostics still upload, because the upload steps below also run on
+  # cancellation.
+  group: kadre-android-nightly
+  cancel-in-progress: true
+
+jobs:
+  android-nightly:
+    name: android-nightly-api-${{ matrix.api }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+
+    strategy:
+      # The two legs are independent measurements of the same commit; one red leg must
+      # not hide the other's state (the aggregate inspection rule of TEST-STRATEGY §9).
+      fail-fast: false
+      matrix:
+        include:
+          - api: 24
+            image: system-images;android-24;google_apis;x86_64
+          - api: 35
+            image: system-images;android-35;google_apis;x86_64
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 25
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "25"
+          cache: gradle
+
+      - name: Enable KVM group perms
+        # The standard android-runner udev rule, the same as kadre-android-contracts.yml:
+        # /dev/kvm exists on the ubuntu runner but is root-owned; MODE 0666 + the udevadm
+        # reload/trigger let the emulator use hardware acceleration without a root
+        # emulator.
+        run: |
+          echo 'KERNEL=="kvm", GROUP=="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+          # The udev rule only applies on the next device event/login; the CI
+          # runner user is not in the kvm group, so force the mode now.
+          if [ -e /dev/kvm ]; then sudo chmod 666 /dev/kvm; fi
+
+      - name: Put the Android SDK tools on the PATH
+        # The ubuntu runner preinstalls the SDK at $ANDROID_HOME but does NOT
+        # put platform-tools (adb) on the PATH — the contracts workflow's first
+        # real run failed its boot wait with `timeout: failed to run command
+        # 'adb': No such file or directory` (exit 127). GITHUB_PATH exports
+        # persist into every later step: the boot waits, the gate script and
+        # any SDK tool resolve from here (sdkmanager/avdmanager keep their
+        # explicit paths; the bin dir is exported anyway so a future bare call
+        # cannot regress this).
+        run: |
+          echo "$ANDROID_HOME/platform-tools" >> "$GITHUB_PATH"
+          echo "$ANDROID_HOME/cmdline-tools/latest/bin" >> "$GITHUB_PATH"
+
+      - name: Install the API ${{ matrix.api }} x86_64 emulator image
+        # ANDROID_HOME is preinstalled on the runner (SDK at
+        # /usr/local/lib/android/sdk, licenses pre-accepted); sdkmanager only downloads
+        # what is missing. The image coordinate is the matrix entry — an unknown package
+        # fails this step loudly, never the boot wait.
+        run: |
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "${{ matrix.image }}" emulator platform-tools
+
+      - name: Create the API ${{ matrix.api }} AVD
+        # ANDROID_AVD_HOME is pinned because avdmanager and the emulator resolve
+        # the AVD home through different env chains ($ANDROID_AVD_HOME /
+        # $ANDROID_SDK_HOME / $HOME/.android/avd) on the runner — the first
+        # contracts run died with `Unknown AVD name [kadre-api-35]` when the ini
+        # landed elsewhere. Pinning both steps to the same explicit dir makes
+        # creator and consumer agree.
+        env:
+          ANDROID_AVD_HOME: ${{ github.workspace }}/avd-home
+        run: |
+          mkdir -p "$ANDROID_AVD_HOME"
+          echo "no" | "$ANDROID_HOME/cmdline-tools/latest/bin/avdmanager" create avd --name kadre-api-${{ matrix.api }} --package "${{ matrix.image }}" --device pixel --force
+
+      - name: Boot the emulator in the background
+        # Same headless flags as the contract gate's local auto-boot path (plus
+        # -no-snapshot: an ephemeral runner must cold-boot). The process outlives this
+        # step; the next step waits for boot, the gate drives it.
+        # Same ANDROID_AVD_HOME as the create step: avdmanager/emulator resolve
+        # the AVD home differently on runners — the emulator must read the ini
+        # from the exact dir avdmanager wrote it to.
+        env:
+          ANDROID_AVD_HOME: ${{ github.workspace }}/avd-home
+        run: |
+          "$ANDROID_HOME/emulator/emulator" -avd kadre-api-${{ matrix.api }} -no-window -gpu swiftshader_indirect -no-audio -no-boot-anim -no-snapshot > /tmp/kadre-nightly-emulator.log 2>&1 &
+
+      - name: Wait for the emulator to finish booting
+        # Bounded waits only (TEST-STRATEGY §9): adb wait-for-device is capped by GNU
+        # timeout, the sys.boot_completed poll by the deadline — then a fast, explained
+        # failure with the emulator log. The resolved serial is handed to both
+        # measurements below.
+        run: |
+          timeout 120 adb wait-for-device
+          serial="$(adb devices | awk 'NR > 1 && $2 == "device" { print $1; exit }')"
+          if [ -z "$serial" ]; then
+            echo "no emulator in 'device' state after wait-for-device (emulator log:)" >&2
+            tail -50 /tmp/kadre-nightly-emulator.log >&2
+            exit 1
+          fi
+          deadline=$((SECONDS + 300))
+          until [ "$(adb -s "$serial" shell getprop sys.boot_completed | tr -d '\r')" = "1" ]; do
+            if [ "$SECONDS" -ge "$deadline" ]; then
+              echo "$serial did not report sys.boot_completed=1 within 300s (emulator log:)" >&2
+              tail -50 /tmp/kadre-nightly-emulator.log >&2
+              exit 1
+            fi
+            sleep 5
+          done
+          echo "KADRE_NIGHTLY_EMULATOR_SERIAL=$serial" >> "$GITHUB_ENV"
+
+      - name: Run the Android contract gate on the booted emulator
+        # The gate handles the rest: serial re-validation, boot re-check, then
+        # :kadre:contracts:validator:androidContractsCheck under the process-group
+        # watchdog (900 s external child timeout inside the 40-minute job hard cap).
+        # The gate's connected suite carries the leak cycles class (see the header).
+        run: scripts/test-kadre-android-contracts.sh --serial "$KADRE_NIGHTLY_EMULATOR_SERIAL"
+
+      - name: Run the leak cycles class alone
+        # The §11.1 :369 measurement leg, named: the AndroidLeakCyclesTest class of
+        # kadre/platform/android-devicetest (riding the consumer's androidTest APK) run
+        # by itself through AGP's instrumentation-argument filter on the SAME booted
+        # emulator — the fork shape of the contract driver (repository + version
+        # properties, --refresh-dependencies against the released-version AAR trap),
+        # bounded by GNU timeout like every external child here.
+        working-directory: kadre/consumers/android
+        run: |
+          timeout 900 ../../../gradlew connectedDebugAndroidTest --console=plain \
+            --refresh-dependencies \
+            -PkadreRepository="${{ github.workspace }}/build/kadre-contract-repository" \
+            -PkadreVersion="$(sed -n 's/^version=\(.*\)$/\1/p' ../../../gradle.properties | head -1)" \
+            -Pandroid.testInstrumentationRunnerArguments.class=org.graphiks.kadre.platform.android.AndroidLeakCyclesTest
+
+      - name: Upload Android nightly diagnostics and evidence
+        # always(): the nightly's measurement history is the deliverable of a red night
+        # too — the JUnit XML of both runs (gate suite + leak class), the canonical
+        # contract evidence, and the emulator log, per matrix leg.
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: kadre-android-nightly-api-${{ matrix.api }}-artifacts
+          path: |
+            kadre/contracts/driver/android/build/contract-evidence/
+            kadre/contracts/driver/android/build/test-results/
+            kadre/consumers/android/build/outputs/androidTest-results/
+            kadre/samples/android-compose-showcase/build/outputs/androidTest-results/
+            /tmp/kadre-nightly-emulator.log
+          if-no-files-found: ignore
+          include-hidden-files: true

@@ -449,21 +449,33 @@ module that shells out to `adb` and forks `gradlew`.
 Cold start — kill any running emulator first (`adb emu kill`), then let the
 script boot the AVD itself (headless: `-no-window -no-audio -no-boot-anim -gpu
 swiftshader_indirect`, log at `/tmp/kadre-emulator.log`) and wait for
-`sys.boot_completed == 1` before running anything. Boot can take minutes:
+`sys.boot_completed == 1` before running anything. Boot can take minutes; the
+wait is bounded (`KADRE_ANDROID_BOOT_TIMEOUT_S`, 300 s by default) and a device
+that never completes boot fails the gate instead of hanging it:
 
 ```shell
 scripts/test-kadre-android-contracts.sh
 ```
 
-If a device is already attached, the script skips the boot and waits for that
-device instead; pass a serial to pin it (`scripts/test-kadre-android-contracts.sh
-emulator-5554`). The Gradle run inside is bounded by a portable 900 s watchdog
-(GNU `timeout` is absent on stock macOS — background Gradle, bounded wait,
-`SIGTERM` at expiry with exit code 124; commit `76229d58`). The gate task is
+If a device is already attached, the script skips the boot and uses that
+device instead; pass a serial to pin it
+(`scripts/test-kadre-android-contracts.sh emulator-5554`, or export
+`ANDROID_SERIAL`). The selection itself is validated first
+(`scripts/test-kadre-android-device.sh`): an explicit serial must report the
+exact adb state `device` (offline/unauthorized are refused before Gradle), and
+without a serial exactly one eligible — booted — device must be attached, any
+ambiguity being refused. The Gradle run inside is bounded by a portable 900 s
+watchdog (`run_with_watchdog`, GNU `timeout` is absent on stock macOS): the
+client runs in its own process group (`setsid`, or a backgrounded subshell
+plus a `pgrep -P` walk where `setsid` is unavailable) and receives `SIGTERM`
+at expiry with exit code 124, escalated to `SIGKILL` for survivors — the
+Gradle daemon and its descendants no longer outlive the killed client (the
+phase-0 "daemon survives" note is obsolete). The gate task is
 `:kadre:contracts:validator:androidContractsCheck`: registry validation plus
 Android contract evidence validation against **`AND-001` through `AND-010`** —
 one canonical JSON per contract, all from the same instrumented emulator gate
 (48 consumer instrumented tests plus the compose-showcase sample's two — 50
+mapped — and the seven `AndroidLeakCyclesTest` leak-cycle testcases — 57
 total; the consumer count grew independently of the mapped scenarios:
 `KotlinFacadeConsumerTest` and `JavaAndroidFacadeConsumerTest` each carry one
 extra unmapped testcase beside the one evidence.tsv maps).
@@ -896,6 +908,110 @@ create. The binding recovers only on that next cycle; a machine-level retry
 (a deferred re-arm) is a documented deferred refinement, and the samples add
 no retry policy of their own.
 
+## CI and nightly (phase 10)
+
+The gate is wired to the two cadences of `TEST-STRATEGY.md`, with the normative
+budgets untouched (§9.1: aggregate PR p95 ≤ 10 min, job p95 ≤ 8 min WARM, hard
+timeout 15 min per job plus an external timeout for every child process —
+changing those numbers is a reviewed change of TEST-STRATEGY, no workflow
+deviates):
+
+**PR gate — `.github/workflows/kadre-android-contracts.yml`** (job
+`android-contracts`, the §9 matrix name). Every pull request and every push to
+master: ubuntu-latest with KVM, the PINNED emulator image
+`system-images;android-35;google_apis;x86_64` (a fresh AVD per run, headless,
+`-no-snapshot` — an ephemeral runner always cold-boots), the boot waited
+bounded (`adb wait-for-device` capped at 120 s, the `sys.boot_completed` poll
+at 300 s, a fast explained failure with the emulator log — never an open
+hang), then THE SAME local gate `scripts/test-kadre-android-contracts.sh
+--serial <booted>` (serial re-validated, registry + the ten AND contracts'
+on-device evidence, 900 s process-group watchdog) under the job's 15-minute
+hard cap; the first cold run may exceed the 8-minute SLO without being a
+drift (the x86_64 KVM emulator boots faster than the local arm64 AVD — the
+p95 is measured on real runs). Artifacts (evidence, JUnit XML, emulator log)
+upload in the `failure() || cancelled()` form — the only conditional step, the
+web workflow's shape. The single `kadre-pr-contracts` branch-protection status
+that groups this check with the six existing platform gates is repository
+settings (a repo-settings action owned by the human partner, not a workflow).
+The engine label on CI is `emulator-api-35-x86_64`, read from the attached
+device itself (getprop, never hardcoded) — a SECOND environment, deliberately
+distinct from the local arm64 label; the evidence JSONs of the two never
+collide.
+
+**Nightly — `.github/workflows/kadre-android-nightly.yml`** (cron
+`43 2 * * *` + `workflow_dispatch`, its own concurrency group with
+cancel-in-progress, the web-nightly 40-minute timeout). The matrix is API 24
+(the minSdk — the oldest surface the gate must hold, TEST-STRATEGY §11.1
+"versions minimum et courante") and API 35 (current), `fail-fast: false` —
+two independent measurements of the same commit, one red leg must not hide
+the other. Each leg runs TWO measurements on its booted emulator: the full
+contract gate (the ten contracts, real consent dialogs included), then the
+leak-cycles class ALONE (AGP's
+`-Pandroid.testInstrumentationRunnerArguments.class=...` filter on the
+consumer's `connectedDebugAndroidTest` — the devicetest module is a library
+consumed by the consumer, it has no connected task of its own). The upload is
+`always()`: the measurement history is the deliverable of a red night too.
+The minSdk-24 static audit (android-35's `api-versions.xml`): every unguarded
+SDK call on the attach/input/display/lifecycle paths is ≤ 24;
+`startForegroundService` (26) is reached only by the capture FGS control and
+wrapped there (the documented `foreground-start-refused` degradation);
+`getVibratorManager` (31) and the three-argument `startForeground` (29) are
+guarded by `Build.VERSION.SDK_INT`; `VibrationEffect` (26) is NOT guarded —
+`startOneShot` reaches `createOneShot` unguarded, and its API-24 protection
+is the one-shot helper's `runCatching { }.isSuccess`: the first use of the
+missing class raises `NoClassDefFoundError`, swallowed into the documented
+graceful `false` (no vibration below API 26, never a crash). The first API 24
+night is the real verification — the x86_64 image cannot boot on an arm64
+host (the hard QEMU2 rule), CI runs it for real.
+
+**The leak-cycles class — `AndroidLeakCyclesTest`** (the friend module
+`platform/android-devicetest`, riding the consumer's androidTest APK — the P6
+wiring; carried by BOTH the PR gate suite and the nightly's explicit leg).
+Seven repeated-cycle measurements, each red if its resource leaks: 10
+attach/stop cycles (5 Kotlin + 5 facade — the exact terminal HELD through
+churn and a bounded soak, the same View re-attached next cycle, the diagnostic
+journal unchanged), 5 `recreate()` cycles (the old session stays exactly
+`Stopped(HostDetached)` while the new instance is RESUMED), 4
+background/foreground round trips (`moveToState` — the session SURVIVES, the
+surface publications follow every transition), 4 service cycles (ZERO
+`AndroidCaptureService` at rest — the behavioral consequence of the refcount
+reaching zero; the registry's `arm→forget` yields a FRESH deferred), and 4
+cycles for each of the display / input / gamepad ports (exactly 1
+registration at install, 0 at close, the inventory bounded). Red-if-leak is
+proven by mutation: removing the display port's close-time unregister turns
+ITS measurement red (`expected:<0> but was:<1>`), byte-identical revert, green
+again. Documented as NOT measurable here (named in the KDoc): heap-level
+survival (captured Activity/View instances, orphan coroutines, delivery
+buffers) and a direct read of the FGS `holders` counter — the deferred
+LeakCanary sample/debug decision (TEST-STRATEGY §11.1); the service-at-rest
+measurement is its exact behavioral consequence on the FGS side.
+
+**The cold-boot rule** (the phase 9 Task 5 finding, adopted for every
+cadence): an emulator left warm for a long time can abort in PLATFORM
+components — the emulator's Bluetooth stack SIGABRTs, then `libhwui`
+`Readback::copySurfaceInto` hits a framework assert on the RenderThread — the
+crash is in the platform, not in Kadre code. Any retry after such a failure
+runs COLD (`adb emu kill`, zero devices, let the script boot the AVD again)
+and the cold-boot green run is the verdict (proven in phase 9: the same
+branch red on a warm emulator, green on the next cold boot). A CI or nightly
+job does not have this problem — its runner is ephemeral and `-no-snapshot`
+forces the cold boot.
+
+**The device script.** `scripts/test-kadre-android-device.sh` is the
+selection/check library sourced by the gate script (and usable standalone):
+an explicit serial (`--serial <serial>`, positional, or an exported
+`ANDROID_SERIAL`) is validated against `adb devices` for the exact `device`
+state before anything runs; without one, auto-detection admits EXACTLY ONE
+eligible (booted) device and refuses any ambiguity; a boot-incomplete device
+fast-fails after a bounded wait instead of hanging. Its self-test
+(`scripts/test-kadre-android-device-selftest.sh`, 19/19 with fake adb/gradle —
+unique, explicit OK/incompatible, multi, zero, offline, boot-incomplete,
+watchdog kills parent+child) never touches a real emulator. The Gradle child
+of the gate runs under the portable process-group watchdog: its own group
+(`setsid` on Linux, backgrounded subshell + `pgrep -P` walk elsewhere), TERM
+then KILL at the 900 s expiry (exit 124), escalation for survivors — the
+Gradle daemon no longer outlives a killed client.
+
 ## Engine labeling
 
 The engine label is **never hardcoded**. The evidence producer
@@ -951,11 +1067,14 @@ engines this run actually produced), and the gate copies
 
 ## `androidContractsCheck` is deliberately not in `:kadre:check`
 
-`:kadre:check` does **not** depend on `androidContractsCheck`: there is no
-emulator on the current CI runners, and the aggregate requires a booted device
-(the smoke re-runs the consumer instrumentation). Wiring the mandatory CI job
-is phase 10 of the roadmap
-(`ANDROID-IMPLEMENTATION-ROADMAP.md#Phase 10`).
+`:kadre:check` does **not** depend on `androidContractsCheck`: the aggregate
+requires a booted device (the smoke re-runs the consumer instrumentation), so
+wiring it into `:kadre:check` would break every device-less invocation. The
+mandatory CI job is wired at phase 10 of the roadmap
+(`ANDROID-IMPLEMENTATION-ROADMAP.md#Phase 10`): the `android-contracts` job of
+[kadre-android-contracts.yml](../../../../.github/workflows/kadre-android-contracts.yml)
+boots the emulator itself on every PR and master push (see "CI and nightly"
+above), which is where the check runs mandatorily.
 
 ## Phase limits (deferred guarantees)
 

@@ -1,0 +1,72 @@
+public final class org/graphiks/kadre/host/android/KadreAndroid {
+	public static final field Companion Lorg/graphiks/kadre/host/android/KadreAndroid$Companion;
+	public static final fun attach (Landroid/view/View;Landroidx/lifecycle/LifecycleOwner;Lorg/graphiks/kadre/application/KadreApplicationFactory;)Lorg/graphiks/kadre/host/android/KadreSessionHandle;
+	public static final fun attach (Landroid/view/View;Landroidx/lifecycle/LifecycleOwner;Lorg/graphiks/kadre/application/KadreApplicationFactory;Lorg/graphiks/kadre/policy/KadrePolicy;)Lorg/graphiks/kadre/host/android/KadreSessionHandle;
+	public static final fun attach (Landroidx/activity/ComponentActivity;Landroid/view/View;Lorg/graphiks/kadre/application/KadreApplicationFactory;)Lorg/graphiks/kadre/host/android/KadreSessionHandle;
+	public static final fun attach (Landroidx/activity/ComponentActivity;Landroid/view/View;Lorg/graphiks/kadre/application/KadreApplicationFactory;Lorg/graphiks/kadre/policy/KadrePolicy;)Lorg/graphiks/kadre/host/android/KadreSessionHandle;
+}
+
+public final class org/graphiks/kadre/host/android/KadreAndroid$Companion {
+	public final fun attach (Landroid/view/View;Landroidx/lifecycle/LifecycleOwner;Lorg/graphiks/kadre/application/KadreApplicationFactory;)Lorg/graphiks/kadre/host/android/KadreSessionHandle;
+	public final fun attach (Landroid/view/View;Landroidx/lifecycle/LifecycleOwner;Lorg/graphiks/kadre/application/KadreApplicationFactory;Lorg/graphiks/kadre/policy/KadrePolicy;)Lorg/graphiks/kadre/host/android/KadreSessionHandle;
+	public final fun attach (Landroidx/activity/ComponentActivity;Landroid/view/View;Lorg/graphiks/kadre/application/KadreApplicationFactory;)Lorg/graphiks/kadre/host/android/KadreSessionHandle;
+	public final fun attach (Landroidx/activity/ComponentActivity;Landroid/view/View;Lorg/graphiks/kadre/application/KadreApplicationFactory;Lorg/graphiks/kadre/policy/KadrePolicy;)Lorg/graphiks/kadre/host/android/KadreSessionHandle;
+	public static synthetic fun attach$default (Lorg/graphiks/kadre/host/android/KadreAndroid$Companion;Landroid/view/View;Landroidx/lifecycle/LifecycleOwner;Lorg/graphiks/kadre/application/KadreApplicationFactory;Lorg/graphiks/kadre/policy/KadrePolicy;ILjava/lang/Object;)Lorg/graphiks/kadre/host/android/KadreSessionHandle;
+	public static synthetic fun attach$default (Lorg/graphiks/kadre/host/android/KadreAndroid$Companion;Landroidx/activity/ComponentActivity;Landroid/view/View;Lorg/graphiks/kadre/application/KadreApplicationFactory;Lorg/graphiks/kadre/policy/KadrePolicy;ILjava/lang/Object;)Lorg/graphiks/kadre/host/android/KadreSessionHandle;
+}
+
+public final class org/graphiks/kadre/host/android/KadreSessionHandle : java/lang/AutoCloseable {
+	public fun close ()V
+	public final fun id ()Ljava/lang/String;
+	public final fun observeState (Ljava/util/function/Consumer;)Ljava/lang/AutoCloseable;
+	public final fun requestStop ()V
+	public final fun state ()Lorg/graphiks/kadre/host/android/KadreSessionSnapshot;
+	public final fun termination ()Ljava/util/concurrent/CompletionStage;
+}
+
+public final class org/graphiks/kadre/host/android/KadreSessionPhase : java/lang/Enum {
+	public static final field Running Lorg/graphiks/kadre/host/android/KadreSessionPhase;
+	public static final field Starting Lorg/graphiks/kadre/host/android/KadreSessionPhase;
+	public static final field Stopping Lorg/graphiks/kadre/host/android/KadreSessionPhase;
+	public static final field Terminated Lorg/graphiks/kadre/host/android/KadreSessionPhase;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public static fun valueOf (Ljava/lang/String;)Lorg/graphiks/kadre/host/android/KadreSessionPhase;
+	public static fun values ()[Lorg/graphiks/kadre/host/android/KadreSessionPhase;
+}
+
+public final class org/graphiks/kadre/host/android/KadreSessionSnapshot {
+	public fun <init> (Ljava/lang/String;Lorg/graphiks/kadre/host/android/KadreSessionPhase;Lorg/graphiks/kadre/application/SessionOutcome;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun component2 ()Lorg/graphiks/kadre/host/android/KadreSessionPhase;
+	public final fun component3 ()Lorg/graphiks/kadre/application/SessionOutcome;
+	public final fun copy (Ljava/lang/String;Lorg/graphiks/kadre/host/android/KadreSessionPhase;Lorg/graphiks/kadre/application/SessionOutcome;)Lorg/graphiks/kadre/host/android/KadreSessionSnapshot;
+	public static synthetic fun copy$default (Lorg/graphiks/kadre/host/android/KadreSessionSnapshot;Ljava/lang/String;Lorg/graphiks/kadre/host/android/KadreSessionPhase;Lorg/graphiks/kadre/application/SessionOutcome;ILjava/lang/Object;)Lorg/graphiks/kadre/host/android/KadreSessionSnapshot;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getId ()Ljava/lang/String;
+	public final fun getOutcome ()Lorg/graphiks/kadre/application/SessionOutcome;
+	public final fun getPhase ()Lorg/graphiks/kadre/host/android/KadreSessionPhase;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class org/graphiks/kadre/platform/android/AndroidCaptureService : android/app/Service {
+	public fun <init> ()V
+	public fun onBind (Landroid/content/Intent;)Landroid/os/IBinder;
+	public fun onStartCommand (Landroid/content/Intent;II)I
+}
+
+public final class org/graphiks/kadre/platform/android/AndroidViewLeaseKt {
+	public static final fun withAndroidView (Lorg/graphiks/kadre/surface/HostSurface;Lkotlin/jvm/functions/Function1;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+}
+
+public final class org/graphiks/kadre/platform/android/KadreAndroidAttachKt {
+	public static final fun attachKadre (Landroid/view/View;Landroidx/lifecycle/LifecycleOwner;Lorg/graphiks/kadre/application/KadreApplicationFactory;Lorg/graphiks/kadre/policy/KadrePolicy;Lkotlinx/coroutines/CoroutineScope;)Lorg/graphiks/kadre/diagnostics/KadreResult;
+	public static final fun attachKadre (Landroid/view/View;Landroidx/lifecycle/LifecycleOwner;Lorg/graphiks/kadre/policy/KadrePolicy;Lkotlinx/coroutines/CoroutineScope;Lorg/graphiks/kadre/application/KadreApplication;)Lorg/graphiks/kadre/diagnostics/KadreResult;
+	public static final fun attachKadre (Landroidx/activity/ComponentActivity;Landroid/view/View;Lorg/graphiks/kadre/application/KadreApplicationFactory;Lorg/graphiks/kadre/policy/KadrePolicy;Lkotlinx/coroutines/CoroutineScope;)Lorg/graphiks/kadre/diagnostics/KadreResult;
+	public static final fun attachKadre (Landroidx/activity/ComponentActivity;Landroid/view/View;Lorg/graphiks/kadre/policy/KadrePolicy;Lkotlinx/coroutines/CoroutineScope;Lorg/graphiks/kadre/application/KadreApplication;)Lorg/graphiks/kadre/diagnostics/KadreResult;
+	public static synthetic fun attachKadre$default (Landroid/view/View;Landroidx/lifecycle/LifecycleOwner;Lorg/graphiks/kadre/application/KadreApplicationFactory;Lorg/graphiks/kadre/policy/KadrePolicy;Lkotlinx/coroutines/CoroutineScope;ILjava/lang/Object;)Lorg/graphiks/kadre/diagnostics/KadreResult;
+	public static synthetic fun attachKadre$default (Landroid/view/View;Landroidx/lifecycle/LifecycleOwner;Lorg/graphiks/kadre/policy/KadrePolicy;Lkotlinx/coroutines/CoroutineScope;Lorg/graphiks/kadre/application/KadreApplication;ILjava/lang/Object;)Lorg/graphiks/kadre/diagnostics/KadreResult;
+	public static synthetic fun attachKadre$default (Landroidx/activity/ComponentActivity;Landroid/view/View;Lorg/graphiks/kadre/application/KadreApplicationFactory;Lorg/graphiks/kadre/policy/KadrePolicy;Lkotlinx/coroutines/CoroutineScope;ILjava/lang/Object;)Lorg/graphiks/kadre/diagnostics/KadreResult;
+	public static synthetic fun attachKadre$default (Landroidx/activity/ComponentActivity;Landroid/view/View;Lorg/graphiks/kadre/policy/KadrePolicy;Lkotlinx/coroutines/CoroutineScope;Lorg/graphiks/kadre/application/KadreApplication;ILjava/lang/Object;)Lorg/graphiks/kadre/diagnostics/KadreResult;
+}
+

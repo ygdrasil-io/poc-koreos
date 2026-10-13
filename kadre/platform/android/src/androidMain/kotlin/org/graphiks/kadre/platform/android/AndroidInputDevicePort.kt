@@ -276,8 +276,12 @@ internal fun genericDeviceKind(sources: Int): InputDeviceKind {
  * est contracté en UNE callback (`onInputDeviceAdded/Removed/Changed` → l'id, informationnel) ;
  * les fires arrivent sur le thread du [handler] (le main looper par défaut — la même discipline
  * main-thread que toute la fenêtre). Les lectures d'effects restent au niveau d'API du module
- * (minSdk 24) : les chemins 26+/31+ sont gardés par [Build.VERSION.SDK_INT], le même parti pris
- * que le seam de capture.
+ * (minSdk 24) : le chemin 31+ ([InputDevice.getVibratorManager] et le cancel par VibratorManager)
+ * est gardé par [Build.VERSION.SDK_INT] ; le chemin 26+ ([VibrationEffect]) ne l'est PAS —
+ * [startOneShot] l'atteint sans guard, et sa protection API 24 est le `runCatching { }.isSuccess`
+ * de [vibrateOneShot] : la première rencontre de la classe manquante lève
+ * `NoClassDefFoundError`, avalé en `false` gracieux (jamais de crash). Le même parti pris que le
+ * seam de capture.
  */
 internal class AndroidInputManagerSource(
     context: Context,
