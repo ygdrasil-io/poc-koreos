@@ -10,6 +10,7 @@ import org.graphiks.kadre.internal.runtime.RuntimeFailureReporter
 import org.graphiks.kadre.internal.runtime.RuntimePrimarySurface
 import org.graphiks.kadre.internal.runtime.RuntimeWindowManager
 import org.graphiks.kadre.internal.runtime.RuntimeWindowSurface
+import org.graphiks.kadre.internal.runtime.TextInputPortFactory
 import org.graphiks.kadre.policy.KadrePolicy
 import org.graphiks.kadre.surface.LogicalSize
 import org.graphiks.kadre.surface.SurfaceId
@@ -25,7 +26,12 @@ import platform.UIKit.UIWindow
  *  - `publicWindowCapabilities = false`, `enabledWindowUpdateCapabilities = emptySet()` — la
  *   session UIKit est mono-fenêtre imposée par le host : rien n'est annoncé comme
  *   créable/modifiable côté fenêtre ;
- *  - pas d'attention, pas de fullscreen, pas de TextInput factory dédiée (défauts du manager).
+ *  - pas d'attention, pas de fullscreen ;
+ *  - phase 6 Task 2 : le port texte EST branché — `textInputPortFactory =
+ *   TextInputPortFactory(commandPort::textInputPort)` (miroir AppKit driver l.139), résolu par
+ *   surfaceId au commit du peer, le port vivant mémoïsé dans le command port (le CAS de l'open
+ *   exclusif tient sur une instance stable) ; la capacité est structurellement `Supported`
+ *   (miroir web D-X2).
  *
  * Phase 2 : `publicSurfaceCapabilities = true` — les commands surface sont OUVERTS (le runtime
  * alloue des tickets de redraw et transmet les `SurfaceUpdateCommand` au port) et les
@@ -77,6 +83,9 @@ internal class UIKitWindowRuntime internal constructor(
         enabledWindowUpdateCapabilities = emptySet(),
         publicSurfaceCapabilities = true,
         enabledSurfaceCapabilities = uikitSurfaceCapabilities(),
+        // Phase 6, Task 2 : le port texte (miroir AppKit driver l.139). Résolu par surfaceId au
+        // commit (`commitPendingLocked` l.1478), mémoïsé côté command port.
+        textInputPortFactory = TextInputPortFactory(commandPort::textInputPort),
     )
 
     /** Le RuntimePrimarySurface de la session, construit par [admitPrimaryWindow] (mémoïsé). */
