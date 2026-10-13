@@ -25,6 +25,9 @@ import org.graphiks.kadre.internal.runtime.WindowUpdateCommand
 import org.graphiks.kadre.internal.runtime.WindowUpdateCancellationCommand
 import org.graphiks.kadre.internal.runtime.WindowUpdateCancellationOutcome
 import org.graphiks.kadre.policy.ResourceBudgetPolicy
+import org.graphiks.kadre.surface.SurfaceId
+import org.graphiks.kadre.internal.runtime.SurfaceRedrawGeneration
+import org.graphiks.kadre.diagnostics.Capability
 import org.graphiks.kadre.window.WindowProperty
 import org.graphiks.kadre.internal.runtime.SurfaceInitialSnapshot
 import org.graphiks.kadre.surface.SurfaceFocus
@@ -48,9 +51,32 @@ import java.util.concurrent.atomic.AtomicBoolean
  * input and capture stay in their later phases — the runtime exposes the
  * exact `Unsupported`/rejected states for them.
  */
+private fun win32SurfaceCapabilities(public: Boolean): org.graphiks.kadre.surface.SurfaceCapabilities {
+    val unsupportedUpdate = Capability.Unsupported(KadreFailure.Unsupported(KadreOperation.UpdateSurface))
+    val unsupportedInteraction = Capability.Unsupported(KadreFailure.Unsupported(KadreOperation.InstallInteractionHandler))
+    val unsupportedArm = Capability.Unsupported(KadreFailure.Unsupported(KadreOperation.ArmInteraction))
+    return org.graphiks.kadre.surface.SurfaceCapabilities(
+        cursor = unsupportedUpdate,
+        customCursor = unsupportedUpdate,
+        pointerCapture = unsupportedUpdate,
+        hitTesting = unsupportedUpdate,
+        inputDefaultBehavior = unsupportedUpdate,
+        // Aucune interaction implémentée en phase 3 (déplacement = phase 5,
+        // drop = phase 7) : la capability reste Unsupported.
+        handlerInteractions = unsupportedInteraction,
+        armedInteractions = unsupportedArm,
+        platformAccess = Capability.Unsupported(KadreFailure.Unsupported(KadreOperation.PlatformSurfaceAccess)),
+    )
+}
+
 /** Native message ids consumed by the driver's window handler. */
 internal const val WM_CLOSE: Int = 0x0010
 internal const val WM_DESTROY: Int = 0x0002
+internal const val WM_SIZE: Int = 0x0005
+internal const val WM_PAINT: Int = 0x000F
+internal const val WM_SHOWWINDOW: Int = 0x0018
+internal const val WM_ACTIVATE: Int = 0x0006
+internal const val WM_DPICHANGED: Int = 0x02E0
 
 internal class Win32WindowRuntimeDriver internal constructor(
     resources: ResourceBudgetPolicy,
@@ -62,14 +88,20 @@ internal class Win32WindowRuntimeDriver internal constructor(
     private val closed = AtomicBoolean(false)
     private val entries = ConcurrentHashMap<org.graphiks.kadre.window.WindowRequestId, Win32WindowEntry>()
     private val maxWindows = resources.maxWindowsPerSession
+    private val pendingRedraws = java.util.concurrent.ConcurrentHashMap<SurfaceId, java.util.ArrayDeque<SurfaceRedrawGeneration>>()
+    @Volatile
+    private var currentScale = 1.0
 
     internal val manager: RuntimeWindowManager = RuntimeWindowManager(
         resources = resources,
         commandPort = this,
+        surfaceCommandPort = this,
         platform = KadrePlatform.Win32,
         failureReporter = failureReporter,
         publicWindowCapabilities = true,
         enabledWindowUpdateCapabilities = enabledWindowUpdateCapabilities,
+        publicSurfaceCapabilities = true,
+        enabledSurfaceCapabilities = win32SurfaceCapabilities(true),
         onLastWindowClosed = onLastWindowClosed,
     )
 
@@ -88,6 +120,79 @@ internal class Win32WindowRuntimeDriver internal constructor(
                     when (message) {
                         WM_CLOSE -> command.closeRequested()
                         WM_DESTROY -> command.nativeClosed()
+                        WM_SIZE -> {
+                            java.nio.file.Files.write(
+                                java.nio.file.Paths.get("build/win32-integration/dispatch-debug.txt"),
+                                ("handler WM_SIZE hwnd=$hwnd\n").toByteArray(),
+                                java.nio.file.StandardOpenOption.CREATE, java.nio.file.StandardOpenOption.APPEND,
+                            )
+                            val size = port.readClientPhysicalSize(hwnd)
+                            val scale = port.readScaleFactor(hwnd)
+                            val logical = org.graphiks.kadre.surface.LogicalSize(
+                                size.first / scale,
+                                size.second / scale,
+                            )
+                            val current = manager.state.value.windows
+                                .firstOrNull { it.id == command.windowId }?.state?.value
+                            val accepted = if (current != null) {
+                                manager.acceptWindowGeometryObservation(
+                                    command.windowId,
+                                    current.copy(contentSize = logical),
+                                )
+                            } else {
+                                false
+                            }
+                            run {
+                                val dir = java.nio.file.Paths.get("build/win32-integration")
+                                java.nio.file.Files.createDirectories(dir)
+                                java.nio.file.Files.writeString(
+                                    dir.resolve("wm-size-debug.txt"),
+                                    "size=$size scale=$scale logical=$logical current=${current?.contentSize} accepted=$accepted",
+                                )
+                            }
+                        }
+                        WM_DPICHANGED -> {
+                            val scale = port.readScaleFactor(hwnd)
+                            val current = manager.state.value.windows
+                                .firstOrNull { it.id == command.windowId }?.state?.value
+                            if (current != null) {
+                                val logical = org.graphiks.kadre.surface.LogicalSize(
+                                    current.contentSize.width * currentScale / scale,
+                                    current.contentSize.height * currentScale / scale,
+                                )
+                                manager.acceptWindowGeometryObservation(
+                                    command.windowId,
+                                    current.copy(contentSize = logical),
+                                )
+                            }
+                        }
+                        WM_ACTIVATE -> manager.acceptSurfaceStimulus(
+                            org.graphiks.kadre.internal.runtime.SurfaceStimulus.FocusChanged(
+                                surfaceId = command.surfaceId,
+                                focus = if (wParam != 0L) org.graphiks.kadre.surface.SurfaceFocus.Focused
+                                else org.graphiks.kadre.surface.SurfaceFocus.Unfocused,
+                            ),
+                        )
+                        WM_SHOWWINDOW -> manager.acceptSurfaceStimulus(
+                            org.graphiks.kadre.internal.runtime.SurfaceStimulus.VisibilityChanged(
+                                surfaceId = command.surfaceId,
+                                visibility = if (wParam != 0L) org.graphiks.kadre.surface.SurfaceVisibility.Visible
+                                else org.graphiks.kadre.surface.SurfaceVisibility.Hidden,
+                                occlusion = org.graphiks.kadre.surface.SurfaceOcclusion.Visible,
+                            ),
+                        )
+                        WM_PAINT -> {
+                            port.validateRect(hwnd)
+                            val pending = pendingRedraws[command.surfaceId]?.pollFirst()
+                            if (pending != null) {
+                                manager.acceptSurfaceStimulus(
+                                    org.graphiks.kadre.internal.runtime.SurfaceStimulus.RedrawConsumed(
+                                        surfaceId = command.surfaceId,
+                                        generation = pending,
+                                    ),
+                                )
+                            }
+                        }
                         else -> port.defWindowProc(hwnd, message, wParam, lParam)
                     }
                     0L
@@ -167,8 +272,19 @@ internal class Win32WindowRuntimeDriver internal constructor(
         command: WindowUpdateCancellationCommand,
     ): WindowUpdateCancellationOutcome = WindowUpdateCancellationOutcome.TooLate
 
-    override fun requestRedraw(command: org.graphiks.kadre.internal.runtime.SurfaceRedrawCommand): KadreResult<Unit> =
-        KadreResult.Failure(KadreFailure.TemporarilyUnavailable(retryable = false))
+    override fun requestRedraw(command: org.graphiks.kadre.internal.runtime.SurfaceRedrawCommand): KadreResult<Unit> {
+        val entry = entries.values.firstOrNull { it.command.surfaceId == command.surfaceId }
+            ?: return KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.Window))
+        if (entry.closeAdmitted || closed.get()) {
+            return KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.Window))
+        }
+        // Coalescing natif : les invalidations rapprochées fusionnent dans la
+        // file du message ; une seule génération (la dernière demandée) est
+        // publiée consommée au drain.
+        pendingRedraws.computeIfAbsent(command.surfaceId) { java.util.ArrayDeque() }.addLast(command.generation)
+        port.invalidateRect(entry.window.hwnd)
+        return KadreResult.Success(Unit)
+    }
 
     override suspend fun apply(
         command: org.graphiks.kadre.internal.runtime.SurfaceUpdateCommand,
@@ -216,6 +332,9 @@ internal class Win32WindowEntry(
 ) {
     @Volatile
     var closeAdmitted = false
+
+    /** Redraw generations requested but not yet drained by a WM_PAINT. */
+    val pendingRedraws = java.util.ArrayDeque<SurfaceRedrawGeneration>()
 }
 
 internal object Win32WindowRuntimeDriverFactory {
