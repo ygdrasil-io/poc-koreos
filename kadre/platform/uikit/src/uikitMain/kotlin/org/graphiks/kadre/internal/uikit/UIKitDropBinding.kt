@@ -65,9 +65,12 @@ internal fun uikitLogicalPoint(x: Double, y: Double): LogicalPoint? =
 /**
  * Le compteur process-wide du drop (le proxy du driver, pattern [UIKitGestureCount]) : les
  * installations/retraits d'interaction réellement exécutés ([recordInstall]/[recordTeardown] —
- * zéro côté tvOS par construction, le binding n'y existe pas) et les livraisons du delegate
- * réellement ACCEPTÉES ([recordEvent] — zéro attendu sur toute suite automatisée, aucun drag
- * n'est synthétisable in-process honnêtement ; le charter manuel Task 4 incrémentera).
+ * zéro côté tvOS par construction, le binding n'y existe pas) et les livraisons que le delegate
+ * VIVANT reçoit ([recordEvent] — zéro sur toute suite automatisée SANS scénarios drop
+ * delegate-driven : tvOS, où le binding n'existe pas, ou les suites des autres familles
+ * d'entrée, où aucun drag n'est livré ; les scénarios drop delegate-driven du driver les
+ * incrémentent — l'install structurel posé par l'attach, puis chaque hook livré au vrai
+ * delegate par les fausses de session conformes, l'exact canal qu'UIKit emprunterait).
  */
 internal object UIKitDropCount {
     private val lock = RuntimeLock()

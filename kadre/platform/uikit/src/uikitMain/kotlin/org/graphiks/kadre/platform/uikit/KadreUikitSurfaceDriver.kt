@@ -643,10 +643,12 @@ public object KadreUikitSurfaceDriver {
         get() = UIKitDropCount.totalTeardowns()
 
     /**
-     * Les livraisons du delegate drop réellement acceptées (`canHandle`, entrée, mouvement,
-     * sortie, perform, conclude, fin de session — zéro attendu sur toute suite automatisée :
-     * aucun drag n'est synthétisable in-process honnêtement ; le charter manuel Task 4
-     * incrémentera).
+     * Les livraisons que le delegate drop VIVANT reçoit (`canHandle`, entrée, mouvement,
+     * sortie, perform, conclude, fin de session — zéro sur toute suite automatisée SANS
+     * scénarios drop delegate-driven : tvOS, où le binding n'existe pas, ou les suites des
+     * autres familles d'entrée, où aucun drag n'est livré ; les scénarios drop
+     * delegate-driven du driver les incrémentent — l'install structurel posé par l'attach,
+     * puis chaque hook livré au vrai delegate par les fausses de session conformes).
      */
     public val dropEventCount: Long
         get() = UIKitDropCount.totalEvents()
