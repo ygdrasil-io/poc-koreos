@@ -45,6 +45,9 @@ internal class DeterministicWin32HostPort : Win32NativeHostPort {
 
     override fun postWake(hwnd: Long): Boolean {
         wakeCount.incrementAndGet()
+        // Mirrors the real frontier: the wake reaches the pump as a window
+        // message dispatched to the control window.
+        messages.add(Win32MessageWait.Message(Win32PumpMessage.Wake.ordinal, 0L, 0L))
         synchronized(monitor) { monitor.notifyAll() }
         return true
     }
