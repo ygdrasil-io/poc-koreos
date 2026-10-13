@@ -14,6 +14,7 @@ internal open class DeterministicWin32HostPort : Win32NativeHostPort {
     val destroyedTopLevelWindows = AtomicInteger(0)
     val postedCloses = AtomicInteger(0)
     private val topLevelHandlers = java.util.concurrent.ConcurrentHashMap<Long, (Int, Long, Long) -> Long>()
+    private val topLevelHwndOrder = java.util.concurrent.ConcurrentLinkedQueue<Long>()
     private var nextTopLevelHwnd = 10_000L
     val createdWindows = AtomicInteger(0)
     val destroyedWindows = AtomicInteger(0)
@@ -104,6 +105,7 @@ internal open class DeterministicWin32HostPort : Win32NativeHostPort {
             createdTopLevelWindows.incrementAndGet()
             val hwnd = nextTopLevelHwnd++
             topLevelHandlers[hwnd] = messageHandler
+            topLevelHwndOrder.add(hwnd)
             return Win32TopLevelWindowHandle(hwnd)
         }
     }
@@ -125,8 +127,15 @@ internal open class DeterministicWin32HostPort : Win32NativeHostPort {
         synchronized(monitor) { monitor.notifyAll() }
     }
 
+    fun lastTopLevelHwnd(): Long = topLevelHwndOrder.lastOrNull() ?: 0L
+
+    fun topLevelHwndAt(index: Int): Long = topLevelHwndOrder.elementAtOrNull(index) ?: 0L
+
     override fun destroyWindow(hwnd: Long) {
-        if (topLevelHandlers.remove(hwnd) != null) destroyedTopLevelWindows.incrementAndGet()
+        if (topLevelHandlers.remove(hwnd) != null) {
+            destroyedTopLevelWindows.incrementAndGet()
+            topLevelHwndOrder.remove(hwnd)
+        }
     }
 
     override fun close() {
