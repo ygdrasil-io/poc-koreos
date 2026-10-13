@@ -37,11 +37,15 @@ import org.graphiks.kadre.policy.KadrePolicy
  *    (`SurfaceView(activity).also(container::addView)`) — et la rend ; c'est cette vue,
  *    l'attach cible de la session.
  *  — **l'attach attend l'attachement effectif** (l'exigence P1 — l'échelle d'admission
- *    refuse une vue hors fenêtre) : l'événement `onViewAttachedToWindow` du conteneur —
- *    ou la relecture initiale quand le conteneur est déjà attaché — pilote la création
- *    via [KadreComposeBinding], par l'overload ACTIVITY public
+ *    refuse une vue hors fenêtre) : l'événement `onViewAttachedToWindow` de LA VUE DE
+ *    SURFACE — l'attach cible de l'admission — pilote la création via
+ *    [KadreComposeBinding], par l'overload ACTIVITY public
  *    (`ComponentActivity.attachKadre`) : un `KadreResult.Failure` (vue refusée, réservation
- *    encore vivante…) laisse le créneau ouvert, l'événement suivant retente.
+ *    encore vivante…) laisse le créneau ouvert, l'événement suivant retente. (Revue de
+ *    phase 9, gate d'instrumentation AND-010 : Android dispatch les événements d'attach
+ *    de HAUT en bas AVANT d'attacher les enfants — l'événement du conteneur ne garantit
+ *    PAS l'attach de la vue cible ; le déclencheur est donc la vue elle-même, jamais le
+ *    conteneur.)
  *  — **la sortie ferme** : le `onDispose` du [DisposableEffect] demande l'arrêt de la
  *    session vivante (le `close()` Kotlin = `requestHostStop`, le modèle P1).
  *  — **le détachement terminal recrée** : le détachement de la vue de la fenêtre est un
@@ -54,6 +58,14 @@ import org.graphiks.kadre.policy.KadrePolicy
  * [KadreSession] (le slot [content], composé AU-DESSUS du conteneur tant qu'une session
  * vit) seulement. Tout le cycle de vie court sur le thread principal (composition, view
  * attach events, dispose) — la machine n'a besoin d'aucune synchronisation.
+ *
+ * Review T3 (M-2) : les captures de CREATION survivent à la RECRÉATION — l'activité, le
+ * conteneur, la vue, la machine et les paramètres `applicationFactory`/`policy` sont tenus
+ * dans des `remember` SANS clé, qui ne meurent qu'à la sortie de composition. Une session
+ * recréée après un détachement terminal (le `recreate` de [KadreComposeBinding]) est donc
+ * construite avec la policy et l'usine de la PREMIÈRE composition — une recomposition qui
+ * passe d'autres lambdas n'atteint ni la session vivante, ni la recréée (une NOUVELLE
+ * composition est un NOUVEAU host : ses captures sont à elle).
  *
  * @param onSurface le choix du host : crée la vue de surface pour CETTE activité dans CE
  *   conteneur et la rend. Invoqué UNE fois par identité de host (capturé avec la
@@ -102,7 +114,14 @@ public fun KadreComposeHost(
     var session by remember { mutableStateOf<KadreSession?>(null, referentialEqualityPolicy()) }
 
     DisposableEffect(container) {
-        val listener = object : View.OnAttachStateChangeListener {
+        // LE DÉCLENCHEUR EST LA VUE CIBLE — la revue de phase 9 (Task 4, gate d'instrumentation
+        // AND-010) : Android dispatch `onViewAttachedToWindow` de HAUT en bas, AVANT d'attacher
+        // les enfants — l'événement du conteneur ne garantit PAS l'attach de [surfaceView],
+        // et l'échelle d'admission refuse alors une vue hors fenêtre SANS re-événement (la
+        // session n'aurait jamais lieu). L'attach de la vue de surface est exactement la
+        // précondition d'admission P1 : c'est lui qui porte la création — et son détachement,
+        // le terminal dont l'arrêt appartient au runtime.
+        val surfaceListener = object : View.OnAttachStateChangeListener {
             override fun onViewAttachedToWindow(view: View) {
                 binding.onSurfaceAttached()
                 session = binding.current
@@ -113,17 +132,17 @@ public fun KadreComposeHost(
                 session = null
             }
         }
-        container.addOnAttachStateChangeListener(listener)
+        surfaceView.addOnAttachStateChangeListener(surfaceListener)
         // La composition peut arriver APRÈS l'attachement de la fenêtre : l'événement du
         // listener ne viendra jamais — l'état réel est relu une fois ici. La course avec
         // l'enregistrement est absorbée par le « keep » de la machine (double événement
         // inoffensif).
-        if (container.isAttachedToWindow) {
+        if (surfaceView.isAttachedToWindow) {
             binding.onSurfaceAttached()
             session = binding.current
         }
         onDispose {
-            container.removeOnAttachStateChangeListener(listener)
+            surfaceView.removeOnAttachStateChangeListener(surfaceListener)
             binding.onHostDisposed()
             session = null
         }

@@ -13,9 +13,14 @@ import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 plugins {
     id("org.jetbrains.kotlin.multiplatform")
     id("com.android.kotlin.multiplatform.library")
+    id("maven-publish")
     alias(libs.plugins.compose.compiler)
     alias(libs.plugins.compose.multiplatform)
 }
+
+// Le groupe des artefacts internes (le même que `platform/android` et `platform/android-devicetest`)
+// : le sample `android-compose-showcase` (Task 4) consomme l'AAR PUBLIÉ du repository contractuel.
+group = "org.graphiks.kadre.internal"
 
 kotlin {
     applyDefaultHierarchyTemplate()
@@ -37,6 +42,12 @@ kotlin {
             // La surface d'attach PUBLIQUE de la plateforme (les overloads `attachKadre`)
             // — `implementation` : la liaison n'expose que les types fondation.
             implementation(project(":kadre:platform:android"))
+            // Review T3 (I-1) : la signature publique de `KadreComposeHost` expose
+            // `androidx.activity.ComponentActivity` (le paramètre `onSurface`, le fail-fast
+            // `componentActivityOf`) — la règle codifiée de `platform/android/build.gradle.kts`
+            // (§ « Activity/Lifecycle SDK types exposés dans les signatures publiques ») :
+            // tout type SDK traversant une signature publique voyage en `api`.
+            api(libs.androidx.activity.ktx)
             implementation(compose.runtime)
             implementation(compose.ui)
             implementation(compose.foundation)
@@ -48,4 +59,16 @@ kotlin {
 // (le modèle de platform/android) : la dépendance passe par SA configuration Gradle.
 dependencies {
     "androidHostTestImplementation"(kotlin("test"))
+}
+
+// La publication contractuelle (le modèle de platform/android) : le sample compose-showcase
+// résout l'AAR PUBLIÉ de la liaison — jamais un `project(":kadre:integration:compose")` qui
+// contournerait la preuve consumateur (le pattern `consumers/android`, AND-010).
+publishing {
+    repositories {
+        maven {
+            name = "contractTest"
+            url = rootProject.layout.buildDirectory.dir("kadre-contract-repository").get().asFile.toURI()
+        }
+    }
 }
