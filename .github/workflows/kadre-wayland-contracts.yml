@@ -8,7 +8,10 @@ on:
 
 jobs:
   wayland-contracts:
-    runs-on: ubuntu-latest
+    # Pinned: the ubuntu-latest image is migrating to Ubuntu 26 (kernel 6.17)
+    # and the wayland native proofs destabilise on it (client-side display
+    # corruption around the shm pool marshals). Revisit with the image bump.
+    runs-on: ubuntu-24.04
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
