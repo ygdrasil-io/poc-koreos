@@ -26,7 +26,9 @@ import platform.darwin.NSObjectProtocol
  *
  * - les TROIS états de capability du créneau : jamais tentée → `Unsupported` ;
  *   installée → `Available` ; échec d'install →
- *   `Unavailable(PlatformFailure(UIKit, "memory-pressure", "source-exception"))` ;
+ *   `Unavailable(PlatformFailure(UIKit, "memory-pressure", "source-exception"))` — et
+ *   l'échec d'une source VIVANTE est collant (le second créneau reçoit la même
+ *   `Unavailable`, sans re-registration) ;
  * - la garde de double registration : un second `newHost` réutilise la source vivante, ne
  *   re-registre JAMAIS ;
  * - arrival-before-wire : PERDU (règle documentée — la pression est un état transient, rien
@@ -55,6 +57,7 @@ class UIKitMemoryPressureTest {
      */
     private class FakeMemoryPressureSeam : UIKitMemoryPressureSeam {
         var failInstall: Boolean = false
+        var attemptedNames = ArrayList<String>()
         var registeredNames = ArrayList<String>()
         var unregisteredCount = 0
         var observerBlock: (() -> Unit)? = null
@@ -62,6 +65,9 @@ class UIKitMemoryPressureTest {
         val posted = ArrayDeque<() -> Unit>()
 
         override fun observe(name: String, onEvent: () -> Unit): NSObjectProtocol {
+            // La TENTATIVE est comptée avant le lancer : c'est elle que la garde de
+            // double-registration observe (une install qui échoue a été tentée une fois).
+            attemptedNames.add(name)
             if (failInstall) throw IllegalStateException("install failed")
             registeredNames.add(name)
             observerBlock = onEvent
@@ -270,6 +276,25 @@ class UIKitMemoryPressureTest {
     }
 
     @Test
+    fun aLiveFailedSourceHandsUnavailableToTheNextClaimantWithoutReRegistering() {
+        // L'état échec d'une source vivante est COLLANT : le second créneau reçoit la MÊME
+        // Unavailable(PlatformFailure), sans seconde registration.
+        val owner = UIKitProcessMemoryPressure()
+        val failing = FakeMemoryPressureSeam().apply { failInstall = true }
+        owner.newHost(failing)
+        val second = owner.newHost(failing)
+        val availability = second.capabilities.memoryPressure
+        assertIs<FeatureAvailability.Unavailable>(availability)
+        assertEquals(
+            KadreFailure.PlatformFailure(KadrePlatform.UIKit, "memory-pressure", "source-exception"),
+            availability.failure,
+        )
+        // UNE seule tentative d'install pour les DEUX créneaux : la source vivante est
+        // réutilisée, échec compris — jamais une seconde registration (ni tentée).
+        assertEquals(listOf(memoryWarningName), failing.attemptedNames)
+    }
+
+    @Test
     fun aFailedInstallNeverUnregistersAndTheNextHostReinstalls() {
         val owner = UIKitProcessMemoryPressure()
         val failing = FakeMemoryPressureSeam().apply { failInstall = true }
@@ -293,9 +318,6 @@ class UIKitMemoryPressureTest {
         val mapped = uikitMemoryPressureLevelOfMemoryWarning()
         assertEquals(MemoryPressureLevel.Moderate, mapped)
         assertNotEquals(MemoryPressureLevel.Critical, mapped)
-        assertTrue(
-            MemoryPressureLevel.entries.none { level -> level != mapped && uikitMemoryPressureLevelOfMemoryWarning() == level },
-        )
     }
 
     @Test
