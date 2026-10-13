@@ -39,6 +39,7 @@ public final class KadreAndroid private constructor() {
     public companion object {
         @JvmStatic
         @JvmOverloads
+        @Throws(KadreException::class)
         public fun attach(
             activity: ComponentActivity,
             surfaceView: View,
@@ -48,6 +49,7 @@ public final class KadreAndroid private constructor() {
 
         @JvmStatic
         @JvmOverloads
+        @Throws(KadreException::class)
         public fun attach(
             view: View,
             lifecycleOwner: LifecycleOwner,
@@ -169,6 +171,9 @@ public class KadreSessionHandle internal constructor(
      * L'observation (§4) : émission immédiate du snapshot courant au retour de l'appel,
      * puis chaque changement séquentiellement dans l'ordre d'inscription. Le token rendu
      * retire l'observer sans arrêter la session ; après [close], l'observation est muette.
+     * Course NARROW du seeding : l'état peut changer entre la lecture du seed (hors verrou)
+     * et l'armement du collecteur, qui re-délivrerait alors le courant une fois — bénin sur
+     * le thread principal, seul thread d'attach et d'observation, qui sérialise ces instants.
      */
     public fun observeState(observer: Consumer<KadreSessionSnapshot>): AutoCloseable {
         synchronized(lock) {
