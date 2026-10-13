@@ -135,6 +135,38 @@ internal class KffiWin32HostPort : Win32NativeHostPort {
     override fun defWindowProc(hwnd: Long, message: Int, wParam: Long, lParam: Long): Long =
         org.graphiks.kffi.win32.generated.DefWindowProcW(MemorySegment.ofAddress(hwnd), message, wParam, lParam)
 
+    override fun invalidateRect(hwnd: Long) {
+        org.graphiks.kffi.win32.generated.InvalidateRect(MemorySegment.ofAddress(hwnd), MemorySegment.NULL, 0)
+    }
+
+    override fun validateRect(hwnd: Long) {
+        org.graphiks.kffi.win32.generated.ValidateRect(MemorySegment.ofAddress(hwnd), MemorySegment.NULL)
+    }
+
+    override fun readClientPhysicalSize(hwnd: Long): Pair<Int, Int> {
+        org.graphiks.kffi.win32.generated.init()
+        Arena.ofConfined().use { arena ->
+            // RECT win64 : LONG left(0), top(8), right(16), bottom(24).
+            val rect = arena.allocate(32)
+            check(
+                org.graphiks.kffi.win32.generated.GetClientRect(
+                    MemorySegment.ofAddress(hwnd),
+                    rect,
+                ) != 0,
+            ) { "GetClientRect failed for hwnd $hwnd" }
+            val left = rect.get(java.lang.foreign.ValueLayout.JAVA_LONG, 0)
+            val top = rect.get(java.lang.foreign.ValueLayout.JAVA_LONG, 8)
+            val right = rect.get(java.lang.foreign.ValueLayout.JAVA_LONG, 16)
+            val bottom = rect.get(java.lang.foreign.ValueLayout.JAVA_LONG, 24)
+            return Pair((right - left).toInt(), (bottom - top).toInt())
+        }
+    }
+
+    override fun readScaleFactor(hwnd: Long): Double {
+        org.graphiks.kffi.win32.generated.init()
+        return org.graphiks.kffi.win32.generated.GetDpiForWindow(MemorySegment.ofAddress(hwnd)) / 96.0
+    }
+
     override fun requestCloseWindow(hwnd: Long) {
         PostMessageW(MemorySegment.ofAddress(hwnd), WM_CLOSE, 0L, 0L)
     }

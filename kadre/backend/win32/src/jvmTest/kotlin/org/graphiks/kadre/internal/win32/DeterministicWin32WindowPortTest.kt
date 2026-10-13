@@ -78,3 +78,43 @@ class DeterministicWin32WindowPortTest {
         assertEquals(second.hwnd != 0L, true)
     }
 }
+
+class DeterministicWin32SurfacePortTest {
+    @Test
+    fun scriptedClientSizeIsReadBack() {
+        val port = DeterministicWin32HostPort()
+        val window = port.createTopLevelWindow("s", Win32WindowDecorations.System, 320, 240) { _, _, _, _ -> 0L }
+        port.scriptedClientSize[window.hwnd] = 320 to 240
+        assertEquals(320 to 240, port.readClientPhysicalSize(window.hwnd))
+    }
+
+    @Test
+    fun invalidateAndValidateAreCounted() {
+        val port = DeterministicWin32HostPort()
+        val window = port.createTopLevelWindow("s", Win32WindowDecorations.System, 100, 100) { _, _, _, _ -> 0L }
+        port.invalidateRect(window.hwnd)
+        port.invalidateRect(window.hwnd)
+        port.validateRect(window.hwnd)
+        assertEquals(2, port.invalidateCount.get())
+        assertEquals(1, port.validateCount.get())
+    }
+
+    @Test
+    fun paintDispatchRequiresPriorInvalidation() {
+        val port = DeterministicWin32HostPort()
+        val window = port.createTopLevelWindow("s", Win32WindowDecorations.System, 100, 100) { _, _, _, _ -> 0L }
+        port.dispatchWindowMessage(window.hwnd, 0x000F) // WM_PAINT sans invalidation
+        assertEquals(0, port.paintCount.get())
+        port.invalidateRect(window.hwnd)
+        port.dispatchWindowMessage(window.hwnd, 0x000F)
+        assertEquals(1, port.paintCount.get())
+    }
+
+    @Test
+    fun scaleFactorIsScripted() {
+        val port = DeterministicWin32HostPort()
+        val window = port.createTopLevelWindow("s", Win32WindowDecorations.System, 100, 100) { _, _, _, _ -> 0L }
+        port.scriptedScaleFactor[window.hwnd] = 1.5
+        assertEquals(1.5, port.readScaleFactor(window.hwnd))
+    }
+}
