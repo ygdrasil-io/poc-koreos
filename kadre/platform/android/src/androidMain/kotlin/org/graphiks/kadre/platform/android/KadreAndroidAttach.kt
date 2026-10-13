@@ -7,6 +7,7 @@ import android.os.Build
 import android.os.Looper
 import android.view.Display
 import android.view.View
+import android.view.Window
 import androidx.activity.ComponentActivity
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
@@ -144,9 +145,13 @@ public fun View.attachKadre(
  * Un hôte déjà STARTED montre le média dès l'attach (premier show level-triggered) ; sinon
  * le premier START le montre. Le STOP le cache — le média survit aux cycles, jamais deux
  * présentations ; le retrait de l'écran ferme la surface et termine la session sans
- * résurrection. La session ne revendique AUCUN champ fenêtre en v1 (`native = null` — la
- * table des capabilities non supportées) ; appelable après `onCreate` (l'installation observe
- * le lifecycle et le decorView de l'Activity).
+ * résurrection. L'entrée de la fenêtre du média est observée par la chaîne `Window.Callback`
+ * posée au premier show réussi (une seule fois pour la vie du média — la fenêtre survit à
+ * hide/show) et alimente l'input de LA session présentation, jamais la session principale ;
+ * la fermeture du média restitue la callback d'origine exacte. La session ne revendique
+ * AUCUN champ fenêtre en v1 (`native = null` — la table des capabilities non supportées) ;
+ * appelable après `onCreate` (l'installation observe le lifecycle et le decorView de
+ * l'Activity).
  */
 public fun ComponentActivity.attachKadreSecondaryDisplay(
     presentationDisplay: Display,
@@ -162,7 +167,63 @@ public fun ComponentActivity.attachKadreSecondaryDisplay(
     sourceFactory = { AndroidSdkPresentationSource(this, presentationDisplay, contentView) },
     installHostLifecycle = { lifecycle -> lifecycle.install(this, window.decorView) },
     displayPortFactory = { AndroidDisplayPort(AndroidDisplayManagerSource(contentView.context)) },
+    // L'installateur d'entrée de la forme présentation : la fenêtre réelle du JETON du média
+    // (le contentView y vit — le focus observé est le sien), le câblage de LA session
+    // présentation — le même code d'installation que la forme Activity, une seule vérité.
+    inputChainFactory = { windowToken, wiring ->
+        windowInputChainFor(windowToken as? Window, contentView, wiring)
+    },
 )
+
+/**
+ * L'installateur FENÊTRE-PARAMÉTRÉ de la chaîne d'entrée (phase 11, Task 3) : le MÊME
+ * forwarder T1 pour les deux formes fenêtrées — la forme Activity passe la fenêtre de
+ * l'Activity ([AndroidHostSession] y délègue), la forme présentation la fenêtre du jeton du
+ * média (`attachKadreSecondaryDisplay`) — un seul code d'installation, jamais deux.
+ *
+ * Le forwarder enchaîne le callback EXISTANT de la fenêtre (la paire publique get/set — la
+ * discipline « no listener replacement », jamais de remplacement, jamais de réflexion),
+ * observe la porte de focus de la vue ciblée (`view.hasFocus()` AU MOMENT de l'événement —
+ * une présentation ne prend PAS le focus par décret, la porte l'observe), et route
+ * observations/consommation/motion vers le câblage de SESSION que la couture remet — chaque
+ * session reçoit son input, jamais celui d'une autre.
+ *
+ * `null` (pas de fenêtre, ou fenêtre sans callback) : pas de chaîne — l'observation
+ * clavier/tactile vit là où la couture peut enchaîner, jamais une promesse vide.
+ */
+internal fun windowInputChainFor(
+    window: Window?,
+    view: View,
+    wiring: AndroidSessionInputWiring,
+): AndroidWindowInputChain? {
+    val wrapped = window?.callback ?: return null
+    return AndroidForwarderInputChain(
+        AndroidWindowCallbackForwarder(
+            wrapped = wrapped,
+            getWindowCallback = { window.callback },
+            setWindowCallback = { window.callback = it },
+            isTargetFocused = { view.hasFocus() },
+            onObservation = wiring.onObservation,
+            shouldConsumeKey = wiring.shouldConsumeKey,
+            onMotion = { observation, offsetX, offsetY ->
+                wiring.onMotion(observation, view.width, view.height, offsetX, offsetY)
+            },
+            // L'origine de la View DANS l'espace fenêtre — la paire publique
+            // `getLocationOnScreen` de la View et du decorView de CETTE fenêtre, lue à
+            // chaque dispatch (les positions fenêtre et parent-relatives peuvent diverger
+            // à tout layout) : le tracker convertit les coordonnées fenêtre du dispatch
+            // `Window.Callback` en view-local avant ses gates.
+            viewOffsetInWindow = {
+                val viewLocation = IntArray(2)
+                view.getLocationOnScreen(viewLocation)
+                val decorLocation = IntArray(2)
+                window.decorView.getLocationOnScreen(decorLocation)
+                viewLocation[0] - decorLocation[0] to viewLocation[1] - decorLocation[1]
+            },
+            onPointerCaptureState = wiring.onPointerCaptureState,
+        ),
+    )
+}
 
 /** La variante « application » : délègue à la variante factory (le modèle exact des overloads web). */
 public fun ComponentActivity.attachKadreSecondaryDisplay(
@@ -706,15 +767,22 @@ internal object AndroidHostSession {
      *    `Removed` du seam, observé en continu) et un show échoué ferment la surface puis
      *    terminent la session — le MÊME chemin que la disparition de l'hôte dans les formes
      *    existantes (`controller.detach()` → `Stopped(HostDetached)`), réservations libérées,
-     *    jamais de résurrection ;
+     *    jamais de résurrection. L'INPUT de la fenêtre du média (Task 3) : la chaîne
+     *    `Window.Callback` est posée au PREMIER `Shown` du seam — une seule fois pour la vie
+     *    du média, via l'étape injectée `inputChainFactory` (le jeton opaque + le câblage de
+     *    LA session) — et restituée à la callback d'origine exacte par le teardown du
+     *    binding, chaque chemin de démonte compris ;
      * 5. l'installation puis l'attach sous le garde post-réservation (l'overload présentation
      *    de [installBindingAndAttach]) : rollback intégral — `presentationSource.close()` +
      *    réservation rendue, throwable SDK propagé TEL QUEL.
      *
      * Les paramètres injectés (`sourceFactory`, `installHostLifecycle`, `ownership`,
-     * `displayPortFactory`) sont les seuls qui touchent le SDK en production : les tests
-     * hôtes conduisent toute la machinerie sans android.jar — le modèle de
-     * `installBindingAndAttach`, dont l'étape d'installation reste LA seule couture SDK.
+     * `displayPortFactory`, `inputChainFactory`) sont les seuls qui touchent le SDK en
+     * production : les tests hôtes conduisent toute la machinerie sans android.jar — le
+     * modèle de `installBindingAndAttach`, dont l'étape d'installation reste LA seule couture
+     * SDK. `inputChainFactory` (Task 3) construit la chaîne d'entrée du JETON de fenêtre
+     * opaque avec le câblage de LA session présentation — la production y passe la fenêtre
+     * réelle du média ([windowInputChainFor]), les tests hôtes une fake sans type SDK.
      */
     internal fun attachSecondaryDisplay(
         request: AndroidPresentationAttachRequest,
@@ -725,6 +793,8 @@ internal object AndroidHostSession {
         installHostLifecycle: (AndroidPresentationLifecycle) -> Unit,
         registry: AndroidViewOwnership = ownership,
         displayPortFactory: () -> DisplayPort? = { null },
+        inputChainFactory: (windowToken: Any?, wiring: AndroidSessionInputWiring) -> AndroidWindowInputChain? =
+            { _, _ -> null },
     ): KadreResult<KadreSession> {
         // 1. L'échelle normative présentation : thread → scope → contentView LIBRE → écran →
         //    owner détruit → conflit contentView/displayId.
@@ -846,21 +916,58 @@ internal object AndroidHostSession {
             onHostGone = { sessionTerminal(closeSurface = false) },
         )
         installedBinding = presentationLifecycle.binding
-        // L'observation du retrait d'écran : l'état `Removed` du seam est FINAL. Le collecteur
+        // L'entrée de LA session présentation (Task 3) : le câblage SDK-free que l'étape
+        // injectée consomme — les funnels de CETTE surface (la delivery existe dès l'attach
+        // réussi, la chaîne n'est posée qu'après lui), jamais ceux d'une autre session.
+        val inputWiring = AndroidSessionInputWiring(
+            onObservation = { observation -> surface.onInputObservation(observation) },
+            shouldConsumeKey = { nativeKeyCode -> surface.shouldConsumeKey(nativeKeyCode) },
+            onMotion = { observation, viewWidth, viewHeight, offsetX, offsetY ->
+                surface.onMotionObservation(observation, viewWidth, viewHeight, offsetX, offsetY)
+            },
+        )
+        // La chaîne d'entrée du média : posée au PREMIER `Shown`, UNE fois pour la vie du
+        // média — la fenêtre d'une Presentation survit à hide/show, la reposer à chaque show
+        // doublerait les événements. La garde (`inputChainHandled`) vit sur le chemin du
+        // collecteur ci-dessous, qui en production livre chaque état SOUS le RuntimeLock du
+        // seam — l'idempotence est gardée par le verrou du média, comme la capture du jeton
+        // dans la machine Task 1.
+        var inputChain: AndroidWindowInputChain? = null
+        var inputChainHandled = false
+        fun installInputChainOnce() {
+            if (inputChainHandled) return
+            inputChainHandled = true
+            inputChain = inputChainFactory(presentationSource.windowToken(), inputWiring)
+            inputChain?.install()
+            // Le fait câblé suit la chaîne RÉELLEMENT posée (une fenêtre sans callback ne
+            // promet pas de clavier) — le miroir exact de la discipline de la forme Activity.
+            surface.observationInstalled(inputWired = inputChain != null)
+        }
+
+        // L'observation de l'état du média : le retrait d'écran (`Removed`, FINAL — le
+        // terminal) et le premier `Shown` (l'installation d'entrée UNE fois). Le collecteur
         // Unconfined livre le fait au thread qui l'émet (le listener SDK du seam comme le fake
         // du test hôte), la mort du média ne dépend d'aucun dispatcher. INVARIANT de
         // réentrance : en production, l'émission courut SOUS le RuntimeLock du seam, et le
         // terminal re-rentre dans ce même verrou via `presentationSource.close()` (le
         // teardown des composants) — sûr parce que le RuntimeLock JVM est `synchronized`,
         // donc réentrant ; le fake du test hôte, lui, n'a pas de verrou.
-        val removalWatch = parentScope.launch(Dispatchers.Unconfined) {
+        val mediaWatch = parentScope.launch(Dispatchers.Unconfined) {
             presentationSource.state.collect { state ->
-                if (state is AndroidPresentationState.Removed) sessionTerminal(closeSurface = true)
+                when (state) {
+                    AndroidPresentationState.Hidden -> Unit
+                    is AndroidPresentationState.Shown -> installInputChainOnce()
+                    is AndroidPresentationState.Removed -> sessionTerminal(closeSurface = true)
+                }
             }
         }
-        // Le retrait du binding emporte l'observation : chaque chemin qui démonte l'un
-        // (terminal, révocation, rollback) arrête l'autre — jamais de collecteur orphelin.
-        presentationLifecycle.binding.onTeardown { removalWatch.cancel() }
+        // Le retrait du binding emporte chaîne et observation : chaque chemin qui démonte
+        // l'un (terminal, révocation, rollback) restitue la callback d'origine EXACTE puis
+        // arrête l'autre — jamais de collecteur orphelin, jamais de chaîne résiduelle.
+        presentationLifecycle.binding.onTeardown {
+            inputChain?.restoreOrReport()
+            mediaWatch.cancel()
+        }
 
         // 4+5. L'installation puis l'attach, sous le garde post-réservation (l'overload
         //      présentation de [installBindingAndAttach]) : rollback intégral — la
@@ -988,91 +1095,42 @@ internal object AndroidHostSession {
     }
 
     /**
-     * Le wrapper d'entrée de CETTE attach, et l'état qui rend son retrait sûr : l'installation
-     * n'a lieu qu'après un attach réussi (la delivery existe alors — construite pendant
-     * l'attach par `installSessionConfiguration`), et le retrait suit l'installation pas à
-     * pas — un [restore][AndroidWindowCallbackForwarder.restore] qui lance (le callback de la
-     * fenêtre a été remplacé par un tiers) est REPORTÉ sur le journal de la couture, jamais
-     * propagé dans la boucle de teardown.
+     * Le câblage d'entrée de LA session de cette attach (phase 11, Task 3) — les funnels de
+     * sa surface, qui n'existe pas avant l'attach mais n'est lue qu'après (le wrapper n'est
+     * POSÉ qu'après un attach réussi : la course est structurellement impossible, le thread
+     * principal sérialise l'attach tout entier), la lecture de suppression depuis l'état
+     * COMMIS, et le canal d'état de la capture (le seam retenu par la session). SDK-free par
+     * construction : c'est ce câblage que l'installateur fenêtre-paramétré
+     * ([windowInputChainFor]) consomme — la même forme pour les deux formes fenêtrées.
      */
-    private class InputForwarder(private val forwarder: AndroidWindowCallbackForwarder) {
-        var installed: Boolean = false
-            private set
-
-        fun install() {
-            forwarder.install()
-            installed = true
-        }
-
-        fun restoreOrReport() {
-            if (!installed) return
-            installed = false
-            try {
-                forwarder.restore()
-            } catch (cause: Throwable) {
-                runCatching { AndroidAttachDiagnostics.report(cause) }
-            }
-        }
-    }
+    private fun sessionInputWiring(sessionSurface: SessionSurface) = AndroidSessionInputWiring(
+        onObservation = { observation -> sessionSurface.surface?.onInputObservation(observation) },
+        shouldConsumeKey = { nativeKeyCode -> sessionSurface.surface?.shouldConsumeKey(nativeKeyCode) ?: false },
+        onMotion = { observation, viewWidth, viewHeight, offsetX, offsetY ->
+            sessionSurface.surface?.onMotionObservation(observation, viewWidth, viewHeight, offsetX, offsetY)
+        },
+        // Le canal d'état de la capture (Task 3) : la notification du SDK livrée au
+        // seam retenu par la session — le listener posé par
+        // [AndroidPointerCapture] reçoit la confirmation (le commit en deux temps).
+        onPointerCaptureState = { hasCapture ->
+            sessionSurface.capture?.dispatchCaptureState(hasCapture)
+        },
+    )
 
     /**
-     * Le wrapper T1 construit pour la forme ACTIVITY : enchaîné sur le callback EXISTANT de
-     * la fenêtre de l'activité (la paire publique get/set — jamais de remplacement), nourri
-     * des trois décisions que la couture seule peut répondre :
-     *
-     * - [AndroidInputWindowCallback.isTargetFocused] = `view.hasFocus()` — l'observation
-     *   clavier ne vit que sur la vue attachée focalisée (le câblage documenté du wrapper) ;
-     * - l'observation (touches, perte de focus) et la motion (les primitives copiées au
-     *   dispatch) partent vers la delivery de la surface — qui n'existe pas avant l'attach,
-     *   mais le wrapper n'est POSÉ qu'après un attach réussi : la course est structurellement
-     *   impossible, le thread principal sérialise l'attach tout entier ;
-     * - [AndroidInputWindowCallback.shouldConsumeKey] lit l'état COMMIS de la surface (le
-     *   `suppressDefaultFor` web côté surface — depuis la tâche 4, les scroll-keys sous
-     *   `SuppressWhenPossible`) — sans surface, rien n'est consommé.
-     *
-     * La forme View n'a pas de fenêtre : `null`, l'observation clavier/tactile y est dépourvue
-     * à cette phase (documenté au point d'appel).
+     * La chaîne de la forme ACTIVITY : le constructeur partagé [windowInputChainFor] sur la
+     * fenêtre de l'Activity, nourri du câblage de LA session de cette attach. La forme View
+     * n'a pas de fenêtre : `null`, l'observation clavier/tactile y est dépourvue à cette
+     * phase (documenté au point d'appel).
      */
     private fun inputForwarderFor(
         form: AndroidAttachForm,
         owner: LifecycleOwner,
         view: View,
         sessionSurface: SessionSurface,
-    ): InputForwarder? {
+    ): AndroidWindowInputChain? {
         if (form != AndroidAttachForm.Activity) return null
-        val window = (owner as ComponentActivity).window
-        val wrapped = window.callback ?: return null
-        return InputForwarder(
-            AndroidWindowCallbackForwarder(
-                wrapped = wrapped,
-                getWindowCallback = { window.callback },
-                setWindowCallback = { window.callback = it },
-                isTargetFocused = { view.hasFocus() },
-                onObservation = { observation -> sessionSurface.surface?.onInputObservation(observation) },
-                shouldConsumeKey = { nativeKeyCode -> sessionSurface.surface?.shouldConsumeKey(nativeKeyCode) ?: false },
-                onMotion = { observation, offsetX, offsetY ->
-                    sessionSurface.surface?.onMotionObservation(observation, view.width, view.height, offsetX, offsetY)
-                },
-                // L'origine de la View DANS l'espace fenêtre — la paire publique
-                // `getLocationOnScreen` de la View et du decorView de CETTE fenêtre, lue à
-                // chaque dispatch (les positions fenêtre et parent-relatives peuvent diverger
-                // à tout layout) : le tracker convertit les coordonnées fenêtre du dispatch
-                // `Window.Callback` en view-local avant ses gates.
-                viewOffsetInWindow = {
-                    val viewLocation = IntArray(2)
-                    view.getLocationOnScreen(viewLocation)
-                    val decorLocation = IntArray(2)
-                    window.decorView.getLocationOnScreen(decorLocation)
-                    viewLocation[0] - decorLocation[0] to viewLocation[1] - decorLocation[1]
-                },
-                // Le canal d'état de la capture (Task 3) : la notification du SDK livrée au
-                // seam retenu par la session — le listener posé par
-                // [AndroidPointerCapture] reçoit la confirmation (le commit en deux temps).
-                onPointerCaptureState = { hasCapture ->
-                    sessionSurface.capture?.dispatchCaptureState(hasCapture)
-                },
-            ),
-        )
+        return windowInputChainFor((owner as ComponentActivity).window, view, sessionInputWiring(sessionSurface))
     }
 
     /**
