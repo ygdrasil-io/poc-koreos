@@ -197,6 +197,12 @@ internal class KffiWin32HostPort : Win32NativeHostPort {
         return GetDpiForWindow(MemorySegment.ofAddress(hwnd)) / 96.0
     }
 
+    /** Drains one message from the thread queue (translate + dispatch). Test/diagnostic helper. */
+    internal fun drainOneMessage(timeoutMillis: Long) {
+        val wait = waitForMessage(timeoutMillis)
+        if (wait is Win32MessageWait.Message) translateAndDispatch(wait)
+    }
+
     override fun close() {
         controlWindow?.close()
         controlWindow = null
