@@ -3,6 +3,8 @@
 package org.graphiks.kadre.internal.uikit
 
 import kotlinx.cinterop.useContents
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import org.graphiks.kadre.diagnostics.Capability
 import org.graphiks.kadre.diagnostics.FeatureAvailability
 import org.graphiks.kadre.diagnostics.KadreFailure
@@ -12,6 +14,7 @@ import org.graphiks.kadre.internal.runtime.DisplayPort
 import org.graphiks.kadre.internal.runtime.DisplayPortSnapshot
 import org.graphiks.kadre.internal.runtime.RuntimeLock
 import org.graphiks.kadre.internal.runtime.withLock
+import platform.Foundation.NSThread
 import platform.Foundation.NSNotificationCenter
 import platform.Foundation.NSOperationQueue
 import platform.UIKit.UIScreen
@@ -92,6 +95,19 @@ internal interface UIKitDisplaySource : AutoCloseable {
  * port avec les composants de la session, ce qui désenregistre le listener du seam et ferme
  * le seam possédé.
  *
+ * THREADING (revue Task 2, Important-1) — `UIScreen` est un objet main-thread-only (contrat
+ * UIKit), donc TOUTE lecture du seam l'est aussi, par transitivité :
+ *  - [requestSnapshot] est la voie APPLICATIVE (`RuntimeDisplayManager.requestAccess`, tout
+ *    thread) : un appelant hors du thread principal est FUNNELÉ sur le main
+ *    (`Dispatchers.Main.immediate` — le patron du bail d'[UIKitWindowCommandPort.lease] :
+ *    inline quand l'appelant y est déjà, un seul saut de file sinon), jamais une lecture
+ *    UIScreen depuis le thread appelant ;
+ *  - [installSnapshotObserver] et la publication initiale, comme le chemin de fire, sont
+ *    main-confined PAR LA COMPOSITION : le seul install de production vit dans la construction
+ *    de la session (`RuntimeDisplayManager.init`, attach UIKit/tvOS — `KadreIos.attach` refuse
+ *    tout appel hors main) et la source de production livre les fires sur la file principale
+ *    (`NSOperationQueue.mainQueue()`, cf. [UIKitScreenDisplaySource]).
+ *
  * @param source le seam `UIScreen` que ce port lit ; possédé par le port, fermé avec lui.
  * @param hostScreenResolver les faits de l'écran hôte de la session (l'écran de SA fenêtre),
  *   relus à chaque relecture ; `null` quand la couture ne peut pas les résoudre.
@@ -113,7 +129,19 @@ internal class UIKitDisplayPort(
     override val enumerationCapability: Capability<Unit> =
         Capability.Supported(Unit, FeatureAvailability.Available)
 
-    override suspend fun requestSnapshot(): KadreResult<DisplayPortSnapshot> = snapshotResult()
+    /**
+     * La voie applicative (tout thread — `RuntimeDisplayManager.requestAccess`) : la relecture
+     * du seam `UIScreen` est FUNNELÉE sur le thread principal, inline quand l'appelant y est
+     * déjà (`Dispatchers.Main.immediate` — un seul saut de file sinon, le patron exact du bail
+     * d'[UIKitWindowCommandPort.lease]). `UIScreen` est main-thread-only (contrat UIKit) : un
+     * inventaire relu hors du main n'est pas une lecture, c'est un comportement indéfini.
+     */
+    override suspend fun requestSnapshot(): KadreResult<DisplayPortSnapshot> =
+        if (NSThread.isMainThread()) {
+            snapshotResult()
+        } else {
+            withContext(Dispatchers.Main.immediate) { snapshotResult() }
+        }
 
     /**
      * Installe l'observer session-runtime, publie l'inventaire courant à lui exactement une
@@ -226,7 +254,10 @@ internal class UIKitDisplayPort(
  *
  * Le listener du SDK est contracté en UNE callback (le port relit l'inventaire complet, il ne
  * consomme jamais l'événement comme un delta) ; les livraisons arrivent sur la file principale
- * (l'attach EST sur le main), où l'anti-désenregistrement du port est sûr par son lock. La
+ * (l'attach EST sur le main), où l'anti-désenregistrement du port est sûr par son lock. Les
+ * lectures (`screens`, `isMain`, `factsOf`) sont main-confined COMME les livraisons —
+ * `UIScreen` est main-thread-only (contrat UIKit) : la voie applicative du port les y funnel
+ * (contrat de threading du port, revue Task 2 Important-1). La
  * clé de corrélation d'un écran est son `hash` NSObject (l'ObjectIdentifier du `UIScreen` en
  * production) — stable à vie de l'écran, unique au process ; le runtime alloue ses propres
  * identités publiques par-dessus.

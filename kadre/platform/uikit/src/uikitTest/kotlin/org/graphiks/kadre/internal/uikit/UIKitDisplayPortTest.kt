@@ -13,6 +13,7 @@ import org.graphiks.kadre.diagnostics.KadreFailure
 import org.graphiks.kadre.diagnostics.KadreResult
 import org.graphiks.kadre.display.DisplayType
 import org.graphiks.kadre.internal.runtime.DisplayPortSnapshot
+import platform.Foundation.NSThread
 
 /**
  * Le port display UIKit/tvOS (phase 8, Task 2) prouvé PAR JETONS de seam — le port ne nomme
@@ -46,12 +47,20 @@ class UIKitDisplayPortTest {
         override fun toString(): String = "Screen($label)"
     }
 
-    /** Le seam factice : l'inventaire piloté, les faits par jeton, les listeners comptés. */
+    /**
+     * Le seam factice : l'inventaire piloté, les faits par jeton, les listeners comptés. Le
+     * compteur `mainThreadSeamReads` épingle OÙ la relecture a couru — la matière du pin du
+     * funnel main (revue Task 2, Important-1).
+     */
     private class FakeDisplaySource : UIKitDisplaySource {
         var inventory: List<Any> = emptyList()
         val factsByScreen = HashMap<Any, UIKitDisplayFacts>()
         val registered = ArrayList<() -> Unit>()
         var closedCount = 0
+        var seamReads = 0
+            private set
+        var mainThreadSeamReads = 0
+            private set
 
         fun screen(
             label: String,
@@ -73,7 +82,11 @@ class UIKitDisplayPortTest {
 
         fun listenerCount(): Int = registered.size
 
-        override fun screens(): List<Any> = inventory
+        override fun screens(): List<Any> {
+            seamReads += 1
+            if (NSThread.isMainThread()) mainThreadSeamReads += 1
+            return inventory
+        }
 
         override fun isMain(screen: Any): Boolean = factsByScreen[screen]?.isMain ?: false
 
@@ -156,6 +169,39 @@ class UIKitDisplayPortTest {
         val snapshot = assertIs<KadreResult.Success<DisplayPortSnapshot>>(result).value
         assertEquals(7L, snapshot.primaryKey)
         assertEquals(1, snapshot.displays.size)
+    }
+
+    /**
+     * Le pin du funnel main (revue Task 2, Important-1) — la relecture du seam `UIScreen` est
+     * main-confined : appelé DEPUIS le main (le cas de la composition — l'attach et la boucle
+     * main des sessions), `requestSnapshot` reste INLINE (zéro saut de file) et la lecture du
+     * seam observe le thread principal, exactement une fois par demande.
+     *
+     * La branche HORS main (l'appelant applicatif d'un `requestAccess` sur un thread arbitraire,
+     * funnelé par `Dispatchers.Main.immediate` — le patron du bail d'[UIKitWindowCommandPort.
+     * lease]) n'est PAS épinglable ici, mesuré honnêtement : le runner de tests natif exécute
+     * les cas SUR le thread principal et ne draine PAS la file principale (sonde Task 5 — un
+     * `withContext(Dispatchers.Main)` depuis un Worker n'y est JAMAIS livré) ; l'épingle hors
+     * main demande un hôte à run loop — l'affaire du driver (Task 6, stimulus charté), où un
+     * appel bloqué hors main est vivant par construction.
+     */
+    @Test
+    fun requestSnapshotReadsTheSeamOnTheMainThreadAndStaysInlineWhenAlreadyThere() = runBlocking {
+        val source = FakeDisplaySource()
+        val host = source.screen("host", key = 1L, isMain = true)
+        source.inventory = listOf(host)
+        val port = portWith(source, hostKey = 1L)
+
+        assertTrue(NSThread.isMainThread(), "pré-requis : le runner natif exécute le test sur le main")
+        val snapshot = assertIs<KadreResult.Success<DisplayPortSnapshot>>(port.requestSnapshot()).value
+        assertEquals(1, snapshot.displays.size)
+
+        assertEquals(1, source.seamReads, "exactement une relecture du seam par demande")
+        assertEquals(
+            source.seamReads,
+            source.mainThreadSeamReads,
+            "toute relecture du seam observe le thread principal (UIScreen est main-only)",
+        )
     }
 
     // MARK: - le ruling injecté : l'écran hôte → ruling(true), les autres → ruling(false)
