@@ -144,8 +144,9 @@ final class KadreUikitTextInputSpikeTests: XCTestCase {
             + "shouldChangeCalls=\(delegate.shouldChangeCalls.count)")
         XCTAssertEqual(field.text ?? "", "ab",
                        "(d) programmatic insertText('ab') must produce text='ab'; actual '\(field.text ?? "<nil>")'")
-        // La vérité (d) et le hook shouldChange sont ENREGISTRÉS, jamais inventés : les compteurs
-        // ci-dessus portent la réponse par famille (le journal est la preuve).
+        // La vérité (d) est ENREGISTRÉE, jamais inventée : les compteurs ci-dessus portent la
+        // réponse par famille (le journal est la preuve) ; le silence de shouldChange est de plus
+        // ASSERTÉ dans le bloc des totaux en fin de test (contrat de routage — voir là-bas).
 
         // MARK: (b) — deleteBackward sur une paire surrogate
 
@@ -220,6 +221,26 @@ final class KadreUikitTextInputSpikeTests: XCTestCase {
             + "didChangeSelection=\(delegate.didChangeSelectionCount) "
             + "shouldChangeCalls=\(delegate.shouldChangeCalls.count) "
             + "didBegin=\(delegate.didBeginCount) didEnd=\(delegate.didEndCount)")
+
+        // Sentinelle du contrat de routage (task-1-report §3.4(2)) : l'édition UTILISATEUR passe par
+        // `shouldChangeCharactersInRange` (range nommé par UIKit AVANT la modification), l'édition
+        // PROGRAMMATIQUE (appels UIKeyInput ordinaires — le stimulus driver) ne doit JAMAIS y passer ;
+        // son canal d'observation est `textDidChange`/`DidChangeSelection` APRÈS la modification, le
+        // port réconciliant contre le document du shadow. Un seul appel ici inverserait ce routage.
+        XCTAssertEqual(delegate.shouldChangeCalls.count, 0,
+                       "(d) programmatic UIKeyInput calls (insertText/deleteBackward/setMarkedText) must NEVER "
+                           + "fire shouldChangeCharactersInRange — routing contract: user edits route through "
+                           + "shouldChange (range named by UIKit BEFORE the edit), programmatic driver stimuli "
+                           + "route through textDidChange/DidChangeSelection (reconciled against the shadow AFTER "
+                           + "the edit); any firing flips the port's routing "
+                           + "(\(delegate.shouldChangeCalls.count) call(s): \(delegate.shouldChangeCalls))")
+        // Plancher du canal d'observation programmatique : chacune des 6 éditions programmatiques de
+        // la séquence (insertText ×2, deleteBackward ×2, setMarkedText, unmarkText) a tiré
+        // `textFieldDidChangeSelection` AU MOINS une fois (7 observés, identiques ×2 familles).
+        XCTAssertGreaterThanOrEqual(delegate.didChangeSelectionCount, 6,
+                                    "(d) each of the 6 programmatic edits must fire textFieldDidChangeSelection at "
+                                        + "least once (observed 7 on both families) — it is half of the programmatic "
+                                        + "observation channel; got \(delegate.didChangeSelectionCount)")
     }
 
     @objc private func editingChanged(_ sender: UITextField) {
