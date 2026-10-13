@@ -117,6 +117,11 @@ tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinNativeCompile>().configur
 // runtime_commonMain : friend uniquement sur commonMain ne suffit pas.
 // Phase 2 : le kernel d'`apply` lit aussi un internal de foundation (SurfaceRevision) — le
 // klib metadata de foundation (commonMain seul : module purement common) rejoint la liste.
+// Phase 7 : les compilations metadata des source sets iosMain/tvosMain (publishing klib —
+// compileIosMainKotlinMetadata/compileTvosMainKotlinMetadata) appliquent la même visibilité ;
+// le binding drop iOS (UIKitDropBindingIos, premier consommateur iosMain des internals
+// runtime) les a fait surface. Même liste de friends que uikitMain : les hiérarchies sont
+// les mêmes (iosMain/tvosMain ⊂ appleMain ⊂ nativeMain ⊂ common).
 val runtimeMetadataKlibs = listOf(
     "commonMain" to runtimeProject.layout.buildDirectory.dir("classes/kotlin/metadata/commonMain"),
     "appleMain" to runtimeProject.layout.buildDirectory.dir("classes/kotlin/metadata/appleMain/klib/${runtimeProject.name}_appleMain"),
@@ -129,8 +134,14 @@ val metadataFriendModules = providers.provider {
         .joinToString(File.pathSeparator) { it.get().asFile.absolutePath }
 }
 
+val metadataCompilationNames = setOf(
+    "compileUikitMainKotlinMetadata",
+    "compileIosMainKotlinMetadata",
+    "compileTvosMainKotlinMetadata",
+)
+
 tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinNativeCompile>().configureEach {
-    if (name == "compileUikitMainKotlinMetadata") {
+    if (name in metadataCompilationNames) {
         runtimeMetadataKlibs.forEach { (sourceSet, _) ->
             val capSegment = sourceSet.replaceFirstChar(Char::uppercase)
             dependsOn(runtimeProject.tasks.named("compile${capSegment}KotlinMetadata"))
