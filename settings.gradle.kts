@@ -79,6 +79,9 @@ include(":kadre:platform:uikit")
 include(":kadre:platform:android")
 include(":kadre:platform:android-devicetest")
 include(":kadre:contracts:driver:android")
+// La liaison Compose Android (phase 9) — android-only, hors de l'allowlist `check` du
+// root : la gate de phase (Task 4, instrumentation) en est propriétaire.
+include(":kadre:integration:compose")
 include(":kadre:contracts:driver:wayland")
 include(":kadre:contracts:driver:win32")
 include(":kadre:runtime")
