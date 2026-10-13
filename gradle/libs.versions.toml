@@ -70,6 +70,12 @@ kotlinx-browser = { module = "org.jetbrains.kotlinx:kotlinx-browser", version.re
 compose-runtime = { module = "org.jetbrains.compose.runtime:runtime", version.ref = "compose-multiplatform" }
 compose-ui = { module = "org.jetbrains.compose.ui:ui", version.ref = "compose-multiplatform" }
 compose-foundation = { module = "org.jetbrains.compose.foundation:foundation", version.ref = "compose-multiplatform" }
+# Material3 du tour Android (phase 11, `samples/android-kadre-tour`) : le shell de la
+# visite (Scaffold, NavigationBar, drawer) le demande — le MÊME artefact multiplateforme
+# que les cibles jvm/wasmJs du tour (`samples/desk-tour`, accesseur `compose.material3`).
+# Material3 suit SA propre ligne de versions (calée sur androidx material3) : la version
+# que le plugin compose 1.11.0 résout lui-même — le cache desk-tour le prouve — est 1.9.0.
+compose-material3 = { module = "org.jetbrains.compose.material3:material3", version = "1.9.0" }
 
 # L'instrumentation Android (le sample compose-showcase, phase 9) — les versions exactes
 # déjà épinglées par `consumers/android`.
