@@ -10,10 +10,10 @@ W32-002	jvm	sentinel	win32-no-hwnd-resurrection	org.graphiks.kadre.internal.win3
 W32-003	jvm	scenario	win32-close-idempotent	org.graphiks.kadre.internal.win32.Win32NativeContractTest	doubleCloseLeavesWindowDestroyedWithoutError
 W32-003	jvm	scenario	win32-init-off-windows-fails-actionably	org.graphiks.kadre.internal.win32.Win32PortabilityContractTest	unsupportedOsFailsActionablyBeforeNative[jvm]
 W32-003	jvm	sentinel	win32-no-native-load-off-windows	org.graphiks.kadre.internal.win32.Win32NativeContractTest	controlWindowCreated
-BCK-024	jvm	scenario	win32-provider-discovery	org.graphiks.kadre.internal.win32.Win32DiscoveryTest	serviceLoaderFindsExactlyOneWin32Provider[jvm]
-BCK-024	jvm	scenario	win32-provider-availability-exact	org.graphiks.kadre.internal.win32.Win32DiscoveryTest	availabilityIsExactForTheRunningOs[jvm]
-BCK-024	jvm	scenario	win32-provider-attach-unsupported	org.graphiks.kadre.internal.win32.Win32BackendProviderTest	embeddedAttachIsUnsupportedInTrancheOne[jvm]
-BCK-024	jvm	sentinel	win32-no-native-load-at-discovery	org.graphiks.kadre.internal.win32.Win32BackendProviderTest	discoveryOnNonWindowsIsUnavailableWithoutNativeLoad[jvm]
+BCK-025	jvm	scenario	win32-provider-discovery	org.graphiks.kadre.internal.win32.Win32DiscoveryTest	serviceLoaderFindsExactlyOneWin32Provider[jvm]
+BCK-025	jvm	scenario	win32-provider-availability-exact	org.graphiks.kadre.internal.win32.Win32DiscoveryTest	availabilityIsExactForTheRunningOs[jvm]
+BCK-025	jvm	scenario	win32-provider-attach-unsupported	org.graphiks.kadre.internal.win32.Win32BackendProviderTest	embeddedAttachIsUnsupportedInTrancheOne[jvm]
+BCK-025	jvm	sentinel	win32-no-native-load-at-discovery	org.graphiks.kadre.internal.win32.Win32BackendProviderTest	discoveryOnNonWindowsIsUnavailableWithoutNativeLoad[jvm]
 SES-002	jvm	scenario	sess002-headless-completes	org.graphiks.kadre.internal.win32.Win32BackendProviderTest	emptyApplicationCompletesThroughThePump[jvm]
 SES-002	jvm	scenario	sess002-start-failure-before-session	org.graphiks.kadre.internal.win32.Win32BackendProviderTest	controlWindowStartFailureBecomesPlatformFailureBeforeSession[jvm]
 SES-002	jvm	scenario	sess002-already-in-use	org.graphiks.kadre.internal.win32.Win32BackendProviderTest	concurrentRunIsAlreadyInUse[jvm]
