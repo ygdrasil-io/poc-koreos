@@ -1,20 +1,27 @@
 package org.graphiks.kadre.internal.win32
 
-import org.graphiks.kffi.win32.generated.DispatchMessageW
-import org.graphiks.kffi.win32.generated.GetLastError
 import org.graphiks.kffi.win32.generated.DefWindowProcW
 import org.graphiks.kffi.win32.generated.DestroyWindow
+import org.graphiks.kffi.win32.generated.GetClientRect
+import org.graphiks.kffi.win32.generated.GetDpiForWindow
+import org.graphiks.kffi.win32.generated.GetLastError
+import org.graphiks.kffi.win32.generated.InvalidateRect
 import org.graphiks.kffi.win32.generated.IsWindow
 import org.graphiks.kffi.win32.generated.MsgWaitForMultipleObjectsEx
 import org.graphiks.kffi.win32.generated.PeekMessageW
 import org.graphiks.kffi.win32.generated.PostMessageW
+import org.graphiks.kffi.win32.generated.SetProcessDpiAwarenessContext
+import org.graphiks.kffi.win32.generated.DispatchMessageW
 import org.graphiks.kffi.win32.generated.TranslateMessage
+import org.graphiks.kffi.win32.generated.ValidateRect
 import org.graphiks.kffi.win32.generated.init
 import org.graphiks.kffi.win32.managed.Win32ControlWindow
 import org.graphiks.kffi.win32.managed.Win32ManagedWindow
 import org.graphiks.kffi.win32.managed.Win32Structs
 import java.lang.foreign.Arena
 import java.lang.foreign.MemorySegment
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * The real KFFI host port. `waitForMessage` bounds the blocking wait with
@@ -22,14 +29,16 @@ import java.lang.foreign.MemorySegment
  * the canonical `GetMessageW == -1` discipline is proven on the controlled
  * port (spec SN-4), while `WAIT_FAILED` surfaces through the same `Error`
  * result here. The retrieved MSG is retained and dispatched as-is by
- * [translateAndDispatch].
+ * [translateAndDispatch]. The Per-Monitor V2 DPI context is applied once at
+ * first window creation (spec D2).
  */
 internal class KffiWin32HostPort : Win32NativeHostPort {
     private val createdThread = Thread.currentThread()
     private var controlWindow: Win32ControlWindow? = null
     private var msgArena: Arena? = null
     private var pendingMessage: MemorySegment? = null
-    private val topLevelWindows = java.util.concurrent.ConcurrentHashMap<Win32TopLevelWindowHandle, Win32ManagedWindow>()
+    private val dpiContextApplied = AtomicBoolean(false)
+    private val topLevelWindows = ConcurrentHashMap<Win32TopLevelWindowHandle, Win32ManagedWindow>()
 
     override fun isMainThread(): Boolean = Thread.currentThread() == createdThread
 
@@ -40,16 +49,29 @@ internal class KffiWin32HostPort : Win32NativeHostPort {
         return block()
     }
 
+    /**
+     * Pose le contexte Per-Monitor V2 une seule fois si le processus n'en a
+     * pas déjà un (décision D2 de la phase 3). L'échec n'est pas bloquant :
+     * un processus hôte peut avoir posé son propre contexte.
+     */
+    private fun applyPerMonitorV2Once() {
+        init()
+        if (dpiContextApplied.compareAndSet(false, true)) {
+            val context = MemorySegment.ofAddress(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2)
+            if (SetProcessDpiAwarenessContext(context) == 0) {
+                GetLastError() // consomme l'erreur : contexte hôte déjà posé ou refusé
+            }
+        }
+    }
+
     override fun createControlWindow(
         messageHandler: (id: Int, wParam: Long, lParam: Long) -> Long,
     ): Win32ControlWindowHandle {
         init()
-        // Phase 1: the pump consumes wake/stop private messages through
-        // waitForMessage before any dispatch, so the wndproc sink defaults
-        // every dispatched message to the native default behavior.
-        val window = Win32ControlWindow.open { _, _, _, _ -> 0L }
+        val window = Win32ControlWindow.open { _, message, wParam, lParam ->
+            messageHandler(message, wParam, lParam)
+        }
         controlWindow = window
-        msgArena = Arena.ofShared()
         return Win32ControlWindowHandle(window.hwnd)
     }
 
@@ -109,6 +131,32 @@ internal class KffiWin32HostPort : Win32NativeHostPort {
         DispatchMessageW(message)
     }
 
+    override fun createTopLevelWindow(
+        title: String,
+        decorations: Win32WindowDecorations,
+        width: Int,
+        height: Int,
+        messageHandler: (hwnd: Long, id: Int, wParam: Long, lParam: Long) -> Long,
+    ): Win32TopLevelWindowHandle {
+        applyPerMonitorV2Once()
+        val window = Win32ManagedWindow.open(title) { hwnd, message, wParam, lParam ->
+            messageHandler(hwnd, message, wParam, lParam)
+        }
+        topLevelWindows[Win32TopLevelWindowHandle(window.hwnd)] = window
+        return Win32TopLevelWindowHandle(window.hwnd)
+    }
+
+
+    override fun requestCloseWindow(hwnd: Long) {
+        PostMessageW(MemorySegment.ofAddress(hwnd), WM_CLOSE, 0L, 0L)
+    }
+
+    override fun destroyWindow(hwnd: Long) {
+        val entry = topLevelWindows.entries.firstOrNull { it.key.hwnd == hwnd }
+        entry?.value?.close()
+        topLevelWindows.remove(entry?.key)
+    }
+
     override fun destroyControlWindow(hwnd: Long) {
         controlWindow?.close()
         controlWindow = null
@@ -117,42 +165,24 @@ internal class KffiWin32HostPort : Win32NativeHostPort {
         }
     }
 
-    override fun createTopLevelWindow(
-        title: String,
-        decorations: Win32WindowDecorations,
-        width: Int,
-        height: Int,
-        messageHandler: (hwnd: Long, id: Int, wParam: Long, lParam: Long) -> Long,
-    ): Win32TopLevelWindowHandle {
-        init()
-        val window = Win32ManagedWindow.open(title) { hwnd, message, wParam, lParam ->
-            messageHandler(hwnd, message, wParam, lParam)
-        }
-        topLevelWindows[Win32TopLevelWindowHandle(window.hwnd)] = window
-        return Win32TopLevelWindowHandle(window.hwnd)
-    }
-
     override fun defWindowProc(hwnd: Long, message: Int, wParam: Long, lParam: Long): Long =
-        org.graphiks.kffi.win32.generated.DefWindowProcW(MemorySegment.ofAddress(hwnd), message, wParam, lParam)
+        DefWindowProcW(MemorySegment.ofAddress(hwnd), message, wParam, lParam)
 
     override fun invalidateRect(hwnd: Long) {
-        org.graphiks.kffi.win32.generated.InvalidateRect(MemorySegment.ofAddress(hwnd), MemorySegment.NULL, 0)
+        InvalidateRect(MemorySegment.ofAddress(hwnd), MemorySegment.NULL, 0)
     }
 
     override fun validateRect(hwnd: Long) {
-        org.graphiks.kffi.win32.generated.ValidateRect(MemorySegment.ofAddress(hwnd), MemorySegment.NULL)
+        ValidateRect(MemorySegment.ofAddress(hwnd), MemorySegment.NULL)
     }
 
     override fun readClientPhysicalSize(hwnd: Long): Pair<Int, Int> {
-        org.graphiks.kffi.win32.generated.init()
+        init()
         Arena.ofConfined().use { arena ->
             // RECT win64 : LONG left(0), top(8), right(16), bottom(24).
             val rect = arena.allocate(32)
             check(
-                org.graphiks.kffi.win32.generated.GetClientRect(
-                    MemorySegment.ofAddress(hwnd),
-                    rect,
-                ) != 0,
+                GetClientRect(MemorySegment.ofAddress(hwnd), rect) != 0,
             ) { "GetClientRect failed for hwnd $hwnd" }
             val left = rect.get(java.lang.foreign.ValueLayout.JAVA_LONG, 0)
             val top = rect.get(java.lang.foreign.ValueLayout.JAVA_LONG, 8)
@@ -163,18 +193,8 @@ internal class KffiWin32HostPort : Win32NativeHostPort {
     }
 
     override fun readScaleFactor(hwnd: Long): Double {
-        org.graphiks.kffi.win32.generated.init()
-        return org.graphiks.kffi.win32.generated.GetDpiForWindow(MemorySegment.ofAddress(hwnd)) / 96.0
-    }
-
-    override fun requestCloseWindow(hwnd: Long) {
-        PostMessageW(MemorySegment.ofAddress(hwnd), WM_CLOSE, 0L, 0L)
-    }
-
-    override fun destroyWindow(hwnd: Long) {
-        val entry = topLevelWindows.entries.firstOrNull { it.key.hwnd == hwnd }
-        entry?.value?.close()
-        topLevelWindows.remove(entry?.key)
+        init()
+        return GetDpiForWindow(MemorySegment.ofAddress(hwnd)) / 96.0
     }
 
     override fun close() {
@@ -188,9 +208,11 @@ internal class KffiWin32HostPort : Win32NativeHostPort {
     }
 
     private companion object {
-        const val WAKE_MESSAGE: Int = 0x8002 // WM_APP + 2, spec D2
+        // DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2 = ((DPI_CONTEXT_HANDLE)-4)
+        const val DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2: Long = -4
+        const val WAKE_MESSAGE: Int = 0x8002 // WM_APP + 2, spec D2 de la phase 1
         const val STOP_WPARAM: Long = 0x57494E // "WIN" marker distinguishing stop from wake
-        const val QS_ALLINPUT: Int = 0x04FF
+        const val QS_ALLINPUT: Int = 0x00FF
         const val MWMO_INPUTAVAILABLE: Int = 0x0004
         const val PM_REMOVE: Int = 0x1
         val WAIT_FAILED: Int = -1 // MsgWaitForMultipleObjectsEx failure return
