@@ -5,7 +5,6 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
@@ -50,7 +49,7 @@ class Win32WindowsNativeContractTest {
     }
 
     private fun openWindow(driver: Win32WindowRuntimeDriver, title: String): org.graphiks.kadre.window.Window =
-        runBlocking(Dispatchers.Default) {
+        runBlocking {
             val request = driver.manager.requestWindow(WindowSpec(title = title))
             val result = assertIs<KadreResult.Success<org.graphiks.kadre.window.WindowRequest>>(request)
             val outcome = result.value.await()
@@ -58,7 +57,7 @@ class Win32WindowsNativeContractTest {
         }
 
     private fun borrowHwnd(window: org.graphiks.kadre.window.Window): Long =
-        runBlocking(Dispatchers.Default) {
+        runBlocking {
             val borrowed = window.withDesktopHandle { handle -> handle }
             val result = assertIs<KadreResult.Success<DesktopNativeWindowHandle>>(borrowed)
             (result.value as DesktopNativeWindowHandle.Win32).hwnd.toLong()
@@ -68,7 +67,7 @@ class Win32WindowsNativeContractTest {
     fun windowLifecycleCyclesThroughThreeRealTopLevelWindows() {
         val driver = newDriver()
         repeat(3) { cycle ->
-            runBlocking(Dispatchers.Default) {
+            runBlocking {
                 val window = openWindow(driver, "cycle-$cycle")
                 val hwnd = borrowHwnd(window)
                 assertTrue(IsWindow(MemorySegment.ofAddress(hwnd)) != 0, "cycle $cycle: window must be live")
@@ -87,7 +86,7 @@ class Win32WindowsNativeContractTest {
     fun closingSecondaryKeepsTheSessionAliveThenLastWindowStopsIt() {
         val stopped = CountDownLatch(1)
         val driver = newDriver(onLastWindowClosed = { stopped.countDown() })
-        runBlocking(Dispatchers.Default) {
+        runBlocking {
             val first = openWindow(driver, "last-1")
             val second = openWindow(driver, "last-2")
             second.close()
