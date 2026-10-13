@@ -392,7 +392,9 @@ internal object AndroidHostSession {
             // d'activité typée ; sans activité hébergeante, le port répond `Unsupported
             // (CapturePermission)` à une demande plutôt que de deviner), le FGS Kadre sur le
             // contexte applicatif, l'ImageReader, les faits d'affichage de CETTE vue. Le bras
-            // PixelCopy reste le stub jetant de la Task 3.
+            // PixelCopy est la réservation de production par défaut (`androidPixelCopyReservation`,
+            // le seam `AndroidPixelCopyNative` et son impl `AndroidLivePixelCopy`) : la surfaceView
+            // enregistrée par la factory ci-dessous est copiée par le `PixelCopy.request` réel.
             AndroidAttachForm.View -> {
                 val capturePort = AndroidCapturePort(
                     apiLevel = Build.VERSION.SDK_INT,

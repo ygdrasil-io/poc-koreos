@@ -791,6 +791,16 @@ private sealed interface FirstFrameOutcome {
 }
 
 /**
+ * La lecture d'un plan sous verrou : les octets, ou le refus SDK qui les a empêchés — la
+ * classe de l'exception voyage dans le diagnostic (`image-read-refused:ClassName`).
+ */
+private sealed interface ImageRead {
+    public data class Ok(val bytes: ByteArray) : ImageRead
+
+    public data class Refused(val reason: Throwable) : ImageRead
+}
+
+/**
  * La pompe de frames MediaProjection — le miroir du WebCapturePump (:82-453) porté à
  * l'ImageReader : le grant BRUT y devient UN pending MediaProjection (`getMediaProjection`,
  * APRÈS le signal FGS-ready — l'ordre API 34+ exige le service `mediaProjection` démarré
@@ -1060,8 +1070,12 @@ private class AndroidCapturePump(
                 KadreFailure.ResourceLimitExceeded(KadreResourceKind.CaptureBuffer, maxFrameBytes),
             )
         }
-        val bytes = readUnderLock(image, layout.byteCount)
-            ?: return FirstFrameOutcome.Refused(pipeFailure("image-read-refused", null))
+        val bytes = when (val read = readUnderLock(image, layout.byteCount)) {
+            null -> return FirstFrameOutcome.Refused(pipeFailure("image-read-refused", null))
+            is ImageRead.Refused ->
+                return FirstFrameOutcome.Refused(pipeFailure("image-read-refused", read.reason))
+            is ImageRead.Ok -> read.bytes
+        }
         val frame = try {
             CapturePortFrame(
                 size = PhysicalSize(image.width, image.height),
@@ -1118,9 +1132,16 @@ private class AndroidCapturePump(
             )
             return null
         }
-        val bytes = readUnderLock(image, layout.byteCount) ?: run {
-            terminate(CaptureOutcome.Failed(pipeFailure("image-read-refused", null)))
-            return null
+        val bytes = when (val read = readUnderLock(image, layout.byteCount)) {
+            null -> {
+                terminate(CaptureOutcome.Failed(pipeFailure("image-read-refused", null)))
+                return null
+            }
+            is ImageRead.Refused -> {
+                terminate(CaptureOutcome.Failed(pipeFailure("image-read-refused", read.reason)))
+                return null
+            }
+            is ImageRead.Ok -> read.bytes
         }
         return try {
             CapturePortFrame(
@@ -1198,14 +1219,15 @@ private class AndroidCapturePump(
     /**
      * La copie du plan SOUS LE VERROU de la pompe : le close du reader (le release du
      * terminal) prend le même verrou — la copie et le close ne se croisent JAMAIS. `null`
-     * quand le terminal a gagné la course (déjà délivré, ou gagne ici).
+     * quand le terminal a gagné la course (déjà délivré, ou gagne ici) ; un refus SDK
+     * revient nommé ([ImageRead.Refused]) — sa classe voyage dans le diagnostic.
      */
-    private fun readUnderLock(image: AndroidCaptureImage, byteCount: Int): ByteArray? = lock.withLock {
+    private fun readUnderLock(image: AndroidCaptureImage, byteCount: Int): ImageRead? = lock.withLock {
         if (terminated) return null
         try {
-            image.readPlane(0, byteCount)
+            ImageRead.Ok(image.readPlane(0, byteCount))
         } catch (refused: Throwable) {
-            null
+            ImageRead.Refused(refused)
         }
     }
 

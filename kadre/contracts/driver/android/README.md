@@ -778,8 +778,10 @@ carried by the evidence itself:
   (`Stopped(Requested)`, then nothing follows); the buffer never outlives its
   lease is the host record `AndroidCapturePortTest.surfaceStreamReleasedExactlyOnce`
   (release exactly once across app stop, PixelCopy failure and collector
-  cancellation, a post-stop read `Closed(CaptureSession)`), with
-  `configurationPrecedesFrameAndNeverCopies` pinning the never-copy invariant;
+  cancellation; a start on the closed stream refused `Closed(CaptureSession)`),
+  with `configurationPrecedesFrameAndNeverCopies` pinning the never-copy
+  invariant and `surfaceDestroyedTerminatesFailedAndReleasesOnce` pinning the
+  surface-destroyed terminal (`Failed(surface-size-unavailable)`, released once);
 - the consent dialog is closed, not leaked — the host records
   `closeDuringInFlightConsentFailsTheRequestAndAbsorbsTheLateGrant`
   (immediate `Closed(Host)`, the late dialog result absorbed) and

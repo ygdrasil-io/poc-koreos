@@ -72,7 +72,8 @@ import kotlin.test.assertTrue
  * 3. `sourceTargetRefusedBeforeAnySeam` — `reserve(Source(...))` → `Unsupported(CaptureOpen)`
  *    AVANT tout seam, zéro interaction avec le registre (miroir web :176) ;
  * 4. `surfaceTargetResolvesThroughTheRegistry` — l'id enregistré par l'attach atteint la
- *    fabrique PixelCopy (le seam injecté, bras stub de la Task 3) avec la surfaceView attachée ;
+ *    fabrique PixelCopy (le seam injecté ; en production la fabrique par défaut EST la
+ *    réservation PixelCopy réelle, `androidPixelCopyReservation`) avec la surfaceView attachée ;
  *    l'id étranger → `InvalidRequest("request.target")` (miroir web :216-219) et n'atteint
  *    JAMAIS la fabrique ;
  * 5. `deniedConsentIsAStatefulSuccess` — le refus utilisateur (`RESULT_CANCELED`) est un
@@ -818,6 +819,17 @@ class AndroidCapturePortTest {
         advanceUntilIdle()
         assertEquals(1, native.recycled.size, "un close tardif ne libère jamais deux fois")
 
+        // La réservation elle-même se ferme (au-delà du stream du start) : un start sur le
+        // flux fermé répond le refus exact `Closed(CaptureSession)` — la lease est morte,
+        // aucune frame n'en sort plus.
+        stream.close()
+        advanceUntilIdle()
+        assertEquals(
+            KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.CaptureSession)),
+            stream.start(RecordingListener(), 64L * 1024L * 1024L),
+            "un start sur le flux fermé répond Closed(CaptureSession), jamais une nouvelle session",
+        )
+
         // Aucune frame ne suit le terminal, même quand la copie en vol se complète.
         val framesBefore = listener.frames.size
         native.fireCompleted()
@@ -852,6 +864,56 @@ class AndroidCapturePortTest {
             (failingListener.terminations.single() as CapturePortTermination.Outcome).outcome,
         )
         assertEquals(2, native.recycled.size, "le bitmap du flux échoué est libéré")
+
+        // Le start annulé AVANT la première copie : le contrat d'annulation du SPI — l'état
+        // en vol (le bitmap déjà alloué pour la copie suspendue) est libéré exactement une
+        // fois, et l'annulation surface sans jamais parler au listener.
+        val cancelling = AndroidPixelCopyStream(Any(), CaptureRequest(), native, StandardTestDispatcher(testScheduler))
+        val recycledBefore = native.recycled.size
+        val cancelledStart = async { cancelling.start(RecordingListener(), 64L * 1024L * 1024L) }
+        advanceUntilIdle()
+        cancelledStart.cancel()
+        advanceUntilIdle()
+        assertEquals(
+            recycledBefore + 1,
+            native.recycled.size,
+            "le start annulé avant la première frame libère son bitmap exactement une fois",
+        )
+    }
+
+    // -- (16) la surface détruite : le terminal `Failed` exactement une fois, le bitmap libéré -----------
+
+    @Test
+    fun surfaceDestroyedTerminatesFailedAndReleasesOnce() = runTest {
+        val native = FakePixelCopyNative(PhysicalSize(64, 32))
+        val stream = AndroidPixelCopyStream(Any(), CaptureRequest(), native, StandardTestDispatcher(testScheduler))
+        val listener = RecordingListener()
+        val started = async { stream.start(listener, 64L * 1024L * 1024L) }
+        advanceUntilIdle()
+        native.fireCompleted()
+        assertIs<KadreResult.Success<CapturePortStreamStart>>(started.await())
+        advanceUntilIdle()
+        assertEquals(listOf("frame"), listener.events)
+
+        // La surface détruite (le buffer composé disparaît — `composedSize` répond null) :
+        // la complétion de la copie en vol re-lit la vérité du MOMENT, découvre la disparition,
+        // et le terminal `Failed(surface-size-unavailable)` part exactement une fois — le
+        // bitmap libéré exactement une fois, aucune frame ne suit.
+        native.size = null
+        native.fireCompleted()
+        advanceUntilIdle()
+        assertEquals(listOf("frame", "terminated"), listener.events)
+        assertEquals(
+            CaptureOutcome.Failed(
+                KadreFailure.PlatformFailure(
+                    org.graphiks.kadre.diagnostics.KadrePlatform.Android,
+                    "capture-stream",
+                    "surface-size-unavailable",
+                ),
+            ),
+            (listener.terminations.single() as CapturePortTermination.Outcome).outcome,
+        )
+        assertEquals(1, native.recycled.size, "le bitmap libéré exactement une fois au terminal")
     }
 
     // -- les doubles et les coutures de pilotage ----------------------------------------------------------
