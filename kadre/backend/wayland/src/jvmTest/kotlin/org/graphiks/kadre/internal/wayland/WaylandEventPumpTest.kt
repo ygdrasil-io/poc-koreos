@@ -113,10 +113,10 @@ class WaylandEventPumpTest {
     fun stopDuringPollExitsThroughTheWakeWithoutReading() {
         val ops = RecordingOperations()
         val enteredPoll = CountDownLatch(1)
-        val released = CountDownLatch(1)
+        val stopArmed = CountDownLatch(1)
         ops.beforePoll = {
             enteredPoll.countDown()
-            released.await()
+            stopArmed.await()
             // le vrai ops draine le wake ; le fake reflète juste l'issue
         }
         ops.pollResults = ArrayDeque(listOf(PollOutcome.WakeOnly))
@@ -124,12 +124,13 @@ class WaylandEventPumpTest {
         val pump = WaylandEventPump(ops, wake)
         val stopper = Thread {
             // La promesse « stop PENDANT le poll » doit être tenue par le
-            // test : on ne poste que la pompe est bloquée dans poll, sinon
-            // le flag posé avant prepareRead sort sans lecture préparée
-            // (cancelCount == 0) et le scénario prouvé n'est plus celui-ci.
+            // test : le stop est armé pendant que la pompe est bloquée dans
+            // poll — ni avant runOnce (sortie immédiate sans lecture
+            // préparée : cancelCount == 0), ni après le réveil (le chemin
+            // WakeOnly-sans-arrêt rend la main à la boucle hôte).
             enteredPoll.await()
-            released.countDown()
             pump.requestStop()
+            stopArmed.countDown()
         }
         stopper.start()
         assertEquals(PumpStep.Stopped, pump.runOnce())
