@@ -4,6 +4,8 @@ import org.graphiks.kffi.win32.generated.DefWindowProcW
 import org.graphiks.kffi.win32.generated.DestroyWindow
 import org.graphiks.kffi.win32.generated.GetClientRect
 import org.graphiks.kffi.win32.generated.GetDpiForWindow
+import org.graphiks.kffi.win32.generated.GetWindowRect
+import org.graphiks.kffi.win32.generated.IsIconic
 import org.graphiks.kffi.win32.generated.GetLastError
 import org.graphiks.kffi.win32.generated.InvalidateRect
 import org.graphiks.kffi.win32.generated.IsWindow
@@ -196,6 +198,22 @@ internal class KffiWin32HostPort : Win32NativeHostPort {
     override fun readScaleFactor(hwnd: Long): Double {
         init()
         return GetDpiForWindow(MemorySegment.ofAddress(hwnd)) / 96.0
+    }
+
+    /** Diagnostic : GetWindowRect + IsIconic pour le placement réel du natif. */
+    internal fun readWindowRectForDiagnostics(hwnd: Long): String {
+        init()
+        Arena.ofConfined().use { arena ->
+            val rect = arena.allocate(32)
+            val ok = GetWindowRect(MemorySegment.ofAddress(hwnd), rect)
+            val err = GetLastError()
+            val iconic = IsIconic(MemorySegment.ofAddress(hwnd))
+            return "GetWindowRect(ok=$ok err=$err iconic=$iconic) " +
+                "l=${rect.get(java.lang.foreign.ValueLayout.JAVA_LONG, 0)} " +
+                "t=${rect.get(java.lang.foreign.ValueLayout.JAVA_LONG, 8)} " +
+                "r=${rect.get(java.lang.foreign.ValueLayout.JAVA_LONG, 16)} " +
+                "b=${rect.get(java.lang.foreign.ValueLayout.JAVA_LONG, 24)}"
+        }
     }
 
     /** Drains one message from the thread queue (translate + dispatch). Test/diagnostic helper. */

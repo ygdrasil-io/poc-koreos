@@ -141,7 +141,17 @@ class Win32SurfaceNativeContractTest {
                 diag("client-size-failure", "hwnd=$hwnd failure=${failure.message}")
                 throw failure
             }
-            diag("scale-readback", "scale=$scale size=$width×$height hwnd=$hwnd")
+            diag(
+                "scale-readback",
+                "scale=$scale size=$width×$height hwnd=$hwnd " + port.readWindowRectForDiagnostics(hwnd),
+            )
+            // Diagnostic placement : GetWindowRect + état réduit.
+            val windowRect = port.readWindowRectForDiagnostics(hwnd)
+            val iconic = org.graphiks.kffi.win32.generated.IsIconic(MemorySegment.ofAddress(hwnd)) != 0
+            diag(
+                "placement",
+                "hwnd=$hwnd windowRect=$windowRect iconic=$iconic client=$width×$height",
+            )
             assertTrue(width > 0, "client width must be readable at scale $scale (got ${width}×$height)")
         }
     }
