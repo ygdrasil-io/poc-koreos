@@ -26,7 +26,13 @@ import org.graphiks.kadre.samples.desktour.AndroidTourGateway
 import org.graphiks.kadre.samples.desktour.AndroidTourHost
 import org.graphiks.kadre.samples.desktour.core.ActionDispatcher
 import org.graphiks.kadre.samples.desktour.core.TourStore
+import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.layout.Box
+import androidx.compose.ui.Alignment
+import androidx.compose.foundation.layout.padding
 import org.graphiks.kadre.samples.desktour.ui.DeskTourApp
+import android.content.Context
+import android.view.inputmethod.InputMethodManager
 
 /**
  * Le host Android de la visite — le point d'entrée du sample `android-kadre-tour`.
@@ -80,6 +86,7 @@ private fun TourScreen() {
         applicationFactory = tourApplication(store, noteWindows) { dispatcher = it },
         modifier = Modifier.fillMaxSize(),
     ) { _ ->
+        androidx.compose.foundation.layout.Box(Modifier.fillMaxSize()) {
         val state by store.state.collectAsState()
         dispatcher?.let { live ->
             DeskTourApp(
@@ -95,6 +102,16 @@ private fun TourScreen() {
                 onSelectRoute = { store.setRoute(it) },
                 onToggleApiDetails = { store.toggleApiDetails() },
             )
+        }
+            // Le bouton clavier virtuel : toggle IMM côté sample (le clavier est un feature
+            // SDK Android — kadre observe les touches qui traversent le Window.Callback).
+            val imm = androidx.compose.ui.platform.LocalContext.current.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
+            androidx.compose.material3.Button(
+                onClick = { imm.toggleSoftInput(InputMethodManager.SHOW_FORCED, 0) },
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(top = 48.dp, end = 16.dp),
+            ) { androidx.compose.material3.Text("Clavier") }
         }
     }
 }
