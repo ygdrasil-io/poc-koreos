@@ -1,6 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <application android:label="kadre-android-consumer">
-        <activity android:name=".ConsumerActivity" android:exported="true" />
+        <!-- L'entrée launcher : le sélecteur d'app du flux de consentement MediaProjection
+             (l'API 35 livre le mode « A single app ») n'énumère que les apps LANCEABLES —
+             sans ce filtre, l'app consumer est absente de la liste et le scénario de
+             consentement réel (AND-009) ne peut pas choisir SA propre app. -->
+        <activity android:name=".ConsumerActivity" android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
     </application>
 </manifest>
