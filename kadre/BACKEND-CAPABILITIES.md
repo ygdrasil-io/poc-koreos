@@ -59,25 +59,40 @@ Toutes les lignes possèdent les managers communs `windows`, `displays`, `device
 | Domaine | Android Activity | Android View | UIKit Scene | Web JS/Wasm | AppKit | Win32 | X11 | Wayland |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
 | lifecycle à trois axes | G | G | G | G | G | G | G | G |
-| signal de pression mémoire | C | C | C | N | C | C | C | C |
+| signal de pression mémoire | C | C | C, livré iOS/tvOS : `UIApplicationDidReceiveMemoryWarningNotification` → `Moderate` seul | N | C | C | C | C |
 | surface metrics + redraw request | G | G | G | G | G | G | G | G |
 | fenêtre top-level mutable | C | — (aucune `Window`) | C | — (aucune `Window`) | C | C | C | C |
-| inventaire display complet | C | C | C | C | C | C | C | C |
-| fallback `HostViewport` | C | C | C | G si inventaire complet absent | N | N | N | N |
+| inventaire display complet | C | C | C, miroir `UIScreen` ; host scene = `HostViewport`, écrans attachés = `Physical` | C | C | C | C | C |
+| fallback `HostViewport` | C | C | G pour l’écran de scène host ; tvOS mono-`HostViewport` | G si inventaire complet absent | N | N | N | N |
 | clavier | C | C | C | C, `Available` après installation | C | C | C | C |
 | pointer | C | C | C | C, `Available` après installation | C | C | C | C |
 | touch | C | C | C | C, `Available` après installation | C | C | C | C |
 | gestures reconnues par le host | C | C | C | N(GestureInput) | C | C | C | C |
 | drag-and-drop | C | C | C, livré iOS (`Available` à l'attach, `AcceptDrop` seul kind annoncé) ; `N(InstallInteractionHandler)` tvOS — klib sans `UIDropInteraction*` (§6.2, phase 7) | C, `Available` après installation | C | C | C | C |
 | IME / text input | C | C | C | C, `Supported` à l’installation | C | C | C | C |
-| raw input | C | C | C | N(RawInputAccess) | C | C | C | C |
-| gamepad observation | C | C | C | G, sondée (§6.3) | C | C | C | C |
-| effets gamepad | C | C | C | G, gouvernée (§6.3) | C | C | C | C |
+| raw input | C | C | N(RawInputAccess), preuve de non-appel | N(RawInputAccess) | C | C | C | C |
+| gamepad observation | C | C | C, miroir `GCController`; gamepads = profils étendus seulement | G, sondée (§6.3) | C | C | C | C |
+| effets gamepad | C | C | C, selon capability GameController par pad ; absence honnête | G, gouvernée (§6.3) | C | C | C | C |
 | capture target `HostChoice` | C | C | C | C, picker du navigateur derrière un consentement explicite (§6.3) | C | C | C | C |
 | capture target `Source` | C | C | C | N(CaptureOpen), refusée avant tout picker (§6.3) | C | C | C | C |
 | capture target `Surface` | C | C | C | C, canvas de la surface primaire, sans consentement (§6.3) | C | C | C | C |
 | `SurfaceCapabilities.platformAccess` | G, `withAndroidView` | G, `withAndroidView` | G, `withUIKitView` | G, `withWebElement` | N(PlatformSurfaceAccess) | N(PlatformSurfaceAccess) | N(PlatformSurfaceAccess) | N(PlatformSurfaceAccess) |
 | `WindowCapabilities.platformAccess` | N(PlatformWindowAccess) | — (aucune `Window`) | N(PlatformWindowAccess) | — (aucune `Window`) | G, `withDesktopHandle` | G, `withDesktopHandle` | G, `withDesktopHandle` | G, `withDesktopHandle` |
+
+Pour UIKit, les cellules de phase 8 se lisent comme des observations honnêtes du SDK, jamais
+comme des promesses matérielles de Simulator. Les displays republient l'énumération `UIScreen` :
+l'écran de la scène host est `DisplayType.HostViewport`, les autres écrans attachés sont
+`Physical`, tvOS n'a qu'un `HostViewport`, et `workArea` vaut toujours `null`. Les devices et
+manettes suivent l'ÉQUIVALENCE MIROIR imposée par BCK-027 : l'inventaire publié égale
+l'énumération `GCController`/`GCKeyboard` au moment de lecture, sans fabrication ; les scénarios
+vides ne signifient « zéro » que sur un environnement sans contrôleur bridgé (Xcode 27 Simulator
+peut exposer les manettes du Mac). Une Siri Remote ou un micro-profile apparaît au plus comme fact
+de device, jamais comme gamepad complet ; `GamepadPort` ne liste que les profils étendus. Le raw
+input reste `Unsupported(RawInputAccess)`. La pression mémoire UIKit est single-level :
+`UIApplicationDidReceiveMemoryWarningNotification` produit `MemoryPressureLevel.Moderate`
+seulement, jamais `Critical`, et aucun événement de visibilité ou lifecycle ne devient pression.
+AirPlay/écrans externes, manettes Bluetooth/USB réelles et effets/haptics matériels restent des
+charters manuels.
 
 `raw input` est une capability dynamique. AppKit publie un bridge global
 listen-only lorsque le check de version et Input Monitoring le permettent :
