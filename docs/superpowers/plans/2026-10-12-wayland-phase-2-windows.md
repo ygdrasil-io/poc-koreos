@@ -1,6 +1,6 @@
 # Wayland Phase 2 — Fenêtres, surface minimale et interop renderer — Plan d'implémentation
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Des fenêtres Wayland réelles : handshake xdg complet, propriétés initiales conformes uniquement, fermeture non-interceptable à ordre terminal respecté, deux fenêtres indépendantes mappées sur Weston avec `withDesktopHandle` borné — via un incrément kffi (fenêtrage managé + buffers shm) pour que Kadre ne porte aucun FFM.
 
@@ -133,7 +133,7 @@ public fun createShmBuffer(width: Int, height: Int): WaylandShmBuffer  // memfd/
 
 ### Task 9: gate Docker sur la pointe + clôture
 
-- [ ] Gate machine propre (conteneur glibc, cache frais) verte ; preuves `WIN-010/011/012`+`SUR-002` inspectées (scénarios Passed, sentinelles Killed, commit pigné) ; baseline/capabilities à jour ; cases Phase 2 cochées ; commit `docs(wayland): record the phase 2 proof and close the milestone`.
+- [x] Gate machine propre (conteneur glibc, cache frais) verte ; preuves `WIN-010/011/012`+`SUR-002` inspectées (scénarios Passed, sentinelles Killed, commit pigné) ; baseline/capabilities à jour ; cases Phase 2 cochées ; commit `docs(wayland): record the phase 2 proof and close the milestone`.
 
 ## Hors périmètre
 
