@@ -40,6 +40,40 @@ class ContractRegistryTest {
     }
 
     @Test
+    fun realRegistryActivatesTheExactWaylandPhaseTwoWindowContracts() {
+        val recordsById = ContractRegistry.parse(repositoryFile("kadre/contracts/registry/contracts.tsv").readText())
+            .associateBy(ContractRecord::contractId)
+
+        assertEquals(ContractStatus.Active, recordsById.getValue("WIN-010").status)
+        assertEquals(
+            listOf(
+                "wayland-window-default-decorations-rejected",
+                "wayland-window-outer-position-refused",
+                "wayland-window-borderless-creation-mapped",
+            ),
+            recordsById.getValue("WIN-010").scenarios,
+        )
+        assertEquals(ContractOracle.O2, recordsById.getValue("WIN-010").oracle)
+        assertEquals(ContractStatus.Active, recordsById.getValue("WIN-011").status)
+        assertEquals(ContractOracle.O3, recordsById.getValue("WIN-011").oracle)
+        assertEquals(ContractStatus.Active, recordsById.getValue("WIN-012").status)
+        assertEquals(ContractOracle.O2, recordsById.getValue("WIN-012").oracle)
+        assertEquals(ContractStatus.Active, recordsById.getValue("SUR-002").status)
+        assertEquals(ContractOracle.O3, recordsById.getValue("SUR-002").oracle)
+        assertEquals(
+            listOf(
+                "wayland-surface-two-windows-independence",
+                "wayland-surface-initial-metrics-preserved",
+                "wayland-surface-handle-lease-addresses",
+            ),
+            recordsById.getValue("SUR-002").scenarios,
+        )
+        for (id in listOf("WIN-010", "WIN-011", "WIN-012", "SUR-002")) {
+            assertEquals(listOf("jvm"), recordsById.getValue(id).requiredTargets, id)
+        }
+    }
+
+    @Test
     fun realRegistryActivatesTheExactPhaseSevenDropContracts() {
         val recordsById = ContractRegistry.parse(repositoryFile("kadre/contracts/registry/contracts.tsv").readText())
             .associateBy(ContractRecord::contractId)

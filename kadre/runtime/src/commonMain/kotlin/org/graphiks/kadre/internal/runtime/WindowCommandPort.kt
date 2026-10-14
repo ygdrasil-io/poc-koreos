@@ -382,6 +382,11 @@ public sealed interface RuntimeDesktopNativeWindowHandle {
         public val nsViewAddress: ULong,
     ) : RuntimeDesktopNativeWindowHandle
 
+    public data class Wayland(
+        public val displayAddress: ULong,
+        public val surfaceAddress: ULong,
+    ) : RuntimeDesktopNativeWindowHandle
+
     public data class Win32(
         public val hwnd: ULong,
     ) : RuntimeDesktopNativeWindowHandle

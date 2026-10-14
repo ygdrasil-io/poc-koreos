@@ -392,10 +392,41 @@ class DesktopHostTest {
             window.withDesktopHandle { error("closed windows must not invoke the callback") },
         )
     }
+
+    @OptIn(org.graphiks.kadre.diagnostics.DelicateKadreApi::class, org.graphiks.kadre.diagnostics.KadrePlatformApi::class)
+    @Test
+    fun desktopHandleMapsTheScopedWaylandLease() = runBlocking {
+        val manager = RuntimeWindowManager(
+            resources = KadrePolicies.Default.resources,
+            commandPort = ImmediateDesktopHandlePort(WaylandDesktopHandleOwner()),
+            platform = KadrePlatform.Wayland,
+            failureReporter = RuntimeFailureReporter { throw AssertionError(it) },
+            publicWindowCapabilities = true,
+            enabledWindowUpdateCapabilities = setOf(org.graphiks.kadre.window.WindowProperty.Title),
+        )
+        val window = assertIs<WindowRequestOutcome.OpenedHere>(
+            manager.requestWindow(WindowSpec(title = "handle-wayland")).successValue().await(),
+        ).window
+
+        assertEquals(
+            DesktopNativeWindowHandle.Wayland(0xD15AuL, 0x5FAuL),
+            window.withDesktopHandle { it }.successValue(),
+        )
+    }
+}
+
+private class WaylandDesktopHandleOwner : WindowPeerOwner, RuntimeDesktopWindowHandleAccess {
+    override suspend fun <R> withDesktopHandle(
+        block: (RuntimeDesktopNativeWindowHandle) -> R,
+    ): KadreResult<R> = KadreResult.Success(
+        block(RuntimeDesktopNativeWindowHandle.Wayland(0xD15AuL, 0x5FAuL)),
+    )
+
+    override fun close() {}
 }
 
 private class ImmediateDesktopHandlePort(
-    private val owner: RecordingDesktopHandleOwner,
+    private val owner: WindowPeerOwner,
 ) : WindowCommandPort {
     private lateinit var open: WindowOpenCommand
 

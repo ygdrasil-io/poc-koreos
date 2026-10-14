@@ -52,6 +52,9 @@ internal class KffiWaylandBridge private constructor(
 
     override fun connectionLost(): Boolean = client.hasError()
 
+    override fun createWindowing(width: Int, height: Int): WaylandNativeWindow =
+        KffiWaylandWindowAdapter.create(client, width, height)
+
     override fun close() {
         registryListener.revoke()
         client.close()

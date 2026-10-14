@@ -33,6 +33,10 @@ internal class FakeBridge(
     var dispatchPendingResult = true
     var pollOutcome = PollOutcome.DisplayReady
     var beforePoll: (() -> Unit)? = null
+    var fakeWindow: WaylandNativeWindow? = null
+    var failCreateWindowing: Boolean = false
+    val createdWindows = java.util.concurrent.CopyOnWriteArrayList<FakeNativeWindow>()
+    val createWindowingCalls = java.util.concurrent.atomic.AtomicInteger(0)
 
     override val displayFd: Int = 7
 
@@ -61,6 +65,18 @@ internal class FakeBridge(
     }
 
     override fun connectionLost(): Boolean = false
+
+    override fun createWindowing(width: Int, height: Int): WaylandNativeWindow {
+        createWindowingCalls.incrementAndGet()
+        if (failCreateWindowing) {
+            throw java.util.concurrent.CompletionException(
+                java.lang.IllegalStateException("simulated native windowing failure"),
+            )
+        }
+        // une fenêtre distincte par création (deux fenêtres indépendantes en O2)
+        fakeWindow?.let { return it }
+        return FakeNativeWindow(width = width, height = height).also { createdWindows.add(it) }
+    }
 
     override fun close() {
         closed = true
