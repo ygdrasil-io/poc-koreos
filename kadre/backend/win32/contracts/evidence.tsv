@@ -45,5 +45,5 @@ W32-007	jvm	scenario	win32-resize-publishes-readback	org.graphiks.kadre.internal
 W32-007	jvm	scenario	win32-scale-readback-coherent	org.graphiks.kadre.internal.win32.Win32SurfaceNativeContractTest	scaleReadbackIsCoherent
 W32-008	jvm	scenario	win32-redraw-coalesced-drain	org.graphiks.kadre.internal.win32.Win32SurfaceFlowTest	redrawRequestsCoalesceDrainAndRearm[jvm]
 W32-008	jvm	scenario	win32-redraw-closed-fails	org.graphiks.kadre.internal.win32.Win32SurfaceFlowTest	redrawOnClosedWindowFailsClosed[jvm]
-W32-008	jvm	sentinel	win32-no-paint-at-rest	org.graphiks.kadre.internal.win32.Win32SurfaceFlowTest	paintDispatchRequiresPriorInvalidation[jvm]
+W32-008	jvm	sentinel	win32-no-paint-at-rest	org.graphiks.kadre.internal.win32.DeterministicWin32SurfacePortTest	paintDispatchRequiresPriorInvalidation[jvm]
 W32-007	jvm	sentinel	win32-no-requested-size-published	org.graphiks.kadre.internal.win32.Win32SurfaceNativeContractTest	programmaticResizePublishesReadBackMetrics
