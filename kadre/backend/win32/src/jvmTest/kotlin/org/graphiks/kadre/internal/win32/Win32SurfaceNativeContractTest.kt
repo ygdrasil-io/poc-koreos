@@ -152,6 +152,7 @@ class Win32SurfaceNativeContractTest {
                 "placement",
                 "hwnd=$hwnd windowRect=$windowRect iconic=$iconic client=$width×$height",
             )
+            println("PLACEMENT $windowRect iconic=$iconic client=${width}x$height")
             assertTrue(width > 0, "client width must be readable at scale $scale (got ${width}×$height)")
         }
     }

@@ -48,3 +48,4 @@ jobs:
             kadre/backend/win32/build/contract-evidence/
             kadre/backend/win32/build/test-results/
             kadre/backend/win32/build/ci-diagnostics/
+            kadre/backend/win32/build/win32-integration/
