@@ -76,8 +76,8 @@ private const val STREAM_DOMAIN = "capture-stream"
  * @param closedGate le fait « le port est fermé » — consulté au start (jamais un recorder
  *   vivant derrière un port fermé).
  * @param onEnded la déposition du slot de réservation vivante du port.
- * @param loopContext le contexte de livraison de la frame garée (miroir Android ; les
- *   frames suivantes sont livrées directement sur la file du recorder).
+ * @param loopContext le contexte de L'UNIQUE boucle de livraison (le miroir Android, fix
+ *   round 1) — CHAQUE frame y est livrée, la première garée comme les suivantes.
  */
 internal class UIKitHostCaptureReservation(
     override val source: CapturePortSource,
@@ -214,6 +214,9 @@ internal class UIKitReplayKitPump(
     /**
      * L'UNIQUE file de livraison : le handler enfile les copies consommées, la boucle
      * `run` les livre en FIFO — l'ordre d'arrivée EST l'ordre de livraison (fix round 1).
+     * La borne PRATIQUE de l'UNLIMITED : le collector du runtime draine la file à chaque
+     * livraison (pas de rétention au-delà), et le budget par frame est vérifié à la
+     * CONSOMMATION (avant copie), jamais en file.
      */
     private val deliveries = Channel<SamplePayload>(Channel.UNLIMITED)
 

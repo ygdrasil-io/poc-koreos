@@ -113,8 +113,73 @@ class UIKitCapturePortTest {
         override fun onTerminated(termination: CapturePortTermination) = Unit
     }
 
+    /**
+     * Le registre enregistrant — LE compteur du pin « la résolution du registre a eu lieu »
+     * (le miroir du compteur de lectures du seam FakeCaptureSource, porté au registre).
+     */
+    private class RecordingSurfaceRegistry : UIKitCaptureSurfaceRegistry {
+        private val delegate = UIKitHostCaptureSurfaceRegistry()
+        var resolveCount: Int = 0
+            private set
+
+        override fun register(id: SurfaceId, view: Any) = delegate.register(id, view)
+
+        override fun unregister(id: SurfaceId) = delegate.unregister(id)
+
+        override fun resolve(id: SurfaceId): Any? {
+            resolveCount += 1
+            return delegate.resolve(id)
+        }
+    }
+
+    /**
+     * Le seam snapshot muet des tests port — TOUT appel est un défaut de script : au niveau
+     * port, réserver ne produit AUCUNE frame (le pin « réserver n'allume rien »).
+     */
+    private class PortStubSnapshotSource : UIKitSurfaceSnapshotSource {
+        var snapshotCount: Int = 0
+            private set
+
+        override fun snapshot(view: Any): UIKitSurfaceSnapshotOutcome {
+            snapshotCount += 1
+            error("no surface snapshot is scripted in port-level tests")
+        }
+    }
+
+    /** Le ticker muet des tests port — TOUT démarrage est un défaut de script. */
+    private class PortStubTickSource : UIKitSurfaceTickSource {
+        override fun startTicking(interval: kotlin.time.Duration, onTick: () -> Unit) =
+            error("no surface ticker is scripted in port-level tests")
+
+        override fun stopTicking() = Unit
+    }
+
+    /** La fabrique de tickers COMPTEUSE — la matière du pin « réserver n'allume rien ». */
+    private class CountingTickFactory : () -> UIKitSurfaceTickSource {
+        var created: Int = 0
+            private set
+
+        override fun invoke(): UIKitSurfaceTickSource {
+            created += 1
+            return PortStubTickSource()
+        }
+    }
+
     private fun availablePort(source: FakeCaptureSource = FakeCaptureSource()): UIKitCapturePort =
         UIKitCapturePort(source)
+
+    /** Le port à quatre coutures des tests Surface : registre enregistrant + seams muets. */
+    private fun surfacePort(
+        source: FakeCaptureSource = FakeCaptureSource(),
+    ): Quadruple<UIKitCapturePort, RecordingSurfaceRegistry, PortStubSnapshotSource, CountingTickFactory> {
+        val registry = RecordingSurfaceRegistry()
+        val snapshots = PortStubSnapshotSource()
+        val ticks = CountingTickFactory()
+        return Quadruple(UIKitCapturePort(source, registry, snapshots, ticks), registry, snapshots, ticks)
+    }
+
+    /** La quadruple locale — la lecture destructrice du triple prolongé (kotlin.stdlib n'en porte pas). */
+    private data class Quadruple<A, B, C, D>(val first: A, val second: B, val third: C, val fourth: D)
 
     private fun snapshotOf(port: UIKitCapturePort): CapturePortSnapshot = port.initialSnapshot
 
@@ -412,19 +477,95 @@ class UIKitCapturePortTest {
     }
 
     @Test
-    fun surfaceReserveRefusesAnUnregisteredIdAsInvalidTargetAndARegisteredOneAsTask4Skeleton(): Unit = runBlocking {
-        val port = availablePort()
+    fun surfaceReserveWithRegionIsRefusedStructurallyAtZeroRegistryDelta(): Unit = runBlocking {
+        val (port, registry, snapshots, ticks) = surfacePort()
         val registered = RuntimeProcessIds.nextSurfaceId()
         port.registerHostCaptureSurface(registered, ViewToken("primary"))
 
-        val unregistered = port.reserve(CapturePortTarget.Surface(RuntimeProcessIds.nextSurfaceId()), CaptureRequest())
-        val registeredResult = port.reserve(CapturePortTarget.Surface(registered), CaptureRequest())
+        val refused = port.reserve(
+            CapturePortTarget.Surface(registered),
+            CaptureRequest(region = CaptureRegion(PhysicalRect(PhysicalPoint(0, 0), PhysicalSize(10, 10)))),
+        )
+
+        // La région est refusée STRUCTURELLEMENT, AVANT la résolution du registre (le
+        // miroir du bras HostChoice, décision Task 4 : la région est une propriété de la
+        // REQUÊTE — le refus ne dépend d'aucun état de session) ; la forme est la MÊME que
+        // celle que la table annonce (surface : region Unsupported → Unsupported(CaptureOpen)),
+        // PAS InvalidRequest (la requête est valide, l'opération ne porte pas de région).
+        assertEquals(
+            KadreResult.Failure(KadreFailure.Unsupported(KadreOperation.CaptureOpen)),
+            refused,
+        )
+        assertEquals(0, registry.resolveCount, "the region is decided before any registry read")
+        assertEquals(0, snapshots.snapshotCount, "reserving produces NO frame")
+        assertEquals(0, ticks.created, "reserving lights NOTHING up")
+    }
+
+    @Test
+    fun surfaceReserveResolvesTheRegistryOnceAndReturnsTheSurfaceReservation(): Unit = runBlocking {
+        val (port, registry, snapshots, ticks) = surfacePort()
+        val registered = RuntimeProcessIds.nextSurfaceId()
+        port.registerHostCaptureSurface(registered, ViewToken("primary"))
+
+        val reserved = port.reserve(CapturePortTarget.Surface(registered), CaptureRequest())
+
+        // La réservation Surface réelle (Task 4) : le descripteur source est la surface
+        // hôte (HostSurface), nommée dans le namespace Surface du port.
+        val reservation = assertIs<KadreResult.Success<CapturePortReservation>>(reserved).value
+        assertEquals(CaptureSourceKind.HostSurface, reservation.source.kind)
+        assertEquals("uikit-surface", reservation.source.key.namespace)
+        assertNull(reservation.source.name)
+        // LE pin de registre du bras remplacé (le miroir du pin de seam T3) : l'id est
+        // résolu dans le registre de CETTE session, EXACTEMENT une fois.
+        assertEquals(1, registry.resolveCount)
+        // Le seam snapshot n'est PAS touché et AUCUN ticker n'est créé : réserver ne
+        // produit AUCUNE frame et n'allume RIEN (l'admission ne fait qu'admettre).
+        assertEquals(0, snapshots.snapshotCount)
+        assertEquals(0, ticks.created)
+        // Une disposition honnête : fermer sans démarrer ne crée rien de plus, et le start
+        // derrière un close répond Closed(CaptureSession).
+        reservation.close()
+        assertEquals(0, ticks.created)
+        assertEquals(
+            KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.CaptureSession)),
+            reservation.start(RecordingStreamListener(), maxFrameBytes = 1024L),
+        )
+    }
+
+    @Test
+    fun surfaceReserveWithUnknownIdRefusesTheUnresolvableTargetAfterResolution(): Unit = runBlocking {
+        val (port, registry, snapshots, ticks) = surfacePort()
+
+        val refused = port.reserve(CapturePortTarget.Surface(RuntimeProcessIds.nextSurfaceId()), CaptureRequest())
 
         // Un id que le registre de CETTE session ne nomme pas : la forme du refus de cible
-        // irrésoluble (miroir Android — InvalidRequest("request.target")).
-        assertEquals(KadreResult.Failure(KadreFailure.InvalidRequest("request.target")), unregistered)
-        // L'id enregistré atteint le squelette : le refus honnête en attendant la pompe (Task 4).
-        assertEquals(KadreResult.Failure(KadreFailure.Unsupported(KadreOperation.CaptureOpen)), registeredResult)
+        // irrésoluble (miroir Android — InvalidRequest("request.target")), après UNE
+        // résolution (le delta du registre a bien eu lieu, le refus porte sur SON fait).
+        assertEquals(KadreResult.Failure(KadreFailure.InvalidRequest("request.target")), refused)
+        assertEquals(1, registry.resolveCount)
+        assertEquals(0, snapshots.snapshotCount)
+        assertEquals(0, ticks.created)
+    }
+
+    @Test
+    fun portCloseTerminatesTheLiveSurfaceReservation(): Unit = runBlocking {
+        val (port, registry, snapshots, ticks) = surfacePort()
+        val registered = RuntimeProcessIds.nextSurfaceId()
+        port.registerHostCaptureSurface(registered, ViewToken("primary"))
+        val reserved = assertIs<KadreResult.Success<CapturePortReservation>>(
+            port.reserve(CapturePortTarget.Surface(registered), CaptureRequest()),
+        ).value
+
+        // Ruling 4 : le close du port pendant une réservation Surface vivante la termine —
+        // le start derrière répond Closed(CaptureSession) et rien n'a été allumé.
+        port.close()
+
+        assertEquals(
+            KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.CaptureSession)),
+            reserved.start(RecordingStreamListener(), maxFrameBytes = 1024L),
+        )
+        assertEquals(0, snapshots.snapshotCount)
+        assertEquals(0, ticks.created)
     }
 
     // -----------------------------------------------------------------

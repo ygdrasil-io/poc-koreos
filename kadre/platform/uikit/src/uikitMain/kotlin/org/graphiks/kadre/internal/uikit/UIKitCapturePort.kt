@@ -344,11 +344,13 @@ internal class UIKitHostCaptureSurfaceRegistry : UIKitCaptureSurfaceRegistry {
  * `Unsupported(CapturePermission)` avant tout fait de seam. **La cible Source est refusée
  * AVANT tout seam** (ruling 6, précédent AND-009). **La réservation HostChoice est le bras
  * ReplayKit réel** (Task 3 — la disponibilité y est RELUE à la réservation puis au start,
- * la pompe vit dans [UIKitHostCaptureReservation]) ; **la réservation Surface reste le refus
- * de squelette** (`Unsupported(CaptureOpen)`) — la pompe surface (Task 4) le remplacera ;
+ * la pompe vit dans [UIKitHostCaptureReservation]) ; **la réservation Surface est le bras
+ * renderer réel** (Task 4 — la pompe surface vit dans [UIKitSurfaceCaptureReservation] : le
+ * ticker injecté, la vérité de format lue par snapshot, `SourceLost` de la vue détachée) ;
  * la route Surface résout d'abord l'id dans le registre de CETTE session
  * ([UIKitCaptureSurfaceRegistry], nourri par la couture d'attach), un id
- * inconnu répond `InvalidRequest("request.target")` (le miroir Android).
+ * inconnu répond `InvalidRequest("request.target")` (le miroir Android), et la région est
+ * refusée STRUCTURELLEMENT avant même la résolution (le miroir HostChoice).
  *
  * **Pas d'inventaire, pas de picker** (ruling 4) : `sourceEnumeration` est
  * `Unsupported(CaptureRefreshSources)`, `hostPicker` est [FeatureAvailability.Unsupported],
@@ -369,16 +371,23 @@ internal class UIKitHostCaptureSurfaceRegistry : UIKitCaptureSurfaceRegistry {
  * @param source le seam ReplayKit que ce port lit ; possédé par le port, fermé avec lui.
  * @param surfaces le registre des surfaces hôtes de CETTE session — nourri par la couture
  *   d'attach après l'admission différée de la fenêtre primaire (l'id n'existe qu'alors).
+ * @param surfaceSnapshots le seam snapshot du bras Surface (Task 4) — la réalisation
+ *   production lit le renderer réel ; le test hôte passe le sien (pattern jeton).
+ * @param surfaceTickSources la fabrique des tickers du bras Surface (ruling cadence — le
+ *   scheduling est injecté) : UNE instance fraîche par réservation, démarrée au start et
+ *   désamorcée à la libération.
  */
 internal class UIKitCapturePort(
     private val source: UIKitCaptureSource,
     private val surfaces: UIKitCaptureSurfaceRegistry = UIKitHostCaptureSurfaceRegistry(),
+    private val surfaceSnapshots: UIKitSurfaceSnapshotSource = UIKitLiveSurfaceSnapshotSource(),
+    private val surfaceTickSources: () -> UIKitSurfaceTickSource = { UIKitSurfaceMainQueueTickSource() },
 ) : CapturePort {
     private val lock = RuntimeLock()
     private var closed = false
     private var observer: ((KadreResult<CapturePortSnapshot>) -> Unit)? = null
 
-    /** La séquence des clés de réservation HostChoice de CE port (le miroir Android). */
+    /** La séquence des clés de réservation de CE port (le miroir Android). */
     private var nextReservationKeyValue = 0L
 
     /**
@@ -387,6 +396,12 @@ internal class UIKitCapturePort(
      * la fait terminer immédiatement, la pompe arrêtée, plus aucun callback après).
      */
     private var liveReservation: UIKitHostCaptureReservation? = null
+
+    /**
+     * La réservation Surface vivante de CE port (le slot unique, le miroir du slot
+     * HostChoice) — le close du port la termine pareillement (ruling 4).
+     */
+    private var liveSurfaceReservation: UIKitSurfaceCaptureReservation? = null
 
     /** Le snapshot de construction — relu UNE fois, gelé comme référence initiale du runtime. */
     override val initialSnapshot: CapturePortSnapshot = snapshotOf()
@@ -440,10 +455,11 @@ internal class UIKitCapturePort(
     /**
      * La garde de cible, dans l'ordre du miroir Android : la cible Source est refusée
      * STRUCTURELLEMENT avant tout fait de seam (ruling 6 — aucune source énumérée n'existe,
-     * un `CapturePortSourceKey` ne peut rien désigner) ; la cible Surface résout d'abord l'id
-     * dans le registre de CETTE session puis retombe sur le refus de squelette (la pompe
-     * surface vit en Task 4) ; le choix hôte construit la réservation ReplayKit réelle
-     * (Task 3 — le squelette Task 2 est remplacé).
+     * un `CapturePortSourceKey` ne peut rien désigner) ; la cible Surface résout l'id dans
+     * le registre de CETTE session puis construit la réservation renderer réelle (Task 4 —
+     * la région est refusée STRUCTURELLEMENT avant même la résolution, le miroir
+     * HostChoice) ; le choix hôte construit la réservation ReplayKit réelle (Task 3 — le
+     * squelette Task 2 est remplacé).
      */
     override suspend fun reserve(
         target: CapturePortTarget,
@@ -454,7 +470,7 @@ internal class UIKitCapturePort(
             is CapturePortTarget.Source ->
                 KadreResult.Failure(KadreFailure.Unsupported(KadreOperation.CaptureOpen))
 
-            is CapturePortTarget.Surface -> surfaceReservation(target.id)
+            is CapturePortTarget.Surface -> surfaceReservation(target.id, request)
 
             CapturePortTarget.HostChoice -> hostChoiceReservation(request)
         }
@@ -527,11 +543,11 @@ internal class UIKitCapturePort(
      * Ferme le port : idempotent, le seam possédé est fermé EXACTEMENT UNE FOIS (la propriété
      * du port — sans compter sur l'idempotence du seam), l'observer est oublié (plus aucune
      * livraison après le close) et toute voie ultérieure répond `Closed(Host)`. Une
-     * réservation HostChoice vivante est terminée d'ABORD (ruling 4 — le close du port pendant
-     * une réservation active est un terminal immédiat, la pompe arrêtée, l'arrêt du recorder
-     * exactement une fois, plus aucun callback après). Le registre meurt avec le port : la
-     * session entière le possède, aucun autre détenteur n'existe — rien à déposer ici (le
-     * miroir Android).
+     * réservation HostChoice ou Surface vivante est terminée d'ABORD (ruling 4 — le close du
+     * port pendant une réservation active est un terminal immédiat, la pompe arrêtée, le
+     * ticker désamorcé exactement une fois, plus aucun callback après). Le registre meurt
+     * avec le port : la session entière le possède, aucun autre détenteur n'existe — rien à
+     * déposer ici (le miroir Android).
      */
     override fun close() {
         val firstClose = lock.withLock {
@@ -545,6 +561,7 @@ internal class UIKitCapturePort(
         }
         if (firstClose) {
             lock.withLock { liveReservation }?.close()
+            lock.withLock { liveSurfaceReservation }?.close()
             source.close()
         }
     }
@@ -612,16 +629,57 @@ internal class UIKitCapturePort(
     )
 
     /**
-     * La réservation de la cible Surface : l'id doit être la surface hôte enregistrée par
-     * CETTE session (l'admission du runtime ne vérifie que la capability et transfère l'id tel
-     * quel) — sinon `InvalidRequest("request.target")`, la forme du refus de cible
-     * irrésoluble (miroir Android). L'id résolu atteint le refus de squelette : la pompe
-     * surface de la Task 4 remplacera ce refus par la réservation réelle.
+     * La réservation de la cible Surface — le bras renderer réel (Task 4, remplaçant le
+     * squelette T2), dans l'ordre :
+     *
+     * 1. **La région est refusée STRUCTURELLEMENT, avant même la résolution du registre**
+     *    (le miroir du bras HostChoice : la région est une propriété de la REQUÊTE, le
+     *    refus ne dépend d'aucun état de session). La forme est celle que la table annonce
+     *    déjà (surface : `region Unsupported` → `Unsupported(CaptureOpen)`) — PAS
+     *    `InvalidRequest`, qui reste la forme de la cible IRRÉSOLVABLE : le snapshot
+     *    capture la vue ENTIÈRE, aucune primitive de sous-rect n'existe dans le pump.
+     * 2. **L'id doit être la surface hôte enregistrée par CETTE session** (l'admission du
+     *    runtime ne vérifie que la capability et transfère l'id tel quel) — sinon
+     *    `InvalidRequest("request.target")`, la forme du refus de cible irrésoluble
+     *    (miroir Android).
+     * 3. **La réservation est construite** contre la vue résolue (le jeton `Any` du
+     *    registre — le port ne voit jamais le type UIKit), le seam snapshot et LA fabrique
+     *    de tickers. RÉSERVER ne touche PAS le seam snapshot et ne consulte PAS la
+     *    fabrique (l'admission ne fait qu'admettre — les pins delta zéro ; le ticker
+     *    n'est construit et armé qu'au START) ; le slot vivant est déposé pour le ruling 4
+     *    (le close du port termine la réservation vivante).
      */
-    private fun surfaceReservation(id: SurfaceId): KadreResult<CapturePortReservation> {
-        lock.withLock { surfaces.resolve(id) }
+    private fun surfaceReservation(
+        id: SurfaceId,
+        request: CaptureRequest,
+    ): KadreResult<CapturePortReservation> {
+        if (request.region != null) {
+            return KadreResult.Failure(KadreFailure.Unsupported(KadreOperation.CaptureOpen))
+        }
+        val view = lock.withLock { surfaces.resolve(id) }
             ?: return KadreResult.Failure(KadreFailure.InvalidRequest("request.target"))
-        return KadreResult.Failure(KadreFailure.Unsupported(KadreOperation.CaptureOpen))
+        val keyValue = lock.withLock {
+            val value = nextReservationKeyValue
+            nextReservationKeyValue += 1L
+            value
+        }
+        val reservation = UIKitSurfaceCaptureReservation(
+            source = CapturePortSource(
+                key = CapturePortSourceKey(SURFACE_SOURCE_NAMESPACE, keyValue),
+                kind = CaptureSourceKind.HostSurface,
+                name = null,
+                size = null,
+            ),
+            view = view,
+            request = request,
+            snapshots = surfaceSnapshots,
+            tickSources = surfaceTickSources,
+            tickInterval = request.minimumFrameInterval ?: UIKIT_SURFACE_DEFAULT_TICK_INTERVAL,
+            closedGate = ::isClosed,
+            onEnded = { lock.withLock { liveSurfaceReservation = null } },
+        )
+        lock.withLock { liveSurfaceReservation = reservation }
+        return KadreResult.Success(reservation)
     }
 
     private fun isClosed(): Boolean = lock.withLock { closed }
@@ -632,6 +690,12 @@ internal class UIKitCapturePort(
     private companion object {
         /** Le namespace des réservations HostChoice — UN affichage entier (le miroir Android). */
         private const val HOST_CHOICE_SOURCE_NAMESPACE = "uikit-host-choice"
+
+        /**
+         * Le namespace des réservations Surface — le contenu RENDU du propre view de
+         * l'app (le miroir Android `android-pixel-copy`).
+         */
+        private const val SURFACE_SOURCE_NAMESPACE = "uikit-surface"
 
         /**
          * L'échec honnête du fait « le recorder se déclare indisponible » : `isAvailable` ne
