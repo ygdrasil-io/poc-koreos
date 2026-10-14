@@ -8,10 +8,13 @@ import kotlin.test.assertNull
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
 import kotlinx.coroutines.runBlocking
+import org.graphiks.kadre.capture.CaptureConfiguration
 import org.graphiks.kadre.capture.CaptureCursorMode
 import org.graphiks.kadre.capture.CapturePermissionScope
 import org.graphiks.kadre.capture.CapturePermissionState
+import org.graphiks.kadre.capture.CaptureRegion
 import org.graphiks.kadre.capture.CaptureRequest
+import org.graphiks.kadre.capture.CaptureSourceKind
 import org.graphiks.kadre.capture.CaptureTargetConstraints
 import org.graphiks.kadre.capture.PixelFormat
 import org.graphiks.kadre.diagnostics.Capability
@@ -21,10 +24,17 @@ import org.graphiks.kadre.diagnostics.KadreOperation
 import org.graphiks.kadre.diagnostics.KadreResourceKind
 import org.graphiks.kadre.diagnostics.KadreResult
 import org.graphiks.kadre.input.PermissionState
+import org.graphiks.kadre.internal.runtime.CapturePortFrame
+import org.graphiks.kadre.internal.runtime.CapturePortReservation
 import org.graphiks.kadre.internal.runtime.CapturePortSnapshot
 import org.graphiks.kadre.internal.runtime.CapturePortSources
+import org.graphiks.kadre.internal.runtime.CapturePortStreamListener
 import org.graphiks.kadre.internal.runtime.CapturePortTarget
+import org.graphiks.kadre.internal.runtime.CapturePortTermination
 import org.graphiks.kadre.internal.runtime.RuntimeProcessIds
+import org.graphiks.kadre.surface.PhysicalPoint
+import org.graphiks.kadre.surface.PhysicalRect
+import org.graphiks.kadre.surface.PhysicalSize
 import org.graphiks.kadre.surface.SurfaceId
 
 /**
@@ -68,10 +78,22 @@ class UIKitCapturePortTest {
         val calls = ArrayList<String>()
         var closedCount: Int = 0
             private set
+        var stopCount: Int = 0
+            private set
 
         override fun recorderAvailable(): Boolean {
             calls += "recorderAvailable"
             return available
+        }
+
+        override fun startCapture(handler: UIKitCaptureStreamHandler) {
+            calls += "startCapture"
+        }
+
+        override fun stopCapture(onStopped: (String?) -> Unit) {
+            calls += "stopCapture"
+            stopCount += 1
+            onStopped(null)
         }
 
         override fun close() {
@@ -82,6 +104,13 @@ class UIKitCapturePortTest {
     /** La vue jeton du registre — le port ne voit jamais une vraie UIView (pattern jeton). */
     private class ViewToken(val label: String) {
         override fun toString(): String = "View($label)"
+    }
+
+    /** Le listener muet des gardes de réservation — aucun callback n'est attendu d'elles. */
+    private class RecordingStreamListener : CapturePortStreamListener {
+        override fun onFrame(frame: CapturePortFrame) = Unit
+        override fun onReconfigured(configuration: CaptureConfiguration) = Unit
+        override fun onTerminated(termination: CapturePortTermination) = Unit
     }
 
     private fun availablePort(source: FakeCaptureSource = FakeCaptureSource()): UIKitCapturePort =
@@ -300,17 +329,86 @@ class UIKitCapturePortTest {
     }
 
     @Test
-    fun hostChoiceReserveIsATask3SkeletonRefusal(): Unit = runBlocking {
-        val port = availablePort()
+    fun hostChoiceReserveTouchesTheSeamAndReturnsTheReplayKitReservation(): Unit = runBlocking {
+        val source = FakeCaptureSource()
+        val port = availablePort(source)
+        val readsAtConstruction = source.calls.size
+
+        val reserved = port.reserve(CapturePortTarget.HostChoice, CaptureRequest())
+
+        // La réservation ReplayKit réelle (Task 3) : le descripteur source est l'affichage
+        // entier, nommé dans le namespace HostChoice du port.
+        val reservation = assertIs<KadreResult.Success<CapturePortReservation>>(reserved).value
+        assertEquals(CaptureSourceKind.Display, reservation.source.kind)
+        assertEquals("uikit-host-choice", reservation.source.key.namespace)
+        assertNull(reservation.source.name)
+        // LE pin de seam du bras remplacé : la réservation TOUCHE le seam — la disponibilité
+        // du recorder est RELUE à la réservation (l'ancien squelette Task 2 restait au delta
+        // nul ; le delta != 0 est la matière du pin).
+        assertEquals(readsAtConstruction + 1, source.calls.size)
+        assertEquals("recorderAvailable", source.calls.last())
+        // Une disposition honnête : fermer la réservation sans l'avoir démarrée ne touche
+        // AUCUN fait de recorder de plus (rien n'a été démarré — rien à arrêter).
+        val callsAtClose = source.calls.size
+        reservation.close()
+        assertEquals(callsAtClose, source.calls.size)
+        assertEquals(0, source.stopCount)
+    }
+
+    @Test
+    fun hostChoiceReserveWithUnavailableRecorderRefusesTheHonestAvailabilityFailure(): Unit = runBlocking {
+        val source = FakeCaptureSource().apply { available = false }
+        val port = availablePort(source)
+        val readsAtConstruction = source.calls.size
 
         val refused = port.reserve(CapturePortTarget.HostChoice, CaptureRequest())
 
-        // Le squelette Task 2 ne réserve pas encore : le refus honnête est le même que celui du
-        // contrat par défaut (Unsupported(CaptureOpen)) — la réservation ReplayKit vit en Task 3.
+        // L'échec honnête du fait du seam — la MÊME forme que la disponibilité lue (jamais
+        // une raison fabriquée), et le fait de seam a bien EU LIEU (le delta != 0).
+        assertEquals(
+            KadreResult.Failure(KadreFailure.TemporarilyUnavailable(retryable = true)),
+            refused,
+        )
+        assertEquals(readsAtConstruction + 1, source.calls.size)
+    }
+
+    @Test
+    fun hostChoiceReserveWithRegionIsRefusedStructurallyBeforeAnySeam(): Unit = runBlocking {
+        val source = FakeCaptureSource()
+        val port = availablePort(source)
+        val readsAtConstruction = source.calls.size
+
+        val refused = port.reserve(
+            CapturePortTarget.HostChoice,
+            CaptureRequest(region = CaptureRegion(PhysicalRect(PhysicalPoint(0, 0), PhysicalSize(10, 10)))),
+        )
+
+        // ReplayKit capte l'affichage ENTier : la région est refusée STRUCTURELLEMENT, avant
+        // tout fait de seam (le miroir Android) — zéro lecture de disponibilité.
         assertEquals(
             KadreResult.Failure(KadreFailure.Unsupported(KadreOperation.CaptureOpen)),
             refused,
         )
+        assertEquals(readsAtConstruction, source.calls.size)
+    }
+
+    @Test
+    fun portCloseTerminatesTheLiveReservation(): Unit = runBlocking {
+        val source = FakeCaptureSource()
+        val port = availablePort(source)
+        val reserved = assertIs<KadreResult.Success<CapturePortReservation>>(
+            port.reserve(CapturePortTarget.HostChoice, CaptureRequest()),
+        ).value
+
+        // Ruling 4 : le close du port pendant une réservation vivante la termine — la
+        // réservation close répond ensuite Closed(CaptureSession) et rien n'a été démarré.
+        port.close()
+
+        assertEquals(
+            KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.CaptureSession)),
+            reserved.start(RecordingStreamListener(), maxFrameBytes = 1024L),
+        )
+        assertEquals(0, source.stopCount)
     }
 
     @Test

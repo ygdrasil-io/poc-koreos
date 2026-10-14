@@ -5,6 +5,7 @@ import org.graphiks.kadre.capture.CaptureCursorMode
 import org.graphiks.kadre.capture.CapturePermissionScope
 import org.graphiks.kadre.capture.CapturePermissionState
 import org.graphiks.kadre.capture.CaptureRequest
+import org.graphiks.kadre.capture.CaptureSourceKind
 import org.graphiks.kadre.capture.CaptureTargetConstraints
 import org.graphiks.kadre.capture.PixelFormat
 import org.graphiks.kadre.diagnostics.Capability
@@ -17,24 +18,50 @@ import org.graphiks.kadre.input.PermissionState
 import org.graphiks.kadre.internal.runtime.CapturePort
 import org.graphiks.kadre.internal.runtime.CapturePortReservation
 import org.graphiks.kadre.internal.runtime.CapturePortSnapshot
+import org.graphiks.kadre.internal.runtime.CapturePortSource
+import org.graphiks.kadre.internal.runtime.CapturePortSourceKey
 import org.graphiks.kadre.internal.runtime.CapturePortSources
 import org.graphiks.kadre.internal.runtime.CapturePortTarget
 import org.graphiks.kadre.internal.runtime.RuntimeLock
 import org.graphiks.kadre.internal.runtime.withLock
 import org.graphiks.kadre.surface.SurfaceId
+import kotlinx.cinterop.ByteVarOf
+import kotlinx.cinterop.CPointer
+import kotlinx.cinterop.ExperimentalForeignApi
+import kotlinx.cinterop.addressOf
+import kotlinx.cinterop.reinterpret
+import kotlinx.cinterop.useContents
+import kotlinx.cinterop.usePinned
+import platform.CoreMedia.CMSampleBufferGetImageBuffer
+import platform.CoreMedia.CMSampleBufferGetPresentationTimeStamp
+import platform.CoreMedia.CMSampleBufferRef
+import platform.CoreVideo.CVPixelBufferGetBaseAddress
+import platform.CoreVideo.CVPixelBufferGetBytesPerRow
+import platform.CoreVideo.CVPixelBufferGetHeight
+import platform.CoreVideo.CVPixelBufferGetPixelFormatType
+import platform.CoreVideo.CVPixelBufferGetWidth
+import platform.CoreVideo.CVPixelBufferLockBaseAddress
+import platform.CoreVideo.CVPixelBufferRef
+import platform.CoreVideo.CVPixelBufferUnlockBaseAddress
+import platform.CoreVideo.kCVPixelBufferLock_ReadOnly
+import platform.Foundation.NSError
 import platform.ReplayKit.RPScreenRecorder
+import platform.posix.memcpy
 
 /**
- * Le seam SDK du port capture UIKit/tvOS (phase 9, Task 2) — la lecture ReplayKit de
- * disponibilité en production, une source factice pilotable en test hôte (le pattern jeton du
- * module, miroir [UIKitDisplaySource]) : le port ne nomme JAMAIS un type ReplayKit — c'est la
- * traduction de ce seam en formes port qui est prouvée dans `uikitTest`, pas la lecture SDK
- * elle-même (charterée sur device).
+ * Le seam SDK du port capture UIKit/tvOS (phase 9, Task 2 pour le plan de contrôle, Task 3
+ * pour le flux) — la lecture ReplayKit de disponibilité en production, le démarrage/arrêt du
+ * recorder et la consommation de ses samples, une source factice pilotable en test hôte (le
+ * pattern jeton du module, miroir [UIKitDisplaySource]) : le port ne nomme JAMAIS un type
+ * ReplayKit — c'est la traduction de ce seam en formes port qui est prouvée dans
+ * `uikitTest`, pas la lecture SDK elle-même (charterée sur device).
  *
- * Task 2 ne porte que le fait contrôle-plan : la disponibilité du recorder. Les formes
- * `startCaptureWithHandler`/`stopCaptureWithHandler` (spike § 1 — `isAvailable` est une
- * FONCTION klib, `sharedRecorder` la propriété de classe) rejoindront ce seam aux Tasks 3-4
- * quand les réservations vivront ; le port reste SDK-FREE par construction.
+ * Task 2 portait le fait contrôle-plan (la disponibilité) ; Task 3 y ajoute LE FLUX :
+ * `startCapture` (la forme klib `startCaptureWithHandler` — handler
+ * `(CMSampleBufferRef?, Long, NSError?)`, complétion `(NSError?)`), `stopCapture` (la forme
+ * `stopCaptureWithHandler`) et les jetons [UIKitCaptureSample] — le buffer natif ne
+ * franchit JAMAIS le seam : chaque sample y devient un jeton dont les faits et la copie
+ * sont lus DANS l'invocation du handler (la fenêtre de validité du buffer natif).
  */
 internal interface UIKitCaptureSource : AutoCloseable {
     /**
@@ -44,6 +71,74 @@ internal interface UIKitCaptureSource : AutoCloseable {
      * (runtimes anciens) reste honnête par la même lecture.
      */
     public fun recorderAvailable(): Boolean
+
+    /**
+     * Le démarrage du flux ReplayKit — le handler reçoit les samples vidéo (les jetons),
+     * les erreurs du flux vivant (`onStreamError`), et la complétion du démarrage
+     * (`onStarted` / `onStartFailed` avec le code numérique de l'NSError).
+     */
+    public fun startCapture(handler: UIKitCaptureStreamHandler)
+
+    /** L'arrêt du flux — l'erreur éventuelle est un fait diagnostic, jamais un terminal. */
+    public fun stopCapture(onStopped: (String?) -> Unit)
+}
+
+/**
+ * Les faits verrouillés d'UN pixel buffer ReplayKit — zéro type SDK (pattern jeton). La
+ * copie est UNE opération bloc ([copyInto], le memcpy honnête du spike — JAMAIS la boucle
+ * octet-par-octet du kadre-old), vers une destination que le PUMP a allouée après son
+ * budget : les octets livrés ne peuvent jamais aliaser la source.
+ */
+internal interface UIKitCaptureLockedBuffer {
+    public val width: Int
+    public val height: Int
+    public val bytesPerRow: Int
+    public val cvFormat: Long
+
+    /** Le copie bloc unique de [byteCount] octets — le budget a été vérifié AVANT. */
+    public fun copyInto(destination: ByteArray, byteCount: Int)
+}
+
+/**
+ * Le jeton d'UN sample vidéo ReplayKit — consommé SYNCHRONEMENT dans l'invocation du
+ * handler (la fenêtre de validité du buffer natif ne dépasse jamais le handler). La
+ * fenêtre fact+copy est exactement la paire [lock]/[unlock] ; [close] referme le jeton
+ * EXACTEMENT UNE FOIS (un double close natif est un crash — la discipline est épinglée par
+ * les jetons de seam, qui LÈVENT au second close).
+ */
+internal interface UIKitCaptureSample : AutoCloseable {
+    /** Le timestamp de présentation du sample en nanoseconds, ou null si non lisible honnêtement. */
+    public val sourceTimestampNanos: Long?
+
+    /**
+     * Le lock read-only ET les faits — le début de la fenêtre fact+copy. `null` signifie
+     * « illisible et NON verrouillé » (le pump referme le sample, sans unlock).
+     */
+    public fun lock(): UIKitCaptureLockedBuffer?
+
+    /** La fin de la fenêtre fact+copy — l'unlock du lock pris par [lock]. */
+    public fun unlock()
+
+    /** La fermeture du jeton EXACTEMENT UNE FOIS. */
+    override fun close()
+}
+
+/**
+ * Le handler du flux ReplayKit — la forme klib (`(CMSampleBufferRef?, Long, NSError?)` +
+ * complétion) réduite à ses quatre faits, sans aucun type SDK :
+ *
+ * - [onSample] : UN sample vidéo (le jeton), ou `null` pour un sample non vidéo (l'audio
+ *   ReplayKit n'a pas d'image buffer — un drop silencieux, compté côté pump) ;
+ * - [onStreamError] : l'erreur du flux VIVANT (le `error` du captureHandler) — le code
+ *   numérique de l'NSError, borné ASCII ;
+ * - [onStarted] / [onStartFailed] : la complétion du DÉMARRAGE (le spike § 6 : l'erreur de
+ *   complétion fait échouer l'ouverture).
+ */
+internal interface UIKitCaptureStreamHandler {
+    public fun onSample(sample: UIKitCaptureSample?)
+    public fun onStreamError(code: String)
+    public fun onStarted()
+    public fun onStartFailed(code: String)
 }
 
 /**
@@ -56,7 +151,122 @@ internal interface UIKitCaptureSource : AutoCloseable {
 internal class UIKitReplayKitCaptureSource : UIKitCaptureSource {
     override fun recorderAvailable(): Boolean = RPScreenRecorder.sharedRecorder().isAvailable()
 
+    @OptIn(ExperimentalForeignApi::class)
+    override fun startCapture(handler: UIKitCaptureStreamHandler) {
+        RPScreenRecorder.sharedRecorder().startCaptureWithHandler(
+            captureHandler = { sampleBuffer: CMSampleBufferRef?, _: Long, error: NSError? ->
+                when {
+                    error != null -> handler.onStreamError(error.code.toString())
+
+                    sampleBuffer != null -> {
+                        // Seuls les samples VIDÉO deviennent des jetons — l'audio ReplayKit
+                        // (app/mic) n'a pas d'image buffer et tombe en silence (compté côté
+                        // pump). Le jeton est consommé SYNCHRONEMENT dans cette invocation.
+                        val pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer)
+                        handler.onSample(
+                            if (pixelBuffer != null) {
+                                UIKitReplayKitCaptureSample(sampleBuffer, pixelBuffer)
+                            } else {
+                                null
+                            },
+                        )
+                    }
+
+                    else -> handler.onSample(null)
+                }
+            },
+            completionHandler = { error: NSError? ->
+                if (error != null) handler.onStartFailed(error.code.toString()) else handler.onStarted()
+            },
+        )
+    }
+
+    override fun stopCapture(onStopped: (String?) -> Unit) {
+        RPScreenRecorder.sharedRecorder().stopCaptureWithHandler { error: NSError? ->
+            onStopped(error?.code?.toString())
+        }
+    }
+
     override fun close() = Unit
+}
+
+/**
+ * Le jeton production d'UN sample vidéo ReplayKit : le lock read-only couvre la lecture
+ * des faits ET la copie bloc (memcpy vers la destination du pump), l'unlock referme la
+ * fenêtre, et le jeton ne retient RIEN au-delà de l'invocation du handler — le buffer
+ * natif est consommé strictement dedans (sa fenêtre de validité), rien n'est retenu ni
+ * libéré nativement par [close] : la discipline « exactement une fois » est portée par le
+ * pump et prouvée par les jetons de seam.
+ */
+@OptIn(ExperimentalForeignApi::class)
+private class UIKitReplayKitCaptureSample(
+    private val sampleBuffer: CMSampleBufferRef,
+    private val pixelBuffer: CVPixelBufferRef,
+) : UIKitCaptureSample {
+    override val sourceTimestampNanos: Long? = replayKitPresentationTimestampNanos(sampleBuffer)
+    private var locked = false
+
+    override fun lock(): UIKitCaptureLockedBuffer? {
+        check(!locked) { "the replaykit sample buffer is locked twice" }
+        CVPixelBufferLockBaseAddress(pixelBuffer, kCVPixelBufferLock_ReadOnly)
+        locked = true
+        val base = CVPixelBufferGetBaseAddress(pixelBuffer)
+        if (base == null) {
+            // Un pixel buffer sans base address ne se lit pas : le lock est refermé ICI —
+            // `null` signifie « illisible et NON verrouillé » (le pump ferme, sans unlock).
+            CVPixelBufferUnlockBaseAddress(pixelBuffer, kCVPixelBufferLock_ReadOnly)
+            locked = false
+            return null
+        }
+        return UIKitReplayKitLockedBuffer(
+            source = base.reinterpret<ByteVarOf<Byte>>(),
+            width = CVPixelBufferGetWidth(pixelBuffer).toInt(),
+            height = CVPixelBufferGetHeight(pixelBuffer).toInt(),
+            bytesPerRow = CVPixelBufferGetBytesPerRow(pixelBuffer).toInt(),
+            cvFormat = CVPixelBufferGetPixelFormatType(pixelBuffer).toLong(),
+        )
+    }
+
+    override fun unlock() {
+        if (!locked) return
+        locked = false
+        CVPixelBufferUnlockBaseAddress(pixelBuffer, kCVPixelBufferLock_ReadOnly)
+    }
+
+    override fun close() = Unit
+}
+
+/** La source verrouillée production — le memcpy bloc unique vers la destination du pump. */
+@OptIn(ExperimentalForeignApi::class)
+private class UIKitReplayKitLockedBuffer(
+    private val source: CPointer<ByteVarOf<Byte>>,
+    override val width: Int,
+    override val height: Int,
+    override val bytesPerRow: Int,
+    override val cvFormat: Long,
+) : UIKitCaptureLockedBuffer {
+    override fun copyInto(destination: ByteArray, byteCount: Int) {
+        destination.usePinned { pinned ->
+            memcpy(pinned.addressOf(0), source, byteCount.toULong())
+        }
+    }
+}
+
+/**
+ * Le timestamp de présentation du sample, en nanoseconds — l'honnêteté du brief : une
+ * lecture à bon marché (`CMSampleBufferGetPresentationTimeStamp`), `null` quand le CMTime
+ * n'est pas un instant honnête (invalide, négatif, epoch non nul, débordement) — JAMAIS un
+ * timestamp inventé.
+ */
+@OptIn(ExperimentalForeignApi::class)
+private fun replayKitPresentationTimestampNanos(sampleBuffer: CMSampleBufferRef): Long? {
+    val time = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
+    val (value, timescale, epoch) = time.useContents {
+        Triple(this.value, this.timescale, this.epoch)
+    }
+    if (value < 0L || timescale <= 0 || epoch != 0L) return null
+    if (value != 0L && Long.MAX_VALUE / value < 1_000_000_000L) return null
+    return value * 1_000_000_000L / timescale
 }
 
 /**
@@ -125,10 +335,12 @@ internal class UIKitHostCaptureSurfaceRegistry : UIKitCaptureSurfaceRegistry {
  * **`requestPermission` ne prompt JAMAIS** (ruling 5) : le scope Screen rend le snapshot de
  * disponibilité LUE à cet instant (répétable, idempotent, vivant), le scope Window est refusé
  * `Unsupported(CapturePermission)` avant tout fait de seam. **La cible Source est refusée
- * AVANT tout seam** (ruling 6, précédent AND-009). **Les réservations HostChoice/Surface sont
- * les refus de squelette** (`Unsupported(CaptureOpen)`) — les bras ReplayKit (Task 3) et pompe
- * surface (Task 4) les remplaceront ; la route Surface résout d'abord l'id dans le registre de
- * CETTE session ([UIKitCaptureSurfaceRegistry], nourri par la couture d'attach), un id
+ * AVANT tout seam** (ruling 6, précédent AND-009). **La réservation HostChoice est le bras
+ * ReplayKit réel** (Task 3 — la disponibilité y est RELUE à la réservation puis au start,
+ * la pompe vit dans [UIKitHostCaptureReservation]) ; **la réservation Surface reste le refus
+ * de squelette** (`Unsupported(CaptureOpen)`) — la pompe surface (Task 4) le remplacera ;
+ * la route Surface résout d'abord l'id dans le registre de CETTE session
+ * ([UIKitCaptureSurfaceRegistry], nourri par la couture d'attach), un id
  * inconnu répond `InvalidRequest("request.target")` (le miroir Android).
  *
  * **Pas d'inventaire, pas de picker** (ruling 4) : `sourceEnumeration` est
@@ -158,6 +370,16 @@ internal class UIKitCapturePort(
     private val lock = RuntimeLock()
     private var closed = false
     private var observer: ((KadreResult<CapturePortSnapshot>) -> Unit)? = null
+
+    /** La séquence des clés de réservation HostChoice de CE port (le miroir Android). */
+    private var nextReservationKeyValue = 0L
+
+    /**
+     * La réservation HostChoice vivante de CE port (le slot unique, le miroir Android) — le
+     * close du port la termine (ruling 4 : un port qui ferme pendant une réservation vivante
+     * la fait terminer immédiatement, la pompe arrêtée, plus aucun callback après).
+     */
+    private var liveReservation: UIKitHostCaptureReservation? = null
 
     /** Le snapshot de construction — relu UNE fois, gelé comme référence initiale du runtime. */
     override val initialSnapshot: CapturePortSnapshot = snapshotOf()
@@ -213,8 +435,8 @@ internal class UIKitCapturePort(
      * STRUCTURELLEMENT avant tout fait de seam (ruling 6 — aucune source énumérée n'existe,
      * un `CapturePortSourceKey` ne peut rien désigner) ; la cible Surface résout d'abord l'id
      * dans le registre de CETTE session puis retombe sur le refus de squelette (la pompe
-     * surface vit en Task 4) ; le choix hôte retombe sur le refus de squelette (la réservation
-     * ReplayKit vit en Task 3).
+     * surface vit en Task 4) ; le choix hôte construit la réservation ReplayKit réelle
+     * (Task 3 — le squelette Task 2 est remplacé).
      */
     override suspend fun reserve(
         target: CapturePortTarget,
@@ -227,9 +449,47 @@ internal class UIKitCapturePort(
 
             is CapturePortTarget.Surface -> surfaceReservation(target.id)
 
-            CapturePortTarget.HostChoice ->
-                KadreResult.Failure(KadreFailure.Unsupported(KadreOperation.CaptureOpen))
+            CapturePortTarget.HostChoice -> hostChoiceReservation(request)
         }
+    }
+
+    /**
+     * La réservation HostChoice — le bras ReplayKit réel (Task 3, remplaçant le squelette
+     * Task 2). La région est refusée STRUCTURELLEMENT avant tout fait de seam (ReplayKit
+     * capte l'affichage ENTIER — la capability l'annonce déjà `region Unsupported`, le
+     * miroir Android). LE FAIT DE SEAM DU BRAS (le pin delta != 0) : la disponibilité du
+     * recorder est RELUE à la réservation — un recorder indisponible refuse honnêtement la
+     * MÊME forme que la table (`TemporarilyUnavailable`, retryable — `isAvailable` ne porte
+     * aucun pourquoi, jamais une raison fabriquée) au lieu d'admettre une réservation qui
+     * ne pourra jamais démarrer. La disponibilité est RELUE ENCORE au start (ruling 6) —
+     * la propriété est vivante, le fait peut basculer entre les deux.
+     */
+    private fun hostChoiceReservation(request: CaptureRequest): KadreResult<CapturePortReservation> {
+        if (request.region != null) {
+            return KadreResult.Failure(KadreFailure.Unsupported(KadreOperation.CaptureOpen))
+        }
+        if (!source.recorderAvailable()) {
+            return KadreResult.Failure(KadreFailure.TemporarilyUnavailable(retryable = true))
+        }
+        val keyValue = lock.withLock {
+            val value = nextReservationKeyValue
+            nextReservationKeyValue += 1L
+            value
+        }
+        val reservation = UIKitHostCaptureReservation(
+            source = CapturePortSource(
+                key = CapturePortSourceKey(HOST_CHOICE_SOURCE_NAMESPACE, keyValue),
+                kind = CaptureSourceKind.Display,
+                name = null,
+                size = null,
+            ),
+            streams = source,
+            request = request,
+            closedGate = ::isClosed,
+            onEnded = { lock.withLock { liveReservation = null } },
+        )
+        lock.withLock { liveReservation = reservation }
+        return KadreResult.Success(reservation)
     }
 
     /**
@@ -259,9 +519,12 @@ internal class UIKitCapturePort(
     /**
      * Ferme le port : idempotent, le seam possédé est fermé EXACTEMENT UNE FOIS (la propriété
      * du port — sans compter sur l'idempotence du seam), l'observer est oublié (plus aucune
-     * livraison après le close) et toute voie ultérieure répond `Closed(Host)`. Le registre
-     * meurt avec le port : la session entière le possède, aucun autre détenteur n'existe —
-     * rien à déposer ici (le miroir Android).
+     * livraison après le close) et toute voie ultérieure répond `Closed(Host)`. Une
+     * réservation HostChoice vivante est terminée d'ABORD (ruling 4 — le close du port pendant
+     * une réservation active est un terminal immédiat, la pompe arrêtée, l'arrêt du recorder
+     * exactement une fois, plus aucun callback après). Le registre meurt avec le port : la
+     * session entière le possède, aucun autre détenteur n'existe — rien à déposer ici (le
+     * miroir Android).
      */
     override fun close() {
         val firstClose = lock.withLock {
@@ -273,7 +536,10 @@ internal class UIKitCapturePort(
                 true
             }
         }
-        if (firstClose) source.close()
+        if (firstClose) {
+            lock.withLock { liveReservation }?.close()
+            source.close()
+        }
     }
 
     /** Remplace le snapshot courant et le remet à l'observateur installé, s'il existe et si ouvert. */
@@ -357,6 +623,9 @@ internal class UIKitCapturePort(
         KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.Host))
 
     private companion object {
+        /** Le namespace des réservations HostChoice — UN affichage entier (le miroir Android). */
+        private const val HOST_CHOICE_SOURCE_NAMESPACE = "uikit-host-choice"
+
         /**
          * L'échec honnête du fait « le recorder se déclare indisponible » : `isAvailable` ne
          * porte AUCUN pourquoi — la forme ne fabrique aucune raison (pas de « Simulator », pas
