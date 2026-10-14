@@ -14,6 +14,7 @@ import org.graphiks.kadre.application.KadreApplication
 import org.graphiks.kadre.application.KadreApplicationFactory
 import org.graphiks.kadre.application.KadreScope
 import org.graphiks.kadre.application.KadreSession
+import org.graphiks.kadre.application.SessionState
 import org.graphiks.kadre.diagnostics.Capability
 import org.graphiks.kadre.diagnostics.FeatureAvailability
 import org.graphiks.kadre.diagnostics.KadreFailure
@@ -25,6 +26,7 @@ import org.graphiks.kadre.policy.KadrePolicies
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
+import kotlin.test.assertNull
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
@@ -63,7 +65,7 @@ class AndroidPresentationInputTest {
     @Test
     fun `un key event fenetre presentation alimente la session presentation seule`() {
         val host = PresentationInputHost()
-        val main = host.attachKadre(mainView = Any(), factory = hangingApplication())
+        val main = host.attachSurrogateMainSession(mainView = Any(), factory = hangingApplication())
         val cast = host.attachWithFakeSource(display(7L))
         val fakeSource = host.fakeSource!!
         fakeSource.show()
@@ -115,6 +117,33 @@ class AndroidPresentationInputTest {
         fakeSource.simulateDisplayRemoved()
         // La chaîne est retirée : l'instance d'origine EXACTE est remise — pas une autre.
         assertSame(original, fakeSource.currentWindowCallback)
+    }
+
+    /**
+     * La discipline never-throw du collecteur `mediaWatch` (phase 11, durcissement de la
+     * vague finale) : la fabrique de chaîne et sa pose vivent DANS le collecteur d'état du
+     * média (Unconfined) — une fabrique lançante ne doit PAS tuer la coroutine
+     * d'observation, sinon le `Removed` d'un écran retiré ne serait plus jamais observé :
+     * session jamais terminale, réservation silencieusement tenue. L'échec est absorbé,
+     * SIGNALÉ sur le canal de diagnostic, le fait câblé reste `false` (aucune chaîne
+     * posée) — et le retrait d'écran qui suit termine la session et rend les deux clés.
+     */
+    @Test
+    fun `une fabrique de chaine lancante ne tue pas le collecteur du media`() {
+        val host = PresentationInputHost()
+        val boom = IllegalStateException("input chain factory failed")
+        val session = host.attachWithThrowingChain(display(7L), boom)
+        val fakeSource = host.fakeSource!!
+        // Le premier show livre `Shown` au collecteur : la fabrique jette DANS le collect.
+        fakeSource.show()
+        // Absorbé : RIEN n'est posé sur la fenêtre (le fait câblé reste `false`), et
+        // l'échec est signalé — jamais avalé en silence.
+        assertNull(fakeSource.originalWindowCallback)
+        assertTrue(AndroidAttachDiagnostics.failures().any { it === boom })
+        // Le retrait d'écran est ENCORE observé : session TERMINALE, réservations libérées.
+        fakeSource.simulateDisplayRemoved()
+        assertTrue(session.state.value is SessionState.Terminated)
+        assertTrue(host.registry.isEmpty())
     }
 
     // ------------------------------------------------------------------ outillage
@@ -371,12 +400,25 @@ class AndroidPresentationInputTest {
         }
 
         /**
+         * L'attach de la fabrique lançante : la couture input jette au premier `Shown` —
+         * DANS le collecteur `mediaWatch`, sur le thread qui émet le fait (Unconfined).
+         * Le durcissement never-throw du collect est l'objet du test qui pilote ce
+         * attach : la fabrique lançante ne doit PAS tuer l'observation du média.
+         */
+        fun attachWithThrowingChain(display: FakeDisplay, boom: Throwable): KadreSession {
+            val window = FakePresentationWindow()
+            val source = FakePresentationInputSource(facts(display.key), window)
+            fakeSource = source
+            return attach(display, Any(), source, hangingApplication()) { _, _ -> throw boom }.session()
+        }
+
+        /**
          * La session « principale » du cas cross-talk — la MÊME couture, un autre écran, SON
          * journal : la forme Activity n'est pas conduisible sur hôte (fenêtre SDK), la
          * propriété épinglée est le routage par session du câblage que la composition
          * construit — le journal de CETTE session en est le témoin muet attendu.
          */
-        fun attachKadre(
+        fun attachSurrogateMainSession(
             mainView: Any,
             factory: KadreApplicationFactory,
         ): KadreSession {

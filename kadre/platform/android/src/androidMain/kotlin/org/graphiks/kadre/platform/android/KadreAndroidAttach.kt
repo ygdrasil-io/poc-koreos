@@ -754,7 +754,8 @@ internal object AndroidHostSession {
      * 3. la composition : le seam [AndroidPresentationSource] (fabrique injectée — la
      *    production y passe `AndroidSdkPresentationSource`, les tests hôtes un fake pilotable),
      *    la surface [AndroidHostSurface] construite sur les FAITS du média (attachée — le
-     *    média existe dès la construction — mais CACHÉE jusqu'au premier START), le manager
+     *    média existe dès la construction — mais CACHÉE jusqu'au premier show : dès l'attach
+     *    si l'hôte est déjà ≥ STARTED, sinon au premier START), le manager
      *    `AndroidActivityWindowManager(native = null)` (la table honnête : la session
      *    présentation ne revendique AUCUN champ fenêtre en v1), et `withComponents` — le
      *    teardown de la surface primaire ferme le seam (`presentationSource.close()`), le
@@ -937,11 +938,21 @@ internal object AndroidHostSession {
         fun installInputChainOnce() {
             if (inputChainHandled) return
             inputChainHandled = true
-            inputChain = inputChainFactory(presentationSource.windowToken(), inputWiring)
-            inputChain?.install()
+            // La fabrique et sa pose ne lancent JAMAIS ici : ce code vit DANS le collecteur
+            // `mediaWatch` (Unconfined) — un throwable tuerait la coroutine d'observation et
+            // le `Removed` d'un écran retiré ne serait plus jamais vu : session jamais
+            // terminale, réservation silencieusement tenue. La discipline never-throw du
+            // fichier : l'échec est SIGNALÉ sur le canal de diagnostic, jamais propagé.
+            var wired = false
+            runCatching {
+                inputChain = inputChainFactory(presentationSource.windowToken(), inputWiring)
+                inputChain?.install()
+                wired = inputChain != null
+            }.onFailure { cause -> AndroidAttachDiagnostics.report(cause) }
             // Le fait câblé suit la chaîne RÉELLEMENT posée (une fenêtre sans callback ne
-            // promet pas de clavier) — le miroir exact de la discipline de la forme Activity.
-            surface.observationInstalled(inputWired = inputChain != null)
+            // promet pas de clavier) — le miroir exact de la discipline de la forme Activity :
+            // même sur échec, la delivery n'est pas laissée en limbe, le fait reste `false`.
+            surface.observationInstalled(inputWired = wired)
         }
 
         // L'observation de l'état du média : le retrait d'écran (`Removed`, FINAL — le
@@ -1231,7 +1242,8 @@ internal object AndroidHostSession {
      * L'état initial de la surface présentation, tiré des FAITS du média (Task 1) — pas de la
      * View : le contentView est posé dans la présentation dès la construction, la surface
      * naît donc ATTACHÉE (le média existe) mais CACHÉE (`visibility = false`, pas encore
-     * montrée — le premier START la rend Visible), à la géométrie logique de l'écran cible
+     * montrée — le premier show la rend Visible : dès l'attach si l'hôte est déjà ≥ STARTED,
+     * sinon au premier START), à la géométrie logique de l'écran cible
      * (`realWidth/scaleFactor × realHeight/scaleFactor`). Les insets d'une fenêtre de
      * présentation dédiée sont nuls en v1 ; l'échelle invalide retombe sur 1 (le miroir de la
      * garde densité de [initialSurfaceState]).

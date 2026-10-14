@@ -83,7 +83,9 @@ fi
 if [ "${1:-}" = "-s" ] && [ "${3:-}" = "shell" ] && [ "${4:-}" = "settings" ] && [ "${6:-}" = "global" ] && [ "${7:-}" = "overlay_display_devices" ]; then
   # La syntaxe RÉELLE de la commande settings d'Android : le verbe en $5
   # (`settings put global overlay_display_devices <spec>` / `settings delete …`),
-  # jamais `settings global <key> <verb>`.
+  # jamais `settings global <key> <verb>`. Pour `put`, la SPÉCIFICATION ($8) est
+  # journalisée avec le verbe — le provisioning doit porter la valeur exacte,
+  # pas seulement le verbe.
   case "$scenario" in
     settings-fail)
       printf 'fake settings failure\n' >&2
@@ -91,7 +93,11 @@ if [ "${1:-}" = "-s" ] && [ "${3:-}" = "shell" ] && [ "${4:-}" = "settings" ] &&
       ;;
     *)
       if [ -n "${FAKE_ADB_SETTINGS_LOG:-}" ]; then
-        printf '%s\n' "$5" >>"$FAKE_ADB_SETTINGS_LOG"
+        if [ "$5" = "put" ]; then
+          printf '%s %s\n' "$5" "${8:?fake adb: settings put requires the spec in \$8}" >>"$FAKE_ADB_SETTINGS_LOG"
+        else
+          printf '%s\n' "$5" >>"$FAKE_ADB_SETTINGS_LOG"
+        fi
       fi
       exit 0
       ;;
@@ -445,10 +451,10 @@ provisioning_case() {
     fail "provisioning ($label): wrong adb settings sequence" "expected: [$expected_log] got: [$actual]"
     return 1
   fi
-  echo "PASS: provisioning ($label) — put/delete sequence exact, cleanup best-effort"
+  echo "PASS: provisioning ($label) — put/delete sequence exact (verb + overlay spec), cleanup best-effort"
 }
 
-provisioning_case put-delete-put-delete unique "$(printf 'delete\nput\ndelete')"
+provisioning_case put-delete-put-delete unique "$(printf 'delete\nput 1280x720/160\ndelete')"
 record
 
 remove_without_serial() {
