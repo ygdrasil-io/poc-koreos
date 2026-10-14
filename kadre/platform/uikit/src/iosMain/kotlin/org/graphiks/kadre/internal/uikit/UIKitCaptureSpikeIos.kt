@@ -117,16 +117,17 @@ internal object UIKitCaptureSpikeIos {
 
     /**
      * La composition couture → kernels PURS (le chemin que la Task 2 consommera) : les
-     * scalaires du pixel buffer entrent dans [uikitCaptureLayoutOf] (le booléen BGRA vient
-     * du fourcc LU, pas supposé) et dans [uikitCaptureColorEncodingOf] — la paire portable
-     * en sort, `null` honnête si la combinaison n'est pas la table.
+     * scalaires du pixel buffer entrent dans [uikitCaptureLayoutOfFourcc] — la PORTE fourcc
+     * qui n'admet que 'BGRA'/'RGBA' (revue Important-2 : 'ARGB'/'ABGR' → `null`, jamais
+     * réétiquetés) — et dans [uikitCaptureColorEncodingOf] ; la paire portable en sort,
+     * `null` honnête si la combinaison n'est pas la table.
      */
     fun portableLayoutOf(facts: UIKitCaptureSpikeBufferFacts): Pair<PixelFormat, PixelPlaneLayout>? =
-        uikitCaptureLayoutOf(
+        uikitCaptureLayoutOfFourcc(
             width = facts.width,
             height = facts.height,
             bytesPerRow = facts.bytesPerRow,
-            bitmapInfoIsBgra = facts.cvFormat == UIKIT_CVFORMAT_32BGRA,
+            cvFormat = facts.cvFormat,
         )
 
     fun colorEncodingOf(facts: UIKitCaptureSpikeBufferFacts): ColorEncoding =

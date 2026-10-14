@@ -57,7 +57,9 @@ internal const val UIKIT_CVFORMAT_420FULL = 0x34323066L
  * `bitmapInfoIsBgra` : la couture lit le bitmap info RÉEL (pour un `CVPixelBuffer`, le
  * fourcc ; pour un `CGImage`, `CGImageGetBitmapInfo` — alpha-first little-endian ⇒ BGRA,
  * alpha-last ⇒ RGBA) et réduit à ce booléen : le kernel NE SUPPOSE JAMAIS l'ordre des
- * octets (§ décision 3 du rapport de spike).
+ * octets (§ décision 3 du rapport de spike). Cette forme feuille ne voit QUE des ordres
+ * d'octets déjà prouvés — la PORTE fourcc ([uikitCaptureLayoutOfFourcc]) est l'entrée SDK
+ * qui n'admet que 'BGRA'/'RGBA'.
  */
 internal fun uikitCaptureLayoutOf(
     width: Int,
@@ -69,6 +71,25 @@ internal fun uikitCaptureLayoutOf(
         ?: return null
     val format = if (bitmapInfoIsBgra) PixelFormat.Bgra8 else PixelFormat.Rgba8
     return format to layout
+}
+
+/**
+ * La PORTE fourcc du chemin pixel buffer — L'ENTRÉE SDK de la table de layout : seuls
+ * 'BGRA' et 'RGBA' (les deux seuls ordres d'octets portables, ReplayKit documenté 32BGRA)
+ * y passent. 'ARGB'/'ABGR' répondent `null` : sous la convention d'ordre des lettres
+ * CoreVideo leur mémoire est `[A][R][G][B]` / `[A][B][G][R]` — AUCUN étiquetage ne les
+ * rend Rgba8 (ce serait un swap de canaux), ils ne sont pas mesurés (revue Important-2) :
+ * `null`, jamais un format inventé. Les codes hors table (planaire, inconnu) aussi.
+ */
+internal fun uikitCaptureLayoutOfFourcc(
+    width: Int,
+    height: Int,
+    bytesPerRow: Int,
+    cvFormat: Long,
+): Pair<PixelFormat, PixelPlaneLayout>? = when (cvFormat) {
+    UIKIT_CVFORMAT_32BGRA -> uikitCaptureLayoutOf(width, height, bytesPerRow, bitmapInfoIsBgra = true)
+    UIKIT_CVFORMAT_32RGBA -> uikitCaptureLayoutOf(width, height, bytesPerRow, bitmapInfoIsBgra = false)
+    else -> null
 }
 
 /**

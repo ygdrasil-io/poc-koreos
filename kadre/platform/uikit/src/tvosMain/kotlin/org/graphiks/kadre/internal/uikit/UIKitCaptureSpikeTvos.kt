@@ -97,13 +97,17 @@ internal object UIKitCaptureSpikeTvos {
         }
     }
 
-    /** La composition couture → kernels PURS — les MÊMES kernels uikitMain des deux cibles. */
+    /**
+     * La composition couture → kernels PURS — les MÊMES kernels uikitMain des deux cibles :
+     * [uikitCaptureLayoutOfFourcc], la PORTE fourcc qui n'admet que 'BGRA'/'RGBA' (revue
+     * Important-2 : 'ARGB'/'ABGR' → `null`, jamais réétiquetés).
+     */
     fun portableLayoutOf(facts: UIKitCaptureSpikeBufferFacts): Pair<PixelFormat, PixelPlaneLayout>? =
-        uikitCaptureLayoutOf(
+        uikitCaptureLayoutOfFourcc(
             width = facts.width,
             height = facts.height,
             bytesPerRow = facts.bytesPerRow,
-            bitmapInfoIsBgra = facts.cvFormat == UIKIT_CVFORMAT_32BGRA,
+            cvFormat = facts.cvFormat,
         )
 
     fun colorEncodingOf(facts: UIKitCaptureSpikeBufferFacts): ColorEncoding =

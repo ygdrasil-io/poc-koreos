@@ -16,19 +16,22 @@ import ReplayKit
 //    Swift du SDK 27 (le klib Kotlin garde `sharedRecorder`).
 //
 // 2/3. Le bitmap info RÉEL du `CGImage` produit par `UIGraphicsImageRenderer` — la vérité
-//    Bgra8/Rgba8 est LUE sur les DEUX voies de rendu :
-//    - `layer.render(in:)` (la voie Swift hors écran déterministe) ;
-//    - `drawHierarchy(in:afterScreenUpdates:)` (le plus proche analogue Swift de la pompe
-//      Kotlin `drawViewHierarchyInRect`).
-//    FAITS de spike (iOS 27.0 Simulator, scale 1) : `layer.render` produit
-//    `bitmapInfo = 0x1` = premultipliedLast + byteOrderDefault(32Big) = **RGBA8** en
-//    mémoire — PAS le BGRA classique. `drawViewHierarchyInRect:afterScreenUpdates:` est
-//    DÉCLARÉ dans le header Obj-C (UIView.h:666) ET lié dans le klib K/N (les probes
-//    Kotlin compilent), mais l'overlay Swift du SDK 27 ne l'exporte PLUS vers Swift —
-//    d'où le mesure `drawHierarchy` comme analogue. L'assertion retenue est
-//    STRUCTURELLE : chaque lecture décode vers UN membre de la table portable (jamais
-//    « unknown ») et la formule plancher bytesPerRow tient — la décision Bgra8/Rgba8
-//    exacte appartient à la couture qui lit au runtime (jamais supposée).
+//    Bgra8/Rgba8 est LUE sur les voies de rendu :
+//    - `layer.render(in:)` (la voie hors écran déterministe, mesurée 32bpp DANS la table) ;
+//    - `drawHierarchy(in:afterScreenUpdates:)` — qui EST `drawViewHierarchyInRect:
+//      afterScreenUpdates:` sous son renommage Swift standard (NS_SWIFT_NAME, TOUS SDK ;
+//      l'erreur « has been renamed » du premier jet était un mauvais nom K/N, PAS un
+//      retrait SDK — correction de revue Important-3) : ces mesures portent donc
+//      DIRECTEMENT sur le sélecteur de la pompe Kotlin.
+//    FAITS de spike (iOS/tvOS 27.0 Simulator, scale 1) : `layer.render` produit
+//    `bitmapInfo = 0x1` = premultipliedLast + byteOrderDefault(big-endian) = **RGBA8** en
+//    mémoire — PAS le BGRA classique ; les DEUX variantes `drawHierarchy` sortent de la
+//    table 32bpp (`false` → 2 octets/pixel, `true` → 16-bit composantes order16Little).
+//    L'assertion retenue est STRUCTURELLE : la voie pompe-éligible (layer.render) décode
+//    vers UN membre de la table portable et la formule plancher bytesPerRow tient — la
+//    décision Bgra8/Rgba8 exacte appartient à la couture qui lit au runtime (jamais
+//    supposée). Le décodeur est ÉPINGLÉ par test sur les valeurs CGImage.h (byteOrder :
+//    32Little = 0x3000, 32Big = 0x4000 — revue Important-1).
 //
 // La frontière `tests/Shared` compile dans les DEUX targets de test (iOS ET tvOS) :
 // `RPScreenRecorder` est klib-présent tvOS (vérifié § rapport) — aucune garde os() n'est
@@ -61,8 +64,9 @@ final class KadreUikitCaptureSpikeTests: XCTestCase {
         // bytesPerRow=128 pour width=64 (2 octets/pixel — 16bpp, PAS la table portable
         // 32bpp) : la garde d'honnêteté du kernel (`bytesPerRow >= 4·w` sinon `null`)
         // rejetterait ce bitmap — la pompe doit soit relire et retomber, soit utiliser la
-        // voie layer.render. La Task 3 Kotlin lira AUSSI son propre readback
-        // (drawViewHierarchyInRect — le klib K/N le porte) : jamais supposée.
+        // voie layer.render. `drawHierarchy` EST `drawViewHierarchyInRect` renommé en
+        // Swift : ces mesures portent sur le sélecteur EXACT de la pompe Kotlin — la Task 3
+        // lira AUSSI son propre readback, jamais supposée.
         let hierarchyDrawnImmediate = renderer.image { _ in
             view.drawHierarchy(in: view.bounds, afterScreenUpdates: false)
         }
@@ -106,21 +110,38 @@ final class KadreUikitCaptureSpikeTests: XCTestCase {
     }
 
     /// Le décodeur bitmapInfo → table portable (la VÉRITÉ mémoire : alphaInfo ordonne les
-    /// composantes, byteOrder l'endianness de l'unité 32-bit).
+    /// composantes, byteOrder l'endianness de l'unité 32-bit). Valeurs CGImage.h ÉPINGLÉES
+    /// par `testDecoderPinsTheCanonicalByteOrders` — revue Important-1 : byteOrder
+    /// 32Little = 0x3000, 32Big = 0x4000 (l'ancien jet les inversait : le BGRA canonique
+    /// 0x3002 décodait « unknown » et 0x3001 — mémoire [A][B][G][R] — décodait « rgba8 »).
     private static func decodePortableFormat(_ raw: UInt32) -> String {
         let alphaInfo = raw & 0x1F
         let byteOrder = raw & 0x7000
         switch (alphaInfo, byteOrder) {
-        case (2, 0x2000):
-            return "bgra8" // premultipliedFirst + order32Little : [B][G][R][A] en mémoire
-        case (1, 0x3000), (1, 0):
-            return "rgba8" // premultipliedLast + 32Big/default : [R][G][B][A] en mémoire
-        case (5, 0x2000):
-            return "bgrx8" // noneSkipFirst + order32Little
-        case (4, 0x3000), (4, 0):
-            return "bgrx8" // noneSkipLast + 32Big/default
+        case (2, 0x3000):
+            return "bgra8" // premultipliedFirst + order32Little (0x3000) : [B][G][R][A] en mémoire
+        case (1, 0x4000), (1, 0):
+            return "rgba8" // premultipliedLast + order32Big (0x4000)/default : [R][G][B][A] en mémoire
+        case (6, 0x3000):
+            return "bgrx8" // noneSkipFirst + order32Little : [B][G][R][X]
+        case (5, 0x4000), (5, 0):
+            return "bgrx8" // noneSkipLast + order32Big/default : [R][G][B][X]
         default:
             return "unknown"
         }
+    }
+
+    func testDecoderPinsTheCanonicalByteOrders() {
+        // Les valeurs de CGImage.h (revue Important-1) : byteOrder 16Little=0x1000,
+        // 16Big=0x2000, 32Little=0x3000, 32Big=0x4000 ; alphaInfo premultipliedLast=1,
+        // premultipliedFirst=2, noneSkipLast=5, noneSkipFirst=6.
+        XCTAssertEqual(Self.decodePortableFormat(0x1), "rgba8")      // mesuré : layer.render
+        XCTAssertEqual(Self.decodePortableFormat(0x4001), "rgba8")   // premultipliedLast + 32Big
+        XCTAssertEqual(Self.decodePortableFormat(0x3002), "bgra8")   // LE BGRA canonique (premultipliedFirst + 32Little)
+        XCTAssertEqual(Self.decodePortableFormat(0x3001), "unknown") // premultipliedLast + 32Little = [A][B][G][R] — HORS table (le piège du swap de canaux)
+        XCTAssertEqual(Self.decodePortableFormat(0x3006), "bgrx8")   // noneSkipFirst + 32Little
+        XCTAssertEqual(Self.decodePortableFormat(0x5), "bgrx8")      // noneSkipLast + default
+        XCTAssertEqual(Self.decodePortableFormat(0x1101), "unknown") // mesuré : drawHierarchy(true) — 16-bit composantes
+        XCTAssertEqual(Self.decodePortableFormat(0x2002), "unknown") // 16Big : pas un ordre 32bpp portable
     }
 }

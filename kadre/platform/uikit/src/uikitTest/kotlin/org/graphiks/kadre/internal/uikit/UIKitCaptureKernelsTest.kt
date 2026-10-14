@@ -172,6 +172,37 @@ class UIKitCaptureKernelsTest {
         }
     }
 
+    // MARK: - layout : la porte fourcc (l'entrée SDK de la table, revue Important-2)
+
+    @Test
+    fun fourccGateAdmitsOnlyBgraAndRgba() {
+        val bgra = checkNotNull(uikitCaptureLayoutOfFourcc(16, 16, 64, UIKIT_CVFORMAT_32BGRA))
+        assertEquals(PixelFormat.Bgra8, bgra.first)
+        assertEquals(64, bgra.second.rowStride)
+        val rgba = checkNotNull(uikitCaptureLayoutOfFourcc(16, 16, 64, UIKIT_CVFORMAT_32RGBA))
+        assertEquals(PixelFormat.Rgba8, rgba.first)
+    }
+
+    @Test
+    fun argbAndAbgrLetterOrdersAreRejectedNeverRelabeled() {
+        // La convention d'ordre des lettres CoreVideo : 'ARGB'/'ABGR' = mémoire [A][R][G][B] /
+        // [A][B][G][R] — AUCUN étiquetage ne les rend Rgba8 (ce serait un swap de canaux) ;
+        // ils ne sont pas mesurés : `null`, jamais un format inventé.
+        assertNull(uikitCaptureLayoutOfFourcc(16, 16, 64, UIKIT_CVFORMAT_32ARGB))
+        assertNull(uikitCaptureLayoutOfFourcc(16, 16, 64, UIKIT_CVFORMAT_32ABGR))
+        assertNull(uikitCaptureLayoutOfFourcc(16, 16, 64, UIKIT_CVFORMAT_420VIDEO), "planaire hors porte packed")
+        assertNull(uikitCaptureLayoutOfFourcc(16, 16, 64, 42L), "code inconnu hors porte")
+    }
+
+    @Test
+    fun fourccGateCarriesTheLayoutHonestyUnchanged() {
+        // La porte NE rescousse pas la malhonnêteté géométrique : stride trop court ou
+        // byteCount hors Int restent `null` DERRIÈRE la porte aussi.
+        assertNull(uikitCaptureLayoutOfFourcc(100, 100, 399, UIKIT_CVFORMAT_32BGRA))
+        assertNull(uikitCaptureLayoutOfFourcc(1, 65536, 32768, UIKIT_CVFORMAT_32RGBA))
+        assertNull(uikitCaptureLayoutOfFourcc(0, 16, 64, UIKIT_CVFORMAT_32BGRA))
+    }
+
     // MARK: - encodage couleur : le fourcc CVPixelBuffer → ColorEncoding
 
     @Test
