@@ -1,5 +1,7 @@
 package org.graphiks.kadre.internal.runtime
 
+import org.graphiks.kadre.diagnostics.KadreFailure
+
 import org.graphiks.kadre.input.InputDeviceDescriptor
 
 /** One detached native input-device projection before the runtime allocates its public identity. */
@@ -14,6 +16,8 @@ public data class InputDevicePortDevice(
 
 /** One per-session generic input-device observation from a backend. */
 public sealed interface InputDevicePortEvent {
+    /** Re-read [InputDevicePort.inventoryFailure], including recovery to an empty inventory. */
+    public data object InventoryChanged : InputDevicePortEvent
     public data class Connected(public val device: InputDevicePortDevice) : InputDevicePortEvent
     public data class Disconnected(public val key: Long) : InputDevicePortEvent {
         init {
@@ -29,6 +33,8 @@ public sealed interface InputDevicePortEvent {
  * `DeviceId`s, owns lifecycle flows, and never receives native handles or raw HID reports.
  */
 public interface InputDevicePort : AutoCloseable {
+    /** A failed complete read withdraws the snapshot; null means enumeration succeeded. */
+    public val inventoryFailure: KadreFailure? get() = null
     /** Complete current generic-device projection visible to this session. */
     public val devices: List<InputDevicePortDevice>
 

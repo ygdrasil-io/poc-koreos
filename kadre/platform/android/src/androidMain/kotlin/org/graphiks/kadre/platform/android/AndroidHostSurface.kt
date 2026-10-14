@@ -263,6 +263,23 @@ internal class AndroidHostSurface(
     private var inputDelivery: AndroidInputDelivery? = null
 
     /**
+     * Le fait câblé d'entrée AVANT la configuration (phase 11, Task 4) : la forme présentation
+     * peut montrer son média PENDANT l'étape d'installation du binding — le rattrapage de
+     * l'observer lifecycle (`addObserver` sur un hôte RESUMED livre ON_CREATE puis ON_START,
+     * et ce START level-triggered montre le média AVANT `controller.attach`) — et le premier
+     * `Shown` y pose la chaîne d'entrée et publie `observationInstalled(inputWired)` alors
+     * que `inputDelivery` n'existe PAS ENCORE ([installSessionConfiguration] ne courra qu'à
+     * l'attach du runtime). Le fait est donc RETENU ici et rejoué sur la delivery au moment
+     * où la configuration la construit — le MÊME parti pris que [gamepadRoute] : le miroir
+     * exact de « la delivery vivante le reçoit immédiatement, une configuration installée
+     * plus tard le câble à la sienne ». Sans lui, la delivery naîtrait `installed = false`
+     * et bufferait chaque observation pour toujours (caps Unsupported, zéro événement) — le
+     * relevé device de la phase 11.
+     */
+    @Volatile
+    private var preConfigurationInputWired: Boolean? = null
+
+    /**
      * Le routage gamepad de la session (phase 7) — le port construit par l'attach pour cette
      * surface, retenu ICI pour que [installSessionConfiguration] le câble à la delivery qu'il
      * construit, et que [attachGamepadRoute] le (re)pousse à une delivery vivante. La delivery
@@ -686,7 +703,20 @@ internal class AndroidHostSurface(
             surfaceInput = input,
             committedState = { mutableState.value },
             interactions = engine,
-        ).also { delivery -> delivery.gamepadRoute = gamepadRoute }
+        ).also { delivery ->
+            delivery.gamepadRoute = gamepadRoute
+            // Le rattrapage du fait câblé d'entrée (phase 11) : un `observationInstalled` survenu
+            // AVANT cette configuration (le premier show de la forme présentation, couru par le
+            // rattrapage de l'observer lifecycle pendant l'étape d'installation du binding) est
+            // REJOUÉ ici — sans lui, la delivery naîtrait non installée et bufferait tout.
+            preConfigurationInputWired?.let { wired ->
+                delivery.observationInstalled(
+                    keyboardInstalled = wired,
+                    pointerInstalled = wired,
+                    touchInstalled = wired,
+                )
+            }
+        }
     }
 
     /**
@@ -761,6 +791,12 @@ internal class AndroidHostSurface(
                 ),
             )
         }
+        // Le fait câblé RETENU avant tout (phase 11, Task 4) : la delivery n'existe pas
+        // encore quand le premier show de la forme présentation courut pendant l'étape
+        // d'installation du binding — [installSessionConfiguration] rejouera ce fait sur la
+        // delivery qu'il construit. La garde null garde la sémantique « jamais après la
+        // révocation » : un attach qui échoue avant la configuration ne laisse rien.
+        preConfigurationInputWired = inputWired
         // L'installation de l'observation d'entrée (Task 3) : le stimulus structurel — avec
         // les faits câblés — puis le replay ordonné des observations bufferisées. Hors verrou :
         // la delivery vit sur le thread principal, et le réducteur runtime tient le sien.

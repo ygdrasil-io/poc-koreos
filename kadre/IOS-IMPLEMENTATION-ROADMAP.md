@@ -301,13 +301,13 @@ Apple transmet l’activité associée à une demande d’activation dans les op
 
 **But :** remplir les managers communs avec des observations honnêtes des environnements iOS et tvOS.
 
-- [ ] Observer les displays et changements de rattachement de scène. Si seul le viewport est connu, publier explicitement un `DisplayType.HostViewport` selon le contrat ; ne pas présenter une liste partielle comme inventaire physique exhaustif.
-- [ ] Relayer la pression mémoire réellement applicable aux sessions vivantes, sans transformer une notification non graduée en gravité inventée ; documenter son mapping avant activation.
-- [ ] Brancher `InputDevicePort` et `GamepadPort` sur les primitives publiques disponibles : connexion, déconnexion, snapshots, routing (routage) et effets effectivement supportés.
-- [ ] Décider séparément chaque domaine : l’observation gamepad ne prouve pas un inventaire HID complet, et son haptique ne prouve pas le support de tous les effets.
-- [ ] Sur Apple TV, vérifier découverte et reconnexion de manettes, profils effectivement exposés, coexistence avec la télécommande et effets selon matériel. Ne pas présenter toute Siri Remote comme une manette complète ni promettre ses capteurs ou son haptique à partir d’une autre génération.
-- [ ] Conserver `Unsupported(RawInputAccess)` tant qu’aucune primitive publique ne satisfait ce contrat. Ne pas émuler le raw input (entrée brute) avec le flux de touch/pointer ordinaire.
-- [ ] Tester disparition/reconnexion, changement de capability, fermeture d’une scène pendant un effet et retrait du dernier abonné d’une source partagée.
+- [x] Observer les displays et changements de rattachement de scène. Si seul le viewport est connu, publier explicitement un `DisplayType.HostViewport` selon le contrat ; ne pas présenter une liste partielle comme inventaire physique exhaustif.
+- [x] Relayer la pression mémoire réellement applicable aux sessions vivantes, sans transformer une notification non graduée en gravité inventée ; documenter son mapping avant activation.
+- [x] Brancher `InputDevicePort` et `GamepadPort` sur les primitives publiques disponibles : connexion, déconnexion, snapshots, routing (routage) et effets effectivement supportés.
+- [x] Décider séparément chaque domaine : l’observation gamepad ne prouve pas un inventaire HID complet, et son haptique ne prouve pas le support de tous les effets.
+- [x] Sur Apple TV, vérifier découverte et reconnexion de manettes, profils effectivement exposés, coexistence avec la télécommande et effets selon matériel. Ne pas présenter toute Siri Remote comme une manette complète ni promettre ses capteurs ou son haptique à partir d’une autre génération.
+- [x] Conserver `Unsupported(RawInputAccess)` tant qu’aucune primitive publique ne satisfait ce contrat. Ne pas émuler le raw input (entrée brute) avec le flux de touch/pointer ordinaire.
+- [x] Tester disparition/reconnexion, changement de capability, fermeture d’une scène pendant un effet et retrait du dernier abonné d’une source partagée.
 
 **Fichiers principaux :** ports display/device/gamepad UIKit, relais système à ownership explicite, registre de capabilities et cahiers matériels.
 

@@ -34,7 +34,17 @@ posés dans `WAYLAND-PHASE-0-DECISIONS.md` ; la tranche livrée est décrite par
 | `WindowDecorations.System` (D1) | `jvm` | — (négociation xdg-decoration attendue phase 5) | — | — | demande `System` refusée exactement `Unsupported(Decorations)`, jamais de repli `Borderless` | documenté D1 |
 | capture (phase 10) | `jvm` | — (`KFFI-WAYLAND-003` ouvert) | — | — | `Unsupported(Capture)` tant que le gap kffi est ouvert | documenté `KFFI-REQUIREMENTS.md` |
 
-## 3. Limites de la tranche 1
+## 3. Registre — tranche 2 (fenêtres réelles, driver `RuntimeWindowManager`)
+
+| feature | target | minimum déclaré | compile gate | runtime gate | état absent | tests |
+|---|---|---|---|---|---|---|
+| `WindowManager.requestWindow` (borderless, création réelle surface+xdg+toplevel+shm) | `jvm` | compositor réel pour la preuve O3 (Weston headless) ; handshake xdg 10 s | `:kadre:backend:wayland:jvmTest` + `waylandNativeTests` | `WIN-010`, `SUR-002` | `decorations=System`, `outerPosition`, fullscreen, level, boutons, transparence, blur, icône, content-protection refusés normativement avant toute primitive (`PlatformFailure(Wayland,"window-create",<code>)`) ; échec native ⇒ zéro résidu | `WaylandWindowO2Test` (O2), `WaylandWindowsLinuxTest` (O3) |
+| fermeture non-interceptable (L914) : close compositor et close programmatique | `jvm` | stimulus `xdg_toplevel.close` → `nativeClosed` ; destroy ordonné toplevel→xdg→surface→buffer | `:kadre:backend:wayland:waylandNativeTests` | `WIN-011` | pas de `CloseRequested` sur close compositor ; double terminaison inoffensive | `WaylandWindowsLinuxTest.secondCloseAfterTerminalCloseKeepsTheSessionHealthy`, `twoWindowsAreMappedAndIndependentWithDeterministicSuccession` |
+| succession `primary` + arming `stopWhenLastWindowClosed` (P-3) | `jvm` | armé après la première admission ; transition non-vide → vide ⇒ arrêt | `:kadre:backend:wayland:jvmTest` | `WIN-012` | aucun arrêt tant qu'une fenêtre survit (sentinelle `WIN-012`) | `WaylandWindowO2Test.closingWindowsStopsTheSessionOnlyWhenTheLastOneCloses` |
+| lease `withDesktopHandle` (adresses `wl_display`/`wl_surface` réelles) | `jvm` | adresses valides uniquement pendant le block ; refus `Closed(Window)` après fermeture admise (SN-8) | `:kadre:backend:wayland:jvmTest` + `waylandNativeTests` | `SUR-002` — `wayland-surface-handle-lease-addresses`, sentinelle `wayland-surface-lease-refused-after-close` | block jamais exécuté après fermeture admise | `WaylandWindowO2Test.handleLeaseIsHonoredWhileActiveAndRefusedAfterClose`, `WaylandWindowsLinuxTest` (adresses non nulles) |
+| mises à jour de fenêtre (`WindowUpdate`) | `jvm` | — (tranche 2 sans update natif) | `:kadre:backend:wayland:jvmTest` | — | toute demande ⇒ `WindowUpdateCommand.rejected` (phase 3 : redraw coalescent) | couvert par le port (rejet explicite) |
+
+## 4. Limites des tranches 1 et 2
 
 - Le support `WAYLAND_SOCKET` au run est refusé avant session
   (`PlatformFailure(Wayland, "start", "wayland-socket-unsupported")`) tant que
@@ -42,11 +52,19 @@ posés dans `WAYLAND-PHASE-0-DECISIONS.md` ; la tranche livrée est décrite par
   déclare néanmoins disponible (R3) — contrat R7 en attente du binding.
 - SN-4 (compositor amputé d'un global) et SN-8 (version annoncée sous le
   minimal B-4) sont prouvés en O2 sur fakes ; une preuve O3 exige un compositor
-  amputé dédié (procédure documentée dans le README du driver).
+  amputé dédié (procédure documentée dans le README du driver). Le configure
+  ancien (F1-5, pas de double ack) est implémenté dans l'adaptateur kffi ; sa
+  preuve O3 dédiée attend le même harnais.
+- `configure` non-imposé (F1-4) : la taille du spec est conservée — aucune
+  observation géométrique n'est publiée en tranche 2 (les readbacks
+  géométriques suivent en phase 3 avec le redraw).
+- Le diagnostic `wl_surface.enter` non observé sur certains runners x86 reste
+  ouvert côté kffi (la preuve de mapping est le presentation frame, pas
+  `enter`).
 - Images de test pignées par digest au premier job CI (B-3) ; la version weston
   réelle est journalisée par `scripts/ci-wayland-runtime.sh version`.
 
-## 4. Références
+## 5. Références
 
 - `WAYLAND-PHASE-1-HOST-DESIGN.md` — scénarios P/SN et tables F1-F3.
 - `WAYLAND-PHASE-0-KFFI-AUDIT.md` §Baseline, §verdicts.

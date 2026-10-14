@@ -116,3 +116,7 @@ include(":kadre:samples:hello-kadre")
 include(":kadre:samples:android-hello-window")
 include(":kadre:samples:android-hello-touch")
 include(":kadre:samples:android-compose-showcase")
+// Le tour Kadre sur Android (phase 11) : la visite commune (`desk-tour`) sur le host
+// Android — sources core/ + ui/ partagées par `kotlin.srcDir`, host de notes
+// capability-off, managers Android réels. Même pattern `consumers/android`.
+include(":kadre:samples:android-kadre-tour")

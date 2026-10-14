@@ -15,7 +15,29 @@ internal class WaylandHostSession private constructor(
     val bridge: WaylandNativeBridge,
     val wake: PosixWakeup,
     val pump: WaylandEventPump,
-) {
+) : WindowActionQueue {
+
+    private val windowActions = java.util.concurrent.ConcurrentLinkedQueue<() -> Unit>()
+
+    /** Marshal d'une action vers le thread pompe (créations fenêtres). */
+    override fun enqueue(action: () -> Unit) {
+        windowActions.add(action)
+        wake.signal()
+    }
+
+    internal fun asActionQueue(): WindowActionQueue = this
+
+    /** Crée une fenêtre native (surface+xdg+toplevel+buffer) via la facade kffi. */
+    fun createWindowing(width: Int, height: Int): WaylandNativeWindow =
+        bridge.createWindowing(width, height)
+
+    /** À appeler par la boucle de pompe avant chaque itération. */
+    fun drainWindowActions() {
+        while (true) {
+            val action = windowActions.poll() ?: return
+            runCatching { action() }.onFailure { failure -> println("wayland action failed: $failure") }
+        }
+    }
 
     internal companion object {
         fun start(

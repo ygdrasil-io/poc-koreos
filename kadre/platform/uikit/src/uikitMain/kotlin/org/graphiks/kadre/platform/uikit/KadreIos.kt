@@ -11,6 +11,8 @@ import org.graphiks.kadre.application.KadreApplicationFactory
 import org.graphiks.kadre.application.KadreLaunchReason
 import org.graphiks.kadre.application.KadreSession
 import org.graphiks.kadre.application.LifecycleState
+import org.graphiks.kadre.application.LifecycleCapabilities
+import org.graphiks.kadre.display.DisplayType
 import org.graphiks.kadre.diagnostics.ExperimentalKadreApi
 import org.graphiks.kadre.diagnostics.KadreFailure
 import org.graphiks.kadre.diagnostics.KadrePlatform
@@ -24,11 +26,19 @@ import org.graphiks.kadre.internal.runtime.RuntimeSessionComponents
 import org.graphiks.kadre.internal.runtime.RuntimeSessionRevocationHandler
 import org.graphiks.kadre.internal.runtime.RuntimeSessionObserver
 import org.graphiks.kadre.internal.runtime.withLock
+import org.graphiks.kadre.internal.uikit.UIKitControllerInventory
+import org.graphiks.kadre.internal.uikit.UIKitDisplayPort
+import org.graphiks.kadre.internal.uikit.UIKitGCControllerSource
+import org.graphiks.kadre.internal.uikit.UIKitGCDeviceHapticsEffectSeam
 import org.graphiks.kadre.internal.uikit.UIKitLifecycleReducer
 import org.graphiks.kadre.internal.uikit.UIKitLifecycleSource
 import org.graphiks.kadre.internal.uikit.UIKitLifecycleSnapshot
+import org.graphiks.kadre.internal.uikit.UIKitMemoryPressureClaim
+import org.graphiks.kadre.internal.uikit.UIKitNotificationCenterMemoryPressureSeam
 import org.graphiks.kadre.internal.uikit.UIKitOwnership
+import org.graphiks.kadre.internal.uikit.UIKitProcessMemoryPressure
 import org.graphiks.kadre.internal.uikit.UIKitSceneRegistry
+import org.graphiks.kadre.internal.uikit.UIKitScreenDisplaySource
 import org.graphiks.kadre.internal.uikit.UIKitWindowRuntime
 import org.graphiks.kadre.internal.uikit.UIKitWindowSceneManager
 import org.graphiks.kadre.policy.KadrePolicies
@@ -78,10 +88,13 @@ private fun toLifecycleState(snapshot: UIKitLifecycleSnapshot): LifecycleState =
  * L'échelle (roadmap l.106-120, patron Web `WebHostSession`) :
  *  1. validations fermées sur les champs `window` / `surfaceView` ;
  *  2. réservation de la scène AVANT toute installation (`AlreadyInUse(Host)` sur doublon) ;
+ *  2bis. créneau mémoire process (phase 8) — AVANT le contrôleur, sa capability devient
+ *        `initialLifecycleCapabilities` ; libéré au terminal ET au rollback ;
  *  3. installation des observers de lifecycle avec rollback par étape
  *     ([UIKitOwnership.releaseAfterAttachFailure]) ;
  *  4. controller + factory (le runtime est créé DANS la factory, au premier attach de session) ;
- *  5. `attach` — en cas d'échec, rollback complet (observers + réservation + scope).
+ *  5. `attach` — en cas d'échec, rollback complet (observers + réservation + scope) ; en cas
+ *     de succès, le relais mémoire du créneau est branché (`claim.wire`).
  *
  * L'appelant DOIT être sur le thread principal — contrat vérifié à l'entrée
  * (`NSThread.isMainThread()`, sinon IllegalStateException) : l'installation
@@ -91,6 +104,42 @@ private fun toLifecycleState(snapshot: UIKitLifecycleSnapshot): LifecycleState =
  */
 @OptIn(ExperimentalKadreApi::class, ExperimentalAtomicApi::class)
 public object KadreIos {
+    /**
+     * La source de pression mémoire process-wide (phase 8, Task 3, modèle AppKit/Android) —
+     * UNE source pour toutes les attaches du processus : installée à la première (la
+     * registration `NSNotificationCenter` est un fait PROCESS, comme la scène), réutilisée
+     * par les suivantes, fermée par la terminaison du DERNIER host vivant. Les scènes d'un
+     * même processus (attach ordinaire + enfants d'une demande de fenêtre) sont autant de
+     * créneaux de LA MÊME source : un seul observer, fan-out vers tous les hosts câblés.
+     */
+    private val memoryPressure = UIKitProcessMemoryPressure()
+
+    /**
+     * L'état vivant de la source mémoire process — l'observation du driver (phase 8, Task 6,
+     * scaffolding, même posture que les compteurs de [KadreUikitSurfaceDriver]) : `Unsupported`
+     * tant qu'aucune source n'a jamais été tentée ET après la fermeture par le DERNIER host
+     * vivant, `Available` pendant qu'UN host au moins vit, `Unavailable(PlatformFailure)` sur
+     * un échec d'install collant. Jamais une entrée dans l'API contractuelle.
+     */
+    internal val processMemoryPressureCapabilities: LifecycleCapabilities
+        get() = memoryPressure.currentCapabilities
+
+    /**
+     * L'inventaire contrôleurs process-wide (phase 8, Task 4, moule AppKit/Android — le
+     * miroir exact de la source mémoire ci-dessus) : UNE source pour toutes les attaches du
+     * processus, UNE SEULE séquence de clés process-monotoniques (une manette revenue obtient
+     * une NOUVELLE clé, critère runtime « nouvel ID après disparition terminale »), les ports
+     * manette/device de chaque attach en sont des projections. La source vit au-delà des
+     * sessions (le GameController est un fait process, comme la scène) ; les OBSERVERS du
+     * seam ne vivent qu'avec le dernier port ouvert (miroir AppKit), et ni les ports ni
+     * l'inventaire ne ferment JAMAIS la source — elle appartient à cet objet, comme le
+     * centre de notifications appartient au process.
+     */
+    private val controllerInventory = UIKitControllerInventory(
+        source = UIKitGCControllerSource(),
+        effects = UIKitGCDeviceHapticsEffectSeam(),
+    )
+
     /**
      * L'attach UIKit/tvOS d'une session sur la scène primaire du host, avec l'échelle optionnelle
      * multi-fenêtre : un [windowSceneProvider] non nul annonce `requestWindow` comme
@@ -163,6 +212,17 @@ public object KadreIos {
         val ownership = UIKitOwnership(reservation)
         val failureReporter = UIKitAttachDiagnostics
 
+        // 2bis. Le créneau mémoire de CETTE attach (phase 8, Task 3, modèle Android) : pris
+        //       AVANT le contrôleur — sa capability (`Available` après l'install réussie de
+        //       la source process, `Unavailable(PlatformFailure(UIKit, "memory-pressure",
+        //       "source-exception"))` après un échec d'install, le défaut runtime sans seam)
+        //       devient le `initialLifecycleCapabilities` du contrôleur ci-dessous : la
+        //       transition réelle exigée par la matrice C, publiée seulement après le succès
+        //       d'install. La source vit au-delà des sessions ; le créneau meurt avec le host
+        //       (terminal) ou avec l'attach (rollback — tous les chemins ci-dessous).
+        val pressureClaim: UIKitMemoryPressureClaim =
+            memoryPressure.newHost(UIKitNotificationCenterMemoryPressureSeam)
+
         // 3. Source de lifecycle + observations, avec rollback par étape. Le relais pointe
         //    vers le controller créé plus bas : la référence atomique est lue par les closures
         //    (null avant le set = rien à relayer — jamais d'effet avant Running).
@@ -174,6 +234,7 @@ public object KadreIos {
         val initial = UIKitLifecycleReducer.initial(windowScene)
             ?: run {
                 ownership.releaseAfterAttachFailure()
+                releasePressureClaim(pressureClaim)
                 return KadreResult.Failure(KadreFailure.InvalidRequest("window"))
             }
         val relay = AtomicReference<UIKitSessionRelay?>(null)
@@ -185,6 +246,7 @@ public object KadreIos {
         )) {
             is KadreResult.Failure -> {
                 ownership.releaseAfterAttachFailure()
+                releasePressureClaim(pressureClaim)
                 return KadreResult.Failure(observed.reason)
             }
             is KadreResult.Success -> Unit
@@ -252,9 +314,39 @@ public object KadreIos {
                 // substitue la seule capability `requestWindow` (`Unsupported` sans provider —
                 // le manager refuse ; `OpenedInNewSession` avec).
                 val windows: WindowManager = sceneManager
+                // Le port display de CETTE session (phase 8, Task 2) : l'inventaire `UIScreen`
+                // relu EN ENTIER à chaque fire, l'écran de LA fenêtre de la session réglé HostViewport par la
+                // ruling de la couture, les autres écrans Physical (tvOS : l'unique écran EST
+                // l'écran de la fenêtre — un seul HostViewport). Le resolver est relu à chaque
+                // relecture du port (un fire relit tout, la couture y comprise) ; le port est
+                // FERMÉ par les composants (RuntimeSessionComponents.close → displayPort) — le
+                // closeAction ci-dessous ne le referme jamais, et le seam qu'il possède meurt
+                // avec lui.
+                val displaySource = UIKitScreenDisplaySource()
+                val displayPort = UIKitDisplayPort(
+                    source = displaySource,
+                    hostScreenResolver = { displaySource.factsOf(window.screen) },
+                    displayTypeRuling = { isHostScreen ->
+                        if (isHostScreen) DisplayType.HostViewport else DisplayType.Physical
+                    },
+                )
+                // Les ports manette/device de CETTE session (phase 8, Task 4) : projections de
+                // l'inventaire process ci-dessus — `gamepads` ne liste QUE les profils étendus
+                // (la micro-manette Siri Remote vit comme device `Other` du port générique,
+                // ruling tvOS), `devices` porte manettes + clavier coalescé + souris, le
+                // clavier comme FAIT SEUL (la livraison des touches reste au binding phase 5).
+                // Les deux ports sont FERMÉS par les composants (RuntimeSessionComponents.close
+                // → gamepadPort/inputDevicePort) — le closeAction ci-dessous ne les referme
+                // JAMAIS et ne ferme JAMAIS la source process ; le dernier port libère
+                // l'observation du seam (miroir AppKit), la prochaine attach la réinstalle.
+                val gamepadPort = controllerInventory.openGamepadPort()
+                val inputDevicePort = controllerInventory.openInputDevicePort()
                 RuntimeSessionComponents(
                     windows = windows,
                     primarySurfaceProvider = { runtime.attachedPrimarySurface },
+                    displayPort = displayPort,
+                    gamepadPort = gamepadPort,
+                    inputDevicePort = inputDevicePort,
                     closeAction = {
                         sceneManager.close()
                         runtime.close()
@@ -262,25 +354,66 @@ public object KadreIos {
                 )
             },
             initialLifecycleState = toLifecycleState(initial),
+            initialLifecycleCapabilities = pressureClaim.capabilities,
             failureReporter = failureReporter,
             sessionObserver = RuntimeSessionObserver { _, _ ->
                 // Terminaison : observers puis réservation (ordre non négociable Task 3).
                 ownership.release()
+                // La terminaison du host libère le créneau mémoire (Task 3). Sur CE seam,
+                // l'attach EST l'unité de host (une session par scène) : chaque terminaison du
+                // runtime de session — close de session, hostDetached, arrêt — passe ICI et
+                // libère le créneau ; le DERNIER libéré ferme la source process (retrait exact
+                // du token posé). Une RÉVOCATION seule (admission révoquée, la session
+                // terminant plus tard) ne passe PAS ici — le créneau vit jusqu'à la vraie
+                // terminaison. Une déregistration lançante est SIGNALÉE sur le canal de
+                // reporting, comme toute perte de terminal — elle ne remplace jamais la
+                // traversée du terminal.
+                try {
+                    pressureClaim.hostTerminated()
+                } catch (cause: Throwable) {
+                    runCatching { failureReporter.report(cause) }
+                }
             },
         )
         relay.store(UIKitSessionRelay(controller))
 
         // 5. attach — échec → rollback complet (patron Web : observers + réservation, le scope
-        //    créé pour l'occasion est annulé). Le scope appartient à l'adaptateur.
+        //    créé pour l'occasion est annulé). Le scope appartient à l'adaptateur. Le relais
+        //    mémoire (Task 3) est branché sur l'attach RÉUSSI — chaque warning mappé par la
+        //    source process atteint CE host ; le `runCatching` absorbe la course
+        //    signal/terminal (un `emitMemoryPressure` sur un host détaché jette — le runtime
+        //    exige un host attaché et `Available` ; le signal perdu est une observation, le
+        //    prochain warning rétablit — le même parti pris que le relais de lifecycle).
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
         val attached = controller.attach(scope, applicationFactory, policy, launch)
         return when (attached) {
-            is KadreResult.Success -> attached
+            is KadreResult.Success -> {
+                pressureClaim.wire { level -> runCatching { controller.emitMemoryPressure(level) } }
+                attached
+            }
             is KadreResult.Failure -> {
                 scope.cancel()
                 ownership.releaseAfterAttachFailure()
+                releasePressureClaim(pressureClaim)
                 KadreResult.Failure(attached.reason)
             }
+        }
+    }
+
+    /**
+     * Le rollback du créneau mémoire d'un attach qui échoue (Task 3) : un attach qui échoue
+     * ne laisse la source process installée pour personne. L'absorption est SYMÉTRIQUE au
+     * chemin terminal ([sessionObserver] ci-dessus) : une déregistration lançante ne
+     * remplace JAMAIS l'issue de l'attach — le rejet du contrôleur reste un
+     * `KadreResult.Failure` retourné — elle est SIGNALÉE sur le canal de reporting, comme
+     * toute perte de terminal. Idempotent avec la terminaison : un créneau ne quitte qu'une
+     * fois.
+     */
+    private fun releasePressureClaim(claim: UIKitMemoryPressureClaim) {
+        try {
+            claim.hostTerminated()
+        } catch (cause: Throwable) {
+            runCatching { UIKitAttachDiagnostics.report(cause) }
         }
     }
 }

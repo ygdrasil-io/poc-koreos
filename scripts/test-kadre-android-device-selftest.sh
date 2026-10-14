@@ -80,6 +80,30 @@ if [ "${1:-}" = "devices" ]; then
   exit 0
 fi
 
+if [ "${1:-}" = "-s" ] && [ "${3:-}" = "shell" ] && [ "${4:-}" = "settings" ] && [ "${6:-}" = "global" ] && [ "${7:-}" = "overlay_display_devices" ]; then
+  # La syntaxe RÉELLE de la commande settings d'Android : le verbe en $5
+  # (`settings put global overlay_display_devices <spec>` / `settings delete …`),
+  # jamais `settings global <key> <verb>`. Pour `put`, la SPÉCIFICATION ($8) est
+  # journalisée avec le verbe — le provisioning doit porter la valeur exacte,
+  # pas seulement le verbe.
+  case "$scenario" in
+    settings-fail)
+      printf 'fake settings failure\n' >&2
+      exit 1
+      ;;
+    *)
+      if [ -n "${FAKE_ADB_SETTINGS_LOG:-}" ]; then
+        if [ "$5" = "put" ]; then
+          printf '%s %s\n' "$5" "${8:?fake adb: settings put requires the spec in \$8}" >>"$FAKE_ADB_SETTINGS_LOG"
+        else
+          printf '%s\n' "$5" >>"$FAKE_ADB_SETTINGS_LOG"
+        fi
+      fi
+      exit 0
+      ;;
+  esac
+fi
+
 if [ "${1:-}" = "-s" ] && [ "${3:-}" = "shell" ] && [ "${4:-}" = "getprop" ] && [ "${5:-}" = "sys.boot_completed" ]; then
   case "$scenario" in
     boot0)
@@ -398,6 +422,74 @@ workflow_guard() {
   echo "PASS: workflow guard — no continue-on-error, no '|| true', no masquerading if: always() gate-allow"
 }
 workflow_guard
+record
+
+# --- overlay display provisioning (phase 11, AND-011) --------------------------
+# The sourced functions are driven against the fake adb: provision puts the exact
+# spec, remove deletes the setting, remove NEVER fails (even when adb errors) and
+# never issues anything without a selected serial.
+
+provisioning_case() {
+  local label="$1" scenario="$2" expected_log="$3"
+  local log="$FIXTURE_DIR/settings-$label.log"
+  : >"$log"
+  (
+    export PATH="$FAKE_BIN:$PATH"
+    export KADRE_ANDROID_ADB="$FAKE_BIN/adb"
+    export ANDROID_SERIAL=emulator-5554
+    export FAKE_ADB_SCENARIO="$scenario"
+    export FAKE_ADB_SETTINGS_LOG="$log"
+    # shellcheck source=test-kadre-android-device.sh
+    source "$DEVICE_SCRIPT"
+    remove_overlay_display
+    provision_overlay_display
+    remove_overlay_display
+  ) >/dev/null 2>&1
+  local actual
+  actual="$(cat "$log")"
+  if [ "$actual" != "$expected_log" ]; then
+    fail "provisioning ($label): wrong adb settings sequence" "expected: [$expected_log] got: [$actual]"
+    return 1
+  fi
+  echo "PASS: provisioning ($label) — put/delete sequence exact (verb + overlay spec), cleanup best-effort"
+}
+
+provisioning_case put-delete-put-delete unique "$(printf 'delete\nput 1280x720/160\ndelete')"
+record
+
+remove_without_serial() {
+  (
+    export PATH="$FAKE_BIN:$PATH"
+    export KADRE_ANDROID_ADB="$FAKE_BIN/adb"
+    unset ANDROID_SERIAL
+    # shellcheck source=test-kadre-android-device.sh
+    source "$DEVICE_SCRIPT"
+    remove_overlay_display
+  ) >/dev/null 2>&1 || {
+    fail "provisioning: remove without a selected serial must be a silent no-op"
+    return 1
+  }
+  echo "PASS: provisioning — remove without ANDROID_SERIAL is a no-op"
+}
+remove_without_serial
+record
+
+remove_tolerant_to_adb_failure() {
+  (
+    export PATH="$FAKE_BIN:$PATH"
+    export KADRE_ANDROID_ADB="$FAKE_BIN/adb"
+    export ANDROID_SERIAL=emulator-5554
+    export FAKE_ADB_SCENARIO=settings-fail
+    # shellcheck source=test-kadre-android-device.sh
+    source "$DEVICE_SCRIPT"
+    remove_overlay_display
+  ) >/dev/null 2>&1 || {
+    fail "provisioning: remove must tolerate an adb failure (never mask the gate outcome)"
+    return 1
+  }
+  echo "PASS: provisioning — remove tolerates adb failure"
+}
+remove_tolerant_to_adb_failure
 record
 
 echo "PASS: android device selection + portable watchdog contract holds ($SCENARIOS scenario checks)"

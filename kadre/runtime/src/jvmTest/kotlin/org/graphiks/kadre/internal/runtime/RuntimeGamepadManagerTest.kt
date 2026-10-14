@@ -49,6 +49,33 @@ import kotlin.time.Duration.Companion.hours
 
 class RuntimeGamepadManagerTest {
     @Test
+    fun failedControllerReadPublishesUnavailableAndEmptyRecoveryForBothPorts() = runTest {
+        val pads = FakeGamepadPort()
+        val devices = FakeInputDevicePort()
+        val manager = RuntimeGamepadManager(
+            port = pads,
+            inputPort = devices,
+            eventStampSource = { EventStamp(SessionSequence(0), SessionInstant(0.nanoseconds), null) },
+            collectorAllocator = RuntimeEventCollectorAllocator(4),
+            maxCollectorsPerFlow = 1,
+            effectScope = this,
+            maxConcurrentEffects = 4,
+            gamepadRouting = GamepadRouting.AllForegroundSessions,
+            initialLifecycleState = lifecycle(VisibilityState.Foreground, ActivationState.Active),
+        )
+        val failure = KadreFailure.TemporarilyUnavailable(true)
+        pads.fireInventoryFailure(failure)
+        assertEquals(failure, assertIs<DeviceInventory.Unavailable>(manager.state.value.inventory).failure)
+        devices.fireInventoryFailure(failure)
+        pads.fireInventoryFailure(null)
+        assertIs<DeviceInventory.Unavailable>(manager.state.value.inventory)
+        devices.fireInventoryFailure(null)
+        val recovered = assertIs<DeviceInventory.Enumerated>(manager.state.value.inventory)
+        assertEquals(emptyList(), recovered.gamepads)
+        assertEquals(emptyList(), recovered.devices)
+        manager.close()
+    }
+    @Test
     fun initialInputDevicesShareTheAtomicDeviceInventoryWithGamepads() = runTest {
         val inputPort = FakeInputDevicePort(
             devices = listOf(inputDevice(key = 3L, name = "Keyboard", kind = InputDeviceKind.Keyboard)),
@@ -621,6 +648,12 @@ class RuntimeGamepadManagerTest {
 private class FakeGamepadPort(
     initialGamepads: List<GamepadPortGamepad> = emptyList(),
 ) : GamepadPort {
+    override var inventoryFailure: KadreFailure? = null
+        private set
+    fun fireInventoryFailure(failure: KadreFailure?) {
+        inventoryFailure = failure
+        checkNotNull(observer)(GamepadPortEvent.InventoryChanged)
+    }
     private var observer: ((GamepadPortEvent) -> Unit)? = null
     val effects = mutableListOf<RecordingGamepadPortEffect>()
     val routingUpdates = mutableListOf<GamepadPortRouting>()
@@ -662,6 +695,12 @@ private class FakeGamepadPort(
 private class FakeInputDevicePort(
     override val devices: List<InputDevicePortDevice> = emptyList(),
 ) : InputDevicePort {
+    override var inventoryFailure: KadreFailure? = null
+        private set
+    fun fireInventoryFailure(failure: KadreFailure?) {
+        inventoryFailure = failure
+        checkNotNull(observer)(InputDevicePortEvent.InventoryChanged)
+    }
     private var observer: ((InputDevicePortEvent) -> Unit)? = null
 
     override fun installObserver(observer: (InputDevicePortEvent) -> Unit): AutoCloseable {

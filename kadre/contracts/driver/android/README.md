@@ -1,17 +1,17 @@
 # Android emulator contract driver
 
 This non-published JVM project runs the public Android host-attachment proof of
-phases 0 through 9 on a real emulator. It is a contract driver, not an
+phases 0 through 11 on a real emulator. It is a contract driver, not an
 implementation API: it forks the instrumented consumer build, executes its
 scenarios on the attached device, and turns the JUnit output into the canonical
-`AND-001` through `AND-010` evidence with the validator's own
+`AND-001` through `AND-011` evidence with the validator's own
 generator. English
 prose, like the Web driver README it mirrors; everything else in this phase is
 documented in French in the sources.
 
 ## What the driver proves
 
-Ten contracts, all active in the registry
+Eleven contracts, all active in the registry
 ([contracts.tsv](../../registry/contracts.tsv)), oracle `O3`, mapped in
 [evidence.tsv](contracts/evidence.tsv):
 
@@ -472,7 +472,7 @@ at expiry with exit code 124, escalated to `SIGKILL` for survivors — the
 Gradle daemon and its descendants no longer outlive the killed client (the
 phase-0 "daemon survives" note is obsolete). The gate task is
 `:kadre:contracts:validator:androidContractsCheck`: registry validation plus
-Android contract evidence validation against **`AND-001` through `AND-010`** —
+Android contract evidence validation against **`AND-001` through `AND-011`** —
 one canonical JSON per contract, all from the same instrumented emulator gate
 (48 consumer instrumented tests plus the compose-showcase sample's two — 50
 mapped — and the seven `AndroidLeakCyclesTest` leak-cycle testcases — 57
@@ -829,7 +829,14 @@ carried by the evidence itself:
   consumer run carries the facade-consumer scenarios, and a SECOND forked run
   executes the migrated compose-showcase sample's own instrumented APK
   (`androidComposeShowcaseSingleSession`, `androidLegacyTypesAbsent`); the
-  producer globs BOTH APKs' XML into the same per-engine JUnit copy.
+  producer globs BOTH APKs' XML into the same per-engine JUnit copy;
+- `AND-011` through the same gate — the phase 11 secondary-display presentation
+  session (below): the consumer run carries the eight scenarios of
+  `KadreConsumerSecondaryDisplayTest`, and the GATE SCRIPT (not the tests)
+  provisions the emulator's simulated secondary display
+  (`settings put global overlay_display_devices 1280x720/160`) before the run
+  and removes it on any exit (trap) — the scenarios themselves poll the
+  DisplayManager inventory for the overlay display to appear asynchronously.
 
 **`AND-010`** — the phase 9 samples-migration and negative-consumer proof
 (source `ANDROID-IMPLEMENTATION-ROADMAP.md#Phase 9 — Façade Java, Compose et
@@ -856,6 +863,45 @@ semantics for a sample — the refusal is logged, never replayed). The old GPU
 sample (`hello-triangle-android-capture`) is NOT migrated: the wgpu4k
 renderer is sample responsibility, deferred with the phase 8 `CapturePort` as
 the future primitive.
+
+
+**`AND-011`** — the phase 11 secondary-display presentation session (source
+`docs/superpowers/plans/2026-10-13-android-p11-multidisplay-presentation.md`).
+Seven scenarios and one sentinel, all carried by
+`KadreConsumerSecondaryDisplayTest` in the consumer run:
+
+| evidenceId | kind | what it exercises |
+|---|---|---|
+| `android-secondary-display-opens-session` | scenario | attach on the simulated overlay display: session Running, surface at the REAL metrics of the simulated screen (1280x720 recollated to an independent SDK reading, scale 1.0) and the first show LEVEL-TRIGGERED (a RESUMED host shows the media at attach) |
+| `android-secondary-display-no-window-claim` | sentinel | the presentation session claims NO window field in v1: the published capability is `Unsupported(RequestWindow)` and `requestWindow().await()` terminates `Rejected(Unsupported(RequestWindow))` — the honest table of a manager built `native = null` |
+| `android-secondary-display-input-via-presentation` | scenario | a REAL `input -d <displayId> tap` on the overlay display (the shell channel — `Instrumentation.sendKeyDownUpSync` cannot target a secondary display) traverses the media window's `Window.Callback` chain into the PRESENTATION session's input flow; per-session routing is additionally pinned host-side by `AndroidPresentationInputTest` |
+| `android-secondary-display-display-removal-terminal` | scenario | `settings delete global overlay_display_devices`: the session goes terminal `Stopped(HostDetached)` within the bounded poll, never resurrects, and the registry is released (the same contentView re-attaches on a re-provisioned display) |
+| `android-secondary-display-attached-view-denied` | scenario | a contentView ALREADY attached to the main window is refused `InvalidRequest("contentView")` WITHOUT reserving — the valid attach on the same display that follows succeeds |
+| `android-secondary-display-same-display-twice-denied` | scenario | the displayId reserved BY VALUE: a second attach on the same display is refused `AlreadyInUse(Host)` while the first session stays Running; after its termination the SECOND reservation cycle on the same displayId succeeds |
+| `android-secondary-display-coexists-with-main-session` | scenario | the Activity form AND the presentation form live on the SAME Activity: both Running, cross input isolation observed BOTH ways on the real channels (a targeted tap on the overlay feeds the presentation session alone, a tap on the main display feeds the main session alone), and the main session survives the presentation's termination |
+| `android-secondary-display-activity-stop-hides` | scenario | the honest lifecycle channel (`ActivityScenario.moveToState(CREATED)` — the only move that traverses PAUSED then STOPPED on API 35): STOP hides the media, START shows it again, two full cycles, the session NEVER terminal |
+
+The overlay display is a SIMULATION display: it carries `FLAG_PRESENTATION` and
+is classified Virtual by the DisplayPort's Physical/Virtual rule (the
+documented P7 limit) — the contract's assertions target the display's METRICS
+and IDENTITY, never `DisplayType.Physical`. The input-via-presentation and
+coexistence scenarios document their channels in the test KDoc: the shell
+`input -d` is the only injection channel that can target display 2, and the
+per-session routing proof is shared with the host-side composition test.
+
+### Exit gate of roadmap phase 11
+
+Same script, the overlay provisioning riding along
+(`scripts/test-kadre-android-contracts.sh` puts
+`overlay_display_devices 1280x720/160` before its Gradle run and deletes it on
+any exit — the workflow needs no extra step). From the booted emulator:
+`scripts/test-kadre-android-contracts.sh --serial <serial>` — the gate runs
+`:kadre:contracts:validator:androidContractsCheck` end to end (publish, the
+63 consumer testcases including the eight AND-011 ones, the compose-showcase
+sample's two from the second forked run — 65 executed —
+`AND-001.json` through `AND-011.json`, eleven canonical JSONs, then the
+registry and evidence validation). Measured wall time on the local API 35
+emulator: 5m57s (watchdog 900s, CI hard cap 15 min).
 
 ### Exit gate of roadmap phase 9
 
@@ -892,11 +938,11 @@ roadmap checklist is carried by the evidence itself:
   of the EXECUTED sample APK (no `AndroidKadreRuntime`, no kadre-old
   `EventLoop` — exact FQNs, the kotlinx-coroutines `EventLoop` not a false
   positive), bounded by the two coverage guards;
-- `AND-001` through `AND-010` together — 50 instrumented tests, one canonical
-  JSON per contract, all from the same gate invocation (47 mapped scenarios
-  and 21 sentinels across the ten contracts; the executed testcase count grew
-  independently of the mapped scenarios — the facade-consumer classes carry
-  two unmapped extras).
+- `AND-001` through `AND-011` together — 65 instrumented tests, one canonical
+  JSON per contract, all from the same gate invocation (54 mapped scenarios
+  and 22 sentinels across the eleven contracts; the executed testcase count
+  grew independently of the mapped scenarios — the facade-consumer classes
+  carry two unmapped extras, the leak-cycle class seven).
 
 **The quick-reattach race the binding documents.** After a terminal detach,
 a re-attach attempted WHILE the P1 reservation is still held (before the
@@ -945,7 +991,7 @@ cancel-in-progress, the web-nightly 40-minute timeout). The matrix is API 24
 "versions minimum et courante") and API 35 (current), `fail-fast: false` —
 two independent measurements of the same commit, one red leg must not hide
 the other. Each leg runs TWO measurements on its booted emulator: the full
-contract gate (the ten contracts, real consent dialogs included), then the
+contract gate (the eleven contracts, real consent dialogs included), then the
 leak-cycles class ALONE (AGP's
 `-Pandroid.testInstrumentationRunnerArguments.class=...` filter on the
 consumer's `connectedDebugAndroidTest` — the devicetest module is a library
@@ -1023,7 +1069,7 @@ writes `emulator-api-<sdk>-<abi>`. On the phase 0 AVD this is
 are attached. Every run resets the per-engine JUnit copy directory first, so a
 stale XML from an earlier run can never inflate the evidence identity. The
 producer writes one canonical JSON per active android contract (currently
-`AND-001` through `AND-010`), each pinned to the current HEAD
+`AND-001` through `AND-011`), each pinned to the current HEAD
 commit.
 
 ## Evidence mapping

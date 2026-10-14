@@ -9,6 +9,13 @@
 #                              (exactly one eligible device; eligible = booted);
 #   ensure_booted_device     — bounded wait for sys.boot_completed=1, fast-fail
 #                              afterwards (the phase-0 unbounded loop is gone);
+#   provision_overlay_display — phase 11 (AND-011): puts the overlay_display_devices
+#                              global setting on the selected device (the simulated
+#                              secondary display the gate's scenarios attach to;
+#                              the TESTS poll the DisplayManager inventory);
+#   remove_overlay_display   — the best-effort, idempotent cleanup (never fails
+#                              the caller — the gate's own outcome is never
+#                              masked by a cleanup hiccup);
 #   run_with_watchdog        — runs a command in its own process group
 #                              (`setsid` where available — Linux CI — else a
 #                              backgrounded subshell exec'ing the command),
@@ -17,12 +24,16 @@
 #                              (GNU timeout semantics; no perl, no GNU-only
 #                              tools — portable macOS + Linux).
 # Executed directly it performs selection + boot fast-fail, then either runs
-# `-- <command...>` under the watchdog or prints the resolved serial.
+# `-- <command...>` under the watchdog or prints the resolved serial. The overlay
+# provisioning is NOT wired into the direct path (generic debugging affordance):
+# the contracts gate (test-kadre-android-contracts.sh) provisions around its own
+# Gradle run with an EXIT-trap cleanup.
 #
 # Environment: KADRE_ANDROID_ADB, ANDROID_SERIAL, ANDROID_HOME,
 #   KADRE_ANDROID_BOOT_TIMEOUT_S (60), KADRE_ANDROID_BOOT_POLL_S (2),
 #   KADRE_ANDROID_WATCHDOG_TIMEOUT_S (900), KADRE_WATCHDOG_POLL_S (1),
-#   KADRE_WATCHDOG_KILL_GRACE_S (10), KADRE_WATCHDOG_MODE (auto|setsid|subshell).
+#   KADRE_WATCHDOG_KILL_GRACE_S (10), KADRE_WATCHDOG_MODE (auto|setsid|subshell),
+#   KADRE_ANDROID_OVERLAY_DISPLAY_SPEC (1280x720/160).
 
 set -euo pipefail
 
@@ -162,6 +173,35 @@ wait_for_emulator_serial() { # <launcher-pid> [timeout-seconds] — prints the s
     sleep "$poll_s"
     waited="$(awk -v waited="$waited" -v poll="$poll_s" 'BEGIN { printf "%.3f", waited + poll }')"
   done
+}
+
+# --- overlay simulated display provisioning (phase 11, AND-011) ----------------
+#
+# The AND-011 scenarios attach a presentation session to the SIMULATED secondary
+# display of the emulator ("Simulate secondary displays" / overlay display). The
+# gate provisions it BEFORE the instrumented run and removes it AFTER (the tests
+# themselves poll the DisplayManager inventory — the script never sleeps on the
+# asynchronous creation). Removal is best-effort and idempotent: a cleanup that
+# fails (device gone, adb hiccup) must never mask the gate's own outcome.
+
+# The provisioning contract: 1280x720 at density 160 (scale factor 1.0 — the
+# scenarios assert these exact metrics against the SDK's own reading).
+KADRE_ANDROID_OVERLAY_DISPLAY_SPEC="${KADRE_ANDROID_OVERLAY_DISPLAY_SPEC:-1280x720/160}"
+
+provision_overlay_display() { # [spec] — puts the global setting on the selected device
+  require_adb || return 1
+  if [ -z "${ANDROID_SERIAL:-}" ]; then
+    echo "test-kadre-android-device: provision_overlay_display requires a selected ANDROID_SERIAL" >&2
+    return 1
+  fi
+  local spec="${1:-$KADRE_ANDROID_OVERLAY_DISPLAY_SPEC}"
+  "$ADB" -s "$ANDROID_SERIAL" shell settings put global overlay_display_devices "$spec"
+}
+
+remove_overlay_display() { # best-effort, idempotent — never fails the caller
+  require_adb || return 0
+  [ -n "${ANDROID_SERIAL:-}" ] || return 0
+  "$ADB" -s "$ANDROID_SERIAL" shell settings delete global overlay_display_devices >/dev/null 2>&1 || true
 }
 
 # --- portable process-group watchdog -----------------------------------------

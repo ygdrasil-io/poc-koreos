@@ -51,6 +51,13 @@ fi
 select_android_serial
 ensure_booted_device "$ANDROID_SERIAL" "$boot_timeout"
 
+# Phase 11 (AND-011) : l'écran simulé — le provisioning AVANT la gate, le retrait
+# APRÈS (trap : toute issue de la gate, succès comme échec, rend l'écran au système).
+# Les scénarios instrumentés pollent l'inventaire DisplayManager eux-mêmes (≤ 10 s) :
+# le script ne dort jamais sur la création asynchrone du display overlay.
+provision_overlay_display
+trap 'remove_overlay_display' EXIT INT TERM
+
 cd "$repo_root"
 gradle_status=0
 run_with_watchdog "${KADRE_ANDROID_WATCHDOG_TIMEOUT_S:-900}" \

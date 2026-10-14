@@ -69,16 +69,22 @@ internal class WaylandEventPump(
             when (ops.poll(wake.readFd, watchWrite)) {
                 PollOutcome.DisplayReady -> break
                 // EINTR : la lecture préparée subsiste, on repoll — jamais un
-                // second prepare_read. WakeOnly : DRAINER le wake (sinon il
-                // resterait lisible et la boucle tournerait à vide), puis repoll.
+                // second prepare_read.
                 PollOutcome.Interrupted -> continue
                 PollOutcome.WakeOnly -> {
                     if (stopRequested.get()) {
                         ops.cancelRead()
                         return PumpStep.Stopped
                     }
+                    // Réveil applicatif hors arrêt : une action a été
+                    // marshalée vers le thread pompe (création de fenêtre).
+                    // La lecture préparée est annulée et le pas rendu à la
+                    // boucle hôte — c'est elle qui draine la file d'actions ;
+                    // repoller ici la priverait du marshall (le poll se
+                    // rebloquerait sur un compositor silencieux).
                     wake.drain()
-                    continue
+                    ops.cancelRead()
+                    return PumpStep.Rearm
                 }
                 PollOutcome.Lost -> {
                     ops.cancelRead()

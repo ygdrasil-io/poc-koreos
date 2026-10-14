@@ -52,6 +52,10 @@ public suspend fun <R> Window.withDesktopHandle(
                 is RuntimeDesktopNativeWindowHandle.Win32 -> DesktopNativeWindowHandle.Win32(
                     native.hwnd,
                 )
+                is RuntimeDesktopNativeWindowHandle.Wayland -> DesktopNativeWindowHandle.Wayland(
+                    native.displayAddress,
+                    native.surfaceAddress,
+                )
             },
         )
     }
