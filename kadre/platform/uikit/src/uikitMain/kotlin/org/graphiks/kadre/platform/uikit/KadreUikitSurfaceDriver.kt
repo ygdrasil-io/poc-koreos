@@ -397,13 +397,13 @@ public class KadreUikitLifecycleSignalCapture private constructor(scope: KadreSc
 
     init {
         collectScope.launch {
-            collectAlive = true
+            lock.withLock { collectAlive = true }
             try {
                 scope.lifecycle.signals.collect { signal -> record(signal) }
             } catch (t: Throwable) {
-                collectError = t.toString()
+                lock.withLock { collectError = t.toString() }
             } finally {
-                collectAlive = false
+                lock.withLock { collectAlive = false }
             }
         }
     }
@@ -412,7 +412,6 @@ public class KadreUikitLifecycleSignalCapture private constructor(scope: KadreSc
         val kind = when (signal) {
             is HostSignal.MemoryPressure ->
                 if (signal.level == MemoryPressureLevel.Moderate) 1 else 2
-            else -> 2
         }
         lock.withLock {
             counts[0] += 1
