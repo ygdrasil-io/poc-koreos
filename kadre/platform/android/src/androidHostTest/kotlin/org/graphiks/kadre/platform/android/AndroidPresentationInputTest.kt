@@ -1,6 +1,7 @@
 package org.graphiks.kadre.platform.android
 
 import android.view.KeyEvent
+import java.util.concurrent.atomic.AtomicReference
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -11,10 +12,14 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import org.graphiks.kadre.application.KadreApplication
 import org.graphiks.kadre.application.KadreApplicationFactory
+import org.graphiks.kadre.application.KadreScope
 import org.graphiks.kadre.application.KadreSession
+import org.graphiks.kadre.diagnostics.Capability
+import org.graphiks.kadre.diagnostics.FeatureAvailability
 import org.graphiks.kadre.diagnostics.KadreFailure
 import org.graphiks.kadre.diagnostics.KadrePlatform
 import org.graphiks.kadre.diagnostics.KadreResult
+import org.graphiks.kadre.input.InputCapabilities
 import org.graphiks.kadre.input.KeyState
 import org.graphiks.kadre.policy.KadrePolicies
 import kotlin.test.Test
@@ -68,6 +73,36 @@ class AndroidPresentationInputTest {
         assertTrue(host.mainInputJournal(main).isEmpty()) // cross-talk = échec
     }
 
+    /**
+     * Le show du RATTRAPAGE lifecycle pendant l'install (phase 11, Task 4) : sur un hôte
+     * RESUMED, `addObserver` livre ON_CREATE puis ON_START au nouvel observer — et ce START
+     * level-triggered montre le média PENDANT l'étape d'installation du binding, AVANT
+     * `controller.attach` : la chaîne d'entrée est posée et `observationInstalled(true)`
+     * publié alors que la delivery d'entrée N'EXISTE PAS ENCORE (elle naît à
+     * `installSessionConfiguration`, à l'attach du runtime). Le fait câblé doit SURVIVRE à
+     * la configuration — la surface le retient et le rejoue sur la delivery qu'elle
+     * construit (le parti pris `gamepadRoute`) : sans lui, la delivery naîtrait non
+     * installée et bufferait chaque observation pour toujours (caps Unsupported, zéro
+     * événement — le relevé device de la phase 11). L'oracle : les capabilities d'entrée de
+     * LA session deviennent honnêtes après la configuration, et l'observation d'UNE touche
+     * par la chaîne posée pendant l'install atteint le journal de session.
+     */
+    @Test
+    fun `le show du rattrapage lifecycle pendant l install livre le fait cable a la configuration`() {
+        val host = PresentationInputHost()
+        val captured = AtomicReference<KadreScope?>(null)
+        val session = host.attachWithCatchupShow(display(9L), captured)
+        val scope = awaitCapturedScope(captured)
+
+        // Le fait câblé a survécu à la configuration : les caps d'entrée de LA session sont
+        // honnêtes (Available derrière un observateur réellement installé — sémantique C).
+        awaitInputCapability(scope) { caps -> caps.touch == FeatureAvailability.Available }
+
+        // Et la chaîne posée PENDANT l'install délivre : une touche atteint le journal.
+        host.fakeSource!!.dispatchKeyToPresentationWindow(KeyEvent.KEYCODE_A)
+        assertEquals(listOf(keyObserved(KeyEvent.KEYCODE_A)), host.castInputJournal(session))
+    }
+
     @Test
     fun `fermeture du media restitue la callback d origine`() {
         val host = PresentationInputHost()
@@ -88,6 +123,34 @@ class AndroidPresentationInputTest {
     private data class FakeDisplay(val key: Long)
 
     private fun display(displayKey: Long): FakeDisplay = FakeDisplay(displayKey)
+
+    /** Le scope capturé par l'application suspendue — polling borné, jamais une lecture en course. */
+    private fun awaitCapturedScope(captured: AtomicReference<KadreScope?>): KadreScope {
+        val deadline = System.currentTimeMillis() + 5_000L
+        while (System.currentTimeMillis() < deadline) {
+            captured.get()?.let { return it }
+            Thread.sleep(10L)
+        }
+        error("the session's KadreScope was never captured")
+    }
+
+    /**
+     * Les caps d'entrée de LA session — polling borné sur l'état publié du SurfaceInput :
+     * le stimulus structurel traverse le réducteur runtime (coroutine de session) avant la
+     * publication, l'attente est bornée, jamais un sleep aveugle.
+     */
+    private fun awaitInputCapability(
+        scope: KadreScope,
+        predicate: (InputCapabilities) -> Boolean,
+    ): InputCapabilities {
+        val deadline = System.currentTimeMillis() + 5_000L
+        while (System.currentTimeMillis() < deadline) {
+            val caps = scope.primarySurface.value?.input?.state?.value?.capabilities
+            if (caps != null && predicate(caps)) return caps
+            Thread.sleep(10L)
+        }
+        error("the input capabilities never satisfied the predicate")
+    }
 
     /** L'observation attendue d'une touche pressée — les primitives du dispatch de test. */
     private fun keyObserved(nativeKeyCode: Int) = AndroidInputObservation.Key(
@@ -265,6 +328,49 @@ class AndroidPresentationInputTest {
         }
 
         /**
+         * L'attach du RATTRAPAGE (phase 11, Task 4) : un hôte RESUMED dont l'étape
+         * d'installation reproduit le rattrapage de l'observer lifecycle SDK — `addObserver`
+         * sur un lifecycle RESUMED livre ON_CREATE puis ON_START au nouvel observer, et ce
+         * START montre le média PENDANT l'install, avant `controller.attach` : la chaîne
+         * d'entrée et son fait câblé précèdent la configuration de session — l'ORDRE exact
+         * du device, celui que le relevé de la phase 11 a pris en défaut.
+         */
+        fun attachWithCatchupShow(
+            display: FakeDisplay,
+            captured: AtomicReference<KadreScope?>,
+        ): KadreSession {
+            val journal = mutableListOf<AndroidInputObservation>()
+            val window = FakePresentationWindow()
+            val source = FakePresentationInputSource(facts(display.key), window)
+            fakeSource = source
+            val factory = KadreApplicationFactory {
+                KadreApplication {
+                    captured.set(this)
+                    awaitCancellation()
+                }
+            }
+            val session = attach(
+                display,
+                Any(),
+                source,
+                factory,
+                ownerState = 4, // RESUMED : le rattrapage de l'observer montre le média
+                installHostLifecycle = { lifecycle ->
+                    // Le rattrapage du LifecycleRegistry SDK : ON_CREATE puis ON_START livrés
+                    // au nouvel observer DANS l'étape d'installation — le START montre le média
+                    // avant `controller.attach` (l'ordre exact du device).
+                    lifecycle.dispatch(AndroidHostEvent.LifecycleCreated)
+                    lifecycle.dispatch(AndroidHostEvent.LifecycleStarted)
+                },
+                inputChainFactory = { windowToken, wiring ->
+                    (windowToken as? FakePresentationWindow)?.let { FakeInputChain(it, wiring, journal) }
+                },
+            ).session()
+            journals[session] = journal
+            return session
+        }
+
+        /**
          * La session « principale » du cas cross-talk — la MÊME couture, un autre écran, SON
          * journal : la forme Activity n'est pas conduisible sur hôte (fenêtre SDK), la
          * propriété épinglée est le routage par session du câblage que la composition
@@ -289,6 +395,8 @@ class AndroidPresentationInputTest {
             view: Any,
             source: FakePresentationInputSource,
             factory: KadreApplicationFactory,
+            ownerState: Int = 2,
+            installHostLifecycle: (AndroidPresentationLifecycle) -> Unit = { },
             inputChainFactory: (Any?, AndroidSessionInputWiring) -> AndroidWindowInputChain?,
         ): KadreResult<KadreSession> = AndroidHostSession.attachSecondaryDisplay(
             request = AndroidPresentationAttachRequest(
@@ -297,7 +405,7 @@ class AndroidPresentationInputTest {
                 isContentViewAttachedToWindow = false,
                 displayKey = display.key,
                 isDisplayResolvable = true,
-                ownerState = 2, // CREATED : le média attend le premier START
+                ownerState = ownerState, // CREATED par défaut : le média attend le premier START
                 parentScopeJob = scope.coroutineContext[Job],
                 parentScopeJobIsActive = true,
             ),
@@ -305,7 +413,7 @@ class AndroidPresentationInputTest {
             applicationFactory = factory,
             policy = KadrePolicies.Default,
             sourceFactory = { source },
-            installHostLifecycle = { }, // le pilotage lifecycle n'est pas conduit ici
+            installHostLifecycle = installHostLifecycle, // le pilotage lifecycle n'est pas conduit ici
             registry = registry,
             displayPortFactory = { null },
             inputChainFactory = inputChainFactory,
