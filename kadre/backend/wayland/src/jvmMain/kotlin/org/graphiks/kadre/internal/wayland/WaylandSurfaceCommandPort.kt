@@ -27,7 +27,20 @@ internal class WaylandSurfaceCommandPort : SurfaceCommandPort {
     private val surfaces = ConcurrentHashMap<SurfaceId, SurfaceEntry>()
 
     fun register(surfaceId: SurfaceId, peer: WaylandWindowPeer) {
-        surfaces[surfaceId] = SurfaceEntry(peer)
+        val entry = SurfaceEntry(peer)
+        surfaces[surfaceId] = entry
+        // exactly ONE pacing chain per surface, armed at registration:
+        // requestRedraw only marks dirty, so bursts coalesce by construction
+        fun pace() {
+            // re-arm the pacing listener for the next cycle (kffi frame
+            // listeners are one-shot by contract)
+            peer.window.onNextFrame { pace() }
+            val shouldCommit = entry.frameArmed.getAndSet(false)
+            if (shouldCommit && entry.dirty.compareAndSet(true, false)) {
+                entry.peer.window.commitCurrent()
+            }
+        }
+        peer.window.onNextFrame { pace() }
     }
 
     fun unregister(surfaceId: SurfaceId) {
@@ -38,21 +51,7 @@ internal class WaylandSurfaceCommandPort : SurfaceCommandPort {
         val entry = surfaces[command.surfaceId]
             ?: return KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.Surface))
         entry.dirty.set(true)
-        if (!entry.frameArmed.compareAndSet(false, true)) {
-            // a frame callback is already pending: this request coalesces
-            return KadreResult.Success(Unit)
-        }
-        entry.peer.window.onNextFrame {
-            val restart = runCatching {
-                if (entry.dirty.compareAndSet(true, false)) {
-                    entry.peer.window.commitCurrent()
-                }
-                false
-            }.getOrDefault(false)
-            if (restart) {
-                entry.frameArmed.set(false)
-            }
-        }
+        entry.frameArmed.set(true)
         return KadreResult.Success(Unit)
     }
 
