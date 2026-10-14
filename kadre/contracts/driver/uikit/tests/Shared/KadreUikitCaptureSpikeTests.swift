@@ -30,8 +30,10 @@ import ReplayKit
 //    L'assertion retenue est STRUCTURELLE : la voie pompe-éligible (layer.render) décode
 //    vers UN membre de la table portable et la formule plancher bytesPerRow tient — la
 //    décision Bgra8/Rgba8 exacte appartient à la couture qui lit au runtime (jamais
-//    supposée). Le décodeur est ÉPINGLÉ par test sur les valeurs CGImage.h (byteOrder :
-//    32Little = 0x3000, 32Big = 0x4000 — revue Important-1).
+//    supposée). Le décodeur est ÉPINGLÉ par test sur les valeurs CGImage.h lues à la
+//    source (byteOrder : 32Little = 0x2000, 16Big = 0x3000, 32Big = 0x4000 — fix round 2 :
+//    le jet 1 les avait inversés sur prescription de revue erronée ; le header EST
+//    l'autorité, cf. testDecoderPinsTheCanonicalByteOrders).
 //
 // La frontière `tests/Shared` compile dans les DEUX targets de test (iOS ET tvOS) :
 // `RPScreenRecorder` est klib-présent tvOS (vérifié § rapport) — aucune garde os() n'est
@@ -109,39 +111,48 @@ final class KadreUikitCaptureSpikeTests: XCTestCase {
             + "decoded=\(Self.decodePortableFormat(raw))")
     }
 
-    /// Le décodeur bitmapInfo → table portable (la VÉRITÉ mémoire : alphaInfo ordonne les
-    /// composantes, byteOrder l'endianness de l'unité 32-bit). Valeurs CGImage.h ÉPINGLÉES
-    /// par `testDecoderPinsTheCanonicalByteOrders` — revue Important-1 : byteOrder
-    /// 32Little = 0x3000, 32Big = 0x4000 (l'ancien jet les inversait : le BGRA canonique
-    /// 0x3002 décodait « unknown » et 0x3001 — mémoire [A][B][G][R] — décodait « rgba8 »).
+    /// Le décodeur bitmapInfo → label mémoire (la VÉRITÉ : alphaInfo ordonne les composantes
+    /// DE L'UNITÉ MSB→LSB — CGImage.h:22-33, l'exemple « RGBX » porté par NoneSkipLast — et
+    /// byteOrder l'endianness de l'unité 32-bit — CGImage.h:42-46 : Default=0x0000,
+    /// 16Little=0x1000, **32Little=0x2000**, **16Big=0x3000**, 32Big=0x4000, vérifié à la
+    /// source sur les SDK device ET simulator). ÉPINGLÉ par
+    /// `testDecoderPinsTheCanonicalByteOrders`. Histoire : le jet 0 avait raison ; le jet 1
+    /// a RÉGRessÉ (32Little/16Big inversés — source : une prescription de revue erronée) ;
+    /// LE HEADER EST L'AUTORITÉ, jamais le chat de revue.
     private static func decodePortableFormat(_ raw: UInt32) -> String {
         let alphaInfo = raw & 0x1F
         let byteOrder = raw & 0x7000
         switch (alphaInfo, byteOrder) {
-        case (2, 0x3000):
-            return "bgra8" // premultipliedFirst + order32Little (0x3000) : [B][G][R][A] en mémoire
+        case (2, 0x2000):
+            return "bgra8" // premultipliedFirst + 32Little : unité A,R,G,B → mémoire [B][G][R][A] — LE BGRA canonique iOS (0x2002)
         case (1, 0x4000), (1, 0):
-            return "rgba8" // premultipliedLast + order32Big (0x4000)/default : [R][G][B][A] en mémoire
-        case (6, 0x3000):
-            return "bgrx8" // noneSkipFirst + order32Little : [B][G][R][X]
+            return "rgba8" // premultipliedLast + 32Big/default : unité R,G,B,A → mémoire [R][G][B][A]
+        case (6, 0x2000):
+            return "bgrx8" // noneSkipFirst + 32Little : unité X,R,G,B → mémoire [B][G][R][X]
         case (5, 0x4000), (5, 0):
-            return "bgrx8" // noneSkipLast + order32Big/default : [R][G][B][X]
+            return "rgbx8" // noneSkipLast + 32Big/default : unité R,G,B,X → mémoire [R][G][B][X] — l'exemple « RGBX » du header
         default:
-            return "unknown"
+            return "unknown" // hors table : 16-bit composantes (16Little/16Big), [X][B][G][R] (noneSkipLast+32Little), [X][R][G][B] (noneSkipFirst+big)…
         }
     }
 
     func testDecoderPinsTheCanonicalByteOrders() {
-        // Les valeurs de CGImage.h (revue Important-1) : byteOrder 16Little=0x1000,
-        // 16Big=0x2000, 32Little=0x3000, 32Big=0x4000 ; alphaInfo premultipliedLast=1,
-        // premultipliedFirst=2, noneSkipLast=5, noneSkipFirst=6.
+        // Valeurs CGImage.h lues À LA SOURCE (CoreGraphics.framework/Headers/CGImage.h —
+        // byteOrder l.42-46 : 16Little=0x1000, 32Little=0x2000, 16Big=0x3000, 32Big=0x4000 ;
+        // alphaInfo l.22-33 : premultipliedLast=1, premultipliedFirst=2, noneSkipLast=5
+        // (« For example, RGBX »), noneSkipFirst=6 (« XRGB »)). HISTOIRE (fix round 2) : le
+        // jet 0 avait raison (32Little=0x2000) ; le jet 1 a régressé (32Little/16Big
+        // inversés, source : prescription de revue erronée) — RELIRE CES PINS CONTRE LE
+        // HEADER, pas contre le chat de revue.
         XCTAssertEqual(Self.decodePortableFormat(0x1), "rgba8")      // mesuré : layer.render
-        XCTAssertEqual(Self.decodePortableFormat(0x4001), "rgba8")   // premultipliedLast + 32Big
-        XCTAssertEqual(Self.decodePortableFormat(0x3002), "bgra8")   // LE BGRA canonique (premultipliedFirst + 32Little)
-        XCTAssertEqual(Self.decodePortableFormat(0x3001), "unknown") // premultipliedLast + 32Little = [A][B][G][R] — HORS table (le piège du swap de canaux)
-        XCTAssertEqual(Self.decodePortableFormat(0x3006), "bgrx8")   // noneSkipFirst + 32Little
-        XCTAssertEqual(Self.decodePortableFormat(0x5), "bgrx8")      // noneSkipLast + default
+        XCTAssertEqual(Self.decodePortableFormat(0x4001), "rgba8")   // premultipliedLast + 32Big : [R][G][B][A]
+        XCTAssertEqual(Self.decodePortableFormat(0x2002), "bgra8")   // LE BGRA canonique iOS (premultipliedFirst + 32Little) : [B][G][R][A]
+        XCTAssertEqual(Self.decodePortableFormat(0x3002), "unknown") // premultipliedFirst + 16Big : 16-bit composantes, pas un 32bpp portable
+        XCTAssertEqual(Self.decodePortableFormat(0x3001), "unknown") // premultipliedLast + 16Big : 16-bit composantes
+        XCTAssertEqual(Self.decodePortableFormat(0x2006), "bgrx8")   // noneSkipFirst + 32Little : [B][G][R][X]
+        XCTAssertEqual(Self.decodePortableFormat(0x5), "rgbx8")      // noneSkipLast + default : [R][G][B][X] — l'exemple RGBX du header
+        XCTAssertEqual(Self.decodePortableFormat(0x4005), "rgbx8")   // noneSkipLast + 32Big : [R][G][B][X]
+        XCTAssertEqual(Self.decodePortableFormat(0x2005), "unknown") // noneSkipLast + 32Little : [X][B][G][R] — hors table
         XCTAssertEqual(Self.decodePortableFormat(0x1101), "unknown") // mesuré : drawHierarchy(true) — 16-bit composantes
-        XCTAssertEqual(Self.decodePortableFormat(0x2002), "unknown") // 16Big : pas un ordre 32bpp portable
     }
 }
