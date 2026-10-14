@@ -16,6 +16,7 @@
 		28E4137FCEE717DC6770EEB4 /* KadreUikitAttachTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB076B59B50782C75356E323 /* KadreUikitAttachTests.swift */; };
 		2B0145306B788DF5672E44C4 /* KadreUikitDropIosTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31A70CAE1A1301CA944394E0 /* KadreUikitDropIosTests.swift */; };
 		2D9CC0FBE025BBD8748FCF74 /* KadreUikitDisplaysTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38239FDF50793BA271D34F79 /* KadreUikitDisplaysTests.swift */; };
+		376127A6FDB27FCA0AFFFA4B /* KadreUikitCaptureSpikeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9868A7F361349CF674A04557 /* KadreUikitCaptureSpikeTests.swift */; };
 		37C18BF7E3E3E00019086AF9 /* KadreUikitMemoryPressureTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8840B572C3DCEE1F9ACB1DDD /* KadreUikitMemoryPressureTests.swift */; };
 		3F8C640BBE16B94EF162448B /* KadreUikit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 418337605D5B3199B7E05325 /* KadreUikit.framework */; };
 		447FB172AC08C6378923191F /* DriverFixture.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1E444F71E79C711F6BF4ED11 /* DriverFixture.swift */; };
@@ -46,6 +47,7 @@
 		A994C38DD6BDA86C27E28AFE /* DriverWindowSceneProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A765D6361A5D02AF1DDD9A8 /* DriverWindowSceneProvider.swift */; };
 		AE3A2C494182A1D8939A3C0B /* DriverSceneDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1D37932D257E216FA8982CD /* DriverSceneDelegate.swift */; };
 		AF9D706DFF5B8DC6F91A3755 /* KadreUikitTextInputSpikeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C233CF6069EB6ECF2F1D8612 /* KadreUikitTextInputSpikeTests.swift */; };
+		B6033252A3916DE29317E99B /* KadreUikitCaptureSpikeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9868A7F361349CF674A04557 /* KadreUikitCaptureSpikeTests.swift */; };
 		C7C57FE2E6827FC672C6BB25 /* KadreUikit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 0BE6A301E633DDEB145A1DBC /* KadreUikit.framework */; };
 		CC605EAC7648723B63A816A4 /* KadreUikit.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 0BE6A301E633DDEB145A1DBC /* KadreUikit.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		CEFEE3910D583AB4D45A3A32 /* MainApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = FE98F3A76E07C48BCFEE7624 /* MainApp.swift */; };
@@ -125,6 +127,7 @@
 		7158A2D7EE927CE0F564B5B7 /* KadreUikitDriverIosTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = KadreUikitDriverIosTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		8840B572C3DCEE1F9ACB1DDD /* KadreUikitMemoryPressureTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KadreUikitMemoryPressureTests.swift; sourceTree = "<group>"; };
 		91719BE8D2BEB7B9A16C9210 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		9868A7F361349CF674A04557 /* KadreUikitCaptureSpikeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KadreUikitCaptureSpikeTests.swift; sourceTree = "<group>"; };
 		9A69BCFDCF6D58770B77CEDD /* KadreUikitDevicesGamepadsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KadreUikitDevicesGamepadsTests.swift; sourceTree = "<group>"; };
 		B8101E012344AE673FE76468 /* KadreUikitTextInputTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KadreUikitTextInputTests.swift; sourceTree = "<group>"; };
 		C1B21199F53FE2CA195F1EC3 /* DriverApplication.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DriverApplication.swift; sourceTree = "<group>"; };
@@ -226,6 +229,7 @@
 			isa = PBXGroup;
 			children = (
 				FB076B59B50782C75356E323 /* KadreUikitAttachTests.swift */,
+				9868A7F361349CF674A04557 /* KadreUikitCaptureSpikeTests.swift */,
 				9A69BCFDCF6D58770B77CEDD /* KadreUikitDevicesGamepadsTests.swift */,
 				38239FDF50793BA271D34F79 /* KadreUikitDisplaysTests.swift */,
 				34888DC507A9523344912ADC /* KadreUikitDriverTests.swift */,
@@ -392,6 +396,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				28E4137FCEE717DC6770EEB4 /* KadreUikitAttachTests.swift in Sources */,
+				376127A6FDB27FCA0AFFFA4B /* KadreUikitCaptureSpikeTests.swift in Sources */,
 				D400DFF943B547CBA1989152 /* KadreUikitDevicesGamepadsTests.swift in Sources */,
 				2D9CC0FBE025BBD8748FCF74 /* KadreUikitDisplaysTests.swift in Sources */,
 				5BF1729E91D5C95BD0B4C26C /* KadreUikitDriverTests.swift in Sources */,
@@ -414,6 +419,7 @@
 			files = (
 				5FFF4CF409B518FE59B30608 /* KadreUikitAttachIosTests.swift in Sources */,
 				A2B6955939359F103409316F /* KadreUikitAttachTests.swift in Sources */,
+				B6033252A3916DE29317E99B /* KadreUikitCaptureSpikeTests.swift in Sources */,
 				774DA1EB93D2FE9DC40C6533 /* KadreUikitDevicesGamepadsTests.swift in Sources */,
 				935BA16ECA3C7E4B062E9ACF /* KadreUikitDisplaysTests.swift in Sources */,
 				993798177928E45DD8DDF7E5 /* KadreUikitDriverTests.swift in Sources */,
