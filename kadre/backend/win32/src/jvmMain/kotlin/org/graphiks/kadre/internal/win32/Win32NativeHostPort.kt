@@ -35,4 +35,10 @@ internal interface Win32NativeHostPort : AutoCloseable {
 
     /** Native default behavior for unhandled messages (real: DefWindowProcW; fake: 0L). */
     fun defWindowProc(hwnd: Long, message: Int, wParam: Long, lParam: Long): Long
+
+    /** Phase 3 surface: invalidation requests and effective-metrics readback. */
+    fun invalidateRect(hwnd: Long)
+    fun validateRect(hwnd: Long)
+    fun readClientPhysicalSize(hwnd: Long): Pair<Int, Int>
+    fun readScaleFactor(hwnd: Long): Double
 }

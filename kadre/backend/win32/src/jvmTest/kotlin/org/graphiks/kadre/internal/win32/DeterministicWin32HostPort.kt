@@ -14,6 +14,12 @@ internal open class DeterministicWin32HostPort : Win32NativeHostPort {
     val destroyedTopLevelWindows = AtomicInteger(0)
     val postedCloses = AtomicInteger(0)
     private val topLevelHandlers = java.util.concurrent.ConcurrentHashMap<Long, (Long, Int, Long, Long) -> Long>()
+    val scriptedClientSize = java.util.concurrent.ConcurrentHashMap<Long, Pair<Int, Int>>()
+    val scriptedScaleFactor = java.util.concurrent.ConcurrentHashMap<Long, Double>()
+    val invalidateCount = AtomicInteger(0)
+    val validateCount = AtomicInteger(0)
+    val paintCount = AtomicInteger(0)
+    private val invalidated = java.util.Collections.newSetFromMap(java.util.concurrent.ConcurrentHashMap<Long, Boolean>())
     private val topLevelHwndOrder = java.util.concurrent.ConcurrentLinkedQueue<Long>()
     private var nextTopLevelHwnd = 10_000L
     val createdWindows = AtomicInteger(0)
@@ -112,6 +118,11 @@ internal open class DeterministicWin32HostPort : Win32NativeHostPort {
 
     fun dispatchWindowMessage(hwnd: Long, id: Int, wParam: Long = 0L, lParam: Long = 0L) {
         // Routage manquant = fallthrough silencieux (miroir du pont réel : 0L).
+        if (id == 0x000F) { // WM_PAINT : ne se délivre que si invalidé
+            if (!invalidated.contains(hwnd)) return
+            invalidated.remove(hwnd)
+            paintCount.incrementAndGet()
+        }
         topLevelHandlers[hwnd]?.invoke(hwnd, id, wParam, lParam)
     }
 
@@ -126,6 +137,8 @@ internal open class DeterministicWin32HostPort : Win32NativeHostPort {
         messages.add(Win32MessageWait.Message(0x0010, 0L, 0L))
         synchronized(monitor) { monitor.notifyAll() }
     }
+
+
 
     fun lastTopLevelHwnd(): Long = topLevelHwndOrder.lastOrNull() ?: 0L
 
@@ -144,6 +157,21 @@ internal open class DeterministicWin32HostPort : Win32NativeHostPort {
         defWindowProcCalls.incrementAndGet()
         return 0L
     }
+
+    override fun invalidateRect(hwnd: Long) {
+        invalidateCount.incrementAndGet()
+        invalidated.add(hwnd)
+    }
+
+    override fun validateRect(hwnd: Long) {
+        validateCount.incrementAndGet()
+        invalidated.remove(hwnd)
+    }
+
+    override fun readClientPhysicalSize(hwnd: Long): Pair<Int, Int> =
+        scriptedClientSize[hwnd] ?: (800 to 600)
+
+    override fun readScaleFactor(hwnd: Long): Double = scriptedScaleFactor[hwnd] ?: 1.0
 
     override fun close() {
         destroyed = true
