@@ -154,6 +154,15 @@ class UIKitHostCaptureReservationTest {
         var closeCount: Int = 0
             private set
 
+        /**
+         * LE compteur du pin I2 : le nombre d'appels `copyInto` — le pin « le budget est
+         * vérifié AVANT la copie » est une MUTATION (une implémentation qui déplacerait la
+         * vérification après la copie verrait ce compteur à 1 sur les frames surdimensionnées
+         * et échouerait), pas une lecture de l'ordre du code.
+         */
+        var copyCount: Int = 0
+            private set
+
         override fun lock(): UIKitCaptureLockedBuffer? {
             check(lockCount == 0) { "the fake sample was locked twice" }
             lockCount += 1
@@ -179,6 +188,7 @@ class UIKitHostCaptureReservationTest {
             override fun copyInto(destination: ByteArray, byteCount: Int) {
                 // La simulation du memcpy : le « natif » du fake est copié bloc vers la
                 // destination fraîche du pump — JAMAIS l'array du fake elle-même.
+                this@FakeSample.copyCount += 1
                 native.copyInto(destination, 0, 0, byteCount)
             }
         }
@@ -290,6 +300,10 @@ class UIKitHostCaptureReservationTest {
         assertEquals(1, oversize.lockCount)
         assertEquals(1, oversize.unlockCount)
         assertEquals(1, oversize.closeCount)
+        // LE PIN I2 (mutation) : ZÉRO copie — le budget a été vérifié AVANT le copyInto ;
+        // une implémentation qui déplacerait la vérification après la copie verrait ce
+        // compteur à 1 et échouerait.
+        assertEquals(0, oversize.copyCount)
         // La pompe est arrêtée (le recorder fut démarré) — exactement une fois.
         assertEquals(1, streams.stopCount)
     }
@@ -317,11 +331,15 @@ class UIKitHostCaptureReservationTest {
             KadreFailure.ResourceLimitExceeded(KadreResourceKind.CaptureBuffer, 32L),
             outcome.failure,
         )
-        // Zéro octet de la frame surdimensionnée — au plus la première frame (livrée en
-        // async depuis le garé), JAMAIS une frame 4x3 (la copie n'a jamais tourné pour elle).
+        // Zéro octet de la frame surdimensionnée — au plus la première frame (livrée depuis
+        // le garé), JAMAIS une frame 4x3 (la copie n'a jamais tourné pour elle).
         assertTrue(listener.frames.size <= 1)
         listener.frames.forEach { frame -> assertEquals(1, frame.size.height) }
         assertEquals(1, first.closeCount)
+        // LE PIN I2 (mutation) : ZÉRO copie pour la frame surdimensionnée — le budget a été
+        // vérifié AVANT le copyInto (une vérification déplacée après la copie mettrait ce
+        // compteur à 1 et ferait échouer le test).
+        assertEquals(0, oversize.copyCount)
         // La pompe est arrêtée (stop exactement une fois) et le buffer surdimensionné fermé.
         assertEquals(1, streams.stopCount)
         assertEquals(1, oversize.closeCount)
@@ -602,8 +620,9 @@ class UIKitHostCaptureReservationTest {
         assertEquals(20, plane.layout.rowStride)
         assertEquals(40, plane.layout.byteCount)
         assertEquals(40, plane.bytes.size)
-        // Les octets livrés sont la copie du « natif » du sample.
+        // Les octets livrés sont la copie du « natif » du sample — copiée EXACTEMENT une fois.
         plane.bytes.forEach { byte -> assertEquals(0x5A, byte) }
+        assertEquals(1, first.copyCount)
         // Le sample de départ a été refermé honnêtement.
         assertEquals(1, first.closeCount)
     }
@@ -659,7 +678,7 @@ class UIKitHostCaptureReservationTest {
     // --------------------------------------------------------------------------
 
     @Test
-    fun firstFrameArrivingBeforeStartCompletionIsParkedNotLost(): Unit = runBlocking {
+    fun startCompletionBeforeTheFirstFrameStillStartsAndDelivers(): Unit = runBlocking {
         val (reservation, streams) = newReservation()
         val listener = RecordingListener()
         val started = async(Dispatchers.Default) { reservation.start(listener, 1 shl 20) }
@@ -673,6 +692,35 @@ class UIKitHostCaptureReservationTest {
         val result = started.await()
         assertIs<KadreResult.Success<CapturePortStreamStart>>(result)
         awaitCondition("the frame is delivered after start") { listener.frames.isNotEmpty() }
+    }
+
+    // --------------------------------------------------------------------------
+    // LE PIN I1 (fix round 1) : l'ordre d'arrivée EST l'ordre de livraison — une frame
+    // garée avant la complétion puis une seconde livrée après le start arrivent DANS
+    // L'ORDRE (la course à deux fils de livraison que le fix a supprimée inversait cette
+    // paire de façon non déterministe).
+    // --------------------------------------------------------------------------
+
+    @Test
+    fun frameParkedBeforeStartCompletionThenASecondAreDeliveredInArrivalOrder(): Unit = runBlocking {
+        val (reservation, streams) = newReservation()
+        val listener = RecordingListener()
+        // La première frame garée (0x11) AVANT la complétion, la seconde (0x22) APRÈS le
+        // retour du start — exactement la fenêtre où les deux fils de livraison couraient.
+        val first = videoSample(width = 4, height = 1, bytesPerRow = 16, fill = 0x11)
+        val started = startWithFirstFrame(reservation, streams, listener, maxFrameBytes = 1 shl 20, firstSample = first)
+        assertIs<KadreResult.Success<CapturePortStreamStart>>(started)
+
+        val second = videoSample(width = 4, height = 1, bytesPerRow = 16, fill = 0x22)
+        streams.deliverVideoSample(second)
+
+        awaitCondition("both frames are delivered") { listener.frames.size >= 2 }
+        // L'ORDRE : 0x11 d'abord, 0x22 ensuite — la même taille (pas de reconfiguration qui
+        // porterait à confusion), la paire que la course inversait.
+        assertEquals(2, listener.frames.size)
+        assertEquals(0, listener.reconfigurations.size)
+        listener.frames[0].planes.single().bytes.forEach { byte -> assertEquals(0x11, byte) }
+        listener.frames[1].planes.single().bytes.forEach { byte -> assertEquals(0x22, byte) }
     }
 
 }

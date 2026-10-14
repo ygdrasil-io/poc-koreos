@@ -233,6 +233,13 @@ private class UIKitReplayKitCaptureSample(
         CVPixelBufferUnlockBaseAddress(pixelBuffer, kCVPixelBufferLock_ReadOnly)
     }
 
+    /**
+     * CAVEAT : le header `RPScreenRecorder.h` est MUET sur la propriété du buffer du
+     * handler (ni retain ni release documentés) — ce no-op est une convention DOCUMENTÉE
+     * (consommation strictement synchrone, rien retenu, donc rien à libérer), pas un fait
+     * de header ; si une task prouvait un jour une possession (+1) explicite, c'est ICI
+     * que la libération exactement-une-fois devrait naître.
+     */
     override fun close() = Unit
 }
 

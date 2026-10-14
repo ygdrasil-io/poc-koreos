@@ -65,6 +65,11 @@ private const val STREAM_DOMAIN = "capture-stream"
  * d'autre ne l'a portée — un runtime déjà en fin de session absorbe le terminal, jamais un
  * double) ; l'arrêt du recorder est EXACTEMENT UNE FOIS quoi qu'il arrive.
  *
+ * ATTENTION aux appelants (drivers, harnesses) : [start] attend INDEFINIMENT la complétion
+ * ReplayKit ET la première frame — aucun timeout n'est inventé ici (ces faits ne portent
+ * aucun pourquoi) ; tout appelant qui ne peut pas se permettre l'attente doit borner la
+ * sienne (le pattern des tests de mesure, § mesure du rapport Task 3).
+ *
  * @param source le descripteur source détaché (l'affichage entier, nommé par le port).
  * @param streams le seam ReplayKit possédé par le port — jamais fermé par la réservation.
  * @param request la requête admise (la région fut refusée avant la construction).
@@ -160,9 +165,23 @@ internal class UIKitHostCaptureReservation(
  * extras avant l'installation) tombent en silence et sont COMPTEES ([droppedSampleCount] —
  * le pattern des compteurs de drops des phases précédentes).
  *
+ * **UNE SEULE file de livraison** (le moule Android, fix round 1) : le handler ReplayKit ne
+ * fait que CONSOMMER (synchronement, dans la fenêtre de validité du buffer natif) et
+ * ENFILER la copie Kotlin dans [deliveries] ; la boucle `run` sur [loopContext] est
+ * l'UNIQUE chemin vers le listener — l'ordre d'arrivée des samples EST l'ordre de
+ * livraison, jamais une paire de frames inversée ni un flip-flop de révision par course
+ * entre deux fils. Un silence de garde à la LIVRAISON (le terminal a gagné la course
+ * pendant l'attente en file) est absorbé sans compte — le compteur porte les refus de
+ * GARDE du handler, pas les courses perdues de la livraison.
+ *
  * La mapping d'erreurs du spike § 6 : l'erreur de COMPLETION fait échouer le start
  * (`PlatformFailure(replaykit, start:<code>)`) ; l'erreur du flux VIVANT est un terminal
  * `Outcome(Failed(…))` ; l'erreur d'ARRÊT est un fait diagnostic, jamais un terminal.
+ *
+ * ATTENTION aux appelants (drivers, harnesses) : le start attend INDEFINIMENT la
+ * complétion ReplayKit ET la première frame — aucun timeout n'est inventé ici (le spike :
+ * ces faits ne portent aucun pourquoi) ; tout appelant qui ne peut pas se permettre
+ * l'attente doit borner la sienne (le pattern des tests de mesure).
  */
 internal class UIKitReplayKitPump(
     private val streams: UIKitCaptureSource,
@@ -191,6 +210,12 @@ internal class UIKitReplayKitPump(
 
     private val startWakeup = Channel<Unit>(Channel.CONFLATED)
     private val firstPayloadArrived = Channel<Unit>(Channel.CONFLATED)
+
+    /**
+     * L'UNIQUE file de livraison : le handler enfile les copies consommées, la boucle
+     * `run` les livre en FIFO — l'ordre d'arrivée EST l'ordre de livraison (fix round 1).
+     */
+    private val deliveries = Channel<SamplePayload>(Channel.UNLIMITED)
 
     suspend fun start(
         listener: CapturePortStreamListener,
@@ -239,10 +264,15 @@ internal class UIKitReplayKitPump(
             lock.withLock { settled = true }
             val pumpScope = CoroutineScope(loopContext + SupervisorJob())
             lock.withLock { scope = pumpScope }
-            pumpScope.launch { deliver(first) }
+            // L'UNIQUE boucle de livraison (le moule Android) : la première frame d'abord,
+            // puis la file FIFO des suivantes — jamais un second fil de livraison.
+            pumpScope.launch { run(first) }
             return KadreResult.Success(CapturePortStreamStart(UIKitHostCaptureStream(this), initialConfiguration))
         } catch (cancellation: CancellationException) {
-            // Le contrat d'annulation du SPI : libération propre puis surface de l'annulation.
+            // Le contrat d'annulation du SPI : libération propre puis surface de
+            // l'annulation. Le terminal est scellé d'abord — les samples en vol dans le
+            // handler tombent en silence à la garde (le miroir de failedStart).
+            lock.withLock { terminated = true }
             release()
             throw cancellation
         }
@@ -278,7 +308,7 @@ internal class UIKitReplayKitPump(
             when {
                 terminated -> SampleDecision.Drop
                 !settled -> if (parkedPayload == null) SampleDecision.Park else SampleDecision.Drop
-                else -> SampleDecision.Deliver
+                else -> SampleDecision.Enqueue
             }
         }
         when (decision) {
@@ -301,7 +331,12 @@ internal class UIKitReplayKitPump(
                 if (!parked) countDropped()
             }
 
-            SampleDecision.Deliver -> deliver(consume(sample) ?: return)
+            SampleDecision.Enqueue -> {
+                val payload = consume(sample) ?: return
+                // L'ENFILEMENT seul — la boucle `run` est l'unique livreur (l'ordre
+                // d'arrivée EST l'ordre de livraison, fix round 1).
+                deliveries.trySend(payload)
+            }
 
             SampleDecision.Drop -> {
                 // Tardif (après le terminal) ou extra (avant l'installation) : le sample est
@@ -309,6 +344,31 @@ internal class UIKitReplayKitPump(
                 sample.close()
                 countDropped()
             }
+        }
+    }
+
+    // -- la boucle de livraison (l'UNIQUE chemin vers le listener) --------------------------
+
+    /**
+     * La boucle du moule Android : la première frame (garée avant l'installation), puis la
+     * file FIFO — toutes les livraisons listener sérialisées sur UN fil, jamais une course
+     * entre le fil du handler et un livreur parallèle. Un terminal qui gagne la course
+     * pendant l'attente en file garde le dernier mot (silence absorbé, sans compte — les
+     * refus comptés sont ceux de la GARDE du handler).
+     */
+    private suspend fun run(first: SamplePayload) {
+        try {
+            deliver(first)
+            while (true) {
+                val payload = deliveries.receive()
+                if (lock.withLock { terminated }) return
+                deliver(payload)
+            }
+        } catch (cancellation: CancellationException) {
+            // Le cancel du scope (le terminal, le close) — rien à libérer ici.
+            throw cancellation
+        } catch (unexpected: Throwable) {
+            terminate(CaptureOutcome.Failed(pipeFailure("frame-pump-failed")))
         }
     }
 
@@ -590,7 +650,7 @@ internal class UIKitReplayKitPump(
     }
 
     /** La décision de garde d'UNE invocation du handler. */
-    private enum class SampleDecision { Park, Deliver, Drop }
+    private enum class SampleDecision { Park, Enqueue, Drop }
 
     /** La matière Kotlin d'UNE frame consommée — le jeton natif est déjà refermé. */
     private class SamplePayload(
