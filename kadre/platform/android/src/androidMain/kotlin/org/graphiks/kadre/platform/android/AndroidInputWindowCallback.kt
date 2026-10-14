@@ -411,3 +411,81 @@ internal class AndroidWindowCallbackForwarder(
         if (Build.VERSION.SDK_INT >= 26) wrapped.onPointerCaptureChanged(hasCapture)
     }
 }
+
+/**
+ * Le câblage SESSION d'une chaîne d'entrée (phase 11, Task 3) — ce que la couture d'attach
+ * remet à un installateur de chaîne SANS aucun type SDK : les funnels de la surface de CETTE
+ * session (l'observation clavier/focus, la motion avec les bornes de la vue, la lecture de
+ * suppression depuis l'état COMMIS) et le canal d'état de la capture quand la session en
+ * possède un. La forme Activity le construit depuis sa surface de session, la forme
+ * présentation depuis la surface du média — dans les deux cas le câblage nourrit UNE session
+ * et elle seule : l'input d'une fenêtre ne part JAMAIS vers la session d'une autre.
+ */
+internal class AndroidSessionInputWiring(
+    /** Le funnel d'observation clavier/focus — les funnels de la surface de LA session. */
+    val onObservation: (AndroidInputObservation) -> Unit,
+    /** La lecture de suppression depuis l'état COMMIS de la surface de LA session. */
+    val shouldConsumeKey: (nativeKeyCode: Int) -> Boolean,
+    /**
+     * Le funnel motion — les bornes PHYSIQUES de la vue et son origine dans l'espace fenêtre
+     * sont fournies par le côté SDK de la chaîne (celles de la vue ciblée), le funnel reste
+     * celui de LA session.
+     */
+    val onMotion: (
+        observation: AndroidMotionObservation,
+        viewWidth: Int,
+        viewHeight: Int,
+        offsetX: Int,
+        offsetY: Int,
+    ) -> Unit,
+    /** Le canal d'état de la capture — le défaut muet d'une session sans seam de capture. */
+    val onPointerCaptureState: (hasCapture: Boolean) -> Unit = {},
+)
+
+/**
+ * Une chaîne d'entrée posée sur une fenêtre — le handle que la couture retient du premier
+ * show à la fermeture du média : [install] pose le wrapper PAR-DESSUS le callback existant,
+ * [restoreOrReport] restitue l'instance d'origine EXACTE. Le contrat des DEUX formes
+ * fenêtrées — l'implémentation réelle ([AndroidForwarderInputChain]) enveloppe
+ * [AndroidWindowCallbackForwarder] (la forme Activity depuis la phase d'entrée, la forme
+ * présentation depuis la phase 11), les tests hôtes en posent une fake sans type SDK.
+ */
+internal interface AndroidWindowInputChain {
+    /** Pose la chaîne — exactement une fois par fenêtre (le double-install du wrapper lance). */
+    fun install()
+
+    /**
+     * Retire la chaîne en remettant la callback d'origine EXACTE. Un retrait qui lance (la
+     * callback a été remplacée par un tiers entre-temps) est REPORTÉ sur le journal de la
+     * couture, jamais propagé dans la boucle de teardown.
+     */
+    fun restoreOrReport()
+}
+
+/**
+ * L'implémentation réelle du handle — le wrapper d'entrée de la couture d'attach depuis la
+ * phase d'entrée (ex-`InputForwarder` de la forme Activity), partagé par les deux formes
+ * fenêtrées depuis la phase 11 : l'installation n'a lieu qu'après un attach réussi (la
+ * delivery existe alors), et le retrait suit l'installation pas à pas.
+ */
+internal class AndroidForwarderInputChain(
+    private val forwarder: AndroidWindowCallbackForwarder,
+) : AndroidWindowInputChain {
+    var installed: Boolean = false
+        private set
+
+    override fun install() {
+        forwarder.install()
+        installed = true
+    }
+
+    override fun restoreOrReport() {
+        if (!installed) return
+        installed = false
+        try {
+            forwarder.restore()
+        } catch (cause: Throwable) {
+            runCatching { AndroidAttachDiagnostics.report(cause) }
+        }
+    }
+}

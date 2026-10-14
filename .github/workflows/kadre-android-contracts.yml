@@ -1,9 +1,14 @@
 # Kadre Android Contracts — the phase-10 CI closure: the Android contract gate
-# (registry + on-device evidence for the ten active AND contracts) runs on every
+# (registry + on-device evidence for the eleven active AND contracts) runs on every
 # pull request and every push to master, against a booted, pinned Android 35
 # google_apis x86_64 emulator (KVM) on the ubuntu runner — mirroring
 # kadre-web-contracts.yml (triggers, ubuntu-latest, 15-minute hard timeout,
 # temurin JDK 25 + Gradle cache).
+#
+# Phase 11 (AND-011): the gate script provisions the emulator's simulated
+# secondary display (`overlay_display_devices`, 1280x720/160) before its Gradle
+# run and removes it on any exit (trap) — the workflow needs no extra step, the
+# provisioning rides along scripts/test-kadre-android-contracts.sh.
 #
 # Integrity (TEST-STRATEGY §9, binding): every step must succeed — a failure or
 # a watchdog timeout (exit 124) fails the job, no tolerated step, no masked
