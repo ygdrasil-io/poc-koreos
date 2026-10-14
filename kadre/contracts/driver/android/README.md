@@ -1,17 +1,17 @@
 # Android emulator contract driver
 
 This non-published JVM project runs the public Android host-attachment proof of
-phases 0 through 8 on a real emulator. It is a contract driver, not an
+phases 0 through 9 on a real emulator. It is a contract driver, not an
 implementation API: it forks the instrumented consumer build, executes its
 scenarios on the attached device, and turns the JUnit output into the canonical
-`AND-001` through `AND-009` evidence with the validator's own
+`AND-001` through `AND-010` evidence with the validator's own
 generator. English
 prose, like the Web driver README it mirrors; everything else in this phase is
 documented in French in the sources.
 
 ## What the driver proves
 
-Nine contracts, all active in the registry
+Ten contracts, all active in the registry
 ([contracts.tsv](../../registry/contracts.tsv)), oracle `O3`, mapped in
 [evidence.tsv](contracts/evidence.tsv):
 
@@ -449,21 +449,36 @@ module that shells out to `adb` and forks `gradlew`.
 Cold start — kill any running emulator first (`adb emu kill`), then let the
 script boot the AVD itself (headless: `-no-window -no-audio -no-boot-anim -gpu
 swiftshader_indirect`, log at `/tmp/kadre-emulator.log`) and wait for
-`sys.boot_completed == 1` before running anything. Boot can take minutes:
+`sys.boot_completed == 1` before running anything. Boot can take minutes; the
+wait is bounded (`KADRE_ANDROID_BOOT_TIMEOUT_S`, 300 s by default) and a device
+that never completes boot fails the gate instead of hanging it:
 
 ```shell
 scripts/test-kadre-android-contracts.sh
 ```
 
-If a device is already attached, the script skips the boot and waits for that
-device instead; pass a serial to pin it (`scripts/test-kadre-android-contracts.sh
-emulator-5554`). The Gradle run inside is bounded by a portable 900 s watchdog
-(GNU `timeout` is absent on stock macOS — background Gradle, bounded wait,
-`SIGTERM` at expiry with exit code 124; commit `76229d58`). The gate task is
+If a device is already attached, the script skips the boot and uses that
+device instead; pass a serial to pin it
+(`scripts/test-kadre-android-contracts.sh emulator-5554`, or export
+`ANDROID_SERIAL`). The selection itself is validated first
+(`scripts/test-kadre-android-device.sh`): an explicit serial must report the
+exact adb state `device` (offline/unauthorized are refused before Gradle), and
+without a serial exactly one eligible — booted — device must be attached, any
+ambiguity being refused. The Gradle run inside is bounded by a portable 900 s
+watchdog (`run_with_watchdog`, GNU `timeout` is absent on stock macOS): the
+client runs in its own process group (`setsid`, or a backgrounded subshell
+plus a `pgrep -P` walk where `setsid` is unavailable) and receives `SIGTERM`
+at expiry with exit code 124, escalated to `SIGKILL` for survivors — the
+Gradle daemon and its descendants no longer outlive the killed client (the
+phase-0 "daemon survives" note is obsolete). The gate task is
 `:kadre:contracts:validator:androidContractsCheck`: registry validation plus
-Android contract evidence validation against **`AND-001` through `AND-009`** —
-one canonical JSON per contract, all from the same instrumented emulator run
-(44 instrumented tests).
+Android contract evidence validation against **`AND-001` through `AND-010`** —
+one canonical JSON per contract, all from the same instrumented emulator gate
+(48 consumer instrumented tests plus the compose-showcase sample's two — 50
+mapped — and the seven `AndroidLeakCyclesTest` leak-cycle testcases — 57
+total; the consumer count grew independently of the mapped scenarios:
+`KotlinFacadeConsumerTest` and `JavaAndroidFacadeConsumerTest` each carry one
+extra unmapped testcase beside the one evidence.tsv maps).
 
 The wrapper chains two steps, each of which can also be run on its own — one
 Gradle invocation per shell command:
@@ -809,7 +824,193 @@ carried by the evidence itself:
   JSON per contract, all from the same instrumented emulator run (the 38
   previous testcases plus the six capture/consent/frames ones of
   `KadreConsumerCaptureContractTest` and the friend-module
-  `AndroidCaptureDeviceContractTest`).
+  `AndroidCaptureDeviceContractTest`);
+- `AND-010` through the same gate — the phase 9 samples migration (below): the
+  consumer run carries the facade-consumer scenarios, and a SECOND forked run
+  executes the migrated compose-showcase sample's own instrumented APK
+  (`androidComposeShowcaseSingleSession`, `androidLegacyTypesAbsent`); the
+  producer globs BOTH APKs' XML into the same per-engine JUnit copy.
+
+**`AND-010`** — the phase 9 samples-migration and negative-consumer proof
+(source `ANDROID-IMPLEMENTATION-ROADMAP.md#Phase 9 — Façade Java, Compose et
+migration des samples`). Three scenarios and two sentinels:
+
+| evidenceId | kind | what it exercises |
+|---|---|---|
+| `android-facade-consumers-both-forms` | scenario | the Task-2 facade consumers run on the published umbrella against the real device — pinned by `KotlinFacadeConsumerTest.kotlinAttachKadreBothFormsExhaustiveOutcome`, which drives BOTH public `attachKadre` forms (Activity + View) to their exhaustive terminal outcome |
+| `android-compose-showcase-single-session` | scenario | the migrated compose sample (`kadre/samples/android-compose-showcase`, against the PUBLISHED compose binding AAR): recomposition ×3 records ONE session identity; leaving the composition terminates it (a real window detaches the view before the dispose — the runtime's host stop, `Stopped(HostDetached)`, wins the race over the dispose's `requestStop`; both are the machine's documented host stops); re-composing recreates a NEW session that reaches `Running` |
+| `android-legacy-types-absent` | scenario | the dex of the sample's executed APK (where the published `platform-android` AAR classes are merged) contains neither `AndroidKadreRuntime` nor the kadre-old `EventLoop` (exact FQNs; the kotlinx-coroutines `EventLoop` is not a false positive) — bounded by two coverage guards (the scan sees the real `platform.android`/`host.android` classes) |
+| `android-facade-no-leak` | sentinel | a facade that leaks coroutine types into the Java surface kills `javaFacadeAttachObserveStopAwait` alone |
+| `android-compose-no-double-attach` | sentinel | a binding that creates more than one session per host (recomposition or re-entry) kills `androidComposeShowcaseSingleSession` alone (the recorded identity set) |
+
+The migrated sample modules themselves are `kadre/samples/android-hello-window`
+(Activity-form attach on a plain View + a window-lifecycle console),
+`kadre/samples/android-hello-touch` (the same plus `SurfaceInput` touch
+observation) and `kadre/samples/android-compose-showcase` (the phase 9 binding
+plus touch). They resolve the PUBLISHED umbrella (`org.graphiks.kadre:
+kadre-android`) and the PUBLISHED binding (`org.graphiks.kadre.internal:
+compose-android`) from the contract repository declared in the root settings —
+never a project dependency — and grep zero kadre-old build references. Each
+plain sample attaches ONCE with no retry on refusal (programming-error
+semantics for a sample — the refusal is logged, never replayed). The old GPU
+sample (`hello-triangle-android-capture`) is NOT migrated: the wgpu4k
+renderer is sample responsibility, deferred with the phase 8 `CapturePort` as
+the future primitive.
+
+### Exit gate of roadmap phase 9
+
+Same commands, one contract more and a second forked run. From a cold start
+(kill any running emulator, `adb emu kill`, wait for zero devices, then let
+the script boot the AVD itself): publish (1), consumer compile (2), emulator
+evidence + validator (the script — **50** instrumented tests green — the 48
+consumer testcases of the forked consumer run plus the compose-showcase
+sample's two from the SECOND forked run — `AND-001.json` through
+`AND-010.json`, ten canonical JSONs), the same transitive-resolution purity
+check (grep exit 1, redone cold), and the no-device sanity tasks above. The
+roadmap checklist is carried by the evidence itself:
+
+- Kotlin AND Java compile against the PUBLISHED artifacts and drive both host
+  forms — `android-facade-consumers-both-forms` (`KotlinFacadeConsumerTest`
+  drives both public `attachKadre` forms to their exhaustive terminal
+  outcome) and the INTEROP §9 "Java Android" consumer row, landed:
+  `JavaAndroidFacadeConsumerTest` (attach, observer state, request stop, await
+  the `CompletionStage`, inspect failure — the admission refusal surfaces as
+  `KadreException`), guarded by the sentinel `android-facade-no-leak` (a
+  facade leaking coroutine types into the Java surface kills it alone);
+- Compose proves no double attach and no leak after dispose/recreation —
+  `android-compose-showcase-single-session` (recomposition ×3 records ONE
+  session identity; leaving the composition terminates the session — one of
+  the machine's two documented host stops, `Stopped(HostRequested)` via
+  onDispose or `Stopped(HostDetached)` when the real window detaches the view
+  first; re-composing recreates a NEW session that reaches `Running`),
+  guarded by the sentinel `android-compose-no-double-attach`;
+- every historical Android usage migrated or its removal explicitly
+  documented, no hidden `kadre-old` dependency — the three migrated sample
+  modules resolve only the PUBLISHED artifacts and grep zero kadre-old
+  references; `hello-triangle-android-capture` is the documented removal (see
+  above); the negative consumer `android-legacy-types-absent` scans the dex
+  of the EXECUTED sample APK (no `AndroidKadreRuntime`, no kadre-old
+  `EventLoop` — exact FQNs, the kotlinx-coroutines `EventLoop` not a false
+  positive), bounded by the two coverage guards;
+- `AND-001` through `AND-010` together — 50 instrumented tests, one canonical
+  JSON per contract, all from the same gate invocation (47 mapped scenarios
+  and 21 sentinels across the ten contracts; the executed testcase count grew
+  independently of the mapped scenarios — the facade-consumer classes carry
+  two unmapped extras).
+
+**The quick-reattach race the binding documents.** After a terminal detach,
+a re-attach attempted WHILE the P1 reservation is still held (before the
+effective termination releases it) is refused (`AlreadyInUse(Host)`) — and
+the refusal leaves the binding's slot open with NO further attach event
+incoming (the view is already in the window): the host stays session-less
+until the NEXT detach/attach cycle, the only thing that re-triggers the
+create. The binding recovers only on that next cycle; a machine-level retry
+(a deferred re-arm) is a documented deferred refinement, and the samples add
+no retry policy of their own.
+
+## CI and nightly (phase 10)
+
+The gate is wired to the two cadences of `TEST-STRATEGY.md`, with the normative
+budgets untouched (§9.1: aggregate PR p95 ≤ 10 min, job p95 ≤ 8 min WARM, hard
+timeout 15 min per job plus an external timeout for every child process —
+changing those numbers is a reviewed change of TEST-STRATEGY, no workflow
+deviates):
+
+**PR gate — `.github/workflows/kadre-android-contracts.yml`** (job
+`android-contracts`, the §9 matrix name). Every pull request and every push to
+master: ubuntu-latest with KVM, the PINNED emulator image
+`system-images;android-35;google_apis;x86_64` (a fresh AVD per run, headless,
+`-no-snapshot` — an ephemeral runner always cold-boots), the boot waited
+bounded (`adb wait-for-device` capped at 120 s, the `sys.boot_completed` poll
+at 300 s, a fast explained failure with the emulator log — never an open
+hang), then THE SAME local gate `scripts/test-kadre-android-contracts.sh
+--serial <booted>` (serial re-validated, registry + the ten AND contracts'
+on-device evidence, 900 s process-group watchdog) under the job's 15-minute
+hard cap; the first cold run may exceed the 8-minute SLO without being a
+drift (the x86_64 KVM emulator boots faster than the local arm64 AVD — the
+p95 is measured on real runs). Artifacts (evidence, JUnit XML, emulator log)
+upload in the `failure() || cancelled()` form — the only conditional step, the
+web workflow's shape. The single `kadre-pr-contracts` branch-protection status
+that groups this check with the six existing platform gates is repository
+settings (a repo-settings action owned by the human partner, not a workflow).
+The engine label on CI is `emulator-api-35-x86_64`, read from the attached
+device itself (getprop, never hardcoded) — a SECOND environment, deliberately
+distinct from the local arm64 label; the evidence JSONs of the two never
+collide.
+
+**Nightly — `.github/workflows/kadre-android-nightly.yml`** (cron
+`43 2 * * *` + `workflow_dispatch`, its own concurrency group with
+cancel-in-progress, the web-nightly 40-minute timeout). The matrix is API 24
+(the minSdk — the oldest surface the gate must hold, TEST-STRATEGY §11.1
+"versions minimum et courante") and API 35 (current), `fail-fast: false` —
+two independent measurements of the same commit, one red leg must not hide
+the other. Each leg runs TWO measurements on its booted emulator: the full
+contract gate (the ten contracts, real consent dialogs included), then the
+leak-cycles class ALONE (AGP's
+`-Pandroid.testInstrumentationRunnerArguments.class=...` filter on the
+consumer's `connectedDebugAndroidTest` — the devicetest module is a library
+consumed by the consumer, it has no connected task of its own). The upload is
+`always()`: the measurement history is the deliverable of a red night too.
+The minSdk-24 static audit (android-35's `api-versions.xml`): every unguarded
+SDK call on the attach/input/display/lifecycle paths is ≤ 24;
+`startForegroundService` (26) is reached only by the capture FGS control and
+wrapped there (the documented `foreground-start-refused` degradation);
+`getVibratorManager` (31) and the three-argument `startForeground` (29) are
+guarded by `Build.VERSION.SDK_INT`; `VibrationEffect` (26) is NOT guarded —
+`startOneShot` reaches `createOneShot` unguarded, and its API-24 protection
+is the one-shot helper's `runCatching { }.isSuccess`: the first use of the
+missing class raises `NoClassDefFoundError`, swallowed into the documented
+graceful `false` (no vibration below API 26, never a crash). The first API 24
+night is the real verification — the x86_64 image cannot boot on an arm64
+host (the hard QEMU2 rule), CI runs it for real.
+
+**The leak-cycles class — `AndroidLeakCyclesTest`** (the friend module
+`platform/android-devicetest`, riding the consumer's androidTest APK — the P6
+wiring; carried by BOTH the PR gate suite and the nightly's explicit leg).
+Seven repeated-cycle measurements, each red if its resource leaks: 10
+attach/stop cycles (5 Kotlin + 5 facade — the exact terminal HELD through
+churn and a bounded soak, the same View re-attached next cycle, the diagnostic
+journal unchanged), 5 `recreate()` cycles (the old session stays exactly
+`Stopped(HostDetached)` while the new instance is RESUMED), 4
+background/foreground round trips (`moveToState` — the session SURVIVES, the
+surface publications follow every transition), 4 service cycles (ZERO
+`AndroidCaptureService` at rest — the behavioral consequence of the refcount
+reaching zero; the registry's `arm→forget` yields a FRESH deferred), and 4
+cycles for each of the display / input / gamepad ports (exactly 1
+registration at install, 0 at close, the inventory bounded). Red-if-leak is
+proven by mutation: removing the display port's close-time unregister turns
+ITS measurement red (`expected:<0> but was:<1>`), byte-identical revert, green
+again. Documented as NOT measurable here (named in the KDoc): heap-level
+survival (captured Activity/View instances, orphan coroutines, delivery
+buffers) and a direct read of the FGS `holders` counter — the deferred
+LeakCanary sample/debug decision (TEST-STRATEGY §11.1); the service-at-rest
+measurement is its exact behavioral consequence on the FGS side.
+
+**The cold-boot rule** (the phase 9 Task 5 finding, adopted for every
+cadence): an emulator left warm for a long time can abort in PLATFORM
+components — the emulator's Bluetooth stack SIGABRTs, then `libhwui`
+`Readback::copySurfaceInto` hits a framework assert on the RenderThread — the
+crash is in the platform, not in Kadre code. Any retry after such a failure
+runs COLD (`adb emu kill`, zero devices, let the script boot the AVD again)
+and the cold-boot green run is the verdict (proven in phase 9: the same
+branch red on a warm emulator, green on the next cold boot). A CI or nightly
+job does not have this problem — its runner is ephemeral and `-no-snapshot`
+forces the cold boot.
+
+**The device script.** `scripts/test-kadre-android-device.sh` is the
+selection/check library sourced by the gate script (and usable standalone):
+an explicit serial (`--serial <serial>`, positional, or an exported
+`ANDROID_SERIAL`) is validated against `adb devices` for the exact `device`
+state before anything runs; without one, auto-detection admits EXACTLY ONE
+eligible (booted) device and refuses any ambiguity; a boot-incomplete device
+fast-fails after a bounded wait instead of hanging. Its self-test
+(`scripts/test-kadre-android-device-selftest.sh`, 19/19 with fake adb/gradle —
+unique, explicit OK/incompatible, multi, zero, offline, boot-incomplete,
+watchdog kills parent+child) never touches a real emulator. The Gradle child
+of the gate runs under the portable process-group watchdog: its own group
+(`setsid` on Linux, backgrounded subshell + `pgrep -P` walk elsewhere), TERM
+then KILL at the 900 s expiry (exit 124), escalation for survivors — the
+Gradle daemon no longer outlives a killed client.
 
 ## Engine labeling
 
@@ -822,7 +1023,7 @@ writes `emulator-api-<sdk>-<abi>`. On the phase 0 AVD this is
 are attached. Every run resets the per-engine JUnit copy directory first, so a
 stale XML from an earlier run can never inflate the evidence identity. The
 producer writes one canonical JSON per active android contract (currently
-`AND-001` through `AND-009`), each pinned to the current HEAD
+`AND-001` through `AND-010`), each pinned to the current HEAD
 commit.
 
 ## Evidence mapping
@@ -846,26 +1047,34 @@ arguments as the runtime/AppKit producers — no format reimplementation) with:
   for AND-007; `androidCaptureSourceRefused` for AND-009) are mapped to
   `AndroidDropDeviceContractTest` / `AndroidCaptureDeviceContractTest`, whose
   classes arrive in the same XML from the `platform/android-devicetest` AAR
-  consumed `androidTestImplementation`;
+  consumed `androidTestImplementation`; `AND-010` maps to
+  `KotlinFacadeConsumerTest` and `JavaAndroidFacadeConsumerTest` (the
+  facade-consumer scenario and its no-leak sentinel, in the consumer's own
+  androidTest sources) and to `ComposeShowcaseContractTest` (the migrated
+  compose sample's OWN instrumented APK — the SECOND forked run, whose XML
+  joins the same per-engine JUnit copy);
 - the JUnit XML the consumer produced under
   `kadre/consumers/android/build/outputs/androidTest-results/connected/`;
 - the current HEAD commit (the same `git rev-parse HEAD` rule the validator
   uses — a document pinned to a commit is stale by definition once HEAD moves).
 
-Outputs: `build/contract-evidence/android/<engine>/AND-{001,002,003,004,005,006,007,008,009}.json`
+Outputs: `build/contract-evidence/android/<engine>/AND-{001,002,003,004,005,006,007,008,009,010}.json`
 (canonical), `build/test-results/android/<engine>/TEST-*.xml` (the JUnit copy
 the validator cross-checks), `build/contract-evidence/android/engines.txt` (the
 engines this run actually produced), and the gate copies
-`build/contract-evidence/AND-{001,002,003,004,005,006,007,008,009}.json` that
+`build/contract-evidence/AND-{001,002,003,004,005,006,007,008,009,010}.json` that
 `validateContractEvidence` reads.
 
 ## `androidContractsCheck` is deliberately not in `:kadre:check`
 
-`:kadre:check` does **not** depend on `androidContractsCheck`: there is no
-emulator on the current CI runners, and the aggregate requires a booted device
-(the smoke re-runs the consumer instrumentation). Wiring the mandatory CI job
-is phase 10 of the roadmap
-(`ANDROID-IMPLEMENTATION-ROADMAP.md#Phase 10`).
+`:kadre:check` does **not** depend on `androidContractsCheck`: the aggregate
+requires a booted device (the smoke re-runs the consumer instrumentation), so
+wiring it into `:kadre:check` would break every device-less invocation. The
+mandatory CI job is wired at phase 10 of the roadmap
+(`ANDROID-IMPLEMENTATION-ROADMAP.md#Phase 10`): the `android-contracts` job of
+[kadre-android-contracts.yml](../../../../.github/workflows/kadre-android-contracts.yml)
+boots the emulator itself on every PR and master push (see "CI and nightly"
+above), which is where the check runs mandatorily.
 
 ## Phase limits (deferred guarantees)
 
@@ -1075,6 +1284,41 @@ sharing on a physical device and a real mid-stream revocation/rotation remain
 material [verify-device] items — the process-wide refcount and the
 reconfigure machinery are proven host-side.
 
+Since phase 9, the Java facade and the Compose binding are live wrappers over
+the unchanged Kotlin surface: `KadreAndroid.attach` — the two INTEROP §4
+statics verbatim (Activity form with an explicit `surfaceView`, View form with
+an explicit `lifecycleOwner`), the `KadreResult.Failure` translated to
+`KadreException` (the failure intact, never null) — and the
+`KadreSessionHandle`: the opaque facade-allocated id (never the Kotlin
+`SessionId`, the web model), the Java-safe snapshot, immediate-then-sequential
+observers in registration order (a throwing consumer unregisters ITSELF and
+reaches the host dispatcher's uncaught handler without touching the session),
+THE stable terminal `CompletionStage` whose derived waiters cancel without
+stopping the session and which survives `close()`, the motivated stop, the
+idempotent close — with the zero-leak scan pinning that no coroutine type
+crosses the facade, and the Java policy helpers
+`KadrePolicies.defaultPolicy()/realtimePolicy()/recordingPolicy()` landed with
+it (INTEROP §4's policy-letter sentence is true). The Compose binding
+`KadreComposeHost` keeps ONE session per host: the attach waits for the
+surface view's real attachment (the view itself is the trigger — Android
+dispatches attach events top-down BEFORE attaching children), recomposition is
+inert (creation captures held in unkeyed `remember`), composition exit closes
+(`onDispose` → the host stop request), a terminal detach recreates on the next
+attach (the runtime owns that stop, never doubled). The binding's documented
+limit is the quick-reattach race (see the phase 9 exit gate above): after a
+terminal detach, a re-attach while the P1 reservation is still held is refused
+and NO further attach event fires — the host stays session-less until the next
+detach/attach cycle; a machine-level retry is a deferred refinement. The
+samples migration retires the kadre-old Android usages: three modules rebuilt
+on the public surface and the PUBLISHED artifacts (`android-hello-window`,
+`android-hello-touch`, `android-compose-showcase`), each plain sample
+attach-once with no retry on refusal (programming-error semantics for a
+sample), and the negative consumer proving the executed APK carries no
+`AndroidKadreRuntime` and no kadre-old `EventLoop`; the GPU sample
+`hello-triangle-android-capture` is NOT migrated — the wgpu4k renderer is
+sample responsibility, documented as deferred with the phase 8 `CapturePort`
+as the future primitive.
+
 **The View form has no input observation — a structural, declared limit.**
 `View.getWindow()` is `@hide`: a View-form attach has no `Window.Callback` to
 chain, so no observation path exists. The input capabilities there stay
@@ -1154,7 +1398,17 @@ authoritative list with the owning phase lives in
   carries the procedures, and per `TEST-STRATEGY.md` they pass on the declared
   device pool when one is qualified; editor actions through the IME (phase 5
   text-input decision) stay parked with that decision;
-- **Phase 9** — Java facade, Compose;
+- **Phase 9 — delivered; what remains are refinements, not the facade or the
+  binding.** The Java facade, the Compose binding and the samples migration
+  are live and proven by `AND-010` (see the phase 9 paragraph above). The
+  remaining items: the quick-reattach race refinement (a machine-level retry
+  after a refused re-attach — today the binding recovers on the next
+  detach/attach cycle only), the migrated GPU sample's renderer
+  (`hello-triangle-android-capture` stays unmigrated — wgpu4k is sample
+  responsibility, the phase 8 `CapturePort` is the future primitive), real
+  gamepad hardware (the phase 7 material item, unchanged), and the editor
+  actions through the IME (parked with the phase 5 text-input decision,
+  unchanged);
 - **Phase 10** — the mandatory `android-contracts` CI job.
 
 Two boundary lines are not deferrals at all. **Rendering itself** is out of

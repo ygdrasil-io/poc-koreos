@@ -33,6 +33,12 @@ androidx-activity-compose = "1.10.1"
 androidx-activity = "1.10.1"
 androidx-lifecycle = "2.8.7"
 
+# L'instrumentation Android (le sample compose-showcase, phase 9) — les versions exactes
+# déjà épinglées par `consumers/android`.
+androidx-test-ext-junit = "1.2.1"
+androidx-test-runner = "1.6.2"
+androidx-test-core = "1.6.1"
+
 [libraries]
 # kffi X11 FFI snapshot
 kffi-x11 = { module = "org.graphiks:kffi-x11", version.ref = "kffi-x11" }
@@ -57,6 +63,19 @@ kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serializa
 # Séparé de la stdlib Kotlin/Wasm ; platform:web l'apporte aux samples qui
 # n'ont pas Compose.
 kotlinx-browser = { module = "org.jetbrains.kotlinx:kotlinx-browser", version.ref = "kotlinx-browser" }
+
+# Les artefacts compose en coordonnées directes (le sample compose-showcase, phase 9) : une
+# application AGP pure — le plugin `org.jetbrains.compose` et ses accesseurs visent le
+# conteneur KMP ; ici les MÊMES artefacts publiés de JetBrains, la version du même ref.
+compose-runtime = { module = "org.jetbrains.compose.runtime:runtime", version.ref = "compose-multiplatform" }
+compose-ui = { module = "org.jetbrains.compose.ui:ui", version.ref = "compose-multiplatform" }
+compose-foundation = { module = "org.jetbrains.compose.foundation:foundation", version.ref = "compose-multiplatform" }
+
+# L'instrumentation Android (le sample compose-showcase, phase 9) — les versions exactes
+# déjà épinglées par `consumers/android`.
+androidx-test-ext-junit = { module = "androidx.test.ext:junit", version.ref = "androidx-test-ext-junit" }
+androidx-test-runner = { module = "androidx.test:runner", version.ref = "androidx-test-runner" }
+androidx-test-core = { module = "androidx.test:core", version.ref = "androidx-test-core" }
 
 # Koin (Dependency Injection)
 koin-core = { module = "io.insert-koin:koin-core", version.ref = "koin" }

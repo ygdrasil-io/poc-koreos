@@ -71,6 +71,17 @@ internal class UIKitWindowRuntime internal constructor(
         windowStateSink = { id, state -> manager.acceptWindowGeometryObservation(id, state) },
         // La surface est déjà visible dans la vue du host dès l'attach : rien à faire natif.
         readySink = { },
+        // Phase 7, Task 3 : le second sink du port — l'admission synchrone d'un drop. Le
+        // miroir EXACT du driver AppKit (AppKitWindowRuntimeDriver.kt l.112-114) : l'étape
+        // d'accept native est un SUCCÈS CONSTANT — la décision d'admission est celle du
+        // consumer (`InteractionAction.AcceptDrop`, lue par le dispatch du manager) ; un
+        // rendu non-nul est l'offerId retenu par les hooks du binding pour le suivi
+        // move/exit/perform, `null` le chemin refusant (la source déjà fermée par le
+        // manager). La lambda lit le manager au moment de l'invocation (composition
+        // différée, cf. KDoc de classe).
+        synchronousDropSink = { surfaceId, source, position ->
+            manager.dispatchSynchronousDrop(surfaceId, source, position) { KadreResult.Success(Unit) }
+        },
     )
 
     internal val manager: RuntimeWindowManager = RuntimeWindowManager(

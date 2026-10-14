@@ -46,6 +46,30 @@ targets:
         # (clé retirée aussi). Le stimulus retenu est le repli DOCUMENTÉ du brief Step 2 :
         # resize à changement d'aspect (240×320), tracé (NSLog + DriverTrace) et rapporté —
         # JAMAIS un faux vert rotation.
+        # Le drop (phase 7, BCK-026) : un drag CROSS-APP est IMPOSSIBLE sur Simulator (aucune API
+        # de drag système programmable — un UIDragItem ne peut pas être initié hors du process
+        # hôte). La preuve du driver est donc un stimulus IN-PROCESS honnête : le VRAI
+        # UIDropInteractionDelegate installé par l'attach (fetché de la vue) est appelé hook par
+        # hook dans l'ordre UIKit (canHandle → enter → update → exit/perform) avec une fausse de
+        # session conforme à `UIDropSession` (route épinglée par la spike Task 1) — le canal
+        # delegate RÉEL d'UIKit, jamais un événement fabriqué. Le drag physique cross-app reste
+        # le charter manuel Task 4.
+        # Displays/devices/gamepads/mémoire (phase 8, BCK-027) : les LIMITES Simulator bornent
+        # le scope du driver — PAS d'écran externe (UIScreen.screens porte l'unique écran du
+        # device simulé : l'inventaire réel + single-viewport HostViewport, le multi-écrans
+        # AirPlay reste le charter matériel) et PAS de manette BLUETOOTH réelle du simulateur.
+        # FAIT ÉPINGLÉ AU DRIVER (Xcode 27, l'hôte de gate) : le Simulator PONTE les devices
+        # GameController du Mac hôte DANS le process simulé — la souris gamer de l'hôte y
+        # arrive en GCController à profil étendu, le clavier du Mac en GCKeyboard coalesced ;
+        # l'inventaire publié les PORTE (le miroir est le contrat, jamais une fabrication).
+        # Les scénarios empty-honest épinent donc le MIROIR PARFAIT contre l'oracle SDK relu
+        # par le test lui-même : la forme VIDE est la référence sans périphérique (le zéro du
+        # nom du scénario, tenu sur toute machine sans device ponté) et la divergence
+        # fabrication/omission échoue SUR TOUTE machine. La notification
+        # mémoire est le stimulus IN-PROCESS sanctionné (le post réel
+        # UIApplicationDidReceiveMemoryWarningNotification — observateur → source process →
+        # relais → signaux, la chaîne entre extrémités) ; la DÉCISION OS de tirer la
+        # notification (et les livraisons réelles d'écrans branchés) reste le charter manuel.
         UIApplicationSceneManifest:
           UIApplicationSupportsMultipleScenes: true
           UISceneConfigurations:

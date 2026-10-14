@@ -4520,9 +4520,12 @@ public final class org/graphiks/kadre/policy/InputDeliveryPolicy {
 
 public final class org/graphiks/kadre/policy/KadrePolicies {
 	public static final field INSTANCE Lorg/graphiks/kadre/policy/KadrePolicies;
+	public final fun defaultPolicy ()Lorg/graphiks/kadre/policy/KadrePolicy;
 	public final fun getDefault ()Lorg/graphiks/kadre/policy/KadrePolicy;
 	public final fun getRealtime ()Lorg/graphiks/kadre/policy/KadrePolicy;
 	public final fun getRecording ()Lorg/graphiks/kadre/policy/KadrePolicy;
+	public final fun realtimePolicy ()Lorg/graphiks/kadre/policy/KadrePolicy;
+	public final fun recordingPolicy ()Lorg/graphiks/kadre/policy/KadrePolicy;
 }
 
 public final class org/graphiks/kadre/policy/KadrePolicy {

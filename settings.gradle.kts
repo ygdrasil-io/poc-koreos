@@ -60,6 +60,20 @@ dependencyResolutionManagement {
             metadataSources { artifact() }
             content { includeModule("com.github.webassembly", "binaryen") }
         }
+
+        // Repository contractuel : les artefacts kadre PUBLIÉS à HEAD (le pattern
+        // `consumers/android`) pour les samples Android migrés (phase 9, AND-010).
+        // Filtré par groupe : seuls les artefacts kadre y sont résolus, jamais rien
+        // d'autre — et aucun autre module du build n'en résout (toutes les dépendances
+        // kadre internes sont des projets).
+        maven {
+            name = "KadreContractRepository"
+            url = rootDir.resolve("build/kadre-contract-repository").toURI()
+            content {
+                includeGroup("org.graphiks.kadre")
+                includeGroup("org.graphiks.kadre.internal")
+            }
+        }
     }
 }
 
@@ -79,6 +93,9 @@ include(":kadre:platform:uikit")
 include(":kadre:platform:android")
 include(":kadre:platform:android-devicetest")
 include(":kadre:contracts:driver:android")
+// La liaison Compose Android (phase 9) — android-only, hors de l'allowlist `check` du
+// root : la gate de phase (Task 4, instrumentation) en est propriétaire.
+include(":kadre:integration:compose")
 include(":kadre:contracts:driver:wayland")
 include(":kadre:contracts:driver:win32")
 include(":kadre:runtime")
@@ -87,3 +104,15 @@ include(":kadre:backend:wayland")
 include(":kadre:backend:win32")
 include(":kadre:samples:desk-tour")
 include(":kadre:samples:hello-kadre")
+
+// Les samples Android migrés (phase 9, AND-010) : applications Android AGP pures qui
+// consomment les artefacts PUBLIÉS du repository contractuel (l'umbrella `kadre-android`,
+// la liaison `compose-android` — le pattern `consumers/android`). Comme
+// `:kadre:integration:compose`, ils restent HORS de l'allowlist `check` du root : la gate
+// d'instrumentation Android (`androidContractsCheck`) en est propriétaire. Le repository
+// contractuel est déclaré plus haut (filtré sur les groupes kadre) — les coordonnées
+// `-android` visent les AAR publiés ; la coordonnée par défaut de l'umbrella serait
+// substituée par le projet `:kadre` (substitution automatique group:name du build).
+include(":kadre:samples:android-hello-window")
+include(":kadre:samples:android-hello-touch")
+include(":kadre:samples:android-compose-showcase")

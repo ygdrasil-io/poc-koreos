@@ -1,6 +1,7 @@
 package org.graphiks.kadre.internal.runtime
 
 import org.graphiks.kadre.diagnostics.KadreResult
+import org.graphiks.kadre.diagnostics.KadreFailure
 import org.graphiks.kadre.input.GamepadCapabilities
 import org.graphiks.kadre.input.GamepadDescriptor
 import org.graphiks.kadre.input.GamepadEffect
@@ -24,6 +25,8 @@ public data class GamepadPortGamepad(
 
 /** One per-session gamepad observation from a backend. */
 public sealed interface GamepadPortEvent {
+    /** Re-read [GamepadPort.inventoryFailure], including recovery to an empty inventory. */
+    public data object InventoryChanged : GamepadPortEvent
     public data class Connected(public val gamepad: GamepadPortGamepad) : GamepadPortEvent
     public data class Disconnected(public val key: Long) : GamepadPortEvent {
         init {
@@ -65,6 +68,8 @@ public data class GamepadPortRouting(
  * `GamepadId`, validates state against the advertised descriptor, and owns public flows.
  */
 public interface GamepadPort : AutoCloseable {
+    /** A failed complete read withdraws the snapshot; null means enumeration succeeded. */
+    public val inventoryFailure: KadreFailure? get() = null
     /**
      * Current complete projection visible to this session.
      *

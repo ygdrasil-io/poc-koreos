@@ -78,6 +78,20 @@ public object KadrePolicies {
         ),
     )
 
+    /**
+     * Les helpers « lettres de policy » promis par INTEROP-EXPORTS §4 aux hosts Java :
+     * des fonctions ordinaires du singleton — `KadrePolicies.INSTANCE.defaultPolicy()` en
+     * bytecode JVM — délégant trivialement à la constante publique (LA MÊME instance,
+     * jamais une copie). Aucun builder custom en v1.
+     */
+    public fun defaultPolicy(): KadrePolicy = Default
+
+    /** La lettre temps réel — [Realtime]. Voir [defaultPolicy] pour le contrat Java. */
+    public fun realtimePolicy(): KadrePolicy = Realtime
+
+    /** La lettre d'enregistrement — [Recording]. Voir [defaultPolicy] pour le contrat Java. */
+    public fun recordingPolicy(): KadrePolicy = Recording
+
     private fun profile(
         execution: ExecutionPolicy,
         discreteCapacity: Int,

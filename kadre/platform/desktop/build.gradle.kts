@@ -20,6 +20,7 @@ kotlin {
             implementation(project(":kadre:runtime"))
             runtimeOnly(project(":kadre:backend:appkit"))
             runtimeOnly(project(":kadre:backend:wayland"))
+            runtimeOnly(project(":kadre:backend:win32"))
         }
         jvmTest.dependencies {
             implementation(kotlin("test"))

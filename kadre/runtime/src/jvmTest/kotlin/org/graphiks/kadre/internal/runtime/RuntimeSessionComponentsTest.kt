@@ -23,9 +23,23 @@ import org.graphiks.kadre.diagnostics.KadreFailure
 import org.graphiks.kadre.diagnostics.KadreOperation
 import org.graphiks.kadre.diagnostics.KadrePlatform
 import org.graphiks.kadre.diagnostics.KadreResult
+import org.graphiks.kadre.diagnostics.FeatureAvailability
 import org.graphiks.kadre.display.DisplayInventory
 import org.graphiks.kadre.display.DisplayType
 import org.graphiks.kadre.input.DeviceInventory
+import org.graphiks.kadre.input.GamepadButton
+import org.graphiks.kadre.input.GamepadButtonValue
+import org.graphiks.kadre.input.GamepadCapabilities
+import org.graphiks.kadre.input.GamepadDescriptor
+import org.graphiks.kadre.input.GamepadEffectConstraints
+import org.graphiks.kadre.input.GamepadEffectKind
+import org.graphiks.kadre.input.GamepadHapticLocality
+import org.graphiks.kadre.input.GamepadLocalizedHapticConstraints
+import org.graphiks.kadre.input.GamepadMapping
+import org.graphiks.kadre.input.GamepadRoutingState
+import org.graphiks.kadre.input.GamepadState
+import org.graphiks.kadre.input.InputDeviceDescriptor
+import org.graphiks.kadre.input.InputDeviceKind
 import org.graphiks.kadre.input.PermissionState
 import org.graphiks.kadre.policy.InputDeliveryPolicy
 import org.graphiks.kadre.policy.WindowDeliveryPolicy
@@ -52,6 +66,36 @@ import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 
 class RuntimeSessionComponentsTest {
+    @Test
+    fun throwingDisplayObserverClosesEveryCreatedComponentExactlyOnce() = runTest {
+        val display = RecordingDisplayPort(failObserver = true)
+        val pads = RecordingGamepadPort()
+        val devices = RecordingInputDevicePort()
+        val raw = RecordingRawInputPort()
+        var windowRuntimeCloses = 0
+        var root: Job? = null
+        val host = RuntimeHostController.withComponents(
+            platform = KadrePlatform.Fake,
+            componentsFactory = RuntimeSessionComponentsFactory { _, scope ->
+                root = scope.coroutineContext[Job]
+                RuntimeSessionComponents(
+                    RecordingWindowManager(),
+                    rawInputPort = raw,
+                    displayPort = display,
+                    gamepadPort = pads,
+                    inputDevicePort = devices,
+                ) { windowRuntimeCloses++ }
+            },
+        )
+        assertIs<KadreResult.Failure>(host.attach(this, KadreApplicationFactory { KadreApplication { } }))
+        assertEquals(1, display.closeCount)
+        assertEquals(1, pads.closeCount)
+        assertEquals(1, devices.closeCount)
+        assertEquals(1, raw.closeCount)
+        assertEquals(1, windowRuntimeCloses)
+        assertFalse(checkNotNull(root).isActive)
+    }
+
     @Test
     fun injectedCapturePortIsProjectedThroughItsSessionScopeAndClosedWithTheSession() = runTest {
         val port = RecordingCapturePort(
@@ -85,12 +129,13 @@ class RuntimeSessionComponentsTest {
     @Test
     fun configurationFailureReturnsAnAttachFailureAndClosesCreatedComponents() = runTest {
         var componentsClosed = 0
+        val display = RecordingDisplayPort()
         var componentScopeJob: Job? = null
         val host = RuntimeHostController.withComponents(
             platform = KadrePlatform.Fake,
             componentsFactory = RuntimeSessionComponentsFactory { _, rootScope ->
                 componentScopeJob = rootScope.coroutineContext[Job]
-                RuntimeSessionComponents(FailingInstallWindowManager()) { componentsClosed += 1 }
+                RuntimeSessionComponents(FailingInstallWindowManager(), displayPort = display) { componentsClosed += 1 }
             },
         )
 
@@ -103,6 +148,8 @@ class RuntimeSessionComponentsTest {
             result,
         )
         assertEquals(1, componentsClosed)
+        assertEquals(1, display.closeCount)
+        assertEquals(1, display.observationCloseCount, "successfully constructed manager must close on later failure")
         assertFalse(componentScopeJob!!.isActive)
     }
 
@@ -180,6 +227,103 @@ class RuntimeSessionComponentsTest {
         testScheduler.runCurrent()
 
         assertEquals(1, port.closeCount)
+    }
+
+    /**
+     * Le pin de la revue Task 2 (Important-2) — le SEUL des deux overloads différés sanctionnés
+     * pour l'uikit phase 8 qui porte le display port seul : la délégation POSITIONNELLE interne
+     * de l'overload `(windows, primarySurfaceProvider, displayPort, closeAction)` place le port
+     * dans LE SLOT display (jamais capture — le glissement compile vert autrement) et [close]
+     * le referme exactement une fois, APRÈS le closeAction. La projection par le manager display
+     * de la session est ce qui distingue un bon slot d'un slot où le port serait seulement fermé.
+     */
+    @Test
+    fun deferredProviderDisplayPortOverloadProjectsThroughTheDisplaySlotAndClosesThePortOnce() = runTest {
+        val port = RecordingDisplayPort()
+        var providerRuns = 0
+        var closeActionRuns = 0
+        val host = RuntimeHostController.withComponents(
+            platform = KadrePlatform.Fake,
+            componentsFactory = RuntimeSessionComponentsFactory { _, _ ->
+                RuntimeSessionComponents(
+                    windows = RecordingWindowManager(),
+                    primarySurfaceProvider = { providerRuns += 1; null },
+                    displayPort = port,
+                    closeAction = { closeActionRuns += 1 },
+                )
+            },
+        )
+        lateinit var observed: KadreScope
+
+        val session = attach(host) {
+            observed = this
+            awaitCancellation()
+        }
+        testScheduler.runCurrent()
+
+        assertEquals(1, providerRuns, "the deferred provider resolves exactly once, at session construction")
+        observed.displays.requestAccess()
+        assertIs<DisplayInventory.Enumerated>(observed.displays.state.value.inventory)
+
+        session.close()
+        testScheduler.runCurrent()
+
+        assertEquals(1, closeActionRuns)
+        assertEquals(1, port.closeCount)
+    }
+
+    /**
+     * Le pin de la revue Task 2 (Important-2), l'overload complet de l'attach uikit
+     * `(windows, primarySurfaceProvider, displayPort, gamepadPort, inputDevicePort, closeAction)`
+     * : les TROIS ports sont projetés DANS LEUR SLOT (le display comme DisplayManager, les deux
+     * device comme DeviceManager — un glissement d'argument qui compilerait vert les mettrait
+     * au mauvais manager ou les fermerait zéro/deux fois) et chacun est refermé EXACTEMENT une
+     * fois par la terminaison de session, après le closeAction.
+     */
+    @Test
+    fun deferredProviderThreePortOverloadProjectsEachPortInItsSlotAndClosesEachOnce() = runTest {
+        val displayPort = RecordingDisplayPort()
+        val gamepadPort = RecordingGamepadPort()
+        val inputDevicePort = RecordingInputDevicePort()
+        var providerRuns = 0
+        var closeActionRuns = 0
+        val host = RuntimeHostController.withComponents(
+            platform = KadrePlatform.Fake,
+            componentsFactory = RuntimeSessionComponentsFactory { _, _ ->
+                RuntimeSessionComponents(
+                    windows = RecordingWindowManager(),
+                    primarySurfaceProvider = { providerRuns += 1; null },
+                    displayPort = displayPort,
+                    gamepadPort = gamepadPort,
+                    inputDevicePort = inputDevicePort,
+                    closeAction = { closeActionRuns += 1 },
+                )
+            },
+        )
+        lateinit var observed: KadreScope
+
+        val session = attach(host) {
+            observed = this
+            awaitCancellation()
+        }
+        testScheduler.runCurrent()
+
+        assertEquals(1, providerRuns, "the deferred provider resolves exactly once, at session construction")
+        observed.displays.requestAccess()
+        val displays = assertIs<DisplayInventory.Enumerated>(observed.displays.state.value.inventory)
+        assertEquals(1, displays.displays.size, "the display port is projected as the DisplayManager")
+
+        val devices = assertIs<DeviceInventory.Enumerated>(observed.devices.state.value.inventory)
+        assertEquals(1, devices.gamepads.size, "the gamepad port is projected into the DeviceManager gamepads")
+        assertEquals(1, devices.devices.size, "the input-device port is projected into the DeviceManager devices")
+
+        session.close()
+        testScheduler.runCurrent()
+
+        assertEquals(1, closeActionRuns)
+        assertEquals(1, displayPort.closeCount)
+        assertEquals(1, gamepadPort.closeCount)
+        assertEquals(1, inputDevicePort.closeCount)
     }
 
     @Test
@@ -489,7 +633,9 @@ class RuntimeSessionComponentsTest {
         }
     }
 
-    private class RecordingDisplayPort : DisplayPort {
+    private class RecordingDisplayPort(private val failObserver: Boolean = false) : DisplayPort {
+        var observationCloseCount = 0
+            private set
         var closeCount = 0
             private set
 
@@ -518,19 +664,53 @@ class RuntimeSessionComponentsTest {
             ),
         )
 
-        override fun installSnapshotObserver(observer: (KadreResult<DisplayPortSnapshot>) -> Unit): AutoCloseable =
-            AutoCloseable { }
+        override fun installSnapshotObserver(observer: (KadreResult<DisplayPortSnapshot>) -> Unit): AutoCloseable {
+            check(!failObserver) { "display observer installation failed" }
+            return AutoCloseable { observationCloseCount++ }
+        }
 
         override fun close() {
             closeCount += 1
         }
     }
 
+    /**
+     * Le port manette enregistré avec UNE manette connectée (la forme uikit Task 4 : profil
+     * étendu, effets LocalizedHaptic disponibles) — la projection du slot gamepadPort doit la
+     * retrouver dans l'inventaire publie de la session.
+     */
     private class RecordingGamepadPort : GamepadPort {
         var closeCount = 0
             private set
 
-        override val gamepads: List<GamepadPortGamepad> = emptyList()
+        override val gamepads: List<GamepadPortGamepad> = listOf(
+            GamepadPortGamepad(
+                key = 11L,
+                descriptor = GamepadDescriptor(
+                    name = "Controller 11",
+                    mapping = GamepadMapping.Standard,
+                    buttons = listOf(GamepadButton.South),
+                    axes = emptyList(),
+                ),
+                state = GamepadState(
+                    buttons = listOf(GamepadButtonValue(GamepadButton.South, 0.0, false)),
+                    axes = emptyList(),
+                ),
+                routing = GamepadRoutingState.Routed,
+                capabilities = GamepadCapabilities(
+                    effects = Capability.Supported(
+                        GamepadEffectConstraints(
+                            kinds = setOf(GamepadEffectKind.LocalizedHaptic),
+                            localizedHaptics = GamepadLocalizedHapticConstraints(
+                                setOf(GamepadHapticLocality.Default),
+                            ),
+                            maximumDuration = null,
+                        ),
+                        FeatureAvailability.Available,
+                    ),
+                ),
+            ),
+        )
 
         override fun installObserver(observer: (GamepadPortEvent) -> Unit): AutoCloseable = AutoCloseable { }
 
@@ -548,11 +728,14 @@ class RuntimeSessionComponentsTest {
         }
     }
 
+    /** Le port device générique enregistré avec UN clavier (le fait seul, hors livraison). */
     private class RecordingInputDevicePort : InputDevicePort {
         var closeCount = 0
             private set
 
-        override val devices: List<InputDevicePortDevice> = emptyList()
+        override val devices: List<InputDevicePortDevice> = listOf(
+            InputDevicePortDevice(21L, InputDeviceDescriptor("Keyboard", InputDeviceKind.Keyboard)),
+        )
 
         override fun installObserver(observer: (InputDevicePortEvent) -> Unit): AutoCloseable = AutoCloseable { }
 

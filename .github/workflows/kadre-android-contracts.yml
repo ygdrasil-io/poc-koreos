@@ -1,0 +1,155 @@
+# Kadre Android Contracts — the phase-10 CI closure: the Android contract gate
+# (registry + on-device evidence for the ten active AND contracts) runs on every
+# pull request and every push to master, against a booted, pinned Android 35
+# google_apis x86_64 emulator (KVM) on the ubuntu runner — mirroring
+# kadre-web-contracts.yml (triggers, ubuntu-latest, 15-minute hard timeout,
+# temurin JDK 25 + Gradle cache).
+#
+# Integrity (TEST-STRATEGY §9, binding): every step must succeed — a failure or
+# a watchdog timeout (exit 124) fails the job, no tolerated step, no masked
+# step, no retry. The Gradle child runs under the portable process-group
+# watchdog of scripts/test-kadre-android-device.sh (TERM then KILL on the whole
+# group); the boot waits here and inside the gate script are bounded and
+# fast-fail. The only conditional step is the artifact upload at the end, in
+# the failure/cancelled form sanctioned by the web workflow.
+#
+# Aggregate status: this workflow publishes the `android-contracts` check. The
+# single `kadre-pr-contracts` branch-protection status that groups it with the
+# other platform gates is GitHub repository settings — not expressible in this
+# file — a repository-settings action owned by the human partner.
+#
+# Evidence identity: the engine label is derived from the attached device
+# itself (`emulator-api-<sdk>-<abi>`, read via getprop — never hardcoded), so
+# on this runner the evidence lands under emulator-api-35-x86_64, deliberately
+# distinct from the local macOS arm64 label: separate environments by
+# protocol, their evidence JSONs never collide.
+
+name: Kadre Android Contracts
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  android-contracts:
+    name: android-contracts
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 25
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "25"
+          cache: gradle
+
+      - name: Enable KVM group perms
+        # The standard android-runner udev rule: /dev/kvm exists on the ubuntu
+        # runner but is root-owned; MODE 0666 + the udevadm reload/trigger let
+        # the emulator use hardware acceleration without a root emulator.
+        run: |
+          echo 'KERNEL=="kvm", GROUP=="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+          # The udev rule only applies on the next device event/login; the CI
+          # runner user is not in the kvm group, so force the mode now.
+          if [ -e /dev/kvm ]; then sudo chmod 666 /dev/kvm; fi
+
+      - name: Put the Android SDK tools on the PATH
+        # The ubuntu runner preinstalls the SDK at $ANDROID_HOME but does NOT
+        # put platform-tools (adb) on the PATH — the first real run failed its
+        # boot wait with `timeout: failed to run command 'adb': No such file
+        # or directory` (exit 127). GITHUB_PATH exports persist into every
+        # later step: the boot waits, the gate script and any SDK tool resolve
+        # from here (sdkmanager/avdmanager keep their explicit paths; the bin
+        # dir is exported anyway so a future bare call cannot regress this).
+        run: |
+          echo "$ANDROID_HOME/platform-tools" >> "$GITHUB_PATH"
+          echo "$ANDROID_HOME/cmdline-tools/latest/bin" >> "$GITHUB_PATH"
+
+      - name: Install the pinned Android 35 x86_64 emulator image
+        # ANDROID_HOME is preinstalled on the runner (SDK at
+        # /usr/local/lib/android/sdk, licenses pre-accepted); sdkmanager only
+        # downloads what is missing, so this is a no-op whenever a runner
+        # image update ships the pinned components. The system image version
+        # is pinned to API 35 google_apis x86_64 — the same API level as the
+        # local gate emulator, on the KVM-friendly ABI.
+        run: |
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "system-images;android-35;google_apis;x86_64" emulator platform-tools
+
+      - name: Create the Android 35 AVD
+        # ANDROID_AVD_HOME is pinned because avdmanager and the emulator resolve
+        # the AVD home through different env chains ($ANDROID_AVD_HOME /
+        # $ANDROID_SDK_HOME / $HOME/.android/avd) on the runner — the first run
+        # died with `Unknown AVD name [kadre-api-35]` when the ini landed
+        # elsewhere. Pinning both steps to the same explicit dir makes creator
+        # and consumer agree.
+        env:
+          ANDROID_AVD_HOME: ${{ github.workspace }}/avd-home
+        run: |
+          mkdir -p "$ANDROID_AVD_HOME"
+          echo "no" | "$ANDROID_HOME/cmdline-tools/latest/bin/avdmanager" create avd --name kadre-api-35 --package "system-images;android-35;google_apis;x86_64" --device pixel --force
+
+      - name: Boot the emulator in the background
+        # Same headless flags as the local auto-boot path of the gate script
+        # (plus -no-snapshot: an ephemeral runner must cold-boot). The process
+        # outlives this step; the next step waits for boot, the gate drives it.
+        # Same ANDROID_AVD_HOME as the create step: avdmanager/emulator resolve
+        # the AVD home differently on runners — the emulator must read the ini
+        # from the exact dir avdmanager wrote it to.
+        env:
+          ANDROID_AVD_HOME: ${{ github.workspace }}/avd-home
+        run: |
+          "$ANDROID_HOME/emulator/emulator" -avd kadre-api-35 -no-window -gpu swiftshader_indirect -no-audio -no-boot-anim -no-snapshot > /tmp/kadre-ci-emulator.log 2>&1 &
+
+      - name: Wait for the emulator to finish booting
+        # Bounded waits only (TEST-STRATEGY §9): adb wait-for-device is capped
+        # by GNU timeout, the sys.boot_completed poll by the deadline — then a
+        # fast, explained failure with the emulator log, never an open hang.
+        # The resolved serial is handed to the gate (--serial), which
+        # re-validates it against `adb devices` before anything else runs.
+        run: |
+          timeout 120 adb wait-for-device
+          serial="$(adb devices | awk 'NR > 1 && $2 == "device" { print $1; exit }')"
+          if [ -z "$serial" ]; then
+            echo "no emulator in 'device' state after wait-for-device (emulator log:)" >&2
+            tail -50 /tmp/kadre-ci-emulator.log >&2
+            exit 1
+          fi
+          deadline=$((SECONDS + 300))
+          until [ "$(adb -s "$serial" shell getprop sys.boot_completed | tr -d '\r')" = "1" ]; do
+            if [ "$SECONDS" -ge "$deadline" ]; then
+              echo "$serial did not report sys.boot_completed=1 within 300s (emulator log:)" >&2
+              tail -50 /tmp/kadre-ci-emulator.log >&2
+              exit 1
+            fi
+            sleep 5
+          done
+          echo "KADRE_CI_EMULATOR_SERIAL=$serial" >> "$GITHUB_ENV"
+
+      - name: Run the Android contract gate on the booted emulator
+        # The gate handles the rest: serial re-validation, boot re-check, then
+        # :kadre:contracts:validator:androidContractsCheck under the watchdog
+        # (900s external child timeout inside the 15-minute job hard cap).
+        run: scripts/test-kadre-android-contracts.sh --serial "$KADRE_CI_EMULATOR_SERIAL"
+
+      - name: Upload Android diagnostics and evidence
+        if: failure() || cancelled()
+        uses: actions/upload-artifact@v4
+        with:
+          name: kadre-android-contract-failure-artifacts
+          path: |
+            kadre/contracts/driver/android/build/contract-evidence/
+            kadre/contracts/driver/android/build/test-results/
+            /tmp/kadre-ci-emulator.log
+          if-no-files-found: ignore
+          include-hidden-files: true

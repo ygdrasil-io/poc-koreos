@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# UIKit contract gate (BCK-012, BCK-013, BCK-014, BCK-015, BCK-016, BCK-020, BCK-021, BCK-022, BCK-023, BCK-024, WIN-009). Usage: test-uikit-simulator.sh [ios|tvos|all]
+# UIKit contract gate (BCK-012, BCK-013, BCK-014, BCK-015, BCK-016, BCK-020, BCK-021, BCK-022, BCK-023, BCK-024, BCK-026, BCK-027, WIN-009). Usage: test-uikit-simulator.sh [ios|tvos|all]
 # Sélectionne explicitement la famille et sa destination, vérifie la toolchain,
 # lance les tests, valide les preuves et retourne un code d'échec fidèle.
 set -euo pipefail
@@ -57,10 +57,12 @@ run_gradle() {
 # BCK-014 (multi-scène iPadOS), BCK-016 (rotation iPadOS) et BCK-021 (scènes corrélées
 # iPadOS) n'exigent QUE iosSimulatorArm64, la suite tvOS reste mono-scène ; BCK-020
 # (refus de requestWindow sans provider), BCK-022/BCK-023 (sources d'entrée annoncées :
-# touch/pointeur, clavier/gestes) et BCK-024 (la session texte sur le receiver caché)
+# touch/pointeur, clavier/gestes), BCK-024 (la session texte sur le receiver caché) et
+# BCK-026 (la destination de drop native : flux iOS + sonde d'absence tvOS) et BCK-027
+# (displays/devices/gamepads/pression mémoire, avec sentinelle gamepad portée par uikitTest)
 # courent sur les DEUX familles.
-IOS_CONTRACT_IDS=(BCK-012 BCK-013 BCK-014 BCK-015 BCK-016 BCK-020 BCK-021 BCK-022 BCK-023 BCK-024 WIN-009)
-TVOS_CONTRACT_IDS=(BCK-012 BCK-013 BCK-015 BCK-020 BCK-022 BCK-023 BCK-024 WIN-009)
+IOS_CONTRACT_IDS=(BCK-012 BCK-013 BCK-014 BCK-015 BCK-016 BCK-020 BCK-021 BCK-022 BCK-023 BCK-024 BCK-026 BCK-027 WIN-009)
+TVOS_CONTRACT_IDS=(BCK-012 BCK-013 BCK-015 BCK-020 BCK-022 BCK-023 BCK-024 BCK-026 BCK-027 WIN-009)
 
 # Une SEULE invocation Gradle par famille : les tâches generate partagent le même
 # dependOn (export JUnit → xcodebuild) — une invocation exécute la suite simulateur UNE fois,
