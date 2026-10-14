@@ -5,17 +5,17 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import org.graphiks.kadre.platform.desktop.DesktopNativeWindowHandle
 import org.graphiks.kadre.platform.desktop.withDesktopHandle
 import org.graphiks.kadre.diagnostics.KadreResult
-import org.graphiks.kadre.window.WindowPhase
 import org.graphiks.kadre.window.WindowRequestOutcome
 import org.graphiks.kadre.window.WindowSpec
+import java.lang.foreign.Arena
 import java.lang.foreign.MemorySegment
+import java.lang.foreign.ValueLayout
 
 /**
  * W32-007/008 native half (spec R4) : métriques relues après resize natif
@@ -61,6 +61,21 @@ class Win32SurfaceNativeContractTest {
         (result.value as DesktopNativeWindowHandle.Win32).hwnd.toLong()
     }
 
+    // Independent native oracle: Windows LONG remains 32-bit on Win64.
+    private fun readNativeClientSize(hwnd: Long): Pair<Int, Int> = Arena.ofConfined().use { arena ->
+        val rect = arena.allocate(16, 4)
+        val ok = org.graphiks.kffi.win32.generated.GetClientRect(MemorySegment.ofAddress(hwnd), rect)
+        val error = if (ok == 0) org.graphiks.kffi.win32.generated.GetLastError() else 0
+        val bytes = rect.toArray(ValueLayout.JAVA_BYTE).joinToString(" ") {
+            "%02x".format(it.toInt() and 0xff)
+        }
+        val diagnostic = "hwnd=$hwnd GetClientRect=$ok error=$error RECT=[$bytes]"
+        diag("client-rect", diagnostic)
+        assertTrue(ok != 0, diagnostic)
+        (rect.get(ValueLayout.JAVA_INT, 8) - rect.get(ValueLayout.JAVA_INT, 0)) to
+            (rect.get(ValueLayout.JAVA_INT, 12) - rect.get(ValueLayout.JAVA_INT, 4))
+    }
+
     @Test
     fun programmaticResizePublishesReadBackMetrics() {
         val (port, driver) = newDriver()
@@ -71,7 +86,7 @@ class Win32SurfaceNativeContractTest {
             val hwnd = borrowHwnd(window)
             val initial = port.readClientPhysicalSize(hwnd)
 
-            // Stimulus externe : SetWindowPos(HWND, NULL, 0, 0, 900, 700, SWP_NOZORDER).
+            // SetWindowPos sizes the outer window, including its decorations.
             assertEquals(
                 1,
                 org.graphiks.kffi.win32.generated.SetWindowPos(
@@ -85,16 +100,21 @@ class Win32SurfaceNativeContractTest {
                 ),
                 "SetWindowPos must succeed",
             )
+            val expectedPhysical = readNativeClientSize(hwnd)
+            assertTrue(expectedPhysical.first > 0 && expectedPhysical.second > 0)
+            assertTrue(expectedPhysical != initial, "the native resize must change the client size")
+            assertEquals(expectedPhysical, port.readClientPhysicalSize(hwnd), "client RECT readback")
+            val scale = org.graphiks.kffi.win32.generated.GetDpiForWindow(MemorySegment.ofAddress(hwnd)) / 96.0
             withTimeout(2_000) {
                 window.state.first {
-                    it.contentSize.width == 900.0 && it.contentSize.height == 700.0
+                    it.contentSize.width == expectedPhysical.first / scale &&
+                        it.contentSize.height == expectedPhysical.second / scale
                 }
             }
             // Les métriques publiées sont la relecture effective, pas la demande.
-            assertEquals(900 to 700, port.readClientPhysicalSize(hwnd))
             assertIs<org.graphiks.kadre.window.WindowState>(window.state.value).let { state ->
-                assertEquals(900.0, state.contentSize.width)
-                assertEquals(700.0, state.contentSize.height)
+                assertEquals(expectedPhysical.first / scale, state.contentSize.width)
+                assertEquals(expectedPhysical.second / scale, state.contentSize.height)
             }
             assertTrue(initial.first > 0, "the initial client size must be readable")
         }
@@ -135,6 +155,7 @@ class Win32SurfaceNativeContractTest {
             val window = assertIs<WindowRequestOutcome.OpenedHere>(result.value.await()).window
             val hwnd = borrowHwnd(window)
             val scale = port.readScaleFactor(hwnd)
+            assertTrue(scale > 0.0, "a live window must have a positive DPI scale")
             val (width, height) = try {
                 port.readClientPhysicalSize(hwnd)
             } catch (failure: Throwable) {
@@ -153,7 +174,8 @@ class Win32SurfaceNativeContractTest {
                 "hwnd=$hwnd windowRect=$windowRect iconic=$iconic client=$width×$height",
             )
             println("PLACEMENT $windowRect iconic=$iconic client=${width}x$height")
-            assertTrue(width > 0, "client width must be readable at scale $scale (got ${width}×$height)")
+            assertEquals(readNativeClientSize(hwnd), width to height, "client RECT readback at scale $scale")
+            assertTrue(width > 0 && height > 0, "client size must be readable at scale $scale (got ${width}×$height)")
         }
     }
 }

@@ -22,6 +22,7 @@ import org.graphiks.kffi.win32.managed.Win32ManagedWindow
 import org.graphiks.kffi.win32.managed.Win32Structs
 import java.lang.foreign.Arena
 import java.lang.foreign.MemorySegment
+import java.lang.foreign.ValueLayout
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -182,16 +183,17 @@ internal class KffiWin32HostPort : Win32NativeHostPort {
     override fun readClientPhysicalSize(hwnd: Long): Pair<Int, Int> {
         init()
         Arena.ofConfined().use { arena ->
-            // RECT win64 : LONG left(0), top(8), right(16), bottom(24).
-            val rect = arena.allocate(32)
+            // Windows LONG is signed 32-bit, including on Win64 (LLP64).
+            // RECT: left(0), top(4), right(8), bottom(12), total 16 bytes.
+            val rect = arena.allocate(16, 4)
             check(
                 GetClientRect(MemorySegment.ofAddress(hwnd), rect) != 0,
-            ) { "GetClientRect failed for hwnd $hwnd" }
-            val left = rect.get(java.lang.foreign.ValueLayout.JAVA_LONG, 0)
-            val top = rect.get(java.lang.foreign.ValueLayout.JAVA_LONG, 8)
-            val right = rect.get(java.lang.foreign.ValueLayout.JAVA_LONG, 16)
-            val bottom = rect.get(java.lang.foreign.ValueLayout.JAVA_LONG, 24)
-            return Pair((right - left).toInt(), (bottom - top).toInt())
+            ) { "GetClientRect failed for hwnd $hwnd: GetLastError=${GetLastError()}" }
+            val left = rect.get(ValueLayout.JAVA_INT, 0)
+            val top = rect.get(ValueLayout.JAVA_INT, 4)
+            val right = rect.get(ValueLayout.JAVA_INT, 8)
+            val bottom = rect.get(ValueLayout.JAVA_INT, 12)
+            return Pair(right - left, bottom - top)
         }
     }
 
@@ -204,15 +206,15 @@ internal class KffiWin32HostPort : Win32NativeHostPort {
     internal fun readWindowRectForDiagnostics(hwnd: Long): String {
         init()
         Arena.ofConfined().use { arena ->
-            val rect = arena.allocate(32)
+            val rect = arena.allocate(16, 4)
             val ok = GetWindowRect(MemorySegment.ofAddress(hwnd), rect)
-            val err = GetLastError()
+            val err = if (ok == 0) GetLastError() else 0
             val iconic = IsIconic(MemorySegment.ofAddress(hwnd))
             return "GetWindowRect(ok=$ok err=$err iconic=$iconic) " +
-                "l=${rect.get(java.lang.foreign.ValueLayout.JAVA_LONG, 0)} " +
-                "t=${rect.get(java.lang.foreign.ValueLayout.JAVA_LONG, 8)} " +
-                "r=${rect.get(java.lang.foreign.ValueLayout.JAVA_LONG, 16)} " +
-                "b=${rect.get(java.lang.foreign.ValueLayout.JAVA_LONG, 24)}"
+                "l=${rect.get(ValueLayout.JAVA_INT, 0)} " +
+                "t=${rect.get(ValueLayout.JAVA_INT, 4)} " +
+                "r=${rect.get(ValueLayout.JAVA_INT, 8)} " +
+                "b=${rect.get(ValueLayout.JAVA_INT, 12)}"
         }
     }
 
