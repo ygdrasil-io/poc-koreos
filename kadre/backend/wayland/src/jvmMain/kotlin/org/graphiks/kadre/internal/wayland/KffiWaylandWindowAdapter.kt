@@ -30,6 +30,10 @@ internal class KffiWaylandWindowAdapter private constructor(
 
     override fun content(): MemorySegment = buffer.content()
 
+    override fun commitCurrent() {
+        surface.commit()
+    }
+
     override fun commitInitial() {
         surface.commit()
     }

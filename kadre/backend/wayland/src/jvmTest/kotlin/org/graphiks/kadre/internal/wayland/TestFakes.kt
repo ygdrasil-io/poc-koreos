@@ -78,6 +78,10 @@ internal class FakeBridge(
         return FakeNativeWindow(width = width, height = height).also { createdWindows.add(it) }
     }
 
+    override fun outputSnapshots(): List<WaylandOutputSnapshot> = emptyList()
+
+    override fun onOutputsChanged(listener: () -> Unit): AutoCloseable = AutoCloseable {}
+
     override fun close() {
         closed = true
     }

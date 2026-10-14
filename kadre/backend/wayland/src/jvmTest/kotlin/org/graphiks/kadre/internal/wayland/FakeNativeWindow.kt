@@ -31,6 +31,12 @@ internal class FakeNativeWindow(
 
     private val serialCounter = java.util.concurrent.atomic.AtomicInteger(1)
 
+    val commitCurrentCount = java.util.concurrent.atomic.AtomicInteger(0)
+
+    override fun commitCurrent() {
+        commitCurrentCount.incrementAndGet()
+    }
+
     override fun commitInitial() {
         // simule la réponse du compositor: un configure arrive après le commit
         val serial = serialCounter.getAndIncrement()

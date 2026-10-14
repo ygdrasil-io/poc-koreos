@@ -26,6 +26,9 @@ internal interface WaylandNativeWindow : AutoCloseable {
     /** Acknowledge du dernier configure observé. */
     public fun ackLatestConfigure()
 
+    /** Re-commit du buffer courant sans nouvel attach (redraw pacing). */
+    public fun commitCurrent()
+
     /** Événements du toplevel : configure (taille proposée, états) et close. */
     public fun onToplevelEvents(
         onConfigure: (width: Int, height: Int, states: List<Int>) -> Unit,
