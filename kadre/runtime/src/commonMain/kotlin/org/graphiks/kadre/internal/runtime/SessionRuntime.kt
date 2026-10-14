@@ -101,15 +101,16 @@ internal class SessionRuntime(
         // (pending/committed vides). L'ordre ci-dessous EST le contrat ; le construire après
         // coup jette `IllegalStateException` à la première session portant un display port
         // (phase 8 uikit — l'intégration réelle driver, l'épingle de ce).
-        val displayManager = components.displayPort?.let { port ->
-            RuntimeDisplayManager(
-                port = port,
-                eventStampSource = ::nextStamp,
-                collectorAllocator = eventCollectorAllocator,
-                maxCollectorsPerFlow = policy.resources.maxEventCollectorsPerFlow,
-            )
-        }
+        var displayManager: RuntimeDisplayManager? = null
         try {
+            displayManager = components.displayPort?.let { port ->
+                RuntimeDisplayManager(
+                    port = port,
+                    eventStampSource = ::nextStamp,
+                    collectorAllocator = eventCollectorAllocator,
+                    maxCollectorsPerFlow = policy.resources.maxEventCollectorsPerFlow,
+                )
+            }
             displayManager?.let(components::installExclusiveDisplayTargetResolver)
             components.installSessionConfiguration(
                 policy.window,
@@ -124,6 +125,7 @@ internal class SessionRuntime(
                 components.rawInputPort,
             )
         } catch (cause: Throwable) {
+            runCatching { displayManager?.close() }
             runCatching { components.close() }
             throw cause
         }

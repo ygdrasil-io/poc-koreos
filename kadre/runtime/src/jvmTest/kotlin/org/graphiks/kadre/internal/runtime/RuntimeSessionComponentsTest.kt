@@ -67,6 +67,36 @@ import java.util.concurrent.TimeUnit
 
 class RuntimeSessionComponentsTest {
     @Test
+    fun throwingDisplayObserverClosesEveryCreatedComponentExactlyOnce() = runTest {
+        val display = RecordingDisplayPort(failObserver = true)
+        val pads = RecordingGamepadPort()
+        val devices = RecordingInputDevicePort()
+        val raw = RecordingRawInputPort()
+        var windowRuntimeCloses = 0
+        var root: Job? = null
+        val host = RuntimeHostController.withComponents(
+            platform = KadrePlatform.Fake,
+            componentsFactory = RuntimeSessionComponentsFactory { _, scope ->
+                root = scope.coroutineContext[Job]
+                RuntimeSessionComponents(
+                    RecordingWindowManager(),
+                    rawInputPort = raw,
+                    displayPort = display,
+                    gamepadPort = pads,
+                    inputDevicePort = devices,
+                ) { windowRuntimeCloses++ }
+            },
+        )
+        assertIs<KadreResult.Failure>(host.attach(this, KadreApplicationFactory { KadreApplication { } }))
+        assertEquals(1, display.closeCount)
+        assertEquals(1, pads.closeCount)
+        assertEquals(1, devices.closeCount)
+        assertEquals(1, raw.closeCount)
+        assertEquals(1, windowRuntimeCloses)
+        assertFalse(checkNotNull(root).isActive)
+    }
+
+    @Test
     fun injectedCapturePortIsProjectedThroughItsSessionScopeAndClosedWithTheSession() = runTest {
         val port = RecordingCapturePort(
             snapshot(
@@ -99,12 +129,13 @@ class RuntimeSessionComponentsTest {
     @Test
     fun configurationFailureReturnsAnAttachFailureAndClosesCreatedComponents() = runTest {
         var componentsClosed = 0
+        val display = RecordingDisplayPort()
         var componentScopeJob: Job? = null
         val host = RuntimeHostController.withComponents(
             platform = KadrePlatform.Fake,
             componentsFactory = RuntimeSessionComponentsFactory { _, rootScope ->
                 componentScopeJob = rootScope.coroutineContext[Job]
-                RuntimeSessionComponents(FailingInstallWindowManager()) { componentsClosed += 1 }
+                RuntimeSessionComponents(FailingInstallWindowManager(), displayPort = display) { componentsClosed += 1 }
             },
         )
 
@@ -117,6 +148,8 @@ class RuntimeSessionComponentsTest {
             result,
         )
         assertEquals(1, componentsClosed)
+        assertEquals(1, display.closeCount)
+        assertEquals(1, display.observationCloseCount, "successfully constructed manager must close on later failure")
         assertFalse(componentScopeJob!!.isActive)
     }
 
@@ -600,7 +633,9 @@ class RuntimeSessionComponentsTest {
         }
     }
 
-    private class RecordingDisplayPort : DisplayPort {
+    private class RecordingDisplayPort(private val failObserver: Boolean = false) : DisplayPort {
+        var observationCloseCount = 0
+            private set
         var closeCount = 0
             private set
 
@@ -629,8 +664,10 @@ class RuntimeSessionComponentsTest {
             ),
         )
 
-        override fun installSnapshotObserver(observer: (KadreResult<DisplayPortSnapshot>) -> Unit): AutoCloseable =
-            AutoCloseable { }
+        override fun installSnapshotObserver(observer: (KadreResult<DisplayPortSnapshot>) -> Unit): AutoCloseable {
+            check(!failObserver) { "display observer installation failed" }
+            return AutoCloseable { observationCloseCount++ }
+        }
 
         override fun close() {
             closeCount += 1

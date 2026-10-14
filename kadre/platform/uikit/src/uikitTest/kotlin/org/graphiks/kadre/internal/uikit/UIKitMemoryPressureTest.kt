@@ -158,8 +158,8 @@ class UIKitMemoryPressureTest {
         val collector = Collector()
         // L'arrivée PREND avant le câblage : rien n'est câblé pour la recevoir — perdue.
         seam.fire()
-        seam.drain()
         claim.wire(collector.relay)
+        seam.drain()
         assertEquals(emptyList(), collector.levels)
         // Le prochain warning (un épisode RÉEL, jamais un replay du premier) est livré LUI.
         seam.fire()
@@ -179,6 +179,27 @@ class UIKitMemoryPressureTest {
         assertEquals(listOf(MemoryPressureLevel.Moderate), collector.levels)
         seam.drain()
         assertEquals(listOf(MemoryPressureLevel.Moderate), collector.levels)
+    }
+
+    @Test
+    fun queuedWarningExcludesNewHostWiredBeforeDrainWhileSurvivorReceivesIt() {
+        val owner = UIKitProcessMemoryPressure()
+        val seam = FakeMemoryPressureSeam()
+        val first = owner.newHost(seam)
+        val firstCollector = Collector()
+        first.wire(firstCollector.relay)
+        seam.fire()
+        val second = owner.newHost(seam)
+        val secondCollector = Collector()
+        second.wire(secondCollector.relay)
+        seam.drain()
+        assertEquals(listOf(MemoryPressureLevel.Moderate), firstCollector.levels)
+        assertEquals(emptyList(), secondCollector.levels)
+        seam.fire()
+        seam.drain()
+        assertEquals(listOf(MemoryPressureLevel.Moderate), secondCollector.levels)
+        first.hostTerminated()
+        second.hostTerminated()
     }
 
     // ---- Le relais HORS de la pile du block observer ------------------------------

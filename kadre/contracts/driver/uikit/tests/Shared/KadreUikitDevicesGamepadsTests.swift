@@ -172,18 +172,18 @@ final class KadreUikitDevicesGamepadsTests: KadreUikitPhase8FixtureCase {
     }
 
     /// uikit-gamepads-empty-honest — contrat d'acceptation amendé : la liste manette est TENUE
-    /// DANS LE TEMPS (fenêtre d'observation bornée) à l'identité SDK du profil étendu :
+    /// EN ÉQUIVALENCE ÉVENTUELLE (fenêtre d'observation bornée) à l'identité SDK du profil étendu :
     /// compteur ET noms comparés à l'oracle RELU à chaque passe (deux lectures vivantes). Sans manette, l'énoncé EST le
     /// vide que le nom du scénario épine (zéro, jamais fabriquée) et c'est ce que ce scénario
     /// prouve sur un Simulator sans contrôleur ; sur l'hôte ponté, l'identité tient sur la
     /// réalité non vide — aucune fabrication au-delà de ce que le système rapporte, toute
-    /// divergence (fabrication, disparition, renommage, micro publiée) échoue.
+    /// absence de convergence (fabrication, disparition, renommage, micro publiée) échoue.
     func test_uikit_gamepads_empty_honest() throws {
         let (fixture, _, scope) = try attachedScope()
         _ = try awaitDeviceState(scope, "enumerated device inventory", isEnumerated)
 
-        // L'énoncé tient dans le temps : sur la fenêtre d'observation, l'inventaire reste
-        // exactement ce que le système énonce — jamais une manette inventée, jamais perdue.
+        // Équivalence éventuelle : au moins une passe de la fenêtre doit converger vers
+        // l'oracle vivant. Ce test ne prétend pas prouver une équivalence soutenue.
         // Chaque passe compare DEUX lectures vivantes (l'oracle est relu à chaque passe) ;
         // l'échec final porte la dernière divergence nommée.
         let deadline = Date().addingTimeInterval(1.0)
@@ -204,7 +204,7 @@ final class KadreUikitDevicesGamepadsTests: KadreUikitPhase8FixtureCase {
             pump(0.1)
         }
         XCTAssertTrue(everHeld,
-                      "the gamepad list must mirror the system's extended-profile facts over the window: \(lastMismatch)")
+                       "the gamepad list must eventually mirror the system's extended-profile facts within the window: \(lastMismatch)")
 
         try stopAndAwaitTermination(fixture)
     }

@@ -2,8 +2,6 @@
 
 package org.graphiks.kadre.internal.uikit
 
-import kotlin.concurrent.atomics.AtomicBoolean
-import kotlin.concurrent.atomics.ExperimentalAtomicApi
 import org.graphiks.kadre.diagnostics.Capability
 import org.graphiks.kadre.diagnostics.FeatureAvailability
 import org.graphiks.kadre.diagnostics.KadreFailure
@@ -128,7 +126,7 @@ internal interface UIKitControllerSource : AutoCloseable {
  * Le propriétaire natif d'UN effet démarré — le miroir `AppKitGameControllerNativeEffect` :
  * [requestStop] demande l'arrêt et rapporte un échec SANS lancer, [close] est IDEMPOTENT (le
  * teardown peut suivre un stop explicite). L'implémentation réelle garde son arrêt par
- * `AtomicBoolean` : ni stop ni close ne touche le natif deux fois.
+ * un lock : un stop réussi n'est pas rejoué, un échec reste nettoyable par close.
  */
 internal interface UIKitGamepadEffectHandle : AutoCloseable {
     public fun requestStop(): KadreResult<Unit>
@@ -264,6 +262,10 @@ internal class UIKitControllerInventory(
     private var opening = false
     private var firedDuringOpening = false
     private var closed = false
+    private var sourceGeneration = 0L
+    private var sourceListener: (() -> Unit)? = null
+    private var readFailure: KadreFailure? = null
+    internal val inventoryFailure: KadreFailure? get() = lock.withLock { readFailure }
 
     // MARK: - l'ouverture des ports
 
@@ -326,7 +328,10 @@ internal class UIKitControllerInventory(
         opening = true
         firedDuringOpening = false
         try {
-            source.registerListener(::onSourceFired)
+            val generation = ++sourceGeneration
+            val listener = { onSourceFired(generation) }
+            sourceListener = listener
+            source.registerListener(listener)
             listening = true
             val first = reconcileLocked()
             if (!firedDuringOpening) return first
@@ -341,10 +346,10 @@ internal class UIKitControllerInventory(
     // MARK: - la lecture du process (le listener du seam)
 
     /** Le fire du seam — delta-free par contrat : l'inventaire relit TOUT, sous le lock. */
-    private fun onSourceFired() {
+    private fun onSourceFired(generation: Long) {
         val deliveries = lock.withLock {
             when {
-                closed -> Pump()
+                closed || generation != sourceGeneration || (!listening && !opening) -> Pump()
                 opening -> {
                     firedDuringOpening = true
                     Pump()
@@ -359,19 +364,30 @@ internal class UIKitControllerInventory(
      * LA relecture complète — la table est mise à jour avant que QUI QUE CE SOIT entende
      * quoi que ce soit. Un contrôleur vu pour la première fois obtient sa clé et gèle ses
      * faits ; un contrôleur connu rafraîchit SON ÉTAT seul (le gel est inviolable) ; un jeton
-     * disparu quitte la table et interrompt ses effets. Un jeton énuméré mais illisible
-     * (`profileFacts` null) : inconnu → sauté (le prochain fire réessaie), connu → garde son
-     * dernier état (une course de lecture n'est pas une déconnexion).
+     * disparu quitte la table et interrompt ses effets. Toutes les lectures sont préparées
+     * avant mutation ; une lecture impossible retire l'inventaire ENTIER, jamais un sous-ensemble.
      */
     private fun reconcileLocked(): Pump {
         val deliveries = Pump()
+        val previousFailure = readFailure
+        val staged = try {
+            source.controllers().associateWith { token ->
+                val facts = checkNotNull(source.profileFacts(token)) { "unreadable controller" }
+                Triple(facts, source.nameOf(token), source.isExtendedGamepad(token) to source.isMicroGamepadOnly(token))
+            }
+        } catch (_: Throwable) {
+            readFailure = KadreFailure.TemporarilyUnavailable(retryable = true)
+            controllers.toMap().forEach { (token, physical) -> disconnectLocked(token, physical, deliveries) }
+            inventoryChangedLocked(deliveries)
+            return deliveries
+        }
+        readFailure = null
         val seen = linkedSetOf<Any>()
-        for (token in source.controllers()) {
-            if (closed) break
+        for ((token, reading) in staged) {
             seen += token
             val known = controllers[token]
             if (known != null) {
-                val facts = source.profileFacts(token) ?: continue
+                val facts = reading.first
                 val before = known.state
                 known.refresh(facts)
                 if (known.state != before && known.extended) {
@@ -382,7 +398,7 @@ internal class UIKitControllerInventory(
                     }
                 }
             } else {
-                connectLocked(token, deliveries)
+                connectLocked(token, reading.first, reading.second, reading.third.first, reading.third.second, deliveries)
             }
         }
         // Les clés sont photographiées (les entries du LinkedHashMap natif sont des vues
@@ -393,19 +409,22 @@ internal class UIKitControllerInventory(
                 disconnectLocked(token, physical, deliveries)
             }
         }
+        if (previousFailure != null) inventoryChangedLocked(deliveries)
         return deliveries
     }
 
+    private fun inventoryChangedLocked(deliveries: Pump) {
+        gamepadPorts.forEach { port -> port.observerLocked()?.let { deliveries.gamepads += GamepadDelivery(it, GamepadPortEvent.InventoryChanged) } }
+        devicePorts.forEach { port -> port.observerLocked()?.let { deliveries.devices += DeviceDelivery(it, InputDevicePortEvent.InventoryChanged) } }
+    }
+
     /** La première sighting : clé allouée, faits GELÉS, lifecycle fan-out à tous les ports. */
-    private fun connectLocked(token: Any, deliveries: Pump) {
-        val facts = source.profileFacts(token) ?: return
-        val extended = source.isExtendedGamepad(token)
-        val micro = source.isMicroGamepadOnly(token)
+    private fun connectLocked(token: Any, facts: UIKitControllerFacts, name: String?, extended: Boolean, micro: Boolean, deliveries: Pump) {
         val key = uikitControllerKey(nextSeed++)
         val physical = PhysicalController(
             token = token,
             key = key,
-            name = source.nameOf(token),
+            name = name,
             extended = extended,
             genericKind = uikitGenericDeviceKindOf(
                 isGamepad = extended,
@@ -616,13 +635,15 @@ internal class UIKitControllerInventory(
     // MARK: - les fermetures
 
     internal fun closeGamepadPort(port: UIKitGamepadPort) {
-        val release = lock.withLock {
-            if (!gamepadPorts.remove(port)) return@withLock emptyList<UIKitGamepadPortEffect>()
+        val deliveries = lock.withLock {
+            if (!gamepadPorts.remove(port)) return@withLock Pump()
             port.closeFromInventoryLocked()
-            detachEffectsLocked { owner -> owner.port === port } +
-                if (gamepadPorts.isEmpty() && devicePorts.isEmpty()) releaseLocked() else emptyList()
+            reconcileRoutingLocked().also { pump ->
+                pump.interrupted += detachEffectsLocked { owner -> owner.port === port }
+                if (gamepadPorts.isEmpty() && devicePorts.isEmpty()) pump.interrupted += releaseLocked()
+            }
         }
-        release.forEach(UIKitGamepadPortEffect::closeFromInventory)
+        deliver(deliveries)
     }
 
     internal fun closeInputDevicePort(port: UIKitInputDevicePort) {
@@ -664,9 +685,12 @@ internal class UIKitControllerInventory(
         activeEffects.clear()
         pendingEffects.clear()
         controllers.clear()
+        readFailure = null
+        ++sourceGeneration
         if (listening) {
-            source.unregisterListener(::onSourceFired)
             listening = false
+            sourceListener?.let(source::unregisterListener)
+            sourceListener = null
         }
         return interrupted
     }
@@ -789,23 +813,40 @@ internal val UIKIT_GAMEPAD_ACCESSOR_NAMES_MATCH_KERNEL_TABLES: Boolean =
  * (le dedup d'état de la table fait le reste — un fire sans changement canonique ne livre
  * rien, prouvé par le test hôte).
  */
-internal class UIKitGCControllerSource : UIKitControllerSource {
-    private val lock = RuntimeLock()
-    private var listeners: MutableList<() -> Unit> = mutableListOf()
-    private var registrations: HashMap<() -> Unit, List<NSObjectProtocol>> = HashMap()
-
-    override fun controllers(): List<Any> =
+internal class UIKitGCControllerSource(
+    private val enumerate: () -> List<Any> = {
         GCController.controllers().orEmpty().filterIsInstance<GCController>() +
             listOfNotNull<Any>(GCKeyboard.coalescedKeyboard) +
             GCMouse.mice().orEmpty().filterIsInstance<GCMouse>()
+    },
+) : UIKitControllerSource {
+    private val lock = RuntimeLock()
+    private var listeners: MutableList<() -> Unit> = mutableListOf()
+    private var registrations: HashMap<() -> Unit, List<NSObjectProtocol>> = HashMap()
+    private val ownedElements = linkedMapOf<Any, MutableSet<GCControllerElement>>()
+    private var generation = 0L
+
+    override fun controllers(): List<Any> {
+        val tokens = enumerate()
+        lock.withLock {
+            ownedElements.keys.toList().filter { it !in tokens }.forEach { token ->
+                ownedElements.remove(token)?.forEach(::detach)
+            }
+        }
+        return tokens
+    }
 
     override fun registerListener(listener: () -> Unit) {
+        val guarded = lock.withLock {
+            listeners += listener
+            ++generation
+            currentListener()
+        }
         val center = NSNotificationCenter.defaultCenter
         val tokens = NOTIFICATION_NAMES.map { name ->
-            center.addObserverForName(name, null, NSOperationQueue.mainQueue()) { _ -> listener() }
+            center.addObserverForName(name, null, NSOperationQueue.mainQueue()) { _ -> guarded?.invoke() }
         }
         lock.withLock {
-            listeners += listener
             registrations[listener] = tokens
         }
     }
@@ -813,6 +854,11 @@ internal class UIKitGCControllerSource : UIKitControllerSource {
     override fun unregisterListener(listener: () -> Unit) {
         val tokens = lock.withLock {
             listeners.remove(listener)
+            ++generation
+            if (listeners.isEmpty()) {
+                ownedElements.values.flatten().forEach(::detach)
+                ownedElements.clear()
+            }
             registrations.remove(listener)
         } ?: return
         val center = NSNotificationCenter.defaultCenter
@@ -853,6 +899,9 @@ internal class UIKitGCControllerSource : UIKitControllerSource {
             val taken = registrations.values.toList()
             registrations = HashMap()
             listeners = mutableListOf()
+            ++generation
+            ownedElements.values.flatten().forEach(::detach)
+            ownedElements.clear()
             taken
         }
         val center = NSNotificationCenter.defaultCenter
@@ -868,18 +917,18 @@ internal class UIKitGCControllerSource : UIKitControllerSource {
             val listener = currentListener()
             UIKIT_GAMEPAD_BUTTON_ACCESSORS.forEach { (name, accessor) ->
                 accessor(extended)?.let { element ->
-                    arm(element, listener)
+                    arm(controller, element, listener)
                     buttons[name] = UIKitButtonReading(element.value.toDouble(), element.isPressed())
                 }
             }
             UIKIT_GAMEPAD_AXIS_ACCESSORS.forEach { (name, accessor) ->
                 when (val element = accessor(extended)) {
                     is GCControllerAxisInput -> {
-                        arm(element, listener)
+                        arm(controller, element, listener)
                         axes[name] = element.value.toDouble()
                     }
                     is GCControllerButtonInput -> {
-                        arm(element, listener)
+                        arm(controller, element, listener)
                         axes[name] = element.value.toDouble()
                     }
                 }
@@ -900,19 +949,43 @@ internal class UIKitGCControllerSource : UIKitControllerSource {
         )
     }
 
-    private fun currentListener(): (() -> Unit)? = lock.withLock { listeners.lastOrNull() }
+    private fun currentListener(): (() -> Unit)? = lock.withLock {
+        val listener = listeners.lastOrNull() ?: return@withLock null
+        val armedGeneration = generation
+        {
+            val live = lock.withLock { generation == armedGeneration && listener in listeners }
+            if (live) listener()
+        }
+    }
+
+    private fun detach(element: GCControllerElement) {
+        when (element) {
+            is GCControllerButtonInput -> {
+                element.valueChangedHandler = null
+                element.pressedChangedHandler = null
+            }
+            is GCControllerAxisInput -> element.valueChangedHandler = null
+        }
+    }
 
     /** (Re)branche les handlers de l'élément bouton sur le listener courant. */
-    private fun arm(element: GCControllerButtonInput, listener: (() -> Unit)?) {
+    internal fun arm(controller: Any, element: GCControllerButtonInput, listener: (() -> Unit)? = currentListener()) {
         if (listener == null) return
-        element.valueChangedHandler = { _, _, _ -> listener() }
-        element.pressedChangedHandler = { _, _, _ -> listener() }
+        lock.withLock { ownedElements.getOrPut(controller) { linkedSetOf() }.add(element) }
+        val fire = {
+            if (lock.withLock { ownedElements[controller]?.contains(element) == true }) listener()
+        }
+        element.valueChangedHandler = { _, _, _ -> fire() }
+        element.pressedChangedHandler = { _, _, _ -> fire() }
     }
 
     /** (Re)branche le handler de l'élément axe sur le listener courant. */
-    private fun arm(element: GCControllerAxisInput, listener: (() -> Unit)?) {
+    private fun arm(controller: Any, element: GCControllerAxisInput, listener: (() -> Unit)?) {
         if (listener == null) return
-        element.valueChangedHandler = { _, _ -> listener() }
+        lock.withLock { ownedElements.getOrPut(controller) { linkedSetOf() }.add(element) }
+        element.valueChangedHandler = { _, _ ->
+            if (lock.withLock { ownedElements[controller]?.contains(element) == true }) listener()
+        }
     }
 
     private companion object {
@@ -938,13 +1011,12 @@ internal class UIKitGCControllerSource : UIKitControllerSource {
 // `controller.haptics` → `createEngineWithLocality(localité)` → CoreHaptics (`CHHapticEngine`
 // → pattern événement continu → player). Toute erreur Obj-C (NSError) est une RÉPONSE mappée
 // `PlatformFailure(UIKit, "game-controller", code)` — les formes AppKit
-// (`KffiAppKitGameControllerNative`), jamais une exception traversante. LIMITE HONNÊTE : le
-// Simulator ne porte AUCUN contrôleur, ce chemin n'est JAMAIS exécutable dans les gates CI —
+// (`KffiAppKitGameControllerNative`), jamais une exception traversante. LIMITE HONNÊTE : un
+// contrôleur ponté sur Simulator ne prouve pas les moteurs haptiques physiques —
 // l'admission (localités gelées), le stop/close idempotent et le teardown interrupteur sont
 // prouvés sur le seam injecté (tests hôtes) ; la lecture réelle est le charter matériel
-// (Task 6/8). Le moteur est VOLONTAIREMENT par-effet et court-vivant : CoreHaptics récupère
-// les moteurs inactifs de lui-même (l'arrêt SDK par idle timeout), l'inventaire n'en gère
-// aucun au-delà de l'effet qu'il a démarré.
+// (Task 6/8). Le moteur est possédé explicitement par le handle de l'effet et arrêté au
+// close, même après un échec d'arrêt du player ; aucun idle timeout n'est supposé.
 // =============================================================================================
 
 /** L'échec haptique normalisé — la forme AppKit `gameControllerFailure`. */
@@ -987,6 +1059,7 @@ internal class UIKitGCDeviceHapticsEffectSeam : UIKitHapticsEffectSeam {
         val engine: CHHapticEngine = (haptics.createEngineWithLocality(locality) ?: return KadreResult.Failure(
             uikitHapticsFailure("haptics-engine-unavailable"),
         )) as CHHapticEngine
+        var transferred = false
         return try {
             if (!engine.startAndReturnError(null)) {
                 return KadreResult.Failure(uikitHapticsFailure("haptics-engine-start-failed"))
@@ -1005,33 +1078,56 @@ internal class UIKitGCDeviceHapticsEffectSeam : UIKitHapticsEffectSeam {
             if (!player.startAtTime(CHHapticTimeImmediate, null)) {
                 return KadreResult.Failure(uikitHapticsFailure("haptics-start-failed"))
             }
-            KadreResult.Success(UIKitCHHapticsEffectHandle(player))
+            KadreResult.Success(UIKitCHHapticsEffectHandle(
+                stopPlayer = { player.stopAtTime(CHHapticTimeImmediate, null) },
+                stopEngine = { engine.stopWithCompletionHandler(null) },
+            )).also { transferred = true }
         } catch (_: Throwable) {
             KadreResult.Failure(uikitHapticsFailure("haptics-start-failed"))
+        } finally {
+            if (!transferred) {
+                try {
+                    engine.stopWithCompletionHandler(null)
+                } catch (_: Throwable) {
+                    return KadreResult.Failure(uikitHapticsFailure("haptics-engine-stop-failed"))
+                }
+            }
         }
     }
 }
 
 /**
- * Le handle CoreHaptics — la même garde atomique que le miroir AppKit : UN seul stop natif
- * quel que soit le nombre de stops et de closes, et un stop qui échoue reste une RÉPONSE
- * (le moteur court-vivant récupéré par le SDK porte le reste).
+ * Le handle possède player ET moteur (les closures retiennent les objets natifs).
+ * Un stop manqué ne marque pas le player arrêté ; close le retente et arrête TOUJOURS le
+ * moteur explicitement, sans dépendre de l'auto-shutdown (désactivé par défaut chez Apple).
  */
-@OptIn(ExperimentalAtomicApi::class)
 internal class UIKitCHHapticsEffectHandle(
-    private val player: CHHapticPatternPlayerProtocol,
+    private val stopPlayer: () -> Boolean,
+    private val stopEngine: () -> Unit,
 ) : UIKitGamepadEffectHandle {
-    private val stopped = AtomicBoolean(false)
+    private val lock = RuntimeLock()
+    private var stopped = false
+    private var closed = false
 
     override fun requestStop(): KadreResult<Unit> = stop()
 
     override fun close() {
-        stop()
+        lock.withLock {
+            if (closed) return
+            closed = true
+            try {
+                if (!stopped) stopped = stopPlayer()
+            } finally {
+                stopEngine()
+            }
+        }
     }
 
-    private fun stop(): KadreResult<Unit> {
-        if (!stopped.compareAndSet(false, true)) return KadreResult.Success(Unit)
-        return if (player.stopAtTime(CHHapticTimeImmediate, null)) {
+    private fun stop(): KadreResult<Unit> = lock.withLock {
+        if (stopped || closed) return@withLock KadreResult.Success(Unit)
+        val succeeded = runCatching { stopPlayer() }.getOrDefault(false)
+        if (succeeded) {
+            stopped = true
             KadreResult.Success(Unit)
         } else {
             KadreResult.Failure(uikitHapticsFailure("haptics-stop-failed"))

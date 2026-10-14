@@ -116,6 +116,7 @@ internal class UIKitMemoryPressureSource(
     private val observe: (String, onEvent: () -> Unit) -> NSObjectProtocol,
     private val removeObserver: (NSObjectProtocol) -> Unit,
     private val post: (() -> Unit) -> Unit,
+    private val captureDelivery: ((MemoryPressureLevel) -> (() -> Unit))? = null,
 ) : AutoCloseable {
     private val lock = RuntimeLock()
     private var closed: Boolean = false
@@ -155,14 +156,17 @@ internal class UIKitMemoryPressureSource(
     /**
      * Le callback notification (le block posé l'appelle). La mapping est normative (voir la
      * kernel) ; le niveau mappé est relayé HORS de cette pile — le block posté relit l'état
-     * vivant, ainsi un warning qui glisse derrière un close (le centre peut consommer un
+     * vivant, mais ses destinataires sont photographiés À L'ARRIVÉE (DROP avant wire).
+     * Ainsi un warning qui glisse derrière un close (le centre peut consommer un
      * block déjà en file après le retrait demandé du token) ne relaie rien.
      */
     public fun onMemoryWarning() {
         val mapped = uikitMemoryPressureLevelOfMemoryWarning()
+        val observedRelay = lock.withLock { if (closed) null else relay } ?: return
+        val delivery = captureDelivery?.invoke(mapped) ?: { observedRelay(mapped) }
         post {
-            val deliver = lock.withLock { if (closed) null else relay } ?: return@post
-            deliver(mapped)
+            if (lock.withLock { closed || relay !== observedRelay }) return@post
+            delivery()
         }
     }
 
@@ -253,9 +257,9 @@ internal class UIKitProcessMemoryPressure {
                     // défaut — honnête, pas de PlatformFailure inventée.
                     capabilities = DEFAULT_MEMORY_PRESSURE_CAPABILITIES
                 } else {
-                    val created = UIKitMemoryPressureSource(seam::observe, seam::removeObserver, seam::post)
+                    val created = UIKitMemoryPressureSource(seam::observe, seam::removeObserver, seam::post, ::captureFanOut)
                     source = created
-                    capabilities = if (created.install { level -> fanOut(level) }) {
+                    capabilities = if (created.install { }) {
                         INSTALLED_MEMORY_PRESSURE_CAPABILITIES
                     } else {
                         FAILED_MEMORY_PRESSURE_CAPABILITIES
@@ -295,10 +299,15 @@ internal class UIKitProcessMemoryPressure {
         dying.close()
     }
 
-    /** Le fan-out du relais unique vers les relais branchés — copié sous lock, livré hors lock. */
-    private fun fanOut(level: MemoryPressureLevel) {
-        val targets = lock.withLock { claims.values.filterNotNull().toList() }
-        targets.forEach { relay -> relay(level) }
+    /** Destinataires à l'observation, terminal/identité revérifiés à la livraison hors lock. */
+    private fun captureFanOut(level: MemoryPressureLevel): () -> Unit {
+        val targets = lock.withLock { claims.filterValues { it != null }.toMap() }
+        return {
+            targets.forEach { (key, relay) ->
+                val live = lock.withLock { claims[key] === relay }
+                if (live) relay?.invoke(level)
+            }
+        }
     }
 }
 

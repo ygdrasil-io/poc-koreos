@@ -305,9 +305,9 @@ internal object UIKitDisplayCount {
  * lectures (`screens`, `isMain`, `factsOf`) sont main-confined COMME les livraisons —
  * `UIScreen` est main-thread-only (contrat UIKit) : la voie applicative du port les y funnel
  * (contrat de threading du port, revue Task 2 Important-1). La
- * clé de corrélation d'un écran est son `hash` NSObject (l'ObjectIdentifier du `UIScreen` en
- * production) — stable à vie de l'écran, unique au process ; le runtime alloue ses propres
- * identités publiques par-dessus.
+ * clé de corrélation actuelle est son `hash` NSObject — ce n'est PAS un ObjectIdentifier
+ * et l'unicité n'est pas garantie. Une allocation de clés sans collisions est un suivi
+ * distinct ; le runtime alloue ses propres identités publiques par-dessus.
  *
  * Le close retire TOUTES les registrations restantes (idempotent) : un listener remis à
  * [unregisterListener] après le close n'a déjà plus de tokens à retirer.
@@ -332,8 +332,8 @@ internal class UIKitScreenDisplaySource : UIKitDisplaySource {
         val bounds = uiScreen.bounds.useContents { size.width to size.height }
         return UIKitDisplayFacts(
             key = keyOf(uiScreen),
-            // Le klib PARTAGÉ n'expose AUCUN nom d'écran (`UIScreen.name` : 0-hit des deux
-            // knm ; `localizedName` : iOS-seul, exclu de uikitMain par la discipline tvOS) —
+            // Aucun nom public d'UIScreen n'est utilisé ici ; `localizedName` n'est pas
+            // une propriété d'UIScreen (ne pas la confondre avec d'autres types SDK) —
             // null honnête, jamais fabriqué (le contrat T1 porte le nom nullable).
             name = null,
             boundsWidth = bounds.first,

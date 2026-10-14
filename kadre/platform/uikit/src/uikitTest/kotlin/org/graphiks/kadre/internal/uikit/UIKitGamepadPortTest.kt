@@ -30,6 +30,7 @@ import org.graphiks.kadre.internal.runtime.GamepadPortGamepad
 import org.graphiks.kadre.internal.runtime.GamepadPortRouting
 import org.graphiks.kadre.policy.DeviceEffectOwnership
 import org.graphiks.kadre.policy.GamepadRouting
+import platform.GameController.GCControllerButtonInput
 
 /**
  * Le port manette UIKit/tvOS (phase 8, Task 4) sur la source jeton injectée — JAMAIS un vrai
@@ -53,6 +54,8 @@ class UIKitGamepadPortTest {
         var closeCount: Int = 0
             private set
         var fireOnRegister: Boolean = false
+        var failEnumeration = false
+        fun unreadable(token: Any) { facts.remove(token) }
 
         fun connect(name: String, controllerFacts: UIKitControllerFacts): Any {
             val token = Any()
@@ -78,7 +81,10 @@ class UIKitGamepadPortTest {
 
         fun listenerCount(): Int = listeners.size
 
-        override fun controllers(): List<Any> = tokens.values.toList()
+        override fun controllers(): List<Any> {
+            check(!failEnumeration) { "enumeration failed" }
+            return tokens.values.toList()
+        }
         override fun registerListener(listener: () -> Unit) {
             listeners += listener
             if (fireOnRegister) fire()
@@ -322,7 +328,7 @@ class UIKitGamepadPortTest {
     fun activeSessionOnlyArbitrationRoutesExactlyTheElectedPort() {
         val source = FakeSource()
         val inventory = UIKitControllerInventory(source, FakeEffects())
-        source.connect("pad", extendedFacts())
+        val token = source.connect("pad", extendedFacts())
         val first = inventory.openGamepadPort()
         val second = inventory.openGamepadPort()
         val policy = GamepadPortRouting(GamepadRouting.ActiveSessionOnly, true, DeviceEffectOwnership.SharedWhenSupported)
@@ -330,6 +336,144 @@ class UIKitGamepadPortTest {
         second.updateRouting(policy)
         assertEquals(GamepadRoutingState.Routed, first.gamepads.single().routing, "le PREMIER port éligible est élu")
         assertEquals(GamepadRoutingState.Suspended, second.gamepads.single().routing)
+        val events = mutableListOf<GamepadPortEvent>()
+        second.installObserver { events += it }
+        first.close()
+        assertEquals(GamepadRoutingState.Routed, second.gamepads.single().routing)
+        assertEquals(GamepadRoutingState.Routed, routingChanges(events).single().routing)
+        source.updateFacts(token, extendedFacts(buttons = mapOf("buttonA" to UIKitButtonReading(1.0, true))))
+        source.fire()
+        assertTrue(stateChanges(events).single().state.buttons.first().pressed)
+    }
+
+    @Test
+    fun retainedProductionElementCallbackCannotResurrectReleasedInventory() {
+        var reads = 0
+        val source = UIKitGCControllerSource { reads++; emptyList() }
+        val inventory = UIKitControllerInventory(source, FakeEffects())
+        val port = inventory.openGamepadPort()
+        val element = GCControllerButtonInput()
+        source.arm(Any(), element)
+        val retained = checkNotNull(element.valueChangedHandler)
+        port.close()
+        assertNull(element.valueChangedHandler)
+        assertNull(element.pressedChangedHandler)
+        val before = reads
+        retained(element, 1f, true)
+        assertEquals(before, reads, "released inventory must not re-enumerate")
+        val reopened = inventory.openGamepadPort()
+        val afterReopen = reads
+        retained(element, 1f, true)
+        assertEquals(afterReopen, reads, "old generation must stay rejected after reopen")
+        assertTrue(reopened.gamepads.isEmpty())
+        reopened.close()
+        source.close()
+    }
+
+    @Test
+    fun productionSourceDetachesElementsWhenControllerDisappears() {
+        val token = Any()
+        var tokens = listOf(token)
+        val source = UIKitGCControllerSource { tokens }
+        var fires = 0
+        val listener = { fires++; Unit }
+        source.registerListener(listener)
+        val element = GCControllerButtonInput()
+        source.arm(token, element)
+        val retained = checkNotNull(element.valueChangedHandler)
+        source.controllers()
+        tokens = emptyList()
+        source.controllers()
+        assertNull(element.valueChangedHandler)
+        assertNull(element.pressedChangedHandler)
+        retained(element, 1f, true)
+        assertEquals(0, fires, "disappeared element callback must be inert")
+        source.unregisterListener(listener)
+        source.close()
+    }
+
+    @Test
+    fun unreadableUnknownTokenWithdrawsBothCompleteInventories() {
+        val source = FakeSource()
+        source.connect("known", extendedFacts())
+        val inventory = UIKitControllerInventory(source, FakeEffects())
+        val pads = inventory.openGamepadPort()
+        val devices = inventory.openInputDevicePort()
+        val events = mutableListOf<GamepadPortEvent>()
+        pads.installObserver { events += it }
+        val unknown = source.connect("unknown", extendedFacts())
+        source.unreadable(unknown)
+        source.fire()
+        assertTrue(pads.gamepads.isEmpty())
+        assertTrue(devices.devices.isEmpty())
+        assertEquals(KadreFailure.TemporarilyUnavailable(true), pads.inventoryFailure)
+        assertEquals(pads.inventoryFailure, devices.inventoryFailure)
+        assertEquals(1, disconnected(events).size)
+        assertTrue(connected(events).isEmpty(), "no staged partial connection can escape")
+        inventory.close()
+    }
+
+    @Test
+    fun unreadableKnownTokenWithdrawsRatherThanKeepingStaleState() {
+        val source = FakeSource()
+        val token = source.connect("known", extendedFacts())
+        val inventory = UIKitControllerInventory(source, FakeEffects())
+        val port = inventory.openGamepadPort()
+        val key = port.gamepads.single().key
+        source.unreadable(token)
+        source.fire()
+        assertTrue(port.gamepads.isEmpty())
+        assertEquals(KadreFailure.TemporarilyUnavailable(true), port.inventoryFailure)
+        source.updateFacts(token, extendedFacts())
+        source.fire()
+        assertNull(port.inventoryFailure)
+        assertNotEquals(key, port.gamepads.single().key)
+        inventory.close()
+    }
+
+    @Test
+    fun failedEnumerationWithdrawsPriorInventoryAndEmptyRecoveryIsObservable() {
+        val source = FakeSource()
+        source.connect("known", extendedFacts())
+        val inventory = UIKitControllerInventory(source, FakeEffects())
+        val port = inventory.openGamepadPort()
+        val events = mutableListOf<GamepadPortEvent>()
+        port.installObserver { events += it }
+        source.failEnumeration = true
+        source.fire()
+        assertTrue(port.gamepads.isEmpty())
+        assertEquals(KadreFailure.TemporarilyUnavailable(true), port.inventoryFailure)
+        source.failEnumeration = false
+        source.disconnect("known")
+        events.clear()
+        source.fire()
+        assertNull(port.inventoryFailure)
+        assertEquals(listOf<GamepadPortEvent>(GamepadPortEvent.InventoryChanged), events)
+        inventory.close()
+    }
+
+    @Test
+    fun failedNativePlayerStopStillCleansUpEngineOnClose() {
+        var playerStops = 0
+        var engineStops = 0
+        val handle = UIKitCHHapticsEffectHandle({ playerStops++; false }, { engineStops++ })
+        assertIs<KadreResult.Failure>(handle.requestStop())
+        handle.close()
+        handle.close()
+        assertEquals(2, playerStops, "failed stop must not mark the player stopped")
+        assertEquals(1, engineStops, "engine interruption is owned even when player stop fails")
+    }
+
+    @Test
+    fun successfulNativePlayerStopStillReleasesOwnedEngineExactlyOnce() {
+        var playerStops = 0
+        var engineStops = 0
+        val handle = UIKitCHHapticsEffectHandle({ playerStops++; true }, { engineStops++ })
+        assertIs<KadreResult.Success<Unit>>(handle.requestStop())
+        handle.close()
+        handle.close()
+        assertEquals(1, playerStops)
+        assertEquals(1, engineStops)
     }
 
     // MARK: - le gel : descripteur et capabilities figés à la connexion

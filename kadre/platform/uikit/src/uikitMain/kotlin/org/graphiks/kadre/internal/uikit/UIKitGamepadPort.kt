@@ -32,6 +32,7 @@ import org.graphiks.kadre.internal.runtime.GamepadPortRouting
 internal class UIKitGamepadPort internal constructor(
     private val inventory: UIKitControllerInventory,
 ) : GamepadPort {
+    override val inventoryFailure get() = inventory.inventoryFailure
     private var closed: Boolean = false
     private var observer: ((GamepadPortEvent) -> Unit)? = null
     private var routing: GamepadPortRouting? = null

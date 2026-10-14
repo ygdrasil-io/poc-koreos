@@ -165,7 +165,8 @@ final class KadreUikitDisplaysTests: KadreUikitPhase8FixtureCase {
         XCTAssertEqual(hostViewports.count, 1,
                        "exactly ONE HostViewport: the screen of the session's own window")
         let primary = try XCTUnwrap(inventory.primary, "the host viewport is the primary display")
-        XCTAssertTrue((primary as AnyObject) === (hostViewports[0] as AnyObject),
+        let hostViewport = try XCTUnwrap(hostViewports.first, "the host viewport must exist")
+        XCTAssertTrue((primary as AnyObject) === (hostViewport as AnyObject),
                       "the primary is the host viewport object itself")
 
         // requestAccess (voie applicative, DEPUIS le main — la branche inline du funnel)

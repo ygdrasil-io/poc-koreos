@@ -565,7 +565,7 @@ val uikitContractValidateTasks = uikitTargets.map { (target, _) ->
         inputs.property("contractTarget", target)
         inputs.property("contractExecutions", "junit")
         inputs.property("contractGateIds", targetGateIds)
-        inputs.property("junitReportRelativeDirectories", listOf("test-results/$target"))
+        inputs.property("junitReportRelativeDirectories", listOf("test-results/$target", "test-results/${target}UikitTest"))
     }
 }
 

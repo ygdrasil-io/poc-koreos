@@ -30,6 +30,7 @@ import org.graphiks.kadre.internal.runtime.InputDevicePortEvent
 internal class UIKitInputDevicePort internal constructor(
     private val inventory: UIKitControllerInventory,
 ) : InputDevicePort {
+    override val inventoryFailure get() = inventory.inventoryFailure
     private var closed: Boolean = false
     private var observer: ((InputDevicePortEvent) -> Unit)? = null
     private val known = linkedSetOf<Long>()
@@ -47,6 +48,7 @@ internal class UIKitInputDevicePort internal constructor(
     // MARK: - le contexte de session, muté par l'inventaire SOUS son lock (le suffixe Locked)
 
     internal fun isOpenLocked(): Boolean = !closed
+    internal fun observerLocked(): ((InputDevicePortEvent) -> Unit)? = observer
 
     /** L'inventaire initial de l'OUVERTURE — sans événement : la première lecture est la connexion. */
     internal fun installInitialLocked(devices: List<InputDevicePortDevice>) {
