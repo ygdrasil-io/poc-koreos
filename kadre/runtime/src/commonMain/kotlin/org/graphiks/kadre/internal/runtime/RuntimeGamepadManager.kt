@@ -131,6 +131,10 @@ internal class RuntimeGamepadManager(
         val accepted = lock.withLock {
             if (closed) return
             when (event) {
+                GamepadPortEvent.InventoryChanged -> {
+                    publishInventoryLocked(incrementRevision = true)
+                    AcceptedPortEvent(emptyList())
+                }
                 is GamepadPortEvent.Connected -> AcceptedPortEvent(connectLocked(event.gamepad))
                 is GamepadPortEvent.Disconnected -> disconnectLocked(event.key)
                 is GamepadPortEvent.StateChanged -> AcceptedPortEvent(
@@ -151,6 +155,10 @@ internal class RuntimeGamepadManager(
         val accepted = lock.withLock {
             if (closed) return
             when (event) {
+                InputDevicePortEvent.InventoryChanged -> {
+                    publishInventoryLocked(incrementRevision = true)
+                    AcceptedPortEvent(emptyList())
+                }
                 is InputDevicePortEvent.Connected -> AcceptedPortEvent(connectInputDeviceLocked(event.device))
                 is InputDevicePortEvent.Disconnected -> disconnectInputDeviceLocked(event.key)
             }
@@ -250,10 +258,11 @@ internal class RuntimeGamepadManager(
         val previous = mutableState.value
         val revision = if (incrementRevision) nextRevision(previous.revision) else previous.revision
         return DeviceManagerState(
-            inventory = DeviceInventory.Enumerated(
-                devices = inputDevicesByKey.values.toList(),
-                gamepads = gamepadsByKey.values.toList(),
-            ),
+            inventory = (port.inventoryFailure ?: inputPort?.inventoryFailure)?.let(DeviceInventory::Unavailable)
+                ?: DeviceInventory.Enumerated(
+                    devices = inputDevicesByKey.values.toList(),
+                    gamepads = gamepadsByKey.values.toList(),
+                ),
             revision = revision,
         ).also { mutableState.value = it }
     }

@@ -18,7 +18,7 @@ kotlin {
 
 val jvmMain = kotlin.targets.getByName("jvm").compilations.getByName("main")
 val webContractIds = listOf("BCK-001", "BCK-002", "BCK-003", "BCK-004", "BCK-005", "BCK-006", "BCK-007", "BCK-008", "BCK-009", "BCK-010", "BCK-011", "INT-002", "INT-003", "INT-004")
-val uikitContractIds = listOf("BCK-012", "BCK-013", "BCK-014", "BCK-015", "BCK-016", "BCK-020", "BCK-021", "BCK-022", "BCK-023", "BCK-024", "BCK-026", "WIN-009")
+val uikitContractIds = listOf("BCK-012", "BCK-013", "BCK-014", "BCK-015", "BCK-016", "BCK-020", "BCK-021", "BCK-022", "BCK-023", "BCK-024", "BCK-026", "BCK-027", "WIN-009")
 val appKitContractIds = listOf(
     "APK-001", "APK-002", "APK-003", "APK-004", "APK-005", "APK-006",
     "APK-007", "APK-008", "APK-009", "APK-010", "APK-011", "APK-012",
@@ -478,6 +478,21 @@ val uikitTargets = listOf(
     "iosSimulatorArm64" to "iosSimulatorJunitExport",
     "tvosSimulatorArm64" to "tvosSimulatorJunitExport",
 )
+val uikitPlatformJunitCopies = uikitTargets.associate { (target, _) ->
+    val capitalized = target.replaceFirstChar { it.uppercase() }
+    val platformTestTask = ":kadre:platform:uikit:${target}Test"
+    val platformReportDirectory = rootProject.file("kadre/platform/uikit/build/test-results/${target}Test")
+    val copiedReportDirectory = rootProject.file(
+        "kadre/contracts/driver/uikit/build/contract-evidence/$target/test-results/${target}UikitTest",
+    )
+    target to tasks.register<Sync>("sync${capitalized}UikitPlatformJUnitForContractEvidence") {
+        group = "verification"
+        description = "Copies $target UIKit platform JUnit reports beside the UIKit driver evidence."
+        dependsOn(platformTestTask)
+        from(platformReportDirectory)
+        into(copiedReportDirectory)
+    }
+}
 val uikitContractEvidenceTasks = activeUikitContractIds.flatMap { id ->
     uikitTargets.mapNotNull { (target, junitExportTask) ->
         if (target !in uikitRequiredTargetsByContractId[id].orEmpty()) return@mapNotNull null
@@ -486,17 +501,20 @@ val uikitContractEvidenceTasks = activeUikitContractIds.flatMap { id ->
         // ValidateContractEvidence résout les répertoires JUnit relativement au répertoire
         // d'artefacts — ils vivent donc sous build/contract-evidence/<target>/test-results.
         val junitDirectory = artifactDirectory.resolve("test-results/$target")
+        val uikitPlatformJunitDirectory = artifactDirectory.resolve("test-results/${target}UikitTest")
         tasks.register<JavaExec>("generateUikit${id.replace("-", "")}${capitalized}ContractEvidence") {
             group = "verification"
             description = "Generates and validates $id evidence from the $target UIKit simulator JUnit reports."
-            dependsOn("jvmMainClasses", ":kadre:contracts:driver:uikit:$junitExportTask")
+            dependsOn("jvmMainClasses", ":kadre:contracts:driver:uikit:$junitExportTask", uikitPlatformJunitCopies.getValue(target))
             classpath(jvmMain.output.allOutputs, jvmMain.runtimeDependencyFiles)
             mainClass.set("org.graphiks.kadre.contracts.GenerateContractEvidenceKt")
             val output = artifactDirectory.resolve("contract-evidence/$id.json")
             args(
                 uikitContractRegistry.absolutePath,
                 uikitContractMapping.absolutePath,
-                junitDirectory.absolutePath,
+                listOf(junitDirectory, uikitPlatformJunitDirectory).joinToString(
+                    separator = System.getProperty("path.separator"),
+                ) { it.absolutePath },
                 output.absolutePath,
                 contractEvidenceCommit.get(),
                 id,
@@ -506,6 +524,7 @@ val uikitContractEvidenceTasks = activeUikitContractIds.flatMap { id ->
             inputs.file(uikitContractRegistry)
             inputs.file(uikitContractMapping)
             inputs.dir(junitDirectory)
+            inputs.dir(uikitPlatformJunitDirectory)
             inputs.property("contractCommit", contractEvidenceCommit)
             inputs.property("contractTarget", target)
             inputs.property("contractAdapter", uikitContractAdapter)
@@ -535,7 +554,9 @@ val uikitContractValidateTasks = uikitTargets.map { (target, _) ->
             "junit",
             targetGateIds.joinToString(separator = ","),
             artifactDirectory.absolutePath,
-            "test-results/$target",
+            listOf("test-results/$target", "test-results/${target}UikitTest").joinToString(
+                separator = System.getProperty("path.separator"),
+            ),
         )
         inputs.file(uikitContractRegistry)
         inputs.file(uikitContractMapping)
@@ -544,7 +565,7 @@ val uikitContractValidateTasks = uikitTargets.map { (target, _) ->
         inputs.property("contractTarget", target)
         inputs.property("contractExecutions", "junit")
         inputs.property("contractGateIds", targetGateIds)
-        inputs.property("junitReportRelativeDirectories", listOf("test-results/$target"))
+        inputs.property("junitReportRelativeDirectories", listOf("test-results/$target", "test-results/${target}UikitTest"))
     }
 }
 
