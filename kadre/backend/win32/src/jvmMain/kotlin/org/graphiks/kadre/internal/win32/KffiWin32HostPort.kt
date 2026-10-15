@@ -99,6 +99,7 @@ internal class KffiWin32HostPort : Win32NativeHostPort {
 
     override fun <T> onMainThread(block: () -> T): T = commands.invoke(block)
     override fun postOnMainThread(block: () -> Unit, onFailure: (Throwable) -> Unit) = commands.post(block, onFailure)
+    override fun stopWorkerCommands() = commands.stopWorkerAdmission()
 
     /**
      * Pose le contexte Per-Monitor V2 une seule fois si le processus n'en a

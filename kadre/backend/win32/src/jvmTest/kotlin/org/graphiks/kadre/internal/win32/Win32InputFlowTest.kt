@@ -58,6 +58,7 @@ class Win32InputFlowTest {
 
     @Test fun signedPointerMotionButtonsAndLeaveUseWindowDpiAndRearm() = runBlocking {
         fixture { port, _, window, hwnd ->
+            window.surface.apply(SurfaceUpdate(inputDefaultBehavior = PropertyChange.Set(InputDefaultBehavior.SuppressWhenPossible)))
             val events = async(start = CoroutineStart.UNDISPATCHED) { window.surface.input.events.take(5).toList() }
             port.dispatchWindowMessage(hwnd, 0x200, 0, xy(-10, -25))
             yield()
@@ -135,6 +136,34 @@ class Win32InputFlowTest {
             assertIs<KadreResult.Success<*>>(window.surface.apply(SurfaceUpdate(
                 inputDefaultBehavior = PropertyChange.Set(InputDefaultBehavior.HostDefault))))
             assertEquals(87L, port.dispatchWindowMessage(hwnd, 0x104))
+        }
+    }
+
+    @Test fun mouseHostDefaultsAreDelegatedAndSuppressionUsesTheDocumentedConsumedResults() = runBlocking {
+        fixture { port, _, window, hwnd ->
+            port.defaultResult = 87L
+            for (message in listOf(0x200, 0x201, 0x202, 0x204, 0x205, 0x20a, 0x20e)) {
+                assertEquals(87L, port.dispatchWindowMessage(hwnd, message, 60L shl 16))
+            }
+            window.surface.apply(SurfaceUpdate(inputDefaultBehavior = PropertyChange.Set(InputDefaultBehavior.SuppressWhenPossible)))
+            val calls = port.defWindowProcCalls.get()
+            assertEquals(0L, port.dispatchWindowMessage(hwnd, 0x205))
+            assertEquals(0L, port.dispatchWindowMessage(hwnd, 0x20a, 60L shl 16))
+            assertEquals(1L, port.dispatchWindowMessage(hwnd, 0x20b, 1L shl 16))
+            assertEquals(calls, port.defWindowProcCalls.get())
+        }
+    }
+
+    @Test fun focusLossAndRegainInTheHandlerRevokeTheWholeRepeatPacket() = runBlocking {
+        fixture { port, _, window, hwnd ->
+            port.dispatchWindowMessage(hwnd, 0x7)
+            window.surface.installInteractionHandler(org.graphiks.kadre.interaction.InteractionHandler { _, _ ->
+                port.dispatchWindowMessage(hwnd, 0x8)
+                port.dispatchWindowMessage(hwnd, 0x7)
+            })
+            port.keyInput = key(count = 3)
+            port.dispatchWindowMessage(hwnd, 0x100)
+            assertTrue(window.surface.input.state.value.keyboard.pressedKeys.isEmpty())
         }
     }
 

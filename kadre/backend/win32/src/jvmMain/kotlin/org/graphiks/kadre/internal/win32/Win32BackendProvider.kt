@@ -133,6 +133,7 @@ public class Win32BackendProvider private constructor(
                         if (nativeFailure.get() != null) {
                             controller.fail(KadreFailure.PlatformFailure(KadrePlatform.Win32, "input", "native-input-failed"))
                         } else controller.detach()
+                        session.port.stopWorkerCommands()
                         runBlocking { kadreSession.awaitTermination() }
                     }
                     PumpStep.PumpFailed -> {
@@ -143,12 +144,14 @@ public class Win32BackendProvider private constructor(
                                 "get-message-failed",
                             ),
                         )
+                        session.port.stopWorkerCommands()
                         runBlocking { kadreSession.awaitTermination() }
                     }
                 }
             }
             return KadreResult.Success(outcome)
         } finally {
+            session.port.stopWorkerCommands()
             ownedDriver?.close()
             parentScope.cancel(CancellationException("win32 standalone host released"))
         }

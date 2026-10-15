@@ -44,6 +44,7 @@ internal open class DeterministicWin32HostPort : Win32NativeHostPort {
     override fun postOnMainThread(block: () -> Unit, onFailure: (Throwable) -> Unit) {
         try { block() } catch (failure: Throwable) { onFailure(failure) }
     }
+    override fun stopWorkerCommands() = Unit
 
     override fun createControlWindow(
         messageHandler: (id: Int, wParam: Long, lParam: Long) -> Long,

@@ -16,6 +16,7 @@ internal class Win32InputRouter(
 ) : AutoCloseable {
     private var ready = false
     private var focused = false
+    private var focusGeneration = 0L
     private var inside = false
     private var lastPosition: LogicalPoint? = null
     private val held = mutableMapOf<PhysicalKey, Pair<LogicalKey, KeyLocation>>()
@@ -30,7 +31,8 @@ internal class Win32InputRouter(
     }
 
     private fun barrier() { boundary++; wheelSignature = null }
-    private fun defaultResult(): Long? = if (defaultBehavior == InputDefaultBehavior.SuppressWhenPossible) 0L else null
+    private fun defaultResult(consumed: Long = 0L): Long? =
+        if (!isAlive() || defaultBehavior == InputDefaultBehavior.SuppressWhenPossible) consumed else null
 
     fun handle(message: Int, wParam: Long, lParam: Long): Long? {
         if (!ready || !isAlive()) return null
@@ -48,7 +50,7 @@ internal class Win32InputRouter(
                 emit(SurfaceStimulus.PointerMoved(surfaceId, PointerKind.Mouse, position,
                     LogicalDelta(position.x - (previous?.x ?: position.x), position.y - (previous?.y ?: position.y)), null, null))
                 lastPosition = position
-                0L
+                defaultResult()
             }
             in 0x201..0x209, in 0x20b..0x20d -> {
                 val position = position(lParam)
@@ -69,14 +71,14 @@ internal class Win32InputRouter(
                 if (pressed) interact(RuntimeSynchronousInteraction.PointerPressed(button, position, null))
                 else emit(SurfaceStimulus.PointerButtonChanged(surfaceId, PointerKind.Mouse, button,
                     PointerButtonState.Released, position, null, null))
-                if (message in 0x20b..0x20d) 1L else 0L
+                defaultResult(if (message in 0x20b..0x20d) 1L else 0L)
             }
             0x2a3 -> {
                 if (inside) emit(SurfaceStimulus.PointerLeft(surfaceId, PointerKind.Mouse))
                 inside = false
                 lastPosition = null
                 barrier()
-                0L
+                defaultResult()
             }
             0x20a, 0x20e -> {
                 val horizontal = message == 0x20e
@@ -86,7 +88,7 @@ internal class Win32InputRouter(
                 win32WheelDelta(horizontal, wParam, settings)?.let {
                     emit(SurfaceStimulus.Scroll(surfaceId, it, boundary))
                 }
-                0L
+                defaultResult()
             }
             else -> null
         }
@@ -94,6 +96,7 @@ internal class Win32InputRouter(
 
     private fun keyboard(message: Int, wParam: Long, lParam: Long) {
         val key = port.readKeyboardInput(hwnd, message, wParam, lParam) ?: return
+        val packetFocusGeneration = focusGeneration
         val physical = win32PhysicalKey(key)
         val identity = held[physical] ?: (win32LogicalKey(key) to win32KeyLocation(key))
         barrier()
@@ -101,7 +104,7 @@ internal class Win32InputRouter(
         // The native count is an unsigned word. Runtime overflow/terminal rejection stops expansion.
         val count = if (key.pressed) key.repeatCount.coerceIn(1, 65535) else 1
         repeat(count) { index ->
-            if (!ready || !isAlive()) return
+            if (!ready || !isAlive() || packetFocusGeneration != focusGeneration) return
             val repeating = key.repeat || index > 0
             if (key.pressed && !repeating) {
                 interact(RuntimeSynchronousInteraction.KeyPressed(physical, identity.first, identity.second, key.modifiers))
@@ -124,7 +127,7 @@ internal class Win32InputRouter(
         if (focused == value) return
         focused = value
         barrier()
-        if (!value) { held.clear(); lastPosition = null }
+        if (!value) { focusGeneration++; held.clear(); lastPosition = null }
         emit(SurfaceStimulus.FocusChanged(surfaceId, if (value) SurfaceFocus.Focused else SurfaceFocus.Unfocused))
     }
 

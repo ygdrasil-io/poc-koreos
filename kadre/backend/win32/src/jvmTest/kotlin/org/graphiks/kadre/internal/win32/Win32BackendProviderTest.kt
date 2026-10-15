@@ -28,6 +28,33 @@ import org.graphiks.kadre.policy.KadrePolicies
 
 class Win32BackendProviderTest {
     @Test
+    fun stopCompletesAWorkerCommandAlreadyWaitingInTheUiQueue() {
+        val owner = Thread.currentThread()
+        val admitted = CountDownLatch(1)
+        val released = java.util.concurrent.atomic.AtomicBoolean(false)
+        val queue = Win32UiCommandQueue({ Thread.currentThread() === owner }, { admitted.countDown(); true })
+        val port = object : DeterministicWin32HostPort() {
+            override fun isMainThread() = Thread.currentThread() === owner
+            override fun <T> onMainThread(block: () -> T): T = queue.invoke(block)
+            override fun stopWorkerCommands() = queue.stopWorkerAdmission()
+            override fun close() { queue.close(); super.close() }
+        }
+        val provider = Win32BackendProvider.forTesting(availability = { true }, portFactory = { port },
+            loopStarted = { pump ->
+                assertTrue(admitted.await(2, TimeUnit.SECONDS))
+                pump.requestStop()
+            })
+        val result = provider.run(DesktopStandaloneRequest(
+            applicationFactory = KadreApplicationFactory { KadreApplication {
+                try { port.onMainThread { error("stopped command must not run") } }
+                finally { released.set(true) }
+            } }, stopWhenLastWindowClosed = true, policy = KadrePolicies.Default))
+        val outcome = assertIs<KadreResult.Success<SessionOutcome>>(result).value
+        assertTrue(outcome is SessionOutcome.Stopped || outcome == SessionOutcome.Completed, "shutdown outcome: $outcome")
+        assertTrue(released.get(), "shutdown must release the waiting Java future before awaiting application termination")
+    }
+
+    @Test
     fun nativeInputReadFailureTerminatesTheSessionAsAPlatformFailure() {
         val provider = Win32BackendProvider.forTesting(
             availability = { true },

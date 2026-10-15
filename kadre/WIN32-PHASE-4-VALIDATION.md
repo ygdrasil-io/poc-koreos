@@ -1,8 +1,9 @@
 # Livraison conjointe Win32 phase 4
 
-Kadre : base `09a29b0a`, branche `codex/win32-phase-4-input`.
+Kadre : base initiale `09a29b0a`, rebased sur `8ed94a54` (UIKit phase 9),
+branche `codex/win32-phase-4-input`.
 KFFI : base `67bb7b1`, branche `feat/win32-phase-4-input`, commits
-`a6af6f1` et `5ad1fee`. Le checkout KFFI utilisé ici est
+`a6af6f1`, `5ad1fee` et `4a6a5e7`. Le checkout KFFI utilisé ici est
 `.worktrees/kffi-phase4` (ignoré par Git Kadre).
 
 ## Reproduire la validation JVM Windows
@@ -33,9 +34,16 @@ scripts/test-kadre-win32-contracts.sh -PkadreKffiLocal=true -PkadreKffiWin32Vers
 Le repository local est filtré sur ces quatre modules ; la résolution par
 défaut reste celle du catalogue versionné.
 
+Les coordonnées locales sont un alias de test des JAR construits et testés
+avec `releaseVersion=1.0.0-SNAPSHOT` : `Kffi.VERSION` reste `1.0.0`, conformément
+à son contrat de version existant. Le suffixe local n'est pas une release
+runtime. Le helper exécute les deux suites JVM avant de publier ces JAR.
+
 ## Preuves et portée
 
 Les suites complètes Windows, runtime, Desktop et validateur passent.
+Dernière passe après revue : **74 tests portables Win32, 22 natifs Win32,
+418 runtime, 18 Desktop et 70 du validateur**, sans échec ni skip.
 KFFI : 110 tests core et 22 Win32, sans échec ni skip, avec l'intégration native
 activée. Les preuves Kadre sont générées pour W32-001 à W32-011, BCK-025,
 SES-002 et PMP-001 : **14 JSON non vides**.
@@ -91,6 +99,36 @@ système ne sont pas déclarés exécutés.
 - Fenêtre interactive : publier les métriques natives initiales et montrer
   après admission de la surface. Coût : la taille effective peut différer
   de la demande ; elle est désormais exposée honnêtement.
+
+## Revue finale et corrections
+
+Une revue fraîche des deux dépôts a trouvé deux défauts importants et un
+défaut de défaut souris initialement classé mineur. Ce dernier a été reclassé
+important : la politique `HostDefault` est annoncée disponible et doit donc
+préserver le comportement natif observable. Les trois ont été corrigés dans
+une seule passe, chacun avec régression RED puis GREEN et suite complète :
+
+- Shutdown : fermer l'admission worker et terminer les futures pendantes
+  avant `awaitTermination`, en laissant le cleanup UI légal. Test
+  `stopCompletesAWorkerCommandAlreadyWaitingInTheUiQueue` ; les reporters
+  défaillants ne peuvent pas empêcher la libération des autres attentes.
+- Focus réentrant : révoquer l'expansion entière du paquet repeat, y compris
+  si le focus revient pendant le callback. Tests
+  `focusLossAndRegainInTheHandlerRevokeTheWholeRepeatPacket` et la preuve
+  native d'ouverture avec `repeatCount=3`.
+- Défauts souris : déléguer au vrai `DefWindowProc` sous `HostDefault` ; sous
+  suppression, conserver le résultat consommé approprié, dont XBUTTON=1.
+  Test `mouseHostDefaultsAreDelegatedAndSuppressionUsesTheDocumentedConsumedResults`.
+  La délégation du clic droit préserve notamment le
+  [chemin WM_CONTEXTMENU documenté](https://learn.microsoft.com/en-us/windows/win32/menurc/wm-contextmenu).
+
+Aucun défaut mineur reporté. Les domaines que la revue a laissés hors verdict
+restent explicitement limités : matériel/layouts/menus à vérifier manuellement,
+KMP/Dokka/Central et headers MSVC complets hors preuve locale, capture/touch/IME
+dans leurs phases ultérieures. Le helper local modifié après la revue a été
+vérifié par ses suites et sa publication effective ; les hashes SHA-256 des
+deux JAR publiés correspondent aux JAR testés. Son alias de test ne change pas
+`Kffi.VERSION` et ne doit pas servir de version runtime de production.
 
 ## Publication distante
 

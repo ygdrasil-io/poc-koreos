@@ -133,12 +133,12 @@ class Win32InputNativeContractTest {
                 opened = true
             })
             post(hwnd, 0x7)
-            post(hwnd, 0x100, 0x41, keyBits(0x1e))
+            post(hwnd, 0x100, 0x41, keyBits(0x1e, count = 3))
             pumpUntil(port, "the synchronous key must open a second native window") { opened }
             assertEquals(2, driver.manager.state.value.windows.size)
             if (window.surface.state.value.focus == SurfaceFocus.Unfocused) {
                 assertTrue(window.surface.input.state.value.keyboard.pressedKeys.isEmpty(), "focus lost during the callback must not be followed by a stale ordinary press")
-            } else assertEquals(1, events.filterIsInstance<InputEvent.Key>().size)
+            } else assertEquals(3, events.filterIsInstance<InputEvent.Key>().size)
         }
     }
 

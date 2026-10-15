@@ -14,6 +14,23 @@ import kotlin.test.assertTrue
 
 class Win32UiCommandQueueTest {
     @Test
+    fun stoppingWorkersReleasesEveryWaiterEvenWhenAFailureCallbackThrowsAndAllowsOwnerCleanup() {
+        val owner = Thread.currentThread()
+        val admitted = Semaphore(0)
+        val queue = Win32UiCommandQueue({ Thread.currentThread() === owner }, { admitted.release(); true })
+        worker { queue.post({}, { error("broken failure reporter") }) }.get(2, TimeUnit.SECONDS)
+        assertTrue(admitted.tryAcquire(2, TimeUnit.SECONDS))
+        val waiting = worker { runCatching { queue.invoke { error("must not run") } }.exceptionOrNull() }
+        assertTrue(admitted.tryAcquire(2, TimeUnit.SECONDS))
+        queue.stopWorkerAdmission()
+        assertTrue(waiting.get(2, TimeUnit.SECONDS) is java.util.concurrent.CancellationException)
+        assertEquals(42, queue.invoke { 42 }, "native owner cleanup remains legal before port close")
+        val rejected = worker { runCatching { queue.invoke { 1 } }.exceptionOrNull() }.get(2, TimeUnit.SECONDS)
+        assertTrue(rejected is java.util.concurrent.CancellationException)
+        queue.close()
+    }
+
+    @Test
     fun aQueuedWindowCanBeCancelledBeforeTheUiClaimsIt() {
         val owner = Thread.currentThread()
         val queue = Win32UiCommandQueue({ Thread.currentThread() === owner }, { true })
