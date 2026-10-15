@@ -1,8 +1,20 @@
-# Win32 phase 5 — window mutations, tranche A
+# Win32 phase 5 — complete window and interaction qualification
 
 ## Scope and contract
 
-This jointly delivered KFFI/Kadre tranche replaces the phase-4 mutation rejection with real owner-thread commands: title, physical outer position, logical client size, minimum/maximum client sizes, resizability, decorations/system buttons, and reversible borderless fullscreen. The phase-5 roadmap explicitly permits independently qualified sub-tranches. Levels, icons, attention, cursors, hit testing, native move/resize and pointer confinement remain separate follow-ups. Visibility and native minimize/maximize continue to be observed through the surface/native system menu; the public Window API has no show/minimize/maximize command. Exclusive mode remains phase 9. No public API is added.
+The PR delivers the entire phase-5 roadmap in one reviewable change. Existing title/geometry/chrome/borderless behavior is retained. The remaining work implements Normal/Floating native levels, bounded RGBA8 icons and custom cursors, exact system cursor mappings, window-owned attention, native pointer confinement, and synchronous primary-pointer move/resize. Visibility/minimize/maximize and the native system menu are qualified through the native window lifecycle: the closed public Window API has no separate show/minimize/maximize/menu method. No public API is added.
+
+Qualification decisions are part of the complete phase, not deferred implementation: Modal has no distinct Win32 z-order equivalent and is excluded from advertised level constraints. Locked waits for raw input in phase 8; SetCapture is not used to claim lock. HTTRANSPARENT alone only redirects within one UI thread, so Disabled hit testing remains explicitly unsupported rather than promising cross-process pass-through. Enabled uses native default hit testing. Transparency and blur require a qualified rendering/compositor path; they remain explicitly unsupported. Content protection is implemented only if checked native display-affinity set/readback proves its exact value, with no universal privacy promise. Exclusive fullscreen remains phase 9 and embedded attention admission remains phase 12.
+
+## Additional ownership and interaction rules
+
+- KFFI owns HICON/HCURSOR/DIB/MINMAXINFO/FLASHWINFO and process-global ClipCursor arbitration. RGBA8 icons are at most 256x256 and cursors 128x128; unsupported encodings are rejected before native allocation. Images obey per-resource and session retained-payload budgets, including pending requests and replacement lifetimes.
+- Icons are installed in both native icon slots and read back before publication. Replacements release only resources no longer referenced by a live HWND. Cursor policy is applied on WM_SETCURSOR/HTCLIENT; custom cursor destruction first removes an active owned cursor. Shared system cursors are never destroyed.
+- Normal/Floating map to native non-topmost/topmost and are read back through WS_EX_TOPMOST. Modal is rejected by field. Fullscreen restore preserves the runtime desired level rather than replaying stale saved z-order.
+- FlashWindowEx is an admission API whose return value is previous activity, not a success BOOL. None stops only this window's request; close stops its attention without activating another application or injecting keys.
+- Confined requires a live foreground window and exclusive broker ownership. Existing foreign clipping is preserved. Focus loss, hide, minimize, cancel mode and teardown release only a still-owned clipping rectangle and publish None. Moving/resizing updates the actual client-screen rectangle. A foreign replacement withdraws the lease without clearing the foreign clip. No implicit reacquisition occurs on focus regain.
+- Native move/resize is admitted only inside the same live primary PointerPressed callback. Resize additionally requires a resizable windowed peer. KFFI releases only that HWND's capture, encodes checked signed screen coordinates, and enters the native non-client move/size loop. Ordinary input remains deferred until the callback ends; callbacks may close the window. No delayed or fabricated activation is used.
+- The modal-menu native test posts an actual control-window command from a worker while TrackPopupMenu is running, then cancels the menu. The command must complete inside the native nested loop. System minimize/maximize/restore tests read actual flags/rectangles and verify public surface observations without inventing a public window-mode property.
 
 ## Native boundary
 
