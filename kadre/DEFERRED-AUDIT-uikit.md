@@ -55,7 +55,7 @@ présent est prouvé, jamais déclaré.
 | # | différé | état | preuve de l'état | chemin d'activation |
 |---|---|---|---|---|
 | 1 | touch réel (livraison d'un `UITouch`) | ABSENCE STRUCTURELLE + charter | pas synthétisable in-process honnêtement (ruling pré-vol) ; les zéros sont PROUVÉS : `touchEventCount == 0`, `touchStimulusCount == 0` (BCK-022, `KadreUikitInputTests`) ; l'ANNONCE du recognizer additif est livrée (BCK-022) | charter manuel sur device — §4 du registre |
-| 2 | clavier physique réel (touches de la route `GCKeyboard`) | ABSENCE STRUCTURELLE + charter | `keyboardEventCount == 0`, `keyboardStimulusCount == 0` prouvés (BCK-023) ; le BINDING est livré et s'attache au VRAI objet d'un clavier Simulator appareillé (`keyboardConnectCount`, scénario BCK-023) ; `LogicalKey` reste `Unidentified(null)` (limite GameController documentée, ligne BCK-023) | charter manuel sur device |
+| 2 | clavier physique réel (touches de la route `GCKeyboard`) | ABSENCE STRUCTURELLE + charter | `keyboardEventCount == 0`, `keyboardStimulusCount == 0` prouvés (BCK-023) ; le BINDING est livré et s'attache au VRAI objet d'un clavier Simulator appareillé (`keyboardConnectCount`, scénario BCK-023) ; `LogicalKey` reste `Unidentified(null)` (limite GameController documentée, ligne BCK-023) ; la limite mono-consumateur du handler process-global porte son propre verdict en §3.6 | charter manuel sur device |
 | 3 | gestes réels (iOS double-tap/pan/pinch/rotation ; tvOS double-tap/pan) | ABSENCE STRUCTURELLE + charter | `gestureStimulusCount == 0` prouvé (BCK-023) ; l'ENSEMBLE EXACT par famille est livré et épinglé (recognizers comptés sur la vue, `gestureKinds` = l'ensemble annoncé — sentinelle `uikit-input-gesture-set-exact`) | charter manuel sur device |
 | 4 | survol réel (iOS, `UIHoverGestureRecognizer`) | ABSENCE STRUCTURELLE + charter | l'install porte le compteur, jamais un événement (`hoverInstallCount`, jamais de fait de survol — ligne pointeur iOS de BCK-022) ; tvOS : absence structurelle du TYPE dans le klib (ligne dédiée) | charter manuel sur device (iPad/pointeur) |
 | 5 | clavier logiciel réel + IME réel (+ purposes non exercés) | ABSENCE STRUCTURELLE + charter | la session texte est LIVRÉE de bout en bout (BCK-024 — receiver, ombre, révisions, write-back, `StaleRevision`, mapping Email/Password sur les brutes du champ, les deux familles) ; le vrai clavier et l'IME vif ne sont pas synthétisables in-process ; les purposes au-delà de Text/Email/Password suivent la table exhaustive épinglée en uikitTest mais ne sont pas exercés sur le receiver vivant (limite portée par la ligne BCK-024) | charter manuel (vrai clavier, langues IME) |
@@ -96,7 +96,7 @@ pour ne rien fondre dans les tableaux ci-dessus :
 
 ## 3. Résidus accumulés par la revue de la phase — portés explicitement
 
-Ces quatre résidus viennent des revues T2-T6 ; ils sont repris ici MOT POUR MOT dans leur
+Ces cinq résidus viennent des revues T2-T8 ; ils sont repris ici MOT POUR MOT dans leur
 portée jugée, pour qu'aucun ne disparaisse au merge.
 
 ### 3.1 BCK-019 — résidu « fuite de symbole de façade » (ruling T4, porté par T8)
@@ -154,8 +154,13 @@ chemin qui n'existe pas ; le différé est une note de conception, portée ici.
 Vérification demandée par la revue T6, résultat : **aucun défaut machine-checké**. Les ids
 de SCÉNARIO du registre (`uikit-window-request-tvos-rejected`,
 `uikit-window-request-concurrent-pair`) sont les vrais noms des KDoc des tests Swift
-(`KadreUikitWindowRequestTests.swift:233`, `KadreUikitWindowRequestIosTests.swift:230`) et
-sont validés contre les JUnit produits ; les lignes `evidence.tsv` type `sentinel`
+(`KadreUikitWindowRequestTests.swift:233`, `KadreUikitWindowRequestIosTests.swift:230`) ;
+la validation JUnit, elle, porte sur les colonnes `testClass`/`testName` des lignes
+`evidence.tsv` — chaque testcase mappé doit exister ET passer dans les JUnit produits
+(« mapped testcase is missing / did not pass ») — PAS sur l'id de scénario, qui n'est
+jamais cherché dans un JUnit : l'invariant machine d'un id de scénario est l'ÉGALITÉ
+D'ENSEMBLES registre ↔ evidence, la même mécanique (`ContractEvidenceMapping.compareEvidence`)
+que celle des sentinelles décrite ci-dessous. Les lignes `evidence.tsv` type `sentinel`
 citent les bonnes méthodes de test réelles
 (`testWindowRequestWithoutProviderIsRejectedUnsupportedWithNoNativeEffect()`,
 `testConcurrentWindowRequestsCorrelateEachSceneToItsOwnRequest()`). Les ids de
@@ -167,6 +172,24 @@ donc purement de WORDING (l'id de sentinelle ne partage pas la tige du nom de sc
 renommer des ids de sentinelles toucherait des fichiers machine-checkés (registre +
 evidence) pour un gain de lisibilité — non fait. Les sections de lecture du registre nomment
 déjà, pour chaque sentinelle, le scénario et le test qui la tue.
+
+### 3.6 Clavier GameController — le handler `keyChangedHandler` est process-global (verdict explicite)
+
+Ce watch item de conception n'avait jusqu'ici qu'une couverture indirecte — la ligne BCK-023
+du registre, pointée par l'entrée 2 du §2 sans verdict nommé ; la revue T8 l'a jugé en
+dessous de la barre de ce document, il porte donc son verdict ici. Le fait : le handler
+`keyChangedHandler` de `GCKeyboard.coalescedKeyboard` est PROCESS-GLOBAL (limite
+GameController, pas un choix Kadre) ; la ligne BCK-023 du registre documente la conséquence
+mot pour mot — « une seconde session attachée prend la livraison des touches, le teardown
+de la première la coupe pour la suivante — les annonces peuvent alors sur-déclarer
+`keyboardInstalled` ». **Verdict : DÉCISION NON PRISE** — un arbitrage process-wide de la
+livraison clavier entre sessions (ré-armer le handler au teardown de chaque session,
+ré-émettre les annonces) est une route que Kadre pourrait prendre dans le process ; il ne
+l'a pas prise, et la ligne du registre nomme le chemin d'activation : « arbitrage
+process-wide = follow-up ». La limite, elle, est LIVRÉE en tant que documentée (registre
+BCK-023, reprise ci-dessus) et aucun scénario ne l'exerce : le comportement appartient à
+GameController, un test le rejouerait sans le prouver — la garde est la ligne du registre
+elle-même, que ce paragraphe indexe dans l'audit.
 
 ## 4. Index des charters manuels — la passe de release
 
@@ -216,7 +239,7 @@ Critère de sortie de la phase 10 : « toutes les obligations du §8 sont démon
 | 407 | input, IME, drop, displays, devices, gamepads, raw input, capture : chacun une décision et une preuve adaptées | BCK-022/BCK-023/BCK-024/BCK-026/BCK-027/BCK-028 — toutes ACTIVES avec sentinelles et evidence par famille ; raw input refusé avec preuve de non-appel (BCK-027) ; §2 de cet audit pour les charters correspondants |
 | 408 | aucun contrat actif sans scénario, sentinelle ou rapport corrélé ; registre de capabilities complet | `validateContractRegistry` vert (T2) ; le validateur refuse scénario absent, test manquant, skip, désaccord JSON/JUnit (preuve négative T2 citée §1) ; registre 30 lignes, 30 PASS / 0 FAIL au cross-check T1 ; 16 contrats uikit gate-verts avec evidence JSON+JUnit corrélés |
 | 409 | tests de rétention et de callback tardif couvrent chaque source native et chaque ressource closeable | `UIKitRetentionCyclesTest` (T3, `ff4b7aa7`) : 48 cycles / 8 familles (attach/stop, re-attach, drop, capture, displays/devices/gamepads, pression mémoire, texte-receiver, window requests), preuve de mutation réelle ; callbacks tardifs : scénarios driver (`uikit-capture-late-callback-after-close`, livraisons post-teardown no-op comptées zéro BCK-026, résolution tardive de requête annulée no-op BCK-021) ; résidu session-texte porté §3.2 |
-| 410 | guides et consumers démontrent hosts UIKit et SwiftUI iOS/tvOS avec factory Kotlin partagée ; slices XCFramework distinctes | guides T6 (`d8bea43d`, 7 guides + index) ; consumers T2/T7 : factory `ConsumerKadre` traversant les modules (`ConsumerAttachTests`), SwiftUI gated lancé pour de vrai (BCK-019), sample de coexistence tvOS (T7, `baf01cbb`) ; slices : `ios-arm64`/`ios-arm64-simulator`/`tvos-arm64`/`tvos-arm64-simulator` nommées dans la ligne distribution du registre |
+| 410 | guides et consumers démontrent hosts UIKit et SwiftUI iOS/tvOS avec factory Kotlin partagée ; slices XCFramework distinctes | guides T6 (`d8bea43d`, 7 guides + index) ; consumers T2/T7 : factory `ConsumerApplicationFactory` traversant les modules (`ConsumerAttachTests`), SwiftUI gated lancé pour de vrai (BCK-019), sample de coexistence tvOS (T7, `baf01cbb`) ; slices : `ios-arm64`/`ios-arm64-simulator`/`tvos-arm64`/`tvos-arm64-simulator` nommées dans la ligne distribution du registre |
 | 411 | preuves des deux simulateurs obligatoires et séparées ; essais Siri Remote/manette/capture réalisés sur Apple TV physique | le gate exige les DEUX familles à destinations distinctes (`scripts/test-uikit-simulator.sh`, preuves par `<target>` jamais écrasables) ; nightly 4 jambes famille × {courant, plus-ancien-disponible} (T5, `73dd1dbe`) avec l'écart de plancher dit intégralement (§4 du registre) ; les essais physiques = l'index §4 de cet audit (Siri Remote, manette, capture — Apple TV/iPhone physiques, avant coupe) |
 
 **Verdict de la phase :** l'obligation « Revoir chaque différé » est tenue entrée par
