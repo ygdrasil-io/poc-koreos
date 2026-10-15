@@ -317,12 +317,12 @@ Apple transmet l’activité associée à une demande d’activation dans les op
 
 **But :** fermer séparément les capabilities de capture iOS et tvOS sans promettre une source ou une permission que la plateforme ne fournit pas.
 
-- [ ] Examiner séparément `CaptureTarget.HostChoice`, `Source` et `Surface` et leur correspondance avec les APIs publiques disponibles, notamment ReplayKit lorsque pertinent. Un enregistrement de l’application entière ne prouve pas une capture isolée de surface.
-- [ ] Compiler et tester le chemin tvOS sur son SDK et sur Apple TV pour les capacités annoncées ; l’existence d’un framework commun ne prouve pas la disponibilité de chaque méthode, picker ou format. Garder explicites les chemins sans primitive conforme.
-- [ ] Fixer la sémantique des sources, consentements, interruptions et révocations ; `HostPickerOnly` n’est annoncé que si un vrai parcours conforme existe. Aucune demande de permission implicite à l’énumération.
-- [ ] Si une primitive exige un type de permission ou un lifecycle absent du contrat fermé, corriger d’abord le document normatif ou conserver le chemin non supporté ; ne pas détourner une permission existante.
-- [ ] Brancher les ports capture communs : formats, plans, strides, orientation, dimensions et colorimétrie réellement connus, cadence demandée, copies et budget total en octets.
-- [ ] Tester refus utilisateur, interruption, source perdue, stop concurrent, callback après fermeture et libération des buffers même lorsque le consumer est lent ou annulé.
+- [x] Examiner séparément `CaptureTarget.HostChoice`, `Source` et `Surface` et leur correspondance avec les APIs publiques disponibles, notamment ReplayKit lorsque pertinent. Un enregistrement de l’application entière ne prouve pas une capture isolée de surface.
+- [x] Compiler et tester le chemin tvOS sur son SDK et sur Apple TV pour les capacités annoncées ; l’existence d’un framework commun ne prouve pas la disponibilité de chaque méthode, picker ou format. Garder explicites les chemins sans primitive conforme.
+- [x] Fixer la sémantique des sources, consentements, interruptions et révocations ; `HostPickerOnly` n’est annoncé que si un vrai parcours conforme existe. Aucune demande de permission implicite à l’énumération.
+- [x] Si une primitive exige un type de permission ou un lifecycle absent du contrat fermé, corriger d’abord le document normatif ou conserver le chemin non supporté ; ne pas détourner une permission existante.
+- [x] Brancher les ports capture communs : formats, plans, strides, orientation, dimensions et colorimétrie réellement connus, cadence demandée, copies et budget total en octets.
+- [x] Tester refus utilisateur, interruption, source perdue, stop concurrent, callback après fermeture et libération des buffers même lorsque le consumer est lent ou annulé.
 
 **Fichiers principaux :** port capture UIKit, owners de buffers, driver et cahier sur appareil pour les parcours non reproductibles sur simulateur.
 

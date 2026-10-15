@@ -73,9 +73,9 @@ Toutes les lignes possèdent les managers communs `windows`, `displays`, `device
 | raw input | C | C | N(RawInputAccess), preuve de non-appel | N(RawInputAccess) | C | C | C | C |
 | gamepad observation | C | C | C, miroir `GCController`; gamepads = profils étendus seulement | G, sondée (§6.3) | C | C | C | C |
 | effets gamepad | C | C | C, selon capability GameController par pad ; absence honnête | G, gouvernée (§6.3) | C | C | C | C |
-| capture target `HostChoice` | C | C | C | C, picker du navigateur derrière un consentement explicite (§6.3) | C | C | C | C |
-| capture target `Source` | C | C | C | N(CaptureOpen), refusée avant tout picker (§6.3) | C | C | C | C |
-| capture target `Surface` | C | C | C | C, canvas de la surface primaire, sans consentement (§6.3) | C | C | C | C |
+| capture target `HostChoice` | C | C | C, ReplayKit in-app availability-gated (`RPScreenRecorder.isAvailable` lu VIVANT) — INJOIGNABLE via tout target public aujourd'hui : `hostPicker` structurellement `Unsupported`, l'admission runtime exige un lifecycle de picker qu'iOS/tvOS n'offrent pas (§6.2, phase 9) | C, picker du navigateur derrière un consentement explicite (§6.3) | C | C | C | C |
+| capture target `Source` | C | C | N(CaptureOpen), refus structurel avant tout fait de port — aucune primitive in-process d'énumération ; `sources` jamais `HostPickerOnly` (§6.2, phase 9) | N(CaptureOpen), refusée avant tout picker (§6.3) | C | C | C | C |
+| capture target `Surface` | C | C | C, livré iOS/tvOS : pompe de snapshots de la vue, prouvée de bout en bout sur Simulator avec de vraies frames (§6.2, phase 9) | C, canvas de la surface primaire, sans consentement (§6.3) | C | C | C | C |
 | `SurfaceCapabilities.platformAccess` | G, `withAndroidView` | G, `withAndroidView` | G, `withUIKitView` | G, `withWebElement` | N(PlatformSurfaceAccess) | N(PlatformSurfaceAccess) | N(PlatformSurfaceAccess) | N(PlatformSurfaceAccess) |
 | `WindowCapabilities.platformAccess` | N(PlatformWindowAccess) | — (aucune `Window`) | N(PlatformWindowAccess) | — (aucune `Window`) | G, `withDesktopHandle` | G, `withDesktopHandle` | G, `withDesktopHandle` | G, `withDesktopHandle` |
 
@@ -93,6 +93,42 @@ input reste `Unsupported(RawInputAccess)`. La pression mémoire UIKit est single
 seulement, jamais `Critical`, et aucun événement de visibilité ou lifecycle ne devient pression.
 AirPlay/écrans externes, manettes Bluetooth/USB réelles et effets/haptics matériels restent des
 charters manuels.
+
+La capture UIKit (phase 9) est décidée PAR CIBLE (BCK-028), et les trois cellules se lisent
+comme des décisions, pas des promesses. `Surface` est la seule cible ouvrable publiquement :
+la pompe snapshotte la vue du host (`drawViewHierarchyInRect`, repli `layer.render(in:)`),
+lit le format PAR frame (le bitmap info du renderer ne se suppose jamais — `Rgba8` mesuré ;
+un raster hors table persistant termine
+`Failed(PlatformFailure(UIKit, "capture-stream", "frame-format-out-of-table"))`, jamais un
+skip silencieux), streame par un ticker injecté sous le budget par frame vérifié AVANT la
+copie, et sa preuve de bout en bout sur Simulator porte un STIMULUS DE CONTENU documenté :
+une vue vide produit des rasters mensongers (bitmap info `0x1` avec `bytesPerRow = 2·w`)
+que le kernel refuse honnêtement, une vue avec contenu rendu livre le raster cohérent.
+`HostChoice` est le chemin ReplayKit in-app : la disponibilité `RPScreenRecorder.isAvailable`
+est LUE VIVANTE (jamais « Simulator ⇒ indisponible » codé — mesuré `true` sur les deux
+simulateurs 27.0 au moment du gate), `requestPermission` ne prompte JAMAIS (aucun dialogue
+de consentement n'existe pour la capture in-app — la permission écran est dérivée de la
+disponibilité, la fenêtre reste `Unavailable(Unsupported(CapturePermission))`), micro et
+caméra ne sont jamais activés — et ce chemin est ACTUELLEMENT INJOIGNABLE par tout target
+public : `hostPicker` est structurellement `Unsupported` (les broadcast extensions sont un
+process séparé dont les frames n'atteignent jamais l'app, hors du contrat fermé) et
+l'admission runtime d'un open `HostChoice` exige un lifecycle de picker qu'iOS/tvOS
+n'offrent pas — le refus `Unsupported(CaptureOpen)` avant tout fait de port est prouvé, la
+roadmap dit « conserver le chemin non supporté », et les frames ReplayKit ne sont de plus
+JAMAIS livrées sur Simulator (mesuré : la complétion du démarrage ne vient pas, zéro frame,
+jamais maquillé) — la preuve de frames est le charter manuel sur device ; la dépréciation
+SDK 27 des formes ReplayKit au profit de ScreenCaptureKit est surfacée et la migration
+SCStream reste une question de roadmap. `Source`, la fenêtre et l'énumération sont les
+absences exactes : aucune primitive in-process n'énumère les surfaces capturables — `window`
+`Unsupported(CaptureOpen)`, `sourceEnumeration` `Unsupported(CaptureRefreshSources)`,
+inventaire `Unavailable(même échec)`, JAMAIS `HostPickerOnly` (le web l'annonce parce qu'un
+vrai picker existe derrière un consentement ; ici aucun parcours conforme n'existe). La
+ligne de contrat est BCK-028 (huit scénarios et deux sentinelles par famille), le registre
+`capabilities/uikit.md` §2 porte les trois lignes, et le fix runtime découvert par le
+driver — `RuntimeCaptureSession.offerFrameLocked` incrémente AVANT le send (un collector
+unconfined reprend inline dans le send ; l'ancien ordre sous-fluait l'invariant de compte
+d'octets de façon process-fatale), prédicat de budget revenu à sa baseline
+`queued + leased > maxBufferedBytesPerSession` — concerne tout collector unconfined futur.
 
 `raw input` est une capability dynamique. AppKit publie un bridge global
 listen-only lorsque le check de version et Input Monitoring le permettent :
