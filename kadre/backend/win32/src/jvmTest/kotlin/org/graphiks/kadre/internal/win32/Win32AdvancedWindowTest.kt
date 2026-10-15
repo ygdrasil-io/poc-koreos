@@ -144,4 +144,44 @@ class Win32AdvancedWindowTest {
         window.apply(WindowUpdate(fullscreen = PropertyChange.Set(FullscreenMode.Windowed)))
         assertEquals(WindowLevel.Normal, window.state.value.level)
     } }
+
+    @Test fun focusOrCancelOrReleaseInsideTheHandlerRevokesMoveAuthority() = runBlocking { fixture { port, window, hwnd ->
+        var boundary: () -> Unit = {}
+        val outcomes = mutableListOf<InteractionActionOutcome>()
+        val registration = assertIs<KadreResult.Success<InteractionRegistration>>(window.surface.installInteractionHandler(InteractionHandler { context, _ ->
+            boundary(); context.request(InteractionAction.BeginWindowMove)
+        })).value
+        val collecting = launch(Dispatchers.Unconfined, CoroutineStart.UNDISPATCHED) { registration.outcomes.collect { outcomes += it } }
+        for (event in listOf<() -> Unit>(
+            { port.dispatchWindowMessage(hwnd, 0x8); port.dispatchWindowMessage(hwnd, 0x7) },
+            { port.dispatchWindowMessage(hwnd, 0x1f) },
+            { port.dispatchWindowMessage(hwnd, 0x202) },
+        )) {
+            boundary = event; port.dispatchWindowMessage(hwnd, 0x7); port.dispatchWindowMessage(hwnd, 0x201)
+            assertIs<InteractionActionOutcome.Rejected>(outcomes.last())
+            assertTrue(port.nativeDrags.isEmpty())
+        }
+        collecting.cancel(); registration.close()
+    } }
+
+    @Test fun failedConfinedReacquisitionPublishesLossAndPreservesTheForeignClip() = runBlocking { fixture { port, window, hwnd ->
+        var nativeClip = "desktop"
+        val access = object : Win32ConfinementAccess {
+            override fun acquire(): Boolean = if (nativeClip == "foreign") false else { nativeClip = "owned"; true }
+            override fun release() { if (nativeClip == "owned") nativeClip = "desktop" }
+            override fun update() = nativeClip == "owned"
+            override fun isActive() = nativeClip == "owned"
+        }
+        Win32WindowFeatures(hwnd, access) { 0L }.use { features ->
+            features.observeLoss { port.confinementObservers.getValue(hwnd)() }
+            port.dispatchWindowMessage(hwnd, 0x7)
+            window.surface.apply(SurfaceUpdate(pointerCapture = PropertyChange.Set(PointerCaptureMode.Confined)))
+            assertTrue(features.confine(true))
+            nativeClip = "foreign"
+            assertFalse(features.confine(true))
+            features.pollConfinement()
+            assertEquals(PointerCaptureMode.None, window.surface.state.value.pointerCapture)
+            assertEquals("foreign", nativeClip)
+        }
+    } }
 }

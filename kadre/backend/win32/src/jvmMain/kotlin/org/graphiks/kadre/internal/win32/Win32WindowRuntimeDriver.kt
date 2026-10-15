@@ -123,7 +123,8 @@ internal class Win32WindowRuntimeDriver internal constructor(
             router = Win32InputRouter(created.hwnd, command.surfaceId, port, manager::acceptSurfaceStimulus,
                 { event -> dispatchInteraction(entry, event) },
                 { !closed.get() && !entry.closeAdmitted && entries[command.requestId] === entry },
-                { releaseConfinement(entry) })
+                { revokeInteractionAuthority(entry); releaseConfinement(entry) },
+                { revokeInteractionAuthority(entry) })
             entry.input = router
             val snapshot = initialSnapshot(created.hwnd)
             command.commit(
@@ -151,7 +152,7 @@ internal class Win32WindowRuntimeDriver internal constructor(
             WM_CLOSE -> { command.closeRequested(); 0L }
             WM_DESTROY -> { entries[command.requestId]?.let { releaseConfinement(it); it.closeAdmitted = true; it.input?.close() }; command.nativeClosed(); 0L }
             WM_SIZE, WM_MOVE, WM_DPICHANGED -> {
-                entries[command.requestId]?.let { if (message == WM_SIZE && wParam == 1L) releaseConfinement(it) else port.refreshPointerConfinement(hwnd) }
+                entries[command.requestId]?.let { if (message == WM_SIZE && wParam == 1L) { revokeInteractionAuthority(it); releaseConfinement(it) } else port.refreshPointerConfinement(hwnd) }
                 if (message == WM_SIZE && entries.containsKey(command.requestId)) {
                     val visible = wParam != 1L && port.readWindow(hwnd).style and 0x10000000 != 0
                     manager.acceptSurfaceStimulus(SurfaceStimulus.VisibilityChanged(command.surfaceId,
@@ -166,12 +167,13 @@ internal class Win32WindowRuntimeDriver internal constructor(
                 result
             }
             WM_SHOWWINDOW -> {
-                if (wParam == 0L) entries[command.requestId]?.let(::releaseConfinement)
+                if (wParam == 0L) entries[command.requestId]?.let { revokeInteractionAuthority(it); releaseConfinement(it) }
                 manager.acceptSurfaceStimulus(SurfaceStimulus.VisibilityChanged(command.surfaceId,
                     if (wParam != 0L) SurfaceVisibility.Visible else SurfaceVisibility.Hidden, SurfaceOcclusion.Unknown))
                 port.defWindowProc(hwnd, message, wParam, lParam)
             }
-            0x001f -> { entries[command.requestId]?.let(::releaseConfinement); port.defWindowProc(hwnd, message, wParam, lParam) }
+            0x001f -> { entries[command.requestId]?.let { revokeInteractionAuthority(it); releaseConfinement(it) }; port.defWindowProc(hwnd, message, wParam, lParam) }
+            0x0211, 0x0231 -> { entries[command.requestId]?.let(::revokeInteractionAuthority); port.defWindowProc(hwnd, message, wParam, lParam) }
             0x0020 -> {
                 if (lParam and 0xffffL == 1L && entries[command.requestId]?.let(::isLive) == true) { port.applyClientCursor(hwnd); 1L }
                 else port.defWindowProc(hwnd, message, wParam, lParam)
@@ -205,6 +207,10 @@ internal class Win32WindowRuntimeDriver internal constructor(
     private fun publishCaptureLoss(entry: Win32WindowEntry) {
         manager.acceptSurfaceStimulus(SurfaceStimulus.PointerCaptureChanged(entry.command.surfaceId, PointerCaptureMode.None))
     }
+    private fun revokeInteractionAuthority(entry: Win32WindowEntry) {
+        entry.interactionGeneration++
+        manager.invalidateDeferredInteractionInput(entry.command.surfaceId)
+    }
     private fun releaseConfinement(entry: Win32WindowEntry) {
         port.setPointerConfinement(entry.window.hwnd, false)
         publishCaptureLoss(entry)
@@ -229,6 +235,7 @@ internal class Win32WindowRuntimeDriver internal constructor(
     }
 
     private fun dispatchInteraction(entry: Win32WindowEntry, event: RuntimeSynchronousInteraction) {
+        val authority = entry.interactionGeneration
         manager.dispatchSynchronousInteraction(entry.command.surfaceId, event, WIN32_HANDLER_INTERACTIONS) { action ->
             if (action is InteractionAction.OpenWindow) {
                 // Native creation commits inline on this UI owner; no borrowed event leaves the callback.
@@ -245,7 +252,7 @@ internal class Win32WindowRuntimeDriver internal constructor(
             } else if (action == InteractionAction.BeginWindowMove || action is InteractionAction.BeginWindowResize) {
                 val press = event as? RuntimeSynchronousInteraction.PointerPressed
                 val state = currentState(entry)
-                if (press?.button != PointerButton.Primary || !isLive(entry) || state == null || state.fullscreen != FullscreenMode.Windowed ||
+                if (press?.button != PointerButton.Primary || authority != entry.interactionGeneration || !isLive(entry) || state == null || state.fullscreen != FullscreenMode.Windowed ||
                     (action is InteractionAction.BeginWindowResize && !state.resizable)) {
                     KadreResult.Failure(KadreFailure.TemporarilyUnavailable(retryable = true))
                 } else try {
@@ -444,6 +451,7 @@ internal class Win32WindowEntry(val window: Win32TopLevelWindowHandle, val comma
     var input: Win32InputRouter? = null
     lateinit var mutations: Win32WindowMutations
     var mutating: Boolean = false
+    var interactionGeneration: Long = 0L
 }
 
 internal object Win32WindowRuntimeDriverFactory {

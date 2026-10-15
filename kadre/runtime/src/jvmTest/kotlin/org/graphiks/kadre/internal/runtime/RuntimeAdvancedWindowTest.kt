@@ -153,9 +153,9 @@ class RuntimeAdvancedWindowTest {
             val cursor = CursorStyle.Custom(CursorImage(image(2), PhysicalPoint(0, 0)))
             assertIs<SurfaceUpdateOutcome.Applied>(assertIs<KadreResult.Success<SurfaceUpdateOutcome>>(window.surface.apply(SurfaceUpdate(cursor = PropertyChange.Set(cursor)))).value)
             assertIs<KadreResult.Failure>(manager.requestWindow(WindowSpec(icon = image(3))))
-            val rejected = assertIs<SurfaceUpdateOutcome.PartiallyApplied>(assertIs<KadreResult.Success<SurfaceUpdateOutcome>>(window.surface.apply(SurfaceUpdate(
-                cursor = PropertyChange.Set(CursorStyle.Custom(CursorImage(image(3), PhysicalPoint(0, 0))))))).value)
-            assertIs<KadreFailure.ResourceLimitExceeded>(rejected.rejected.single().failure)
+            val rejected = assertIs<KadreResult.Failure>(window.surface.apply(SurfaceUpdate(
+                cursor = PropertyChange.Set(CursorStyle.Custom(CursorImage(image(3), PhysicalPoint(0, 0)))))))
+            assertIs<KadreFailure.ResourceLimitExceeded>(rejected.reason)
             window.close()
             val reopened = assertIs<WindowRequestOutcome.OpenedHere>(assertIs<KadreResult.Success<WindowRequest>>(manager.requestWindow(WindowSpec(icon = image(4)))).value.await()).window
             assertIs<SurfaceUpdateOutcome.Applied>(assertIs<KadreResult.Success<SurfaceUpdateOutcome>>(reopened.surface.apply(SurfaceUpdate(cursor = PropertyChange.Set(cursor)))).value)
@@ -181,5 +181,37 @@ class RuntimeAdvancedWindowTest {
             assertIs<KadreResult.Failure>(withTimeout(1000) { window.apply(WindowUpdate(icon = PropertyChange.Set(image(2)))) })
             assertEquals(initial, window.state.value.icon); assertTrue(diagnostics.isNotEmpty())
         } finally { manager.close() }
+    }
+
+    @Test fun cursorImagesWaitingForSerializationAreReservedAndCancellationReleasesThem() = runBlocking<Unit> {
+        val id = RuntimeProcessIds.nextSurfaceId()
+        val started = CompletableDeferred<Unit>(); val release = CompletableDeferred<Unit>()
+        val surface = RuntimeWindowSurface(id, SurfaceInitialSnapshot(
+            SurfaceMetrics(LogicalSize(100.0, 100.0), PhysicalSize(100, 100), 1.0, LogicalInsets(0.0, 0.0, 0.0, 0.0)),
+            SurfaceFocus.Focused, SurfaceVisibility.Visible, SurfaceOcclusion.Unknown, SurfaceAppearance(SurfaceTheme.Light, SurfaceContrast.Normal)),
+            commandPort = object : SurfaceCommandPort {
+                override fun requestRedraw(command: SurfaceRedrawCommand) = KadreResult.Success(Unit)
+                override suspend fun apply(command: SurfaceUpdateCommand): KadreResult<SurfaceUpdateCommandOutcome> {
+                    started.complete(Unit); release.await()
+                    return KadreResult.Success(SurfaceUpdateCommandOutcome(cursor = SurfaceFieldOutcome.Applied((command.cursor as PropertyChange.Set).value)))
+                }
+            }, commandsEnabled = true, enabledCapabilities = unsupportedSurfaceCapabilities().copy(customCursor = Capability.Supported(
+                ImageConstraints(PhysicalSize(128, 128), setOf(ImageFormat.Rgba8)), FeatureAvailability.Available)),
+            resources = KadrePolicies.Default.resources.copy(maxImageBytesPerResource = 16, maxRetainedPayloadBytesPerSession = 32, maxDropChunkBytes = 16),
+            eventStampSource = { org.graphiks.kadre.application.EventStamp(org.graphiks.kadre.application.SessionSequence(1), org.graphiks.kadre.application.SessionInstant(kotlin.time.Duration.ZERO), null) })
+        fun update(value: Int) = SurfaceUpdate(cursor = PropertyChange.Set(CursorStyle.Custom(CursorImage(image(value), PhysicalPoint(0, 0)))))
+        val first = async(start = CoroutineStart.UNDISPATCHED) { surface.apply(update(1)) }; started.await()
+        val second = async(start = CoroutineStart.UNDISPATCHED) { surface.apply(update(2)) }
+        val excess = async(start = CoroutineStart.UNDISPATCHED) { surface.apply(update(3)) }
+        try {
+            assertTrue(excess.isCompleted, "over-budget cursor is rejected before waiting on the busy backend")
+            assertIs<KadreResult.Failure>(excess.await())
+            second.cancelAndJoin()
+            val replacement = async(start = CoroutineStart.UNDISPATCHED) { surface.apply(update(4)) }
+            assertFalse(replacement.isCompleted, "cancellation returned its reservation")
+            release.complete(Unit)
+            assertIs<KadreResult.Success<SurfaceUpdateOutcome>>(first.await())
+            assertIs<KadreResult.Success<SurfaceUpdateOutcome>>(replacement.await())
+        } finally { second.cancel(); excess.cancel(); release.complete(Unit); first.cancel(); surface.detach() }
     }
 }

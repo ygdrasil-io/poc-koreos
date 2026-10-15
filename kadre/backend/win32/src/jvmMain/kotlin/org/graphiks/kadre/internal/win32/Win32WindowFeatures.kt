@@ -16,12 +16,15 @@ internal val WIN32_CURSOR_RESOURCES: Map<CursorIcon, Int> = mapOf(
 )
 
 /** UI-owned handles. Icon storage outlives the HWND, and shared cursors are never destroyed. */
-internal class Win32WindowFeatures(private val hwnd: Long) : AutoCloseable {
+internal class Win32WindowFeatures(
+    private val hwnd: Long,
+    private val confinement: Win32ConfinementAccess = KffiWin32ConfinementAccess(hwnd),
+    initialCursor: () -> Long = { Win32WindowOperations.systemCursor(32512) },
+) : AutoCloseable {
     private data class Icon(val native: Win32OwnedImage, val image: BinaryImage)
     private val icons = mutableMapOf<Long, Icon>()
     private var cursor: Win32OwnedImage? = null
-    private var cursorHandle: Long = Win32WindowOperations.systemCursor(32512)
-    private val confinement = Win32PointerConfinement(hwnd)
+    private var cursorHandle: Long = initialCursor()
     private var confined = false
     private var onConfinementLost: () -> Unit = {}
 
@@ -64,7 +67,12 @@ internal class Win32WindowFeatures(private val hwnd: Long) : AutoCloseable {
     fun observeLoss(observer: () -> Unit) { onConfinementLost = observer }
     fun confine(enabled: Boolean): Boolean {
         if (!enabled) { confinement.release(); confined = false; return true }
+        val previous = confined
         confined = confinement.acquire()
+        if (previous && !confined) {
+            try { confinement.release() } // Still-owned clipping is released; a foreign replacement is preserved.
+            finally { onConfinementLost() }
+        }
         return confined
     }
     fun refreshConfinement(): Boolean {
@@ -84,4 +92,20 @@ internal class Win32WindowFeatures(private val hwnd: Long) : AutoCloseable {
         cursor?.close(); cursor = null
         icons.values.forEach { it.native.close() }; icons.clear()
     }
+}
+
+internal interface Win32ConfinementAccess : AutoCloseable {
+    fun acquire(): Boolean
+    fun release()
+    fun update(): Boolean
+    fun isActive(): Boolean
+    override fun close() = release()
+}
+
+private class KffiWin32ConfinementAccess(hwnd: Long) : Win32ConfinementAccess {
+    private val native = Win32PointerConfinement(hwnd)
+    override fun acquire() = native.acquire()
+    override fun release() = native.release()
+    override fun update() = native.update()
+    override fun isActive() = native.isActive()
 }

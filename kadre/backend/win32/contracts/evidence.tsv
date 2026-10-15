@@ -74,3 +74,5 @@ W32-016	jvm	scenario	win32-native-window-modes	org.graphiks.kadre.internal.win32
 W32-016	jvm	scenario	win32-native-modal-menu	org.graphiks.kadre.internal.win32.Win32AdvancedWindowNativeContractTest	workerCommandExecutesInsideTheRealNativeSystemMenuLoop
 W32-016	jvm	scenario	win32-native-system-drag	org.graphiks.kadre.internal.win32.Win32AdvancedWindowNativeContractTest	moveAndResizeUseCopiedCoordinatesAndRealSystemModalLoops
 W32-016	jvm	sentinel	win32-no-stale-modal-pointer	org.graphiks.kadre.internal.win32.Win32AdvancedWindowTest	moveAndResizeAreOnlyAdmittedInsideALivePrimaryPointerCallback[jvm]
+W32-015	jvm	sentinel	win32-no-confined-after-reacquire	org.graphiks.kadre.internal.win32.Win32AdvancedWindowTest	failedConfinedReacquisitionPublishesLossAndPreservesTheForeignClip[jvm]
+W32-016	jvm	sentinel	win32-no-expired-drag	org.graphiks.kadre.internal.win32.Win32AdvancedWindowTest	focusOrCancelOrReleaseInsideTheHandlerRevokesMoveAuthority[jvm]

@@ -14,6 +14,7 @@ internal class Win32InputRouter(
     private val interact: (RuntimeSynchronousInteraction) -> Unit,
     private val isAlive: () -> Boolean,
     private val onFocusLost: () -> Unit = {},
+    private val onPrimaryPointerBoundary: () -> Unit = {},
 ) : AutoCloseable {
     private var ready = false
     private var focused = false
@@ -69,6 +70,7 @@ internal class Win32InputRouter(
                 val pressed = message !in setOf(0x202, 0x205, 0x208, 0x20c)
                 barrier()
                 lastPosition = position
+                if (button == PointerButton.Primary) onPrimaryPointerBoundary()
                 if (pressed) interact(RuntimeSynchronousInteraction.PointerPressed(button, position, null))
                 else emit(SurfaceStimulus.PointerButtonChanged(surfaceId, PointerKind.Mouse, button,
                     PointerButtonState.Released, position, null, null))

@@ -2,6 +2,8 @@ package org.graphiks.kadre.internal.runtime
 
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -263,7 +265,25 @@ internal class RuntimeWindowSurface(
         return outcome
     }
 
-    override suspend fun apply(update: SurfaceUpdate): KadreResult<SurfaceUpdateOutcome> = updateMutex.withLock surfaceApply@{
+    override suspend fun apply(update: SurfaceUpdate): KadreResult<SurfaceUpdateOutcome> {
+        currentCoroutineContext().ensureActive()
+        val lease = lock.withLock {
+            if (currentState.attachment == SurfaceAttachmentState.Detached)
+                return KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.Surface))
+            update.expectedRevision?.let { expected ->
+                if (expected != currentState.revision) return KadreResult.Failure(KadreFailure.StaleRevision(expected.value, currentState.revision.value))
+            }
+            invalidClearField(update)?.let { return KadreResult.Failure(KadreFailure.InvalidRequest(it)) }
+            val image = ((update.cursor as? PropertyChange.Set)?.value as? CursorStyle.Custom)?.image?.image
+            when (val retained = imageBudget.retain(image)) {
+                is KadreResult.Success -> retained.value
+                is KadreResult.Failure -> return retained
+            }
+        }
+        return try { applySerialized(update) } finally { lease.close() }
+    }
+
+    private suspend fun applySerialized(update: SurfaceUpdate): KadreResult<SurfaceUpdateOutcome> = updateMutex.withLock surfaceApply@{
         val admission = lock.withLock {
             if (currentState.attachment == SurfaceAttachmentState.Detached) {
                 return@surfaceApply KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.Surface))
@@ -286,7 +306,6 @@ internal class RuntimeWindowSurface(
             return@surfaceApply successfulUpdateOutcome(snapshot, admission.rejected)
         }
 
-        try {
         val portResult = try {
             commandPort.apply(admission.command)
         } catch (cause: CancellationException) {
@@ -335,7 +354,6 @@ internal class RuntimeWindowSurface(
         stateToPublish?.let(::publishStateAtLeast)
         adapterFailures.forEach(::reportAdapterFailure)
         result
-        } finally { admission.cursorLease?.close() }
     }
 
     internal fun accept(stimulus: SurfaceStimulus): Boolean {
@@ -548,14 +566,7 @@ internal class RuntimeWindowSurface(
 
     private fun prepareUpdateLocked(update: SurfaceUpdate): UpdateAdmission {
         val rejected = mutableListOf<RejectedSurfaceField>()
-        var cursor = admitCursor(update.cursor, rejected)
-        var cursorLease: RuntimeImageLease? = null
-        (cursor as? PropertyChange.Set)?.value?.let { value -> if(value is CursorStyle.Custom) {
-            when(val retained = imageBudget.retain(value.image.image)) {
-                is KadreResult.Success -> cursorLease = retained.value
-                is KadreResult.Failure -> { rejected += RejectedSurfaceField(SurfaceProperty.Cursor, retained.reason); cursor = PropertyChange.Unchanged }
-            }
-        } }
+        val cursor = admitCursor(update.cursor, rejected)
         val pointerCapture = admitField(
             update.pointerCapture,
             SurfaceProperty.PointerCapture,
@@ -576,7 +587,7 @@ internal class RuntimeWindowSurface(
         )
         val command = SurfaceUpdateCommand(id, cursor, pointerCapture, hitTesting, inputDefaultBehavior)
             .takeUnless(SurfaceUpdateCommand::isEmpty)
-        return UpdateAdmission(command, rejected, cursorLease, captureGeneration)
+        return UpdateAdmission(command, rejected, captureGeneration)
     }
 
     private fun admitCursor(
@@ -989,7 +1000,6 @@ internal class RuntimeWindowSurface(
     private data class UpdateAdmission(
         val command: SurfaceUpdateCommand?,
         val rejected: List<RejectedSurfaceField>,
-        val cursorLease: RuntimeImageLease?,
         val captureGeneration: Long,
     )
 
