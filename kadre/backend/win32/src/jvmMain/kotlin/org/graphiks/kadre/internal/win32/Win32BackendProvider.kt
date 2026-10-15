@@ -1,6 +1,7 @@
 package org.graphiks.kadre.internal.win32
 
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicReference
 import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -19,6 +20,7 @@ import org.graphiks.kadre.diagnostics.KadrePlatform
 import org.graphiks.kadre.diagnostics.KadreResourceKind
 import org.graphiks.kadre.diagnostics.KadreResult
 import org.graphiks.kadre.internal.runtime.RuntimeHostController
+import org.graphiks.kadre.internal.runtime.RuntimeFailureReporter
 import org.graphiks.kadre.internal.runtime.RuntimeSessionComponents
 import org.graphiks.kadre.internal.runtime.RuntimeSessionStopHandler
 import org.graphiks.kadre.internal.runtime.desktop.DesktopBackendKind
@@ -88,10 +90,15 @@ public class Win32BackendProvider private constructor(
         var ownedDriver: Win32WindowRuntimeDriver? = null
         try {
             val lastWindowStop = Win32LastWindowStopBridge()
+            val nativeFailure = AtomicReference<Throwable?>(null)
             val driver = Win32WindowRuntimeDriverFactory.create(
                 port = session.port,
                 resources = request.policy.resources,
                 onLastWindowClosed = if (request.stopWhenLastWindowClosed) lastWindowStop::request else null,
+                failureReporter = RuntimeFailureReporter { failure ->
+                    nativeFailure.compareAndSet(null, failure)
+                    session.pump.requestStop()
+                },
             ).also { ownedDriver = it }
             val controller = RuntimeHostController.withComponents(
                 platform = KadrePlatform.Win32,
@@ -117,10 +124,15 @@ public class Win32BackendProvider private constructor(
             lastWindowStop.install(kadreSession)
             var outcome: SessionOutcome? = null
             while (outcome == null) {
-                outcome = when (session.pump.runOnce()) {
+                val step = try { session.pump.runOnce() }
+                catch (failure: Exception) { nativeFailure.compareAndSet(null, failure); PumpStep.Stopped }
+                catch (failure: LinkageError) { nativeFailure.compareAndSet(null, failure); PumpStep.Stopped }
+                outcome = when (step) {
                     PumpStep.Dispatched, PumpStep.Rearm -> null
                     PumpStep.Stopped -> {
-                        controller.detach()
+                        if (nativeFailure.get() != null) {
+                            controller.fail(KadreFailure.PlatformFailure(KadrePlatform.Win32, "input", "native-input-failed"))
+                        } else controller.detach()
                         runBlocking { kadreSession.awaitTermination() }
                     }
                     PumpStep.PumpFailed -> {

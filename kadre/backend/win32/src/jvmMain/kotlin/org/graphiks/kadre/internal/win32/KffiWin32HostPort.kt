@@ -20,6 +20,10 @@ import org.graphiks.kffi.win32.generated.init
 import org.graphiks.kffi.win32.managed.Win32ControlWindow
 import org.graphiks.kffi.win32.managed.Win32ManagedWindow
 import org.graphiks.kffi.win32.managed.Win32Structs
+import org.graphiks.kffi.win32.managed.Win32Keyboard
+import org.graphiks.kffi.win32.managed.Win32Pointer
+import org.graphiks.kadre.input.KeyboardModifiers
+import org.graphiks.kadre.input.ModifierKey
 import java.lang.foreign.Arena
 import java.lang.foreign.MemorySegment
 import java.lang.foreign.ValueLayout
@@ -49,6 +53,49 @@ internal class KffiWin32HostPort : Win32NativeHostPort {
     )
 
     override fun isMainThread(): Boolean = Thread.currentThread() == createdThread
+
+    override fun showWindow(hwnd: Long) { onMainThread { topLevelWindows.entries.firstOrNull { it.key.hwnd == hwnd }?.value?.setVisible(true) } }
+    private class PreparedKey(val hwnd: Long, val message: Int, val wParam: Long, val lParam: Long, val input: Win32KeyInput?) {
+        var consumed = false
+    }
+    private var preparedKey: PreparedKey? = null
+
+    override fun readKeyboardInput(hwnd: Long, message: Int, wParam: Long, lParam: Long): Win32KeyInput? {
+        check(isMainThread())
+        val prepared = preparedKey
+        if (prepared != null && !prepared.consumed && prepared.hwnd == hwnd && prepared.message == message &&
+            prepared.wParam == wParam && prepared.lParam == lParam) {
+            prepared.consumed = true
+            return prepared.input
+        }
+        // SendMessage callbacks have no TranslateMessage step to observe.
+        return readKey(wParam, lParam)
+    }
+
+    private fun readKey(wParam: Long, lParam: Long): Win32KeyInput? {
+        if (wParam !in 0L..255L) return null
+        val snapshot = Win32Keyboard.read(wParam.toInt(), lParam) ?: return null
+        val modifiers = buildSet {
+            if (snapshot.shift) add(ModifierKey.Shift)
+            if (snapshot.control) add(ModifierKey.Control)
+            if (snapshot.alt) add(ModifierKey.Alt)
+            if (snapshot.meta) add(ModifierKey.Meta)
+            if (snapshot.capsLock) add(ModifierKey.CapsLock)
+            if (snapshot.numLock) add(ModifierKey.NumLock)
+        }
+        val packet = snapshot.packet
+        return Win32KeyInput(packet.virtualKey, packet.scanCode, packet.extended, packet.pressed,
+            packet.repeat, packet.repeatCount, KeyboardModifiers(modifiers), snapshot.translation.characters,
+            snapshot.translation.deadKey, snapshot.layoutId)
+    }
+
+    override fun trackMouseLeave(hwnd: Long) { check(isMainThread()); Win32Pointer.trackLeave(hwnd) }
+    override fun cancelMouseLeave(hwnd: Long) { check(isMainThread()); Win32Pointer.cancelLeave(hwnd) }
+    override fun readWheelSettings(): Win32WheelSettings {
+        check(isMainThread())
+        val settings = Win32Pointer.wheelSettings()
+        return Win32WheelSettings(settings.verticalLines, settings.horizontalCharacters)
+    }
 
     override fun <T> onMainThread(block: () -> T): T = commands.invoke(block)
 
@@ -140,8 +187,16 @@ internal class KffiWin32HostPort : Win32NativeHostPort {
         val message = checkNotNull(pendingMessage) {
             "translateAndDispatch requires a message retrieved by waitForMessage"
         }
-        TranslateMessage(message)
-        DispatchMessageW(message)
+        val id = Win32Structs.msg.getMessage(message)
+        val previous = preparedKey
+        try {
+            preparedKey = if (id in 0x100..0x101 || id in 0x104..0x105) PreparedKey(
+                Win32Structs.msg.getHwnd(message), id, Win32Structs.msg.getWParam(message),
+                Win32Structs.msg.getLParam(message), readKey(Win32Structs.msg.getWParam(message), Win32Structs.msg.getLParam(message)),
+            ) else null
+            TranslateMessage(message)
+            DispatchMessageW(message)
+        } finally { preparedKey = previous }
     }
 
     override fun createTopLevelWindow(

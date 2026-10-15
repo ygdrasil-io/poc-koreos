@@ -421,6 +421,27 @@ class RuntimeInteractionHandlerTest {
     }
 
     @Test
+    fun runtimeKeyboardPayloadSurvivesTheSynchronousCallbackExactlyOnce() = runTest {
+        val surface = surface()
+        var callbacks = 0
+        surface.installInteractionHandler(InteractionHandler { _, _ -> callbacks += 1 })
+        val input = async(start = CoroutineStart.UNDISPATCHED) { surface.input.events.take(1).toList() }
+        val key = RuntimeSynchronousInteraction.KeyPressed(
+            physicalKey = org.graphiks.kadre.input.PhysicalKey.Code(7, 8),
+            logicalKey = org.graphiks.kadre.input.LogicalKey.Character("€"),
+            location = org.graphiks.kadre.input.KeyLocation.Right,
+            modifiers = org.graphiks.kadre.input.KeyboardModifiers(setOf(org.graphiks.kadre.input.ModifierKey.Alt)),
+        )
+        surface.dispatchSynchronousInteraction(key, emptySet()) { KadreResult.Success(Unit) }
+        val ordinary = assertIs<InputEvent.Key>(input.await().single())
+        assertEquals(1, callbacks)
+        assertEquals(key.logicalKey, ordinary.logicalKey)
+        assertEquals(key.location, ordinary.location)
+        assertEquals(key.modifiers, ordinary.modifiers)
+        assertEquals(setOf(key.physicalKey), surface.input.state.value.keyboard.pressedKeys)
+    }
+
+    @Test
     fun closeSourceOutcomeOverflowFailsCurrentAndFutureCollectorsAndReleasesRegistration() = runTest {
         val surface = surface(deliveryPolicy = outcomePolicy(CollectorOverflowAction.CloseSource))
         val registration = surface.installInteractionHandler(moveHandler()).successValue()

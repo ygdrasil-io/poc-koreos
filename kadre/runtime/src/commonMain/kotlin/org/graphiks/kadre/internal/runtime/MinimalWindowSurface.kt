@@ -459,10 +459,10 @@ internal class RuntimeWindowSurface(
                         NativeInteractionOutcome.Now(invokeNative(action))
                     }
                 } finally {
-                    surfaceInput.acceptInteraction(stamped, admitted.pointerPressure)
+                    surfaceInput.acceptInteraction(stamped, admitted.pointerPressure, admitted.keyInput)
                     while (true) {
                         val nested = deferredNestedInteractions.removeFirstOrNull() ?: break
-                        surfaceInput.acceptInteraction(nested.event, nested.pointerPressure)
+                        surfaceInput.acceptInteraction(nested.event, nested.pointerPressure, nested.keyInput)
                     }
                     interactionDispatchActive = false
                 }
@@ -480,6 +480,7 @@ internal class RuntimeWindowSurface(
                 DeferredInteraction(
                     event.toInteractionEvent(stamp),
                     (event as? RuntimeSynchronousInteraction.PointerPressed)?.pressure,
+                    event as? RuntimeSynchronousInteraction.KeyPressed,
                 )
             },
             supported = supported,
@@ -1198,6 +1199,7 @@ private fun RuntimeSynchronousInteraction.toInteractionEvent(stamp: EventStamp):
 private data class DeferredInteraction(
     val event: InteractionEvent,
     val pointerPressure: Double?,
+    val keyInput: RuntimeSynchronousInteraction.KeyPressed? = null,
 )
 
 private fun initialState(snapshot: SurfaceInitialSnapshot): SurfaceState = SurfaceState(

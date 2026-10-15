@@ -28,6 +28,20 @@ import org.graphiks.kadre.policy.KadrePolicies
 
 class Win32BackendProviderTest {
     @Test
+    fun nativeInputReadFailureTerminatesTheSessionAsAPlatformFailure() {
+        val provider = Win32BackendProvider.forTesting(
+            availability = { true },
+            portFactory = { object : DeterministicWin32HostPort() {
+                override fun waitForMessage(timeoutMillis: Long): Win32MessageWait = Win32MessageWait.Message(0x100, 0, 0)
+                override fun translateAndDispatch(wait: Win32MessageWait.Message) { error("native input read failed") }
+            } },
+        )
+        val result = assertIs<KadreResult.Success<SessionOutcome>>(provider.run(blockingRequest()))
+        val failed = assertIs<SessionOutcome.Failed>(result.value)
+        assertEquals(KadreFailure.PlatformFailure(KadrePlatform.Win32, "input", "native-input-failed"), failed.failure)
+    }
+
+    @Test
     fun driverAndPumpShareTheSameNativePort() {
         var portsCreated = 0
         val provider = Win32BackendProvider.forTesting(
