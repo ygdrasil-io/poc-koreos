@@ -129,7 +129,8 @@ au-delà d'eux-mêmes :
   téléphone) et **Apple TV 4K (3rd generation) / tvOS 27.0 (build 24J360)** (relevés
   `devices` des bundles `build/xcresult/{ios,tvos}.xcresult`) ;
 - planchers **déclarés** de l'adapter : **iOS 16.0 / tvOS 16.0** — déclarés, pas exercés :
-  aucune passe de preuve ne court sous 27.0 à ce stade (voir la colonne `minimum déclaré`).
+  aucune passe de preuve ne court sous 27.0 à ce stade (voir la colonne `minimum déclaré`
+  et la §4 « Gate de release »).
 
 **Règle d'identité du pont Obj-C (relevé Task 5, 2026-10-10).** `===` ne traverse PAS le
 pont Kotlin/Obj-C : pour la même instance `UIWindow` reçue du hôte, le pont produit deux
@@ -805,3 +806,53 @@ dans le script : le nommage Obj-C (préfixe + nom simple) ne portant pas le pack
 Kotlin, un type public d'un package `internal` au nom simple sans « Internal » n'est pas
 détectable dans l'en-tête — ces types sont exactement le scaffolding listé ici, que
 l'inventaire tenu à jour garantit.
+
+## 4. Gate de release — nightly, planchers déclarés et charters matériel (phase 10)
+
+**Le nightly** (`.github/workflows/kadre-uikit-nightly.yml` — programmé + dispatchable,
+miroir de l'android nightly) exécute QUATRE jambes — les DEUX familles × {runtime
+courant, runtime le plus ancien disponible} — et CHAQUE jambe porte LES DEUX mesures :
+
+- la gate de contrat par famille (`scripts/test-uikit-simulator.sh ios|tvos`),
+  LITTÉRALEMENT celle du gate de PR (`kadre-uikit-contracts.yml`) : mêmes contrats,
+  mêmes destinations, preuves consumer BCK-018/BCK-019 de `run_consumer` incluses — le
+  nightly n'ajoute AUCUN périmètre consumer propre, et le mode `all` du script (slices
+  device, tests natifs du module runtime) reste hors nightly ;
+- la classe de cycles de rétention `UIKitRetentionCyclesTest` (uikitTest) lancée SEULE
+  par le filtre Gradle `--tests "*UIKitRetentionCyclesTest*"` sur la task simulateur de
+  sa famille — la mesure « détection de leaks d'owners, handles, buffers et
+  subscriptions natives » de TEST-STRATEGY §11.1 rendue EXPLICITE, l'analogue exact de
+  la jambe `AndroidLeakCyclesTest` de l'android nightly.
+
+Toute étape doit réussir (§9), pas de skip ni de retry ; les artefacts (preuves de
+contrat, xcresult, JUnit XML de la rétention) partent en `always()` — l'historique de
+mesure est le livrable d'une nuit rouge aussi. Un nightly rouge ouvre un incident et
+bloque la release (§11.1) ; le §11.2 exige de plus le dernier nightly complet vert
+depuis moins de 24 heures sur le commit exact.
+
+**Planchers déclarés ↔ runtimes exercés — l'écart dit intégralement.** Les planchers de
+l'adapter restent **iOS 16.0 / tvOS 16.0** (colonne « minimum déclaré ») ; ce que le
+nightly exerce est **27.0 uniquement, les deux familles, les deux jambes**. Constat
+d'autorat (2026-10-15, manifeste public de l'image `xcode-27-arm64` d'
+actions/runner-images — le `runs-on: xcode-27` des gates de ce dépôt) : l'image ne porte
+que les simulateurs installés **iOS 27.0 et tvOS 27.0** (Xcode 27.0 `27A266a` par
+défaut, 27.1, 27.2 beta — aucun runtime antérieur). La jambe « oldest-available » court
+donc AUSSI 27.0 : elle est le créneau permanent du §11.1 (« versions minimum et courante
+d'iOS **disponibles** »), tenu à la limite de « disponibles » — elle N'EST PAS une
+preuve min-OS et ne doit jamais être lue comme telle. Quand le pool portera un runtime
+plus ancien, l'entrée de matrice correspondante descend (device + OS) ; une épingle
+obsolète échoue bruyamment au `require_destination` de la gate avant tout travail
+Gradle — jamais un downgrade silencieux de destination (§7 de la roadmap).
+
+**Le charter matériel avant release.** Le §11.2 de TEST-STRATEGY exige « validation sur
+device physique pour toute capability officiellement promise mais non exerçable sur
+simulateur, ou retrait explicite de cette promesse ». L'index des charters manuels
+UIKit/tvOS — touches réelles, clavier et IME réels, drag cross-app, frames ReplayKit,
+rotation réelle, destruction FrontBoard, changement d'échelle d'écran et mode-change
+tvOS, AirPlay/écrans externes, GameController matériel, télécommande et focus tvOS —
+est tenu dans `kadre/DEFERRED-AUDIT-uikit.md` (l'audit de révision différée de la
+phase 10, avec l'état prouvé/absence structurelle de chaque entrée) ; chaque charter est
+aussi nommé, ligne par ligne, dans la colonne « état absent » du registre §2. Une
+release UIKit/tvOS parcourt cet index AVANT la coupe : chaque capability promise non
+exerçable sur simulateur doit porter sa validation physique, ou la promesse doit être
+retirée explicitement — jamais l'inverse.
