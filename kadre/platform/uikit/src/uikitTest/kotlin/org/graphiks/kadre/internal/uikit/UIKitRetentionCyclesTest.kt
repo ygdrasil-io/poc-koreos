@@ -367,17 +367,28 @@ class UIKitRetentionCyclesTest {
         }
     }
 
-    /** Le ticker factice — le scheduling est INJECTÉ, le test tire les ticks À LA MAIN. */
+    /**
+     * Le ticker factice — le scheduling est INJECTÉ, le test tire les ticks À LA MAIN. LA
+     * CRÉATION (consultation de la fabrique, production `UIKitSurfaceCaptureReservation.kt:461`)
+     * et L'ARMEMENT (`startTicking`, :463 — la publication sous lock entre les deux) sont DEUX
+     * faits : [armed] porte le second — le test l'attend BORNÉMENT avant son premier tick, un
+     * `tick()` course avec l'armement étant un artefact du FIXTURE (le `checkNotNull(onTick)`
+     * lèverait), jamais un fait de rétention.
+     */
     private class FakeTickSource : UIKitSurfaceTickSource {
         var stopCount: Int = 0
             private set
         private var startCount = 0
         private var onTick: (() -> Unit)? = null
 
+        /** Le signal de l'ARMEMENT — complet après [onTick] posé (happens-before du deferred). */
+        val armed = CompletableDeferred<Unit>()
+
         override fun startTicking(interval: kotlin.time.Duration, onTick: () -> Unit) {
             check(startCount == 0) { "the fake tick source was started twice" }
             startCount += 1
             this.onTick = onTick
+            armed.complete(Unit)
         }
 
         override fun stopTicking() {
@@ -860,9 +871,14 @@ class UIKitRetentionCyclesTest {
             val listener = RecordingCaptureListener()
             val started = async(Dispatchers.Default) { reservation.start(listener, MAX_FRAME_BYTES) }
             val ticker = tickerCreated.await()
-            // LE MOLDE T3 : LE PREMIER tick (il stage la payload qui dérive la configuration),
-            // puis l'attente BORNÉE du start (le settled), PUIS les ticks suivants — un tick
-            // d'avant-installation est un drop COMPTE, jamais une frame.
+            // LE MOLDE T3 : l'ARMEMENT d'abord (fait distinct de la création — la consultation
+            // de la fabrique :461, l'armement :463, la publication sous lock entre les deux ;
+            // attendu BORNÉMENT — un tick en course avec l'armement est un artefact du
+            // fixture, jamais un fait de rétention), PUIS LE PREMIER tick (il stage la payload
+            // qui dérive la configuration), puis l'attente BORNÉE du start (le settled),
+            // PUIS les ticks suivants — un tick d'avant-installation est un drop COMPTE,
+            // jamais une frame.
+            awaitAtRest("cycle $cycle: the ticker is armed") { ticker.armed.isCompleted }
             ticker.tick()
             awaitAtRest("cycle $cycle: the stream start completed") { started.isCompleted }
             val stream = assertIs<KadreResult.Success<CapturePortStreamStart>>(started.await()).value.stream
