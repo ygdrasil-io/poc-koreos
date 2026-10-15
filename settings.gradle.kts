@@ -23,9 +23,6 @@ dependencyResolutionManagement {
     repositoriesMode.set(RepositoriesMode.PREFER_SETTINGS)
     repositories {
         google()
-        // phase 3 in progress: consolidated kffi fixes come from mavenLocal
-        // until the end-of-phase kffi PR merges and republishes
-        mavenLocal()
         maven("https://central.sonatype.com/repository/maven-snapshots/") {
             name = "Central Portal Snapshots"
             mavenContent { snapshotsOnly() }
