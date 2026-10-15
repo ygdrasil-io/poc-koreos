@@ -26,6 +26,10 @@ Ces décisions Unsupported terminent la qualification des variantes concernées 
 
 ## Reproduction
 
+Après revue : 649 tests Kadre passent (103 Win32 portables, 32 natifs, 426 runtime, 18 Desktop, 70 validator), zéro failure/error/skip ; 19 JSON validés. Les corrections ont leurs régressions RED→GREEN et sont décrites dans les [décisions de revue](WIN32-PHASE-5-REVIEW.md).
+
+Le contrôle natif hors écran a confirmé que User32 borne le rectangle ClipCursor au bureau virtuel. KFFI utilise donc l’intersection visible du client, refuse un client entièrement hors écran et enregistre l’ownership avant readback pour permettre le rollback. La régression native KFFI vérifie cette normalisation et la restauration du clip précédent.
+
 Windows x64/JDK 25, depuis KFFI : activer KFFI_WIN32_INTEGRATION=1 puis exécuter `:kffi:jvmTest :kffi-win32:jvmTest :kffi-win32:win32IntegrationTest --configure-on-demand --rerun-tasks`. Publier les mêmes jars avec `scripts/publish-win32-local.ps1 -Version 1.0.0-win32-phase5-complete-local-SNAPSHOT`.
 
 Depuis Kadre, exécuter `:kadre:backend:win32:win32ContractTests :kadre:runtime:jvmTest :kadre:platform:desktop:jvmTest :kadre:contracts:validator:jvmTest :kadre:contracts:validator:validateContractRegistry :kadre:contracts:validator:generateWin32ContractEvidence` avec `-PkadreKffiLocal=true -PkadreKffiWin32Version=1.0.0-win32-phase5-complete-local-SNAPSHOT`.
