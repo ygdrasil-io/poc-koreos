@@ -317,7 +317,8 @@ final class KadreSessionHandleTests: XCTestCase {
 
     // MARK: — 6. LA COURSE : terminaison ET cancellation, reprise EXACTEMENT une fois
 
-    /// uikit-facade-termination-vs-cancellation-resumes-exactly-once — 50 itérations :
+    /// uikit-facade-race-never-resumes-twice (id du registre — « la course terminaison vs
+    /// cancellation reprend EXACTEMENT une fois ») — 50 itérations :
     /// waiter armé, délai aléatoire 0–20 ms (drand48 SEMÉ par itération — déterministe),
     /// requestStop PUIS cancellation concurrente. À chaque itération : la continuation est
     /// reprise UNE fois (outcome OU CancellationError — jamais les deux, jamais aucune :

@@ -113,10 +113,25 @@ include(":kadre:samples:hello-kadre")
 // contractuel est déclaré plus haut (filtré sur les groupes kadre) — les coordonnées
 // `-android` visent les AAR publiés ; la coordonnée par défaut de l'umbrella serait
 // substituée par le projet `:kadre` (substitution automatique group:name du build).
-include(":kadre:samples:android-hello-window")
-include(":kadre:samples:android-hello-touch")
-include(":kadre:samples:android-compose-showcase")
-// Le tour Kadre sur Android (phase 11) : la visite commune (`desk-tour`) sur le host
-// Android — sources core/ + ui/ partagées par `kotlin.srcDir`, host de notes
-// capability-off, managers Android réels. Même pattern `consumers/android`.
-include(":kadre:samples:android-kadre-tour")
+//
+// Leur COMPILATION DE SCRIPT exige les flags AGP 9 (`systemProp.android.builtInKotlin/
+// newDsl=false` — la forme DSL héritée y est écrite). Les invocations racine directes
+// fonctionnaient (la fuite JVM du buildSrc-first est déterministe — CI 38679060381 :
+// démon frais, configuration racine complète OK) ; le seul contexte cassé était le build
+// IMBRIQUÉ GradleBuild de l'agrégateur consumer (racine = racine du dépôt, macOS
+// uniquement, jamais exercé en CI) : aucun systemProp ne le traverse (ni -D, ni
+// startParameter.systemPropertiesArgs, ni le gradle.properties parent — Gradle 9.8,
+// vérifié), la configuration racine complète y échouait donc. L'exclusion
+// `kadre.androidSamples=false` du nesting est SANS PERTE (il ne résout que
+// assembleKadreUikitDebugXCFramework). Défaut : inclus.
+val androidSamplesEnabled: Boolean =
+    providers.gradleProperty("kadre.androidSamples").getOrElse("true") != "false"
+if (androidSamplesEnabled) {
+    include(":kadre:samples:android-hello-window")
+    include(":kadre:samples:android-hello-touch")
+    include(":kadre:samples:android-compose-showcase")
+    // Le tour Kadre sur Android (phase 11) : la visite commune (`desk-tour`) sur le host
+    // Android — sources core/ + ui/ partagées par `kotlin.srcDir`, host de notes
+    // capability-off, managers Android réels. Même pattern `consumers/android`.
+    include(":kadre:samples:android-kadre-tour")
+}

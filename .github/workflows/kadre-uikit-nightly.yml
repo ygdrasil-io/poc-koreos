@@ -1,0 +1,210 @@
+# Kadre UIKit Nightly — le §11.1 nightly uikit/tvOS (TEST-STRATEGY : « versions minimum
+# et courante d'iOS disponibles » et « détection de leaks d'owners, handles, buffers et
+# subscriptions natives » (:369-370)). Structure miroir de kadre-android-nightly.yml :
+# un run programmé + dispatchable, un groupe de concurrence, et LES DEUX MÊMES mesures
+# sur CHAQUE jambe de la matrice — la gate de contrat par famille, puis la classe de
+# cycles de rétention isolée par filtre Gradle. Pas de skip, pas de retry : chaque étape
+# doit réussir (TEST-STRATEGY §9) ; la seule étape conditionnelle est l'upload
+# d'artefacts, en forme always() — l'historique de mesure (preuves de contrat, xcresult,
+# JUnit XML de la rétention) est le livrable d'une nuit rouge aussi.
+#
+# Périmètre — ce que le nightly N'EST PAS : il n'ajoute AUCUN périmètre consumer propre.
+# La gate par famille (scripts/test-uikit-simulator.sh ios|tvos) est EXACTEMENT celle du
+# gate de PR (kadre-uikit-contracts.yml) — les preuves consumer BCK-018/BCK-019 sont
+# portées par run_consumer À L'INTÉRIEUR de la gate, à l'identique en PR et en nightly ;
+# le mode `all` du script (slices device linkDebugFramework*Arm64, tests natifs du
+# module runtime) n'est pas invoqué ici. Les AJOUTS du nightly sont exactement deux :
+#   1. la jambe de RÉTENTION — UIKitRetentionCyclesTest (uikitTest) lancée SEULE par le
+#      filtre `--tests "*UIKitRetentionCyclesTest*"` sur la task simulateur de sa
+#      famille : la mesure :369-370 rendue EXPLICITE plutôt qu'incidencielle, l'analogue
+#      exact de la jambe AndroidLeakCyclesTest de l'android nightly. La classe
+#      n'invente aucun contrat : elle RÉPÈTE les cycles de vie réels du module et
+#      affirme, À CHAQUE cycle, le retour EXACT à l'état de repos (démontage complet,
+#      réservations en vol à zéro, registrations SDK rendues, budgets retournés).
+#   2. la jambe OLDEST-AVAILABLE — §11.1 « versions minimum ... disponibles ». Constat
+#      d'autorat (2026-10-15, manifeste public de l'image
+#      actions/runner-images images/macos/xcode-27-arm64-Readme.md — le `xcode-27` des
+#      gates de ce dépôt) : l'image ne porte QUE les simulateurs installés iOS 27.0 et
+#      tvOS 27.0 (Xcode 27.0 27A266a par défaut, 27.1, 27.2 beta — aucun runtime
+#      antérieur). Les planchers DÉCLARÉS de l'adapter restent iOS/tvOS 16.0
+#      (capabilities/uikit.md, « minimum déclaré »). La jambe oldest-available court
+#      donc AUSSI 27.0 aujourd'hui : elle N'EST PAS une preuve min-OS et ne doit JAMAIS
+#      être lue comme telle — c'est le créneau permanent du §11.1, tenu à la limite de
+#      « disponibles ». Quand le pool portera un runtime plus ancien, l'entrée de
+#      matrice correspondante descend (device + os) ; une épingle obsolète échoue
+#      BRUYAMMENT au require_destination de la gate avant tout travail Gradle — jamais
+#      de downgrade silencieux de destination (règle §7 de la roadmap, déjà portée par
+#      la script de gate). L'écart plancher 16.0 ↔ runtime exercé 27.0 est documenté
+#      dans la section « gate de release » de capabilities/uikit.md.
+#
+# Les DEUX jambes d'une famille exercent donc LE MÊME runtime aujourd'hui — la
+# répétition est le prix de la forme matricielle du moule Android (chaque jambe porte
+# les DEUX mesures) ; le jour où le plus ancien runtime diverge, la mesure :369 couvrira
+# min ET current comme l'android nightly sur API 24 ET API 35. Les jambes sont des
+# mesures indépendantes du même commit : fail-fast false, chaque jambe inspectée,
+# chaque jambe upload ses propres artefacts always().
+#
+# Budgets : les 40/25 min des jobs contracts (exception §9.1 revue) couvrent la gate
+# SEULE, à froid et variable (run 38109607559 : >15 min ; xcodebuild tué à 25 min). Le
+# nightly ajoute la mesure de rétention (configuration Gradle + compile K/N uikitTest +
+# boot simulateur + la classe) : 50/35. Le GNU timeout de l'android nightly n'existe
+# PAS sur l'image macOS (coreutils absent du manifeste) : la borne externe de la jambe
+# rétention est le cap du job — la même discipline que chaque étape des contracts —,
+# les attentes internes du test restant bornées elles-mêmes (poll 25 ms, deadline 10 s).
+
+name: Kadre UIKit Nightly
+
+on:
+  schedule:
+    # 03:33 UTC daily — la même discipline de creuse que les deux nightlies existants
+    # (android 02:43, web 03:17) : minute hors du sommet d'heure — la fenêtre où le
+    # planificateur de GitHub retarde d'abord les runs programmés — et une nuit rouge
+    # qui atterrit avec la journée de travail complète devant elle. Les runs
+    # programmés ne tournent que sur la branche par défaut.
+    - cron: "33 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  # Un seul nightly en vol — le miroir des nightlies android et web : le run est un
+  # snapshot idempotent de la branche par défaut, des matrices qui se chevauchent
+  # doublent la charge simulateur et Gradle du même commit sans rien acheter. Le run
+  # le plus ancien est annulé, pas mis en file ; ses diagnostics uploadent quand
+  # même, les étapes d'upload ci-dessous courant aussi sur annulation.
+  group: kadre-uikit-nightly
+  cancel-in-progress: true
+
+jobs:
+  uikit-nightly:
+    name: uikit-nightly-${{ matrix.family }}-${{ matrix.leg }}
+    # Même image publique en preview que les gates de PR (actions/runner-images#14404,
+    # Xcode 27 préinstallé sur macOS 27) — le constat de runtimes du commentaire
+    # d'en-tête porte sur CETTE image. Toute instabilité apparaît en job rouge à
+    # diagnostiquer, jamais en skip.
+    runs-on: xcode-27
+    timeout-minutes: ${{ matrix.timeout }}
+
+    strategy:
+      # Mesures indépendantes du même commit — une jambe rouge ne doit pas masquer
+      # l'état des autres (règle d'inspection agrégée de TEST-STRATEGY §9).
+      fail-fast: false
+      matrix:
+        include:
+          # Les deux jambes iOS : current et oldest-available. Aujourd'hui le runtime
+          # le plus ancien DISPONIBLE sur l'image est 27.0 (constat d'autorat du
+          # commentaire d'en-tête) : même device, même OS — l'écart aux planchers
+          # déclarés 16.0 est dit là, dans la matrice elle-même, pas dans une prose
+          # qui le maquillerait. Le device iOS est l'iPad (le multi-scène BCK-014 est
+          # refusé par l'idiome téléphone — la destination des gates).
+          - family: ios
+            leg: current
+            device: "iPad Pro 11-inch (M5)"
+            os: "27.0"
+            timeout: 50
+          - family: ios
+            leg: oldest-available
+            device: "iPad Pro 11-inch (M5)"
+            os: "27.0"
+            timeout: 50
+          # Les deux jambes tvOS — même constat oldest-available côté tvOS 27.0.
+          - family: tvos
+            leg: current
+            device: "Apple TV 4K (3rd generation)"
+            os: "27.0"
+            timeout: 35
+          - family: tvos
+            leg: oldest-available
+            device: "Apple TV 4K (3rd generation)"
+            os: "27.0"
+            timeout: 35
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Cache the Kotlin/Native toolchain
+        # La toolchain K/N vit dans ~/.konan (PAS dans ~/.gradle) : sans ce cache, chaque
+        # runner froid la re-télécharge. Même clé que les jobs contracts (version Kotlin
+        # de libs.versions.toml).
+        uses: actions/cache@v4
+        with:
+          path: ~/.konan
+          key: konan-${{ runner.os }}-kotlin-2.4.20
+
+      - name: Set up JDK 25
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "25"
+          cache: gradle
+
+      - name: Grant execute permission
+        run: chmod +x gradlew scripts/test-uikit-simulator.sh
+
+      # H2 (diagnostic run PR 38109607559, run verte 38111601105, repris des contracts) :
+      # sur le device FRAIS du runner, la première app lancée par XCTest peut rester
+      # connectée SANS jamais être activée (stall FrontBoard/SpringBoard du premier
+      # boot). Le pré-boot borne cette course AVANT la gate — même device que la jambe
+      # (l'entrée de matrice), idempotent (déjà booté = no-op avalé), l'échec de
+      # résolution du device reste fatal. tvOS n'en a pas (le stall H2 est un fait
+      # iPad/SpringBoard — même posture que les contracts).
+      - name: Pre-boot the leg's iPad simulator
+        if: matrix.family == 'ios'
+        run: |
+          set -euo pipefail
+          udid="$(xcrun simctl list devices available -j | python3 -c "import json, sys; devices = json.load(sys.stdin)['devices']; print(next(d['udid'] for ds in devices.values() for d in ds if d['name'] == '${{ matrix.device }}' and d.get('isAvailable', True)))")"
+          xcrun simctl boot "$udid" 2>/dev/null || true
+          xcrun simctl bootstatus "$udid" -b
+
+      # L'épingle de destination de la jambe est LUE de la matrice au pas qui la
+      # consomme — source unique (l'entrée de matrice), jamais un défaut implicite du
+      # script qui divergerait silencieusement de la jambe déclarée. Les DEUX variables
+      # sont posées depuis la MÊME entrée : le script ne lit que celle de SA famille,
+      # et require_destination valide device ET runtime avant tout travail Gradle — une
+      # jambe épinglée sur un runtime absent échoue là, bruyamment (§7 : échec
+      # explicite, jamais un downgrade silencieux de destination).
+      - name: Run the UIKit contract gate on the leg's destination
+        # La gate par famille du dépôt — LITTÉRALEMENT celle des contracts de PR (mêmes
+        # contrats, mêmes destinations, preuves consumer BCK-018/019 de run_consumer
+        # incluses). Voir le commentaire d'en-tête : le nightly n'ajoute aucun
+        # périmètre consumer propre ; le mode `all` du script (slices device, tests
+        # natifs du module runtime) reste hors nightly.
+        env:
+          KADRE_UIKIT_IOS_DESTINATION: platform=iOS Simulator,name=${{ matrix.device }},OS=${{ matrix.os }}
+          KADRE_UIKIT_TVOS_DESTINATION: platform=tvOS Simulator,name=${{ matrix.device }},OS=${{ matrix.os }}
+        run: ./scripts/test-uikit-simulator.sh ${{ matrix.family }}
+
+      - name: Run the retention cycles class alone
+        # La mesure :369-370 nommée — UIKitRetentionCyclesTest (uikitTest) lancée SEULE
+        # par le filtre --tests sur la task simulateur de la famille de la jambe (le
+        # même mécanisme que la jambe leak de l'android nightly : la classe y est déjà
+        # exercée par la mesure d'ensemble ; CE pas rend la mesure explicite). Le
+        # workspace est CHAUD : la gate vient de compiler le framework main de la
+        # famille — la jambe ne paie que uikitTest, le boot simulateur et la classe.
+        # Pas de GNU timeout ici (coreutils absent de l'image macOS — en-tête) : la
+        # borne externe est le cap du job, les attentes du test sont bornées
+        # elles-mêmes (poll 25 ms, deadline 10 s).
+        run: |
+          case "${{ matrix.family }}" in
+            ios) task=":kadre:platform:uikit:iosSimulatorArm64Test" ;;
+            tvos) task=":kadre:platform:uikit:tvosSimulatorArm64Test" ;;
+            *) echo "famille de jambe inconnue: ${{ matrix.family }}" >&2; exit 1 ;;
+          esac
+          ./gradlew "$task" --tests "*UIKitRetentionCyclesTest*" --console=plain
+
+      - name: Upload UIKit nightly diagnostics and evidence
+        # always() : l'historique de mesure est le livrable d'une nuit rouge aussi —
+        # les preuves de contrat et le xcresult de la gate, le JUnit XML de la jambe
+        # rétention, par jambe de matrice.
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: kadre-uikit-nightly-${{ matrix.family }}-${{ matrix.leg }}-artifacts
+          path: |
+            kadre/contracts/driver/uikit/build/contract-evidence/
+            kadre/contracts/driver/uikit/build/xcresult/
+            kadre/platform/uikit/build/test-results/
+          if-no-files-found: ignore
+          include-hidden-files: true
