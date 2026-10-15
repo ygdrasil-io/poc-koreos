@@ -1,0 +1,100 @@
+package org.graphiks.kadre.internal.win32
+
+import org.graphiks.kadre.input.*
+import org.graphiks.kadre.surface.LogicalPoint
+
+/** Copied keyboard values; no native buffer or layout escapes the KFFI port. */
+internal data class Win32KeyInput(
+    val virtualKey: Int,
+    val scanCode: Int,
+    val extended: Boolean,
+    val pressed: Boolean,
+    val repeat: Boolean,
+    val repeatCount: Int,
+    val modifiers: KeyboardModifiers,
+    val characters: String?,
+    val deadKey: Boolean,
+    val layoutId: Long,
+)
+
+internal data class Win32WheelSettings(val verticalLines: Long?, val horizontalCharacters: Long?)
+
+// Set-1 make codes to USB keyboard usage page 7. Character/layout never selects a usage.
+private val set1 = mapOf(
+    0x01 to 0x29, 0x02 to 0x1e, 0x03 to 0x1f, 0x04 to 0x20, 0x05 to 0x21,
+    0x06 to 0x22, 0x07 to 0x23, 0x08 to 0x24, 0x09 to 0x25, 0x0a to 0x26,
+    0x0b to 0x27, 0x0c to 0x2d, 0x0d to 0x2e, 0x0e to 0x2a, 0x0f to 0x2b,
+    0x10 to 0x14, 0x11 to 0x1a, 0x12 to 0x08, 0x13 to 0x15, 0x14 to 0x17,
+    0x15 to 0x1c, 0x16 to 0x18, 0x17 to 0x0c, 0x18 to 0x12, 0x19 to 0x13,
+    0x1a to 0x2f, 0x1b to 0x30, 0x1c to 0x28, 0x1d to 0xe0,
+    0x1e to 0x04, 0x1f to 0x16, 0x20 to 0x07, 0x21 to 0x09, 0x22 to 0x0a,
+    0x23 to 0x0b, 0x24 to 0x0d, 0x25 to 0x0e, 0x26 to 0x0f, 0x27 to 0x33,
+    0x28 to 0x34, 0x29 to 0x35, 0x2a to 0xe1, 0x2b to 0x31,
+    0x2c to 0x1d, 0x2d to 0x1b, 0x2e to 0x06, 0x2f to 0x19, 0x30 to 0x05,
+    0x31 to 0x11, 0x32 to 0x10, 0x33 to 0x36, 0x34 to 0x37, 0x35 to 0x38,
+    0x36 to 0xe5, 0x37 to 0x55, 0x38 to 0xe2, 0x39 to 0x2c, 0x3a to 0x39,
+    0x3b to 0x3a, 0x3c to 0x3b, 0x3d to 0x3c, 0x3e to 0x3d, 0x3f to 0x3e,
+    0x40 to 0x3f, 0x41 to 0x40, 0x42 to 0x41, 0x43 to 0x42, 0x44 to 0x43,
+    0x45 to 0x53, 0x46 to 0x47, 0x47 to 0x5f, 0x48 to 0x60, 0x49 to 0x61,
+    0x4a to 0x56, 0x4b to 0x5c, 0x4c to 0x5d, 0x4d to 0x5e, 0x4e to 0x57,
+    0x4f to 0x59, 0x50 to 0x5a, 0x51 to 0x5b, 0x52 to 0x62, 0x53 to 0x63,
+    0x56 to 0x64, 0x57 to 0x44, 0x58 to 0x45,
+)
+private val extendedSet1 = mapOf(
+    0x1c to 0x58, 0x1d to 0xe4, 0x35 to 0x54, 0x37 to 0x46, 0x38 to 0xe6,
+    0x45 to 0x53, 0x47 to 0x4a, 0x48 to 0x52, 0x49 to 0x4b, 0x4b to 0x50, 0x4d to 0x4f,
+    0x4f to 0x4d, 0x50 to 0x51, 0x51 to 0x4e, 0x52 to 0x49, 0x53 to 0x4c,
+    0x5b to 0xe3, 0x5c to 0xe7, 0x5d to 0x65,
+)
+
+internal fun win32PhysicalKey(key: Win32KeyInput): PhysicalKey {
+    val usage = if (key.virtualKey == 0x13) 0x48
+        else (if (key.extended) extendedSet1 else set1)[key.scanCode]
+    return usage?.let { PhysicalKey.Code(7, it) }
+        ?: PhysicalKey.Unidentified("win32-scan:${key.scanCode}:${if (key.extended) 1 else 0}")
+}
+
+internal fun win32KeyLocation(key: Win32KeyInput): KeyLocation {
+    val usage = (win32PhysicalKey(key) as? PhysicalKey.Code)?.usageId
+    return when (usage) {
+        in 0xe0..0xe3 -> KeyLocation.Left
+        in 0xe4..0xe7 -> KeyLocation.Right
+        in 0x53..0x63 -> KeyLocation.Numpad
+        else -> KeyLocation.Standard
+    }
+}
+
+private val namedKeys = mapOf(
+    0x08 to NamedKey.Backspace, 0x09 to NamedKey.Tab, 0x0d to NamedKey.Enter,
+    0x10 to NamedKey.Shift, 0xa0 to NamedKey.Shift, 0xa1 to NamedKey.Shift,
+    0x11 to NamedKey.Control, 0xa2 to NamedKey.Control, 0xa3 to NamedKey.Control,
+    0x12 to NamedKey.Alt, 0xa4 to NamedKey.Alt, 0xa5 to NamedKey.Alt,
+    0x14 to NamedKey.CapsLock, 0x1b to NamedKey.Escape, 0x20 to NamedKey.Space,
+    0x21 to NamedKey.PageUp, 0x22 to NamedKey.PageDown, 0x23 to NamedKey.End,
+    0x24 to NamedKey.Home, 0x25 to NamedKey.ArrowLeft, 0x26 to NamedKey.ArrowUp,
+    0x27 to NamedKey.ArrowRight, 0x28 to NamedKey.ArrowDown, 0x2d to NamedKey.Insert,
+    0x2e to NamedKey.Delete, 0x5b to NamedKey.Meta, 0x5c to NamedKey.Meta,
+    0x5d to NamedKey.ContextMenu, 0x90 to NamedKey.NumLock,
+    0xad to NamedKey.VolumeMute, 0xae to NamedKey.VolumeDown, 0xaf to NamedKey.VolumeUp,
+    0xb0 to NamedKey.MediaNext, 0xb1 to NamedKey.MediaPrevious,
+    0xb2 to NamedKey.MediaStop, 0xb3 to NamedKey.MediaPlayPause,
+)
+internal fun win32LogicalKey(key: Win32KeyInput): LogicalKey {
+    val named = namedKeys[key.virtualKey] ?: if (key.virtualKey in 0x70..0x7b)
+        NamedKey.entries[NamedKey.F1.ordinal + key.virtualKey - 0x70] else null
+    return named?.let(LogicalKey::Named)
+        ?: key.characters?.takeIf { it.isNotEmpty() && !key.deadKey }?.let(LogicalKey::Character)
+        ?: LogicalKey.Unidentified("win32-vk:${key.virtualKey}")
+}
+
+internal fun win32ClientPosition(lParam: Long, scale: Double): LogicalPoint = LogicalPoint(
+    lParam.toShort().toDouble() / scale,
+    (lParam ushr 16).toShort().toDouble() / scale,
+)
+
+internal fun win32WheelDelta(horizontal: Boolean, wParam: Long, settings: Win32WheelSettings): ScrollDelta.Lines? {
+    val increments = (if (horizontal) settings.horizontalCharacters else settings.verticalLines) ?: return null
+    val delta = (wParam ushr 16).toShort().toDouble() / 120.0 * increments
+    return if (delta == 0.0) null else if (horizontal) ScrollDelta.Lines(delta, 0.0)
+        else ScrollDelta.Lines(0.0, -delta)
+}

@@ -20,6 +20,10 @@ import org.graphiks.kffi.win32.generated.init
 import org.graphiks.kffi.win32.managed.Win32ControlWindow
 import org.graphiks.kffi.win32.managed.Win32ManagedWindow
 import org.graphiks.kffi.win32.managed.Win32Structs
+import org.graphiks.kffi.win32.managed.Win32Keyboard
+import org.graphiks.kffi.win32.managed.Win32Pointer
+import org.graphiks.kadre.input.KeyboardModifiers
+import org.graphiks.kadre.input.ModifierKey
 import java.lang.foreign.Arena
 import java.lang.foreign.MemorySegment
 import java.lang.foreign.ValueLayout
@@ -37,20 +41,65 @@ import java.util.concurrent.atomic.AtomicBoolean
  */
 internal class KffiWin32HostPort : Win32NativeHostPort {
     private val createdThread = Thread.currentThread()
-    private var controlWindow: Win32ControlWindow? = null
+    @Volatile private var controlWindow: Win32ControlWindow? = null
     private var msgArena: Arena? = null
     private var pendingMessage: MemorySegment? = null
     private val dpiContextApplied = AtomicBoolean(false)
     private val topLevelWindows = ConcurrentHashMap<Win32TopLevelWindowHandle, Win32ManagedWindow>()
+    private val closing = AtomicBoolean(false)
+    private val commands = Win32UiCommandQueue(
+        ::isMainThread,
+        { controlWindow?.let { postWake(it.hwnd) } ?: false },
+    )
 
     override fun isMainThread(): Boolean = Thread.currentThread() == createdThread
 
-    override fun <T> onMainThread(block: () -> T): T {
-        check(isMainThread()) {
-            "Win32 host main-thread violation: ${Thread.currentThread().name} != ${createdThread.name}"
-        }
-        return block()
+    override fun showWindow(hwnd: Long) { onMainThread { topLevelWindows.entries.firstOrNull { it.key.hwnd == hwnd }?.value?.setVisible(true) } }
+    private class PreparedKey(val hwnd: Long, val message: Int, val wParam: Long, val lParam: Long, val input: Win32KeyInput?) {
+        var consumed = false
     }
+    private var preparedKey: PreparedKey? = null
+
+    override fun readKeyboardInput(hwnd: Long, message: Int, wParam: Long, lParam: Long): Win32KeyInput? {
+        check(isMainThread())
+        val prepared = preparedKey
+        if (prepared != null && !prepared.consumed && prepared.hwnd == hwnd && prepared.message == message &&
+            prepared.wParam == wParam && prepared.lParam == lParam) {
+            prepared.consumed = true
+            return prepared.input
+        }
+        // SendMessage callbacks have no TranslateMessage step to observe.
+        return readKey(wParam, lParam)
+    }
+
+    private fun readKey(wParam: Long, lParam: Long): Win32KeyInput? {
+        if (wParam !in 0L..255L) return null
+        val snapshot = Win32Keyboard.read(wParam.toInt(), lParam) ?: return null
+        val modifiers = buildSet {
+            if (snapshot.shift) add(ModifierKey.Shift)
+            if (snapshot.control) add(ModifierKey.Control)
+            if (snapshot.alt) add(ModifierKey.Alt)
+            if (snapshot.meta) add(ModifierKey.Meta)
+            if (snapshot.capsLock) add(ModifierKey.CapsLock)
+            if (snapshot.numLock) add(ModifierKey.NumLock)
+        }
+        val packet = snapshot.packet
+        return Win32KeyInput(packet.virtualKey, packet.scanCode, packet.extended, packet.pressed,
+            packet.repeat, packet.repeatCount, KeyboardModifiers(modifiers), snapshot.translation.characters,
+            snapshot.translation.deadKey, snapshot.layoutId)
+    }
+
+    override fun trackMouseLeave(hwnd: Long) { check(isMainThread()); Win32Pointer.trackLeave(hwnd) }
+    override fun cancelMouseLeave(hwnd: Long) { check(isMainThread()); Win32Pointer.cancelLeave(hwnd) }
+    override fun readWheelSettings(): Win32WheelSettings {
+        check(isMainThread())
+        val settings = Win32Pointer.wheelSettings()
+        return Win32WheelSettings(settings.verticalLines, settings.horizontalCharacters)
+    }
+
+    override fun <T> onMainThread(block: () -> T): T = commands.invoke(block)
+    override fun postOnMainThread(block: () -> Unit, onFailure: (Throwable) -> Unit) = commands.post(block, onFailure)
+    override fun stopWorkerCommands() = commands.stopWorkerAdmission()
 
     /**
      * Pose le contexte Per-Monitor V2 une seule fois si le processus n'en a
@@ -70,8 +119,12 @@ internal class KffiWin32HostPort : Win32NativeHostPort {
     override fun createControlWindow(
         messageHandler: (id: Int, wParam: Long, lParam: Long) -> Long,
     ): Win32ControlWindowHandle {
+        check(isMainThread()) { "the control window must be created on the UI owner" }
         init()
         val window = Win32ControlWindow.open { _, message, wParam, lParam ->
+            // Native modal loops dispatch the endpoint directly, without
+            // returning through waitForMessage. Commands must progress there too.
+            if (message == WAKE_MESSAGE) commands.drain()
             messageHandler(message, wParam, lParam)
         }
         controlWindow = window
@@ -96,6 +149,9 @@ internal class KffiWin32HostPort : Win32NativeHostPort {
     }
 
     override fun waitForMessage(timeoutMillis: Long): Win32MessageWait {
+        check(isMainThread()) { "the Win32 pump must run on its UI owner" }
+        commands.drain()
+        if (closing.get()) return Win32MessageWait.Quit
         init()
         val waitResult = MsgWaitForMultipleObjectsEx(
             0,
@@ -107,6 +163,8 @@ internal class KffiWin32HostPort : Win32NativeHostPort {
         if (waitResult == WAIT_FAILED) {
             return Win32MessageWait.Error(GetLastError())
         }
+        commands.drain()
+        if (closing.get()) return Win32MessageWait.Quit
         if (msgArena == null) msgArena = Arena.ofShared()
         if (pendingMessage == null) {
             pendingMessage = checkNotNull(msgArena).allocate(Win32Structs.msg.layout)
@@ -131,8 +189,16 @@ internal class KffiWin32HostPort : Win32NativeHostPort {
         val message = checkNotNull(pendingMessage) {
             "translateAndDispatch requires a message retrieved by waitForMessage"
         }
-        TranslateMessage(message)
-        DispatchMessageW(message)
+        val id = Win32Structs.msg.getMessage(message)
+        val previous = preparedKey
+        try {
+            preparedKey = if (id in 0x100..0x101 || id in 0x104..0x105) PreparedKey(
+                Win32Structs.msg.getHwnd(message), id, Win32Structs.msg.getWParam(message),
+                Win32Structs.msg.getLParam(message), readKey(Win32Structs.msg.getWParam(message), Win32Structs.msg.getLParam(message)),
+            ) else null
+            TranslateMessage(message)
+            DispatchMessageW(message)
+        } finally { preparedKey = previous }
     }
 
     override fun createTopLevelWindow(
@@ -142,6 +208,10 @@ internal class KffiWin32HostPort : Win32NativeHostPort {
         height: Int,
         messageHandler: (hwnd: Long, id: Int, wParam: Long, lParam: Long) -> Long,
     ): Win32TopLevelWindowHandle {
+        if (!isMainThread()) return onMainThread {
+            createTopLevelWindow(title, decorations, width, height, messageHandler)
+        }
+        check(!closing.get()) { "Win32 host port is closed" }
         applyPerMonitorV2Once()
         val window = Win32ManagedWindow.open(title) { hwnd, message, wParam, lParam ->
             messageHandler(hwnd, message, wParam, lParam)
@@ -156,12 +226,14 @@ internal class KffiWin32HostPort : Win32NativeHostPort {
     }
 
     override fun destroyWindow(hwnd: Long) {
-        val entry = topLevelWindows.entries.firstOrNull { it.key.hwnd == hwnd }
-        entry?.value?.close()
-        topLevelWindows.remove(entry?.key)
+        if (!isMainThread()) return onMainThread { destroyWindow(hwnd) }
+        val entry = topLevelWindows.entries.firstOrNull { it.key.hwnd == hwnd } ?: return
+        entry.value.close()
+        topLevelWindows.remove(entry.key)
     }
 
     override fun destroyControlWindow(hwnd: Long) {
+        if (!isMainThread()) return onMainThread { destroyControlWindow(hwnd) }
         controlWindow?.close()
         controlWindow = null
         if (IsWindow(MemorySegment.ofAddress(hwnd)) != 0) {
@@ -173,14 +245,17 @@ internal class KffiWin32HostPort : Win32NativeHostPort {
         DefWindowProcW(MemorySegment.ofAddress(hwnd), message, wParam, lParam)
 
     override fun invalidateRect(hwnd: Long) {
+        if (!isMainThread()) return onMainThread { invalidateRect(hwnd) }
         InvalidateRect(MemorySegment.ofAddress(hwnd), MemorySegment.NULL, 0)
     }
 
     override fun validateRect(hwnd: Long) {
+        if (!isMainThread()) return onMainThread { validateRect(hwnd) }
         ValidateRect(MemorySegment.ofAddress(hwnd), MemorySegment.NULL)
     }
 
     override fun readClientPhysicalSize(hwnd: Long): Pair<Int, Int> {
+        if (!isMainThread()) return onMainThread { readClientPhysicalSize(hwnd) }
         init()
         Arena.ofConfined().use { arena ->
             // Windows LONG is signed 32-bit, including on Win64 (LLP64).
@@ -198,6 +273,7 @@ internal class KffiWin32HostPort : Win32NativeHostPort {
     }
 
     override fun readScaleFactor(hwnd: Long): Double {
+        if (!isMainThread()) return onMainThread { readScaleFactor(hwnd) }
         init()
         return GetDpiForWindow(MemorySegment.ofAddress(hwnd)) / 96.0
     }
@@ -225,13 +301,23 @@ internal class KffiWin32HostPort : Win32NativeHostPort {
     }
 
     override fun close() {
-        controlWindow?.close()
-        controlWindow = null
-        topLevelWindows.values.forEach { runCatching(it::close) }
-        topLevelWindows.clear()
-        msgArena?.close()
-        msgArena = null
-        pendingMessage = null
+        if (!closing.compareAndSet(false, true)) return
+        try {
+            onMainThread {
+                try {
+                    topLevelWindows.values.forEach { runCatching(it::close) }
+                    topLevelWindows.clear()
+                    controlWindow?.close()
+                    controlWindow = null
+                    msgArena?.close()
+                    msgArena = null
+                    pendingMessage = null
+                } finally { commands.close() }
+            }
+        } catch (failure: Throwable) {
+            commands.close()
+            throw failure
+        }
     }
 
     private companion object {

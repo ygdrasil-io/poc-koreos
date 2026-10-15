@@ -58,6 +58,20 @@ class Win32SurfaceFlowTest {
     }
 
     @Test
+    fun dpiObservationKeepsSurfaceMetricsAndInputCoordinatesCoherent() = runBlocking {
+        val (port, driver) = newDriver()
+        val window = openWindow(driver, "dpi-input")
+        val hwnd = port.lastTopLevelHwnd()
+        port.scriptedClientSize[hwnd] = 1000 to 750
+        port.scriptedScaleFactor[hwnd] = 1.25
+        port.dispatchWindowMessage(hwnd, WM_DPICHANGED)
+        assertEquals(1.25, window.surface.state.value.scaleFactor)
+        assertEquals(org.graphiks.kadre.surface.PhysicalSize(1000, 750), window.surface.state.value.physicalSize)
+        port.dispatchWindowMessage(hwnd, 0x200, 0, 125L or (250L shl 16))
+        assertEquals(org.graphiks.kadre.surface.LogicalPoint(100.0, 200.0), window.surface.input.state.value.pointers.single().position)
+    }
+
+    @Test
     fun redrawRequestsCoalesceDrainAndRearm() {
         val (port, driver) = newDriver()
         runBlocking {

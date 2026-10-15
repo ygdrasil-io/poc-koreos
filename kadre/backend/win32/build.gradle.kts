@@ -4,6 +4,7 @@ plugins {
 }
 
 group = "org.graphiks.kadre.internal"
+val win32KffiVersion = providers.gradleProperty("kadreKffiWin32Version").orElse(libs.versions.kffi.win32)
 
 kotlin {
     jvmToolchain(25)
@@ -13,7 +14,7 @@ kotlin {
     sourceSets {
         jvmMain.dependencies {
             api(project(":kadre:runtime"))
-            implementation(libs.kffi.win32)
+            implementation("org.graphiks:kffi-win32:${win32KffiVersion.get()}")
         }
         val jvmTest by getting {
             dependencies {
@@ -28,6 +29,7 @@ kotlin {
 // Les preuves O3 chargent la pile native Windows (user32/kernel32) : elles ne
 // tournent que sur Windows, dans le task dédié, jamais dans le jvmTest portable.
 tasks.named<Test>("jvmTest") {
+    filter.excludeTestsMatching("org.graphiks.kadre.internal.win32.Win32InputNativeContractTest")
     filter.excludeTestsMatching(
         "org.graphiks.kadre.internal.win32.Win32NativeContractTest",
     )
@@ -47,6 +49,7 @@ val win32NativeTests = tasks.register<Test>("win32NativeTests") {
     group = "verification"
     description = "Runs the Windows-only Win32 O3 frontier proofs."
     enabled = onWindows
+    filter.includeTestsMatching("org.graphiks.kadre.internal.win32.Win32InputNativeContractTest")
     testClassesDirs = tasks.named<Test>("jvmTest").get().testClassesDirs
     classpath = tasks.named<Test>("jvmTest").get().classpath
     jvmArgs(
@@ -73,6 +76,16 @@ val win32ContractTests = tasks.register("win32ContractTests") {
     group = "verification"
     description = "Runs the O2 portable suite and the Windows-only O3 proofs feeding the contract evidence."
     dependsOn(tasks.named("jvmTest"), win32NativeTests)
+}
+
+tasks.register<JavaExec>("win32InputManual") {
+    group = "verification"
+    description = "Opens the interactive Win32 keyboard/pointer harness; no contract verdict is inferred."
+    dependsOn(tasks.named("jvmTestClasses"))
+    classpath = tasks.named<Test>("jvmTest").get().classpath
+    mainClass.set("org.graphiks.kadre.internal.win32.Win32InputManualHarness")
+    jvmArgs("--enable-native-access=ALL-UNNAMED")
+    onlyIf { onWindows }
 }
 
 // Friend-wiring JVM : le backend construit des internals de foundation

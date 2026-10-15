@@ -41,6 +41,10 @@ internal open class DeterministicWin32HostPort : Win32NativeHostPort {
     override fun isMainThread(): Boolean = true
 
     override fun <T> onMainThread(block: () -> T): T = block()
+    override fun postOnMainThread(block: () -> Unit, onFailure: (Throwable) -> Unit) {
+        try { block() } catch (failure: Throwable) { onFailure(failure) }
+    }
+    override fun stopWorkerCommands() = Unit
 
     override fun createControlWindow(
         messageHandler: (id: Int, wParam: Long, lParam: Long) -> Long,
@@ -116,14 +120,14 @@ internal open class DeterministicWin32HostPort : Win32NativeHostPort {
         }
     }
 
-    fun dispatchWindowMessage(hwnd: Long, id: Int, wParam: Long = 0L, lParam: Long = 0L) {
+    fun dispatchWindowMessage(hwnd: Long, id: Int, wParam: Long = 0L, lParam: Long = 0L): Long {
         // Routage manquant = fallthrough silencieux (miroir du pont réel : 0L).
         if (id == 0x000F) { // WM_PAINT : ne se délivre que si invalidé
-            if (!invalidated.contains(hwnd)) return
+            if (!invalidated.contains(hwnd)) return 0L
             invalidated.remove(hwnd)
             paintCount.incrementAndGet()
         }
-        topLevelHandlers[hwnd]?.invoke(hwnd, id, wParam, lParam)
+        return topLevelHandlers[hwnd]?.invoke(hwnd, id, wParam, lParam) ?: 0L
     }
 
     fun errorIfWindowUnknown(hwnd: Long) {
@@ -152,10 +156,19 @@ internal open class DeterministicWin32HostPort : Win32NativeHostPort {
     }
 
     val defWindowProcCalls = AtomicInteger(0)
+    var defaultResult = 0L
+    var keyInput: Win32KeyInput? = null
+    var wheelSettings = Win32WheelSettings(3, 1)
+    var leaveArms = 0
+    override fun showWindow(hwnd: Long) = Unit
+    override fun readKeyboardInput(hwnd: Long, message: Int, wParam: Long, lParam: Long): Win32KeyInput? = keyInput
+    override fun trackMouseLeave(hwnd: Long) { leaveArms++ }
+    override fun cancelMouseLeave(hwnd: Long) = Unit
+    override fun readWheelSettings(): Win32WheelSettings = wheelSettings
 
     override fun defWindowProc(hwnd: Long, message: Int, wParam: Long, lParam: Long): Long {
         defWindowProcCalls.incrementAndGet()
-        return 0L
+        return defaultResult
     }
 
     override fun invalidateRect(hwnd: Long) {
