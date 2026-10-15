@@ -246,4 +246,52 @@ class Win32WindowMutationTest {
         }
         queue.close()
     }
+
+    @Test fun frameInclusiveLimitsAreRejectedBeforeChangingAnyProperty() = runBlocking {
+        val port = DeterministicWin32HostPort()
+        driver(port).use { driver ->
+            val window = open(driver)
+            val before = window.state.value
+            assertIs<KadreResult.Failure>(window.apply(WindowUpdate(title = PropertyChange.Set("must not commit"),
+                maximumSize = PropertyChange.Set(LogicalSize(Int.MAX_VALUE.toDouble(), 1000.0)))))
+            assertEquals(before, window.state.value)
+            assertEquals(before.title, port.windowTitles.getValue(port.lastTopLevelHwnd()))
+            val initial = assertIs<KadreResult.Success<WindowRequest>>(driver.manager.requestWindow(WindowSpec(
+                maximumSize = LogicalSize(Int.MAX_VALUE.toDouble(), 1000.0)))).value
+            assertIs<WindowRequestOutcome.Rejected>(initial.await())
+            assertEquals(1, driver.manager.state.value.windows.size)
+        }
+    }
+
+    @Test fun movingAcrossDpiPreservesRequestedLogicalClientSizeAndConstraints() = runBlocking {
+        val port = DeterministicWin32HostPort()
+        driver(port).use { driver ->
+            val window = open(driver, WindowSpec(contentSize = LogicalSize(400.0, 300.0), minimumSize = LogicalSize(400.0, 300.0)))
+            var moved = false
+            port.beforeBoundsWrite = {
+                if (!moved) { moved = true; port.scriptedScaleFactor[port.lastTopLevelHwnd()] = 2.0 }
+            }
+            val outcome = assertIs<WindowUpdateOutcome.Applied>(apply(window, WindowUpdate(outerPosition = PropertyChange.Set(PhysicalPoint(1500, 40)))))
+            assertEquals(LogicalSize(400.0, 300.0), outcome.state.contentSize)
+            assertEquals(LogicalSize(400.0, 300.0), outcome.state.minimumSize)
+            assertEquals(PhysicalSize(800, 600), window.surface.state.value.physicalSize)
+            port.beforeBoundsWrite = { port.scriptedScaleFactor[port.lastTopLevelHwnd()] = 1.5 }
+            val resized = assertIs<WindowUpdateOutcome.Applied>(apply(window, WindowUpdate(outerPosition = PropertyChange.Set(PhysicalPoint(700, 50)),
+                contentSize = PropertyChange.Set(LogicalSize(500.0, 350.0)))))
+            assertEquals(LogicalSize(500.0, 350.0), resized.state.contentSize)
+            assertEquals(PhysicalSize(750, 525), window.surface.state.value.physicalSize)
+        }
+    }
+
+    @Test fun initialOuterPositionUsesTheDestinationDpiForClientGeometry() = runBlocking {
+        val port = DeterministicWin32HostPort()
+        port.beforeBoundsWrite = { port.scriptedScaleFactor[port.lastTopLevelHwnd()] = 2.0 }
+        driver(port).use { driver ->
+            val window = open(driver, WindowSpec(contentSize = LogicalSize(400.0, 300.0), minimumSize = LogicalSize(400.0, 300.0),
+                outerPosition = PhysicalPoint(1600, 40)))
+            assertEquals(LogicalSize(400.0, 300.0), window.state.value.contentSize)
+            assertEquals(LogicalSize(400.0, 300.0), window.state.value.minimumSize)
+            assertEquals(PhysicalSize(800, 600), window.surface.state.value.physicalSize)
+        }
+    }
 }

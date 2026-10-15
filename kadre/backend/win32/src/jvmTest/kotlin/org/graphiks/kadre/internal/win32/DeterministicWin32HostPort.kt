@@ -219,10 +219,13 @@ internal open class DeterministicWin32HostPort : Win32NativeHostPort {
         scriptedClientSize[hwnd] = (bounds.size.width - frame.first) to (bounds.size.height - frame.second)
         dispatchWindowMessage(hwnd, WM_SIZE)
     }
-    private fun frame(hwnd: Long): Pair<Int, Int> = if (windowStyles.getValue(hwnd) and 0x00c00000 != 0) 16 to 39 else 0 to 0
-    override fun outerSizeForClient(hwnd: Long, width: Int, height: Int): Pair<Int, Int> {
-        val frame = frame(hwnd)
-        return Math.addExact(width, frame.first) to Math.addExact(height, frame.second)
+    private fun frame(hwnd: Long, style: Int? = null): Pair<Int, Int> = if ((style ?: windowStyles.getValue(hwnd)) and 0x00c00000 != 0) 16 to 39 else 0 to 0
+    override fun outerSizeForClient(hwnd: Long, width: Int, height: Int, style: Int?): Pair<Int, Int> {
+        val frame = frame(hwnd, style)
+        val outerWidth = width.toLong() + frame.first
+        val outerHeight = height.toLong() + frame.second
+        require(outerWidth in 1..Int.MAX_VALUE.toLong() && outerHeight in 1..Int.MAX_VALUE.toLong()) { "outer size overflows Windows LONG" }
+        return outerWidth.toInt() to outerHeight.toInt()
     }
     override fun monitorBounds(hwnd: Long) = org.graphiks.kadre.surface.PhysicalRect(org.graphiks.kadre.surface.PhysicalPoint(-1920, 0), org.graphiks.kadre.surface.PhysicalSize(1920, 1080))
     override fun applyTrackLimits(hwnd: Long, lParam: Long, minimum: org.graphiks.kadre.surface.PhysicalSize?, maximum: org.graphiks.kadre.surface.PhysicalSize?) = Unit

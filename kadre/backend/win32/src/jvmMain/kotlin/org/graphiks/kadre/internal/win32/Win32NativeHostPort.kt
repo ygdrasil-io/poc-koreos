@@ -50,7 +50,7 @@ internal interface Win32NativeHostPort : AutoCloseable {
     fun setWindowTitle(hwnd: Long, title: String)
     fun setWindowStyle(hwnd: Long, style: Int)
     fun setWindowBounds(hwnd: Long, bounds: org.graphiks.kadre.surface.PhysicalRect, frameChanged: Boolean)
-    fun outerSizeForClient(hwnd: Long, width: Int, height: Int): Pair<Int, Int>
+    fun outerSizeForClient(hwnd: Long, width: Int, height: Int, style: Int? = null): Pair<Int, Int>
     fun monitorBounds(hwnd: Long): org.graphiks.kadre.surface.PhysicalRect
     fun applyTrackLimits(hwnd: Long, lParam: Long, minimum: org.graphiks.kadre.surface.PhysicalSize?, maximum: org.graphiks.kadre.surface.PhysicalSize?)
 

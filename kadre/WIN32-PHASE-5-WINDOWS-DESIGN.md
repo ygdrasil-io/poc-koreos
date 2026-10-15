@@ -12,7 +12,7 @@ KFFI MINMAXINFO handling first preserves the native default, then sets only the 
 
 ## Ownership, admission and publication
 
-The existing bounded UI queue is shared with the pump. requestUpdate returns promptly; a pending command can be cancelled before UI claim. Claim is the mutation commit boundary. After claim cancellation is TooLate and readback still completes even if its coroutine detached. Teardown rejects queued commands; no future waits for a stopped pump.
+The existing bounded UI queue is shared with the pump. requestUpdate returns promptly and defers even owner-thread admission until a later pump turn, outside the runtime admission lock; a pending command can be cancelled before UI claim. Claim is the mutation commit boundary. After claim cancellation is TooLate and readback still completes even if its coroutine detached. Teardown rejects queued commands; no future waits for a stopped pump.
 
 During native setters Windows can reenter WndProc. The peer suppresses intermediate window geometry publications for that mutation; the final copied readback completes the admitted command with its operation ID. Surface metrics remain coherent with that same readback. Unrelated native observations outside a mutation carry no operation ID. A reentrant close wins ownership and prevents further setters or late resurrection. No callback retains borrowed memory.
 
@@ -20,7 +20,7 @@ Fields unsupported by this tranche retain the common runtime's per-field rejecti
 
 ## Chrome, constraints and fullscreen
 
-System chrome is encoded with WS_CAPTION, WS_THICKFRAME, WS_SYSMENU, WS_MINIMIZEBOX and WS_MAXIMIZEBOX. Borderless has no system buttons. Frame changes preserve the requested client size by recomputing the outer rectangle at the actual window DPI. Readback derives effective chrome from styles, rather than echoing the command.
+System chrome is encoded with WS_CAPTION, WS_THICKFRAME, WS_SYSMENU, WS_MINIMIZEBOX and WS_MAXIMIZEBOX. Borderless has no system buttons. Frame changes preserve the requested client size by recomputing the outer rectangle at the actual window DPI. Client and constraint dimensions including the target frame are preflighted before any setter. After a move changes DPI, up to three bounded geometry attempts preserve the logical target using the actual destination DPI; intermediate readbacks are not published. This also applies to initial outerPosition. A constraint that becomes unrepresentable during a reentrant DPI callback is withdrawn safely and the owning command reports failure after native return. Readback derives effective chrome from styles, rather than echoing the command.
 
 Entering borderless fullscreen saves the actual windowed styles and physical rectangle, removes chrome, and fills the nearest monitor. Exiting restores both. Constraints are suspended while fullscreen, restored on exit, and geometry/chrome mutations while fullscreen are explicitly rejected. This implementation uses synchronous Win32 setters, not the AppKit selector/callback protocol. The common runtime still serializes updates. Initial fullscreen continues to follow the existing runtime rule: open windowed, then apply fullscreen.
 

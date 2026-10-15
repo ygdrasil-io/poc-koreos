@@ -116,6 +116,24 @@ class Win32WindowMutationNativeContractTest {
         }
     }
 
+    @Test fun anOverflowingFrameInclusiveMaximumIsRejectedWithoutFailingTheSession() = runBlocking {
+        fixture { port, window, _ ->
+            val before = window.state.value
+            val pending = async(start = CoroutineStart.UNDISPATCHED) {
+                window.apply(WindowUpdate(title = PropertyChange.Set("must not commit"),
+                    maximumSize = PropertyChange.Set(LogicalSize(Int.MAX_VALUE.toDouble(), 1000.0))))
+            }
+            val deadline = System.nanoTime() + 3_000_000_000L
+            while (!pending.isCompleted && System.nanoTime() < deadline) { port.drainOneMessage(1); yield() }
+            assertTrue(pending.isCompleted)
+            assertIs<KadreResult.Failure>(pending.await())
+            assertEquals(before, window.state.value)
+            assertEquals(WindowPhase.Open, window.state.value.phase)
+            applyPumped(port, window, WindowUpdate(title = PropertyChange.Set("still alive")))
+            assertEquals("still alive", window.state.value.title)
+        }
+    }
+
     @Test fun publicWorkerUpdatesAndClosesWithoutWaitingOnAStoppedPump() {
         var effective: WindowState? = null
         val outcome = runKadreApplication(options = DesktopHostOptions.Standalone(backend = DesktopBackend.Win32),

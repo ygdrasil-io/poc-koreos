@@ -295,9 +295,10 @@ internal class KffiWin32HostPort : Win32NativeHostPort {
         check(isMainThread())
         Win32WindowProperties.setBounds(hwnd, bounds.origin.x, bounds.origin.y, bounds.size.width, bounds.size.height, frameChanged)
     }
-    override fun outerSizeForClient(hwnd: Long, width: Int, height: Int): Pair<Int, Int> {
+    override fun outerSizeForClient(hwnd: Long, width: Int, height: Int, style: Int?): Pair<Int, Int> {
         check(isMainThread())
-        val size = Win32WindowProperties.outerSize(hwnd, width, height)
+        val size = if (style == null) Win32WindowProperties.outerSize(hwnd, width, height)
+            else Win32WindowProperties.outerSize(hwnd, width, height, style)
         return size.width to size.height
     }
     override fun monitorBounds(hwnd: Long): PhysicalRect {

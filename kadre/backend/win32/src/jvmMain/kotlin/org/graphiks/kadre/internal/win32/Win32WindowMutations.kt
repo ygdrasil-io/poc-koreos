@@ -20,22 +20,21 @@ internal class Win32WindowMutations(
     private data class WindowedRestore(val style: Int, val bounds: PhysicalRect, val minimum: LogicalSize?, val maximum: LogicalSize?)
     private var restore: WindowedRestore? = null
     private var fullscreen = false
+    private var constraintCallbackFailure: IllegalArgumentException? = null
     var nativeCommitStarted: Boolean = false
         private set
 
     fun initialize(spec: WindowSpec): WindowSpec {
         // The runtime has not committed a public Window yet. All native setup is hidden.
         val before = port.readWindow(hwnd)
-        val pixels = spec.contentSize.toPhysical(before.scale)
-        spec.minimumSize?.toPhysical(before.scale)
-        spec.maximumSize?.toPhysical(before.scale, PixelRounding.Floor)
+        val style = chromeStyle(before.style, spec.decorations, spec.systemButtons, spec.resizable)
+        preflightGeometry(spec.contentSize, spec.minimumSize, spec.maximumSize, before.scale, style)
         require('\u0000' !in spec.title) { "title contains NUL" }
         minimum = spec.minimumSize
         maximum = spec.maximumSize
-        port.setWindowStyle(hwnd, chromeStyle(before.style, spec.decorations, spec.systemButtons, spec.resizable))
-        val outer = port.outerSizeForClient(hwnd, pixels.width, pixels.height)
-        port.setWindowBounds(hwnd, PhysicalRect(spec.outerPosition ?: before.outerBounds.origin, PhysicalSize(outer.first, outer.second)), true)
-        val read = port.readWindow(hwnd)
+        port.setWindowStyle(hwnd, style)
+        ensureLive()
+        val read = setLogicalGeometry(spec.contentSize, spec.outerPosition ?: before.outerBounds.origin, true)
         val content = read.positiveClientSize().toLogical(read.scale)
         reconcileConstraints(content)
         return spec.copy(title = read.title, contentSize = content, minimumSize = minimum, maximumSize = maximum,
@@ -45,6 +44,7 @@ internal class Win32WindowMutations(
 
     fun apply(update: WindowUpdate, current: WindowState): WindowState {
         nativeCommitStarted = false
+        constraintCallbackFailure = null
         check(isLive()) { "window closed before mutation" }
         val before = port.readWindow(hwnd)
         val requestedFullscreen = (update.fullscreen as? PropertyChange.Set)?.value
@@ -55,12 +55,10 @@ internal class Win32WindowMutations(
         val nextMinimum = update.minimumSize.optionalOr(minimum)
         val nextMaximum = update.maximumSize.optionalOr(maximum)
         // Preflight every portable number before the first native or constraint write.
-        val pixels = size.toPhysical(before.scale)
-        nextMinimum?.toPhysical(before.scale)
-        nextMaximum?.toPhysical(before.scale, PixelRounding.Floor)
         val targetDecorations = update.decorations.valueOr(current.decorations)
         val targetButtons = update.systemButtons.valueOr(current.systemButtons)
         val style = chromeStyle(before.style, targetDecorations, targetButtons, update.resizable.valueOr(current.resizable))
+        preflightGeometry(size, nextMinimum, nextMaximum, before.scale, style)
         val position = update.outerPosition.optionalOr(before.outerBounds.origin) ?: before.outerBounds.origin
         nativeCommitStarted = true
         minimum = nextMinimum
@@ -70,10 +68,7 @@ internal class Win32WindowMutations(
         if (frameChanged) { port.setWindowStyle(hwnd, style); ensureLive() }
         if (frameChanged || update.contentSize != PropertyChange.Unchanged || update.outerPosition != PropertyChange.Unchanged ||
             update.minimumSize != PropertyChange.Unchanged || update.maximumSize != PropertyChange.Unchanged) {
-            val outer = port.outerSizeForClient(hwnd, pixels.width, pixels.height)
-            ensureLive()
-            port.setWindowBounds(hwnd, PhysicalRect(position, PhysicalSize(outer.first, outer.second)), frameChanged)
-            ensureLive()
+            setLogicalGeometry(size, position, frameChanged)
         }
         return readState(current)
     }
@@ -92,7 +87,47 @@ internal class Win32WindowMutations(
 
     fun trackLimits(lParam: Long) {
         val scale = port.readScaleFactor(hwnd)
-        port.applyTrackLimits(hwnd, lParam, minimum?.toPhysical(scale), maximum?.toPhysical(scale, PixelRounding.Floor))
+        fun validate(value: LogicalSize?, rounding: PixelRounding, clear: () -> Unit): PhysicalSize? = try {
+            value?.toPhysical(scale, rounding)?.also { port.outerSizeForClient(hwnd, it.width, it.height) }
+        } catch (failure: IllegalArgumentException) {
+            // A DPI transition can invalidate a previously representable limit inside WndProc.
+            // Withdraw that limit and let the owning command report failure after native return.
+            clear()
+            constraintCallbackFailure = failure
+            null
+        }
+        val min = validate(minimum, PixelRounding.Ceil) { minimum = null }
+        val max = validate(maximum, PixelRounding.Floor) { maximum = null }
+        port.applyTrackLimits(hwnd, lParam, min, max)
+    }
+
+    private fun preflightGeometry(size: LogicalSize, min: LogicalSize?, max: LogicalSize?, scale: Double, style: Int): PhysicalSize {
+        fun outer(value: LogicalSize, rounding: PixelRounding): PhysicalSize {
+            val pixels = value.toPhysical(scale, rounding)
+            val bounds = port.outerSizeForClient(hwnd, pixels.width, pixels.height, style)
+            return PhysicalSize(bounds.first, bounds.second)
+        }
+        min?.let { outer(it, PixelRounding.Ceil) }
+        max?.let { outer(it, PixelRounding.Floor) }
+        return outer(size, PixelRounding.Ceil)
+    }
+
+    private fun setLogicalGeometry(size: LogicalSize, position: PhysicalPoint, frameChanged: Boolean): Win32WindowReadback {
+        var read = port.readWindow(hwnd)
+        var origin = position
+        // Moving the physical rectangle may synchronously switch per-monitor DPI. Converge
+        // against actual destination DPI without publishing an intermediate logical size.
+        repeat(3) { attempt ->
+            val outer = preflightGeometry(size, minimum, maximum, read.scale, read.style)
+            port.setWindowBounds(hwnd, PhysicalRect(origin, outer), frameChanged && attempt == 0)
+            ensureLive()
+            constraintCallbackFailure?.let { throw it }
+            val actual = port.readWindow(hwnd)
+            if (actual.scale == read.scale) return actual
+            read = actual
+            origin = actual.outerBounds.origin
+        }
+        error("window DPI did not stabilize during geometry mutation")
     }
 
     private fun reconcileConstraints(actual: LogicalSize) {

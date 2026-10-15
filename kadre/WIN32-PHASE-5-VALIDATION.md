@@ -23,13 +23,14 @@ Le snapshot distant de phase 4 reste épinglé dans le catalogue jusqu'à la pub
 
 ## Preuves
 
-- Gate Kadre complète : 621 tests (89 portables Win32, 26 natifs Win32, 418 runtime, 18 Desktop, 70 validator), zéro failure/error/skip. Avec KFFI : 757 tests. Les 16 JSON de contrats sont produits et validés ; W32-012/013 s'ajoutent aux 14 preuves précédentes.
-- KFFI : 110 tests core et 26 Win32, sans échec ni skip, exécutés avec le gate natif activé. Publication locale des jars effectivement testés sous une version distincte.
+- Gate Kadre complète après revue : 625 tests (92 portables Win32, 27 natifs Win32, 418 runtime, 18 Desktop, 70 validator), zéro failure/error/skip. Avec KFFI : 762 tests. Les 16 JSON de contrats sont produits et validés ; W32-012/013 s'ajoutent aux 14 preuves précédentes.
+- KFFI : 110 tests core et 27 Win32, sans échec ni skip, exécutés avec le gate natif activé. Les SHA256 des jars publiés localement correspondent aux jars testés.
 - Génération de 85 fonctions User32/Kernel32/GDI/DWM, quatre ajouts, `--check` identique. Limite d'outillage conservée : le parseur Clang signale `excpt.h` absent dans le SDK installé ; aucune génération sans ce diagnostic n'est revendiquée. Les wrappers ajoutés sont exécutés contre Windows réel.
 - Cycle RED→GREEN des mutations publiques puis du fullscreen, en portable et natif. Les tests natifs relisent RECT/styles/DPI via les fonctions User32, puis comparent avec l'outcome public et les métriques de surface.
 - W32-012 : propriétés et limites natives, application Desktop depuis un worker, readback substitué dans le modèle indépendant, événements corrélés ou externes, cancellation avant claim.
 - W32-013 : round-trip natif styles/rectangle, contraintes suspendues et restaurées, rollback après échec d'entrée injecté.
 - Le test de fermeture réentrante a révélé le verrou d'admission runtime : la queue native diffère maintenant la mutation même lorsqu'elle est admise sur le thread UI. Le setter et ses callbacks exécutent après le retour du SPI. L'annulation après claim conserve la publication du readback réellement commis.
+- Revue indépendante : deux findings Important corrigés en une passe, sans minor différé. Les trois régressions portables ont échoué avant correction : maximum client Int.MAX_VALUE dont le cadre déborde, déplacement avec changement de DPI, position initiale sur un écran de DPI différent. Une preuve native rejette le maximum débordant puis applique un titre pour vérifier que la session reste utilisable. Le correctif utilise une prévalidation du style cible dans KFFI et une convergence bornée au DPI effectif d'arrivée.
 
 ## Qualification manuelle et limites
 
