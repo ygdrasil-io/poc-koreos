@@ -161,4 +161,89 @@ class Win32WindowMutationTest {
         }
         queue.close()
     }
+
+    @Test fun borderlessFullscreenSuspendsConstraintsAndRestoresWindowedGeometryAndChrome() = runBlocking {
+        val port = DeterministicWin32HostPort()
+        driver(port).use { driver ->
+            val window = open(driver, WindowSpec(contentSize = LogicalSize(400.0, 300.0), minimumSize = LogicalSize(200.0, 150.0),
+                maximumSize = LogicalSize(600.0, 450.0), outerPosition = PhysicalPoint(35, 50), systemButtons = WindowSystemButtons.CloseOnly))
+            val before = window.state.value
+            assertIs<WindowUpdateOutcome.Applied>(apply(window, WindowUpdate(fullscreen = PropertyChange.Set(FullscreenMode.Borderless))))
+            assertEquals(FullscreenMode.Borderless, window.state.value.fullscreen)
+            assertEquals(port.monitorBounds(port.lastTopLevelHwnd()), window.state.value.outerBounds)
+            assertEquals(WindowDecorations.Borderless, window.state.value.decorations)
+            assertNull(window.state.value.minimumSize)
+            assertNull(window.state.value.maximumSize)
+            apply(window, WindowUpdate(title = PropertyChange.Set("fullscreen title")))
+            val blocked = assertIs<WindowUpdateOutcome.PartiallyApplied>(apply(window, WindowUpdate(contentSize = PropertyChange.Set(LogicalSize(500.0, 400.0)))))
+            assertEquals(listOf(WindowProperty.ContentSize), blocked.rejected.map { it.field })
+            assertEquals(FullscreenMode.Borderless, window.state.value.fullscreen)
+            apply(window, WindowUpdate(fullscreen = PropertyChange.Set(FullscreenMode.Windowed)))
+            assertEquals(before.outerBounds, window.state.value.outerBounds)
+            assertEquals(before.contentSize, window.state.value.contentSize)
+            assertEquals(before.minimumSize, window.state.value.minimumSize)
+            assertEquals(before.maximumSize, window.state.value.maximumSize)
+            assertEquals(before.systemButtons, window.state.value.systemButtons)
+            assertEquals("fullscreen title", window.state.value.title)
+        }
+    }
+
+    @Test fun failedFullscreenEntryRestoresTheWindowedPeerBeforeReportingFailure() = runBlocking {
+        val port = DeterministicWin32HostPort()
+        driver(port).use { driver ->
+            val window = open(driver)
+            val before = window.state.value
+            var failOnce = true
+            port.beforeBoundsWrite = { if (failOnce) { failOnce = false; error("injected fullscreen bounds failure") } }
+            assertIs<KadreResult.Failure>(window.apply(WindowUpdate(fullscreen = PropertyChange.Set(FullscreenMode.Borderless))))
+            assertEquals(before.outerBounds, window.state.value.outerBounds)
+            assertEquals(before.decorations, window.state.value.decorations)
+            assertEquals(FullscreenMode.Windowed, window.state.value.fullscreen)
+            apply(window, WindowUpdate(fullscreen = PropertyChange.Set(FullscreenMode.Borderless)))
+            apply(window, WindowUpdate(fullscreen = PropertyChange.Set(FullscreenMode.Windowed)))
+            assertEquals(before.outerBounds, window.state.value.outerBounds)
+        }
+    }
+
+    @Test fun anOwnerAdmittedMutationCanCloseReentrantlyOutsideTheRuntimeAdmissionLock() = runBlocking {
+        val queue = Win32UiCommandQueue({ true }, { true })
+        val port = object : DeterministicWin32HostPort() {
+            override fun deferWindowMutation(block: () -> Unit, onFailure: (Throwable) -> Unit) = queue.defer(block, onFailure)
+        }
+        driver(port).use { driver ->
+            val window = open(driver)
+            var laterWrites = 0
+            port.beforeTitleWrite = { runBlocking { window.close() } }
+            port.beforeBoundsWrite = { laterWrites++ }
+            val pending = async(start = CoroutineStart.UNDISPATCHED) {
+                window.apply(WindowUpdate(title = PropertyChange.Set("close in callback"), contentSize = PropertyChange.Set(LogicalSize(500.0, 350.0))))
+            }
+            assertFalse(pending.isCompleted)
+            queue.drain()
+            assertIs<KadreResult.Failure>(withTimeout(2000) { pending.await() })
+            assertEquals(WindowPhase.Closed, window.state.value.phase)
+            assertEquals(0, laterWrites)
+        }
+        queue.close()
+    }
+
+    @Test fun cancellationAfterUiClaimStillPublishesTheCommittedReadback() = runBlocking {
+        val owner = Thread.currentThread()
+        val admitted = java.util.concurrent.Semaphore(0)
+        val queue = Win32UiCommandQueue({ Thread.currentThread() === owner }, { admitted.release(); true })
+        val port = object : DeterministicWin32HostPort() {
+            override fun deferWindowMutation(block: () -> Unit, onFailure: (Throwable) -> Unit) = queue.defer(block, onFailure)
+        }
+        driver(port).use { driver ->
+            val window = open(driver)
+            val pending = launch(Dispatchers.Default) { window.apply(WindowUpdate(title = PropertyChange.Set("committed"))) }
+            assertTrue(admitted.tryAcquire(2, java.util.concurrent.TimeUnit.SECONDS))
+            port.beforeTitleWrite = { pending.cancel() }
+            queue.drain()
+            pending.join()
+            assertEquals("committed", window.state.value.title)
+            assertEquals("committed", port.windowTitles.getValue(port.lastTopLevelHwnd()))
+        }
+        queue.close()
+    }
 }

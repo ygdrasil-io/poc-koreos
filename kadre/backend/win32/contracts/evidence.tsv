@@ -58,3 +58,10 @@ W32-011	jvm	scenario	win32-input-defaults-effective	org.graphiks.kadre.internal.
 W32-011	jvm	scenario	win32-sync-open-window	org.graphiks.kadre.internal.win32.Win32InputFlowTest	synchronousKeyCanOpenAnotherWindowWithoutDuplicatingTheOrdinaryEvent[jvm]
 W32-011	jvm	scenario	win32-native-sync-open-window	org.graphiks.kadre.internal.win32.Win32InputNativeContractTest	nativeKeyCallbackCanOpenAnotherWindowWithoutLeavingAStalePressedKey
 W32-011	jvm	sentinel	win32-no-key-after-native-callback-close	org.graphiks.kadre.internal.win32.Win32InputNativeContractTest	nativeKeyCallbackClosesBeforeAnyOrdinaryPressCanEscape
+W32-012	jvm	scenario	win32-properties-native-readback	org.graphiks.kadre.internal.win32.Win32WindowMutationNativeContractTest	publicMutationsMatchNativeClientRectStylesAndTitle
+W32-012	jvm	scenario	win32-track-limits-native	org.graphiks.kadre.internal.win32.Win32WindowMutationNativeContractTest	nativeMinmaxCallbackAppliesAndClearsTheRequestedTrackLimits
+W32-012	jvm	scenario	win32-mutations-worker-public	org.graphiks.kadre.internal.win32.Win32WindowMutationNativeContractTest	publicWorkerUpdatesAndClosesWithoutWaitingOnAStoppedPump
+W32-012	jvm	sentinel	win32-no-local-observation-duplication	org.graphiks.kadre.internal.win32.Win32WindowMutationTest	effectiveReadbackAndExternalGeometryHaveDistinctOperationCorrelations[jvm]
+W32-012	jvm	sentinel	win32-no-update-after-cancel	org.graphiks.kadre.internal.win32.Win32WindowMutationTest	aWorkerCanCancelAQueuedUpdateBeforeTheUiClaimsIt[jvm]
+W32-013	jvm	scenario	win32-borderless-native-roundtrip	org.graphiks.kadre.internal.win32.Win32WindowMutationNativeContractTest	nativeBorderlessRoundTripRestoresTheExactWindowedStyleAndRectangle
+W32-013	jvm	sentinel	win32-failed-borderless-restores-windowed	org.graphiks.kadre.internal.win32.Win32WindowMutationTest	failedFullscreenEntryRestoresTheWindowedPeerBeforeReportingFailure[jvm]

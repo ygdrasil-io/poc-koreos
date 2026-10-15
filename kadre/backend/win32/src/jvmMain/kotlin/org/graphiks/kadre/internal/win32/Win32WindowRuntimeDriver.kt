@@ -262,12 +262,23 @@ internal class Win32WindowRuntimeDriver internal constructor(
         val current = currentState(entry) ?: run { command.failed(KadreFailure.Closed(KadreResourceKind.Window)); return }
         entry.mutating = true
         try {
-            val actual = entry.mutations.apply(command.update, current)
+            val blocked = if (current.fullscreen == FullscreenMode.Borderless && command.update.fullscreen == PropertyChange.Unchanged)
+                fullscreenBlockedFields(command.update) else emptyList()
+            val update = if (blocked.isEmpty()) command.update else command.update.copy(
+                outerPosition = PropertyChange.Unchanged, contentSize = PropertyChange.Unchanged,
+                minimumSize = PropertyChange.Unchanged, maximumSize = PropertyChange.Unchanged,
+                resizable = PropertyChange.Unchanged, decorations = PropertyChange.Unchanged, systemButtons = PropertyChange.Unchanged)
+            val actual = entry.mutations.apply(update, current)
             if (!isLive(entry)) { command.failed(KadreFailure.Closed(KadreResourceKind.Window)); return }
             publishMetrics(entry)
-            command.applied(actual)
+            if (blocked.isEmpty()) command.applied(actual) else command.partiallyApplied(actual,
+                blocked.map { RejectedWindowField(it, KadreFailure.TemporarilyUnavailable(retryable = true)) })
         } catch (failure: Throwable) {
             if (!isLive(entry)) command.failed(KadreFailure.Closed(KadreResourceKind.Window))
+            else if (failure is Win32FullscreenRecoveryFailure) {
+                command.failed(platformFailure("update-window", "fullscreen-restore-failed"), failure)
+                failureReporter.report(failure)
+            }
             else if (entry.mutations.nativeCommitStarted) {
                 try {
                     val actual = entry.mutations.readState(current)
@@ -280,6 +291,16 @@ internal class Win32WindowRuntimeDriver internal constructor(
             } else command.failed(if (failure is IllegalArgumentException) KadreFailure.InvalidRequest("windowUpdate")
                 else platformFailure("update-window", "native-preflight-failed"), failure)
         } finally { entry.mutating = false }
+    }
+
+    private fun fullscreenBlockedFields(update: WindowUpdate): List<WindowProperty> = buildList {
+        if (update.outerPosition != PropertyChange.Unchanged) add(WindowProperty.OuterPosition)
+        if (update.contentSize != PropertyChange.Unchanged) add(WindowProperty.ContentSize)
+        if (update.minimumSize != PropertyChange.Unchanged) add(WindowProperty.MinimumSize)
+        if (update.maximumSize != PropertyChange.Unchanged) add(WindowProperty.MaximumSize)
+        if (update.resizable != PropertyChange.Unchanged) add(WindowProperty.Resizable)
+        if (update.decorations != PropertyChange.Unchanged) add(WindowProperty.Decorations)
+        if (update.systemButtons != PropertyChange.Unchanged) add(WindowProperty.SystemButtons)
     }
 
     override fun requestRedraw(command: SurfaceRedrawCommand): KadreResult<Unit> {
@@ -360,7 +381,7 @@ internal class Win32WindowEntry(val window: Win32TopLevelWindowHandle, val comma
 internal object Win32WindowRuntimeDriverFactory {
     val supportedWindowUpdateCapabilities: Set<WindowProperty> = setOf(WindowProperty.Title, WindowProperty.ContentSize,
         WindowProperty.MinimumSize, WindowProperty.MaximumSize, WindowProperty.Resizable, WindowProperty.OuterPosition,
-        WindowProperty.Decorations, WindowProperty.SystemButtons)
+        WindowProperty.Decorations, WindowProperty.SystemButtons, WindowProperty.Fullscreen)
     fun create(
         port: Win32NativeHostPort,
         resources: ResourceBudgetPolicy,
