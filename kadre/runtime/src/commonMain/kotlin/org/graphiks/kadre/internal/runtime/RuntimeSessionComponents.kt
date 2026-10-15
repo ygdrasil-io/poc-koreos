@@ -113,6 +113,26 @@ public class RuntimeSessionComponents private constructor(
         closeAction: () -> Unit,
     ) : this(windows, null, displayPort, null, gamepadPort, inputDevicePort, closeAction, null, primarySurfaceProvider)
 
+    /**
+     * The deferred primary-surface form with the session-owned gamepad, generic input-device
+     * and capture ports (uikit phase 9). Same provider contract as the form above: the
+     * backend's primary surface only exists after
+     * [RuntimeSessionWindowManager.installSessionConfiguration], so the provider runs exactly
+     * then, while the ports are closed by [close] like every port of the all-ports forms — the
+     * backend never closes them from its own [closeAction]. The capture port takes its OWN
+     * slot in the private constructor (between the display and gamepad ports); the positional
+     * delegation below is what keeps a slot slip from compiling green.
+     */
+    public constructor(
+        windows: WindowManager,
+        primarySurfaceProvider: () -> RuntimePrimarySurface?,
+        displayPort: DisplayPort?,
+        gamepadPort: GamepadPort?,
+        inputDevicePort: InputDevicePort?,
+        capturePort: CapturePort?,
+        closeAction: () -> Unit,
+    ) : this(windows, null, displayPort, capturePort, gamepadPort, inputDevicePort, closeAction, null, primarySurfaceProvider)
+
     private val lock = RuntimeLock()
     private var closed = false
 

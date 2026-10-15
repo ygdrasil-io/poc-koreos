@@ -17,6 +17,22 @@ import kotlin.test.assertTrue
  * du gate `windows-contracts` ; jamais comptées comme réussies hors Windows.
  */
 class Win32HostNativeContractTest {
+    @Test
+    fun workerCommandsWakeAndExecuteOnTheNativeOwnerThread() {
+        val port = newPort()
+        val session = Win32HostSession.start(port)
+        cleanups.add(session)
+        val owner = Thread.currentThread()
+        val result = java.util.concurrent.CompletableFuture<Thread>()
+        thread(isDaemon = true) {
+            try { result.complete(port.onMainThread { Thread.currentThread() }) }
+            catch (failure: Throwable) { result.completeExceptionally(failure) }
+        }
+        val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(3)
+        while (!result.isDone && System.nanoTime() < deadline) session.pump.runOnce(20)
+        assertEquals(owner, result.get(1, TimeUnit.SECONDS), "native work belongs to the HWND owner")
+    }
+
     private val cleanups = ArrayList<AutoCloseable>()
 
     @BeforeTest

@@ -70,6 +70,20 @@ targets:
         # UIApplicationDidReceiveMemoryWarningNotification — observateur → source process →
         # relais → signaux, la chaîne entre extrémités) ; la DÉCISION OS de tirer la
         # notification (et les livraisons réelles d'écrans branchés) reste le charter manuel.
+        # Capture (phase 9) : la LIMITE Simulator épingle le scope des scénarios driver —
+        # les FRAMES ReplayKit NE SONT JAMAIS LIVRÉES sur Simulator (fait T3 : le start
+        # `RPScreenRecorder.startCaptureWithHandler` ne rend JAMAIS sa complétion sur aucun
+        # hôte mesuré, le stop répond -5829). AUCUN scénario ne prétend donc des frames
+        # HostChoice ici — le bras HostChoice y prouve son plan de CONTRÔLE et ses refus
+        # honnêtes (`Unsupported(CaptureOpen)` à l'admission, zéro réservation de port,
+        # zéro frame fabriquée) ; les frames ReplayKit restent le charter DEVICE. Le flux
+        # Surface, lui, EST pleinement prouvable au driver (l'app hôte du driver rend des
+        # rasters cohérents — fait T1 — QUAND la vue capturée porte du contenu rendu ;
+        # FAIT Task 6 : la vue VIDE du fixture rend un raster menteur — layer.render,
+        # bitmapInfo 0x1 in-table mais bytesPerRow = 2·w — que l'honnêteté du kernel refuse
+        # à juste titre `frame-format-out-of-table` ; les scénarios posent un stimulus de
+        # contenu avant l'ouverture) : c'est LÀ que vit la preuve bout en bout des frames
+        # (`uikit-capture-surface-stream-bounded`).
         UIApplicationSceneManifest:
           UIApplicationSupportsMultipleScenes: true
           UISceneConfigurations:

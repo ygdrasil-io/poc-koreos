@@ -22,7 +22,7 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 GRADLEW="${KADRE_GRADLEW:-$REPO_ROOT/gradlew}"
 WIN32_BACKEND_BUILD="$REPO_ROOT/kadre/backend/win32/build"
 EVIDENCE_DIRECTORY="$WIN32_BACKEND_BUILD/contract-evidence"
-EVIDENCE_FILES=("W32-001.json" "W32-002.json" "W32-003.json")
+EVIDENCE_FILES=("W32-001.json" "W32-002.json" "W32-003.json" "W32-004.json" "W32-005.json" "W32-006.json" "W32-007.json" "W32-008.json" "W32-009.json" "W32-010.json" "W32-011.json" "BCK-025.json" "SES-002.json" "PMP-001.json")
 DIAGNOSTICS_DIRECTORY="$WIN32_BACKEND_BUILD/ci-diagnostics"
 TEST_TIMEOUT_SECONDS="${KADRE_WIN32_TEST_TIMEOUT_SECONDS:-480}"
 EVIDENCE_TIMEOUT_SECONDS=300
@@ -82,7 +82,7 @@ run_phase tests "$TEST_TIMEOUT_SECONDS" \
     --rerun-tasks \
     --no-daemon \
     --stacktrace \
-    --console=plain
+    --console=plain "$@"
 
 run_phase evidence "$EVIDENCE_TIMEOUT_SECONDS" \
     "$GRADLEW" \
@@ -90,7 +90,7 @@ run_phase evidence "$EVIDENCE_TIMEOUT_SECONDS" \
     -PkadreContractCommit="$COMMIT" \
     --no-daemon \
     --stacktrace \
-    --console=plain
+    --console=plain "$@"
 
 for evidence_file in "${EVIDENCE_FILES[@]}"; do
     if [[ ! -s "$EVIDENCE_DIRECTORY/$evidence_file" ]]; then

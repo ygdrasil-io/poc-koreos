@@ -317,12 +317,12 @@ Apple transmet l’activité associée à une demande d’activation dans les op
 
 **But :** fermer séparément les capabilities de capture iOS et tvOS sans promettre une source ou une permission que la plateforme ne fournit pas.
 
-- [ ] Examiner séparément `CaptureTarget.HostChoice`, `Source` et `Surface` et leur correspondance avec les APIs publiques disponibles, notamment ReplayKit lorsque pertinent. Un enregistrement de l’application entière ne prouve pas une capture isolée de surface.
-- [ ] Compiler et tester le chemin tvOS sur son SDK et sur Apple TV pour les capacités annoncées ; l’existence d’un framework commun ne prouve pas la disponibilité de chaque méthode, picker ou format. Garder explicites les chemins sans primitive conforme.
-- [ ] Fixer la sémantique des sources, consentements, interruptions et révocations ; `HostPickerOnly` n’est annoncé que si un vrai parcours conforme existe. Aucune demande de permission implicite à l’énumération.
-- [ ] Si une primitive exige un type de permission ou un lifecycle absent du contrat fermé, corriger d’abord le document normatif ou conserver le chemin non supporté ; ne pas détourner une permission existante.
-- [ ] Brancher les ports capture communs : formats, plans, strides, orientation, dimensions et colorimétrie réellement connus, cadence demandée, copies et budget total en octets.
-- [ ] Tester refus utilisateur, interruption, source perdue, stop concurrent, callback après fermeture et libération des buffers même lorsque le consumer est lent ou annulé.
+- [x] Examiner séparément `CaptureTarget.HostChoice`, `Source` et `Surface` et leur correspondance avec les APIs publiques disponibles, notamment ReplayKit lorsque pertinent. Un enregistrement de l’application entière ne prouve pas une capture isolée de surface.
+- [x] Compiler et tester le chemin tvOS sur son SDK et sur Apple TV pour les capacités annoncées ; l’existence d’un framework commun ne prouve pas la disponibilité de chaque méthode, picker ou format. Garder explicites les chemins sans primitive conforme.
+- [x] Fixer la sémantique des sources, consentements, interruptions et révocations ; `HostPickerOnly` n’est annoncé que si un vrai parcours conforme existe. Aucune demande de permission implicite à l’énumération.
+- [x] Si une primitive exige un type de permission ou un lifecycle absent du contrat fermé, corriger d’abord le document normatif ou conserver le chemin non supporté ; ne pas détourner une permission existante.
+- [x] Brancher les ports capture communs : formats, plans, strides, orientation, dimensions et colorimétrie réellement connus, cadence demandée, copies et budget total en octets.
+- [x] Tester refus utilisateur, interruption, source perdue, stop concurrent, callback après fermeture et libération des buffers même lorsque le consumer est lent ou annulé.
 
 **Fichiers principaux :** port capture UIKit, owners de buffers, driver et cahier sur appareil pour les parcours non reproductibles sur simulateur.
 
@@ -332,13 +332,13 @@ Apple transmet l’activité associée à une demande d’activation dans les op
 
 **But :** rendre les supports iOS et tvOS consommables, reproductibles et auditables.
 
-- [ ] Terminer `capabilities/uikit.md`, une entrée par feature et famille iOS/tvOS de la matrice normative, avec minimum testé, compile gate, runtime gate, état absent exact et preuves. Ne pas fusionner deux disponibilités différentes sous une ligne « UIKit » générique.
-- [ ] Compiler les consumers Kotlin iOS/tvOS, Swift UIKit et SwiftUI contre les publications temporaires et frameworks distribuables ; vérifier exports, opt-ins, profils et absence d’API ancienne ou interne dans la façade promise.
-- [ ] Exécuter les deux branches iOS/tvOS du gate UIKit sur chaque PR et les intégrer au statut agrégé `kadre-pr-contracts` ; tester les versions minimum/courante de chaque OS dans le nightly (exécution nocturne) et les parcours matériels nécessaires avant release.
-- [ ] Vérifier les cycles de rétention Kotlin/ARC, les observers, continuations, scopes, transferts et buffers après ouvertures/fermetures répétées.
-- [ ] Livrer les guides UIKit, SwiftUI, multi-scène, installation/packaging, capacités conditionnelles et migration depuis `kadre-old`, avec un sample consommateur minimal utilisant l’API publique.
-- [ ] Livrer le guide tvOS et un sample navigable à la télécommande, avec saisie système selon support, manette conditionnelle et limites explicites ; documenter séparément les procédures Simulator et Apple TV physique.
-- [ ] Revoir chaque différé : implémentation avec preuve, ou absence structurelle explicitement justifiée. Aucun contrat `planned` ne peut être présenté comme fonctionnalité livrée.
+- [x] Terminer `capabilities/uikit.md`, une entrée par feature et famille iOS/tvOS de la matrice normative, avec minimum testé, compile gate, runtime gate, état absent exact et preuves. Ne pas fusionner deux disponibilités différentes sous une ligne « UIKit » générique.
+- [x] Compiler les consumers Kotlin iOS/tvOS, Swift UIKit et SwiftUI contre les publications temporaires et frameworks distribuables ; vérifier exports, opt-ins, profils et absence d’API ancienne ou interne dans la façade promise.
+- [x] Exécuter les deux branches iOS/tvOS du gate UIKit sur chaque PR et les intégrer au statut agrégé `kadre-pr-contracts` ; tester les versions minimum/courante de chaque OS dans le nightly (exécution nocturne) et les parcours matériels nécessaires avant release.
+- [x] Vérifier les cycles de rétention Kotlin/ARC, les observers, continuations, scopes, transferts et buffers après ouvertures/fermetures répétées.
+- [x] Livrer les guides UIKit, SwiftUI, multi-scène, installation/packaging, capacités conditionnelles et migration depuis `kadre-old`, avec un sample consommateur minimal utilisant l’API publique.
+- [x] Livrer le guide tvOS et un sample navigable à la télécommande, avec saisie système selon support, manette conditionnelle et limites explicites ; documenter séparément les procédures Simulator et Apple TV physique.
+- [x] Revoir chaque différé : implémentation avec preuve, ou absence structurelle explicitement justifiée. Aucun contrat `planned` ne peut être présenté comme fonctionnalité livrée.
 
 **Critère de sortie :** un consumer neuf peut intégrer le parcours documenté sans dépendance `project(...)` vers les sources Kadre ; toutes les obligations du §8 sont démontrées. La suppression de `kadre-old` reste un chantier distinct.
 

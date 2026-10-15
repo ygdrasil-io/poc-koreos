@@ -31,6 +31,7 @@ internal class Win32HostSession private constructor(
     val pump: Win32MessagePump,
     val controlWindow: Win32ControlWindowHandle,
 ) : AutoCloseable {
+    private val closed = java.util.concurrent.atomic.AtomicBoolean(false)
     public companion object {
         public fun start(port: Win32NativeHostPort): Win32HostSession {
             check(port.isMainThread()) { "Win32HostSession.start must run on the calling UI thread" }
@@ -49,6 +50,7 @@ internal class Win32HostSession private constructor(
     }
 
     public fun teardown() {
+        if (!closed.compareAndSet(false, true)) return
         port.onMainThread {
             port.destroyControlWindow(controlWindow.hwnd)
         }

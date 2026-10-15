@@ -236,33 +236,57 @@ internal class RuntimeCaptureSession(
                 failSession = false,
             )
         }
+        // L'INCRÉMENT AVANT L'ENVOI (fix driver Task 6, crash mesuré `capture queued-byte
+        // accounting underflow`) : un collecteur dont le contexte ne confine PAS le fil
+        // (le pont K/N d'une suspension Swift, par exemple) est repris EN LIGNE dans
+        // `trySend` — son décrément court ALORS que le `+=` d'après- envoi n'a pas tourné,
+        // et l'invariant est sous-flottant sous le même verrou réentrant. L'incrément
+        // d'abord garantit l'invariant À TOUTE acquisition du verrou : entre l'envoi et le
+        // décrément du receveur, la frame est comptée exactement une fois ; les sorties de
+        // secours (drop/échec d'envoi) l'annulent explicitement.
+        queuedFrameBytes += bytes
         var dropped = 0L
+        // LE PRÉDICATE NE RECOMPTE PAS LE CANDIDAT (fix revue Task 6) : l'incrément
+        // ci-dessus inclut DÉJÀ la frame candidate dans `queuedFrameBytes` — ajouter
+        // `+ bytes` ici doublerait le seuil effectif (Q+L+2b ≤ max) et ferait déborder
+        // spurious une frame isolée dès ~la moitié du budget. Le seuil est Q+L ≤ max.
         while (
-            queuedFrameBytes + leasedFrameBytes + bytes > capturePolicy.maxBufferedBytesPerSession ||
+            queuedFrameBytes + leasedFrameBytes > capturePolicy.maxBufferedBytesPerSession ||
             frames.trySend(frame).isFailure
         ) {
             when (val overflow = capturePolicy.frames.overflowAction()) {
                 FrameOverflowAction.DropOldest -> {
                     val removed = frames.tryReceive().getOrNull()
-                    if (removed == null) return FrameOffer.Dropped(dropped + 1L)
+                    if (removed == null) {
+                        queuedFrameBytes -= bytes
+                        return FrameOffer.Dropped(dropped + 1L)
+                    }
                     check(queuedFrameBytes >= removed.byteCount()) { "capture queued-byte accounting underflow" }
                     queuedFrameBytes -= removed.byteCount()
                     dropped += 1L
                 }
 
-                FrameOverflowAction.DropLatest -> return FrameOffer.Dropped(dropped + 1L)
-                FrameOverflowAction.CloseSource -> return FrameOffer.Failed(
-                    KadreFailure.SourceOverflow(KadreResourceKind.CaptureBuffer),
-                    failSession = false,
-                )
+                FrameOverflowAction.DropLatest -> {
+                    queuedFrameBytes -= bytes
+                    return FrameOffer.Dropped(dropped + 1L)
+                }
+                FrameOverflowAction.CloseSource -> {
+                    queuedFrameBytes -= bytes
+                    return FrameOffer.Failed(
+                        KadreFailure.SourceOverflow(KadreResourceKind.CaptureBuffer),
+                        failSession = false,
+                    )
+                }
 
-                FrameOverflowAction.FailSession -> return FrameOffer.Failed(
-                    KadreFailure.SourceOverflow(KadreResourceKind.CaptureBuffer),
-                    failSession = true,
-                )
+                FrameOverflowAction.FailSession -> {
+                    queuedFrameBytes -= bytes
+                    return FrameOffer.Failed(
+                        KadreFailure.SourceOverflow(KadreResourceKind.CaptureBuffer),
+                        failSession = true,
+                    )
+                }
             }
         }
-        queuedFrameBytes += bytes
         return if (dropped == 0L) FrameOffer.Accepted else FrameOffer.Dropped(dropped)
     }
 

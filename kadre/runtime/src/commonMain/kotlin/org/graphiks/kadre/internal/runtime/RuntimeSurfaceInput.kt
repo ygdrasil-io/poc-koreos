@@ -332,7 +332,11 @@ internal class RuntimeSurfaceInput(
         return accepted
     }
 
-    fun acceptInteraction(event: InteractionEvent, pointerPressure: Double? = null): Boolean = when (event) {
+    fun acceptInteraction(
+        event: InteractionEvent,
+        pointerPressure: Double? = null,
+        keyInput: RuntimeSynchronousInteraction.KeyPressed? = null,
+    ): Boolean = when (event) {
         is InteractionEvent.PointerPressed -> accept(
             SurfaceStimulus.PointerButtonChanged(
                 surfaceId = surfaceId,
@@ -350,11 +354,11 @@ internal class RuntimeSurfaceInput(
             SurfaceStimulus.KeyChanged(
                 surfaceId = surfaceId,
                 physicalKey = event.physicalKey,
-                logicalKey = LogicalKey.Unidentified("interaction-key"),
-                location = KeyLocation.Standard,
+                logicalKey = keyInput?.logicalKey ?: LogicalKey.Unidentified("interaction-key"),
+                location = keyInput?.location ?: KeyLocation.Standard,
                 keyState = KeyState.Pressed,
                 repeat = false,
-                modifiers = KeyboardModifiers(emptySet()),
+                modifiers = keyInput?.modifiers ?: KeyboardModifiers(emptySet()),
             ),
             event.stamp,
         )

@@ -14,6 +14,8 @@ internal class Win32ControlWindowHandle(val hwnd: Long)
 internal interface Win32NativeHostPort : AutoCloseable {
     fun isMainThread(): Boolean
     fun <T> onMainThread(block: () -> T): T
+    fun postOnMainThread(block: () -> Unit, onFailure: (Throwable) -> Unit)
+    fun stopWorkerCommands()
     fun createControlWindow(messageHandler: (id: Int, wParam: Long, lParam: Long) -> Long): Win32ControlWindowHandle
     fun postWake(hwnd: Long): Boolean
     fun requestStopFromAnyone(hwnd: Long)
@@ -35,4 +37,16 @@ internal interface Win32NativeHostPort : AutoCloseable {
 
     /** Native default behavior for unhandled messages (real: DefWindowProcW; fake: 0L). */
     fun defWindowProc(hwnd: Long, message: Int, wParam: Long, lParam: Long): Long
+
+    /** Phase 3 surface: invalidation requests and effective-metrics readback. */
+    fun invalidateRect(hwnd: Long)
+    fun validateRect(hwnd: Long)
+    fun readClientPhysicalSize(hwnd: Long): Pair<Int, Int>
+    fun readScaleFactor(hwnd: Long): Double
+
+    fun showWindow(hwnd: Long)
+    fun readKeyboardInput(hwnd: Long, message: Int, wParam: Long, lParam: Long): Win32KeyInput?
+    fun trackMouseLeave(hwnd: Long)
+    fun cancelMouseLeave(hwnd: Long)
+    fun readWheelSettings(): Win32WheelSettings
 }

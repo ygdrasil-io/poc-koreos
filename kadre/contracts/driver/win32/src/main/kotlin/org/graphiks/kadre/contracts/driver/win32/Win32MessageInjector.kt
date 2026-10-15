@@ -33,6 +33,10 @@ public class Win32MessageInjector : AutoCloseable {
             lParam,
         ) != 0
 
+    /** Window-queue input stimulus; this does not emulate hardware or change keyboard state. */
+    public fun postWindowMessage(hwnd: Long, message: Int, wParam: Long = 0L, lParam: Long = 0L): Boolean =
+        PostMessageW(MemorySegment.ofAddress(hwnd), message, wParam, lParam) != 0
+
     override fun close() {
         // Aucune ressource KFFI possédée : l'init générée est process-lifetime.
     }

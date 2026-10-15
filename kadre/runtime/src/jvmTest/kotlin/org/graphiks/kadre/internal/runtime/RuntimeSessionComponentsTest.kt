@@ -326,6 +326,75 @@ class RuntimeSessionComponentsTest {
         assertEquals(1, inputDevicePort.closeCount)
     }
 
+    /**
+     * Le pin de la phase 9 (Task 2, uikit) — l'overload différé QUATRE ports
+     * `(windows, primarySurfaceProvider, displayPort, gamepadPort, inputDevicePort, capturePort,
+     * closeAction)` : le port capture est projeté DANS SON SLOT (comme CaptureManager de la
+     * session — le snapshot d'inventaire indisponible du port est l'état public, donc un
+     * glissement d'argument qui compilerait vert projeterait ici le mauvais port ou rien), et
+     * chacun des QUATRE ports est refermé EXACTEMENT une fois par la terminaison de session,
+     * après le closeAction. Les TROIS autres slots (display, gamepad, device) sont réépinglés
+     * dans le même test : la délégation positionnelle du nouvel overload ne doit pas les
+     * déranger.
+     */
+    @Test
+    fun deferredProviderCapturePortOverloadProjectsTheCapturePortInItsSlotAndClosesEachPortOnce() = runTest {
+        val displayPort = RecordingDisplayPort()
+        val gamepadPort = RecordingGamepadPort()
+        val inputDevicePort = RecordingInputDevicePort()
+        val capturePort = RecordingCapturePort(
+            snapshot(
+                permissions = CapturePermissionState(PermissionState.Granted, PermissionState.Granted),
+                sources = CapturePortSources.Unavailable(
+                    KadreFailure.Unsupported(KadreOperation.CaptureRefreshSources),
+                ),
+            ),
+        )
+        var providerRuns = 0
+        var closeActionRuns = 0
+        val host = RuntimeHostController.withComponents(
+            platform = KadrePlatform.Fake,
+            componentsFactory = RuntimeSessionComponentsFactory { _, _ ->
+                RuntimeSessionComponents(
+                    windows = RecordingWindowManager(),
+                    primarySurfaceProvider = { providerRuns += 1; null },
+                    displayPort = displayPort,
+                    gamepadPort = gamepadPort,
+                    inputDevicePort = inputDevicePort,
+                    capturePort = capturePort,
+                    closeAction = { closeActionRuns += 1 },
+                )
+            },
+        )
+        lateinit var observed: KadreScope
+
+        val session = attach(host) {
+            observed = this
+            awaitCancellation()
+        }
+        testScheduler.runCurrent()
+
+        assertEquals(1, providerRuns, "the deferred provider resolves exactly once, at session construction")
+
+        val sources = assertIs<org.graphiks.kadre.capture.CaptureSources.Unavailable>(
+            observed.capture.state.value.sources,
+        )
+        assertEquals(
+            KadreFailure.Unsupported(KadreOperation.CaptureRefreshSources),
+            sources.failure,
+            "the capture port is projected as the session CaptureManager",
+        )
+
+        session.close()
+        testScheduler.runCurrent()
+
+        assertEquals(1, closeActionRuns)
+        assertEquals(1, capturePort.closeCount)
+        assertEquals(1, displayPort.closeCount)
+        assertEquals(1, gamepadPort.closeCount)
+        assertEquals(1, inputDevicePort.closeCount)
+    }
+
     @Test
     fun primarySurfaceTeardownCannotSkipComponentCleanup() {
         var componentsClosed = 0

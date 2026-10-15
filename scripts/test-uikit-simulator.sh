@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# UIKit contract gate (BCK-012, BCK-013, BCK-014, BCK-015, BCK-016, BCK-020, BCK-021, BCK-022, BCK-023, BCK-024, BCK-026, BCK-027, WIN-009). Usage: test-uikit-simulator.sh [ios|tvos|all]
+# UIKit contract gate (BCK-012, BCK-013, BCK-014, BCK-015, BCK-016, BCK-018, BCK-019, BCK-020, BCK-021, BCK-022, BCK-023, BCK-024, BCK-026, BCK-027, BCK-028, WIN-009). Usage: test-uikit-simulator.sh [ios|tvos|all]
 # Sélectionne explicitement la famille et sa destination, vérifie la toolchain,
 # lance les tests, valide les preuves et retourne un code d'échec fidèle.
 set -euo pipefail
@@ -58,11 +58,55 @@ run_gradle() {
 # iPadOS) n'exigent QUE iosSimulatorArm64, la suite tvOS reste mono-scène ; BCK-020
 # (refus de requestWindow sans provider), BCK-022/BCK-023 (sources d'entrée annoncées :
 # touch/pointeur, clavier/gestes), BCK-024 (la session texte sur le receiver caché) et
-# BCK-026 (la destination de drop native : flux iOS + sonde d'absence tvOS) et BCK-027
+# BCK-026 (la destination de drop native : flux iOS + sonde d'absence tvOS), BCK-027
 # (displays/devices/gamepads/pression mémoire, avec sentinelle gamepad portée par uikitTest)
-# courent sur les DEUX familles.
-IOS_CONTRACT_IDS=(BCK-012 BCK-013 BCK-014 BCK-015 BCK-016 BCK-020 BCK-021 BCK-022 BCK-023 BCK-024 BCK-026 BCK-027 WIN-009)
-TVOS_CONTRACT_IDS=(BCK-012 BCK-013 BCK-015 BCK-020 BCK-022 BCK-023 BCK-024 BCK-026 BCK-027 WIN-009)
+# et BCK-028 (la capture : flux de surface borné, disponibilité honnête, cellule écran
+# structurellement inatteignable, avec sentinelles portées par uikitTest et le driver)
+# courent sur les DEUX familles. BCK-018 (la façade Swift KadreHost : attach/observation/
+# termination + sentinelles course-exactement-une-fois et deinit-ferme-la-session, portées
+# par KadreSessionHandleTests/KadreHostViewControllerTests) et BCK-019 (les consumers Swift
+# UIKit/SwiftUI depuis leurs PROPRES artefacts : l'attach-une-fois du SwiftUI, sentinelle
+# anti-duplication portée par ConsumerAttachTests, sentinelle update-no-op portée par
+# KadreSwiftUIConsumerTests) courent sur les DEUX familles AUSSI — leur preuve est produite
+# par l'agrégateur externe kadre/consumers/swift (run_consumer ci-dessous), jamais par le
+# driver : un artefact publié, jamais un project(...).
+IOS_CONTRACT_IDS=(BCK-012 BCK-013 BCK-014 BCK-015 BCK-016 BCK-018 BCK-019 BCK-020 BCK-021 BCK-022 BCK-023 BCK-024 BCK-026 BCK-027 BCK-028 WIN-009)
+TVOS_CONTRACT_IDS=(BCK-012 BCK-013 BCK-015 BCK-018 BCK-019 BCK-020 BCK-022 BCK-023 BCK-024 BCK-026 BCK-027 BCK-028 WIN-009)
+
+# Le repository contractTest et la version publiée (la même que le build racine —
+# gradle.properties). Les contrats consumer refusent tout project(...) : l'agrégateur
+# résout `org.graphiks.kadre:uikit` DEPUIS CE repository, publié au préalable.
+CONSUMER_REPOSITORY="$ROOT/build/kadre-contract-repository"
+CONSUMER_VERSION="$(sed -n 's/^version=//p' "$ROOT/gradle.properties")"
+
+# La preuve consumer des contrats BCK-018/BCK-019 : publication AU PRÉALABLE de uikit et de
+# foundation dans le repository contractTest, puis les exports JUnit de l'agrégateur (chaque
+# export porte son run xcodebuild : standard + lancement gated SwiftUI, une famille par
+# invocation). --refresh-dependencies est la garde anti-repository-périmé : sans elle,
+# Gradle résoudrait silencieusement un artefact CACHÉ d'une version identique au lieu de
+# celui, frais, du repository recomposé. Les Sync du validateur copient ces XML près des
+# preuves du driver (test-results/<target>ConsumerTest[Gated]).
+# Coût gate (mesuré une fois, mode `all`) : au-delà des 2 runs xcodebuild du driver, `all`
+# paie 2 publications (uikit + foundation, up-to-date après la première famille) + les 4
+# runs xcodebuild du consumer (standard + gated SwiftUI, par famille) — le prix honnête de
+# la preuve « consumers depuis leurs propres artefacts » dans LA même gate.
+run_consumer() {
+  local family="$1" exports
+  case "$family" in
+    ios) exports=("iosSimulatorJunitExport" "iosSimulatorGatedJunitExport") ;;
+    tvos) exports=("tvosSimulatorJunitExport" "tvosSimulatorGatedJunitExport") ;;
+    *) echo "FAIL: famille consumer inconnue '$family'" >&2; exit 1;;
+  esac
+  # runtime aussi : le POM du klib uikit déclare la dépendance transitive
+  # org.graphiks.kadre.internal:runtime — sans cette publication, le lien consumer
+  # échoue sur un dépôt contractuel FRAIS (le piège stale-repository l'avait masqué
+  # localement ; première passage CI = dépôt vide → rouge #470).
+  run_gradle ":kadre:platform:uikit:publishAllPublicationsToContractTestRepository" \
+             ":kadre:foundation:publishAllPublicationsToContractTestRepository" \
+             ":kadre:runtime:publishAllPublicationsToContractTestRepository"
+  run_gradle -p kadre/consumers/swift --refresh-dependencies "${exports[@]}" \
+    -PkadreRepository="$CONSUMER_REPOSITORY" -PkadreVersion="$CONSUMER_VERSION"
+}
 
 # Une SEULE invocation Gradle par famille : les tâches generate partagent le même
 # dependOn (export JUnit → xcodebuild) — une invocation exécute la suite simulateur UNE fois,
@@ -82,6 +126,7 @@ run_family() {
       ;;
     *) echo "FAIL: famille inconnue '$1'" >&2; exit 1;;
   esac
+  run_consumer "$1"
   for id in "${ids[@]}"; do
     generates+=(":kadre:contracts:validator:generateUikit${id//-/}${target}ContractEvidence")
   done

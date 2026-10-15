@@ -67,3 +67,11 @@ AND-010	android	scenario	android-compose-showcase-single-session	org.graphiks.ka
 AND-010	android	scenario	android-legacy-types-absent	org.graphiks.kadre.samples.composeshowcase.ComposeShowcaseContractTest	androidLegacyTypesAbsent
 AND-010	android	sentinel	android-facade-no-leak	org.graphiks.kadre.consumer.JavaAndroidFacadeConsumerTest	javaFacadeAttachObserveStopAwait
 AND-010	android	sentinel	android-compose-no-double-attach	org.graphiks.kadre.samples.composeshowcase.ComposeShowcaseContractTest	androidComposeShowcaseSingleSession
+AND-011	android	scenario	android-secondary-display-opens-session	org.graphiks.kadre.consumer.KadreConsumerSecondaryDisplayTest	androidSecondaryDisplayOpensSession
+AND-011	android	sentinel	android-secondary-display-no-window-claim	org.graphiks.kadre.consumer.KadreConsumerSecondaryDisplayTest	androidSecondaryDisplayNoWindowClaim
+AND-011	android	scenario	android-secondary-display-input-via-presentation	org.graphiks.kadre.consumer.KadreConsumerSecondaryDisplayTest	androidSecondaryDisplayInputViaPresentation
+AND-011	android	scenario	android-secondary-display-display-removal-terminal	org.graphiks.kadre.consumer.KadreConsumerSecondaryDisplayTest	androidSecondaryDisplayDisplayRemovalTerminal
+AND-011	android	scenario	android-secondary-display-attached-view-denied	org.graphiks.kadre.consumer.KadreConsumerSecondaryDisplayTest	androidSecondaryDisplayAttachedViewDenied
+AND-011	android	scenario	android-secondary-display-same-display-twice-denied	org.graphiks.kadre.consumer.KadreConsumerSecondaryDisplayTest	androidSecondaryDisplaySameDisplayTwiceDenied
+AND-011	android	scenario	android-secondary-display-coexists-with-main-session	org.graphiks.kadre.consumer.KadreConsumerSecondaryDisplayTest	androidSecondaryDisplayCoexistsWithMainSession
+AND-011	android	scenario	android-secondary-display-activity-stop-hides	org.graphiks.kadre.consumer.KadreConsumerSecondaryDisplayTest	androidSecondaryDisplayActivityStopHides

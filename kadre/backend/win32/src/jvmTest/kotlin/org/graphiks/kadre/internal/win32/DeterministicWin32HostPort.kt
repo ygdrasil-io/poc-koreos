@@ -14,6 +14,12 @@ internal open class DeterministicWin32HostPort : Win32NativeHostPort {
     val destroyedTopLevelWindows = AtomicInteger(0)
     val postedCloses = AtomicInteger(0)
     private val topLevelHandlers = java.util.concurrent.ConcurrentHashMap<Long, (Long, Int, Long, Long) -> Long>()
+    val scriptedClientSize = java.util.concurrent.ConcurrentHashMap<Long, Pair<Int, Int>>()
+    val scriptedScaleFactor = java.util.concurrent.ConcurrentHashMap<Long, Double>()
+    val invalidateCount = AtomicInteger(0)
+    val validateCount = AtomicInteger(0)
+    val paintCount = AtomicInteger(0)
+    private val invalidated = java.util.Collections.newSetFromMap(java.util.concurrent.ConcurrentHashMap<Long, Boolean>())
     private val topLevelHwndOrder = java.util.concurrent.ConcurrentLinkedQueue<Long>()
     private var nextTopLevelHwnd = 10_000L
     val createdWindows = AtomicInteger(0)
@@ -35,6 +41,10 @@ internal open class DeterministicWin32HostPort : Win32NativeHostPort {
     override fun isMainThread(): Boolean = true
 
     override fun <T> onMainThread(block: () -> T): T = block()
+    override fun postOnMainThread(block: () -> Unit, onFailure: (Throwable) -> Unit) {
+        try { block() } catch (failure: Throwable) { onFailure(failure) }
+    }
+    override fun stopWorkerCommands() = Unit
 
     override fun createControlWindow(
         messageHandler: (id: Int, wParam: Long, lParam: Long) -> Long,
@@ -110,9 +120,14 @@ internal open class DeterministicWin32HostPort : Win32NativeHostPort {
         }
     }
 
-    fun dispatchWindowMessage(hwnd: Long, id: Int, wParam: Long = 0L, lParam: Long = 0L) {
+    fun dispatchWindowMessage(hwnd: Long, id: Int, wParam: Long = 0L, lParam: Long = 0L): Long {
         // Routage manquant = fallthrough silencieux (miroir du pont réel : 0L).
-        topLevelHandlers[hwnd]?.invoke(hwnd, id, wParam, lParam)
+        if (id == 0x000F) { // WM_PAINT : ne se délivre que si invalidé
+            if (!invalidated.contains(hwnd)) return 0L
+            invalidated.remove(hwnd)
+            paintCount.incrementAndGet()
+        }
+        return topLevelHandlers[hwnd]?.invoke(hwnd, id, wParam, lParam) ?: 0L
     }
 
     fun errorIfWindowUnknown(hwnd: Long) {
@@ -127,6 +142,8 @@ internal open class DeterministicWin32HostPort : Win32NativeHostPort {
         synchronized(monitor) { monitor.notifyAll() }
     }
 
+
+
     fun lastTopLevelHwnd(): Long = topLevelHwndOrder.lastOrNull() ?: 0L
 
     fun topLevelHwndAt(index: Int): Long = topLevelHwndOrder.elementAtOrNull(index) ?: 0L
@@ -139,11 +156,35 @@ internal open class DeterministicWin32HostPort : Win32NativeHostPort {
     }
 
     val defWindowProcCalls = AtomicInteger(0)
+    var defaultResult = 0L
+    var keyInput: Win32KeyInput? = null
+    var wheelSettings = Win32WheelSettings(3, 1)
+    var leaveArms = 0
+    override fun showWindow(hwnd: Long) = Unit
+    override fun readKeyboardInput(hwnd: Long, message: Int, wParam: Long, lParam: Long): Win32KeyInput? = keyInput
+    override fun trackMouseLeave(hwnd: Long) { leaveArms++ }
+    override fun cancelMouseLeave(hwnd: Long) = Unit
+    override fun readWheelSettings(): Win32WheelSettings = wheelSettings
 
     override fun defWindowProc(hwnd: Long, message: Int, wParam: Long, lParam: Long): Long {
         defWindowProcCalls.incrementAndGet()
-        return 0L
+        return defaultResult
     }
+
+    override fun invalidateRect(hwnd: Long) {
+        invalidateCount.incrementAndGet()
+        invalidated.add(hwnd)
+    }
+
+    override fun validateRect(hwnd: Long) {
+        validateCount.incrementAndGet()
+        invalidated.remove(hwnd)
+    }
+
+    override fun readClientPhysicalSize(hwnd: Long): Pair<Int, Int> =
+        scriptedClientSize[hwnd] ?: (800 to 600)
+
+    override fun readScaleFactor(hwnd: Long): Double = scriptedScaleFactor[hwnd] ?: 1.0
 
     override fun close() {
         destroyed = true
