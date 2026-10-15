@@ -39,3 +39,11 @@ SUR-002	jvm	scenario	wayland-surface-two-windows-independence	org.graphiks.kadre
 SUR-002	jvm	scenario	wayland-surface-initial-metrics-preserved	org.graphiks.kadre.internal.wayland.WaylandWindowsLinuxTest	initialPropertiesArePreservedOnANonImposingConfigure
 SUR-002	jvm	scenario	wayland-surface-handle-lease-addresses	org.graphiks.kadre.internal.wayland.WaylandWindowsLinuxTest	twoWindowsAreMappedAndIndependentWithDeterministicSuccession
 SUR-002	jvm	sentinel	wayland-surface-lease-refused-after-close	org.graphiks.kadre.internal.wayland.WaylandWindowO2Test	handleLeaseIsHonoredWhileActiveAndRefusedAfterClose[jvm]
+DSP-002	jvm	scenario	wayland-display-snapshot-assembled	org.graphiks.kadre.internal.wayland.WaylandMetricsO2Test	snapshotAssemblesFromCachedOutputs[jvm]
+DSP-002	jvm	scenario	wayland-display-scale-change-republished	org.graphiks.kadre.internal.wayland.WaylandMetricsLinuxTest	scaleChangeMidSessionRepublishesTheInventory
+DSP-002	jvm	scenario	wayland-display-output-added	org.graphiks.kadre.internal.wayland.WaylandMetricsLinuxTest	outputAdditionExtendsTheInventory
+DSP-002	jvm	sentinel	wayland-display-no-zero-scale	org.graphiks.kadre.internal.wayland.WaylandMetricsO2Test	unusableOutputsAreExcludedNotZeroScaled[jvm]
+DSP-002	jvm	sentinel	wayland-display-primary-never-substituted	org.graphiks.kadre.internal.wayland.WaylandMetricsO2Test	outputRemovalWithdrawsItWithoutSubstitutingThePrimary[jvm]
+SUR-003	jvm	scenario	wayland-redraw-burst-coalesces-one-commit	org.graphiks.kadre.internal.wayland.WaylandMetricsO2Test	redrawRequestsCoalesceIntoOneFrameCommit[jvm]
+SUR-003	jvm	scenario	wayland-redraw-rearms-next-cycle	org.graphiks.kadre.internal.wayland.WaylandMetricsO2Test	redrawRequestsCoalesceIntoOneFrameCommit[jvm]
+SUR-003	jvm	sentinel	wayland-redraw-refused-after-disappearance	org.graphiks.kadre.internal.wayland.WaylandMetricsO2Test	redrawAfterSurfaceDisappearanceIsRejected[jvm]

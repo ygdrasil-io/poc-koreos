@@ -31,6 +31,12 @@ internal class FakeNativeWindow(
 
     private val serialCounter = java.util.concurrent.atomic.AtomicInteger(1)
 
+    val commitCurrentCount = java.util.concurrent.atomic.AtomicInteger(0)
+
+    override fun commitCurrent() {
+        commitCurrentCount.incrementAndGet()
+    }
+
     override fun commitInitial() {
         // simule la réponse du compositor: un configure arrive après le commit
         val serial = serialCounter.getAndIncrement()
@@ -58,8 +64,17 @@ internal class FakeNativeWindow(
         // diagnostic uniquement (voir registre phase 2)
     }
 
+    private val frameListeners = java.util.concurrent.CopyOnWriteArrayList<() -> Unit>()
+
     override fun onNextFrame(listener: () -> Unit) {
-        // le mapping O2 est prouvé par l'attach enregistré
+        frameListeners.add(listener)
+    }
+
+    /** Délivre le frame callback (pacing) aux listeners armés. */
+    fun deliverFrame() {
+        val listeners = ArrayList(frameListeners)
+        frameListeners.clear()
+        listeners.forEach { it() }
     }
 
     override fun setTitle(title: String) {

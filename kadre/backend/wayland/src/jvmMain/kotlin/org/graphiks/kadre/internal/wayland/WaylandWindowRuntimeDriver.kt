@@ -38,10 +38,12 @@ internal class WaylandWindowRuntimeDriver private constructor(
 
     private val closed = AtomicBoolean(false)
     private val peers = ConcurrentHashMap<WindowId, WaylandWindowPeer>()
+    private val surfaceCommandPort = WaylandSurfaceCommandPort()
 
     internal val manager: RuntimeWindowManager = RuntimeWindowManager(
         resources = resources,
         commandPort = WaylandWindowCommandPort(session, this),
+        surfaceCommandPort = surfaceCommandPort,
         platform = KadrePlatform.Wayland,
         failureReporter = failureReporter,
         publicWindowCapabilities = publicWindowCapabilities,
@@ -61,12 +63,14 @@ internal class WaylandWindowRuntimeDriver private constructor(
 
     internal fun registeredPeerCount(): Int = peers.size
 
-    internal fun register(peer: WaylandWindowPeer) {
+    internal fun register(peer: WaylandWindowPeer, surfaceId: org.graphiks.kadre.surface.SurfaceId) {
         peers[peer.windowId] = peer
+        surfaceCommandPort.register(surfaceId, peer)
     }
 
-    internal fun unregister(windowId: WindowId) {
+    internal fun unregister(windowId: WindowId, surfaceId: org.graphiks.kadre.surface.SurfaceId? = null) {
         peers.remove(windowId)
+        surfaceId?.let { surfaceCommandPort.unregister(it) }
     }
 
     internal fun createNativeWindow(width: Int, height: Int): WaylandNativeWindow =
@@ -169,11 +173,11 @@ internal class WaylandWindowCommandPort internal constructor(
                 // (acceptNativeClose : fin de closing, membership, arrêt
                 // stopWhenLastWindowClosed) ; les stimuli tardifs sont acceptés.
                 onNativeClosed = { windowId ->
-                    driver.unregister(windowId)
+                    driver.unregister(windowId, command.surfaceId)
                     command.nativeClosed()
                 },
             )
-            driver.register(peer)
+            driver.register(peer, command.surfaceId)
             command.commit(owner = peer, effectiveSpec = spec)
             peer.markCommitted()
         } catch (failure: Throwable) {

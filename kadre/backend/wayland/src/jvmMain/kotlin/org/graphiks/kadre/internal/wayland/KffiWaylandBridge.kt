@@ -15,11 +15,18 @@ internal class KffiWaylandBridge private constructor(
 
     private val globalsLock = Any()
     private val globals = ArrayList<WaylandGlobal>()
+    private val outputsLock = Any()
+    private val outputs = LinkedHashMap<Int, org.graphiks.kffi.wayland.managed.WaylandOutput>()
+    private val outputStates = LinkedHashMap<Int, org.graphiks.kffi.wayland.managed.WaylandOutputState>()
+    private val outputChangeListeners = ArrayList<() -> Unit>()
     private val registryListener = client.registry.addGlobalsListener(
-        onGlobal = { _, interfaceName, version ->
+        onGlobal = { name, interfaceName, version ->
             synchronized(globalsLock) {
                 globals.removeAll { it.name == interfaceName }
                 globals.add(WaylandGlobal(interfaceName, version))
+            }
+            if (interfaceName == "wl_output") {
+                bindOutput(name, version)
             }
         },
     )
@@ -51,6 +58,37 @@ internal class KffiWaylandBridge private constructor(
     }
 
     override fun connectionLost(): Boolean = client.hasError()
+
+    /**
+     * Binds one advertised output, tracks its done-batched state and notifies
+     * change listeners (each wl_output.done is a batching point). Safe to
+     * call from the dispatching thread.
+     */
+    private fun bindOutput(globalName: Int, advertised: Int) {
+        val output = client.bindOutput(globalName, minOf(advertised, 4)) ?: return
+        synchronized(outputsLock) { outputs[globalName] = output }
+        output.addListener(
+            onState = { state ->
+                synchronized(outputsLock) { outputStates[globalName] = state }
+                synchronized(outputsLock) { ArrayList(outputChangeListeners) }.forEach { it() }
+            },
+        )
+    }
+
+    /** Cached output observations; assembly reads only these copies. */
+    override fun outputSnapshots(): List<WaylandOutputSnapshot> = synchronized(outputsLock) {
+        outputs.mapNotNull { (name, output) ->
+            outputStates[name]?.let { WaylandOutputSnapshot(name.toLong(), it) }
+        }
+    }
+
+    /** Registers a change hook invoked at every output batching point. */
+    override fun onOutputsChanged(listener: () -> Unit): AutoCloseable {
+        synchronized(outputsLock) { outputChangeListeners.add(listener) }
+        return AutoCloseable {
+            synchronized(outputsLock) { outputChangeListeners.remove(listener) }
+        }
+    }
 
     override fun createWindowing(width: Int, height: Int): WaylandNativeWindow =
         KffiWaylandWindowAdapter.create(client, width, height)

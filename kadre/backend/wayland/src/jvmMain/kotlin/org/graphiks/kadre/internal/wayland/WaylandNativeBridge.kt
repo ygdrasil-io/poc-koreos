@@ -50,6 +50,12 @@ internal interface WaylandNativeBridge : AutoCloseable {
     /** Crée une fenêtre native (surface+xdg+toplevel+buffer) via kffi managé. */
     fun createWindowing(width: Int, height: Int): WaylandNativeWindow
 
+    /** Observations cacheés des outputs liés (assemblage snapshot). */
+    fun outputSnapshots(): List<WaylandOutputSnapshot>
+
+    /** Hook invoqué à chaque point de batching output (wl_output.done). */
+    fun onOutputsChanged(listener: () -> Unit): AutoCloseable
+
     override fun close()
 }
 

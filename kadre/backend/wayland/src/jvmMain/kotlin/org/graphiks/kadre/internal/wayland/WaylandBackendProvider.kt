@@ -110,7 +110,11 @@ public class WaylandBackendProvider private constructor(
             val controller = RuntimeHostController.withComponents(
                 platform = KadrePlatform.Wayland,
                 componentsFactory = { _, _ ->
-                    RuntimeSessionComponents(windows = driver.manager)
+                    val displayPort = WaylandDisplayPort(
+                        outputsProvider = session.bridge::outputSnapshots,
+                        rescan = session.bridge::onOutputsChanged,
+                    )
+                    RuntimeSessionComponents(windows = driver.manager, displayPort = displayPort)
                 },
                 initialLifecycleState = LifecycleState(
                     AttachmentState.Attached,
