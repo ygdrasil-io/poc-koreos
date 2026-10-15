@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# UIKit contract gate (BCK-012, BCK-013, BCK-014, BCK-015, BCK-016, BCK-020, BCK-021, BCK-022, BCK-023, BCK-024, BCK-026, BCK-027, BCK-028, WIN-009). Usage: test-uikit-simulator.sh [ios|tvos|all]
+# UIKit contract gate (BCK-012, BCK-013, BCK-014, BCK-015, BCK-016, BCK-018, BCK-019, BCK-020, BCK-021, BCK-022, BCK-023, BCK-024, BCK-026, BCK-027, BCK-028, WIN-009). Usage: test-uikit-simulator.sh [ios|tvos|all]
 # Sélectionne explicitement la famille et sa destination, vérifie la toolchain,
 # lance les tests, valide les preuves et retourne un code d'échec fidèle.
 set -euo pipefail
@@ -62,9 +62,42 @@ run_gradle() {
 # (displays/devices/gamepads/pression mémoire, avec sentinelle gamepad portée par uikitTest)
 # et BCK-028 (la capture : flux de surface borné, disponibilité honnête, cellule écran
 # structurellement inatteignable, avec sentinelles portées par uikitTest et le driver)
-# courent sur les DEUX familles.
-IOS_CONTRACT_IDS=(BCK-012 BCK-013 BCK-014 BCK-015 BCK-016 BCK-020 BCK-021 BCK-022 BCK-023 BCK-024 BCK-026 BCK-027 BCK-028 WIN-009)
-TVOS_CONTRACT_IDS=(BCK-012 BCK-013 BCK-015 BCK-020 BCK-022 BCK-023 BCK-024 BCK-026 BCK-027 BCK-028 WIN-009)
+# courent sur les DEUX familles. BCK-018 (la façade Swift KadreHost : attach/observation/
+# termination + sentinelles course-exactement-une-fois et deinit-ferme-la-session, portées
+# par KadreSessionHandleTests/KadreHostViewControllerTests) et BCK-019 (les consumers Swift
+# UIKit/SwiftUI depuis leurs PROPRES artefacts : l'attach-une-fois du SwiftUI, sentinelle
+# anti-duplication portée par ConsumerAttachTests, sentinelle update-no-op portée par
+# KadreSwiftUIConsumerTests) courent sur les DEUX familles AUSSI — leur preuve est produite
+# par l'agrégateur externe kadre/consumers/swift (run_consumer ci-dessous), jamais par le
+# driver : un artefact publié, jamais un project(...).
+IOS_CONTRACT_IDS=(BCK-012 BCK-013 BCK-014 BCK-015 BCK-016 BCK-018 BCK-019 BCK-020 BCK-021 BCK-022 BCK-023 BCK-024 BCK-026 BCK-027 BCK-028 WIN-009)
+TVOS_CONTRACT_IDS=(BCK-012 BCK-013 BCK-015 BCK-018 BCK-019 BCK-020 BCK-022 BCK-023 BCK-024 BCK-026 BCK-027 BCK-028 WIN-009)
+
+# Le repository contractTest et la version publiée (la même que le build racine —
+# gradle.properties). Les contrats consumer refusent tout project(...) : l'agrégateur
+# résout `org.graphiks.kadre:uikit` DEPUIS CE repository, publié au préalable.
+CONSUMER_REPOSITORY="$ROOT/build/kadre-contract-repository"
+CONSUMER_VERSION="$(sed -n 's/^version=//p' "$ROOT/gradle.properties")"
+
+# La preuve consumer des contrats BCK-018/BCK-019 : publication AU PRÉALABLE de uikit et de
+# foundation dans le repository contractTest, puis les exports JUnit de l'agrégateur (chaque
+# export porte son run xcodebuild : standard + lancement gated SwiftUI, une famille par
+# invocation). --refresh-dependencies est la garde anti-repository-périmé : sans elle,
+# Gradle résoudrait silencieusement un artefact CACHÉ d'une version identique au lieu de
+# celui, frais, du repository recomposé. Les Sync du validateur copient ces XML près des
+# preuves du driver (test-results/<target>ConsumerTest[Gated]).
+run_consumer() {
+  local family="$1" exports
+  case "$family" in
+    ios) exports=("iosSimulatorJunitExport" "iosSimulatorGatedJunitExport") ;;
+    tvos) exports=("tvosSimulatorJunitExport" "tvosSimulatorGatedJunitExport") ;;
+    *) echo "FAIL: famille consumer inconnue '$family'" >&2; exit 1;;
+  esac
+  run_gradle ":kadre:platform:uikit:publishAllPublicationsToContractTestRepository" \
+             ":kadre:foundation:publishAllPublicationsToContractTestRepository"
+  run_gradle -p kadre/consumers/swift --refresh-dependencies "${exports[@]}" \
+    -PkadreRepository="$CONSUMER_REPOSITORY" -PkadreVersion="$CONSUMER_VERSION"
+}
 
 # Une SEULE invocation Gradle par famille : les tâches generate partagent le même
 # dependOn (export JUnit → xcodebuild) — une invocation exécute la suite simulateur UNE fois,
@@ -84,6 +117,7 @@ run_family() {
       ;;
     *) echo "FAIL: famille inconnue '$1'" >&2; exit 1;;
   esac
+  run_consumer "$1"
   for id in "${ids[@]}"; do
     generates+=(":kadre:contracts:validator:generateUikit${id//-/}${target}ContractEvidence")
   done

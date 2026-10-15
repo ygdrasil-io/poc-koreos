@@ -100,12 +100,20 @@ val generateConsumerProject by tasks.registering(Exec::class) {
  * car la preuve anti-duplication s'y lit : tout « Class … is implemented in both » est
  * une duplication Obj-C au lancement — le run est alors UN ÉCHEC même si les tests
  * passent. Un `duplicate symbol` à l'édition de liens fait échouer xcodebuild de lui-même.
+ *
+ * `skipTesting` porte le scénario de lancement gated SwiftUI (voir `gatedSwiftuiTestTask`) :
+ * le run STANDARD ne l'exécute PAS (plutôt qu'un XCTSkip) — la gate contractuelle refuse
+ * tout JUnit porteur d'un cas skipped, et la preuve gated est FAITE, sur le même bundle,
+ * par le run dédié ci-dessous (env TEST_RUNNER_ + -only-testing). Aucune preuve n'est
+ * perdue : le scénario passe de « skippé ailleurs » à « exécuté dans son run dédié
+ * obligatoire ».
  */
 fun consumerTestTask(
     name: String,
     scheme: String,
     destination: String,
     xcresult: Directory,
+    skipTesting: List<String> = emptyList(),
 ) = tasks.register<Exec>(name) {
     group = "verification"
     description = "Runs the $scheme consumer XCTest suite on $destination."
@@ -127,6 +135,7 @@ fun consumerTestTask(
         "-scheme", scheme,
         "-destination", destination,
         "-resultBundlePath", xcresult.asFile.absolutePath,
+        *skipTesting.flatMap { listOf("-skip-testing", it) }.toTypedArray(),
         "CODE_SIGNING_ALLOWED=NO",
         "test",
     )
@@ -142,20 +151,147 @@ fun consumerTestTask(
     }
 }
 
+/**
+ * Le run DÉDIÉ du scénario de lancement gated SwiftUI (`uikit-swiftui-consumer-gated-launch-
+ * scene-hosts-the-wrapper` — la fenêtre SwiftUI posée À LA PLACE du store UIKit au
+ * lancement) : la gate ne peut être armée qu'AU LANCEMENT du process (env `TEST_RUNNER_`
+ * transmise à l'app hôte par xcodebuild, mécanique phase 1 `DriverSceneRequest`) — d'où un
+ * relancement de l'app avec `-only-testing` du seul scénario. Mêmes gardes que le run
+ * standard : TEST SUCCEEDED + zéro duplication Obj-C au lancement.
+ */
+fun gatedSwiftuiTestTask(
+    name: String,
+    scheme: String,
+    destination: String,
+    xcresult: Directory,
+    onlyTesting: String,
+) = tasks.register<Exec>(name) {
+    group = "verification"
+    description = "Runs the gated SwiftUI launch scenario of $scheme on $destination."
+    dependsOn(generateConsumerProject)
+    workingDir = consumerAppDirectory.asFile
+    environment(
+        "TEST_RUNNER_KADRE_CONSUMER_SWIFTUI" to "1",
+        "TEST_RUNNER_KADRE_CONSUMER_SWIFTUI_FACTORY" to "held",
+    )
+    val logFile = logsDirectory.get().file("$name.log").asFile
+    doFirst {
+        delete(xcresult)
+        logFile.parentFile.mkdirs()
+        println("$name — log: $logFile")
+        standardOutput = logFile.outputStream().buffered()
+    }
+    commandLine(
+        "xcodebuild",
+        "-project", "KadreSwiftConsumer.xcodeproj",
+        "-scheme", scheme,
+        "-destination", destination,
+        "-resultBundlePath", xcresult.asFile.absolutePath,
+        "-only-testing", onlyTesting,
+        "CODE_SIGNING_ALLOWED=NO",
+        "test",
+    )
+    doLast {
+        val log = logFile.readText()
+        check(log.contains("TEST SUCCEEDED")) {
+            "$name: xcodebuild did not report TEST SUCCEEDED (log: $logFile)"
+        }
+        check(!log.contains("is implemented in both")) {
+            "$name: DUPLICATE Obj-C class detected at launch — the two static frameworks " +
+                "must contribute exactly one implementation of each class (log: $logFile)"
+        }
+    }
+}
+
+/**
+ * L'export JUnit d'un xcresult consumer — MIROIR EXACT du `junitExportTask` du driver
+ * uikit (le même adaptateur `tools/xctest_to_junit.py`, pris par chemin relatif depuis ce
+ * build). Les XML alimentent la gate contractuelle : le bloc uikit de
+ * kadre/contracts/validator/build.gradle.kts les Sync près des preuves du driver
+ * (`test-results/<target>ConsumerTest` et `test-results/<target>ConsumerTestGated`).
+ */
+fun consumerJunitExportTask(
+    name: String,
+    xcresult: Directory,
+    output: Directory,
+    upstream: TaskProvider<Exec>,
+) = tasks.register<Exec>(name) {
+    group = "verification"
+    description = "Exports ${xcresult.asFile.name} to JUnit XML under ${output.asFile.path}."
+    dependsOn(upstream)
+    workingDir = projectDir
+    // Purge des XML d'un run précédent : un testcase disparu de la suite ne doit pas
+    // survivre dans le rapport exporté.
+    doFirst { delete(output) }
+    commandLine(
+        "python3",
+        "../../contracts/driver/uikit/tools/xctest_to_junit.py",
+        xcresult.asFile.absolutePath,
+        output.asFile.absolutePath,
+    )
+}
+
 // Destinations phase 1 (les mêmes que le driver).
 val iosSimulatorTests = consumerTestTask(
     "iosSimulatorTests", "KadreConsumerIos",
     "platform=iOS Simulator,name=iPad Pro 11-inch (M5),OS=27.0",
     xcresultDirectory.get().dir("ios.xcresult"),
+    skipTesting = listOf(
+        "KadreConsumerIosTests/KadreSwiftUIConsumerTests/testLaunchGatedSwiftUISceneHostsTheWrapperAndAttachesOnce",
+    ),
 )
 val tvosSimulatorTests = consumerTestTask(
     "tvosSimulatorTests", "KadreConsumerTvOs",
     "platform=tvOS Simulator,name=Apple TV 4K (3rd generation),OS=27.0",
     xcresultDirectory.get().dir("tvos.xcresult"),
+    skipTesting = listOf(
+        "KadreConsumerTvOsTests/KadreSwiftUIConsumerTests/testLaunchGatedSwiftUISceneHostsTheWrapperAndAttachesOnce",
+    ),
+)
+
+// Les runs DÉDIÉS du lancement gated SwiftUI — une famille chacun, le même bundle.
+val iosSimulatorGatedSwiftuiTests = gatedSwiftuiTestTask(
+    "iosSimulatorGatedSwiftuiTests", "KadreConsumerIos",
+    "platform=iOS Simulator,name=iPad Pro 11-inch (M5),OS=27.0",
+    xcresultDirectory.get().dir("ios-gated.xcresult"),
+    onlyTesting = "KadreConsumerIosTests/KadreSwiftUIConsumerTests/testLaunchGatedSwiftUISceneHostsTheWrapperAndAttachesOnce",
+)
+val tvosSimulatorGatedSwiftuiTests = gatedSwiftuiTestTask(
+    "tvosSimulatorGatedSwiftuiTests", "KadreConsumerTvOs",
+    "platform=tvOS Simulator,name=Apple TV 4K (3rd generation),OS=27.0",
+    xcresultDirectory.get().dir("tvos-gated.xcresult"),
+    onlyTesting = "KadreConsumerTvOsTests/KadreSwiftUIConsumerTests/testLaunchGatedSwiftUISceneHostsTheWrapperAndAttachesOnce",
+)
+
+// Les exports JUnit par famille — standard ET gated (répertoires distincts : le même
+// TEST-<suite>.xml des deux runs ne doit JAMAIS fusionner, l'identité testcase serait
+// dupliquée et la gate refuserait).
+val junitDirectory = layout.buildDirectory.dir("junit")
+val junitGatedDirectory = layout.buildDirectory.dir("junit-gated")
+val iosSimulatorJunitExport = consumerJunitExportTask(
+    "iosSimulatorJunitExport", xcresultDirectory.get().dir("ios.xcresult"),
+    junitDirectory.get().dir("iosSimulatorArm64"), iosSimulatorTests,
+)
+val tvosSimulatorJunitExport = consumerJunitExportTask(
+    "tvosSimulatorJunitExport", xcresultDirectory.get().dir("tvos.xcresult"),
+    junitDirectory.get().dir("tvosSimulatorArm64"), tvosSimulatorTests,
+)
+val iosSimulatorGatedJunitExport = consumerJunitExportTask(
+    "iosSimulatorGatedJunitExport", xcresultDirectory.get().dir("ios-gated.xcresult"),
+    junitGatedDirectory.get().dir("iosSimulatorArm64"), iosSimulatorGatedSwiftuiTests,
+)
+val tvosSimulatorGatedJunitExport = consumerJunitExportTask(
+    "tvosSimulatorGatedJunitExport", xcresultDirectory.get().dir("tvos-gated.xcresult"),
+    junitGatedDirectory.get().dir("tvosSimulatorArm64"), tvosSimulatorGatedSwiftuiTests,
 )
 
 tasks.named("check") {
     group = "verification"
-    description = "Runs both simulator families of the external swift consumer."
-    dependsOn(iosSimulatorTests, tvosSimulatorTests)
+    description = "Runs both simulator families of the external swift consumer (standard + gated SwiftUI launch) and exports their JUnit evidence."
+    dependsOn(
+        iosSimulatorTests, tvosSimulatorTests,
+        iosSimulatorGatedSwiftuiTests, tvosSimulatorGatedSwiftuiTests,
+        iosSimulatorJunitExport, tvosSimulatorJunitExport,
+        iosSimulatorGatedJunitExport, tvosSimulatorGatedJunitExport,
+    )
 }

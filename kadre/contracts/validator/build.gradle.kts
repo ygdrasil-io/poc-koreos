@@ -18,7 +18,7 @@ kotlin {
 
 val jvmMain = kotlin.targets.getByName("jvm").compilations.getByName("main")
 val webContractIds = listOf("BCK-001", "BCK-002", "BCK-003", "BCK-004", "BCK-005", "BCK-006", "BCK-007", "BCK-008", "BCK-009", "BCK-010", "BCK-011", "INT-002", "INT-003", "INT-004")
-val uikitContractIds = listOf("BCK-012", "BCK-013", "BCK-014", "BCK-015", "BCK-016", "BCK-020", "BCK-021", "BCK-022", "BCK-023", "BCK-024", "BCK-026", "BCK-027", "BCK-028", "WIN-009")
+val uikitContractIds = listOf("BCK-012", "BCK-013", "BCK-014", "BCK-015", "BCK-016", "BCK-018", "BCK-019", "BCK-020", "BCK-021", "BCK-022", "BCK-023", "BCK-024", "BCK-026", "BCK-027", "BCK-028", "WIN-009")
 val appKitContractIds = listOf(
     "APK-001", "APK-002", "APK-003", "APK-004", "APK-005", "APK-006",
     "APK-007", "APK-008", "APK-009", "APK-010", "APK-011", "APK-012",
@@ -451,7 +451,9 @@ val browserContractEvidenceTasks = listOf("js", "wasmJs").map { target ->
 // (survol) et clavier/gestes sur les DEUX familles ; BCK-024 phase 6 — la session texte
 // sur le receiver natif caché, les DEUX familles ; BCK-026 phase 7 — la destination de
 // drop native UIKit sur les DEUX familles : scénarios de flux sur iOS, sonde d'absence
-// sur tvOS où UIDropInteraction est API_UNAVAILABLE) : preuve O3
+// sur tvOS où UIDropInteraction est API_UNAVAILABLE ; BCK-018/BCK-019 phase 10 — la
+// façade Swift KadreHost et les consumers Swift depuis leurs PROPRES artefacts, preuve
+// produite par l'agrégateur kadre/consumers/swift sur les MÊMES destinations) : preuve O3
 // produite par xcodebuild sur simulateurs (:kadre:contracts:driver:uikit:simulatorTests),
 // exportée en JUnit par tools/xctest_to_junit.py. Miroir du bloc AppKit ci-dessus, par target
 // famille. BCK-014 (multi-scène iPadOS), BCK-016 (rotation iPadOS) et BCK-021 (scènes
@@ -493,6 +495,41 @@ val uikitPlatformJunitCopies = uikitTargets.associate { (target, _) ->
         into(copiedReportDirectory)
     }
 }
+// Les rapports JUnit du CONSUMER Swift externe (BCK-018/BCK-019) : produits par
+// l'agrégateur kadre/consumers/swift — un build Gradle SÉPARÉ (aucun dependsOn inter-build
+// possible ; le script de gate l'exécute AVANT la validation, avec -PkadreRepository/
+// -PkadreVersion contre le repository contractTest). Le Sync les copie près des preuves du
+// driver, exactement comme les JUnit platform ci-dessus. Deux répertoires par famille :
+// le run STANDARD (`build/junit`, scénarios de façade et de consumer) et le run DÉDIÉ du
+// lancement gated SwiftUI (`build/junit-gated` — la gate ne peut être armée qu'au
+// lancement du process ; le standard l'exclut par -skip-testing pour ne JAMAIS porter de
+// cas skipped, que la gate contractuelle refuse).
+val uikitConsumerJunitCopies = uikitTargets.associate { (target, _) ->
+    val capitalized = target.replaceFirstChar { it.uppercase() }
+    val consumerReportDirectory = rootProject.file("kadre/consumers/swift/build/junit/$target")
+    val copiedReportDirectory = rootProject.file(
+        "kadre/contracts/driver/uikit/build/contract-evidence/$target/test-results/${target}ConsumerTest",
+    )
+    target to tasks.register<Sync>("sync${capitalized}ConsumerJunitForContractEvidence") {
+        group = "verification"
+        description = "Copies $target consumer JUnit reports beside the UIKit driver evidence."
+        from(consumerReportDirectory)
+        into(copiedReportDirectory)
+    }
+}
+val uikitConsumerGatedJunitCopies = uikitTargets.associate { (target, _) ->
+    val capitalized = target.replaceFirstChar { it.uppercase() }
+    val consumerGatedReportDirectory = rootProject.file("kadre/consumers/swift/build/junit-gated/$target")
+    val copiedReportDirectory = rootProject.file(
+        "kadre/contracts/driver/uikit/build/contract-evidence/$target/test-results/${target}ConsumerTestGated",
+    )
+    target to tasks.register<Sync>("sync${capitalized}ConsumerGatedJunitForContractEvidence") {
+        group = "verification"
+        description = "Copies $target gated consumer JUnit reports beside the UIKit driver evidence."
+        from(consumerGatedReportDirectory)
+        into(copiedReportDirectory)
+    }
+}
 val uikitContractEvidenceTasks = activeUikitContractIds.flatMap { id ->
     uikitTargets.mapNotNull { (target, junitExportTask) ->
         if (target !in uikitRequiredTargetsByContractId[id].orEmpty()) return@mapNotNull null
@@ -502,19 +539,30 @@ val uikitContractEvidenceTasks = activeUikitContractIds.flatMap { id ->
         // d'artefacts — ils vivent donc sous build/contract-evidence/<target>/test-results.
         val junitDirectory = artifactDirectory.resolve("test-results/$target")
         val uikitPlatformJunitDirectory = artifactDirectory.resolve("test-results/${target}UikitTest")
+        val uikitConsumerJunitDirectory = artifactDirectory.resolve("test-results/${target}ConsumerTest")
+        val uikitConsumerGatedJunitDirectory = artifactDirectory.resolve("test-results/${target}ConsumerTestGated")
         tasks.register<JavaExec>("generateUikit${id.replace("-", "")}${capitalized}ContractEvidence") {
             group = "verification"
             description = "Generates and validates $id evidence from the $target UIKit simulator JUnit reports."
-            dependsOn("jvmMainClasses", ":kadre:contracts:driver:uikit:$junitExportTask", uikitPlatformJunitCopies.getValue(target))
+            dependsOn(
+                "jvmMainClasses",
+                ":kadre:contracts:driver:uikit:$junitExportTask",
+                uikitPlatformJunitCopies.getValue(target),
+                uikitConsumerJunitCopies.getValue(target),
+                uikitConsumerGatedJunitCopies.getValue(target),
+            )
             classpath(jvmMain.output.allOutputs, jvmMain.runtimeDependencyFiles)
             mainClass.set("org.graphiks.kadre.contracts.GenerateContractEvidenceKt")
             val output = artifactDirectory.resolve("contract-evidence/$id.json")
             args(
                 uikitContractRegistry.absolutePath,
                 uikitContractMapping.absolutePath,
-                listOf(junitDirectory, uikitPlatformJunitDirectory).joinToString(
-                    separator = System.getProperty("path.separator"),
-                ) { it.absolutePath },
+                listOf(
+                    junitDirectory,
+                    uikitPlatformJunitDirectory,
+                    uikitConsumerJunitDirectory,
+                    uikitConsumerGatedJunitDirectory,
+                ).joinToString(separator = System.getProperty("path.separator")) { it.absolutePath },
                 output.absolutePath,
                 contractEvidenceCommit.get(),
                 id,
@@ -525,6 +573,8 @@ val uikitContractEvidenceTasks = activeUikitContractIds.flatMap { id ->
             inputs.file(uikitContractMapping)
             inputs.dir(junitDirectory)
             inputs.dir(uikitPlatformJunitDirectory)
+            inputs.dir(uikitConsumerJunitDirectory)
+            inputs.dir(uikitConsumerGatedJunitDirectory)
             inputs.property("contractCommit", contractEvidenceCommit)
             inputs.property("contractTarget", target)
             inputs.property("contractAdapter", uikitContractAdapter)
@@ -554,9 +604,12 @@ val uikitContractValidateTasks = uikitTargets.map { (target, _) ->
             "junit",
             targetGateIds.joinToString(separator = ","),
             artifactDirectory.absolutePath,
-            listOf("test-results/$target", "test-results/${target}UikitTest").joinToString(
-                separator = System.getProperty("path.separator"),
-            ),
+            listOf(
+                "test-results/$target",
+                "test-results/${target}UikitTest",
+                "test-results/${target}ConsumerTest",
+                "test-results/${target}ConsumerTestGated",
+            ).joinToString(separator = System.getProperty("path.separator")),
         )
         inputs.file(uikitContractRegistry)
         inputs.file(uikitContractMapping)
@@ -565,7 +618,15 @@ val uikitContractValidateTasks = uikitTargets.map { (target, _) ->
         inputs.property("contractTarget", target)
         inputs.property("contractExecutions", "junit")
         inputs.property("contractGateIds", targetGateIds)
-        inputs.property("junitReportRelativeDirectories", listOf("test-results/$target", "test-results/${target}UikitTest"))
+        inputs.property(
+            "junitReportRelativeDirectories",
+            listOf(
+                "test-results/$target",
+                "test-results/${target}UikitTest",
+                "test-results/${target}ConsumerTest",
+                "test-results/${target}ConsumerTestGated",
+            ),
+        )
     }
 }
 
