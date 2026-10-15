@@ -1,38 +1,51 @@
 # Livraison conjointe Win32 phase 4
 
-Kadre : base initiale `09a29b0a`, rebased sur `8ed94a54` (UIKit phase 9),
+Kadre : base initiale `09a29b0a`, rebased sur `c4a6fa83` (UIKit phases 9/10),
 branche `codex/win32-phase-4-input`.
 KFFI : base `67bb7b1`, branche `feat/win32-phase-4-input`, commits
 `a6af6f1`, `5ad1fee` et `4a6a5e7`. Le checkout KFFI utilisé ici est
 `.worktrees/kffi-phase4` (ignoré par Git Kadre).
 
-## Reproduire la validation JVM Windows
+[KFFI #126](https://github.com/Graphiks-org/kffi/pull/126) est fusionnée au
+commit `38d43178`. Sa [publication automatique](https://github.com/Graphiks-org/kffi/actions/runs/38794806277)
+a réussi ; le catalogue Kadre épingle désormais
+`kffi-win32:1.0.0-20261015.194029-58`.
 
-JDK 25 et bureau interactif Windows requis. Dans le checkout KFFI :
+## Reproduire avec le snapshot publié
+
+JDK 25 et bureau interactif Windows requis. Depuis le checkout Kadre :
+
+```powershell
+.\gradlew.bat :kadre:backend:win32:win32ContractTests :kadre:runtime:jvmTest :kadre:platform:desktop:jvmTest :kadre:contracts:validator:jvmTest :kadre:contracts:validator:generateWin32ContractEvidence --refresh-dependencies --console=plain
+.\gradlew.bat :kadre:backend:win32:dependencyInsight --dependency kffi --configuration jvmRuntimeClasspath --console=plain
+```
+
+Gate avec watchdog sous Git Bash :
+
+```bash
+scripts/test-kadre-win32-contracts.sh
+```
+
+`dependencyInsight` résout `kffi-win32` et `kffi-win32-jvm` au build distant
+`20261015.194029-58`, puis `kffi` et `kffi-jvm` au build
+`20261015.194029-80` de cette publication. Ce chemin consomme les véritables
+métadonnées KMP/JVM de Central Portal, sans propriété de développement ni
+repository Maven local.
+
+## Alternative locale de développement
+
+La validation initiale précédant la publication utilisait les deux checkouts
+ensemble. Dans KFFI :
 
 ```powershell
 $env:KFFI_WIN32_INTEGRATION='1'
-.\gradlew.bat :kffi:jvmTest :kffi-win32:jvmTest --configure-on-demand --console=plain
 .\scripts\publish-win32-local.ps1
 ```
 
-Dans le checkout Kadre :
-
-```powershell
-.\gradlew.bat :kadre:backend:win32:win32ContractTests :kadre:runtime:jvmTest :kadre:platform:desktop:jvmTest :kadre:contracts:validator:jvmTest :kadre:contracts:validator:generateWin32ContractEvidence '-PkadreKffiLocal=true' '-PkadreKffiWin32Version=1.0.0-win32-phase4-local-SNAPSHOT' --console=plain
-.\gradlew.bat :kadre:backend:win32:dependencyInsight --dependency kffi-win32 --configuration jvmRuntimeClasspath '-PkadreKffiLocal=true' '-PkadreKffiWin32Version=1.0.0-win32-phase4-local-SNAPSHOT'
-```
-
-Gate avec watchdog sous Git Bash (mêmes propriétés pour tests et preuves) :
-
-```bash
-scripts/test-kadre-win32-contracts.sh -PkadreKffiLocal=true -PkadreKffiWin32Version=1.0.0-win32-phase4-local-SNAPSHOT
-```
-
-`dependencyInsight` résout explicitement `kffi-win32` et `kffi-win32-jvm`
-à `1.0.0-win32-phase4-local-SNAPSHOT`, puis `kffi-jvm` de cette même version.
-Le repository local est filtré sur ces quatre modules ; la résolution par
-défaut reste celle du catalogue versionné.
+Dans Kadre, ajouter explicitement `-PkadreKffiLocal=true` et
+`-PkadreKffiWin32Version=1.0.0-win32-phase4-local-SNAPSHOT` aux commandes.
+Le repository local est filtré sur les quatre modules KFFI concernés et
+reste désactivé par défaut.
 
 Les coordonnées locales sont un alias de test des JAR construits et testés
 avec `releaseVersion=1.0.0-SNAPSHOT` : `Kffi.VERSION` reste `1.0.0`, conformément
@@ -42,11 +55,14 @@ runtime. Le helper exécute les deux suites JVM avant de publier ces JAR.
 ## Preuves et portée
 
 Les suites complètes Windows, runtime, Desktop et validateur passent.
-Dernière passe après revue : **74 tests portables Win32, 22 natifs Win32,
+Dernière passe avec le snapshot distant, après rebase UIKit phase 10 :
+**74 tests portables Win32, 22 natifs Win32,
 418 runtime, 18 Desktop et 70 du validateur**, sans échec ni skip.
 KFFI : 110 tests core et 22 Win32, sans échec ni skip, avec l'intégration native
-activée. Les preuves Kadre sont générées pour W32-001 à W32-011, BCK-025,
-SES-002 et PMP-001 : **14 JSON non vides**.
+activée lors de la livraison conjointe initiale. Les preuves Kadre sont
+générées pour W32-001 à W32-011, BCK-025, SES-002 et PMP-001 :
+**14 JSON non vides**. Le registre global des contrats est également validé
+après la résolution du conflit, en conservant les contrats UIKit activés.
 
 Le test public `publicDesktopApplicationOpensFromAWorkerAndObservesNativeInput`
 utilise le vrai provider découvert par Desktop, ouvre depuis les coroutines
@@ -132,9 +148,8 @@ deux JAR publiés correspondent aux JAR testés. Son alias de test ne change pas
 
 ## Publication distante
 
-La publication Maven locale demandée est effectuée. Aucune publication
-Central ni fusion automatique n'est incluse. La PR Kadre dépend de la PR
-KFFI et reste en draft tant qu'un snapshot distant contenant ces wrappers
-n'est pas publié puis épinglé dans le catalogue Kadre. Les jobs distants
-qui utilisent encore l'ancien snapshot ne constituent pas une validation
-de cette paire locale.
+La publication distante a été réalisée par le workflow KFFI après la fusion
+de #126 par le demandeur. Le prérequis KFFI-WIN32-001 est clos : son snapshot
+est publié, épinglé et consommé sans Maven local. Le conflit de registre avec
+UIKit phase 10 est résolu en conservant BCK-018/BCK-019 actifs ainsi que
+W32-009/010/011. La validation Windows porte sur cette base intégrée.

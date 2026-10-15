@@ -1,8 +1,8 @@
 # Adapter Win32 — tranches 1 à 4
 
 Hôte exercé : Windows 11 x64, bureau interactif, JVM 25. Les nouveaux wrappers
-KFFI de phase 4 sont validés par publication Maven locale ; leur publication
-distante reste un prérequis de fusion Kadre. Voir
+KFFI de phase 4 sont publiés après la fusion de KFFI #126 et consommés depuis
+le snapshot distant épinglé `1.0.0-20261015.194029-58`. Voir
 [validation conjointe](../WIN32-PHASE-4-VALIDATION.md).
 
 | Fonction | État livré | Gate et limite |

@@ -5,11 +5,12 @@ pas une preuve de saisie physique. Exécuter dans une session de bureau Windows
 avec les layouts et périphériques indiqués ; noter OS, JDK, DPI, layout HKL,
 réglages wheel, résultat et extrait du journal par scénario.
 
-Après la publication KFFI locale décrite dans
-[la validation](WIN32-PHASE-4-VALIDATION.md), lancer depuis PowerShell :
+Avec le snapshot KFFI publié et épinglé dans le catalogue, lancer depuis
+PowerShell (l'alternative locale est décrite dans
+[la validation](WIN32-PHASE-4-VALIDATION.md)) :
 
 ```powershell
-.\gradlew.bat :kadre:backend:win32:win32InputManual '-PkadreKffiLocal=true' '-PkadreKffiWin32Version=1.0.0-win32-phase4-local-SNAPSHOT' --console=plain
+.\gradlew.bat :kadre:backend:win32:win32InputManual --console=plain
 ```
 
 Le harness écrit les touches entrées et les snapshots dans son terminal ; ne
