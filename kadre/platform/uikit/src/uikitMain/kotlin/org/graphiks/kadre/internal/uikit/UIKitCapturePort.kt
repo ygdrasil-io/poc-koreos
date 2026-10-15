@@ -676,9 +676,18 @@ internal class UIKitCapturePort(
             tickSources = surfaceTickSources,
             tickInterval = request.minimumFrameInterval ?: UIKIT_SURFACE_DEFAULT_TICK_INTERVAL,
             closedGate = ::isClosed,
-            onEnded = { lock.withLock { liveSurfaceReservation = null } },
+            onEnded = {
+                // La déposition du slot EST la fin de vie de la réservation (exactement
+                // une fois, close du port compris — ruling 4) : le compteur du driver la
+                // porte (le retour à zéro des réservations en vol au repos).
+                lock.withLock { liveSurfaceReservation = null }
+                UIKitCaptureDiagnostics.surfaceReservationEnded()
+            },
         )
         lock.withLock { liveSurfaceReservation = reservation }
+        // L'ADMISSION réelle d'un bras renderer — comptée (le delta du driver prouve
+        // « un open, une réservation » et l'absence de réservation derrière un refus).
+        UIKitCaptureDiagnostics.surfaceReservationOpened()
         return KadreResult.Success(reservation)
     }
 

@@ -29,6 +29,7 @@ import org.graphiks.kadre.input.TextInputSession
 import org.graphiks.kadre.input.TextRange
 import org.graphiks.kadre.internal.runtime.RuntimeLock
 import org.graphiks.kadre.internal.runtime.withLock
+import org.graphiks.kadre.internal.uikit.UIKitCaptureDiagnostics
 import org.graphiks.kadre.internal.uikit.UIKitDisplayCount
 import org.graphiks.kadre.internal.uikit.UIKitDropCount
 import org.graphiks.kadre.internal.uikit.UIKitGestureCount
@@ -38,6 +39,9 @@ import org.graphiks.kadre.internal.uikit.UIKitTextInputCount
 import org.graphiks.kadre.internal.uikit.UIKitTextInputReceiver
 import org.graphiks.kadre.internal.uikit.UIKitTouchCount
 import org.graphiks.kadre.internal.uikit.UIKitTouchRecognizer
+import org.graphiks.kadre.capture.CaptureRequest
+import org.graphiks.kadre.capture.CaptureSourceId
+import org.graphiks.kadre.capture.CaptureTarget
 import org.graphiks.kadre.surface.HostSurface
 import org.graphiks.kadre.surface.SurfaceEvent
 import kotlinx.cinterop.ObjCClass
@@ -81,6 +85,24 @@ public class KadreUikitLeaseProbe(
 public class KadreUikitClosedLeaseProbe(
     public val unsupportedPlatformSurfaceAccess: Boolean,
     public val outcomeDescription: String,
+)
+
+/**
+ * Résultat du probe de refus de cible SOURCE capture ([KadreUikitSurfaceDriver
+ * .captureSourceRefusalProbe], phase 9 Task 6) — la forme consommatrice du refus
+ * `open(Source)` : le type `CaptureSourceId` est OPAQUE hors du module Kotlin (aucun
+ * constructeur exporté, le registre du runtime fabrique ses ids process-side) — Swift ne
+ * peut pas le NOMMER, la sonde copie les faits (la même discipline que les probes de bail) :
+ * [sourceOpenInvalidRequestTarget] porte LA forme `InvalidRequest("request.target")`,
+ * [refreshSourcesUnsupported] la même opération que la table (`Unsupported
+ * (CaptureRefreshSources)`) ; les descriptions embarquent la forme exacte pour l'échec CI.
+ */
+public class KadreUikitSourceRefusalProbe(
+    public val sourceOpenInvalidRequestTarget: Boolean,
+    public val sourceOpenOutcomeDescription: String,
+    public val refreshSourcesUnsupported: Boolean,
+    public val refreshSourcesOutcomeDescription: String,
+    public val threw: String?,
 )
 
 /**
@@ -533,6 +555,57 @@ public object KadreUikitSurfaceDriver {
         )
     }
 
+    /**
+     * Le probe de refus de la cible SOURCE capture (phase 9, Task 6) : le chemin
+     * CONSOMMATEUR réel (`scope.capture.open` + `scope.capture.refreshSources`), avec un id
+     * construit côté Kotlin — `CaptureSourceId` est internal-constructor au module, la
+     * sonde est la SEULE route Swift de cette cible (la discipline des probes de bail).
+     * La sonde ne fabrique RIEN : l'id ne peut rien désigner (aucune source énumérée
+     * n'existe sur uikit/tvOS), le refus attendu est la forme consommatrice
+     * `InvalidRequest("request.target")` (le pin T5, cité tel quel en évidence) et
+     * `Unsupported(CaptureRefreshSources)` pour l'énumération.
+     */
+    public fun captureSourceRefusalProbe(scope: KadreScope): KadreUikitSourceRefusalProbe {
+        var sourceInvalidRequestTarget = false
+        var sourceDescription = ""
+        var refreshUnsupported = false
+        var refreshDescription = ""
+        var threw: String? = null
+        try {
+            runBlocking {
+                val manager = scope.capture
+                val revision = manager.state.value.revision
+                when (val opened = manager.open(CaptureRequest(target = CaptureTarget.Source(CaptureSourceId(1L), revision)))) {
+                    is KadreResult.Failure -> {
+                        sourceDescription = opened.reason.toString()
+                        sourceInvalidRequestTarget =
+                            (opened.reason as? KadreFailure.InvalidRequest)?.field == "request.target"
+                    }
+
+                    is KadreResult.Success -> sourceDescription = "unexpected success: ${opened.value}"
+                }
+                when (val refreshed = manager.refreshSources()) {
+                    is KadreResult.Failure -> {
+                        refreshDescription = refreshed.reason.toString()
+                        refreshUnsupported =
+                            (refreshed.reason as? KadreFailure.Unsupported)?.operation == KadreOperation.CaptureRefreshSources
+                    }
+
+                    is KadreResult.Success -> refreshDescription = "unexpected success: ${refreshed.value}"
+                }
+            }
+        } catch (t: Throwable) {
+            threw = t.toString()
+        }
+        return KadreUikitSourceRefusalProbe(
+            sourceOpenInvalidRequestTarget = sourceInvalidRequestTarget,
+            sourceOpenOutcomeDescription = sourceDescription,
+            refreshSourcesUnsupported = refreshUnsupported,
+            refreshSourcesOutcomeDescription = refreshDescription,
+            threw = threw,
+        )
+    }
+
     /** Ouvre une capture d'événements de [surface] (le fixture la draine en pompant le run loop). */
     public fun captureEvents(surface: HostSurface): KadreUikitSurfaceEventCapture =
         KadreUikitSurfaceEventCapture.start(surface)
@@ -548,6 +621,26 @@ public object KadreUikitSurfaceDriver {
     /** Le compteur des re-lectures d'observation réellement exécutées (le compteur du fixture). */
     public val observationCount: Long
         get() = UIKitObservationCount.total()
+
+    /**
+     * Les compteurs CAPTURE process-wide (phase 9, Task 6 — le miroir capture du pattern
+     * drop-counter) : les réservations surface ADMISES par le port capture depuis le
+     * lancement du process. Les scénarios driver comparent des DELTAS (un open → +1,
+     * un refus d'admission → 0) — jamais des valeurs absolues.
+     */
+    public val captureSurfaceReservationsOpened: Long
+        get() = UIKitCaptureDiagnostics.snapshot().surfaceReservationsOpened
+
+    /** Les réservations surface EN VOL (ouvertes − terminées) — zéro au repos de tout cycle propre. */
+    public val captureSurfaceReservationsInFlight: Long
+        get() = UIKitCaptureDiagnostics.snapshot().surfaceReservationsInFlight
+
+    /**
+     * Les frames surface réellement LIVRÉES au listener (un appel listener = un compteur) —
+     * le gel de ce compte après le terminal est l'assertion « zéro frame après l'arrêt ».
+     */
+    public val captureSurfaceFramesDelivered: Long
+        get() = UIKitCaptureDiagnostics.snapshot().surfaceFramesDelivered
 
     /**
      * Le probe STRUCTUREL du touch (phase 5, Task 2) : l'état des recognizers de [view] lu du

@@ -701,6 +701,9 @@ internal class UIKitSurfaceCapturePump(
             terminate(CaptureOutcome.Failed(pipeFailure("unexpected-plane-layout")))
             return
         }
+        // LE compteur du driver : un appel listener = un compteur — le gel du compte après
+        // le terminal est l'assertion « zéro frame après l'arrêt » du driver (Task 6).
+        UIKitCaptureDiagnostics.surfaceFrameDelivered()
         listener?.onFrame(frame)
     }
 
