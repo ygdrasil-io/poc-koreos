@@ -101,6 +101,44 @@ Règle de la §4 du registre, valable pour toute release tvOS : chaque capabilit
 non exerçable sur simulateur porte sa validation physique, ou la promesse est retirée
 explicitement — jamais l'inverse.
 
+## Le sample de coexistence : l'app consumer, scène tvOS gated
+
+La coexistence décrite ci-dessus EST RUNNABLE : la scène tvOS gated du consumer
+(`kadre/consumers/swift/consumer-app/apps/Tvos/ConsumerTvOsCoexistenceScene.swift`,
+[`README.md`](../consumers/swift/README.md)) pose trois `UIButton` natifs **focusables**
+autour de la surface Kadre (`KadreHostViewController` en enfant — sa view EST la
+surfaceView) dans LA MÊME hiérarchie, et le focus reste au MOTEUR SYSTÈME :
+
+- le gate `KADRE_CONSUMER_TVOS_COEXIST` (env ou argument, mécanique phase 1
+  `DriverSceneRequest`) bascule la fenêtre tvOS sur la scène — l'attach est
+  controller-driven, la factory est la factory TENUE (session longue) ;
+- **la surface n'est PAS un participant au focus** (`canBecomeFocused == false` — une
+  UIView plate, aucune binding Kadre) — l'honnêteté est une ASSERTION
+  (`ConsumerTvOsCoexistenceTests`, famille tvOS du run standard consumer) : la navigation
+  appartient aux contrôles natifs, pilotée par le moteur de focus UIKit ;
+- la saisie passe par le chemin système livré (BCK-024) : le bouton « Saisie » appelle
+  `SurfaceInput.openTextInput` via `ConsumerTextInputBridge` (le module applicatif Kotlin
+  du consumer — les artefacts publiés, jamais `project(...)`) ; le receiver natif Kadre
+  reçoit la saisie du système et les événements `Replace` s'affichent au label ;
+- la manette est conditionnelle par matériel (BCK-027 côté app) : les `GCController`
+  sont classés `extendedGamepad` (manette complète) / `microGamepad` (télécommande
+  micro-only) — la règle de Kadre, la réponse d'affichage app-owned.
+
+Sur le SIMULATEUR, la navigation « télécommande » s'exerce avec les touches mappées par
+le Simulator (flèches = directions, retour chariot = sélection) — l'émulation du
+Simulator, pas un bout réel ; le BOUT de la Siri Remote reste le charter manuel de la
+section ci-dessus. Lancement (après un `validateSwiftConsumer` qui a installé l'app) :
+
+```bash
+SIMCTL_CHILD_KADRE_CONSUMER_TVOS_COEXIST=1 \
+  xcrun simctl launch "Apple TV 4K (3rd generation)" org.graphiks.kadre.consumer.tvos
+```
+
+Ce que la scène PROUVE automatiquement (tests consumer tvOS) : l'attach exactement une
+fois, la coexistence hiérarchique, l'exclusion de la surface du focus, l'ouverture/
+fermeture de la session texte par le consumer. Ce qu'elle NE prouve PAS (et ne prétend
+pas) : aucun binding télécommande Kadre — il n'existe pas.
+
 ## La préuve séparée est obligatoire
 
 Une preuve iOS ne couvre pas tvOS. Les tests partagés (`KadreUikitInputTests`,

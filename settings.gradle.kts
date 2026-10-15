@@ -113,10 +113,23 @@ include(":kadre:samples:hello-kadre")
 // contractuel est déclaré plus haut (filtré sur les groupes kadre) — les coordonnées
 // `-android` visent les AAR publiés ; la coordonnée par défaut de l'umbrella serait
 // substituée par le projet `:kadre` (substitution automatique group:name du build).
-include(":kadre:samples:android-hello-window")
-include(":kadre:samples:android-hello-touch")
-include(":kadre:samples:android-compose-showcase")
-// Le tour Kadre sur Android (phase 11) : la visite commune (`desk-tour`) sur le host
-// Android — sources core/ + ui/ partagées par `kotlin.srcDir`, host de notes
-// capability-off, managers Android réels. Même pattern `consumers/android`.
-include(":kadre:samples:android-kadre-tour")
+//
+// Leur COMPILATION DE SCRIPT exige les flags AGP 9 (`systemProp.android.builtInKotlin/
+// newDsl=false` du gradle.properties racine — la forme DSL héritée y est écrite). Toute
+// invocation DIRECTE les lit ; un sous-build GradleBuild IMBRIQUÉ qui reconfigure le
+// racine (l'assemblage XCFramework du consumer swift — la seule navigation racine du
+// dépôt) ne transmet AUCUN systemProp (ni -D, ni startParameter.systemPropertiesArgs,
+// ni le gradle.properties parent — Gradle 9.8, vérifié) : ces scripts ne compilent plus
+// dans CE contexte-là. Le property `kadre.androidSamples=false` les exclut de la
+// configuration du sous-build, qui n'en résout AUCUNE tâche. Défaut : inclus.
+val androidSamplesEnabled: Boolean =
+    providers.gradleProperty("kadre.androidSamples").getOrElse("true") != "false"
+if (androidSamplesEnabled) {
+    include(":kadre:samples:android-hello-window")
+    include(":kadre:samples:android-hello-touch")
+    include(":kadre:samples:android-compose-showcase")
+    // Le tour Kadre sur Android (phase 11) : la visite commune (`desk-tour`) sur le host
+    // Android — sources core/ + ui/ partagées par `kotlin.srcDir`, host de notes
+    // capability-off, managers Android réels. Même pattern `consumers/android`.
+    include(":kadre:samples:android-kadre-tour")
+}

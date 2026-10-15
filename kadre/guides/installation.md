@@ -65,6 +65,13 @@ Rien n'empêche un consumer HORS de ce dépôt de consommer le même repository 
 les mêmes `-P` : c'est la forme d'intégration prévue ; une publication officielle
 signée reste une décision future, non prise.
 
+**Le sample minimal EST cette app** : le consumer `kadre/consumers/swift` est l'intégration
+de référence runnable — la décision de forme (pas de module `samples/` dupliqué) et le
+sample tvOS de coexistence (contrôles natifs focusables autour de la surface, focus
+SYSTÈME, saisie BCK-024, manette conditionnelle par matériel) sont documentés dans
+[`kadre/consumers/swift/README.md`](../consumers/swift/README.md) ; le récit tvOS,
+dans [`tvos.md`](tvos.md).
+
 ## Lien statique et la contrainte anti-duplication
 
 L'app consumer lie DEUX archives statiques : le framework du module applicatif (la

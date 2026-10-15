@@ -77,6 +77,14 @@ val assembleKadreUikitXCFramework by tasks.registering(GradleBuild::class) {
     description = "Assembles the static KadreUikit.xcframework from the repository root build."
     dir = buildRootDirectory.asFile
     tasks = listOf(":kadre:platform:uikit:assembleKadreUikitDebugXCFramework")
+    // Le sous-build IMBRIQUÉ reconfigure le build racine ENTIer — or un GradleBuild ne
+    // transmet AUCUN systemProp (ni -D, ni startParameter.systemPropertiesArgs, ni le
+    // gradle.properties parent — Gradle 9.8, vérifié) : la compilation des scripts
+    // android samples (forme DSL héritée, phases 9/11) y échoue sur un démon frais. Le
+    // property racine `kadre.androidSamples=false` les exclut de la configuration de CE
+    // sous-build, qui n'en résout AUCUNE tâche (voir settings.gradle.kts). Miroir du
+    // startParameter.projectProperties déjà posé sur linkConsumerSimulatorFrameworks.
+    startParameter.projectProperties = mapOf("kadre.androidSamples" to "false")
 }
 
 /** xcodegen régénère le projet à chaque évolution de la spec — le .xcodeproj GÉNÉRÉ est

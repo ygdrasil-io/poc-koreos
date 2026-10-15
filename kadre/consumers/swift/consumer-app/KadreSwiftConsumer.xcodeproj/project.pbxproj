@@ -18,6 +18,7 @@
 		365982D31FA91D2BB4E7B844 /* KadreHostViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = F74111C6AD9FAE2CC5507A13 /* KadreHostViewController.swift */; };
 		3BB69E0C97DC45C1ED3DC917 /* ConsumerSceneStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 25E713565274B5F3FB7C73B8 /* ConsumerSceneStore.swift */; };
 		3F101F03F77C3E0EADDB594A /* KadreSessionHandle.swift in Sources */ = {isa = PBXBuildFile; fileRef = F975FC47FBD3DB5CFF2A7FBA /* KadreSessionHandle.swift */; };
+		422DE0BB414C698758A8F477 /* ConsumerTvOsCoexistenceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CAC39B2EB9FD68D688FBF839 /* ConsumerTvOsCoexistenceTests.swift */; };
 		4E9564B58747EF8EC9D70023 /* ConsumerSceneDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = AEF94E2574734A0415EC0C77 /* ConsumerSceneDelegate.swift */; };
 		52AD0BBD6F36FBE6B06FD4FC /* ConsumerSceneStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 25E713565274B5F3FB7C73B8 /* ConsumerSceneStore.swift */; };
 		5771BC8EBC2F476166B51991 /* KadreHostMappingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9746AFF6F5941E955EF7E507 /* KadreHostMappingTests.swift */; };
@@ -38,11 +39,13 @@
 		AA63C146043A842DA0837A6C /* KadreUikit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = C519437100752691E90A2286 /* KadreUikit.framework */; };
 		AA9F6895E23B2961393FAA4E /* KadrePolicyProfile.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2099391B1E94214A33D5E9D /* KadrePolicyProfile.swift */; };
 		ACA98B8834F3E5C067A6D538 /* KadreSessionHandle.swift in Sources */ = {isa = PBXBuildFile; fileRef = F975FC47FBD3DB5CFF2A7FBA /* KadreSessionHandle.swift */; };
+		B4AF7DAE63BE3BF539009488 /* ConsumerTvOsCoexistenceScene.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020CC77955EBACAAA3ECA558 /* ConsumerTvOsCoexistenceScene.swift */; };
 		B635F909F940BF46CD4FF84F /* KadreStopReason.swift in Sources */ = {isa = PBXBuildFile; fileRef = 43292E2F01EC2BE56DD3ECBB /* KadreStopReason.swift */; };
 		BC381571A86A2D603C9ECF6B /* KadreObservation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3EFB79C1FC1BE8CC2220B8A5 /* KadreObservation.swift */; };
 		BF4A7641306C227B0EEA090D /* KadreHostViewControllerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5091D3B9311E4EBA258B613 /* KadreHostViewControllerTests.swift */; };
 		CBA48DF770D697F37BF5EC87 /* KadreHostViewControllerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5091D3B9311E4EBA258B613 /* KadreHostViewControllerTests.swift */; };
 		CF84D40964253FFFBC4E0AF0 /* KadreSessionHandleTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0EA793E21F2B7620A1B8E2C /* KadreSessionHandleTests.swift */; };
+		D09B7826DF5A8F133854EE36 /* ConsumerTvOsCoexistenceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CAC39B2EB9FD68D688FBF839 /* ConsumerTvOsCoexistenceTests.swift */; };
 		D1D4DF1403C354538DDB34F7 /* KadreError.swift in Sources */ = {isa = PBXBuildFile; fileRef = DE821343EB3E67D401204C31 /* KadreError.swift */; };
 		DAD88231A0D5B416EA559611 /* ConsumerRepresentable.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6DF6771CECE957FB55ABEEC5 /* ConsumerRepresentable.swift */; };
 		E032A49F1EDA725F50420028 /* KadreHost.swift in Sources */ = {isa = PBXBuildFile; fileRef = B164056271954F9C33E3CF6D /* KadreHost.swift */; };
@@ -73,6 +76,7 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		020CC77955EBACAAA3ECA558 /* ConsumerTvOsCoexistenceScene.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConsumerTvOsCoexistenceScene.swift; sourceTree = "<group>"; };
 		0B77F4A2FEB55244717BAB07 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		0C8CEBD7FBDF9EA1B987DC63 /* KadreFailure.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KadreFailure.swift; sourceTree = "<group>"; };
 		1FA20495BE515A582FA06497 /* KadreSessionSnapshot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KadreSessionSnapshot.swift; sourceTree = "<group>"; };
@@ -96,6 +100,7 @@
 		AEF94E2574734A0415EC0C77 /* ConsumerSceneDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConsumerSceneDelegate.swift; sourceTree = "<group>"; };
 		B164056271954F9C33E3CF6D /* KadreHost.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KadreHost.swift; sourceTree = "<group>"; };
 		C519437100752691E90A2286 /* KadreUikit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = KadreUikit.framework; path = "../consumer-kmp/build/bin/iosSimulatorArm64/debugFramework/KadreUikit.framework"; sourceTree = "<group>"; };
+		CAC39B2EB9FD68D688FBF839 /* ConsumerTvOsCoexistenceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConsumerTvOsCoexistenceTests.swift; sourceTree = "<group>"; };
 		CC0E86EF723AF24C7EFC4806 /* ConsumerAttachTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConsumerAttachTests.swift; sourceTree = "<group>"; };
 		DDCA87CC094641E6BBF5AFDB /* MainApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainApp.swift; sourceTree = "<group>"; };
 		DE821343EB3E67D401204C31 /* KadreError.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KadreError.swift; sourceTree = "<group>"; };
@@ -192,6 +197,7 @@
 			isa = PBXGroup;
 			children = (
 				CC0E86EF723AF24C7EFC4806 /* ConsumerAttachTests.swift */,
+				CAC39B2EB9FD68D688FBF839 /* ConsumerTvOsCoexistenceTests.swift */,
 				9746AFF6F5941E955EF7E507 /* KadreHostMappingTests.swift */,
 				A5091D3B9311E4EBA258B613 /* KadreHostViewControllerTests.swift */,
 				E0EA793E21F2B7620A1B8E2C /* KadreSessionHandleTests.swift */,
@@ -204,6 +210,7 @@
 		E5ABFD44127109FBAB90D42F /* Tvos */ = {
 			isa = PBXGroup;
 			children = (
+				020CC77955EBACAAA3ECA558 /* ConsumerTvOsCoexistenceScene.swift */,
 				0B77F4A2FEB55244717BAB07 /* Info.plist */,
 				56FED9FFB75A8D992C0EA32A /* MainApp.swift */,
 			);
@@ -341,6 +348,7 @@
 				7F7A5A82773F05E027BB472B /* ConsumerSceneDelegate.swift in Sources */,
 				3BB69E0C97DC45C1ED3DC917 /* ConsumerSceneStore.swift in Sources */,
 				E0FBAD035E2EFFE75AC651B4 /* ConsumerSwiftUIScene.swift in Sources */,
+				B4AF7DAE63BE3BF539009488 /* ConsumerTvOsCoexistenceScene.swift in Sources */,
 				E4C5E08B0041F058B00A736A /* KadreError.swift in Sources */,
 				3296AB0337BE37630A758186 /* KadreFailure.swift in Sources */,
 				70E88A01CA1B6D2E5498BA09 /* KadreFailureMapping.swift in Sources */,
@@ -386,6 +394,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				A40ADB47A4104994215F671F /* ConsumerAttachTests.swift in Sources */,
+				422DE0BB414C698758A8F477 /* ConsumerTvOsCoexistenceTests.swift in Sources */,
 				5771BC8EBC2F476166B51991 /* KadreHostMappingTests.swift in Sources */,
 				BF4A7641306C227B0EEA090D /* KadreHostViewControllerTests.swift in Sources */,
 				E53D6F5B4BA0D9160B6E8244 /* KadreSessionHandleTests.swift in Sources */,
@@ -398,6 +407,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				A310B8A469A73E53038F91A3 /* ConsumerAttachTests.swift in Sources */,
+				D09B7826DF5A8F133854EE36 /* ConsumerTvOsCoexistenceTests.swift in Sources */,
 				F295E4F378E6304E9414AA46 /* KadreHostMappingTests.swift in Sources */,
 				CBA48DF770D697F37BF5EC87 /* KadreHostViewControllerTests.swift in Sources */,
 				CF84D40964253FFFBC4E0AF0 /* KadreSessionHandleTests.swift in Sources */,
