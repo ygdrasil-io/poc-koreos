@@ -600,7 +600,8 @@ internal class UIKitCapturePort(
      * ReplayKit documentées (sortie 32BGRA, curseur système composé, affichage entier) avec la
      * disponibilité LUE ; la fenêtre est le refus structurel ; la surface porte les contraintes
      * de la voie renderer mesurée (Rgba8, le propre buffer de la vue ne compose jamais de
-     * pointeur, région non promise dans ce squelette) ; énumération et picker sont les refus
+     * pointeur, région non promise — la pompe livrée snapshotte la vue ENTIÈRE, aucun
+     * primitif de sous-rect n'existe dans le pump) ; énumération et picker sont les refus
      * structurels — l'inventaire est `Unavailable(même échec)`, JAMAIS `HostPickerOnly`.
      */
     private fun captureCapabilities(recorderAvailable: Boolean): CaptureCapabilities = CaptureCapabilities(

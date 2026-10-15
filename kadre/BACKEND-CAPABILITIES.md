@@ -118,7 +118,10 @@ roadmap dit « conserver le chemin non supporté », et les frames ReplayKit ne 
 JAMAIS livrées sur Simulator (mesuré : la complétion du démarrage ne vient pas, zéro frame,
 jamais maquillé) — la preuve de frames est le charter manuel sur device ; la dépréciation
 SDK 27 des formes ReplayKit au profit de ScreenCaptureKit est surfacée et la migration
-SCStream reste une question de roadmap. `Source`, la fenêtre et l'énumération sont les
+SCStream reste une question de roadmap ; sur tvOS, ces absences sont de COMPILE —
+`cameraEnabled`/`setCameraEnabled` ne figurent pas dans le knm tvOS et
+`RPSystemBroadcastPickerView` en est absent, interdit partout (vérifiés au spike T1,
+strings knm). `Source`, la fenêtre et l'énumération sont les
 absences exactes : aucune primitive in-process n'énumère les surfaces capturables — `window`
 `Unsupported(CaptureOpen)`, `sourceEnumeration` `Unsupported(CaptureRefreshSources)`,
 inventaire `Unavailable(même échec)`, JAMAIS `HostPickerOnly` (le web l'annonce parce qu'un
