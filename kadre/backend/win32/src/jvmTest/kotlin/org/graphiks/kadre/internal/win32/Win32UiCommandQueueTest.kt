@@ -13,6 +13,15 @@ import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
 class Win32UiCommandQueueTest {
+    @Test fun aMutationAdmittedByTheOwnerStillWaitsForTheNextPumpTurn() {
+        var calls = 0
+        val queue = Win32UiCommandQueue({ true }, { true })
+        queue.defer({ calls++ }, { throw it })
+        assertEquals(0, calls, "WindowCommandPort is called under the runtime lock; native callbacks must wait until it returns")
+        queue.drain()
+        assertEquals(1, calls)
+        queue.close()
+    }
     @Test
     fun stoppingWorkersReleasesEveryWaiterEvenWhenAFailureCallbackThrowsAndAllowsOwnerCleanup() {
         val owner = Thread.currentThread()

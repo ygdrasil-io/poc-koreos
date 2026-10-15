@@ -32,6 +32,8 @@ internal const val WM_PAINT: Int = 0x000F
 internal const val WM_SHOWWINDOW: Int = 0x0018
 internal const val WM_ACTIVATE: Int = 0x0006
 internal const val WM_DPICHANGED: Int = 0x02E0
+internal const val WM_MOVE: Int = 0x0003
+internal const val WM_GETMINMAXINFO: Int = 0x0024
 
 /** One UI owner for native peers, input normalization and synchronous interactions. */
 internal class Win32WindowRuntimeDriver internal constructor(
@@ -44,6 +46,7 @@ internal class Win32WindowRuntimeDriver internal constructor(
     private val closed = AtomicBoolean(false)
     private val entries = ConcurrentHashMap<WindowRequestId, Win32WindowEntry>()
     private val queuedOpens = ConcurrentHashMap<WindowRequestId, WindowOpenCommand>()
+    private val queuedUpdates = ConcurrentHashMap<WindowOperationId, WindowUpdateCommand>()
     private val pendingRedraws = mutableMapOf<SurfaceId, java.util.ArrayDeque<SurfaceRedrawGeneration>>()
 
     internal val manager: RuntimeWindowManager = RuntimeWindowManager(
@@ -94,6 +97,10 @@ internal class Win32WindowRuntimeDriver internal constructor(
             window = created
             val entry = Win32WindowEntry(created, command)
             check(entries.putIfAbsent(command.requestId, entry) == null) { "duplicate window request" }
+            entry.mutations = Win32WindowMutations(port, created.hwnd) { isLive(entry) }
+            entry.mutating = true
+            val effectiveSpec = entry.mutations.initialize(command.spec)
+            entry.mutating = false
             router = Win32InputRouter(created.hwnd, command.surfaceId, port, manager::acceptSurfaceStimulus,
                 { event -> dispatchInteraction(entry, event) },
                 { !closed.get() && !entry.closeAdmitted && entries[command.requestId] === entry })
@@ -101,12 +108,13 @@ internal class Win32WindowRuntimeDriver internal constructor(
             val snapshot = initialSnapshot(created.hwnd)
             command.commit(
                 owner = Win32PeerOwner(entry),
-                effectiveSpec = command.spec.copy(contentSize = snapshot.metrics.logicalSize),
+                effectiveSpec = effectiveSpec,
                 initialSurfaceSnapshot = snapshot,
                 onSurfaceReady = {
                     if (!entry.closeAdmitted && entries[command.requestId] === entry) {
                         router.activate()
                         port.showWindow(created.hwnd)
+                        observeWindow(entry)
                     }
                 },
             )
@@ -121,20 +129,15 @@ internal class Win32WindowRuntimeDriver internal constructor(
     private fun handleMessage(command: WindowOpenCommand, hwnd: Long, message: Int, wParam: Long, lParam: Long): Long =
         when (message) {
             WM_CLOSE -> { command.closeRequested(); 0L }
-            WM_DESTROY -> { entries[command.requestId]?.input?.close(); command.nativeClosed(); 0L }
-            WM_SIZE, WM_DPICHANGED -> {
-                // Minimized windows can report a zero client size. There is no positive geometry to admit.
-                val size = port.readClientPhysicalSize(hwnd)
-                if (size.first > 0 && size.second > 0) {
-                    val scale = port.readScaleFactor(hwnd)
-                    val current = manager.state.value.windows.firstOrNull { it.id == command.windowId }?.state?.value
-                    if (current != null) manager.acceptWindowGeometryObservation(command.windowId,
-                        current.copy(contentSize = LogicalSize(size.first / scale, size.second / scale)))
-                    manager.acceptSurfaceStimulus(SurfaceStimulus.MetricsChanged(command.surfaceId,
-                        SurfaceMetrics(LogicalSize(size.first / scale, size.second / scale), PhysicalSize(size.first, size.second),
-                            scale, LogicalInsets(0.0, 0.0, 0.0, 0.0))))
-                }
+            WM_DESTROY -> { entries[command.requestId]?.let { it.closeAdmitted = true; it.input?.close() }; command.nativeClosed(); 0L }
+            WM_SIZE, WM_MOVE, WM_DPICHANGED -> {
+                entries[command.requestId]?.takeIf { !it.mutating }?.let(::observeWindow)
                 0L
+            }
+            WM_GETMINMAXINFO -> {
+                val result = port.defWindowProc(hwnd, message, wParam, lParam)
+                entries[command.requestId]?.let { if (isLive(it)) it.mutations.trackLimits(lParam) }
+                result
             }
             WM_SHOWWINDOW -> {
                 manager.acceptSurfaceStimulus(SurfaceStimulus.VisibilityChanged(command.surfaceId,
@@ -160,6 +163,29 @@ internal class Win32WindowRuntimeDriver internal constructor(
             SurfaceFocus.Unfocused, SurfaceVisibility.Hidden, SurfaceOcclusion.Unknown,
             SurfaceAppearance(SurfaceTheme.Light, SurfaceContrast.Normal),
         )
+    }
+
+    private fun isLive(entry: Win32WindowEntry): Boolean = !closed.get() && !entry.closeAdmitted && entries[entry.command.requestId] === entry
+
+    private fun currentState(entry: Win32WindowEntry): WindowState? = manager.state.value.windows
+        .firstOrNull { it.id == entry.command.windowId }?.state?.value
+
+    private fun observeWindow(entry: Win32WindowEntry) {
+        if (!isLive(entry)) return
+        val current = currentState(entry) ?: return
+        val actual = entry.mutations.readState(current)
+        manager.acceptWindowGeometryObservation(entry.command.windowId, actual)
+        publishMetrics(entry)
+    }
+
+    private fun publishMetrics(entry: Win32WindowEntry) {
+        if (!isLive(entry)) return
+        val size = port.readClientPhysicalSize(entry.window.hwnd)
+        if (size.first <= 0 || size.second <= 0) return
+        val scale = port.readScaleFactor(entry.window.hwnd)
+        manager.acceptSurfaceStimulus(SurfaceStimulus.MetricsChanged(entry.command.surfaceId,
+            SurfaceMetrics(LogicalSize(size.first / scale, size.second / scale), PhysicalSize(size.first, size.second),
+                scale, LogicalInsets(0.0, 0.0, 0.0, 0.0))))
     }
 
     private fun dispatchInteraction(entry: Win32WindowEntry, event: RuntimeSynchronousInteraction) {
@@ -219,9 +245,42 @@ internal class Win32WindowRuntimeDriver internal constructor(
     }
 
     override fun requestUpdate(command: WindowUpdateCommand) {
-        command.rejected(IllegalStateException("Win32 window mutations arrive in phase 5"))
+        queuedUpdates[command.operationId] = command
+        val reject: (Throwable) -> Unit = { failure ->
+            if (queuedUpdates.remove(command.operationId) != null) command.failed(platformFailure("update-window", "ui-command-failed"), failure)
+        }
+        try {
+            port.deferWindowMutation({ if (queuedUpdates.remove(command.operationId) != null) applyWindowUpdate(command) }, reject)
+        } catch (failure: Throwable) { reject(failure) }
     }
-    override fun requestUpdateCancellation(command: WindowUpdateCancellationCommand): WindowUpdateCancellationOutcome = WindowUpdateCancellationOutcome.TooLate
+    override fun requestUpdateCancellation(command: WindowUpdateCancellationCommand): WindowUpdateCancellationOutcome =
+        if (queuedUpdates.remove(command.operationId) != null) WindowUpdateCancellationOutcome.CancelledBeforeCommit else WindowUpdateCancellationOutcome.TooLate
+
+    private fun applyWindowUpdate(command: WindowUpdateCommand) {
+        val entry = entries.values.firstOrNull { it.command.windowId == command.windowId }
+        if (entry == null || !isLive(entry)) { command.failed(KadreFailure.Closed(KadreResourceKind.Window)); return }
+        val current = currentState(entry) ?: run { command.failed(KadreFailure.Closed(KadreResourceKind.Window)); return }
+        entry.mutating = true
+        try {
+            val actual = entry.mutations.apply(command.update, current)
+            if (!isLive(entry)) { command.failed(KadreFailure.Closed(KadreResourceKind.Window)); return }
+            publishMetrics(entry)
+            command.applied(actual)
+        } catch (failure: Throwable) {
+            if (!isLive(entry)) command.failed(KadreFailure.Closed(KadreResourceKind.Window))
+            else if (entry.mutations.nativeCommitStarted) {
+                try {
+                    val actual = entry.mutations.readState(current)
+                    publishMetrics(entry)
+                    command.committedFailure(actual, command.operationId, platformFailure("update-window", "native-mutation-failed"), diagnosticCause = failure)
+                } catch (readFailure: Throwable) {
+                    command.failed(platformFailure("update-window", "native-readback-failed"), readFailure)
+                    failureReporter.report(readFailure)
+                }
+            } else command.failed(if (failure is IllegalArgumentException) KadreFailure.InvalidRequest("windowUpdate")
+                else platformFailure("update-window", "native-preflight-failed"), failure)
+        } finally { entry.mutating = false }
+    }
 
     override fun requestRedraw(command: SurfaceRedrawCommand): KadreResult<Unit> {
         if (!port.isMainThread()) return port.onMainThread { requestRedraw(command) }
@@ -253,6 +312,8 @@ internal class Win32WindowRuntimeDriver internal constructor(
         if (!closed.compareAndSet(false, true)) return
         queuedOpens.values.toList().forEach { it.fail(KadreFailure.Closed(KadreResourceKind.Host)) }
         queuedOpens.clear()
+        queuedUpdates.values.toList().forEach { it.failed(KadreFailure.Closed(KadreResourceKind.Host)) }
+        queuedUpdates.clear()
         entries.values.toList().forEach { entry ->
             runCatching { entry.input?.close() }
             runCatching { port.destroyWindow(entry.window.hwnd) }
@@ -292,10 +353,14 @@ private fun platformFailure(operation: String, detail: String): KadreFailure.Pla
 internal class Win32WindowEntry(val window: Win32TopLevelWindowHandle, val command: WindowOpenCommand) {
     var closeAdmitted = false
     var input: Win32InputRouter? = null
+    lateinit var mutations: Win32WindowMutations
+    var mutating: Boolean = false
 }
 
 internal object Win32WindowRuntimeDriverFactory {
-    val supportedWindowUpdateCapabilities: Set<WindowProperty> = setOf(WindowProperty.Title, WindowProperty.ContentSize, WindowProperty.Decorations)
+    val supportedWindowUpdateCapabilities: Set<WindowProperty> = setOf(WindowProperty.Title, WindowProperty.ContentSize,
+        WindowProperty.MinimumSize, WindowProperty.MaximumSize, WindowProperty.Resizable, WindowProperty.OuterPosition,
+        WindowProperty.Decorations, WindowProperty.SystemButtons)
     fun create(
         port: Win32NativeHostPort,
         resources: ResourceBudgetPolicy,

@@ -16,6 +16,13 @@ internal open class DeterministicWin32HostPort : Win32NativeHostPort {
     private val topLevelHandlers = java.util.concurrent.ConcurrentHashMap<Long, (Long, Int, Long, Long) -> Long>()
     val scriptedClientSize = java.util.concurrent.ConcurrentHashMap<Long, Pair<Int, Int>>()
     val scriptedScaleFactor = java.util.concurrent.ConcurrentHashMap<Long, Double>()
+    val windowTitles = java.util.concurrent.ConcurrentHashMap<Long, String>()
+    val windowStyles = java.util.concurrent.ConcurrentHashMap<Long, Int>()
+    val windowBounds = java.util.concurrent.ConcurrentHashMap<Long, org.graphiks.kadre.surface.PhysicalRect>()
+    var beforeTitleWrite: (() -> Unit)? = null
+    var afterStyleWrite: (() -> Unit)? = null
+    var titleReadback: ((String) -> String)? = null
+    var beforeBoundsWrite: (() -> Unit)? = null
     val invalidateCount = AtomicInteger(0)
     val validateCount = AtomicInteger(0)
     val paintCount = AtomicInteger(0)
@@ -45,6 +52,7 @@ internal open class DeterministicWin32HostPort : Win32NativeHostPort {
         try { block() } catch (failure: Throwable) { onFailure(failure) }
     }
     override fun stopWorkerCommands() = Unit
+    override fun deferWindowMutation(block: () -> Unit, onFailure: (Throwable) -> Unit) = postOnMainThread(block, onFailure)
 
     override fun createControlWindow(
         messageHandler: (id: Int, wParam: Long, lParam: Long) -> Long,
@@ -116,6 +124,9 @@ internal open class DeterministicWin32HostPort : Win32NativeHostPort {
             val hwnd = nextTopLevelHwnd++
             topLevelHandlers[hwnd] = messageHandler
             topLevelHwndOrder.add(hwnd)
+            windowTitles[hwnd] = title
+            windowStyles[hwnd] = 0x00cf0000
+            windowBounds[hwnd] = org.graphiks.kadre.surface.PhysicalRect(org.graphiks.kadre.surface.PhysicalPoint(0, 0), org.graphiks.kadre.surface.PhysicalSize(width + 16, height + 39))
             return Win32TopLevelWindowHandle(hwnd)
         }
     }
@@ -185,6 +196,36 @@ internal open class DeterministicWin32HostPort : Win32NativeHostPort {
         scriptedClientSize[hwnd] ?: (800 to 600)
 
     override fun readScaleFactor(hwnd: Long): Double = scriptedScaleFactor[hwnd] ?: 1.0
+
+    override fun readWindow(hwnd: Long): Win32WindowReadback {
+        errorIfWindowUnknown(hwnd)
+        return Win32WindowReadback(windowTitles.getValue(hwnd), windowBounds.getValue(hwnd), readClientPhysicalSize(hwnd), windowStyles.getValue(hwnd), readScaleFactor(hwnd))
+    }
+    override fun setWindowTitle(hwnd: Long, title: String) {
+        beforeTitleWrite?.invoke()
+        errorIfWindowUnknown(hwnd)
+        windowTitles[hwnd] = titleReadback?.invoke(title) ?: title
+    }
+    override fun setWindowStyle(hwnd: Long, style: Int) {
+        errorIfWindowUnknown(hwnd)
+        windowStyles[hwnd] = style
+        afterStyleWrite?.invoke()
+    }
+    override fun setWindowBounds(hwnd: Long, bounds: org.graphiks.kadre.surface.PhysicalRect, frameChanged: Boolean) {
+        beforeBoundsWrite?.invoke()
+        errorIfWindowUnknown(hwnd)
+        windowBounds[hwnd] = bounds
+        val frame = frame(hwnd)
+        scriptedClientSize[hwnd] = (bounds.size.width - frame.first) to (bounds.size.height - frame.second)
+        dispatchWindowMessage(hwnd, WM_SIZE)
+    }
+    private fun frame(hwnd: Long): Pair<Int, Int> = if (windowStyles.getValue(hwnd) and 0x00c00000 != 0) 16 to 39 else 0 to 0
+    override fun outerSizeForClient(hwnd: Long, width: Int, height: Int): Pair<Int, Int> {
+        val frame = frame(hwnd)
+        return Math.addExact(width, frame.first) to Math.addExact(height, frame.second)
+    }
+    override fun monitorBounds(hwnd: Long) = org.graphiks.kadre.surface.PhysicalRect(org.graphiks.kadre.surface.PhysicalPoint(-1920, 0), org.graphiks.kadre.surface.PhysicalSize(1920, 1080))
+    override fun applyTrackLimits(hwnd: Long, lParam: Long, minimum: org.graphiks.kadre.surface.PhysicalSize?, maximum: org.graphiks.kadre.surface.PhysicalSize?) = Unit
 
     override fun close() {
         destroyed = true

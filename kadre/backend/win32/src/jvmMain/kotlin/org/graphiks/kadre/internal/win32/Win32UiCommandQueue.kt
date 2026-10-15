@@ -26,6 +26,11 @@ internal class Win32UiCommandQueue(
         } else enqueue(Command({ try { block() } catch (failure: Throwable) { onFailure(failure) } }, onFailure))
     }
 
+    /** Always enqueue: mutation admission must return before native callbacks enter the runtime. */
+    fun defer(block: () -> Unit, onFailure: (Throwable) -> Unit) {
+        enqueue(Command({ try { block() } catch (failure: Throwable) { onFailure(failure) } }, onFailure))
+    }
+
     fun <T> invoke(block: () -> T): T {
         if (isUiThread()) {
             synchronized(lock) { check(!closed) { "Win32 UI command queue is closed" } }

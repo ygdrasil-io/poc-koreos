@@ -22,6 +22,10 @@ import org.graphiks.kffi.win32.managed.Win32ManagedWindow
 import org.graphiks.kffi.win32.managed.Win32Structs
 import org.graphiks.kffi.win32.managed.Win32Keyboard
 import org.graphiks.kffi.win32.managed.Win32Pointer
+import org.graphiks.kffi.win32.managed.Win32WindowProperties
+import org.graphiks.kadre.surface.PhysicalRect
+import org.graphiks.kadre.surface.PhysicalPoint
+import org.graphiks.kadre.surface.PhysicalSize
 import org.graphiks.kadre.input.KeyboardModifiers
 import org.graphiks.kadre.input.ModifierKey
 import java.lang.foreign.Arena
@@ -98,6 +102,7 @@ internal class KffiWin32HostPort : Win32NativeHostPort {
     }
 
     override fun <T> onMainThread(block: () -> T): T = commands.invoke(block)
+    override fun deferWindowMutation(block: () -> Unit, onFailure: (Throwable) -> Unit) = commands.defer(block, onFailure)
     override fun postOnMainThread(block: () -> Unit, onFailure: (Throwable) -> Unit) = commands.post(block, onFailure)
     override fun stopWorkerCommands() = commands.stopWorkerAdmission()
 
@@ -276,6 +281,33 @@ internal class KffiWin32HostPort : Win32NativeHostPort {
         if (!isMainThread()) return onMainThread { readScaleFactor(hwnd) }
         init()
         return GetDpiForWindow(MemorySegment.ofAddress(hwnd)) / 96.0
+    }
+
+    override fun readWindow(hwnd: Long): Win32WindowReadback = onMainThread {
+        val value = Win32WindowProperties.read(hwnd)
+        Win32WindowReadback(value.title,
+            PhysicalRect(PhysicalPoint(value.outer.x, value.outer.y), PhysicalSize(value.outer.width, value.outer.height)),
+            value.clientWidth to value.clientHeight, value.style, value.dpi / 96.0, value.minimized, value.maximized)
+    }
+    override fun setWindowTitle(hwnd: Long, title: String) { check(isMainThread()); Win32WindowProperties.setTitle(hwnd, title) }
+    override fun setWindowStyle(hwnd: Long, style: Int) { check(isMainThread()); Win32WindowProperties.setStyle(hwnd, style) }
+    override fun setWindowBounds(hwnd: Long, bounds: PhysicalRect, frameChanged: Boolean) {
+        check(isMainThread())
+        Win32WindowProperties.setBounds(hwnd, bounds.origin.x, bounds.origin.y, bounds.size.width, bounds.size.height, frameChanged)
+    }
+    override fun outerSizeForClient(hwnd: Long, width: Int, height: Int): Pair<Int, Int> {
+        check(isMainThread())
+        val size = Win32WindowProperties.outerSize(hwnd, width, height)
+        return size.width to size.height
+    }
+    override fun monitorBounds(hwnd: Long): PhysicalRect {
+        check(isMainThread())
+        val rect = Win32WindowProperties.monitorBounds(hwnd)
+        return PhysicalRect(PhysicalPoint(rect.x, rect.y), PhysicalSize(rect.width, rect.height))
+    }
+    override fun applyTrackLimits(hwnd: Long, lParam: Long, minimum: PhysicalSize?, maximum: PhysicalSize?) {
+        check(isMainThread())
+        Win32WindowProperties.applyTrackLimits(hwnd, lParam, minimum?.width, minimum?.height, maximum?.width, maximum?.height)
     }
 
     /** Diagnostic : GetWindowRect + IsIconic pour le placement réel du natif. */

@@ -15,6 +15,7 @@ internal interface Win32NativeHostPort : AutoCloseable {
     fun isMainThread(): Boolean
     fun <T> onMainThread(block: () -> T): T
     fun postOnMainThread(block: () -> Unit, onFailure: (Throwable) -> Unit)
+    fun deferWindowMutation(block: () -> Unit, onFailure: (Throwable) -> Unit)
     fun stopWorkerCommands()
     fun createControlWindow(messageHandler: (id: Int, wParam: Long, lParam: Long) -> Long): Win32ControlWindowHandle
     fun postWake(hwnd: Long): Boolean
@@ -44,9 +45,28 @@ internal interface Win32NativeHostPort : AutoCloseable {
     fun readClientPhysicalSize(hwnd: Long): Pair<Int, Int>
     fun readScaleFactor(hwnd: Long): Double
 
+    /** Copied property snapshots; all layouts and native buffers belong to KFFI. */
+    fun readWindow(hwnd: Long): Win32WindowReadback
+    fun setWindowTitle(hwnd: Long, title: String)
+    fun setWindowStyle(hwnd: Long, style: Int)
+    fun setWindowBounds(hwnd: Long, bounds: org.graphiks.kadre.surface.PhysicalRect, frameChanged: Boolean)
+    fun outerSizeForClient(hwnd: Long, width: Int, height: Int): Pair<Int, Int>
+    fun monitorBounds(hwnd: Long): org.graphiks.kadre.surface.PhysicalRect
+    fun applyTrackLimits(hwnd: Long, lParam: Long, minimum: org.graphiks.kadre.surface.PhysicalSize?, maximum: org.graphiks.kadre.surface.PhysicalSize?)
+
     fun showWindow(hwnd: Long)
     fun readKeyboardInput(hwnd: Long, message: Int, wParam: Long, lParam: Long): Win32KeyInput?
     fun trackMouseLeave(hwnd: Long)
     fun cancelMouseLeave(hwnd: Long)
     fun readWheelSettings(): Win32WheelSettings
 }
+
+internal data class Win32WindowReadback(
+    val title: String,
+    val outerBounds: org.graphiks.kadre.surface.PhysicalRect,
+    val clientSize: Pair<Int, Int>,
+    val style: Int,
+    val scale: Double,
+    val minimized: Boolean = false,
+    val maximized: Boolean = false,
+)
