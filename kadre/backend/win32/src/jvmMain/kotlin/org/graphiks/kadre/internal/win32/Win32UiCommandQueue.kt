@@ -17,6 +17,13 @@ internal class Win32UiCommandQueue(
 
     init { require(capacity > 0) }
 
+    fun post(block: () -> Unit, onFailure: (Throwable) -> Unit) {
+        if (isUiThread()) {
+            synchronized(lock) { check(!closed) { "Win32 UI command queue is closed" } }
+            try { block() } catch (failure: Throwable) { onFailure(failure) }
+        } else enqueue(Command({ try { block() } catch (failure: Throwable) { onFailure(failure) } }, onFailure))
+    }
+
     fun <T> invoke(block: () -> T): T {
         if (isUiThread()) {
             synchronized(lock) { check(!closed) { "Win32 UI command queue is closed" } }
@@ -24,20 +31,10 @@ internal class Win32UiCommandQueue(
         }
         val result = CompletableFuture<T>()
         val command = Command(
-            run = { try { result.complete(block()) } catch (failure: Throwable) { result.completeExceptionally(failure) }; Unit },
-            fail = { result.completeExceptionally(it); Unit },
+            run = { try { result.complete(block()) } catch (failure: Throwable) { result.completeExceptionally(failure) } },
+            fail = { result.completeExceptionally(it) },
         )
-        synchronized(lock) {
-            check(!closed) { "Win32 UI command queue is closed" }
-            if (commands.size >= capacity) throw RejectedExecutionException("Win32 UI command queue is full")
-            commands.addLast(command)
-        }
-        val wakeFailure = try {
-            if (wake()) null else IllegalStateException("Win32 UI command endpoint is not ready")
-        } catch (failure: Throwable) { failure }
-        if (wakeFailure != null && synchronized(lock) { commands.remove(command) }) {
-            command.fail(wakeFailure)
-        }
+        enqueue(command)
         return try {
             result.get()
         } catch (failure: ExecutionException) {
@@ -47,6 +44,18 @@ internal class Win32UiCommandQueue(
             Thread.currentThread().interrupt()
             throw failure
         }
+    }
+
+    private fun enqueue(command: Command) {
+        synchronized(lock) {
+            check(!closed) { "Win32 UI command queue is closed" }
+            if (commands.size >= capacity) throw RejectedExecutionException("Win32 UI command queue is full")
+            commands.addLast(command)
+        }
+        val wakeFailure = try {
+            if (wake()) null else IllegalStateException("Win32 UI command endpoint is not ready")
+        } catch (failure: Throwable) { failure }
+        if (wakeFailure != null && synchronized(lock) { commands.remove(command) }) command.fail(wakeFailure)
     }
 
     fun drain() {

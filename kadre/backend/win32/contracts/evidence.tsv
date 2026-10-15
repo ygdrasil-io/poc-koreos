@@ -47,3 +47,14 @@ W32-008	jvm	scenario	win32-redraw-coalesced-drain	org.graphiks.kadre.internal.wi
 W32-008	jvm	scenario	win32-redraw-closed-fails	org.graphiks.kadre.internal.win32.Win32SurfaceFlowTest	redrawOnClosedWindowFailsClosed[jvm]
 W32-008	jvm	sentinel	win32-no-paint-at-rest	org.graphiks.kadre.internal.win32.DeterministicWin32SurfacePortTest	paintDispatchRequiresPriorInvalidation[jvm]
 W32-007	jvm	sentinel	win32-no-requested-size-published	org.graphiks.kadre.internal.win32.Win32SurfaceNativeContractTest	programmaticResizePublishesReadBackMetrics
+W32-009	jvm	scenario	win32-keyboard-native-queue	org.graphiks.kadre.internal.win32.Win32InputNativeContractTest	postedKeyboardPublishesPhysicalKeysModifiersRepeatAndRelease
+W32-009	jvm	scenario	win32-keyboard-worker-public	org.graphiks.kadre.internal.win32.Win32InputNativeContractTest	publicDesktopApplicationOpensFromAWorkerAndObservesNativeInput
+W32-009	jvm	sentinel	win32-no-logical-layout-release-drift	org.graphiks.kadre.internal.win32.Win32InputFlowTest	keyboardRepeatAndLayoutChangeKeepOnePhysicalPressAndLogicalRelease[jvm]
+W32-010	jvm	scenario	win32-pointer-wheel-native-queue	org.graphiks.kadre.internal.win32.Win32InputNativeContractTest	postedPointerAndWheelReachThePublicLogicalInputLane
+W32-010	jvm	scenario	win32-input-metrics-installed	org.graphiks.kadre.internal.win32.Win32InputFlowTest	installedObserversAndInitialMetricsDescribeTheRealWindow[jvm]
+W32-010	jvm	sentinel	win32-no-page-wheel-units	org.graphiks.kadre.internal.win32.Win32InputFlowTest	wheelUsesSystemSettingsAndDoesNotInventPageUnits[jvm]
+W32-011	jvm	scenario	win32-native-focus-reset	org.graphiks.kadre.internal.win32.Win32InputNativeContractTest	postedFocusLossResetsHeldInputOnce
+W32-011	jvm	scenario	win32-input-defaults-effective	org.graphiks.kadre.internal.win32.Win32InputFlowTest	unhandledReturnAndSystemKeyDefaultsFollowTheEffectivePolicy[jvm]
+W32-011	jvm	scenario	win32-sync-open-window	org.graphiks.kadre.internal.win32.Win32InputFlowTest	synchronousKeyCanOpenAnotherWindowWithoutDuplicatingTheOrdinaryEvent[jvm]
+W32-011	jvm	scenario	win32-native-sync-open-window	org.graphiks.kadre.internal.win32.Win32InputNativeContractTest	nativeKeyCallbackCanOpenAnotherWindowWithoutLeavingAStalePressedKey
+W32-011	jvm	sentinel	win32-no-key-after-native-callback-close	org.graphiks.kadre.internal.win32.Win32InputNativeContractTest	nativeKeyCallbackClosesBeforeAnyOrdinaryPressCanEscape

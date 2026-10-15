@@ -14,6 +14,7 @@ internal class Win32ControlWindowHandle(val hwnd: Long)
 internal interface Win32NativeHostPort : AutoCloseable {
     fun isMainThread(): Boolean
     fun <T> onMainThread(block: () -> T): T
+    fun postOnMainThread(block: () -> Unit, onFailure: (Throwable) -> Unit)
     fun createControlWindow(messageHandler: (id: Int, wParam: Long, lParam: Long) -> Long): Win32ControlWindowHandle
     fun postWake(hwnd: Long): Boolean
     fun requestStopFromAnyone(hwnd: Long)

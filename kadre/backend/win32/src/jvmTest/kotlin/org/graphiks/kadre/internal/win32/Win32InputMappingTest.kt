@@ -18,6 +18,8 @@ class Win32InputMappingTest {
     }
 
     @Test fun extendedKeysKeepSideAndNumpadIdentity() {
+        assertEquals(PhysicalKey.Code(7, 0x53), win32PhysicalKey(key(0x45, 0x90, true)))
+        assertEquals(KeyLocation.Numpad, win32KeyLocation(key(0x45, 0x90, true)))
         assertEquals(PhysicalKey.Code(7, 0xe0), win32PhysicalKey(key(0x1d, 0x11)))
         assertEquals(PhysicalKey.Code(7, 0xe4), win32PhysicalKey(key(0x1d, 0x11, true)))
         assertEquals(KeyLocation.Left, win32KeyLocation(key(0x1d, 0x11)))

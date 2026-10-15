@@ -115,6 +115,7 @@ internal class RuntimeWindowSurface(
     private val lock = RuntimeLock()
     private val updateMutex = Mutex()
     private var currentState = initialState(initialSnapshot)
+    private var inputFocusGeneration = 0L
     private var redrawTicket: SurfaceRedrawGeneration? = null
     private var nextRedrawTicket = 0L
     private val publications = BoundedSurfaceScheduler(
@@ -443,7 +444,7 @@ internal class RuntimeWindowSurface(
         supported: Set<InteractionKind>,
         invokeNative: (InteractionAction) -> KadreResult<Unit>,
     ) {
-        val admitted = eventFactory(stamp)
+        val admitted = lock.withLock { eventFactory(stamp).copy(focusGeneration = inputFocusGeneration) }
         val stamped = admitted.event
         interactionDispatchLock.withLock {
             if (interactionDispatchActive) {
@@ -459,13 +460,23 @@ internal class RuntimeWindowSurface(
                         NativeInteractionOutcome.Now(invokeNative(action))
                     }
                 } finally {
-                    surfaceInput.acceptInteraction(stamped, admitted.pointerPressure, admitted.keyInput)
+                    publishInteractionInput(admitted)
                     while (true) {
                         val nested = deferredNestedInteractions.removeFirstOrNull() ?: break
-                        surfaceInput.acceptInteraction(nested.event, nested.pointerPressure, nested.keyInput)
+                        publishInteractionInput(nested)
                     }
                     interactionDispatchActive = false
                 }
+            }
+        }
+    }
+
+    private fun publishInteractionInput(admitted: DeferredInteraction) {
+        lock.withLock {
+            // A callback can transfer focus while opening another native window. Its later
+            // ordinary press belongs to the old focus epoch, even if focus has since returned.
+            if (currentState.attachment != SurfaceAttachmentState.Detached && admitted.focusGeneration == inputFocusGeneration) {
+                surfaceInput.acceptInteraction(admitted.event, admitted.pointerPressure, admitted.keyInput)
             }
         }
     }
@@ -650,6 +661,7 @@ internal class RuntimeWindowSurface(
 
     private fun focusPublicationLocked(focus: SurfaceFocus): SurfacePublication? {
         if (currentState.focus == focus) return null
+        if (focus == SurfaceFocus.Unfocused) inputFocusGeneration++
         currentState = currentState.copy(focus = focus, revision = currentState.revision.next())
         return SurfacePublication(
             state = currentState,
@@ -1200,6 +1212,7 @@ private data class DeferredInteraction(
     val event: InteractionEvent,
     val pointerPressure: Double?,
     val keyInput: RuntimeSynchronousInteraction.KeyPressed? = null,
+    val focusGeneration: Long = 0L,
 )
 
 private fun initialState(snapshot: SurfaceInitialSnapshot): SurfaceState = SurfaceState(

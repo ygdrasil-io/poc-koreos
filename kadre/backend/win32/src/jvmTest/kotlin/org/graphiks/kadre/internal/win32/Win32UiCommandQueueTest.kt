@@ -13,6 +13,45 @@ import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
 class Win32UiCommandQueueTest {
+    @Test
+    fun aQueuedWindowCanBeCancelledBeforeTheUiClaimsIt() {
+        val owner = Thread.currentThread()
+        val queue = Win32UiCommandQueue({ Thread.currentThread() === owner }, { true })
+        val port = object : DeterministicWin32HostPort() {
+            override fun isMainThread() = Thread.currentThread() === owner
+            override fun postOnMainThread(block: () -> Unit, onFailure: (Throwable) -> Unit) = queue.post(block, onFailure)
+            override fun <T> onMainThread(block: () -> T): T = queue.invoke(block)
+        }
+        val driver = Win32WindowRuntimeDriverFactory.create(port, org.graphiks.kadre.policy.KadrePolicies.Default.resources)
+        try {
+            val cancellation = worker {
+                kotlinx.coroutines.runBlocking {
+                    val request = kotlin.test.assertIs<org.graphiks.kadre.diagnostics.KadreResult.Success<org.graphiks.kadre.window.WindowRequest>>(
+                        driver.manager.requestWindow(org.graphiks.kadre.window.WindowSpec())).value
+                    request.cancel()
+                }
+            }.get(2, TimeUnit.SECONDS)
+            assertEquals(org.graphiks.kadre.window.WindowCancellationOutcome.CancelledBeforeCommit, cancellation)
+            queue.drain()
+            assertEquals(0, port.createdTopLevelWindows.get())
+        } finally { driver.close(); queue.close(); port.close() }
+    }
+
+    @Test
+    fun asynchronousAdmissionReturnsBeforeTheUiPublishesAndCloseRejectsPendingWork() {
+        val owner = Thread.currentThread()
+        val queue = Win32UiCommandQueue({ Thread.currentThread() === owner }, { true }, 2)
+        var ran = false
+        var rejected = false
+        worker { queue.post({ ran = true }, { rejected = true }) }.get(2, TimeUnit.SECONDS)
+        assertFalse(ran)
+        queue.drain()
+        assertTrue(ran)
+        worker { queue.post({ error("closed work must not run") }, { rejected = true }) }.get(2, TimeUnit.SECONDS)
+        queue.close()
+        assertTrue(rejected)
+    }
+
     private fun <T> worker(block: () -> T): CompletableFuture<T> = CompletableFuture<T>().also { result ->
         thread(isDaemon = true) {
             try { result.complete(block()) } catch (failure: Throwable) { result.completeExceptionally(failure) }

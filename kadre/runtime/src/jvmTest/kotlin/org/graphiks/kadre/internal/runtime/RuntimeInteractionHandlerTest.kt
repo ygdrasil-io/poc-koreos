@@ -442,6 +442,20 @@ class RuntimeInteractionHandlerTest {
     }
 
     @Test
+    fun focusLossDuringTheCallbackRevokesItsDeferredOrdinaryInputEvenIfFocusReturns() = runTest {
+        val surface = surface()
+        surface.accept(SurfaceStimulus.FocusChanged(surface.id, SurfaceFocus.Focused))
+        surface.installInteractionHandler(InteractionHandler { _, _ ->
+            surface.accept(SurfaceStimulus.FocusChanged(surface.id, SurfaceFocus.Unfocused))
+            surface.accept(SurfaceStimulus.FocusChanged(surface.id, SurfaceFocus.Focused))
+        })
+        surface.dispatchSynchronousInteraction(
+            RuntimeSynchronousInteraction.KeyPressed(org.graphiks.kadre.input.PhysicalKey.Code(7, 4)), emptySet(),
+        ) { KadreResult.Success(Unit) }
+        assertTrue(surface.input.state.value.keyboard.pressedKeys.isEmpty())
+    }
+
+    @Test
     fun closeSourceOutcomeOverflowFailsCurrentAndFutureCollectorsAndReleasesRegistration() = runTest {
         val surface = surface(deliveryPolicy = outcomePolicy(CollectorOverflowAction.CloseSource))
         val registration = surface.installInteractionHandler(moveHandler()).successValue()

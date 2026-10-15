@@ -43,6 +43,7 @@ internal class Win32WindowRuntimeDriver internal constructor(
 ) : AutoCloseable, WindowCommandPort, SurfaceCommandPort {
     private val closed = AtomicBoolean(false)
     private val entries = ConcurrentHashMap<WindowRequestId, Win32WindowEntry>()
+    private val queuedOpens = ConcurrentHashMap<WindowRequestId, WindowOpenCommand>()
     private val pendingRedraws = mutableMapOf<SurfaceId, java.util.ArrayDeque<SurfaceRedrawGeneration>>()
 
     internal val manager: RuntimeWindowManager = RuntimeWindowManager(
@@ -60,8 +61,14 @@ internal class Win32WindowRuntimeDriver internal constructor(
 
     override fun requestOpen(command: WindowOpenCommand) {
         if (!port.isMainThread()) {
-            try { port.onMainThread { requestOpen(command) } }
-            catch (failure: Throwable) { command.fail(platformFailure("open-window", "ui-command-failed")) }
+            // Runtime calls this SPI while admitting the request under its manager lock.
+            // Never wait here for a UI commit that needs that same lock.
+            queuedOpens[command.requestId] = command
+            val reject: (Throwable) -> Unit = {
+                if (queuedOpens.remove(command.requestId) != null) command.fail(platformFailure("open-window", "ui-command-failed"))
+            }
+            try { port.postOnMainThread({ if (queuedOpens.remove(command.requestId) != null) requestOpen(command) }, reject) }
+            catch (failure: Throwable) { reject(failure) }
             return
         }
         if (closed.get()) { command.fail(KadreFailure.Closed(KadreResourceKind.Host)); return }
@@ -123,6 +130,9 @@ internal class Win32WindowRuntimeDriver internal constructor(
                     val current = manager.state.value.windows.firstOrNull { it.id == command.windowId }?.state?.value
                     if (current != null) manager.acceptWindowGeometryObservation(command.windowId,
                         current.copy(contentSize = LogicalSize(size.first / scale, size.second / scale)))
+                    manager.acceptSurfaceStimulus(SurfaceStimulus.MetricsChanged(command.surfaceId,
+                        SurfaceMetrics(LogicalSize(size.first / scale, size.second / scale), PhysicalSize(size.first, size.second),
+                            scale, LogicalInsets(0.0, 0.0, 0.0, 0.0))))
                 }
                 0L
             }
@@ -171,7 +181,14 @@ internal class Win32WindowRuntimeDriver internal constructor(
     }
 
     override fun requestOpenedClose(command: OpenedWindowCloseCommand): OpenedWindowCloseOutcome {
-        if (!port.isMainThread()) return port.onMainThread { requestOpenedClose(command) }
+        if (!port.isMainThread()) {
+            if (!entries.containsKey(command.requestId)) return OpenedWindowCloseOutcome.PlatformFailure(
+                platformFailure("close-window", "missing-peer"))
+            // Completion is the nativeClosed stimulus. Blocking the application here prevents
+            // its cancellation when closing the last window starts the session shutdown.
+            port.postOnMainThread({ requestOpenedClose(command) }, failureReporter::report)
+            return OpenedWindowCloseOutcome.Accepted
+        }
         val entry = entries[command.requestId] ?: return OpenedWindowCloseOutcome.PlatformFailure(
             platformFailure("close-window", "missing-peer"))
         if (entry.closeAdmitted) return OpenedWindowCloseOutcome.NativeCloseAlreadyCommitted
@@ -185,7 +202,14 @@ internal class Win32WindowRuntimeDriver internal constructor(
     override fun closeRequestRejected(command: OpenedWindowCloseCommand): CloseRequestRejectionOutcome = CloseRequestRejectionOutcome.Rejected
 
     override fun requestPendingCancellation(command: PendingWindowCancellationCommand): PendingWindowCancellationOutcome {
-        if (!port.isMainThread()) return port.onMainThread { requestPendingCancellation(command) }
+        if (queuedOpens.remove(command.requestId) != null) return PendingWindowCancellationOutcome.CancelledBeforeCommit
+        if (!port.isMainThread()) {
+            port.postOnMainThread({
+                val entry = entries[command.requestId]
+                if (requestPendingCancellation(command) == PendingWindowCancellationOutcome.CancelledBeforeCommit) entry?.command?.nativeClosed()
+            }, failureReporter::report)
+            return PendingWindowCancellationOutcome.CancellationRequested
+        }
         val entry = entries[command.requestId] ?: return PendingWindowCancellationOutcome.TooLate
         if (entry.closeAdmitted) return PendingWindowCancellationOutcome.TooLate
         entries.remove(command.requestId)
@@ -227,6 +251,8 @@ internal class Win32WindowRuntimeDriver internal constructor(
     override fun close() {
         if (!port.isMainThread()) return port.onMainThread { close() }
         if (!closed.compareAndSet(false, true)) return
+        queuedOpens.values.toList().forEach { it.fail(KadreFailure.Closed(KadreResourceKind.Host)) }
+        queuedOpens.clear()
         entries.values.toList().forEach { entry ->
             runCatching { entry.input?.close() }
             runCatching { port.destroyWindow(entry.window.hwnd) }
@@ -237,6 +263,10 @@ internal class Win32WindowRuntimeDriver internal constructor(
 
     private inner class Win32PeerOwner(private val entry: Win32WindowEntry) : WindowPeerOwner, RuntimeDesktopWindowHandleAccess {
         override fun close() {
+            if (!port.isMainThread()) {
+                port.postOnMainThread({ close() }, failureReporter::report)
+                return
+            }
             port.onMainThread {
                 if (entries.remove(entry.command.requestId) != null) {
                     entry.closeAdmitted = true
