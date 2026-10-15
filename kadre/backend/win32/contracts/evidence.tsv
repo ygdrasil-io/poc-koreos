@@ -65,3 +65,12 @@ W32-012	jvm	sentinel	win32-no-local-observation-duplication	org.graphiks.kadre.i
 W32-012	jvm	sentinel	win32-no-update-after-cancel	org.graphiks.kadre.internal.win32.Win32WindowMutationTest	aWorkerCanCancelAQueuedUpdateBeforeTheUiClaimsIt[jvm]
 W32-013	jvm	scenario	win32-borderless-native-roundtrip	org.graphiks.kadre.internal.win32.Win32WindowMutationNativeContractTest	nativeBorderlessRoundTripRestoresTheExactWindowedStyleAndRectangle
 W32-013	jvm	sentinel	win32-failed-borderless-restores-windowed	org.graphiks.kadre.internal.win32.Win32WindowMutationTest	failedFullscreenEntryRestoresTheWindowedPeerBeforeReportingFailure[jvm]
+W32-014	jvm	scenario	win32-owned-properties-native	org.graphiks.kadre.internal.win32.Win32AdvancedWindowNativeContractTest	exactLevelsIconSlotsAndMonitorAffinityMatchNativeReadback
+W32-014	jvm	sentinel	win32-no-approximate-window-variants	org.graphiks.kadre.internal.win32.Win32AdvancedWindowTest	phaseFiveUnsupportedVariantsAreQualifiedWithoutApproximation[jvm]
+W32-015	jvm	scenario	win32-native-cursor-confinement	org.graphiks.kadre.internal.win32.Win32AdvancedWindowNativeContractTest	clientCursorUsesNativeHandlesAndClipReleasePreservesForeignOwnership
+W32-015	jvm	sentinel	win32-no-stale-confinement	org.graphiks.kadre.internal.win32.Win32AdvancedWindowTest	confinementLossRevokesTheLeaseAndNeverReacquiresOnFocusRegain[jvm]
+W32-015	jvm	sentinel	win32-no-unsupported-image-allocation	org.graphiks.kadre.internal.win32.Win32AdvancedWindowTest	encodedOrOversizedImagesAreRejectedBeforeNativeAllocation[jvm]
+W32-016	jvm	scenario	win32-native-window-modes	org.graphiks.kadre.internal.win32.Win32AdvancedWindowNativeContractTest	systemMinimizeMaximizeRestoreAndVisibilityPublishNativeObservations
+W32-016	jvm	scenario	win32-native-modal-menu	org.graphiks.kadre.internal.win32.Win32AdvancedWindowNativeContractTest	workerCommandExecutesInsideTheRealNativeSystemMenuLoop
+W32-016	jvm	scenario	win32-native-system-drag	org.graphiks.kadre.internal.win32.Win32AdvancedWindowNativeContractTest	moveAndResizeUseCopiedCoordinatesAndRealSystemModalLoops
+W32-016	jvm	sentinel	win32-no-stale-modal-pointer	org.graphiks.kadre.internal.win32.Win32AdvancedWindowTest	moveAndResizeAreOnlyAdmittedInsideALivePrimaryPointerCallback[jvm]

@@ -54,6 +54,17 @@ internal interface Win32NativeHostPort : AutoCloseable {
     fun monitorBounds(hwnd: Long): org.graphiks.kadre.surface.PhysicalRect
     fun applyTrackLimits(hwnd: Long, lParam: Long, minimum: org.graphiks.kadre.surface.PhysicalSize?, maximum: org.graphiks.kadre.surface.PhysicalSize?)
 
+    fun setWindowLevel(hwnd: Long, floating: Boolean)
+    fun setWindowIcon(hwnd: Long, image: org.graphiks.kadre.surface.BinaryImage?)
+    fun setContentProtection(hwnd: Long, enabled: Boolean)
+    fun requestAttention(hwnd: Long, attention: org.graphiks.kadre.window.WindowAttention)
+    fun setCursorStyle(hwnd: Long, style: org.graphiks.kadre.surface.CursorStyle)
+    fun applyClientCursor(hwnd: Long)
+    fun setPointerConfinement(hwnd: Long, enabled: Boolean): Boolean
+    fun refreshPointerConfinement(hwnd: Long): Boolean
+    fun observeConfinementLoss(hwnd: Long, onLost: () -> Unit)
+    fun beginMoveResize(hwnd: Long, hitTest: Int, clientX: Int, clientY: Int)
+
     fun showWindow(hwnd: Long)
     fun readKeyboardInput(hwnd: Long, message: Int, wParam: Long, lParam: Long): Win32KeyInput?
     fun trackMouseLeave(hwnd: Long)
@@ -69,4 +80,7 @@ internal data class Win32WindowReadback(
     val scale: Double,
     val minimized: Boolean = false,
     val maximized: Boolean = false,
+    val floating: Boolean = false,
+    val icon: org.graphiks.kadre.surface.BinaryImage? = null,
+    val contentProtection: Boolean = false,
 )

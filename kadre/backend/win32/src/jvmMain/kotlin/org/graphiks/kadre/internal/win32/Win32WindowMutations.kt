@@ -35,11 +35,18 @@ internal class Win32WindowMutations(
         port.setWindowStyle(hwnd, style)
         ensureLive()
         val read = setLogicalGeometry(spec.contentSize, spec.outerPosition ?: before.outerBounds.origin, true)
+        port.setWindowLevel(hwnd, spec.level == WindowLevel.Floating)
+        ensureLive()
+        if (spec.icon != null) { port.setWindowIcon(hwnd, spec.icon); ensureLive() }
+        if (spec.contentProtection) { port.setContentProtection(hwnd, true); ensureLive() }
+        val properties = port.readWindow(hwnd)
         val content = read.positiveClientSize().toLogical(read.scale)
         reconcileConstraints(content)
         return spec.copy(title = read.title, contentSize = content, minimumSize = minimum, maximumSize = maximum,
             outerPosition = read.outerBounds.origin, decorations = decorations(read.style),
-            systemButtons = buttons(read.style), resizable = read.style and WS_THICKFRAME != 0)
+            systemButtons = buttons(read.style), resizable = read.style and WS_THICKFRAME != 0,
+            level = if (properties.floating) WindowLevel.Floating else WindowLevel.Normal,
+            icon = properties.icon, contentProtection = properties.contentProtection)
     }
 
     fun apply(update: WindowUpdate, current: WindowState): WindowState {
@@ -64,6 +71,9 @@ internal class Win32WindowMutations(
         minimum = nextMinimum
         maximum = nextMaximum
         if (title != before.title) { port.setWindowTitle(hwnd, title); ensureLive() }
+        if (update.level is PropertyChange.Set) { port.setWindowLevel(hwnd, update.level.value == WindowLevel.Floating); ensureLive() }
+        if (update.icon != PropertyChange.Unchanged) { port.setWindowIcon(hwnd, update.icon.optionalOr(current.icon)); ensureLive() }
+        if (update.contentProtection is PropertyChange.Set) { port.setContentProtection(hwnd, update.contentProtection.value); ensureLive() }
         val frameChanged = style != before.style
         if (frameChanged) { port.setWindowStyle(hwnd, style); ensureLive() }
         if (frameChanged || update.contentSize != PropertyChange.Unchanged || update.outerPosition != PropertyChange.Unchanged ||
@@ -82,6 +92,7 @@ internal class Win32WindowMutations(
         return previous.copy(title = read.title, outerBounds = read.outerBounds, contentSize = content,
             minimumSize = minimum, maximumSize = maximum, resizable = read.style and WS_THICKFRAME != 0,
             decorations = decorations(read.style), systemButtons = buttons(read.style),
+            level = if (read.floating) WindowLevel.Floating else WindowLevel.Normal, icon = read.icon, contentProtection = read.contentProtection,
             fullscreen = if (fullscreen) FullscreenMode.Borderless else FullscreenMode.Windowed)
     }
 

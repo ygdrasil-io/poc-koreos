@@ -5,6 +5,7 @@ import org.graphiks.kadre.diagnostics.*
 import org.graphiks.kadre.internal.runtime.*
 import org.graphiks.kadre.interaction.InteractionAction
 import org.graphiks.kadre.interaction.InteractionKind
+import org.graphiks.kadre.input.PointerButton
 import org.graphiks.kadre.policy.ResourceBudgetPolicy
 import org.graphiks.kadre.surface.*
 import org.graphiks.kadre.window.*
@@ -14,16 +15,17 @@ import java.util.concurrent.atomic.AtomicBoolean
 private fun win32SurfaceCapabilities(): SurfaceCapabilities {
     val unsupportedUpdate = Capability.Unsupported(KadreFailure.Unsupported(KadreOperation.UpdateSurface))
     return SurfaceCapabilities(
-        cursor = unsupportedUpdate,
-        customCursor = unsupportedUpdate,
-        pointerCapture = unsupportedUpdate,
-        hitTesting = unsupportedUpdate,
+        cursor = Capability.Supported(WIN32_CURSOR_RESOURCES.keys, FeatureAvailability.Available),
+        customCursor = Capability.Supported(ImageConstraints(PhysicalSize(128, 128), setOf(ImageFormat.Rgba8)), FeatureAvailability.Available),
+        pointerCapture = Capability.Supported(setOf(PointerCaptureMode.None, PointerCaptureMode.Confined), FeatureAvailability.Available),
+        hitTesting = Capability.Supported(setOf(HitTestingMode.Enabled), FeatureAvailability.Available),
         inputDefaultBehavior = Capability.Supported(InputDefaultBehavior.entries.toSet(), FeatureAvailability.Available),
-        handlerInteractions = Capability.Supported(setOf(InteractionKind.OpenWindow), FeatureAvailability.Available),
+        handlerInteractions = Capability.Supported(WIN32_HANDLER_INTERACTIONS, FeatureAvailability.Available),
         armedInteractions = Capability.Unsupported(KadreFailure.Unsupported(KadreOperation.ArmInteraction)),
         platformAccess = Capability.Unsupported(KadreFailure.Unsupported(KadreOperation.PlatformSurfaceAccess)),
     )
 }
+private val WIN32_HANDLER_INTERACTIONS = setOf(InteractionKind.OpenWindow, InteractionKind.BeginWindowMove, InteractionKind.BeginWindowResize)
 
 internal const val WM_CLOSE: Int = 0x0010
 internal const val WM_DESTROY: Int = 0x0002
@@ -48,6 +50,18 @@ internal class Win32WindowRuntimeDriver internal constructor(
     private val queuedOpens = ConcurrentHashMap<WindowRequestId, WindowOpenCommand>()
     private val queuedUpdates = ConcurrentHashMap<WindowOperationId, WindowUpdateCommand>()
     private val pendingRedraws = mutableMapOf<SurfaceId, java.util.ArrayDeque<SurfaceRedrawGeneration>>()
+    private val attention = object : WindowAttentionPort {
+        override suspend fun request(windowId: WindowId, attention: WindowAttention): KadreResult<Unit> = port.onMainThread {
+            val entry = entries.values.firstOrNull { it.command.windowId == windowId && isLive(it) }
+                ?: return@onMainThread KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.Window))
+            try { port.requestAttention(entry.window.hwnd, attention); KadreResult.Success(Unit) }
+            catch (_: Throwable) { KadreResult.Failure(platformFailure("attention", "native-request-failed")) }
+        }
+        override fun release(windowId: WindowId) {
+            // Native peer teardown stops flashing before the HWND is destroyed.
+        }
+        override fun close() = Unit
+    }
 
     internal val manager: RuntimeWindowManager = RuntimeWindowManager(
         resources = resources,
@@ -57,6 +71,10 @@ internal class Win32WindowRuntimeDriver internal constructor(
         failureReporter = failureReporter,
         publicWindowCapabilities = true,
         enabledWindowUpdateCapabilities = enabledWindowUpdateCapabilities,
+        acceptedWindowLevels = setOf(WindowLevel.Normal, WindowLevel.Floating),
+        windowIconConstraints = ImageConstraints(PhysicalSize(256, 256), setOf(ImageFormat.Rgba8)),
+        attentionPort = attention,
+        acceptedAttention = WindowAttention.entries.toSet(),
         publicSurfaceCapabilities = true,
         enabledSurfaceCapabilities = win32SurfaceCapabilities(),
         onLastWindowClosed = onLastWindowClosed,
@@ -97,13 +115,15 @@ internal class Win32WindowRuntimeDriver internal constructor(
             window = created
             val entry = Win32WindowEntry(created, command)
             check(entries.putIfAbsent(command.requestId, entry) == null) { "duplicate window request" }
+            port.observeConfinementLoss(created.hwnd) { publishCaptureLoss(entry) }
             entry.mutations = Win32WindowMutations(port, created.hwnd) { isLive(entry) }
             entry.mutating = true
             val effectiveSpec = entry.mutations.initialize(command.spec)
             entry.mutating = false
             router = Win32InputRouter(created.hwnd, command.surfaceId, port, manager::acceptSurfaceStimulus,
                 { event -> dispatchInteraction(entry, event) },
-                { !closed.get() && !entry.closeAdmitted && entries[command.requestId] === entry })
+                { !closed.get() && !entry.closeAdmitted && entries[command.requestId] === entry },
+                { releaseConfinement(entry) })
             entry.input = router
             val snapshot = initialSnapshot(created.hwnd)
             command.commit(
@@ -129,8 +149,14 @@ internal class Win32WindowRuntimeDriver internal constructor(
     private fun handleMessage(command: WindowOpenCommand, hwnd: Long, message: Int, wParam: Long, lParam: Long): Long =
         when (message) {
             WM_CLOSE -> { command.closeRequested(); 0L }
-            WM_DESTROY -> { entries[command.requestId]?.let { it.closeAdmitted = true; it.input?.close() }; command.nativeClosed(); 0L }
+            WM_DESTROY -> { entries[command.requestId]?.let { releaseConfinement(it); it.closeAdmitted = true; it.input?.close() }; command.nativeClosed(); 0L }
             WM_SIZE, WM_MOVE, WM_DPICHANGED -> {
+                entries[command.requestId]?.let { if (message == WM_SIZE && wParam == 1L) releaseConfinement(it) else port.refreshPointerConfinement(hwnd) }
+                if (message == WM_SIZE && entries.containsKey(command.requestId)) {
+                    val visible = wParam != 1L && port.readWindow(hwnd).style and 0x10000000 != 0
+                    manager.acceptSurfaceStimulus(SurfaceStimulus.VisibilityChanged(command.surfaceId,
+                        if (visible) SurfaceVisibility.Visible else SurfaceVisibility.Hidden, SurfaceOcclusion.Unknown))
+                }
                 entries[command.requestId]?.takeIf { !it.mutating }?.let(::observeWindow)
                 0L
             }
@@ -140,9 +166,15 @@ internal class Win32WindowRuntimeDriver internal constructor(
                 result
             }
             WM_SHOWWINDOW -> {
+                if (wParam == 0L) entries[command.requestId]?.let(::releaseConfinement)
                 manager.acceptSurfaceStimulus(SurfaceStimulus.VisibilityChanged(command.surfaceId,
                     if (wParam != 0L) SurfaceVisibility.Visible else SurfaceVisibility.Hidden, SurfaceOcclusion.Unknown))
                 port.defWindowProc(hwnd, message, wParam, lParam)
+            }
+            0x001f -> { entries[command.requestId]?.let(::releaseConfinement); port.defWindowProc(hwnd, message, wParam, lParam) }
+            0x0020 -> {
+                if (lParam and 0xffffL == 1L && entries[command.requestId]?.let(::isLive) == true) { port.applyClientCursor(hwnd); 1L }
+                else port.defWindowProc(hwnd, message, wParam, lParam)
             }
             WM_PAINT -> {
                 port.validateRect(hwnd)
@@ -170,6 +202,14 @@ internal class Win32WindowRuntimeDriver internal constructor(
     private fun currentState(entry: Win32WindowEntry): WindowState? = manager.state.value.windows
         .firstOrNull { it.id == entry.command.windowId }?.state?.value
 
+    private fun publishCaptureLoss(entry: Win32WindowEntry) {
+        manager.acceptSurfaceStimulus(SurfaceStimulus.PointerCaptureChanged(entry.command.surfaceId, PointerCaptureMode.None))
+    }
+    private fun releaseConfinement(entry: Win32WindowEntry) {
+        port.setPointerConfinement(entry.window.hwnd, false)
+        publishCaptureLoss(entry)
+    }
+
     private fun observeWindow(entry: Win32WindowEntry) {
         if (!isLive(entry)) return
         val current = currentState(entry) ?: return
@@ -189,7 +229,7 @@ internal class Win32WindowRuntimeDriver internal constructor(
     }
 
     private fun dispatchInteraction(entry: Win32WindowEntry, event: RuntimeSynchronousInteraction) {
-        manager.dispatchSynchronousInteraction(entry.command.surfaceId, event, setOf(InteractionKind.OpenWindow)) { action ->
+        manager.dispatchSynchronousInteraction(entry.command.surfaceId, event, WIN32_HANDLER_INTERACTIONS) { action ->
             if (action is InteractionAction.OpenWindow) {
                 // Native creation commits inline on this UI owner; no borrowed event leaves the callback.
                 runBlocking {
@@ -202,6 +242,25 @@ internal class Win32WindowRuntimeDriver internal constructor(
                         }
                     }
                 }
+            } else if (action == InteractionAction.BeginWindowMove || action is InteractionAction.BeginWindowResize) {
+                val press = event as? RuntimeSynchronousInteraction.PointerPressed
+                val state = currentState(entry)
+                if (press?.button != PointerButton.Primary || !isLive(entry) || state == null || state.fullscreen != FullscreenMode.Windowed ||
+                    (action is InteractionAction.BeginWindowResize && !state.resizable)) {
+                    KadreResult.Failure(KadreFailure.TemporarilyUnavailable(retryable = true))
+                } else try {
+                    val hitTest = if (action is InteractionAction.BeginWindowResize) when (action.edge) {
+                        ResizeEdge.West -> 10; ResizeEdge.East -> 11; ResizeEdge.North -> 12; ResizeEdge.NorthWest -> 13
+                        ResizeEdge.NorthEast -> 14; ResizeEdge.South -> 15; ResizeEdge.SouthWest -> 16; ResizeEdge.SouthEast -> 17
+                    } else 2
+                    val physical = press.position.toPhysical(port.readScaleFactor(entry.window.hwnd))
+                    releaseConfinement(entry)
+                    port.beginMoveResize(entry.window.hwnd, hitTest, physical.x, physical.y)
+                    // The press belongs to the completed native drag. Its deferred ordinary
+                    // event must not resurrect a held button after the modal loop consumed it.
+                    manager.invalidateDeferredInteractionInput(entry.command.surfaceId)
+                    if (isLive(entry)) KadreResult.Success(Unit) else KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.Window))
+                } catch (_: Throwable) { KadreResult.Failure(platformFailure("interaction", "native-drag-failed")) }
             } else KadreResult.Failure(KadreFailure.Unsupported(KadreOperation.Interaction))
         }
     }
@@ -323,9 +382,18 @@ internal class Win32WindowRuntimeDriver internal constructor(
                 SurfaceFieldOutcome.Applied(change.value)
             }
         }
-        fun reject(change: PropertyChange<*>): SurfaceFieldOutcome<Nothing> = if (change == PropertyChange.Unchanged)
-            SurfaceFieldOutcome.Unchanged else SurfaceFieldOutcome.Rejected(KadreFailure.Unsupported(KadreOperation.UpdateSurface))
-        KadreResult.Success(SurfaceUpdateCommandOutcome(reject(command.cursor), reject(command.pointerCapture), reject(command.hitTesting), outcome))
+        fun <T> applyField(change: PropertyChange<T>, apply: (T) -> Boolean): SurfaceFieldOutcome<T> = when (change) {
+            PropertyChange.Unchanged -> SurfaceFieldOutcome.Unchanged
+            PropertyChange.Clear -> SurfaceFieldOutcome.Rejected(KadreFailure.InvalidRequest("surfaceUpdate"))
+            is PropertyChange.Set -> try {
+                if (apply(change.value)) SurfaceFieldOutcome.Applied(change.value)
+                else SurfaceFieldOutcome.Rejected(KadreFailure.TemporarilyUnavailable(retryable = true))
+            } catch (_: Throwable) { SurfaceFieldOutcome.Rejected(platformFailure("update-surface", "native-field-failed")) }
+        }
+        val cursor = applyField(command.cursor) { port.setCursorStyle(entry.window.hwnd, it); true }
+        val capture = applyField(command.pointerCapture) { port.setPointerConfinement(entry.window.hwnd, it == PointerCaptureMode.Confined) }
+        val hitTesting = applyField(command.hitTesting) { it == HitTestingMode.Enabled }
+        KadreResult.Success(SurfaceUpdateCommandOutcome(cursor, capture, hitTesting, outcome))
     }
 
     override fun close() {
@@ -381,7 +449,8 @@ internal class Win32WindowEntry(val window: Win32TopLevelWindowHandle, val comma
 internal object Win32WindowRuntimeDriverFactory {
     val supportedWindowUpdateCapabilities: Set<WindowProperty> = setOf(WindowProperty.Title, WindowProperty.ContentSize,
         WindowProperty.MinimumSize, WindowProperty.MaximumSize, WindowProperty.Resizable, WindowProperty.OuterPosition,
-        WindowProperty.Decorations, WindowProperty.SystemButtons, WindowProperty.Fullscreen)
+        WindowProperty.Decorations, WindowProperty.SystemButtons, WindowProperty.Fullscreen,
+        WindowProperty.Level, WindowProperty.Icon, WindowProperty.ContentProtection)
     fun create(
         port: Win32NativeHostPort,
         resources: ResourceBudgetPolicy,

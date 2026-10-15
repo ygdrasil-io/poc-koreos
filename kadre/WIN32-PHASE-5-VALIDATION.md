@@ -1,41 +1,43 @@
-# Win32 phase 5A — validation conjointe
+# Win32 phase 5 — validation complète conjointe
 
-## Périmètre
+La PR Kadre #474 couvre tous les points de la phase 5. KFFI #127 fournit les propriétés/rectangles ; KFFI #128 fournit les images, niveaux, attention, affinité, confinement et actions natives. Les jars complets sont publiés localement pour tester Kadre. La publication Central de #128 reste nécessaire avant de sortir Kadre de draft.
 
-La première sous-tranche de la phase 5 livre les mutations de titre, taille cliente logique, contraintes min/max, position physique, resizabilité, décorations/boutons et fullscreen borderless réversible. La phase 5 entière reste ouverte : niveaux, icône, attention, curseurs, hit testing, confinement et actions transitoires demandent leurs propres qualifications. Aucun changement de l'API publique n'est effectué.
+## Matrice de qualification
 
-## Reproduction locale
+| Point de la roadmap | Comportement ou décision finale | Preuve |
+| --- | --- | --- |
+| Titre, taille cliente, min/max, position physique | Setters natifs, DPI effectif, prévalidation, readback et événements corrélés | W32-012 |
+| Décorations, resizable, boutons | Styles réels, recalcul du cadre et track limits clients | W32-012 |
+| Visibilité, min/max/restore | Commandes système, visibilité et métriques publiques ; dernières dimensions positives conservées minimisées | W32-016 |
+| Fullscreen borderless | Sauvegarde/restauration styles et rectangle, contraintes suspendues, rollback ; exclusif réservé à la phase 9 | W32-013 |
+| Niveaux | Normal/Floating = non-topmost/topmost relu ; Modal exclu des contraintes, aucun alias | W32-014 |
+| Icônes | RGBA8 ≤256×256 ; HICON propre aux deux slots, set/clear/remplacement, libération après retrait/destruction | W32-014 |
+| Attention | FlashWindowEx du HWND vivant, None arrête ; aucun changement de focus ni frappe simulée | W32-014 |
+| Curseurs | 13 mappings système exacts, Hidden, RGBA8 personnalisé ≤128×128 avec hotspot ; WM_SETCURSOR/HTCLIENT, handles partagés jamais détruits | W32-015 |
+| Hit testing | Enabled = DefWindowProc ; Disabled Unsupported car HTTRANSPARENT ne prouve pas le pass-through entre processus | Sentinelle W32-014 |
+| Confinement | Bail exclusif ClipCursor au premier plan ; révocation sur focus perdu, hide, minimize, cancel, teardown ou remplacement étranger observable ; aucune reprise implicite | W32-015 |
+| Lock/raw input | Locked/raw Unsupported jusqu’à la phase 8 ; SetCapture seul ne représente jamais un pointer lock | Sentinelle W32-014 |
+| Menu et move/resize | Worker pendant un vrai TrackPopupMenu ; payload WM_NCLBUTTONDOWN ; vraies boucles SC_MOVE/SC_SIZE ; admission synchrone Primary, resize resizable/windowed | W32-016 |
+| Transparence/blur | Unsupported qualifié faute de contrat renderer/compositeur exact ; aucun alpha arbitraire présenté comme succès | Sentinelle W32-014 |
+| Protection du contenu | Set/GetWindowDisplayAffinity = WDA_MONITOR exact, sans promesse universelle de confidentialité | W32-014 |
+| Host embedded | Droit d’attention lié au host de phase 12 ; aucune admission embedded inventée dans Standalone | Roadmap phase 12 |
 
-Dans la branche KFFI associée, sur Windows/JDK 25 :
+Ces décisions Unsupported terminent la qualification des variantes concernées ; aucun reliquat « 5B » n’est créé. Formats encodés et curseurs sans équivalent exact sont refusés avant allocation native.
 
-```powershell
-$env:KFFI_WIN32_INTEGRATION = '1'
-./scripts/publish-win32-local.ps1 -Version 1.0.0-win32-phase5-local-SNAPSHOT
-```
+## Reproduction
 
-Dans Kadre :
+Windows x64/JDK 25, depuis KFFI : activer KFFI_WIN32_INTEGRATION=1 puis exécuter `:kffi:jvmTest :kffi-win32:jvmTest :kffi-win32:win32IntegrationTest --configure-on-demand --rerun-tasks`. Publier les mêmes jars avec `scripts/publish-win32-local.ps1 -Version 1.0.0-win32-phase5-complete-local-SNAPSHOT`.
 
-```powershell
-./gradlew.bat :kadre:backend:win32:win32ContractTests :kadre:runtime:jvmTest :kadre:platform:desktop:jvmTest :kadre:contracts:validator:jvmTest :kadre:contracts:validator:validateContractRegistry :kadre:contracts:validator:generateWin32ContractEvidence '-PkadreKffiLocal=true' '-PkadreKffiWin32Version=1.0.0-win32-phase5-local-SNAPSHOT' --console=plain
-```
+Depuis Kadre, exécuter `:kadre:backend:win32:win32ContractTests :kadre:runtime:jvmTest :kadre:platform:desktop:jvmTest :kadre:contracts:validator:jvmTest :kadre:contracts:validator:validateContractRegistry :kadre:contracts:validator:generateWin32ContractEvidence` avec `-PkadreKffiLocal=true -PkadreKffiWin32Version=1.0.0-win32-phase5-complete-local-SNAPSHOT`.
 
-Le snapshot distant de phase 4 reste épinglé dans le catalogue jusqu'à la publication des nouveaux wrappers. Cette branche Kadre doit rester draft tant que la dépendance de phase 5 n'est pas publiée puis épinglée. Les succès locaux avec Maven local ne sont pas des succès de résolution distante.
+Le watchdog `scripts/test-kadre-win32-contracts.sh` reçoit les mêmes propriétés. La gate produit 19 JSON : W32-001..016 et BCK-025/SES-002/PMP-001. Chaque scénario/sentinelle doit correspondre à un test sans échec ni skip et au SHA contrôlé.
 
-## Preuves
+## Régressions et limites
 
-- Gate Kadre complète après revue : 625 tests (92 portables Win32, 27 natifs Win32, 418 runtime, 18 Desktop, 70 validator), zéro failure/error/skip. Avec KFFI : 762 tests. Les 16 JSON de contrats sont produits et validés ; W32-012/013 s'ajoutent aux 14 preuves précédentes.
-- KFFI : 110 tests core et 27 Win32, sans échec ni skip, exécutés avec le gate natif activé. Les SHA256 des jars publiés localement correspondent aux jars testés.
-- Génération de 85 fonctions User32/Kernel32/GDI/DWM, quatre ajouts, `--check` identique. Limite d'outillage conservée : le parseur Clang signale `excpt.h` absent dans le SDK installé ; aucune génération sans ce diagnostic n'est revendiquée. Les wrappers ajoutés sont exécutés contre Windows réel.
-- Cycle RED→GREEN des mutations publiques puis du fullscreen, en portable et natif. Les tests natifs relisent RECT/styles/DPI via les fonctions User32, puis comparent avec l'outcome public et les métriques de surface.
-- W32-012 : propriétés et limites natives, application Desktop depuis un worker, readback substitué dans le modèle indépendant, événements corrélés ou externes, cancellation avant claim.
-- W32-013 : round-trip natif styles/rectangle, contraintes suspendues et restaurées, rollback après échec d'entrée injecté.
-- Le test de fermeture réentrante a révélé le verrou d'admission runtime : la queue native diffère maintenant la mutation même lorsqu'elle est admise sur le thread UI. Le setter et ses callbacks exécutent après le retour du SPI. L'annulation après claim conserve la publication du readback réellement commis.
-- Revue indépendante : deux findings Important corrigés en une passe, sans minor différé. Les trois régressions portables ont échoué avant correction : maximum client Int.MAX_VALUE dont le cadre déborde, déplacement avec changement de DPI, position initiale sur un écran de DPI différent. Une preuve native rejette le maximum débordant puis applique un titre pour vérifier que la session reste utilisable. Le correctif utilise une prévalidation du style cible dans KFFI et une convergence bornée au DPI effectif d'arrivée.
+Le menu natif a révélé que la fenêtre de contrôle KFFI filtrait WM_APP+2. La régression native échoue avant correction ; COMMAND_MESSAGE rejoint maintenant son callback dans la boucle imbriquée User32. La minimisation publie Hidden, la restauration sa visibilité native. Le bouton consommé par un drag n’est pas réinséré en input ordinaire après la boucle, sans fabriquer perte de focus ni reset.
 
-## Qualification manuelle et limites
+Les images partagent un budget entre icônes/curseurs, demandes en attente et remplacements. Les tests couvrent identité partagée, limites par ressource/session, annulation avant claim, fermeture/detach, readback initial inattendu et refus avant allocation. Une perte de confinement révoque aussi un ack Confined en cours.
 
-Non exécutés : redimensionnement physique dans le menu système, écrans à DPI mixtes, retrait/reconnexion de moniteur, et déplacement dans une boucle modale système. Les tests de queue et les setters automatisés ne valent pas qualification matérielle de ces chemins. Aucune frappe injectée ni modification de résolution n'est utilisée.
+Non exécutés : souris physique pendant le drag, écrans à DPI mixtes, retrait/reconnexion de moniteur. Un message posté ne pose pas l’état physique du bouton : le test vérifie séparément le payload et les vraies boucles SC_MOVE/SC_SIZE, sans injection matérielle. ClipCursor ne peut être acquis que si Windows accorde le premier plan ; le test consigne succès ou refus et vérifie toujours la préservation d’un clip étranger. Des écritures étrangères identiques au rectangle détenu ne sont pas détectables et nécessitent la coopération des autres usagers.
 
-Les contraintes sont des tailles clientes logiques converties en track limits au DPI courant. Une mutation native étrangère peut les contourner : Kadre publie alors la taille réelle et retire la contrainte devenue incompatible, plutôt que construire un WindowState invalide. La minimisation conserve les dernières métriques positives. L'entrée fullscreen depuis une fenêtre minimisée/maximisée échoue explicitement ; il faut d'abord la restaurer par le système.
-
-Une mutation de géométrie/chrome pendant le fullscreen est refusée champ par champ avec TemporarilyUnavailable. Un titre reste modifiable. Un échec de restauration fullscreen qui empêche d'établir un état cohérent échoue la session ; aucune réussite n'est fabriquée.
+KFFI génère 96 fonctions, `--check` identique. Le SDK installé conserve son diagnostic préexistant `excpt.h` manquant ; aucune génération sans diagnostic n’est revendiquée. La publication Maven locale ne prouve pas une publication Central.

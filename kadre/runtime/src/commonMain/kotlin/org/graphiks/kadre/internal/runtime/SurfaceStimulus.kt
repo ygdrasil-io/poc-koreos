@@ -23,6 +23,7 @@ import org.graphiks.kadre.surface.LogicalInsets
 import org.graphiks.kadre.surface.LogicalPoint
 import org.graphiks.kadre.surface.LogicalSize
 import org.graphiks.kadre.surface.PhysicalSize
+import org.graphiks.kadre.surface.PointerCaptureMode
 import org.graphiks.kadre.surface.SurfaceAppearance
 import org.graphiks.kadre.surface.SurfaceFocus
 import org.graphiks.kadre.surface.SurfaceId
@@ -77,6 +78,12 @@ public sealed interface SurfaceStimulus {
     public data class FocusChanged(
         override val surfaceId: SurfaceId,
         public val focus: SurfaceFocus,
+    ) : SurfaceStimulus
+
+    /** Native confinement/lock lease changed independently of a surface update. */
+    public data class PointerCaptureChanged(
+        override val surfaceId: SurfaceId,
+        public val mode: PointerCaptureMode,
     ) : SurfaceStimulus
 
     public data class VisibilityChanged(

@@ -61,8 +61,8 @@ class Win32WindowMutationTest {
             val window = open(driver)
             val result = assertIs<WindowUpdateOutcome.PartiallyApplied>(apply(window, WindowUpdate(
                 title = PropertyChange.Set("supported"), transparency = PropertyChange.Set(true),
-                contentProtection = PropertyChange.Set(true))))
-            assertEquals(setOf(WindowProperty.Transparency, WindowProperty.ContentProtection), result.rejected.map { it.field }.toSet())
+                blurBehind = PropertyChange.Set(true))))
+            assertEquals(setOf(WindowProperty.Transparency, WindowProperty.Blur), result.rejected.map { it.field }.toSet())
             assertEquals("supported", result.state.title)
             assertFalse(result.state.transparent)
         }

@@ -102,6 +102,7 @@ internal class RuntimeWindowSurface(
     private val deliveryPolicy: WindowDeliveryPolicy = KadrePolicies.Default.window,
     private val inputDeliveryPolicy: InputDeliveryPolicy = KadrePolicies.Default.input,
     private val resources: ResourceBudgetPolicy = KadrePolicies.Default.resources,
+    private val imageBudget: RuntimeImageBudget = RuntimeImageBudget(resources),
     private val dropTransferBudget: RuntimeDropTransferBudget = RuntimeDropTransferBudget(
         resources.maxConcurrentDropTransfers,
     ),
@@ -116,6 +117,8 @@ internal class RuntimeWindowSurface(
     private val updateMutex = Mutex()
     private var currentState = initialState(initialSnapshot)
     private var inputFocusGeneration = 0L
+    private var captureGeneration = 0L
+    private var cursorImageLease: RuntimeImageLease? = null
     private var redrawTicket: SurfaceRedrawGeneration? = null
     private var nextRedrawTicket = 0L
     private val publications = BoundedSurfaceScheduler(
@@ -283,6 +286,7 @@ internal class RuntimeWindowSurface(
             return@surfaceApply successfulUpdateOutcome(snapshot, admission.rejected)
         }
 
+        try {
         val portResult = try {
             commandPort.apply(admission.command)
         } catch (cause: CancellationException) {
@@ -308,6 +312,19 @@ internal class RuntimeWindowSurface(
                 return@withLock KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.Surface))
             }
             val committed = commitUpdateLocked(admission, backend)
+            val nextImage = (committed.state.cursor as? CursorStyle.Custom)?.image?.image
+            val oldImage = (currentState.cursor as? CursorStyle.Custom)?.image?.image
+            if(nextImage !== oldImage) {
+                val lease = when(val retained = imageBudget.retain(nextImage)) {
+                    is KadreResult.Success -> retained.value
+                    is KadreResult.Failure -> {
+                        val failure = KadreFailure.PlatformFailure(platform, "surface-command-port", "image-readback-over-budget")
+                        adapterFailures = listOf(failure)
+                        return@withLock KadreResult.Failure(failure)
+                    }
+                }
+                cursorImageLease?.close(); cursorImageLease = lease
+            }
             if (committed.state != currentState) {
                 currentState = committed.state
             }
@@ -318,11 +335,24 @@ internal class RuntimeWindowSurface(
         stateToPublish?.let(::publishStateAtLeast)
         adapterFailures.forEach(::reportAdapterFailure)
         result
+        } finally { admission.cursorLease?.close() }
     }
 
     internal fun accept(stimulus: SurfaceStimulus): Boolean {
         if (stimulus.surfaceId != id) return false
         if (stimulus is SurfaceStimulus.Detached) return detach()
+        if(stimulus is SurfaceStimulus.PointerCaptureChanged) {
+            val snapshot = lock.withLock {
+                if(currentState.attachment == SurfaceAttachmentState.Detached) return false
+                val supported = (liveCapabilities.pointerCapture as? Capability.Supported)?.constraints.orEmpty()
+                if(stimulus.mode != PointerCaptureMode.None && stimulus.mode !in supported) return false
+                captureGeneration++
+                if(currentState.pointerCapture != stimulus.mode) currentState = currentState.copy(pointerCapture = stimulus.mode, revision = currentState.revision.next())
+                currentState
+            }
+            publishStateAtLeast(snapshot)
+            return true
+        }
         if (stimulus.isInputStimulus()) {
             return lock.withLock {
                 currentState.attachment != SurfaceAttachmentState.Detached && surfaceInput.accept(stimulus)
@@ -346,6 +376,7 @@ internal class RuntimeWindowSurface(
                 )
 
                 is SurfaceStimulus.AppearanceChanged -> appearancePublicationLocked(stimulus.appearance)
+                is SurfaceStimulus.PointerCaptureChanged -> null // handled before publication admission
                 is SurfaceStimulus.RedrawConsumed -> redrawPublicationLocked(stimulus.generation)
                 is SurfaceStimulus.KeyChanged,
                 is SurfaceStimulus.InputObservationChanged,
@@ -471,6 +502,10 @@ internal class RuntimeWindowSurface(
         }
     }
 
+    internal fun invalidateDeferredInteractionInput() {
+        lock.withLock { inputFocusGeneration++ }
+    }
+
     private fun publishInteractionInput(admitted: DeferredInteraction) {
         lock.withLock {
             // A callback can transfer focus while opening another native window. Its later
@@ -513,7 +548,14 @@ internal class RuntimeWindowSurface(
 
     private fun prepareUpdateLocked(update: SurfaceUpdate): UpdateAdmission {
         val rejected = mutableListOf<RejectedSurfaceField>()
-        val cursor = admitCursor(update.cursor, rejected)
+        var cursor = admitCursor(update.cursor, rejected)
+        var cursorLease: RuntimeImageLease? = null
+        (cursor as? PropertyChange.Set)?.value?.let { value -> if(value is CursorStyle.Custom) {
+            when(val retained = imageBudget.retain(value.image.image)) {
+                is KadreResult.Success -> cursorLease = retained.value
+                is KadreResult.Failure -> { rejected += RejectedSurfaceField(SurfaceProperty.Cursor, retained.reason); cursor = PropertyChange.Unchanged }
+            }
+        } }
         val pointerCapture = admitField(
             update.pointerCapture,
             SurfaceProperty.PointerCapture,
@@ -534,7 +576,7 @@ internal class RuntimeWindowSurface(
         )
         val command = SurfaceUpdateCommand(id, cursor, pointerCapture, hitTesting, inputDefaultBehavior)
             .takeUnless(SurfaceUpdateCommand::isEmpty)
-        return UpdateAdmission(command, rejected)
+        return UpdateAdmission(command, rejected, cursorLease, captureGeneration)
     }
 
     private fun admitCursor(
@@ -551,6 +593,13 @@ internal class RuntimeWindowSurface(
         if (failure != null) {
             rejected += RejectedSurfaceField(SurfaceProperty.Cursor, failure)
             return PropertyChange.Unchanged
+        }
+        if(change is PropertyChange.Set && change.value is CursorStyle.Custom) {
+            val constraints = (liveCapabilities.customCursor as? Capability.Supported)?.constraints
+            imageConstraintFailure(change.value.image.image, constraints, "cursor")?.let {
+                rejected += RejectedSurfaceField(SurfaceProperty.Cursor, it)
+                return PropertyChange.Unchanged
+            }
         }
         if (
             change is PropertyChange.Set &&
@@ -586,7 +635,9 @@ internal class RuntimeWindowSurface(
         ) { state, value -> state.copy(cursor = value) }
         next = commitField(
             command.pointerCapture,
-            backend.pointerCapture,
+            if(admission.captureGeneration != captureGeneration && backend.pointerCapture is SurfaceFieldOutcome.Applied &&
+                backend.pointerCapture.value != PointerCaptureMode.None)
+                SurfaceFieldOutcome.Rejected(KadreFailure.TemporarilyUnavailable(retryable = true)) else backend.pointerCapture,
             SurfaceProperty.PointerCapture,
             rejected,
             adapterFailures,
@@ -806,6 +857,7 @@ internal class RuntimeWindowSurface(
         failSession: Boolean,
     ): PublicationAdmission {
         interactionHandler?.close()
+        cursorImageLease?.close(); cursorImageLease = null
         redrawTicket = null
         currentState = currentState.copy(
             attachment = SurfaceAttachmentState.Detached,
@@ -937,6 +989,8 @@ internal class RuntimeWindowSurface(
     private data class UpdateAdmission(
         val command: SurfaceUpdateCommand?,
         val rejected: List<RejectedSurfaceField>,
+        val cursorLease: RuntimeImageLease?,
+        val captureGeneration: Long,
     )
 
     private data class CommittedUpdate(
@@ -1260,6 +1314,7 @@ private fun SurfaceStimulus.isInputStimulus(): Boolean = when (this) {
 
     is SurfaceStimulus.MetricsChanged,
     is SurfaceStimulus.FocusChanged,
+    is SurfaceStimulus.PointerCaptureChanged,
     is SurfaceStimulus.VisibilityChanged,
     is SurfaceStimulus.AppearanceChanged,
     is SurfaceStimulus.RedrawConsumed,

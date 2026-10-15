@@ -2,7 +2,7 @@
 
 ## Scope and contract
 
-The PR delivers the entire phase-5 roadmap in one reviewable change. Existing title/geometry/chrome/borderless behavior is retained. The remaining work implements Normal/Floating native levels, bounded RGBA8 icons and custom cursors, exact system cursor mappings, window-owned attention, native pointer confinement, and synchronous primary-pointer move/resize. Visibility/minimize/maximize and the native system menu are qualified through the native window lifecycle: the closed public Window API has no separate show/minimize/maximize/menu method. No public API is added.
+The PR delivers the entire phase-5 roadmap in one reviewable change. Existing title/geometry/chrome/borderless behavior is retained. It implements Normal/Floating native levels, bounded RGBA8 icons and custom cursors, exact system cursor mappings, window-owned attention, native pointer confinement, and synchronous primary-pointer move/resize. Visibility/minimize/maximize and the native system menu are qualified through the native window lifecycle: the closed public Window API has no separate show/minimize/maximize/menu method. No public API is added.
 
 Qualification decisions are part of the complete phase, not deferred implementation: Modal has no distinct Win32 z-order equivalent and is excluded from advertised level constraints. Locked waits for raw input in phase 8; SetCapture is not used to claim lock. HTTRANSPARENT alone only redirects within one UI thread, so Disabled hit testing remains explicitly unsupported rather than promising cross-process pass-through. Enabled uses native default hit testing. Transparency and blur require a qualified rendering/compositor path; they remain explicitly unsupported. Content protection is implemented only if checked native display-affinity set/readback proves its exact value, with no universal privacy promise. Exclusive fullscreen remains phase 9 and embedded attention admission remains phase 12.
 
@@ -28,7 +28,7 @@ The existing bounded UI queue is shared with the pump. requestUpdate returns pro
 
 During native setters Windows can reenter WndProc. The peer suppresses intermediate window geometry publications for that mutation; the final copied readback completes the admitted command with its operation ID. Surface metrics remain coherent with that same readback. Unrelated native observations outside a mutation carry no operation ID. A reentrant close wins ownership and prevents further setters or late resurrection. No callback retains borrowed memory.
 
-Fields unsupported by this tranche retain the common runtime's per-field rejection outcomes. A failed native setter produces an explicit failure; after any native commit the driver attempts authoritative readback and uses committedFailure. Failure to obtain authoritative post-commit state is a session failure, not success with desired values.
+Fields unsupported by this phase retain the common runtime's per-field rejection outcomes. A failed native setter produces an explicit failure; after any native commit the driver attempts authoritative readback and uses committedFailure. Failure to obtain authoritative post-commit state is a session failure, not success with desired values.
 
 ## Chrome, constraints and fullscreen
 
@@ -38,6 +38,6 @@ Entering borderless fullscreen saves the actual windowed styles and physical rec
 
 ## Evidence and limits
 
-Portable tests cover readback substitution, command correlation versus external events, constraints/clear, cancellation, reentrant close, partial native failure and fullscreen restore. KFFI and Kadre native tests inspect actual styles and rectangles on this Windows machine; a worker-driven public session exercises the shared queue. The contract gate includes existing phase-1..4 evidence. Manual mixed-DPI, physical resizing, and system modal menu qualification are recorded as unexecuted until actually performed.
+Portable tests cover readback substitution, command correlation versus external events, constraints/clear, cancellation, reentrant close, partial native failure and fullscreen restore. KFFI and Kadre native tests inspect actual styles and rectangles on this Windows machine; a worker-driven public session exercises the shared queue. The contract gate includes existing phase-1..4 evidence. Native menu and keyboard move/size modal loops are automated; physical mouse drag and mixed-DPI/hotplug remain unexecuted manual qualification.
 
 Microsoft references: [SetWindowLongPtrW](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-setwindowlongptrw), [AdjustWindowRectExForDpi](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-adjustwindowrectexfordpi), [MINMAXINFO](https://learn.microsoft.com/en-us/windows/win32/api/winuser/ns-winuser-minmaxinfo).

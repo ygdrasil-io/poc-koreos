@@ -13,6 +13,7 @@ internal class Win32InputRouter(
     private val emit: (SurfaceStimulus) -> Boolean,
     private val interact: (RuntimeSynchronousInteraction) -> Unit,
     private val isAlive: () -> Boolean,
+    private val onFocusLost: () -> Unit = {},
 ) : AutoCloseable {
     private var ready = false
     private var focused = false
@@ -124,6 +125,7 @@ internal class Win32InputRouter(
     }
 
     private fun focus(value: Boolean) {
+        if (!value) onFocusLost()
         if (focused == value) return
         focused = value
         barrier()

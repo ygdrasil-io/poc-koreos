@@ -18,6 +18,16 @@ internal open class DeterministicWin32HostPort : Win32NativeHostPort {
     val scriptedScaleFactor = java.util.concurrent.ConcurrentHashMap<Long, Double>()
     val windowTitles = java.util.concurrent.ConcurrentHashMap<Long, String>()
     val windowStyles = java.util.concurrent.ConcurrentHashMap<Long, Int>()
+    val floatingWindows = mutableSetOf<Long>()
+    val icons = mutableMapOf<Long, org.graphiks.kadre.surface.BinaryImage>()
+    val protectedWindows = mutableSetOf<Long>()
+    val cursors = mutableMapOf<Long, org.graphiks.kadre.surface.CursorStyle>()
+    val confinedWindows = mutableSetOf<Long>()
+    val confinementObservers = mutableMapOf<Long, () -> Unit>()
+    val nativeDrags = mutableListOf<Triple<Int, Int, Int>>()
+    var onNativeDrag: (() -> Unit)? = null
+    val attentionRequests = mutableListOf<Pair<Long, org.graphiks.kadre.window.WindowAttention>>()
+    var confinementAvailable = true
     val windowBounds = java.util.concurrent.ConcurrentHashMap<Long, org.graphiks.kadre.surface.PhysicalRect>()
     var beforeTitleWrite: (() -> Unit)? = null
     var afterStyleWrite: (() -> Unit)? = null
@@ -160,6 +170,7 @@ internal open class DeterministicWin32HostPort : Win32NativeHostPort {
     fun topLevelHwndAt(index: Int): Long = topLevelHwndOrder.elementAtOrNull(index) ?: 0L
 
     override fun destroyWindow(hwnd: Long) {
+        confinedWindows.remove(hwnd); icons.remove(hwnd); cursors.remove(hwnd); confinementObservers.remove(hwnd)
         if (topLevelHandlers.remove(hwnd) != null) {
             destroyedTopLevelWindows.incrementAndGet()
             topLevelHwndOrder.remove(hwnd)
@@ -199,7 +210,8 @@ internal open class DeterministicWin32HostPort : Win32NativeHostPort {
 
     override fun readWindow(hwnd: Long): Win32WindowReadback {
         errorIfWindowUnknown(hwnd)
-        return Win32WindowReadback(windowTitles.getValue(hwnd), windowBounds.getValue(hwnd), readClientPhysicalSize(hwnd), windowStyles.getValue(hwnd), readScaleFactor(hwnd))
+        return Win32WindowReadback(windowTitles.getValue(hwnd), windowBounds.getValue(hwnd), readClientPhysicalSize(hwnd), windowStyles.getValue(hwnd), readScaleFactor(hwnd),
+            floating = hwnd in floatingWindows, icon = icons[hwnd], contentProtection = hwnd in protectedWindows)
     }
     override fun setWindowTitle(hwnd: Long, title: String) {
         beforeTitleWrite?.invoke()
@@ -229,6 +241,21 @@ internal open class DeterministicWin32HostPort : Win32NativeHostPort {
     }
     override fun monitorBounds(hwnd: Long) = org.graphiks.kadre.surface.PhysicalRect(org.graphiks.kadre.surface.PhysicalPoint(-1920, 0), org.graphiks.kadre.surface.PhysicalSize(1920, 1080))
     override fun applyTrackLimits(hwnd: Long, lParam: Long, minimum: org.graphiks.kadre.surface.PhysicalSize?, maximum: org.graphiks.kadre.surface.PhysicalSize?) = Unit
+
+    override fun setWindowLevel(hwnd: Long, floating: Boolean) { if (floating) floatingWindows.add(hwnd) else floatingWindows.remove(hwnd) }
+    override fun setWindowIcon(hwnd: Long, image: org.graphiks.kadre.surface.BinaryImage?) { if (image == null) icons.remove(hwnd) else icons[hwnd] = image }
+    override fun setContentProtection(hwnd: Long, enabled: Boolean) { if (enabled) protectedWindows.add(hwnd) else protectedWindows.remove(hwnd) }
+    override fun requestAttention(hwnd: Long, attention: org.graphiks.kadre.window.WindowAttention) { attentionRequests += hwnd to attention }
+    override fun setCursorStyle(hwnd: Long, style: org.graphiks.kadre.surface.CursorStyle) { cursors[hwnd] = style }
+    override fun applyClientCursor(hwnd: Long) = Unit
+    override fun setPointerConfinement(hwnd: Long, enabled: Boolean): Boolean {
+        if (!enabled) { confinedWindows.remove(hwnd); return true }
+        if (!confinementAvailable) return false
+        confinedWindows += hwnd; return true
+    }
+    override fun refreshPointerConfinement(hwnd: Long): Boolean = hwnd in confinedWindows
+    override fun observeConfinementLoss(hwnd: Long, onLost: () -> Unit) { confinementObservers[hwnd] = onLost }
+    override fun beginMoveResize(hwnd: Long, hitTest: Int, clientX: Int, clientY: Int) { nativeDrags += Triple(hitTest, clientX, clientY); onNativeDrag?.invoke() }
 
     override fun close() {
         destroyed = true
