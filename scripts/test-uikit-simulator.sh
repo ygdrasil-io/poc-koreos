@@ -97,8 +97,13 @@ run_consumer() {
     tvos) exports=("tvosSimulatorJunitExport" "tvosSimulatorGatedJunitExport") ;;
     *) echo "FAIL: famille consumer inconnue '$family'" >&2; exit 1;;
   esac
+  # runtime aussi : le POM du klib uikit déclare la dépendance transitive
+  # org.graphiks.kadre.internal:runtime — sans cette publication, le lien consumer
+  # échoue sur un dépôt contractuel FRAIS (le piège stale-repository l'avait masqué
+  # localement ; première passage CI = dépôt vide → rouge #470).
   run_gradle ":kadre:platform:uikit:publishAllPublicationsToContractTestRepository" \
-             ":kadre:foundation:publishAllPublicationsToContractTestRepository"
+             ":kadre:foundation:publishAllPublicationsToContractTestRepository" \
+             ":kadre:runtime:publishAllPublicationsToContractTestRepository"
   run_gradle -p kadre/consumers/swift --refresh-dependencies "${exports[@]}" \
     -PkadreRepository="$CONSUMER_REPOSITORY" -PkadreVersion="$CONSUMER_VERSION"
 }
