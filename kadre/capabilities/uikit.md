@@ -108,7 +108,8 @@ ses DEUX lignes honnêtes : le binding micro-gamepad (`GCMicroGamepad`) N'EST PA
 device micro-only de BCK-027 est livré) et l'observation des transitions
 `UIFocusEnvironment` est HORS PÉRIMÈTRE v1 (décision du plan, non livrée — le focus de la
 surface reste piloté par les transitions de scène) ; l'audit de l'en-tête framework (§3)
-est re-confirmé sur l'en-tête régénéré de cette édition.
+est re-confirmé sur l'en-tête régénéré de cette édition et DÉSORMAIS MÉCANISÉ
+(`scripts/audit-uikit-facade-header.sh` — re-jouable à tout moment, voir §3).
 
 **Portée de lecture.** Deux targets Kotlin partagent la sonde (`KadreUikitProbe`,
 `uikitMain`) : `iosSimulatorArm64` et `tvosSimulatorArm64`. La preuve O3 court dans des
@@ -288,9 +289,28 @@ publié == vivant après le changement de géométrie), jamais par une rotation 
 | capture `Source`, fenêtre, picker et énumération — LES ABSENCES EXACTES : aucune primitive in-process d'énumération des surfaces capturables n'existe sur iOS/tvOS ; `window` = `Capability.Unsupported(CaptureOpen)`, `sourceEnumeration` = `Unsupported(CaptureRefreshSources)`, inventaire `sources` = `Unavailable(même échec)` — JAMAIS `HostPickerOnly` (le web l'annonce parce qu'un VRAI picker navigateur existe derrière un consentement ; ici aucun parcours conforme n'existe) ; `hostPicker` = `FeatureAvailability.Unsupported` — les broadcast extensions sont un process séparé dont les frames n'atteignent jamais l'app, hors du contrat fermé ; `requestPermission(Window)` refusé avant tout fait de seam (delta nul) ; `refreshSources` répond l'inventaire sans toucher le seam — FUSION JUSTIFIÉE : les absences sont les MÊMES sur les deux familles (aucune primitive d'énumération n'existe ni sur iOS ni sur tvOS) | iosSimulatorArm64, tvosSimulatorArm64 | iOS 16.0 / tvOS 16.0 | `:kadre:platform:uikit:compileKotlin*` | BCK-028 (2 simulateurs) | rien à livrer tant qu'aucun parcours conforme n'existe : toute apparition d'un picker ou d'un inventaire serait une fabrication — les compteurs driver (`captureSurfaceReservationsOpened` delta 0 derrière le refus d'admission HostChoice, `captureSurfaceFramesDelivered` figé après terminal) et les journaux de seam au delta nul prouvent les zéros ; depuis le consumer, `open(Source)` répond `InvalidRequest("request.target")` (aucune source énumérée — la forme CONSUMER-VISIBLE que la ligne de contrat cite, le port gardant son `Unsupported(CaptureOpen)` en profondeur) ; un futur parcours conforme (ruling + device) est le chemin d'activation enregistré | `KadreUikitCaptureTests` |
 
 Note de gate des lignes phase 3 (façade Swift, `KadreHostViewController`, distribution
-XCFramework) : le gate consumer (`consumers/swift`, 2 familles) tourne localement via
-l'agrégateur `kadre/consumers/swift` ; le câblage CI (job xcode-27 dédié ou job macOS
-consolidé) est un follow-up enregistré (revue finale F-2).
+XCFramework) — follow-up F-2 LIVRÉ (phase 10), le câblage a DÉSORMAIS deux points d'entrée
+exactement définis :
+
+- **Tâche racine** `./gradlew :kadre:validateSwiftConsumer` (dans `kadre/build.gradle.kts`) :
+  publie AU PRÉALABLE le repository contractTest (les publications communes +
+  `:kadre:platform:uikit` + `:kadre:foundation`), puis pilote le `check` de l'agrégateur
+  `kadre/consumers/swift` avec `-PkadreRepository`/`-PkadreVersion` et
+  `--refresh-dependencies` — xcodegen, les QUATRE runs xcodebuild (standard + lancement
+  gated SwiftUI, iOS et tvOS), leurs exports JUnit et la garde anti-duplication Obj-C du
+  `doLast`. macOS-ONLY : volontairement HORS `:kadre:check` (miroir de la posture des
+  gates AppKit) ; sur un hôte non-macOS l'échec est explicite, jamais un skip silencieux.
+- **Gate par famille** `scripts/test-uikit-simulator.sh [ios|tvos|all]` : son
+  `run_consumer` pilote le MÊME agrégateur (mêmes publications préalables) pour les
+  preuves BCK-018/BCK-019 aux côtés des scénarios du driver.
+
+L'audit façade de l'en-tête framework (§3 ci-dessous) est mécanisé par
+`scripts/audit-uikit-facade-header.sh` : fuites internal (`org.graphiks.kadre.internal`,
+marqueur `Internal`, règle INTEROP §7), surface promise présente (en-tête + module Swift
+`KadreHost`) et inventaire scaffolding recompté. Ce qui RESTE une décision
+d'infrastructure est uniquement le CHOIX du runner CI (job xcode-27 dédié ou job macOS
+consolidé — suivi du nightly, phase 10) : l'entrypoint que ce job invoque existe et est
+découvrable (`./gradlew :kadre:tasks`), F-2 n'est plus un follow-up ouvert.
 
 La ligne phase 0 se lit : `KadreUikitProbe.observe(window:view:)` publie une
 `KadreUikitObservation` copiée (appartenance à la fenêtre via `isEqual`, connexion de la
@@ -772,3 +792,16 @@ La distribution XCFramework statique (Task 1) porte le même en-tête audité : 
 slices (`ios-arm64`, `ios-arm64-simulator`, `tvos-arm64`, `tvos-arm64-simulator`, listés
 dans `AvailableLibraries` du `Info.plist`) sont rassemblées depuis le même binaire
 `KadreUikit` — le grep = 0 vaut pour les slices du xcframework réassemblé.
+
+Cet audit est DÉSORMAIS MÉCANISÉ (phase 10) : `scripts/audit-uikit-facade-header.sh`
+re-joue les greps ci-dessus sur les en-têtes des DEUX familles (les regénérant au besoin)
+et échoue sur (a) une fuite internal — littéral `org.graphiks.kadre.internal`, marqueur
+`Internal` sur un nom exporté, règle INTEROP §7 (`withUIKitView` /
+`UIKitSurfaceAccessKt`) — comme sur (b) l'ABSENCE d'un symbole promise (KadreIos, factory,
+session, policy/profils, value model, les 17 cases KadreFailure) ; l'inventaire
+scaffolding (les compteurs de ce §3 et les sondes driver) y est RECOMPTE et affiché — un
+drift y est une invitation à rafraîchir CE §3, pas un échec. Limite assumée et documentée
+dans le script : le nommage Obj-C (préfixe + nom simple) ne portant pas le package
+Kotlin, un type public d'un package `internal` au nom simple sans « Internal » n'est pas
+détectable dans l'en-tête — ces types sont exactement le scaffolding listé ici, que
+l'inventaire tenu à jour garantit.

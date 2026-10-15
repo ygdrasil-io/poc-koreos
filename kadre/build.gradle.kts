@@ -139,6 +139,47 @@ tasks.named<Test>("jvmTest") {
     dependsOn("publishContractArtifacts")
 }
 
+// Le consumer Swift externe (phase 3/10) suit la discipline des consumers ci-dessus : les
+// artefacts sont publiés D'ABORD dans le repository contractTest — uikit ET foundation EN
+// PLUS des publications communes (l'agrégateur résout `org.graphiks.kadre:uikit` DEPUIS ce
+// repository, jamais un `project(...)`), puis son `check` enchaîne xcodegen, les quatre
+// runs xcodebuild (standard + lancement gated SwiftUI, iOS et tvOS) et leurs exports JUnit,
+// la garde anti-duplication Obj-C du doLast comprise. macOS-ONLY (xcodebuild, simulateurs,
+// xcodegen) : volontairement HORS `:kadre:check` — miroir de la posture des gates AppKit ;
+// la tâche est le point d'entrée découvrable qu'un job CI macOS (dédié ou consolidé)
+// invoque, et le gate `scripts/test-uikit-simulator.sh` pilote le MÊME agrégateur par
+// famille (`run_consumer`). `--refresh-dependencies` : la même garde anti-repository-
+// périmé que la gate. Sur un hôte non-macOS, aucun graphe n'est câblé et l'échec est
+// EXPLICITE (jamais un downgrade silencieux).
+val swiftConsumerOnMacOs = providers.systemProperty("os.name").get().lowercase().contains("mac")
+tasks.register<GradleBuild>("validateSwiftConsumer") {
+    group = "verification"
+    description =
+        "Runs the external swift consumer (consumers/swift) against the contract repository — " +
+            "macOS only (xcodebuild + iOS/tvOS simulators), never wired into :kadre:check."
+    if (swiftConsumerOnMacOs) {
+        dependsOn(contractPublications)
+        dependsOn(":kadre:platform:uikit:publishAllPublicationsToContractTestRepository")
+        dependsOn(":kadre:foundation:publishAllPublicationsToContractTestRepository")
+    }
+    dir = file("consumers/swift")
+    tasks = listOf("check")
+    startParameter.projectProperties = mapOf(
+        "kadreRepository" to contractTestRepository.get().asFile.absolutePath,
+        "kadreVersion" to project.version.toString(),
+    )
+    startParameter.isRefreshDependencies = true
+    doFirst {
+        if (!swiftConsumerOnMacOs) {
+            throw GradleException(
+                ":kadre:validateSwiftConsumer exige macOS (xcodebuild, simulateurs iOS/tvOS, " +
+                    "xcodegen) — tâche volontairement hors :kadre:check, miroir des gates " +
+                    "AppKit ; utilisez un hôte macOS (local ou job CI)."
+            )
+        }
+    }
+}
+
 /**
  * The browser entries of the TypeScript consumer, as the Web driver's host page consumes them.
  *
