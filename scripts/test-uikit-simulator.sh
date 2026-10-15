@@ -86,6 +86,10 @@ CONSUMER_VERSION="$(sed -n 's/^version=//p' "$ROOT/gradle.properties")"
 # Gradle résoudrait silencieusement un artefact CACHÉ d'une version identique au lieu de
 # celui, frais, du repository recomposé. Les Sync du validateur copient ces XML près des
 # preuves du driver (test-results/<target>ConsumerTest[Gated]).
+# Coût gate (mesuré une fois, mode `all`) : au-delà des 2 runs xcodebuild du driver, `all`
+# paie 2 publications (uikit + foundation, up-to-date après la première famille) + les 4
+# runs xcodebuild du consumer (standard + gated SwiftUI, par famille) — le prix honnête de
+# la preuve « consumers depuis leurs propres artefacts » dans LA même gate.
 run_consumer() {
   local family="$1" exports
   case "$family" in
