@@ -17,7 +17,10 @@
 #   2. PRÉSENCE de la surface promise (INTEROP §5 + §2) : KadreIos (le host et son seam
 #      attach), la factory (référence pass-through), la session, la policy et ses profils
 #      intégrés, le value model fermé (KadreResult, outcome 3 cases, 4 phases,
-#      KadreStopReason) et les 17 cases exactes de KadreFailure.
+#      KadreStopReason) et les 17 cases exactes de KadreFailure. Les enums FERMÉS
+#      (outcome, phases, profils, cases) sont vérifiés à l'ÉGALITÉ STRICTE sur préfixe —
+#      une case ou un profil AJOUTÉ est un élargissement de façade et fait échouer
+#      l'audit (revue T4-F1), pas seulement une case retirée.
 #
 #   3. INVENTAIRE scaffolding (toléré INTEROP §1 « détail généré » / §2) — COMPTEURS
 #      AFFICHÉS, jamais un échec : un drift invite à rafraîchir le §3 (lignes /
@@ -80,6 +83,22 @@ check_present() { # header label pattern description [minimum]
   fi
 }
 
+# Les enums FERMÉS de la surface promise (revue T4-F1) : un check_present à `>= N` et un
+# motif qui n'énumère que les noms connus laisseraient PASSER une case AJOUTÉE (une 4e
+# case d'outcome, un 4e profil) — or un élargissement de surface EST la diff de contrat
+# que l'audit doit attraper. Ces contrôles comptent donc sur le PRÉFIXE (tout nom de case,
+# connu ou non) et exigent l'ÉGALITÉ stricte — le mécanisme des 17 cases KadreFailure.
+check_exact() { # header label pattern description expected
+  local header="$1" label="$2" pattern="$3" description="$4" expected="$5" count
+  count="$(grep -cE "$pattern" "$header" || true)"
+  if [[ "$count" -ne "$expected" ]]; then
+    echo "FAIL: [$label] $description — '$pattern' = $count (attendu EXACTEMENT $expected)" >&2
+    FAILURES=$((FAILURES + 1))
+  else
+    echo "OK: [$label] $description — '$pattern' = $count (exact)"
+  fi
+}
+
 count_distinct() { # header pattern -> stdout
   # `|| true` : sous pipefail, un grep sans match (exit 1) tuerait sinon la substitution.
   { grep -oE "$2" "$1" || true; } | sort -u | wc -l | tr -d ' '
@@ -119,10 +138,12 @@ audit_header() {
   check_present "$header" "$label" '@protocol KadreUikitKadreFailure' "le protocole KadreFailure"
   check_present "$header" "$label" 'KadreUikitKadreResult(Success|Failure)' \
     "le value model KadreResult" 2
-  check_present "$header" "$label" '^@interface KadreUikitSessionOutcome(Completed|Stopped|Failed) :' \
-    "l'outcome fermé (exactement 3 cases)" 3
-  check_present "$header" "$label" '^@interface KadreUikitSessionState(Starting|Running|Stopping|Terminated) :' \
-    "les 4 phases de session (exactement)" 4
+  # Égalité stricte sur PRÉFIXE (revue T4-F1) : une case/phase AJOUTÉE passerait un
+  # motif qui n'énumère que les noms connus — l'élargissement doit échouer.
+  check_exact "$header" "$label" '^@interface KadreUikitSessionOutcome' \
+    "l'outcome fermé (exactement 3 cases — une case ajoutée est un élargissement de façade)" 3
+  check_exact "$header" "$label" '^@interface KadreUikitSessionState' \
+    "les 4 phases de session (exactement — une phase ajoutée est un élargissement de façade)" 4
   check_present "$header" "$label" '^@interface KadreUikitSessionStopReason :' "KadreStopReason"
 
   local failure_cases
@@ -169,8 +190,15 @@ check_present "$FACADE_DIR/KadreSessionHandle.swift" "swift-facade" \
   "les quatre membres §5 (observeState/requestStop/close/awaitTermination)" 4
 check_present "$FACADE_DIR/KadreObservation.swift" "swift-facade" 'public final class KadreObservation' "KadreObservation"
 check_present "$FACADE_DIR/KadreObservation.swift" "swift-facade" 'public func close\(\)' "la retrait de l'observation"
-check_present "$FACADE_DIR/KadrePolicyProfile.swift" "swift-facade" \
-  'case (`?default`?|realtime|recording)$' "les 3 profils de policy (exactement)" 3
+# Égalité stricte sur le bloc de l'enum (revue T4-F1) : compter TOUTES les cases du bloc
+# `public enum KadrePolicyProfile` — un 4e profil ajouté doit échouer, pas passer en >= 3.
+profile_cases="$(sed -n '/^public enum KadrePolicyProfile/,/^}/p' "$FACADE_DIR/KadrePolicyProfile.swift" | grep -cE '^    case ' || true)"
+if [[ "$profile_cases" -ne 3 ]]; then
+  echo "FAIL: [swift-facade] les 3 profils de policy — $profile_cases cases dans le bloc (attendu EXACTEMENT 3, INTEROP §5)" >&2
+  FAILURES=$((FAILURES + 1))
+else
+  echo "OK: [swift-facade] les 3 profils de policy — 3 cases dans le bloc (exact, INTEROP §5)"
+fi
 # Le fichier porte AUSSI les enums compagnon (KadreOperation, KadrePermission…) : le
 # comptage des cases est SCOPÉ au bloc `public enum KadreFailure` — pas au fichier entier.
 facade_failure_cases="$(sed -n '/^public enum KadreFailure/,/^}/p' "$FACADE_DIR/KadreFailure.swift" | grep -cE '^    case ' || true)"
