@@ -27,6 +27,7 @@ import org.graphiks.kadre.internal.runtime.RuntimeSessionRevocationHandler
 import org.graphiks.kadre.internal.runtime.RuntimeSessionObserver
 import org.graphiks.kadre.internal.runtime.withLock
 import org.graphiks.kadre.internal.uikit.UIKitControllerInventory
+import org.graphiks.kadre.internal.uikit.UIKitCapturePort
 import org.graphiks.kadre.internal.uikit.UIKitDisplayPort
 import org.graphiks.kadre.internal.uikit.UIKitGCControllerSource
 import org.graphiks.kadre.internal.uikit.UIKitGCDeviceHapticsEffectSeam
@@ -37,6 +38,7 @@ import org.graphiks.kadre.internal.uikit.UIKitMemoryPressureClaim
 import org.graphiks.kadre.internal.uikit.UIKitNotificationCenterMemoryPressureSeam
 import org.graphiks.kadre.internal.uikit.UIKitOwnership
 import org.graphiks.kadre.internal.uikit.UIKitProcessMemoryPressure
+import org.graphiks.kadre.internal.uikit.UIKitReplayKitCaptureSource
 import org.graphiks.kadre.internal.uikit.UIKitSceneRegistry
 import org.graphiks.kadre.internal.uikit.UIKitScreenDisplaySource
 import org.graphiks.kadre.internal.uikit.UIKitWindowRuntime
@@ -283,8 +285,25 @@ public object KadreIos {
             },
             componentsFactory = { _, rootScope ->
                 val runtime = UIKitWindowRuntime(window, surfaceView, policy, failureReporter)
+                // Le port capture de CETTE session (phase 9, Task 2) : le plan de contrôle
+                // ReplayKit — la disponibilité LUE à chaque snapshot (JAMAIS « Simulator ⇒
+                // indisponible » codé en dur — le pin du spike), requestPermission ne présente
+                // JAMAIS d'interface, la cible Source refusée avant tout seam, l'inventaire de
+                // sources honnêtement indisponible (les extensions de broadcast vivent hors
+                // process — les frames n'atteignent jamais l'app). Le registre des surfaces se
+                // remplit à l'ADMISSION DIFFÉRÉE ci-dessous (l'id de surface n'existe qu'alors)
+                // ; le port est FERMÉ par les composants (RuntimeSessionComponents.close →
+                // capturePort) — le closeAction ci-dessous ne le referme jamais, et le seam
+                // qu'il possède meurt avec lui.
+                val capturePort = UIKitCapturePort(source = UIKitReplayKitCaptureSource())
                 val deferred = RuntimeDeferredAdmissionWindowManager(runtime.manager) {
                     runtime.admitPrimaryWindow()
+                    // La surface primaire de CETTE session entre dans le registre capture (le
+                    // miroir Android `registerHostCaptureSurface`, dans la closure d'admission
+                    // qui seule connaît l'id — le miroir des deux branches d'attach Android) ;
+                    // le check du registre refuse un second enregistrement d'une AUTRE vue.
+                    val primary = checkNotNull(runtime.attachedPrimarySurface)
+                    capturePort.registerHostCaptureSurface(primary.surface.id, surfaceView)
                 }
                 val sceneManager = UIKitWindowSceneManager(
                     runtimeManager = deferred,
@@ -347,6 +366,7 @@ public object KadreIos {
                     displayPort = displayPort,
                     gamepadPort = gamepadPort,
                     inputDevicePort = inputDevicePort,
+                    capturePort = capturePort,
                     closeAction = {
                         sceneManager.close()
                         runtime.close()
