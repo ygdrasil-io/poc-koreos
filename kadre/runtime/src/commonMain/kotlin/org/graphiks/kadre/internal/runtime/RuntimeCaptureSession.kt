@@ -246,8 +246,12 @@ internal class RuntimeCaptureSession(
         // secours (drop/échec d'envoi) l'annulent explicitement.
         queuedFrameBytes += bytes
         var dropped = 0L
+        // LE PRÉDICATE NE RECOMPTE PAS LE CANDIDAT (fix revue Task 6) : l'incrément
+        // ci-dessus inclut DÉJÀ la frame candidate dans `queuedFrameBytes` — ajouter
+        // `+ bytes` ici doublerait le seuil effectif (Q+L+2b ≤ max) et ferait déborder
+        // spurious une frame isolée dès ~la moitié du budget. Le seuil est Q+L ≤ max.
         while (
-            queuedFrameBytes + leasedFrameBytes + bytes > capturePolicy.maxBufferedBytesPerSession ||
+            queuedFrameBytes + leasedFrameBytes > capturePolicy.maxBufferedBytesPerSession ||
             frames.trySend(frame).isFailure
         ) {
             when (val overflow = capturePolicy.frames.overflowAction()) {

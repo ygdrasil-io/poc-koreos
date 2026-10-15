@@ -1,5 +1,6 @@
 package org.graphiks.kadre.internal.runtime
 
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.CompletableDeferred
@@ -389,6 +390,137 @@ class RuntimeCaptureSessionTest {
 
         assertEquals(KadreResult.Success(Unit), collecting.await())
         assertEquals(CaptureSessionState.Streaming(reconfigured), stateDuringFrame)
+    }
+
+    /**
+     * LE FILET DE L'INVARIANT QUEUED-BYTES (fix driver Task 6, prescription de revue) : un
+     * collecteur sur [Dispatchers.Unconfined] reprend ses continuations SANS interception —
+     * l'exact contexte du pont K/N d'une suspension Swift, que les essais `runTest` +
+     * StandardTestDispatcher ci-dessus ne peuvent PAS produire (les reprises y sont
+     * interceptées et mises en file, jamais en ligne). `async(Dispatchers.Unconfined)`
+     * exécute le corps du collecteur avec empressement JUSQU'À LA PREMIÈRE suspension :
+     * au retour du `async`, le receveur est garé sur `receiveCatching`. L'envoi producteur
+     * (`offerFrameLocked`) reprend ALORS le receveur EN LIGNE, DANS l'appel `trySend` :
+     * son décrément court AVANT le `+=` d'après-envoi de l'ANCIEN ordre et l'invariant
+     * sous-flotte sous le verrou réentrant — l'ancien ordre fait échouer CE test avec
+     * l'exact `IllegalStateException: capture queued-byte accounting underflow` (preuve
+     * de mutation enregistrée dans le rapport de fix), le nouvel ordre (incrément AVANT
+     * l'envoi) le fait passer.
+     */
+    @Test
+    fun unconfinedCollectorReceivesTheInlineDeliveryWithoutAccountingUnderflow() = runTest {
+        val port = AdmissionCapturePort(enumeratedSnapshot(name = "Primary"))
+        val manager = RuntimeCaptureManager(port, maxConcurrentSessions = 1)
+        val selected = source(manager)
+        val reservation = StreamingCaptureReservation(portSource("Primary"))
+        port.reservations.addLast(KadreResult.Success(reservation))
+        val session = successValue(
+            manager.open(CaptureRequest(CaptureTarget.Source(selected.id, selected.managerRevision))),
+        )
+        val delivered = mutableListOf<Byte>()
+        val collecting = async(Dispatchers.Unconfined) {
+            session.collectFrames { frame ->
+                delivered += frame.copyPlanes().single().bytes.first()
+            }
+        }
+        assertTrue(collecting.isActive, "the Unconfined collector is parked on the channel receive")
+
+        reservation.emit(frame(7))
+
+        assertEquals(listOf<Byte>(7), delivered, "the frame is delivered inline inside the send")
+        assertEquals(CaptureSessionState.Streaming(reservation.configuration), session.state.value)
+        reservation.complete(CaptureOutcome.SourceCompleted)
+
+        assertEquals(KadreResult.Success(Unit), collecting.await())
+    }
+
+    /**
+     * LE SEUIL DU BUDGET (fix revue Task 6 — le prédicat ne recompTE PAS le candidat) :
+     * l'incrément précède la boucle, donc `queuedFrameBytes` inclut DÉJÀ la frame
+     * candidate — le prédicat à `Q+L+b ≤ max` doublait le seuil effectif et laissait
+     * déborder spurious une frame isolée dès ~la moitié du budget. Épinglé au BORD
+     * EXACT : une frame de 4 octets sous un budget de 4 est LIVRÉE (l'ancien prédicat
+     * la droppait — `Dropped(1)`, jamais livrée).
+     */
+    @Test
+    fun frameAtTheExactBudgetBoundaryIsDelivered() = runTest {
+        val port = AdmissionCapturePort(enumeratedSnapshot(name = "Primary"))
+        val manager = RuntimeCaptureManager(
+            port = port,
+            maxConcurrentSessions = 1,
+            capturePolicy = KadrePolicies.Default.capture.copy(maxBufferedBytesPerSession = 4L),
+        )
+        val selected = source(manager)
+        val reservation = StreamingCaptureReservation(portSource("Primary"))
+        port.reservations.addLast(KadreResult.Success(reservation))
+        val session = successValue(
+            manager.open(CaptureRequest(CaptureTarget.Source(selected.id, selected.managerRevision))),
+        )
+        val delivered = mutableListOf<Byte>()
+        val collecting = async {
+            session.collectFrames { frame ->
+                delivered += frame.copyPlanes().single().bytes.first()
+            }
+        }
+        runCurrent()
+
+        reservation.emit(frame(9))
+        runCurrent()
+
+        assertEquals(listOf<Byte>(9), delivered, "a frame at exactly the budget passes the offer")
+        reservation.complete(CaptureOutcome.SourceCompleted)
+        assertEquals(KadreResult.Success(Unit), collecting.await())
+    }
+
+    /** Un octet DE PLUS que le budget : la session termine `Failed(ResourceLimitExceeded)`. */
+    @Test
+    fun frameOneByteOverTheBudgetFailsTheSession() = runTest {
+        val port = AdmissionCapturePort(enumeratedSnapshot(name = "Primary"))
+        val manager = RuntimeCaptureManager(
+            port = port,
+            maxConcurrentSessions = 1,
+            capturePolicy = KadrePolicies.Default.capture.copy(maxBufferedBytesPerSession = 4L),
+        )
+        val selected = source(manager)
+        val reservation = StreamingCaptureReservation(portSource("Primary"))
+        port.reservations.addLast(KadreResult.Success(reservation))
+        val session = successValue(
+            manager.open(CaptureRequest(CaptureTarget.Source(selected.id, selected.managerRevision))),
+        )
+        val collecting = async { session.collectFrames { } }
+        runCurrent()
+        val oversized = frame().let { base ->
+            CapturePortFrame(
+                size = base.size,
+                format = base.format,
+                planes = listOf(
+                    CapturePortPlane(
+                        layout = PixelPlaneLayout(1, 1, 5, 4, 5, 1, 1), // rowStride paddé : 5 octets
+                        bytes = byteArrayOf(1, 2, 3, 4, 5),
+                    ),
+                ),
+                configurationRevision = 0L,
+                sourceTimestamp = null,
+                duration = null,
+                discontinuity = null,
+                colorEncoding = base.colorEncoding,
+                alphaMode = base.alphaMode,
+                orientation = base.orientation,
+            )
+        }
+
+        reservation.emit(oversized)
+
+        assertEquals(
+            KadreResult.Failure(KadreFailure.ResourceLimitExceeded(KadreResourceKind.CaptureBuffer, 4L)),
+            collecting.await(),
+        )
+        assertEquals(
+            CaptureSessionState.Terminated(
+                CaptureOutcome.Failed(KadreFailure.ResourceLimitExceeded(KadreResourceKind.CaptureBuffer, 4L)),
+            ),
+            session.state.value,
+        )
     }
 }
 
