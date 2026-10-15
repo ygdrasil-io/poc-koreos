@@ -44,7 +44,15 @@ posés dans `WAYLAND-PHASE-0-DECISIONS.md` ; la tranche livrée est décrite par
 | lease `withDesktopHandle` (adresses `wl_display`/`wl_surface` réelles) | `jvm` | adresses valides uniquement pendant le block ; refus `Closed(Window)` après fermeture admise (SN-8) | `:kadre:backend:wayland:jvmTest` + `waylandNativeTests` | `SUR-002` — `wayland-surface-handle-lease-addresses`, sentinelle `wayland-surface-lease-refused-after-close` | block jamais exécuté après fermeture admise | `WaylandWindowO2Test.handleLeaseIsHonoredWhileActiveAndRefusedAfterClose`, `WaylandWindowsLinuxTest` (adresses non nulles) |
 | mises à jour de fenêtre (`WindowUpdate`) | `jvm` | — (tranche 2 sans update natif) | `:kadre:backend:wayland:jvmTest` | — | toute demande ⇒ `WindowUpdateCommand.rejected` (phase 3 : redraw coalescent) | couvert par le port (rejet explicite) |
 
-## 4. Limites des tranches 1 et 2
+## 3 bis. Registre — tranche 3 (métriques, outputs, scale, redraw)
+
+| feature | target | minimum déclaré | compile gate | runtime gate | état absent | tests |
+|---|---|---|---|---|---|---|
+| inventaire outputs (`DisplayPort` via `wl_output` managé) | `jvm` | sway headless ; batch all-or-nothing au `done` | `waylandNativeTests` | `DSP-002` (P-1, P-3 ajout) | `workArea = null` honnête ; outputs sans mode courant exclus, jamais scale 0 ; primaire retiré non substitué | `WaylandMetricsLinuxTest` (O3), `WaylandMetricsO2Test` (O2) |
+| scale de surface (`set_buffer_scale` v6) | `jvm` | sway `output scale 2` en cours de session | `waylandNativeTests` | `DSP-003` (P-2) | scale publié = `wl_output.scale` (entier) ; buffer = logique × scale ; pas d'upscale flou | `WaylandMetricsLinuxTest.scaleChangeMidSessionRepublishesTheInventory` |
+| redraw coalescent (`wl_surface.frame` pacing) | `jvm` | N demandes ⇒ 1 commit ; jamais horloge ni preuve de présentation | `:kadre:backend:wayland:jvmTest` | `SUR-003` (F2-2, SN-1) | surface sans frame : demande reste sale | `WaylandMetricsO2Test.redrawRequestsCoalesceIntoOneFrameCommit` |
+
+## 4. Limites des tranches 1, 2 et 3
 
 - Le support `WAYLAND_SOCKET` au run est refusé avant session
   (`PlatformFailure(Wayland, "start", "wayland-socket-unsupported")`) tant que
