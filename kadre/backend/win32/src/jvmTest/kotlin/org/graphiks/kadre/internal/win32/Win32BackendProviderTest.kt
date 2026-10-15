@@ -27,6 +27,17 @@ import org.graphiks.kadre.internal.runtime.desktop.DesktopStandaloneRequest
 import org.graphiks.kadre.policy.KadrePolicies
 
 class Win32BackendProviderTest {
+    @Test
+    fun driverAndPumpShareTheSameNativePort() {
+        var portsCreated = 0
+        val provider = Win32BackendProvider.forTesting(
+            availability = { true },
+            portFactory = { portsCreated += 1; DeterministicWin32HostPort() },
+        )
+        assertEquals(KadreResult.Success(SessionOutcome.Completed), provider.run(standaloneRequest()))
+        assertEquals(1, portsCreated, "the pump and driver must share their UI endpoint")
+    }
+
     private fun blockingRequest(): DesktopStandaloneRequest =
         DesktopStandaloneRequest(
             applicationFactory = KadreApplicationFactory { KadreApplication { awaitCancellation() } },
@@ -90,8 +101,13 @@ class Win32BackendProviderTest {
         assertFalse(first.isAlive, "the first standalone run must terminate after its stop")
 
         // Le lease libéré, une exécution séquentielle repart de zéro (SN-6).
-        port.enqueueMessage(Win32PumpMessage.StopRequest.ordinal)
-        val third = provider.run(blockingRequest())
+        val nextProvider = Win32BackendProvider.forTesting(
+            availability = { true },
+            portFactory = {
+                DeterministicWin32HostPort().also { it.enqueueMessage(Win32PumpMessage.StopRequest.ordinal) }
+            },
+        )
+        val third = nextProvider.run(blockingRequest())
         val stopped = assertIs<KadreResult.Success<SessionOutcome>>(third)
         assertIs<SessionOutcome.Stopped>(stopped.value)
     }

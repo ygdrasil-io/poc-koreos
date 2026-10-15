@@ -4,6 +4,7 @@ plugins {
 }
 
 group = "org.graphiks.kadre.contracts"
+val win32KffiVersion = providers.gradleProperty("kadreKffiWin32Version").orElse(libs.versions.kffi.win32)
 
 kotlin {
     jvmToolchain(25)
@@ -16,7 +17,7 @@ java {
 }
 
 dependencies {
-    implementation(libs.kffi.win32)
+    implementation("org.graphiks:kffi-win32:${win32KffiVersion.get()}")
     testImplementation(kotlin("test"))
 }
 

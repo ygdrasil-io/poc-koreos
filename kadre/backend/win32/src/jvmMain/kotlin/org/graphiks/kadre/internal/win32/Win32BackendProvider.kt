@@ -72,7 +72,8 @@ public class Win32BackendProvider private constructor(
             try {
                 return runSession(request, session)
             } finally {
-                session.teardown()
+                try { session.teardown() }
+                finally { session.port.close() }
             }
         } finally {
             Win32HostLease.release()
@@ -84,13 +85,14 @@ public class Win32BackendProvider private constructor(
         session: Win32HostSession,
     ): KadreResult<SessionOutcome> {
         val parentScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+        var ownedDriver: Win32WindowRuntimeDriver? = null
         try {
             val lastWindowStop = Win32LastWindowStopBridge()
             val driver = Win32WindowRuntimeDriverFactory.create(
-                port = portFactory(),
+                port = session.port,
                 resources = request.policy.resources,
                 onLastWindowClosed = if (request.stopWhenLastWindowClosed) lastWindowStop::request else null,
-            )
+            ).also { ownedDriver = it }
             val controller = RuntimeHostController.withComponents(
                 platform = KadrePlatform.Win32,
                 componentsFactory = { _, _ ->
@@ -135,6 +137,7 @@ public class Win32BackendProvider private constructor(
             }
             return KadreResult.Success(outcome)
         } finally {
+            ownedDriver?.close()
             parentScope.cancel(CancellationException("win32 standalone host released"))
         }
     }

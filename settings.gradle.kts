@@ -22,6 +22,18 @@ dependencyResolutionManagement {
     // added by the Wasm plugin itself → `wasmJsBrowserProductionWebpack` failed.
     repositoriesMode.set(RepositoriesMode.PREFER_SETTINGS)
     repositories {
+        // Explicit development opt-in for the jointly developed KFFI Win32
+        // artifact. No unrelated dependency may resolve from Maven local.
+        if (providers.gradleProperty("kadreKffiLocal").orNull == "true") {
+            mavenLocal {
+                content {
+                    includeModule("org.graphiks", "kffi")
+                    includeModule("org.graphiks", "kffi-jvm")
+                    includeModule("org.graphiks", "kffi-win32")
+                    includeModule("org.graphiks", "kffi-win32-jvm")
+                }
+            }
+        }
         google()
         maven("https://central.sonatype.com/repository/maven-snapshots/") {
             name = "Central Portal Snapshots"
