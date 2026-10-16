@@ -1,6 +1,6 @@
 # Adapter Win32 — phases 1 à 5 complètes
 
-Hôte exercé : Windows x64, bureau interactif, JVM 25. La phase 5 complète est validée avec les jars KFFI publiés localement sous `1.0.0-win32-phase5-complete-local-SNAPSHOT`. La publication distante des primitives complémentaires KFFI #128 puis leur épinglage restent requis avant de quitter le draft. Voir la [matrice de qualification complète](../WIN32-PHASE-5-VALIDATION.md).
+Hôte exercé : Windows x64, bureau interactif, JVM 25. Les primitives KFFI #127/#128 sont fusionnées et publiées ; le snapshot distant `1.0.0-20261015.232828-61` est épinglé dans le catalogue. Maven local reste un opt-in de développement. Voir la [matrice de qualification complète](../WIN32-PHASE-5-VALIDATION.md).
 
 | Fonction | État livré | Gate et limite |
 | --- | --- | --- |

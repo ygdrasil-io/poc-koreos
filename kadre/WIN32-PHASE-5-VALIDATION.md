@@ -1,6 +1,6 @@
 # Win32 phase 5 — validation complète conjointe
 
-La PR Kadre #474 couvre tous les points de la phase 5. KFFI #127 fournit les propriétés/rectangles ; KFFI #128 fournit les images, niveaux, attention, affinité, confinement et actions natives. Les jars complets sont publiés localement pour tester Kadre. La publication Central de #128 reste nécessaire avant de sortir Kadre de draft.
+La PR Kadre #474 couvre tous les points de la phase 5. KFFI #127 fournit les propriétés/rectangles ; KFFI #128 fournit les images, niveaux, attention, affinité, confinement et actions natives. Les deux PR KFFI sont fusionnées. Le snapshot Win32 `1.0.0-20261015.232828-61`, issu du commit `3b94c959`, est publié dans Central Portal et épinglé dans le catalogue. La [publication](https://github.com/Graphiks-org/kffi/actions/runs/38823603711) a réussi ; Maven local reste un opt-in de développement.
 
 ## Matrice de qualification
 
@@ -26,15 +26,17 @@ Ces décisions Unsupported terminent la qualification des variantes concernées 
 
 ## Reproduction
 
-Après revue : 649 tests Kadre passent (103 Win32 portables, 32 natifs, 426 runtime, 18 Desktop, 70 validator), zéro failure/error/skip ; 19 JSON validés. Les corrections ont leurs régressions RED→GREEN et sont décrites dans les [décisions de revue](WIN32-PHASE-5-REVIEW.md).
+La qualification du snapshot distant, avec `-PkadreKffiLocal=false`, passe les 649 tests Kadre (103 Win32 portables, 32 natifs, 426 runtime, 18 Desktop, 70 validator), zéro failure/error/skip, ainsi que le watchdog et les 19 JSON de contrats. Les corrections ont leurs régressions RED→GREEN et sont décrites dans les [décisions de revue](WIN32-PHASE-5-REVIEW.md).
 
 Le contrôle natif hors écran a confirmé que User32 borne le rectangle ClipCursor au bureau virtuel. KFFI utilise donc l’intersection visible du client, refuse un client entièrement hors écran et enregistre l’ownership avant readback pour permettre le rollback. La régression native KFFI vérifie cette normalisation et la restauration du clip précédent.
 
-Windows x64/JDK 25, depuis KFFI : activer KFFI_WIN32_INTEGRATION=1 puis exécuter `:kffi:jvmTest :kffi-win32:jvmTest :kffi-win32:win32IntegrationTest --configure-on-demand --rerun-tasks`. Publier les mêmes jars avec `scripts/publish-win32-local.ps1 -Version 1.0.0-win32-phase5-complete-local-SNAPSHOT`.
+Windows x64/JDK 25 : la qualification distante consomme le snapshot du catalogue avec Maven local explicitement désactivé.
 
-Depuis Kadre, exécuter `:kadre:backend:win32:win32ContractTests :kadre:runtime:jvmTest :kadre:platform:desktop:jvmTest :kadre:contracts:validator:jvmTest :kadre:contracts:validator:validateContractRegistry :kadre:contracts:validator:generateWin32ContractEvidence` avec `-PkadreKffiLocal=true -PkadreKffiWin32Version=1.0.0-win32-phase5-complete-local-SNAPSHOT`.
+Depuis Kadre, exécuter `:kadre:backend:win32:win32ContractTests :kadre:runtime:jvmTest :kadre:platform:desktop:jvmTest :kadre:contracts:validator:jvmTest :kadre:contracts:validator:validateContractRegistry :kadre:contracts:validator:generateWin32ContractEvidence` avec `-PkadreKffiLocal=false --refresh-dependencies`.
 
-Le watchdog `scripts/test-kadre-win32-contracts.sh` reçoit les mêmes propriétés. La gate produit 19 JSON : W32-001..016 et BCK-025/SES-002/PMP-001. Chaque scénario/sentinelle doit correspondre à un test sans échec ni skip et au SHA contrôlé.
+Le watchdog `scripts/test-kadre-win32-contracts.sh` reçoit `-PkadreKffiLocal=false`. La gate produit 19 JSON : W32-001..016 et BCK-025/SES-002/PMP-001. Chaque scénario/sentinelle doit correspondre à un test sans échec ni skip et au SHA contrôlé.
+
+Pour un développement conjoint local uniquement : dans KFFI, activer `KFFI_WIN32_INTEGRATION=1`, exécuter les suites JVM/natives et publier les jars testés avec `scripts/publish-win32-local.ps1 -Version 1.0.0-win32-phase5-complete-local-SNAPSHOT`. Kadre peut alors activer explicitement `-PkadreKffiLocal=true -PkadreKffiWin32Version=1.0.0-win32-phase5-complete-local-SNAPSHOT`. Ces coordonnées locales ne sont pas utilisées par la qualification distante.
 
 ## Régressions et limites
 
