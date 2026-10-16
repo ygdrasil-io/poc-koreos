@@ -137,6 +137,7 @@ public class BinaryImage(
     public val pixelSize: PhysicalSize? = null,
 ) {
     private val ownedBytes: ByteArray = bytes.copyOf()
+    internal val byteCount: Int get() = ownedBytes.size
 
     public val bytes: ByteArray
         get() = ownedBytes.copyOf()
