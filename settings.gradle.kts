@@ -31,6 +31,8 @@ dependencyResolutionManagement {
                     includeModule("org.graphiks", "kffi-jvm")
                     includeModule("org.graphiks", "kffi-win32")
                     includeModule("org.graphiks", "kffi-win32-jvm")
+                    includeModule("org.graphiks", "kffi-wayland")
+                    includeModule("org.graphiks", "kffi-wayland-jvm")
                 }
             }
         }

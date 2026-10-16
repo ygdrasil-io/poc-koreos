@@ -28,6 +28,9 @@ internal class KffiWaylandBridge private constructor(
             if (interfaceName == "wl_output") {
                 bindOutput(name, version)
             }
+            if (interfaceName == "wl_seat") {
+                synchronized(seatLock) { seatGlobalName = name }
+            }
         },
     )
 
@@ -93,7 +96,36 @@ internal class KffiWaylandBridge private constructor(
     override fun createWindowing(width: Int, height: Int): WaylandNativeWindow =
         KffiWaylandWindowAdapter.create(client, width, height)
 
+    private var seatGlobalName: Int? = null
+    private var boundSeat: org.graphiks.kffi.wayland.managed.WaylandSeat? = null
+    private val seatLock = Any()
+
+    /**
+     * Binds the advertised seat and fans its raw events into [router].
+     * Idempotent; called on the pump thread before the loop starts.
+     */
+    override fun attachSeat(router: WaylandInputRouter) {
+        val seat = synchronized(seatLock) {
+            if (boundSeat != null) return
+            val name = seatGlobalName ?: return
+            val bound = client.bindSeat(name) ?: return
+            boundSeat = bound
+            bound
+        }
+        seat.addPointerListener { event -> router.offer(event) }
+        seat.addKeyboardListener { event -> router.offer(event) }
+    }
+
+    /** Releases the bound seat (session teardown). */
+    override fun detachSeat() {
+        synchronized(seatLock) {
+            boundSeat?.close()
+            boundSeat = null
+        }
+    }
+
     override fun close() {
+        detachSeat()
         registryListener.revoke()
         client.close()
     }
