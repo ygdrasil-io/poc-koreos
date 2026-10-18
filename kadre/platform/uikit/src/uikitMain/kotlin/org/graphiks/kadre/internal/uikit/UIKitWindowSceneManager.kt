@@ -20,6 +20,7 @@ import org.graphiks.kadre.diagnostics.KadreResourceKind
 import org.graphiks.kadre.diagnostics.KadreResult
 import org.graphiks.kadre.internal.runtime.ExclusiveDisplayTargetResolver
 import org.graphiks.kadre.internal.runtime.RawInputPort
+import org.graphiks.kadre.internal.runtime.RuntimePayloadBudget
 import org.graphiks.kadre.internal.runtime.RuntimeFailureReporter
 import org.graphiks.kadre.internal.runtime.RuntimeLock
 import org.graphiks.kadre.internal.runtime.RuntimeProcessIds
@@ -254,6 +255,10 @@ internal class UIKitWindowSceneManager(
      * différée, sinon l'admission de la fenêtre primaire n'a jamais lieu). Un manager enveloppé
      * sans ce fil (doubles de test) rend le fil muet — exactement ce que le cast faisait déjà.
      */
+    override fun installPayloadBudget(budget: RuntimePayloadBudget) {
+        (runtimeManager as? RuntimeSessionWindowManager)?.installPayloadBudget(budget)
+    }
+
     override fun installSessionConfiguration(
         deliveryPolicy: WindowDeliveryPolicy,
         inputDeliveryPolicy: InputDeliveryPolicy,

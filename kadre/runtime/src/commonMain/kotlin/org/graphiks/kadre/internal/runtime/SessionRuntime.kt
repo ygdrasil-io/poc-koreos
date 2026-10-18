@@ -92,6 +92,7 @@ internal class SessionRuntime(
         eventCollectorAllocator,
         policy.resources.maxEventCollectorsPerFlow,
     )
+    private val retainedPayloadBudget = RuntimeRetainedPayloadBudget(policy.resources.maxRetainedPayloadBytesPerSession)
     private val runtimeComponentsAndDisplayManager = try {
         val components = componentsFactory.create(id, rootScope)
         // Le résolveur de cible fullscreen AVANT la configuration de session : l'install de
@@ -112,6 +113,7 @@ internal class SessionRuntime(
                 )
             }
             displayManager?.let(components::installExclusiveDisplayTargetResolver)
+            components.installPayloadBudget(retainedPayloadBudget)
             components.installSessionConfiguration(
                 policy.window,
                 policy.input,

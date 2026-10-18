@@ -135,6 +135,7 @@ public class RuntimeSessionComponents private constructor(
 
     private val lock = RuntimeLock()
     private var closed = false
+    private var sessionPayloadBudget: RuntimePayloadBudget? = null
 
     private val primarySurfaceResolved: RuntimePrimarySurface? by lazy {
         primarySurface ?: primarySurfaceProvider?.invoke()
@@ -193,6 +194,11 @@ public class RuntimeSessionComponents private constructor(
         }
     }
 
+    internal fun installPayloadBudget(budget: RuntimePayloadBudget) {
+        sessionPayloadBudget = budget
+        (windows as? RuntimeSessionWindowManager)?.installPayloadBudget(budget)
+    }
+
     internal fun installSessionConfiguration(
         deliveryPolicy: WindowDeliveryPolicy,
         inputDeliveryPolicy: InputDeliveryPolicy,
@@ -221,7 +227,10 @@ public class RuntimeSessionComponents private constructor(
         // a host-provided primary surface is built by a factory that never sees the session policy.
         // Delivering it here is what keeps the primary surface able to build the same shared reducer
         // as the components branch instead of falling back to a built-in default.
-        (primarySurface as? RuntimePrimarySurfaceConfiguration)?.installSessionConfiguration(
+        // Resolving a deferred primary is only valid after its manager admitted the window.
+        val primaryConfiguration = primarySurface as? RuntimePrimarySurfaceConfiguration
+        sessionPayloadBudget?.let { primaryConfiguration?.installPayloadBudget(it) }
+        primaryConfiguration?.installSessionConfiguration(
             deliveryPolicy,
             inputDeliveryPolicy,
             source,
@@ -246,6 +255,7 @@ public class RuntimeSessionComponents private constructor(
  * its manager to defer the host-window admission until the configuration has been installed.
  */
 public interface RuntimeSessionWindowManager {
+    public fun installPayloadBudget(budget: RuntimePayloadBudget) {}
     public fun installSessionConfiguration(
         deliveryPolicy: WindowDeliveryPolicy,
         inputDeliveryPolicy: InputDeliveryPolicy,
@@ -274,6 +284,7 @@ public class RuntimeDeferredAdmissionWindowManager(
     private val target: RuntimeWindowManager,
     private val admission: () -> Unit,
 ) : WindowManager by target, RuntimeSessionWindowManager {
+    override fun installPayloadBudget(budget: RuntimePayloadBudget): Unit = target.installPayloadBudget(budget)
     override fun installSessionConfiguration(
         deliveryPolicy: WindowDeliveryPolicy,
         inputDeliveryPolicy: InputDeliveryPolicy,
@@ -367,6 +378,7 @@ internal object UnsupportedRuntimeSessionComponentsFactory : RuntimeSessionCompo
  * cannot appear in this signature.
  */
 public interface RuntimePrimarySurfaceConfiguration {
+    public fun installPayloadBudget(budget: RuntimePayloadBudget) {}
     public fun installSessionConfiguration(
         deliveryPolicy: WindowDeliveryPolicy,
         inputDeliveryPolicy: InputDeliveryPolicy,

@@ -39,7 +39,7 @@ internal const val WM_GETMINMAXINFO: Int = 0x0024
 
 /** One UI owner for native peers, input normalization and synchronous interactions. */
 internal class Win32WindowRuntimeDriver internal constructor(
-    resources: ResourceBudgetPolicy,
+    private val resources: ResourceBudgetPolicy,
     private val port: Win32NativeHostPort,
     private val failureReporter: RuntimeFailureReporter,
     onLastWindowClosed: (() -> Unit)?,
@@ -77,6 +77,12 @@ internal class Win32WindowRuntimeDriver internal constructor(
         acceptedAttention = WindowAttention.entries.toSet(),
         publicSurfaceCapabilities = true,
         enabledSurfaceCapabilities = win32SurfaceCapabilities(),
+        textInputPortFactory = TextInputPortFactory { surfaceId ->
+            val entry = entries.values.firstOrNull { it.command.surfaceId == surfaceId }
+            if (entry == null) Win32UnavailableTextInputPort(KadreFailure.Closed(KadreResourceKind.Surface))
+            else try { port.createTextInputPort(entry.window.hwnd) }
+            catch (cause: Throwable) { Win32UnavailableTextInputPort(win32TextFailure("initialization", cause)) }
+        },
         onLastWindowClosed = onLastWindowClosed,
     )
 
@@ -124,7 +130,28 @@ internal class Win32WindowRuntimeDriver internal constructor(
                 { event -> dispatchInteraction(entry, event) },
                 { !closed.get() && !entry.closeAdmitted && entries[command.requestId] === entry },
                 { revokeInteractionAuthority(entry); releaseConfinement(entry) },
-                { revokeInteractionAuthority(entry) })
+                { revokeInteractionAuthority(entry) },
+                Win32ContactRouter(created.hwnd, command.surfaceId, port, resources, manager.nativeInputPayloadBudget(),
+                    manager.nativeInputIngressCapacity(), manager::acceptSurfaceStimulus,
+                    { event -> dispatchInteraction(entry, event) }, { isLive(entry) }, { cause ->
+                        val gestureFailure = cause is Win32GestureFailure
+                        val nativeCause = (cause as? Win32GestureFailure)?.nativeCause ?: cause
+                        val reason = (nativeCause as? KadreException)?.failure
+                        if (!gestureFailure && (reason is KadreFailure.SourceOverflow || reason is KadreFailure.ResourceLimitExceeded))
+                            manager.nativeInputFailure(command.surfaceId, checkNotNull(reason))
+                        else {
+                            val failure = platformFailure("rich-input", when (nativeCause) {
+                                is org.graphiks.kffi.win32.managed.Win32PointerException -> "pointer-error-${nativeCause.error}"
+                                is org.graphiks.kffi.win32.managed.Win32InteractionException -> "interaction-hresult-${nativeCause.hresult.toUInt().toString(16)}"
+                                else -> "native-failed"
+                            })
+                            manager.acceptSurfaceStimulus(SurfaceStimulus.InputObservationChanged(command.surfaceId, true, true,
+                                touch=if (gestureFailure) FeatureAvailability.Available else FeatureAvailability.Unavailable(failure),
+                                gestures=Capability.Supported(setOf(org.graphiks.kadre.input.GestureKind.Pan, org.graphiks.kadre.input.GestureKind.Pinch,
+                                    org.graphiks.kadre.input.GestureKind.Rotation, org.graphiks.kadre.input.GestureKind.DoubleTap), FeatureAvailability.Unavailable(failure))))
+                            failureReporter.report(KadreException(failure))
+                        }
+                    }, { revokeInteractionAuthority(entry) }))
             entry.input = router
             val snapshot = initialSnapshot(created.hwnd)
             command.commit(
@@ -132,11 +159,15 @@ internal class Win32WindowRuntimeDriver internal constructor(
                 effectiveSpec = effectiveSpec,
                 initialSurfaceSnapshot = snapshot,
                 onSurfaceReady = {
-                    if (!entry.closeAdmitted && entries[command.requestId] === entry) {
-                        router.activate()
-                        port.showWindow(created.hwnd)
-                        observeWindow(entry)
-                    }
+                    // Runtime may finish admission on a worker under its manager lock.
+                    // Return before native activation can synchronously call that lock.
+                    port.postOnMainThread({
+                        if (!entry.closeAdmitted && entries[command.requestId] === entry) {
+                            router.activate()
+                            port.showWindow(created.hwnd)
+                            observeWindow(entry)
+                        }
+                    }, failureReporter::report)
                 },
             )
         } catch (failure: Throwable) {

@@ -173,6 +173,9 @@ internal class AndroidInteractionEngine(
                 trigger.position,
                 stampSource(),
             )
+
+            // Android triggers use TouchStarted; token reservation belongs to RuntimeWindowSurface.
+            is RuntimeSynchronousInteraction.TouchContactStarted -> error("native contact requires runtime window dispatch")
         }
         runtime.dispatch(event, advertised, ::invokeNative)
     }
