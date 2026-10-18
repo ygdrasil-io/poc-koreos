@@ -28,6 +28,9 @@ public interface TextInputPort {
 
 /** One native text-input owner whose lifetime is bounded by its runtime session. */
 public interface TextInputOwner : AutoCloseable {
+    public fun activate() {}
+    /** Releases observations for this revision after the runtime committed its accepted snapshot. */
+    public fun documentApplied(documentRevision: TextDocumentRevision) {}
     public override fun close()
 }
 
@@ -36,6 +39,8 @@ public data class TextInputOpenCommand(
     public val surfaceId: SurfaceId,
     public val config: TextInputConfig,
     public val onObservation: (TextInputObservation) -> Boolean,
+    public val payloadBudget: RuntimePayloadBudget? = null,
+    public val onTerminated: (KadreFailure) -> Unit = {},
 )
 
 /** Immutable cursor geometry applied by the backend for one live owner. */

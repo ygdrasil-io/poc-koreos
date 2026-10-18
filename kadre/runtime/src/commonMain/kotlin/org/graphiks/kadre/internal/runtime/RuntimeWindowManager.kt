@@ -120,7 +120,8 @@ public class RuntimeWindowManager public constructor(
     }
 
     private val lock = RuntimeLock()
-    private val imageBudget = RuntimeImageBudget(resources)
+    private var payloadBudget: RuntimePayloadBudget = RuntimeRetainedPayloadBudget(resources.maxRetainedPayloadBytesPerSession)
+    private val imageBudget = RuntimeImageBudget(resources, payloadBudget)
     private val pendingCloseWork = RuntimeCallFrame { ArrayDeque<() -> Unit>() }
     private val drainingCloseWork = RuntimeCallFrame { false }
     private val pending = linkedMapOf<WindowRequestId, PendingWindow>()
@@ -268,6 +269,14 @@ public class RuntimeWindowManager public constructor(
     // Narrow module-internal seam for deterministic ownership-race tests.
     internal fun requestForTesting(requestId: WindowRequestId): RuntimeWindowRequest? = lock.withLock {
         pending[requestId]?.request ?: committed[requestId]?.request
+    }
+
+    override fun installPayloadBudget(budget: RuntimePayloadBudget): Unit = lock.withLock {
+        check(sessionEventStampSource == null && pending.isEmpty() && committed.isEmpty()) {
+            "payload budget must be installed before window admission"
+        }
+        imageBudget.installPayloadBudget(budget)
+        payloadBudget = budget
     }
 
     override fun installSessionConfiguration(
@@ -1516,6 +1525,7 @@ public class RuntimeWindowManager public constructor(
             inputDeliveryPolicy = surfaceInputDeliveryPolicy,
             resources = resources,
             imageBudget = imageBudget,
+            payloadBudget = payloadBudget,
             dropTransferBudget = dropTransferBudget,
             dropTransferScope = dropTransferScope,
             maxCollectorsPerFlow = sessionMaxCollectorsPerFlow,

@@ -1,5 +1,8 @@
 package org.graphiks.kadre.internal.runtime
 
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -14,6 +17,7 @@ import org.graphiks.kadre.diagnostics.FeatureAvailability
 import org.graphiks.kadre.diagnostics.KadreException
 import org.graphiks.kadre.diagnostics.KadreFailure
 import org.graphiks.kadre.diagnostics.KadreOperation
+import org.graphiks.kadre.diagnostics.KadrePlatform
 import org.graphiks.kadre.diagnostics.KadreResourceKind
 import org.graphiks.kadre.diagnostics.KadreResult
 import org.graphiks.kadre.input.DropOfferId
@@ -68,6 +72,8 @@ internal class RuntimeSurfaceInput(
     private val textInputEventCollectorGate: RuntimeEventCollectorGate,
     private val failureReporter: (Throwable) -> Unit,
     private val sessionFailureHandler: (KadreFailure) -> Unit,
+    private val payloadBudget: RuntimePayloadBudget = RuntimeRetainedPayloadBudget(resources.maxRetainedPayloadBytesPerSession),
+    private val platform: KadrePlatform = KadrePlatform.Fake,
 ) : SurfaceInput {
     private val lock = RuntimeLock()
     private var currentState = unsupportedInputState(
@@ -95,6 +101,8 @@ internal class RuntimeSurfaceInput(
     private var terminalNotificationPending = false
     private var textInputSession: RuntimeTextInputSession? = null
     private var textInputOpening = false
+    private var openingTextTarget: TextInputObservationTarget? = null
+    private var activeTextTarget: TextInputObservationTarget? = null
     private val mutableState = MutableStateFlow(currentState)
     private val subscribers = linkedMapOf<InputEventSubscriber, RuntimeEventCollectorLease>()
 
@@ -117,16 +125,18 @@ internal class RuntimeSurfaceInput(
     }
 
     override suspend fun openTextInput(config: TextInputConfig): KadreResult<TextInputSession> {
+        currentCoroutineContext().ensureActive()
+        val observationTarget = TextInputObservationTarget()
         val admitted = lock.withLock {
             when {
                 terminal != null -> TextInputOpenAdmission.Closed
                 textInputSession != null || textInputOpening -> TextInputOpenAdmission.AlreadyInUse
-                currentState.capabilities.textInput is Capability.Unsupported -> TextInputOpenAdmission.Unsupported(
-                    (currentState.capabilities.textInput as Capability.Unsupported).failure,
-                )
+                textAdmissionFailure(currentState.capabilities.textInput) != null -> TextInputOpenAdmission.Unsupported(
+                    checkNotNull(textAdmissionFailure(currentState.capabilities.textInput)))
 
                 else -> {
                     textInputOpening = true
+                    openingTextTarget = observationTarget
                     TextInputOpenAdmission.Admitted
                 }
             }
@@ -145,24 +155,62 @@ internal class RuntimeSurfaceInput(
         // reach the session this call opens, so an observation that a port delivers after that
         // session closed is rejected by the session's own guard rather than routed into a later
         // session that may now own the surface.
-        val observationTarget = TextInputObservationTarget()
+        if (config.surroundingText.length > resources.maxTextCodeUnitsPerValue) {
+            clearTextInputOpening(observationTarget)
+            return KadreResult.Failure(KadreFailure.ResourceLimitExceeded(KadreResourceKind.RetainedPayload,
+                resources.maxTextCodeUnitsPerValue.toLong()))
+        }
+        val initialLease = when (val reserved = payloadBudget.retain(config.surroundingText.length * 2L)) {
+            is KadreResult.Failure -> { clearTextInputOpening(observationTarget); return reserved }
+            is KadreResult.Success -> reserved.value
+        }
+        val opened = try {
+            textInputPort.open(TextInputOpenCommand(
+                surfaceId = surfaceId,
+                config = config,
+                onObservation = { observation ->
+                    lock.withLock { observationTarget.session.takeUnless { observationTarget.closed } }?.acceptObservation(observation) ?: false
+                },
+                payloadBudget = payloadBudget,
+                onTerminated = { reason -> terminateTextTarget(observationTarget, reason) },
+            ))
+        } catch (cancelled: CancellationException) {
+            clearTextInputOpening(observationTarget)
+            initialLease.close()
+            throw cancelled
+        } catch (_: Throwable) {
+            val reason = textPlatformFailure("open-failed")
+            terminateTextTarget(observationTarget, reason)
+            initialLease.close(); clearTextInputOpening(observationTarget)
+            return KadreResult.Failure(reason)
+        }
         val owner = when (
-            val opened = textInputPort.open(
-                TextInputOpenCommand(
-                    surfaceId = surfaceId,
-                    config = config,
-                    onObservation = { observation ->
-                        lock.withLock { observationTarget.session }?.acceptObservation(observation) ?: false
-                    },
-                ),
-            )
+            opened
         ) {
             is KadreResult.Failure -> {
-                lock.withLock { textInputOpening = false }
+                initialLease.close(); clearTextInputOpening(observationTarget)
                 return opened
             }
 
             is KadreResult.Success -> opened.value
+        }
+        try { currentCoroutineContext().ensureActive() }
+        catch (cancelled: CancellationException) {
+            clearTextInputOpening(observationTarget)
+            initialLease.close()
+            closeTextOwner(owner)
+            throw cancelled
+        }
+        val earlyFailure = lock.withLock {
+            observationTarget.failure ?: when {
+                terminal != null || observationTarget.closed -> KadreFailure.Closed(KadreResourceKind.InputSource)
+                else -> textAdmissionFailure(currentState.capabilities.textInput)
+            }
+        }
+        if (earlyFailure != null) {
+            clearTextInputOpening(observationTarget)
+            initialLease.close(); closeTextOwner(owner)
+            return KadreResult.Failure(earlyFailure)
         }
         val session = RuntimeTextInputSession(
             owner = owner,
@@ -172,24 +220,85 @@ internal class RuntimeSurfaceInput(
             eventCollectorGate = textInputEventCollectorGate,
             failureReporter = failureReporter,
             onClosed = { closed -> clearTextInputSession(closed, observationTarget) },
+            resources = resources,
+            payloadBudget = payloadBudget,
+            initialPayloadLease = initialLease,
+            deliveryPolicy = deliveryPolicy.discreteEvents,
+            onTerminated = { reason -> terminateTextTarget(observationTarget, reason) },
+            sessionFailureHandler = sessionFailureHandler,
         )
-        lock.withLock { observationTarget.session = session }
         val result = lock.withLock {
             textInputOpening = false
+            if (openingTextTarget === observationTarget) openingTextTarget = null
             when {
+                observationTarget.failure != null -> KadreResult.Failure(checkNotNull(observationTarget.failure))
                 terminal != null -> KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.InputSource))
+                observationTarget.closed -> KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.TextInputSession))
                 textInputSession != null -> KadreResult.Failure(
                     KadreFailure.AlreadyInUse(KadreResourceKind.TextInputSession),
                 )
 
                 else -> {
+                    observationTarget.session = session
+                    activeTextTarget = observationTarget
                     textInputSession = session
                     KadreResult.Success(session)
                 }
             }
         }
-        if (result is KadreResult.Failure) session.close()
-        return result
+        if (result is KadreResult.Failure) { session.close(); return result }
+        try {
+            currentCoroutineContext().ensureActive()
+            owner.activate()
+            currentCoroutineContext().ensureActive()
+        }
+        catch (cancelled: CancellationException) { session.close(); throw cancelled }
+        catch (_: Throwable) { terminateTextTarget(observationTarget, textPlatformFailure("activation-failed")) }
+        val failure = lock.withLock {
+            observationTarget.failure ?: when {
+                terminal != null -> KadreFailure.Closed(KadreResourceKind.InputSource)
+                observationTarget.closed || session.isClosed -> KadreFailure.Closed(KadreResourceKind.TextInputSession)
+                else -> null
+            }
+        }
+        return if (failure == null) result else { session.close(); KadreResult.Failure(failure) }
+    }
+
+    private fun clearTextInputOpening(target: TextInputObservationTarget) = lock.withLock {
+        target.closed = true
+        if (openingTextTarget === target) { openingTextTarget = null; textInputOpening = false }
+    }
+
+    private fun terminateTextTarget(target: TextInputObservationTarget, reason: KadreFailure) {
+        val session = lock.withLock {
+            if (target.closed || target.failure != null) return
+            val ownsSession = target.session?.let { textInputSession === it } == true
+            if (openingTextTarget !== target && !ownsSession) return
+            target.failure = reason
+            val capability: Capability<Unit> = if (reason is KadreFailure.Unsupported) Capability.Unsupported(reason)
+            else Capability.Supported(Unit, try { FeatureAvailability.Unavailable(reason) }
+                catch (_: IllegalArgumentException) { FeatureAvailability.Unavailable(textPlatformFailure("terminated")) })
+            if (terminal == null && textAdmissionFailure(currentState.capabilities.textInput) == null) setStateLocked(currentState.copy(
+                capabilities = currentState.capabilities.copy(textInput = capability), revision = currentState.revision.next()))
+            target.session
+        }
+        session?.terminate(reason)
+        failureReporter(KadreException(reason))
+    }
+
+    private fun closeTextOwner(owner: TextInputOwner) {
+        try { owner.close() } catch (_: Throwable) { failureReporter(KadreException(textPlatformFailure("close-failed"))) }
+    }
+    private fun textPlatformFailure(code: String) = KadreFailure.PlatformFailure(platform, "text-input", code)
+    private fun textAdmissionFailure(capability: Capability<Unit>): KadreFailure? = when (capability) {
+        is Capability.Unsupported -> capability.failure
+        is Capability.Supported -> when (val availability = capability.availability) {
+            FeatureAvailability.Available -> null
+            is FeatureAvailability.Unavailable -> availability.failure
+            is FeatureAvailability.RequiresPermission -> KadreFailure.PermissionDenied(availability.permission)
+            is FeatureAvailability.RequiresInteraction -> KadreFailure.InteractionRequired(org.graphiks.kadre.diagnostics.InteractionFailureReason.Missing)
+            FeatureAvailability.Unsupported -> KadreFailure.Unsupported(KadreOperation.TextInput)
+        }
     }
 
     @OptIn(DelicateKadreApi::class)
@@ -319,15 +428,24 @@ internal class RuntimeSurfaceInput(
 
     fun accept(stimulus: SurfaceStimulus): Boolean {
         var admission: InputPublicationAdmission? = null
+        var withdrawnText: Pair<TextInputObservationTarget, KadreFailure>? = null
         val accepted = lock.withLock {
             if (terminal != null) return@withLock false
             if (stimulus is SurfaceStimulus.InputObservationChanged) {
-                return@withLock updateObservationCapabilitiesLocked(stimulus)
+                val changed = updateObservationCapabilitiesLocked(stimulus)
+                if (stimulus.textInput != null) {
+                    textAdmissionFailure(stimulus.textInput)?.let { reason ->
+                        val target = activeTextTarget ?: openingTextTarget
+                        if (target != null) withdrawnText = target to reason
+                    }
+                }
+                return@withLock changed
             }
             val publication = reduceLocked(stimulus) ?: return@withLock false
             admission = enqueuePublicationLocked(publication)
             true
         }
+        withdrawnText?.let { (target, reason) -> terminateTextTarget(target, reason) }
         admission?.let(::finishPublicationAdmission)
         return accepted
     }
@@ -454,6 +572,7 @@ internal class RuntimeSurfaceInput(
         val admission = lock.withLock {
             if (terminal != null) return
             terminal = failure?.let(FlowTerminal::Failed) ?: FlowTerminal.Closed
+            openingTextTarget?.closed = true
             terminalNotificationPending = true
             activeTextInput = textInputSession
             textInputSession = null
@@ -477,6 +596,8 @@ internal class RuntimeSurfaceInput(
         observationTarget: TextInputObservationTarget,
     ) {
         lock.withLock {
+            observationTarget.closed = true
+            if (activeTextTarget === observationTarget) activeTextTarget = null
             if (observationTarget.session === session) observationTarget.session = null
             if (textInputSession === session) textInputSession = null
         }
@@ -486,7 +607,7 @@ internal class RuntimeSurfaceInput(
         data object Admitted : TextInputOpenAdmission
         data object AlreadyInUse : TextInputOpenAdmission
         data object Closed : TextInputOpenAdmission
-        data class Unsupported(val failure: KadreFailure.Unsupported) : TextInputOpenAdmission
+        data class Unsupported(val failure: KadreFailure) : TextInputOpenAdmission
     }
 
     private fun reduceLocked(
@@ -751,6 +872,7 @@ internal class RuntimeSurfaceInput(
         stimulus: SurfaceStimulus.InputObservationChanged,
     ): Boolean {
         val capabilities = currentState.capabilities.copy(
+            textInput = stimulus.textInput ?: currentState.capabilities.textInput,
             keyboard = if (stimulus.keyboardInstalled) {
                 FeatureAvailability.Available
             } else {
@@ -1060,6 +1182,8 @@ internal class RuntimeSurfaceInput(
  */
 private class TextInputObservationTarget {
     var session: RuntimeTextInputSession? = null
+    var failure: KadreFailure? = null
+    var closed: Boolean = false
 }
 
 private data class InputPublication(

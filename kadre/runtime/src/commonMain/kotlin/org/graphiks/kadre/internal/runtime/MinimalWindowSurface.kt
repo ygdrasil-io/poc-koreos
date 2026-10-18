@@ -104,7 +104,8 @@ internal class RuntimeWindowSurface(
     private val deliveryPolicy: WindowDeliveryPolicy = KadrePolicies.Default.window,
     private val inputDeliveryPolicy: InputDeliveryPolicy = KadrePolicies.Default.input,
     private val resources: ResourceBudgetPolicy = KadrePolicies.Default.resources,
-    private val imageBudget: RuntimeImageBudget = RuntimeImageBudget(resources),
+    private val payloadBudget: RuntimePayloadBudget = RuntimeRetainedPayloadBudget(resources.maxRetainedPayloadBytesPerSession),
+    private val imageBudget: RuntimeImageBudget = RuntimeImageBudget(resources, payloadBudget),
     private val dropTransferBudget: RuntimeDropTransferBudget = RuntimeDropTransferBudget(
         resources.maxConcurrentDropTransfers,
     ),
@@ -156,6 +157,8 @@ internal class RuntimeWindowSurface(
         textInputEventCollectorGate = collectorAllocator.newGate(maxCollectorsPerFlow),
         failureReporter = ::safeReport,
         sessionFailureHandler = sessionFailureHandler,
+        payloadBudget = payloadBudget,
+        platform = platform,
     )
     private val interactionHandler = (liveCapabilities.handlerInteractions as? Capability.Supported<Set<InteractionKind>>)
         ?.constraints

@@ -219,7 +219,41 @@ class RuntimePrimarySurfaceConfigurationTest {
         testScheduler.runCurrent()
     }
 
+    @Test
+    fun deferredPrimaryResolvesAfterManagerConfigurationAndSharesItsBudget() = runTest {
+        val recorded = RecordingSurface()
+        val components = RecordingComponentsManager()
+        val controller = RuntimeHostController.withComponents(
+            platform = KadrePlatform.Web,
+            componentsFactory = RuntimeSessionComponentsFactory { _, _ ->
+                RuntimeSessionComponents(
+                    windows = components,
+                    primarySurfaceProvider = {
+                        checkNotNull(components.configuration) { "primary resolved before manager admission" }
+                        RuntimePrimarySurface(recorded.surfaceFor(SurfaceId(0))) {}
+                    },
+                    closeAction = {},
+                )
+            },
+        )
+        val session = assertIs<KadreResult.Success<KadreSession>>(controller.attach(
+            CoroutineScope(SupervisorJob() + coroutineContext),
+            KadreApplicationFactory { KadreApplication { awaitCancellation() } }, KadrePolicies.Default,
+        )).value
+        try {
+            val primaryBudget = assertNotNull(recorded.payloadBudget)
+            assertSame(components.payloadBudget, primaryBudget)
+            val lease = assertIs<KadreResult.Success<AutoCloseable>>(primaryBudget.retain(
+                KadrePolicies.Default.resources.maxRetainedPayloadBytesPerSession)).value
+            try {
+                assertIs<KadreResult.Failure>(checkNotNull(components.payloadBudget).retain(1))
+            } finally { lease.close() }
+            assertIs<KadreResult.Success<AutoCloseable>>(primaryBudget.retain(1)).value.close()
+        } finally { session.requestStop(); testScheduler.runCurrent() }
+    }
+
     private class RecordingSurface {
+        var payloadBudget: RuntimePayloadBudget? = null
         var configuration: RecordedConfiguration? = null
             private set
         var installCount: Int = 0
@@ -227,6 +261,7 @@ class RuntimePrimarySurfaceConfigurationTest {
 
         fun surfaceFor(surfaceId: SurfaceId): HostSurface =
             object : HostSurface by RuntimeHostSurface(surfaceId, initialState()), RuntimePrimarySurfaceConfiguration {
+                override fun installPayloadBudget(budget: RuntimePayloadBudget) { payloadBudget = budget }
                 override fun installSessionConfiguration(
                     deliveryPolicy: WindowDeliveryPolicy,
                     inputDeliveryPolicy: InputDeliveryPolicy,
@@ -260,6 +295,8 @@ class RuntimePrimarySurfaceConfigurationTest {
     private class RecordingComponentsManager : WindowManager by UnsupportedWindowManager(
         RuntimeProcessIds::nextWindowRequestId,
     ), RuntimeSessionWindowManager {
+        var payloadBudget: RuntimePayloadBudget? = null
+        override fun installPayloadBudget(budget: RuntimePayloadBudget) { payloadBudget = budget }
         var configuration: RecordedComponentsConfiguration? = null
             private set
 

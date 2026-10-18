@@ -41,6 +41,8 @@ import org.graphiks.kadre.interaction.InteractionRegistration
 import org.graphiks.kadre.internal.runtime.RawInputPort
 import org.graphiks.kadre.internal.runtime.RuntimeDropTransferBudget
 import org.graphiks.kadre.internal.runtime.RuntimeEventCollectorAllocator
+import org.graphiks.kadre.internal.runtime.RuntimePayloadBudget
+import org.graphiks.kadre.internal.runtime.RuntimeRetainedPayloadBudget
 import org.graphiks.kadre.internal.runtime.RuntimeFailureReporter
 import org.graphiks.kadre.internal.runtime.RuntimeLock
 import org.graphiks.kadre.internal.runtime.RuntimePrimarySurfaceConfiguration
@@ -251,6 +253,13 @@ internal class AndroidHostSurface(
      */
     @Volatile
     private var surfaceInput: RuntimeSurfaceInput? = null
+    @Volatile
+    private var payloadBudget: RuntimePayloadBudget? = null
+    override fun installPayloadBudget(budget: RuntimePayloadBudget): Unit = lock.withLock {
+        if (detached) return
+        check(surfaceInput == null && payloadBudget == null) { "payload budget must precede input configuration" }
+        payloadBudget = budget
+    }
 
     /**
      * Le pont d'observation → delivery (Task 3), construit avec le réducteur par
@@ -680,6 +689,7 @@ internal class AndroidHostSurface(
             textInputEventCollectorGate = allocator.newGate(maxCollectorsPerFlow),
             failureReporter = { cause -> failureReporter.report(cause) },
             sessionFailureHandler = sessionFailureHandler,
+            payloadBudget = payloadBudget ?: RuntimeRetainedPayloadBudget(resources.maxRetainedPayloadBytesPerSession),
         )
         surfaceInput = input
         // Le moteur d'interactions (phase 4, Task 4) — la même configuration, une gate de plus

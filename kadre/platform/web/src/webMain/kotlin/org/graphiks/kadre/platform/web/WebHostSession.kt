@@ -43,6 +43,8 @@ import org.graphiks.kadre.internal.runtime.RawInputPort
 import org.graphiks.kadre.internal.runtime.DropTransferSource
 import org.graphiks.kadre.internal.runtime.RuntimeDropTransferBudget
 import org.graphiks.kadre.internal.runtime.RuntimeEventCollectorAllocator
+import org.graphiks.kadre.internal.runtime.RuntimePayloadBudget
+import org.graphiks.kadre.internal.runtime.RuntimeRetainedPayloadBudget
 import org.graphiks.kadre.internal.runtime.RuntimeFailureReporter
 import org.graphiks.kadre.internal.runtime.RuntimeHostController
 import org.graphiks.kadre.internal.runtime.RuntimeInteractionHandler
@@ -788,6 +790,12 @@ private class WebHostSurface(
     private val ownership: WebHostOwnership,
     private val failureReporter: RuntimeFailureReporter,
 ) : HostSurface, RuntimePrimarySurfaceConfiguration, WebElementLeasePort {
+    private var payloadBudget: RuntimePayloadBudget? = null
+    override fun installPayloadBudget(budget: RuntimePayloadBudget) {
+        if (admissionClosed) return
+        check(!this::surfaceInput.isInitialized && payloadBudget == null) { "payload budget must precede input configuration" }
+        payloadBudget = budget
+    }
     private var detached: Boolean = false
     private var terminated: Boolean = false
 
@@ -993,6 +1001,7 @@ private class WebHostSurface(
             // raw-input coordinator of a later phase, not this one.
             failureReporter = { cause -> failureReporter.report(cause) },
             sessionFailureHandler = sessionFailureHandler,
+            payloadBudget = payloadBudget ?: RuntimeRetainedPayloadBudget(resources.maxRetainedPayloadBytesPerSession),
         )
         // The interaction engine is built from the same configuration the ordinary reducer is — the
         // same delivery policy, collector gate and session failure handling — mirroring the reference
