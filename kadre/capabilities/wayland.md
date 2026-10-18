@@ -65,6 +65,17 @@ focus pointeur au client (trail complet dans la PR kffi, test parké) ; les
 preuves INP-004..006 sont O2, l'O3 attend un compositor qui livre (weston,
 uinput) ou la tranche 2 XKB.
 
+## 3 quater. Registre — tranche 5 (interactions et fenêtres avancées)
+
+| feature | target | minimum déclaré | compile gate | runtime gate | état absent | tests |
+|---|---|---|---|---|---|---|
+| updates conformes (titre, contraintes min/max, fullscreen borderless) | `jvm` | kffi toplevel ops (marshals array-signature) | `:kadre:backend:wayland:jvmTest` | `WIN-013` | min>max rejeté avant primitive ; exclusive hors domaine ; géométrie effective au configure suivant | `WaylandAdvancedWindowO2Test` (4 preuves) |
+| move/resize interactifs à serials éligibles | `jvm` | serial d'événement natif consommé une fois | `:kadre:backend:wayland:jvmTest` | `INT-005` | hors callback native ⇒ `InvalidRequest`, zéro émission ; validation serial dépendante du compositor (sway : surface configurée) — l'éligibilité est une discipline consommateur | `WaylandAdvancedWindowO2Test.serialLedgerConsumesEligibleSerialsOnce` |
+
+Résiduel tranche 5 : xdg-decoration (T2, bindings kffi requis),
+xdg-activation/icône (`Unsupported` documenté), pointer constraints
+(phase 6+), O3 injection (voir résiduel tranche 4).
+
 ## 4. Limites des tranches 1 à 4
 
 - Le support `WAYLAND_SOCKET` au run est refusé avant session

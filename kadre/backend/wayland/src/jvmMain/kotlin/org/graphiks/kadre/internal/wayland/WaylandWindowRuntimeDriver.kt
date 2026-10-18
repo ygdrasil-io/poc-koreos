@@ -4,6 +4,8 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
 import org.graphiks.kadre.diagnostics.KadreFailure
 import org.graphiks.kadre.diagnostics.KadrePlatform
+import org.graphiks.kadre.diagnostics.KadreResourceKind
+import org.graphiks.kadre.diagnostics.KadreResult
 import org.graphiks.kadre.internal.runtime.RuntimeFailureReporter
 import org.graphiks.kadre.internal.runtime.RuntimeWindowManager
 import org.graphiks.kadre.internal.runtime.WindowCommandPort
@@ -20,6 +22,31 @@ import org.graphiks.kadre.window.WindowId
 /** File d'actions marshalées vers le thread pompe (discipline thread Wayland). */
 internal interface WindowActionQueue {
     fun enqueue(action: () -> Unit)
+}
+
+/**
+ * Registre des serials réellement éligibles (D1 phase 5) : un serial
+ * d'événement d'entrée réel n'est consommé qu'une fois — un move/resize
+ * hors callback native (aucun serial) est refusé avant toute primitive.
+ */
+internal class WaylandSerialLedger {
+    @Volatile
+    private var latest: Int = -1
+
+    /** Record d'un serial d'événement natif (pointer button, key, enter). */
+    fun record(serial: Int) {
+        if (serial >= 0) latest = serial
+    }
+
+    /** Consomme le serial éligible courant une seule fois ; null si épuisé. */
+    fun consumeEligible(): Int? {
+        val value = latest
+        latest = -1
+        return value.takeIf { it >= 0 }
+    }
+
+    /** Peek sans consommer (diagnostic). */
+    fun peek(): Int? = latest.takeIf { it >= 0 }
 }
 
 /**
@@ -94,6 +121,87 @@ internal class WaylandWindowRuntimeDriver private constructor(
         manager.close()
     }
 
+    /**
+     * Move interactif depuis une callback native : exige un serial
+     * réellement éligible (consommé une fois). Hors callback native, rejet
+     * déterministe sans émission (F1-1).
+     */
+    internal fun requestWindowMove(windowId: WindowId): KadreResult<Unit> {
+        val serial = serialLedger.consumeEligible()
+            ?: return KadreResult.Failure(KadreFailure.InvalidRequest("interaction-serial"))
+        val peer = peer(windowId)
+            ?: return KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.Window))
+        peer.window.beginMove(serial)
+        return KadreResult.Success(Unit)
+    }
+
+    /** Resize interactif — mêmes règles de serial que [requestWindowMove]. */
+    internal fun requestWindowResize(windowId: WindowId, edges: Int): KadreResult<Unit> {
+        val serial = serialLedger.consumeEligible()
+            ?: return KadreResult.Failure(KadreFailure.InvalidRequest("interaction-serial"))
+        val peer = peer(windowId)
+            ?: return KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.Window))
+        peer.window.beginResize(serial, edges)
+        return KadreResult.Success(Unit)
+    }
+
+    internal val serialLedger = WaylandSerialLedger()
+
+    /** Spec courant posé au commit (titre/contraints/mode), pour l'état publié. */
+    internal fun currentSpecOf(windowId: WindowId): org.graphiks.kadre.window.WindowSpec? =
+        appliedSpecs[windowId]
+
+    /** État effectif publié après un update : champs demandés appliqués. */
+    internal fun effectiveStateOf(
+        windowId: WindowId,
+        update: org.graphiks.kadre.window.WindowUpdate,
+    ): org.graphiks.kadre.window.WindowState {
+        val base = appliedSpecs[windowId] ?: org.graphiks.kadre.window.WindowSpec()
+        fun <T> org.graphiks.kadre.surface.PropertyChange<T>?.or(base: T): T =
+            (this as? org.graphiks.kadre.surface.PropertyChange.Set)?.value ?: base
+        val spec = org.graphiks.kadre.window.WindowSpec(
+            title = update.title.or(base.title),
+            contentSize = update.contentSize.or(base.contentSize),
+            minimumSize = update.minimumSize.or(base.minimumSize),
+            maximumSize = update.maximumSize.or(base.maximumSize),
+            outerPosition = base.outerPosition,
+            resizable = update.resizable.or(base.resizable),
+            fullscreen = update.fullscreen.or(base.fullscreen),
+            decorations = base.decorations,
+            systemButtons = base.systemButtons,
+            level = base.level,
+            transparent = base.transparent,
+            blurBehind = base.blurBehind,
+            icon = base.icon,
+            contentProtection = base.contentProtection,
+        )
+        appliedSpecs[windowId] = spec
+        return org.graphiks.kadre.window.WindowState(
+            phase = org.graphiks.kadre.window.WindowPhase.Open,
+            title = spec.title,
+            outerBounds = null,
+            contentSize = spec.contentSize,
+            minimumSize = spec.minimumSize,
+            maximumSize = spec.maximumSize,
+            resizable = spec.resizable,
+            fullscreen = spec.fullscreen,
+            decorations = spec.decorations,
+            systemButtons = spec.systemButtons,
+            level = spec.level,
+            transparent = spec.transparent,
+            blurBehind = spec.blurBehind,
+            icon = spec.icon,
+            contentProtection = spec.contentProtection,
+            revision = org.graphiks.kadre.window.WindowRevision(0L),
+        )
+    }
+
+    private val appliedSpecs = java.util.concurrent.ConcurrentHashMap<WindowId, org.graphiks.kadre.window.WindowSpec>()
+
+    internal fun recordAppliedSpec(windowId: WindowId, spec: org.graphiks.kadre.window.WindowSpec) {
+        appliedSpecs[windowId] = spec
+    }
+
     internal fun requestWindowClose(windowId: WindowId): OpenedWindowCloseOutcome {
         val peer = peer(windowId) ?: return OpenedWindowCloseOutcome.NativeCloseAlreadyCommitted
         return peer.requestProgrammaticClose()
@@ -131,10 +239,60 @@ internal class WaylandWindowCommandPort internal constructor(
     }
 
     override fun requestUpdate(command: WindowUpdateCommand) {
-        // tranche 2 : aucun update natif — rejet explicite de la demande
-        command.rejected(
-            IllegalStateException("window updates are unsupported on Wayland phase 2"),
-        )
+        // champs conformes tranche 5 : titre, contraintes, fullscreen
+        // borderless ; min>max validé AVANT toute primitive (SN-1) ;
+        // exclusive reste hors domaine (SN-2)
+        val update = command.update
+        val minimum = (update.minimumSize as? org.graphiks.kadre.surface.PropertyChange.Set)?.value
+        val maximum = (update.maximumSize as? org.graphiks.kadre.surface.PropertyChange.Set)?.value
+        if (minimum != null && maximum != null &&
+            (minimum.width > maximum.width || minimum.height > maximum.height)
+        ) {
+            command.rejected(IllegalArgumentException("minimum exceeds maximum"))
+            return
+        }
+        if ((update.fullscreen as? org.graphiks.kadre.surface.PropertyChange.Set)?.value
+            is org.graphiks.kadre.window.FullscreenMode.Exclusive
+        ) {
+            command.rejected(IllegalArgumentException("exclusive fullscreen is outside the wayland domain"))
+            return
+        }
+        session.asActionQueue().enqueue { applyUpdate(command) }
+    }
+
+    private fun applyUpdate(command: WindowUpdateCommand) {
+        val update = command.update
+        val peer = driver.peer(command.windowId) ?: run {
+            command.rejected(IllegalStateException("window is closed"))
+            return
+        }
+        try {
+            (update.title as? org.graphiks.kadre.surface.PropertyChange.Set)?.value?.let { peer.window.setTitle(it) }
+            val minSet = update.minimumSize as? org.graphiks.kadre.surface.PropertyChange.Set
+            val maxSet = update.maximumSize as? org.graphiks.kadre.surface.PropertyChange.Set
+            if (minSet != null || maxSet != null) {
+                val current = driver.currentSpecOf(command.windowId)
+                val min = minSet?.value ?: current?.minimumSize
+                val max = maxSet?.value ?: current?.maximumSize
+                peer.window.setConstraints(
+                    min?.width?.toInt() ?: 0,
+                    min?.height?.toInt() ?: 0,
+                    max?.width?.toInt() ?: 0,
+                    max?.height?.toInt() ?: 0,
+                )
+            }
+            when ((update.fullscreen as? org.graphiks.kadre.surface.PropertyChange.Set)?.value) {
+                org.graphiks.kadre.window.FullscreenMode.Borderless -> peer.window.setFullscreenBorderless(true)
+                org.graphiks.kadre.window.FullscreenMode.Windowed -> peer.window.setFullscreenBorderless(false)
+                else -> Unit
+            }
+            // l'état publié reflète les contraintes et le mode demandés ; la
+            // géométrie effective reste autoritaire au configure suivant
+            val state = driver.effectiveStateOf(command.windowId, update)
+            command.applied(state)
+        } catch (failure: Throwable) {
+            command.failed(KadreFailure.PlatformFailure(KadrePlatform.Wayland, "window-update", "update-failed"))
+        }
     }
 
     // la création est synchrone dans l'action pompée: pas de cancellation
@@ -182,6 +340,7 @@ internal class WaylandWindowCommandPort internal constructor(
                     command.nativeClosed()
                 },
             )
+            driver.recordAppliedSpec(command.windowId, spec)
             driver.register(peer, command.surfaceId)
             command.commit(owner = peer, effectiveSpec = spec)
             peer.markCommitted()

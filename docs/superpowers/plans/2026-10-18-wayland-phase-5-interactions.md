@@ -9,17 +9,17 @@ Design: `kadre/WAYLAND-PHASE-5-INTERACTIONS-DESIGN.md`. Branches: kadre
 - [x] Integration proof: ops round-trip + fabricated-serial refusal.
 
 ## Task 2: kadre — serial ledger + move/resize port
-- [ ] O2: requestMove/Resize without eligible serial → InvalidRequest, no
+- [x] O2: requestMove/Resize without eligible serial → InvalidRequest, no
       primitive; with serial → marshalled once, serial consumed.
-- [ ] impl: serial ledger in the input router (pointer button/key/enter),
+- [x] impl: serial ledger in the input router (pointer button/key/enter),
       `WaylandWindowCommandPort.requestInteractionActions` for
       BeginWindowMove/Resize from interaction callbacks.
 
 ## Task 3: kadre — requestUpdate conformant fields
-- [ ] O2: title/min/max/fullscreen-borderless applied + state published;
+- [x] O2: title/min/max/fullscreen-borderless applied + state published;
       min>max rejected pre-primitive (SN-1); exclusive rejected (SN-2);
       resizable as min=max constraint semantics documented.
-- [ ] impl: extend the driver's update path (was: total rejection).
+- [x] impl: extend the driver's update path (was: total rejection).
 
 ## Task 4: O3 sway + contracts
 - [ ] WaylandAdvancedLinuxTest: P-1 (min/max/title → configure), P-2

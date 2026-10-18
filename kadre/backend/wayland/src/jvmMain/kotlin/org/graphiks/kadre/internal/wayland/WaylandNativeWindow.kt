@@ -44,4 +44,16 @@ internal interface WaylandNativeWindow : AutoCloseable {
     public fun setTitle(title: String)
 
     public fun setAppId(appId: String)
+
+    /** Contraintes xdg (0 = reset), effet au commit suivant. */
+    public fun setConstraints(minWidth: Int, minHeight: Int, maxWidth: Int, maxHeight: Int)
+
+    /** Fullscreen borderless on/off (sortie Wayland = output au choix du compositor). */
+    public fun setFullscreenBorderless(enabled: Boolean)
+
+    /** Move interactif — serial d'un événement d'entrée réel. */
+    public fun beginMove(serial: Int)
+
+    /** Resize interactif pour un bitmask d'edges xdg. */
+    public fun beginResize(serial: Int, edges: Int)
 }
