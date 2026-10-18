@@ -39,6 +39,7 @@ internal class WaylandWindowRuntimeDriver private constructor(
     private val closed = AtomicBoolean(false)
     private val peers = ConcurrentHashMap<WindowId, WaylandWindowPeer>()
     private val surfaceCommandPort = WaylandSurfaceCommandPort()
+    internal val inputRouter = WaylandInputRouter()
 
     internal val manager: RuntimeWindowManager = RuntimeWindowManager(
         resources = resources,
@@ -66,11 +67,15 @@ internal class WaylandWindowRuntimeDriver private constructor(
     internal fun register(peer: WaylandWindowPeer, surfaceId: org.graphiks.kadre.surface.SurfaceId) {
         peers[peer.windowId] = peer
         surfaceCommandPort.register(surfaceId, peer)
+        inputRouter.registerSurface(peer.window.nativeAddresses.second, surfaceId)
     }
 
     internal fun unregister(windowId: WindowId, surfaceId: org.graphiks.kadre.surface.SurfaceId? = null) {
         peers.remove(windowId)
-        surfaceId?.let { surfaceCommandPort.unregister(it) }
+        surfaceId?.let {
+            surfaceCommandPort.unregister(it)
+            peers[windowId]?.window?.let { window -> inputRouter.unregisterSurface(window.nativeAddresses.second) }
+        }
     }
 
     internal fun createNativeWindow(width: Int, height: Int): WaylandNativeWindow =
