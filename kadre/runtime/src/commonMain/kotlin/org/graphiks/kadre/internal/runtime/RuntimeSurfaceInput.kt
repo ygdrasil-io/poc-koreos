@@ -939,12 +939,12 @@ internal class RuntimeSurfaceInput(
             } else {
                 FeatureAvailability.Unsupported
             },
-            touch = if (stimulus.touchInstalled) {
+            touch = stimulus.touch ?: if (stimulus.touchInstalled) {
                 FeatureAvailability.Available
             } else {
                 FeatureAvailability.Unsupported
             },
-            gestures = if (stimulus.gestureKinds.isEmpty()) {
+            gestures = stimulus.gestures ?: if (stimulus.gestureKinds.isEmpty()) {
                 unsupported(KadreOperation.GestureInput)
             } else {
                 Capability.Supported(stimulus.gestureKinds.toSet(), FeatureAvailability.Available)
@@ -1177,6 +1177,13 @@ internal class RuntimeSurfaceInput(
     internal fun interactionOverflow() = closeFromDeliveryOverflow(
         deliveryPolicy.discreteEvents.ingressOverflow == IngressOverflowAction.FailSession,
     )
+
+    internal fun nativeIngressFailure(failure: KadreFailure) {
+        val admission = lock.withLock {
+            terminaliseLocked(failure, deliveryPolicy.discreteEvents.ingressOverflow == IngressOverflowAction.FailSession)
+        }
+        finishPublicationAdmission(admission)
+    }
 
     private fun closeFromDeliveryOverflow(failSession: Boolean) {
         val admission = lock.withLock {

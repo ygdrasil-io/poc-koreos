@@ -61,6 +61,17 @@ internal open class KffiWin32HostPort : Win32NativeHostPort {
     private val nativeTextPorts = mutableMapOf<Long, KffiWin32TextPort>()
     private var textServices: Win32TextServices? = null
     private var textInitializationFailure: KadreFailure? = null
+    private val contactServices = KffiWin32ContactServices()
+    override val pointerPacketsAvailable: Boolean get() = true
+    override fun readPointerBatch(pointerId: Int, maxPointers: Int, maxFrames: Int,
+        budget: org.graphiks.kadre.internal.runtime.RuntimePayloadBudget): Win32ContactBatch = contactServices.read(pointerId, maxPointers, maxFrames, budget)
+    override fun isPromotedMouseMessage(): Boolean = org.graphiks.kffi.win32.managed.Win32PointerPackets.isPromotedMouseMessage()
+    override fun pointerClientPosition(hwnd: Long, x: Int, y: Int): org.graphiks.kadre.surface.LogicalPoint {
+        val point = Win32Pointer.screenToClient(hwnd, x, y)
+        val scale = readScaleFactor(hwnd)
+        return org.graphiks.kadre.surface.LogicalPoint(point.x / scale, point.y / scale)
+    }
+    override fun createGesturePort(hwnd: Long, maxPointers: Int, onOutput: (Win32GestureOutput) -> Unit): Win32GesturePort = contactServices.open(hwnd, maxPointers, onOutput)
     private val closing = AtomicBoolean(false)
     private val commands = Win32UiCommandQueue(
         ::isMainThread,
@@ -402,6 +413,7 @@ internal open class KffiWin32HostPort : Win32NativeHostPort {
             onMainThread {
                 try {
                     topLevelWindows.keys.toList().forEach { runCatching { destroyWindow(it.hwnd) } }
+                    contactServices.close()
                     textServices?.close()
                     textServices = null
                     textPorts.clear(); nativeTextPorts.clear()

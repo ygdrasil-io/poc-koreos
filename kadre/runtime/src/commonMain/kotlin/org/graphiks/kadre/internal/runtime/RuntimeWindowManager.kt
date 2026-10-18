@@ -413,6 +413,14 @@ public class RuntimeWindowManager public constructor(
         return surface.accept(stimulus)
     }
 
+    /** Unstable native ingress SPI: shares the session reservation and configured queue limit. */
+    public fun nativeInputPayloadBudget(): RuntimePayloadBudget = lock.withLock { payloadBudget }
+    public fun nativeInputIngressCapacity(): Int = lock.withLock { surfaceInputDeliveryPolicy.discreteEvents.ingressCapacity }
+    public fun nativeInputFailure(surfaceId: SurfaceId, failure: KadreFailure) {
+        val surface = lock.withLock { surfaces[surfaceId] } ?: return
+        surface.nativeInputFailure(failure)
+    }
+
     /** A native modal action consumed the triggering press; discard its deferred ordinary input. */
     public fun invalidateDeferredInteractionInput(surfaceId: SurfaceId) {
         val surface = lock.withLock { surfaces[surfaceId] } ?: return

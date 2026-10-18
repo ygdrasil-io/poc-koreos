@@ -31,6 +31,7 @@ kotlin {
 // Les preuves O3 chargent la pile native Windows (user32/kernel32) : elles ne
 // tournent que sur Windows, dans le task dédié, jamais dans le jvmTest portable.
 tasks.named<Test>("jvmTest") {
+    filter.excludeTestsMatching("org.graphiks.kadre.internal.win32.Win32RichInputNativeContractTest")
     filter.excludeTestsMatching("org.graphiks.kadre.internal.win32.Win32TextInputNativeContractTest")
     filter.excludeTestsMatching("org.graphiks.kadre.internal.win32.Win32AdvancedWindowNativeContractTest")
     filter.excludeTestsMatching("org.graphiks.kadre.internal.win32.Win32WindowMutationNativeContractTest")
@@ -54,6 +55,7 @@ val win32NativeTests = tasks.register<Test>("win32NativeTests") {
     group = "verification"
     description = "Runs the Windows-only Win32 O3 frontier proofs."
     enabled = onWindows
+    filter.includeTestsMatching("org.graphiks.kadre.internal.win32.Win32RichInputNativeContractTest")
     filter.includeTestsMatching("org.graphiks.kadre.internal.win32.Win32AdvancedWindowNativeContractTest")
     filter.includeTestsMatching("org.graphiks.kadre.internal.win32.Win32TextInputNativeContractTest")
     filter.includeTestsMatching("org.graphiks.kadre.internal.win32.Win32WindowMutationNativeContractTest")

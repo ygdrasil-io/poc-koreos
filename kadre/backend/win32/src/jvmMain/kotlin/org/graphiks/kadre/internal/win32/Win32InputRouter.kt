@@ -15,6 +15,7 @@ internal class Win32InputRouter(
     private val isAlive: () -> Boolean,
     private val onFocusLost: () -> Unit = {},
     private val onPrimaryPointerBoundary: () -> Unit = {},
+    private val contacts: Win32ContactRouter? = null,
 ) : AutoCloseable {
     private var ready = false
     private var closed = false
@@ -31,6 +32,7 @@ internal class Win32InputRouter(
         if (closed || ready || !isAlive()) return
         ready = true
         emit(SurfaceStimulus.InputObservationChanged(surfaceId, keyboardInstalled = true, pointerInstalled = true))
+        contacts?.activate()
     }
 
     private fun barrier() { boundary++; wheelSignature = null }
@@ -39,6 +41,9 @@ internal class Win32InputRouter(
 
     fun handle(message: Int, wParam: Long, lParam: Long): Long? {
         if (!ready || !isAlive()) return null
+        contacts?.handle(message, wParam, lParam)?.let { return it }
+        if (contacts?.installed == true && (message in 0x200..0x20e || message == 0x2a3) && port.isPromotedMouseMessage()) return 0L
+        if (message == 0x1f || message == WM_SHOWWINDOW && wParam == 0L || message == WM_SIZE && wParam == 1L) contacts?.reset()
         return when (message) {
             0x100, 0x101, 0x104, 0x105 -> { keyboard(message, wParam, lParam); defaultResult() }
             0x102, 0x103, 0x106, 0x107, 0x109, 0x286 ->
@@ -130,6 +135,7 @@ internal class Win32InputRouter(
     private fun focus(value: Boolean) {
         port.setTextFocus(hwnd, value)
         if (!value) onFocusLost()
+        if (!value) contacts?.reset()
         if (focused == value) return
         focused = value
         barrier()
@@ -141,6 +147,7 @@ internal class Win32InputRouter(
         if (closed) return
         closed = true
         ready = false
+        contacts?.close()
         port.closeTextInput(hwnd)
         if (inside) port.cancelMouseLeave(hwnd)
         held.clear()

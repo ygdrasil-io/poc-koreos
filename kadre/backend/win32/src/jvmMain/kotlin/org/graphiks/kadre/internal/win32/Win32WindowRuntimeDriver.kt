@@ -39,7 +39,7 @@ internal const val WM_GETMINMAXINFO: Int = 0x0024
 
 /** One UI owner for native peers, input normalization and synchronous interactions. */
 internal class Win32WindowRuntimeDriver internal constructor(
-    resources: ResourceBudgetPolicy,
+    private val resources: ResourceBudgetPolicy,
     private val port: Win32NativeHostPort,
     private val failureReporter: RuntimeFailureReporter,
     onLastWindowClosed: (() -> Unit)?,
@@ -130,7 +130,26 @@ internal class Win32WindowRuntimeDriver internal constructor(
                 { event -> dispatchInteraction(entry, event) },
                 { !closed.get() && !entry.closeAdmitted && entries[command.requestId] === entry },
                 { revokeInteractionAuthority(entry); releaseConfinement(entry) },
-                { revokeInteractionAuthority(entry) })
+                { revokeInteractionAuthority(entry) },
+                Win32ContactRouter(created.hwnd, command.surfaceId, port, resources, manager.nativeInputPayloadBudget(),
+                    manager.nativeInputIngressCapacity(), manager::acceptSurfaceStimulus,
+                    { event -> dispatchInteraction(entry, event) }, { isLive(entry) }, { cause ->
+                        val reason = (cause as? KadreException)?.failure
+                        if (reason is KadreFailure.SourceOverflow || reason is KadreFailure.ResourceLimitExceeded)
+                            manager.nativeInputFailure(command.surfaceId, checkNotNull(reason))
+                        else {
+                            val failure = platformFailure("rich-input", when (cause) {
+                                is org.graphiks.kffi.win32.managed.Win32PointerException -> "pointer-error-${cause.error}"
+                                is org.graphiks.kffi.win32.managed.Win32InteractionException -> "interaction-hresult-${cause.hresult.toUInt().toString(16)}"
+                                else -> "native-failed"
+                            })
+                            manager.acceptSurfaceStimulus(SurfaceStimulus.InputObservationChanged(command.surfaceId, true, true,
+                                touch=FeatureAvailability.Unavailable(failure),
+                                gestures=Capability.Supported(setOf(org.graphiks.kadre.input.GestureKind.Pan, org.graphiks.kadre.input.GestureKind.Pinch,
+                                    org.graphiks.kadre.input.GestureKind.Rotation, org.graphiks.kadre.input.GestureKind.DoubleTap), FeatureAvailability.Unavailable(failure))))
+                            failureReporter.report(KadreException(failure))
+                        }
+                    }, { revokeInteractionAuthority(entry) }))
             entry.input = router
             val snapshot = initialSnapshot(created.hwnd)
             command.commit(

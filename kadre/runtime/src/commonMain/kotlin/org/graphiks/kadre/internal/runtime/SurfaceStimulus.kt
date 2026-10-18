@@ -132,6 +132,8 @@ public sealed interface SurfaceStimulus {
         public val touchInstalled: Boolean = false,
         public val gestureKinds: Set<GestureKind> = emptySet(),
         public val textInput: org.graphiks.kadre.diagnostics.Capability<Unit>? = null,
+        public val touch: org.graphiks.kadre.diagnostics.FeatureAvailability? = null,
+        public val gestures: org.graphiks.kadre.diagnostics.Capability<Set<GestureKind>>? = null,
     ) : SurfaceStimulus
 
     /**

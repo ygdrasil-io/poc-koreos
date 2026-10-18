@@ -75,6 +75,12 @@ internal interface Win32NativeHostPort : AutoCloseable {
     fun cancelMouseLeave(hwnd: Long)
     fun readWheelSettings(): Win32WheelSettings
 
+    val pointerPacketsAvailable: Boolean get() = false
+    fun readPointerBatch(pointerId: Int, maxPointers: Int, maxFrames: Int, budget: org.graphiks.kadre.internal.runtime.RuntimePayloadBudget): Win32ContactBatch = error("Pointer packets unavailable")
+    fun isPromotedMouseMessage(): Boolean = false
+    fun pointerClientPosition(hwnd: Long, x: Int, y: Int): org.graphiks.kadre.surface.LogicalPoint = error("Pointer packets unavailable")
+    fun createGesturePort(hwnd: Long, maxPointers: Int, onOutput: (Win32GestureOutput) -> Unit): Win32GesturePort = error("Interaction context unavailable")
+
     fun createTextInputPort(hwnd: Long): TextInputPort = Win32UnavailableTextInputPort(KadreFailure.Unsupported(KadreOperation.TextInput))
     fun filterTextKey(hwnd: Long, message: Int, wParam: Long, lParam: Long): Boolean = false
     fun handleTextCharacter(hwnd: Long, message: Int, wParam: Long, lParam: Long): Long? = null

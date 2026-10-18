@@ -536,6 +536,8 @@ internal class RuntimeWindowSurface(
         lock.withLock { inputFocusGeneration++ }
     }
 
+    internal fun nativeInputFailure(failure: KadreFailure) { surfaceInput.nativeIngressFailure(failure) }
+
     private fun publishInteractionInput(admitted: DeferredInteraction) {
         lock.withLock {
             // A callback can transfer focus while opening another native window. Its later
