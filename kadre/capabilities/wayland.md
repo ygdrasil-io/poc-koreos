@@ -76,6 +76,16 @@ Résiduel tranche 5 : xdg-decoration (T2, bindings kffi requis),
 xdg-activation/icône (`Unsupported` documenté), pointer constraints
 (phase 6+), O3 injection (voir résiduel tranche 4).
 
+## 3 quinques. Registre — tranche 6 (text input, IME)
+
+| feature | target | minimum déclaré | compile gate | runtime gate | état absent | tests |
+|---|---|---|---|---|---|---|
+| port text-input (`zwp_text_input_v3` managé) | `jvm` | kffi text-input bindings (batching done) | `:kadre:backend:wayland:jvmTest` | `TXT-002`, `TXT-003` | offsets octets convertis en UTF-16 sans couper un code point ; done obsolète ignoré intégralement ; leave purge la composition | `WaylandTextInputO2Test` (4), `Utf8Utf16Test` (4) |
+| conversion UTF-8 ↔ UTF-16 | `jvm` | pure, sans compositor | `:kadre:backend:wayland:jvmTest` | `TXT-002` — delete-bytes | clamp au début du code point pour un offset mi-séquence | `Utf8Utf16Test` |
+
+Résiduel tranche 6 : l'enter IME exige une surface focusée (résiduel
+injection T4) ; touch/gestures/pen hors tranche 1 (protocoles propres).
+
 ## 4. Limites des tranches 1 à 4
 
 - Le support `WAYLAND_SOCKET` au run est refusé avant session
