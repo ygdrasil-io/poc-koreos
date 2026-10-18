@@ -1119,6 +1119,9 @@ private class WebHostSurface(
                 trigger.position,
                 active.stampSource(),
             )
+
+            // DOM triggers use TouchStarted; token reservation belongs to RuntimeWindowSurface.
+            is RuntimeSynchronousInteraction.TouchContactStarted -> error("native contact requires runtime window dispatch")
         }
         interaction.dispatch(event, advertisedInteractions, ::invokeNative)
     }

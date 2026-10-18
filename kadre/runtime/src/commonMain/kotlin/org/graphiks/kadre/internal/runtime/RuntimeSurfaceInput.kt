@@ -83,8 +83,13 @@ internal class RuntimeSurfaceInput(
     )
     private var nextPointerIdentity = 0L
     private var nextTouchIdentity = 0L
+    private val pointerIdsByNativeIdentity = IdentityKeyedMap<PointerId>()
+    private val retiringPointerIds = mutableSetOf<PointerId>()
+    private var pointerIdentityCount = 0
     private val touchIdsByNativeIdentity = IdentityKeyedMap<TouchId>()
-    private val retiringTouchIdsByNativeIdentity = IdentityKeyedMap<TouchId>()
+    private val reservedTouchIds = mutableSetOf<TouchId>()
+    private val retiringTouchIds = mutableSetOf<TouchId>()
+    private var touchIdentityCount = 0
     private var nextDropOfferIdentity = 0L
     private var mousePointerId: PointerId? = null
     private var activeDrop: RuntimeDropOffer? = null
@@ -107,6 +112,7 @@ internal class RuntimeSurfaceInput(
     private val subscribers = linkedMapOf<InputEventSubscriber, RuntimeEventCollectorLease>()
 
     override val state: StateFlow<SurfaceInputState> = mutableState.asStateFlow()
+    internal val isClosed: Boolean get() = lock.withLock { terminal != null }
     override val events: Flow<InputEvent> = flow {
         val subscriber = InputEventSubscriber(deliveryPolicy)
         when (val registration = registerSubscriber(subscriber)) {
@@ -441,7 +447,10 @@ internal class RuntimeSurfaceInput(
                 }
                 return@withLock changed
             }
-            val publication = reduceLocked(stimulus) ?: return@withLock false
+            val publication = try { reduceLocked(stimulus) } catch (_: InputIdentityOverflow) {
+                admission = identityOverflowLocked()
+                return@withLock false
+            } ?: return@withLock false
             admission = enqueuePublicationLocked(publication)
             true
         }
@@ -454,16 +463,19 @@ internal class RuntimeSurfaceInput(
         event: InteractionEvent,
         pointerPressure: Double? = null,
         keyInput: RuntimeSynchronousInteraction.KeyPressed? = null,
+        nativeInput: RuntimeSynchronousInteraction? = null,
     ): Boolean = when (event) {
         is InteractionEvent.PointerPressed -> accept(
             SurfaceStimulus.PointerButtonChanged(
                 surfaceId = surfaceId,
-                kind = PointerKind.Mouse,
+                kind = (nativeInput as? RuntimeSynchronousInteraction.PointerPressed)?.kind ?: PointerKind.Mouse,
                 button = event.button,
                 buttonState = PointerButtonState.Pressed,
                 position = event.position,
                 pressure = pointerPressure,
-                pen = null,
+                pen = (nativeInput as? RuntimeSynchronousInteraction.PointerPressed)?.pen,
+                nativeIdentity = (nativeInput as? RuntimeSynchronousInteraction.PointerPressed)?.nativeIdentity,
+                deviceId = (nativeInput as? RuntimeSynchronousInteraction.PointerPressed)?.deviceId,
             ),
             event.stamp,
         )
@@ -481,11 +493,37 @@ internal class RuntimeSurfaceInput(
             event.stamp,
         )
 
-        is InteractionEvent.TouchStarted -> acceptInteractionTouch(event)
+        is InteractionEvent.TouchStarted -> if (nativeInput is RuntimeSynchronousInteraction.TouchContactStarted) accept(
+            SurfaceStimulus.TouchChanged(surfaceId, nativeInput.nativeIdentity, TouchPhase.Started,
+                nativeInput.position, nativeInput.pressure, nativeInput.deviceId), event.stamp,
+        ) else acceptInteractionTouch(event)
 
         // A drop entry is published when its runtime-owned offer is created, before this
         // interaction callback is dispatched. It must not be reinjected as ordinary input.
         is InteractionEvent.DropEntered -> false
+    }
+
+    /** Reserves an identity without publishing a contact before its synchronous handler. */
+    internal fun reserveTouch(nativeIdentity: Any): TouchId? {
+        var admission: InputPublicationAdmission? = null
+        val id = lock.withLock {
+            if (terminal != null || touchIdsByNativeIdentity[nativeIdentity] != null) return@withLock null
+            try {
+                newTouchIdLocked().also {
+                    touchIdsByNativeIdentity[nativeIdentity] = it
+                    reservedTouchIds += it
+                }
+            } catch (_: InputIdentityOverflow) { admission = identityOverflowLocked(); null }
+        }
+        admission?.let(::finishPublicationAdmission)
+        return id
+    }
+
+    internal fun abandonTouch(nativeIdentity: Any, id: TouchId) = lock.withLock {
+        if (touchIdsByNativeIdentity[nativeIdentity] == id && reservedTouchIds.remove(id)) {
+            touchIdsByNativeIdentity.remove(nativeIdentity)
+            touchIdentityCount--
+        }
     }
 
     private fun acceptInteractionTouch(event: InteractionEvent.TouchStarted): Boolean {
@@ -517,7 +555,10 @@ internal class RuntimeSurfaceInput(
         var admission: InputPublicationAdmission? = null
         val accepted = lock.withLock {
             if (terminal != null) return@withLock false
-            val publication = reduceLocked(stimulus, stamp) ?: return@withLock false
+            val publication = try { reduceLocked(stimulus, stamp) } catch (_: InputIdentityOverflow) {
+                admission = identityOverflowLocked()
+                return@withLock false
+            } ?: return@withLock false
             admission = enqueuePublicationLocked(publication)
             true
         }
@@ -536,8 +577,7 @@ internal class RuntimeSurfaceInput(
                 modifiers = KeyboardModifiers(emptySet()),
                 revision = currentState.revision.next(),
             )
-            touchIdsByNativeIdentity.clear()
-            retiringTouchIdsByNativeIdentity.clear()
+            clearIdentityTablesLocked()
             setStateLocked(neutral)
             admission = enqueuePublicationLocked(
                 InputPublication(
@@ -580,8 +620,7 @@ internal class RuntimeSurfaceInput(
             activeDrop = null
             transfersToClose = activeDropTransfers.toList()
             activeDropTransfers.clear()
-            touchIdsByNativeIdentity.clear()
-            retiringTouchIdsByNativeIdentity.clear()
+            clearIdentityTablesLocked()
             InputPublicationAdmission(ensurePublicationDrainLocked())
         }
         activeTextInput?.close()
@@ -645,6 +684,7 @@ internal class RuntimeSurfaceInput(
                 position = stimulus.position,
                 pressure = null,
                 pen = null,
+                nativeIdentity = stimulus.nativeIdentity,
             )
             updateStateLocked(pointers = replacePointer(currentState.pointers, pointer))
             InputPublication(
@@ -665,6 +705,7 @@ internal class RuntimeSurfaceInput(
                 position = stimulus.position,
                 pressure = stimulus.pressure,
                 pen = stimulus.pen,
+                nativeIdentity = stimulus.nativeIdentity,
             )
             updateStateLocked(pointers = replacePointer(currentState.pointers, pointer))
             InputPublication(
@@ -683,7 +724,7 @@ internal class RuntimeSurfaceInput(
         }
 
         is SurfaceStimulus.PointerButtonChanged -> {
-            val id = mousePointerIdLocked()
+            val id = pointerIdLocked(stimulus.nativeIdentity)
             val existing = currentState.pointers.firstOrNull { it.id == id }
             val buttons = (existing?.pressedButtons ?: emptySet()).toMutableSet()
             when (stimulus.buttonState) {
@@ -716,8 +757,13 @@ internal class RuntimeSurfaceInput(
         }
 
         is SurfaceStimulus.PointerLeft -> {
-            val id = mousePointerId ?: return null
+            val id = (if (stimulus.nativeIdentity == null) mousePointerId else pointerIdsByNativeIdentity[stimulus.nativeIdentity])
+                ?: return null
             val existing = currentState.pointers.firstOrNull { it.id == id } ?: return null
+            if (stimulus.nativeIdentity != null) {
+                pointerIdsByNativeIdentity.remove(stimulus.nativeIdentity)
+                retiringPointerIds += id
+            }
             InputPublication(
                 InputEvent.PointerLeft(
                     id,
@@ -821,34 +867,34 @@ internal class RuntimeSurfaceInput(
         stimulus: SurfaceStimulus.TouchChanged,
         stamp: EventStamp,
     ): InputPublication? {
-        if (retiringTouchIdsByNativeIdentity[stimulus.nativeIdentity] != null) return null
         val existingId = touchIdsByNativeIdentity[stimulus.nativeIdentity]
+        val newlyAllocated = stimulus.phase == TouchPhase.Started && existingId == null
         val touchId = when (stimulus.phase) {
             TouchPhase.Started -> {
-                if (existingId != null) return null
-                check(nextTouchIdentity < Long.MAX_VALUE) { "touch identity space exhausted" }
-                TouchId(nextTouchIdentity)
+                if (existingId != null && existingId !in reservedTouchIds) return null
+                existingId ?: newTouchIdLocked()
             }
 
             TouchPhase.Moved,
             TouchPhase.Ended,
             TouchPhase.Cancelled,
-            -> existingId ?: return null
+            -> existingId?.takeUnless { it in reservedTouchIds } ?: return null
         }
         val touch = try {
             TouchState(touchId, stimulus.position, stimulus.pressure)
         } catch (_: IllegalArgumentException) {
+            if (newlyAllocated) touchIdentityCount--
             return null
         }
         if (stimulus.phase == TouchPhase.Started) {
-            nextTouchIdentity += 1L
             touchIdsByNativeIdentity[stimulus.nativeIdentity] = touchId
+            reservedTouchIds.remove(touchId)
         }
         updateStateLocked(touches = replaceTouch(currentState.touches, touch))
         val terminal = stimulus.phase == TouchPhase.Ended || stimulus.phase == TouchPhase.Cancelled
         if (terminal) {
             touchIdsByNativeIdentity.remove(stimulus.nativeIdentity)
-            retiringTouchIdsByNativeIdentity[stimulus.nativeIdentity] = touchId
+            retiringTouchIds += touchId
         }
         return InputPublication(
             event = InputEvent.TouchChanged(
@@ -909,8 +955,9 @@ internal class RuntimeSurfaceInput(
         position: org.graphiks.kadre.surface.LogicalPoint,
         pressure: Double?,
         pen: org.graphiks.kadre.input.PenState?,
+        nativeIdentity: Any?,
     ): PointerState {
-        val id = mousePointerIdLocked()
+        val id = pointerIdLocked(nativeIdentity)
         val existing = currentState.pointers.firstOrNull { it.id == id }
         return PointerState(
             id = id,
@@ -922,9 +969,32 @@ internal class RuntimeSurfaceInput(
         )
     }
 
-    private fun mousePointerIdLocked(): PointerId = mousePointerId ?: run {
+    private fun pointerIdLocked(nativeIdentity: Any?): PointerId {
+        val existing = if (nativeIdentity == null) mousePointerId else pointerIdsByNativeIdentity[nativeIdentity]
+        if (existing != null) return existing
+        if (pointerIdentityCount >= resources.maxCollectionElementsPerValue) throw InputIdentityOverflow()
         check(nextPointerIdentity < Long.MAX_VALUE) { "pointer identity space exhausted" }
-        PointerId(nextPointerIdentity++).also { mousePointerId = it }
+        val id = PointerId(nextPointerIdentity++)
+        pointerIdentityCount++
+        if (nativeIdentity == null) mousePointerId = id else pointerIdsByNativeIdentity[nativeIdentity] = id
+        return id
+    }
+
+    private fun newTouchIdLocked(): TouchId {
+        if (touchIdentityCount >= resources.maxCollectionElementsPerValue) throw InputIdentityOverflow()
+        check(nextTouchIdentity < Long.MAX_VALUE) { "touch identity space exhausted" }
+        touchIdentityCount++
+        return TouchId(nextTouchIdentity++)
+    }
+
+    private fun identityOverflowLocked(): InputPublicationAdmission = terminaliseLocked(
+        KadreFailure.SourceOverflow(KadreResourceKind.InputSource),
+        deliveryPolicy.discreteEvents.ingressOverflow == IngressOverflowAction.FailSession,
+    )
+
+    private fun clearIdentityTablesLocked() {
+        pointerIdsByNativeIdentity.clear(); retiringPointerIds.clear(); pointerIdentityCount = 0; mousePointerId = null
+        touchIdsByNativeIdentity.clear(); reservedTouchIds.clear(); retiringTouchIds.clear(); touchIdentityCount = 0
     }
 
     private fun updateStateLocked(
@@ -1004,8 +1074,7 @@ internal class RuntimeSurfaceInput(
             capabilities = unavailableInputCapabilities(currentState.capabilities, failure),
             revision = currentState.revision.next(),
         )
-        touchIdsByNativeIdentity.clear()
-        retiringTouchIdsByNativeIdentity.clear()
+        clearIdentityTablesLocked()
         setStateLocked(neutral)
         terminal = FlowTerminal.Failed(failure)
         terminalNotificationPending = true
@@ -1075,6 +1144,7 @@ internal class RuntimeSurfaceInput(
         lock.withLock {
             when (effect) {
                 is InputStateAfterDelivery.RemovePointer -> {
+                    if (retiringPointerIds.remove(effect.id)) pointerIdentityCount--
                     val currentPointer = currentState.pointers.firstOrNull { it.id == effect.id }
                     if (currentPointer == effect.expected) {
                         updateStateLocked(pointers = currentState.pointers.filterNot { it.id == effect.id })
@@ -1082,10 +1152,9 @@ internal class RuntimeSurfaceInput(
                 }
 
                 is InputStateAfterDelivery.RemoveTouch -> {
-                    val currentId = retiringTouchIdsByNativeIdentity[effect.nativeIdentity]
                     val currentTouch = currentState.touches.firstOrNull { it.id == effect.id }
-                    if (currentId == effect.id) {
-                        retiringTouchIdsByNativeIdentity.remove(effect.nativeIdentity)
+                    if (retiringTouchIds.remove(effect.id)) {
+                        touchIdentityCount--
                         if (currentTouch == effect.expected) {
                             updateStateLocked(touches = currentState.touches.filterNot { it.id == effect.id })
                         }
@@ -1094,6 +1163,10 @@ internal class RuntimeSurfaceInput(
             }
         }
     }
+
+    internal fun interactionOverflow() = closeFromDeliveryOverflow(
+        deliveryPolicy.discreteEvents.ingressOverflow == IngressOverflowAction.FailSession,
+    )
 
     private fun closeFromDeliveryOverflow(failSession: Boolean) {
         val admission = lock.withLock {
@@ -1191,6 +1264,8 @@ private data class InputPublication(
     val scrollBoundary: Long? = null,
     val afterDelivery: InputStateAfterDelivery? = null,
 )
+
+private class InputIdentityOverflow : RuntimeException()
 
 private sealed interface InputStateAfterDelivery {
     data class RemovePointer(

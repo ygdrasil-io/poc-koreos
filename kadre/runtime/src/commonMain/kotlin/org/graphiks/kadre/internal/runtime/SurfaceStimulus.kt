@@ -165,6 +165,7 @@ public sealed interface SurfaceStimulus {
         public val kind: PointerKind,
         public val position: LogicalPoint,
         public val deviceId: DeviceId? = null,
+        public val nativeIdentity: Any? = null,
     ) : SurfaceStimulus
 
     /** One pointer-motion observation; the runtime retains pointer identity and state. */
@@ -176,6 +177,7 @@ public sealed interface SurfaceStimulus {
         public val pressure: Double?,
         public val pen: PenState?,
         public val deviceId: DeviceId? = null,
+        public val nativeIdentity: Any? = null,
     ) : SurfaceStimulus
 
     /** One pointer-button observation. */
@@ -188,6 +190,7 @@ public sealed interface SurfaceStimulus {
         public val pressure: Double?,
         public val pen: PenState?,
         public val deviceId: DeviceId? = null,
+        public val nativeIdentity: Any? = null,
     ) : SurfaceStimulus
 
     /** One pointer-exit observation; its last position comes from runtime state. */
@@ -195,6 +198,7 @@ public sealed interface SurfaceStimulus {
         override val surfaceId: SurfaceId,
         public val kind: PointerKind,
         public val deviceId: DeviceId? = null,
+        public val nativeIdentity: Any? = null,
     ) : SurfaceStimulus
 
     /**

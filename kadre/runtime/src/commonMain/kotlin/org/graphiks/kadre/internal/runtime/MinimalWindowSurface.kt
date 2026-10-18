@@ -491,12 +491,15 @@ internal class RuntimeWindowSurface(
     }
 
     private fun dispatchSynchronousInteraction(
-        eventFactory: (EventStamp) -> DeferredInteraction,
+        eventFactory: (EventStamp) -> DeferredInteraction?,
         stamp: EventStamp = eventStampSource(),
         supported: Set<InteractionKind>,
         invokeNative: (InteractionAction) -> KadreResult<Unit>,
     ) {
-        val admitted = lock.withLock { eventFactory(stamp).copy(focusGeneration = inputFocusGeneration) }
+        val admitted = lock.withLock {
+            if (currentState.attachment == SurfaceAttachmentState.Detached || surfaceInput.isClosed) return
+            (eventFactory(stamp) ?: return).copy(focusGeneration = inputFocusGeneration)
+        }
         val stamped = admitted.event
         interactionDispatchLock.withLock {
             if (interactionDispatchActive) {
@@ -504,7 +507,12 @@ internal class RuntimeWindowSurface(
                 // active dispatch observed inside the critical section can only be this thread's
                 // outer dispatch — defer instead of re-entering the handler, and the outer
                 // dispatch drains the queue after its handler returns.
-                deferredNestedInteractions += admitted
+                if (deferredNestedInteractions.size >= minOf(
+                        inputDeliveryPolicy.discreteEvents.ingressCapacity, resources.maxCollectionElementsPerValue)) {
+                    surfaceInput.interactionOverflow()
+                } else {
+                    deferredNestedInteractions += admitted
+                }
             } else {
                 interactionDispatchActive = true
                 try {
@@ -531,8 +539,13 @@ internal class RuntimeWindowSurface(
         lock.withLock {
             // A callback can transfer focus while opening another native window. Its later
             // ordinary press belongs to the old focus epoch, even if focus has since returned.
-            if (currentState.attachment != SurfaceAttachmentState.Detached && admitted.focusGeneration == inputFocusGeneration) {
-                surfaceInput.acceptInteraction(admitted.event, admitted.pointerPressure, admitted.keyInput)
+            val published = if (currentState.attachment != SurfaceAttachmentState.Detached && admitted.focusGeneration == inputFocusGeneration) {
+                surfaceInput.acceptInteraction(admitted.event, admitted.pointerPressure, admitted.keyInput, admitted.nativeInput)
+            } else false
+            if (!published) {
+                val contact = admitted.nativeInput as? RuntimeSynchronousInteraction.TouchContactStarted
+                val event = admitted.event as? InteractionEvent.TouchStarted
+                if (contact != null && event != null) surfaceInput.abandonTouch(contact.nativeIdentity, event.touchId)
             }
         }
     }
@@ -543,11 +556,15 @@ internal class RuntimeWindowSurface(
         invokeNative: (InteractionAction) -> KadreResult<Unit>,
     ) {
         dispatchSynchronousInteraction(
-            eventFactory = { stamp ->
+            eventFactory = factory@ { stamp ->
+                val touchId = (event as? RuntimeSynchronousInteraction.TouchContactStarted)?.let {
+                    surfaceInput.reserveTouch(it.nativeIdentity) ?: return@factory null
+                }
                 DeferredInteraction(
-                    event.toInteractionEvent(stamp),
+                    event.toInteractionEvent(stamp, touchId),
                     (event as? RuntimeSynchronousInteraction.PointerPressed)?.pressure,
                     event as? RuntimeSynchronousInteraction.KeyPressed,
+                    nativeInput = event,
                 )
             },
             supported = supported,
@@ -1269,10 +1286,11 @@ private fun SurfaceCapabilities.normalisedInteractionCapabilities(): SurfaceCapa
     }
 }
 
-private fun RuntimeSynchronousInteraction.toInteractionEvent(stamp: EventStamp): InteractionEvent = when (this) {
+private fun RuntimeSynchronousInteraction.toInteractionEvent(stamp: EventStamp, reservedTouchId: TouchId? = null): InteractionEvent = when (this) {
     is RuntimeSynchronousInteraction.PointerPressed -> InteractionEvent.PointerPressed(button, position, stamp)
     is RuntimeSynchronousInteraction.KeyPressed -> InteractionEvent.KeyPressed(physicalKey, stamp)
     is RuntimeSynchronousInteraction.TouchStarted -> InteractionEvent.TouchStarted(touchId, position, stamp)
+    is RuntimeSynchronousInteraction.TouchContactStarted -> InteractionEvent.TouchStarted(checkNotNull(reservedTouchId), position, stamp)
 }
 
 private data class DeferredInteraction(
@@ -1280,6 +1298,7 @@ private data class DeferredInteraction(
     val pointerPressure: Double?,
     val keyInput: RuntimeSynchronousInteraction.KeyPressed? = null,
     val focusGeneration: Long = 0L,
+    val nativeInput: RuntimeSynchronousInteraction? = null,
 )
 
 private fun initialState(snapshot: SurfaceInitialSnapshot): SurfaceState = SurfaceState(
