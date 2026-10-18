@@ -81,7 +81,7 @@ internal class Win32WindowRuntimeDriver internal constructor(
             val entry = entries.values.firstOrNull { it.command.surfaceId == surfaceId }
             if (entry == null) Win32UnavailableTextInputPort(KadreFailure.Closed(KadreResourceKind.Surface))
             else try { port.createTextInputPort(entry.window.hwnd) }
-            catch (_: Throwable) { Win32UnavailableTextInputPort(platformFailure("text-input", "initialization-failed")) }
+            catch (cause: Throwable) { Win32UnavailableTextInputPort(win32TextFailure("initialization", cause)) }
         },
         onLastWindowClosed = onLastWindowClosed,
     )

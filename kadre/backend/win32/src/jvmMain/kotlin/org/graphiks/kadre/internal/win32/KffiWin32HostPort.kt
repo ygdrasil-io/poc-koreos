@@ -84,7 +84,7 @@ internal open class KffiWin32HostPort : Win32NativeHostPort {
         textPorts.getOrPut(hwnd) {
             if (textServices == null && textInitializationFailure == null) {
                 try { textServices = Win32TextServices.open() }
-                catch (_: Throwable) { textInitializationFailure = KadreFailure.PlatformFailure(KadrePlatform.Win32, "text-input", "sta-initialization-failed") }
+                catch (cause: Throwable) { textInitializationFailure = win32TextFailure("sta-initialization", cause) }
             }
             val services = textServices
             if (services == null) Win32UnavailableTextInputPort(checkNotNull(textInitializationFailure))

@@ -88,6 +88,16 @@ val win32ContractTests = tasks.register("win32ContractTests") {
     dependsOn(tasks.named("jvmTest"), win32NativeTests)
 }
 
+tasks.register<JavaExec>("win32RichInputManual") {
+    group = "verification"
+    description = "Opens explicit rich-input reception; stdout contains no application text."
+    dependsOn(tasks.named("jvmTestClasses"))
+    classpath = tasks.named<Test>("jvmTest").get().classpath
+    mainClass.set("org.graphiks.kadre.internal.win32.Win32RichInputManualHarness")
+    jvmArgs("--enable-native-access=ALL-UNNAMED")
+    onlyIf { onWindows }
+}
+
 tasks.register<JavaExec>("win32InputManual") {
     group = "verification"
     description = "Opens the interactive Win32 keyboard/pointer harness; no contract verdict is inferred."

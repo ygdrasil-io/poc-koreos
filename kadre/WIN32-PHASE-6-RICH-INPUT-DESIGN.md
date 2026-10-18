@@ -1,6 +1,6 @@
 # Win32 phase 6 — texte, IME, contacts et gestes natifs
 
-**Statut :** design validé par l’utilisateur le 16 octobre 2026 ; plan d’implémentation conjoint en cours de revue. Aucune capability supplémentaire n’est activée par ce document.
+**Statut :** design validé par l’utilisateur le 16 octobre 2026 ; implémentation conjointe et preuves natives locales en qualification. Adoption distante et réception manuelle restent ouvertes ; voir [validation](WIN32-PHASE-6-VALIDATION.md).
 **Date :** 16 octobre 2026.
 **Base Kadre :** `853fd1e8af61df51e7319f8f67e273278763ad42`, fusion de #474.
 **Base KFFI auditée :** `3b94c9597630401f969ea707a3e2175204d74f99`, snapshot Win32 `1.0.0-20261015.232828-61`.

@@ -296,6 +296,5 @@ internal class Win32TextInputPort(private val native: Win32TextNativePort) : Tex
         val work: List<Win32TextUiWork<*>>, val terminated: ((KadreFailure) -> Unit)?)
     private fun closedFailure() = KadreFailure.Closed(KadreResourceKind.TextInputSession)
     private fun platformFailure(code: String) = KadreFailure.PlatformFailure(KadrePlatform.Win32, "text-input", code)
-    private fun nativeFailure(cause: Throwable): KadreFailure = platformFailure(
-        if (cause is Win32TextException) "hresult-${cause.hresult.toUInt().toString(16)}" else "native-failed")
+    private fun nativeFailure(cause: Throwable): KadreFailure = win32TextFailure("native", cause)
 }

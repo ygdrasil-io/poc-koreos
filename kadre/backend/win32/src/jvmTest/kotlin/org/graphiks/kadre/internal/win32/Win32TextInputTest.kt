@@ -175,6 +175,8 @@ class Win32TextInputTest {
             assertEquals(FeatureAvailability.Available, capabilities.keyboard)
             assertEquals(FeatureAvailability.Available, capabilities.pointer)
             assertIs<KadreResult.Failure>(window.surface.input.openTextInput(TextInputConfig()))
+            val reason = assertIs<KadreFailure.PlatformFailure>(assertIs<FeatureAvailability.Unavailable>(assertIs<Capability.Supported<Unit>>(capabilities.textInput).availability).failure)
+            assertTrue(reason.message.contains("80004005"), "native initialization must retain a sanitized HRESULT")
             host.dispatchWindowMessage(hwnd, 0x200)
             assertEquals(1, window.surface.input.state.value.pointers.size)
         }

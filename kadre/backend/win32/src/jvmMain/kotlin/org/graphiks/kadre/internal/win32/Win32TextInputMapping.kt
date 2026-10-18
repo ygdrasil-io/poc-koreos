@@ -1,11 +1,16 @@
 package org.graphiks.kadre.internal.win32
 
 import org.graphiks.kadre.input.*
+import org.graphiks.kadre.diagnostics.*
 import org.graphiks.kadre.internal.runtime.TextInputObservation
 import org.graphiks.kadre.surface.LogicalRect
 import org.graphiks.kffi.win32.managed.*
 import kotlin.math.ceil
 import kotlin.math.floor
+
+internal fun win32TextFailure(stage: String, cause: Throwable): KadreFailure.PlatformFailure =
+    KadreFailure.PlatformFailure(KadrePlatform.Win32, "text-input", "$stage-" +
+        if (cause is Win32TextException) "hresult-${cause.hresult.toUInt().toString(16)}" else "native-failed")
 
 internal fun win32TextConfiguration(config: TextInputConfig): Win32TextConfiguration =
     Win32TextConfiguration(
