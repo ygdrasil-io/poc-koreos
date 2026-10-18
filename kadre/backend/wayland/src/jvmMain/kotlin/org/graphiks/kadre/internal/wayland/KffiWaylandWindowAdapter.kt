@@ -13,6 +13,8 @@ import org.graphiks.kffi.wayland.managed.WaylandXdgSurface
  * suivi du dernier serial configuré.
  */
 internal class KffiWaylandWindowAdapter private constructor(
+    private val client: WaylandClient,
+    private val seatProvider: () -> org.graphiks.kffi.wayland.managed.WaylandSeat?,
     private val surface: WaylandSurface,
     private val xdgSurface: WaylandXdgSurface,
     private val toplevel: WaylandToplevel,
@@ -78,6 +80,23 @@ internal class KffiWaylandWindowAdapter private constructor(
         toplevel.setAppId(appId)
     }
 
+    override fun setConstraints(minWidth: Int, minHeight: Int, maxWidth: Int, maxHeight: Int) {
+        toplevel.setMinSize(minWidth, minHeight)
+        toplevel.setMaxSize(maxWidth, maxHeight)
+    }
+
+    override fun setFullscreenBorderless(enabled: Boolean) {
+        if (enabled) toplevel.setFullscreen() else toplevel.unsetFullscreen()
+    }
+
+    override fun beginMove(serial: Int) {
+        moveResizeSeat()?.let { seat -> toplevel.beginMove(seat, serial) }
+    }
+
+    override fun beginResize(serial: Int, edges: Int) {
+        moveResizeSeat()?.let { seat -> toplevel.beginResize(seat, serial, edges) }
+    }
+
     override fun close() {
         toplevel.close()
         xdgSurface.close()
@@ -85,13 +104,22 @@ internal class KffiWaylandWindowAdapter private constructor(
         buffer.close()
     }
 
+    private fun moveResizeSeat() = seatProvider()
+
     internal companion object {
-        fun create(client: WaylandClient, width: Int, height: Int): KffiWaylandWindowAdapter {
+        fun create(
+            client: WaylandClient,
+            width: Int,
+            height: Int,
+            seatProvider: () -> org.graphiks.kffi.wayland.managed.WaylandSeat? = { null },
+        ): KffiWaylandWindowAdapter {
             val surface = client.createSurface()
             val xdgSurface = client.createXdgSurface(surface)
             val toplevel = client.createToplevel(xdgSurface)
             val buffer = client.createShmBuffer(width, height)
             return KffiWaylandWindowAdapter(
+                client,
+                seatProvider,
                 surface,
                 xdgSurface,
                 toplevel,

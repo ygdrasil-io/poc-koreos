@@ -28,6 +28,15 @@ kotlin {
     }
 }
 
+dependencies {
+    constraints {
+        add("jvmMainImplementation", "org.graphiks:kffi-win32-jvm") {
+            version { strictly(win32KffiVersion.get()) }
+            because("The root snapshot metadata redirects to a moving JVM snapshot")
+        }
+    }
+}
+
 // Les preuves O3 chargent la pile native Windows (user32/kernel32) : elles ne
 // tournent que sur Windows, dans le task dédié, jamais dans le jvmTest portable.
 tasks.named<Test>("jvmTest") {

@@ -77,6 +77,25 @@ internal class FakeNativeWindow(
         listeners.forEach { it() }
     }
 
+    val fullscreenCount = java.util.concurrent.atomic.AtomicInteger(0)
+    val constraintCalls = java.util.concurrent.CopyOnWriteArrayList<IntArray>()
+
+    override fun setConstraints(minWidth: Int, minHeight: Int, maxWidth: Int, maxHeight: Int) {
+        constraintCalls.add(intArrayOf(minWidth, minHeight, maxWidth, maxHeight))
+    }
+
+    override fun setFullscreenBorderless(enabled: Boolean) {
+        if (enabled) fullscreenCount.incrementAndGet()
+    }
+
+    override fun beginMove(serial: Int) {
+        // le fake ne trace pas les moves O2
+    }
+
+    override fun beginResize(serial: Int, edges: Int) {
+        // le fake ne trace pas les resizes O2
+    }
+
     override fun setTitle(title: String) {
         titles.add(title)
     }
