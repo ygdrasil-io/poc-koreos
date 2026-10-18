@@ -58,3 +58,8 @@ INP-005	jvm	sentinel	wayland-input-no-publish-before-frame	org.graphiks.kadre.in
 INP-006	jvm	scenario	wayland-input-keyboard-routes-focus	org.graphiks.kadre.internal.wayland.WaylandInputRouterO2Test	keyboardRoutesByFocusedSurfaceAndKeyOutsideFocusIsDropped[jvm]
 INP-006	jvm	scenario	wayland-input-blur-publishes-releases	org.graphiks.kadre.internal.wayland.WaylandInputRouterO2Test	keyboardLeaveWithHeldKeysSynthesizesExactReleases[jvm]
 INP-006	jvm	sentinel	wayland-input-unregistration-neutralizes	org.graphiks.kadre.internal.wayland.WaylandInputRouterO2Test	surfaceUnregistrationWithdrawsFocusAndNeutralizes[jvm]
+WIN-013	jvm	scenario	wayland-update-conformant-fields-reach-native	org.graphiks.kadre.internal.wayland.WaylandAdvancedWindowO2Test	conformantFieldsReachTheNativeLayer[jvm]
+WIN-013	jvm	scenario	wayland-update-exclusive-rejected-pre-primitive	org.graphiks.kadre.internal.wayland.WaylandAdvancedWindowO2Test	exclusiveFullscreenUpdateIsRejectedPrePrimitive[jvm]
+WIN-013	jvm	sentinel	wayland-update-min-above-max-rejected	org.graphiks.kadre.internal.wayland.WaylandAdvancedWindowO2Test	exclusiveFullscreenUpdateIsRejectedPrePrimitive[jvm]
+INT-005	jvm	scenario	wayland-move-serial-consumed-once	org.graphiks.kadre.internal.wayland.WaylandAdvancedWindowO2Test	serialLedgerConsumesEligibleSerialsOnce[jvm]
+INT-005	jvm	sentinel	wayland-move-refused-without-eligible-serial	org.graphiks.kadre.internal.wayland.WaylandAdvancedWindowO2Test	serialLedgerConsumesEligibleSerialsOnce[jvm]

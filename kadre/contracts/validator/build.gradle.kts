@@ -30,7 +30,7 @@ val runtimeContractIds = listOf(
     "WIN-001", "WIN-002", "WIN-003", "WIN-004", "WIN-005", "WIN-006", "WIN-007", "WIN-008",
     "DSP-001", "RUN-007", "RUN-008", "INT-001", "CAP-001",
 )
-val waylandContractIds = listOf("BCK-017", "SES-001", "SUR-001", "WIN-010", "WIN-011", "WIN-012", "SUR-002", "DSP-002", "SUR-003", "INP-004", "INP-005", "INP-006")
+val waylandContractIds = listOf("BCK-017", "SES-001", "SUR-001", "WIN-010", "WIN-011", "WIN-012", "SUR-002", "DSP-002", "SUR-003", "INP-004", "INP-005", "INP-006", "WIN-013", "INT-005")
 val win32ContractIds = listOf("W32-001", "W32-002", "W32-003", "BCK-025", "SES-002", "PMP-001", "W32-004", "W32-005", "W32-006", "W32-007", "W32-008", "W32-009", "W32-010", "W32-011", "W32-012", "W32-013", "W32-014", "W32-015", "W32-016")
 val contractEvidenceGateIds = appKitContractIds + runtimeContractIds + webContractIds + uikitContractIds + waylandContractIds + win32ContractIds
 check(contractEvidenceGateIds.distinct().size == contractEvidenceGateIds.size) {
