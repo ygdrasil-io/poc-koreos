@@ -17,7 +17,8 @@ internal class Win32ContactRouter(private val hwnd: Long, private val surfaceId:
         val buttons = linkedSetOf<PointerButton>()
     }
     private val contacts = mutableMapOf<Int, Contact>()
-    private val queue = ArrayDeque<Win32ContactBatch>()
+    private class Packet(val batch: Win32ContactBatch, val isLeave: Boolean, val leaving: Contact?, val pointerId: Int)
+    private val queue = ArrayDeque<Packet>()
     private var lastFrame: Int? = null
     private var generation = 0L
     private var processing = false
@@ -39,25 +40,26 @@ internal class Win32ContactRouter(private val hwnd: Long, private val surfaceId:
             nativeGestures = native
             gestures = Win32GestureRouter(surfaceId, native.kinds.toSet(), { port.readScaleFactor(hwnd) }, { emit(it) }, isAlive)
             publish()
-        } catch (cause: Throwable) { fail(cause) }
+        } catch (cause: Throwable) { failGestures(cause) }
     }
     private fun publish() { emit(SurfaceStimulus.InputObservationChanged(surfaceId, true, true, installed, gestures?.kinds.orEmpty())) }
     fun handle(message: Int, wParam: Long, lParam: Long): Long? {
         if (!installed || !isAlive()) return null
         when (message) {
             0x24b -> return 1L // PA_ACTIVATE: acknowledge the coherent pointer stream.
-            0x249, 0x24a -> return 0L // Hover comes from copied pen packets; do not promote into mouse.
             0x24c -> { reset(); return 0L }
-            0x245, 0x246, 0x247 -> Unit
+            0x245, 0x246, 0x247, 0x249, 0x24a -> Unit
             else -> return null
         }
         try {
-            val batch = port.readPointerBatch((wParam and 0xffffL).toInt(), resources.maxCollectionElementsPerValue,
+            val pointerId = (wParam and 0xffffL).toInt()
+            val leaving = contacts[pointerId].takeIf { message == 0x24a }
+            val batch = port.readPointerBatch(pointerId, resources.maxCollectionElementsPerValue,
                 minOf(capacity, resources.maxCollectionElementsPerValue), budget)
             if (queue.size >= minOf(capacity, resources.maxCollectionElementsPerValue)) {
                 batch.close(); throw KadreException(KadreFailure.SourceOverflow(KadreResourceKind.InputSource))
             }
-            queue += batch
+            queue += Packet(batch, message == 0x24a, leaving, pointerId)
             if (!processing) drain()
         } catch (cause: Throwable) { fail(cause) }
         return 0L
@@ -66,7 +68,8 @@ internal class Win32ContactRouter(private val hwnd: Long, private val surfaceId:
         processing = true
         try {
             while (queue.isNotEmpty() && installed && isAlive()) {
-                val batch = queue.removeFirst()
+                val packet = queue.removeFirst()
+                val batch = packet.batch
                 processingGeneration = generation
                 try {
                     for (frame in batch.frames.asReversed()) {
@@ -75,10 +78,14 @@ internal class Win32ContactRouter(private val hwnd: Long, private val surfaceId:
                         lastFrame = frame.id
                         for (sample in frame.samples) {
                             if (generation != processingGeneration || !installed || !isAlive()) break
-                            if (sample.target == hwnd) accept(sample)
+                            if (sample.target == hwnd && !(packet.isLeave && sample.id == packet.pointerId)) accept(sample)
                         }
                     }
-                    if (generation == processingGeneration && installed && isAlive()) nativeGestures?.process(batch)
+                    if (generation == processingGeneration && installed && isAlive()) {
+                        packet.leaving?.let { retire(packet.pointerId, it) }
+                        try { nativeGestures?.process(batch) }
+                        catch (cause: Throwable) { failGestures(cause) }
+                    }
                 } finally { batch.close() }
                 if (resetPending && installed) resetNative()
             }
@@ -134,7 +141,11 @@ internal class Win32ContactRouter(private val hwnd: Long, private val surfaceId:
         }
     }
     private fun retire(id: Int, contact: Contact) {
-        if (contacts[id] === contact) contacts.remove(id)
+        if (contacts[id] !== contact) return
+        contacts.remove(id)
+        cancelContact(contact)
+    }
+    private fun cancelContact(contact: Contact) {
         if (contact.type == 2) emit(SurfaceStimulus.TouchChanged(surfaceId, contact.token, TouchPhase.Cancelled, contact.position, contact.pressure))
         else {
             for (button in contact.buttons) emit(SurfaceStimulus.PointerButtonChanged(surfaceId, contact.kind, button,
@@ -150,12 +161,24 @@ internal class Win32ContactRouter(private val hwnd: Long, private val surfaceId:
     }
     private fun cancelState() {
         generation++; onReset()
-        while (queue.isNotEmpty()) queue.removeFirst().close()
+        while (queue.isNotEmpty()) queue.removeFirst().batch.close()
         val retired = contacts.toMap(); contacts.clear()
-        retired.forEach { (id, value) -> retire(id, value) }
+        retired.values.forEach(::cancelContact)
         gestures?.reset()
     }
-    private fun resetNative() { resetPending = false; nativeGestures?.reset() }
+    private fun resetNative() {
+        resetPending = false
+        try { nativeGestures?.reset() } catch (cause: Throwable) { failGestures(cause) }
+    }
+    private fun failGestures(cause: Throwable) {
+        val native = nativeGestures; nativeGestures = null
+        val router = gestures; gestures = null
+        try { router?.reset() }
+        finally {
+            try { native?.close() }
+            finally { onFailure(Win32GestureFailure(cause)) }
+        }
+    }
     private fun fail(cause: Throwable) {
         if (closed) return
         try { close() } finally { onFailure(cause) }
@@ -171,3 +194,5 @@ internal class Win32ContactRouter(private val hwnd: Long, private val surfaceId:
     }
     private fun after(newer: Int, older: Int): Boolean = ((newer.toLong() - older.toLong()) and 0xffffffffL) in 1..0x7fffffffL
 }
+
+internal class Win32GestureFailure(val nativeCause: Throwable) : RuntimeException()

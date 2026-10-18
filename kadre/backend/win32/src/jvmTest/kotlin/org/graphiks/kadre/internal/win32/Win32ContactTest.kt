@@ -10,6 +10,54 @@ import kotlinx.coroutines.runBlocking
 import kotlin.test.*
 
 class Win32ContactTest {
+    @Test fun penHoverLeaveRetiresItsIdentityBeforeNativeIdReuse() {
+        val f = Fixture()
+        f.sendMessage(0x249, 1, sample(9, 2).copy(type=3))
+        val first = f.events.filterIsInstance<SurfaceStimulus.PointerEntered>().single()
+        f.sendMessage(0x24a, 1, sample(9, 2).copy(type=3, target=0))
+        assertSame(first.nativeIdentity, f.events.filterIsInstance<SurfaceStimulus.PointerLeft>().single().nativeIdentity)
+        f.sendMessage(0x249, 2, sample(9, 2).copy(type=3, eraser=true))
+        val next = f.events.filterIsInstance<SurfaceStimulus.PointerEntered>().last()
+        assertEquals(PointerKind.Eraser, next.kind)
+        assertNotSame(first.nativeIdentity, next.nativeIdentity)
+        assertEquals(0, f.retained); f.router.close()
+    }
+
+    @Test fun recognizerProcessFailurePreservesRawContacts() {
+        val f = Fixture(); val failures=mutableListOf<Throwable>(); f.onFailure=failures::add
+        f.gestures.processFailure=IllegalStateException("recognizer")
+        f.send(1, sample(4, DOWN)); f.send(2, sample(4, MOVE)); f.send(3, sample(4, UP))
+        assertTrue(f.router.installed)
+        assertEquals(1, f.interactions.size)
+        assertEquals(listOf(TouchPhase.Moved, TouchPhase.Ended), f.events.filterIsInstance<SurfaceStimulus.TouchChanged>().map { it.phase })
+        assertEquals(1, failures.size); assertEquals(1, f.gestures.closes)
+        assertEquals(0, f.retained); f.router.close()
+    }
+
+    @Test fun recognizerResetFailurePreservesNewRawContacts() {
+        val f = Fixture(); val failures=mutableListOf<Throwable>(); f.onFailure=failures::add
+        f.send(1, sample(4, DOWN)); f.gestures.resetFailure=IllegalStateException("reset")
+        f.router.reset(); f.send(2, sample(5, DOWN)); f.send(3, sample(5, UP))
+        assertTrue(f.router.installed); assertEquals(2, f.interactions.size)
+        assertEquals(TouchPhase.Ended, f.events.filterIsInstance<SurfaceStimulus.TouchChanged>().last().phase)
+        assertEquals(1, failures.size); assertEquals(1, f.gestures.closes); f.router.close()
+    }
+
+    @Test fun recognizerInitializationFailureOnlyWithdrawsGestures() = runBlocking {
+        val port = object : DeterministicWin32HostPort() {
+            override val pointerPacketsAvailable = true
+            override fun createGesturePort(hwnd: Long, maxPointers: Int, onOutput: (Win32GestureOutput) -> Unit): Win32GesturePort = error("recognizer")
+        }
+        val driver = Win32WindowRuntimeDriverFactory.create(port, KadrePolicies.Default.resources, failureReporter=RuntimeFailureReporter {})
+        try {
+            val request=assertIs<KadreResult.Success<WindowRequest>>(driver.manager.requestWindow(WindowSpec())).value
+            val window=assertIs<WindowRequestOutcome.OpenedHere>(request.await()).window
+            val capabilities=window.surface.input.state.value.capabilities
+            assertEquals(FeatureAvailability.Available, capabilities.touch)
+            assertIs<FeatureAvailability.Unavailable>(assertIs<Capability.Supported<Set<GestureKind>>>(capabilities.gestures).availability)
+            Unit
+        } finally { driver.close(); port.close() }
+    }
     @Test fun twoContactsKeepIndependentLifetimes() {
         val f = Fixture()
         f.send(1, sample(4, DOWN), sample(5, DOWN))
@@ -133,15 +181,19 @@ class Win32ContactTest {
             { events += it; true }, { interactions += it; onInteraction?.invoke() }, { true }, { onFailure(it) })
         init { router.activate(); events.clear() }
         fun send(frame: Int, vararg samples: Win32ContactSample) {
+            sendMessage(0x245, frame, *samples)
+        }
+        fun sendMessage(message: Int, frame: Int, vararg samples: Win32ContactSample) {
             retained++; batches += Win32ContactBatch(listOf(Win32ContactFrame(frame, samples.toList())), AutoCloseable { retained-- })
-            assertEquals(0L, router.handle(0x245, samples.first().id.toLong(), 0))
+            assertEquals(0L, router.handle(message, samples.first().id.toLong(), 0))
         }
     }
     internal class Gestures : Win32GesturePort {
         override val kinds = setOf(GestureKind.Pan, GestureKind.Pinch, GestureKind.Rotation, GestureKind.DoubleTap)
         var resets=0; var closes=0
-        override fun process(batch: Win32ContactBatch) {}
-        override fun reset() { resets++ }
+        var processFailure: Throwable? = null; var resetFailure: Throwable? = null
+        override fun process(batch: Win32ContactBatch) { processFailure?.let { throw it } }
+        override fun reset() { resets++; resetFailure?.let { throw it } }
         override fun close() { closes++ }
     }
     companion object {

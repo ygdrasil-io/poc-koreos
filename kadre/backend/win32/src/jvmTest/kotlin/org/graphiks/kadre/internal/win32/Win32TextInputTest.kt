@@ -14,6 +14,28 @@ import org.graphiks.kffi.win32.managed.*
 import kotlin.test.*
 
 class Win32TextInputTest {
+    @Test fun queuedUpdateSeesTerminalFailureBeforeItsContinuationResumes() = runTest {
+        fixture { native, _, window, _ ->
+            val session=assertIs<KadreResult.Success<TextInputSession>>(window.surface.input.openTextInput(TextInputConfig())).value
+            var resumedState: TextInputState? = null
+            var resumedCapability: Capability<Unit>? = null
+            var reopened: KadreResult<TextInputSession>? = null
+            val update=async(Dispatchers.Unconfined, start=CoroutineStart.UNDISPATCHED) {
+                val result=session.updateSurroundingText("next", TextRange(4, 4), TextDocumentRevision(1))
+                resumedState=session.state.value
+                resumedCapability=window.surface.input.state.value.capabilities.textInput
+                session.close()
+                reopened=window.surface.input.openTextInput(TextInputConfig())
+                result
+            }
+            assertFalse(update.isCompleted)
+            native.failNow()
+            assertIs<KadreResult.Failure>(update.await())
+            assertIs<FeatureAvailability.Unavailable>(assertIs<Capability.Supported<Unit>>(resumedCapability).availability)
+            assertEquals(TextInputState.Closed, resumedState)
+            assertIs<KadreResult.Failure>(reopened)
+        }
+    }
     @Test fun nativeChangesUseOnlyTheAcceptedRevision() {
         val native = Native(); val events = mutableListOf<TextInputObservation>(); val failures = mutableListOf<KadreFailure>()
         val port = Win32TextInputPort(native)
@@ -241,13 +263,15 @@ class Win32TextInputTest {
         var atDestroy: Pair<Boolean, Int>? = null
         private val queue = ArrayDeque<() -> Unit>()
         private var receiver: (Win32TextChange) -> Boolean = { false }
+        private var failureReceiver: (Throwable) -> Unit = {}
+        fun failNow() { failureReceiver(Win32TextException(0x80004005.toInt())) }
         fun emit(change: Win32TextChange) = receiver(change)
         fun drain() { var turns=0; while (queue.isNotEmpty()) { check(turns++ < 100); queue.removeFirst()() } }
         override fun <T> onMainThread(block: () -> T): T = block()
         override fun postOnMainThread(block: () -> Unit, onFailure: (Throwable) -> Unit) { queue += { try { block() } catch (cause: Throwable) { onFailure(cause) } } }
         override fun createStore(initial: Win32TextSnapshot, configuration: Win32TextConfiguration, limits: Win32TextLimits,
             onChange: (Win32TextChange) -> Boolean, onFailure: (Throwable) -> Unit): Win32NativeTextOwner {
-            receiver=onChange
+            receiver=onChange; failureReceiver=onFailure
             if (failDuringOpen) onFailure(Win32TextException(0x80004005.toInt()))
             return owner
         }

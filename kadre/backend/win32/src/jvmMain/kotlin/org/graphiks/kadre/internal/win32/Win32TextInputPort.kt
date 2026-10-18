@@ -274,10 +274,16 @@ internal class Win32TextInputPort(private val native: Win32TextNativePort) : Tex
                     work.toList().also { work.clear() }, callback)
             }
             current.compareAndSet(this, null)
-            cleanup.store?.let(::retire)
-            cleanup.pending.forEach { it.lease.close() }
-            cleanup.work.forEach { it.stop(reason ?: closedFailure()) }
-            if (reason != null) cleanup.terminated?.invoke(reason)
+            try {
+                // Publish the terminal target before stopping work can resume its caller inline.
+                if (reason != null) cleanup.terminated?.invoke(reason)
+            } finally {
+                try { cleanup.store?.let(::retire) }
+                finally {
+                    try { cleanup.pending.forEach { it.lease.close() } }
+                    finally { cleanup.work.forEach { it.stop(reason ?: closedFailure()) } }
+                }
+            }
         }
 
         private fun retire(handle: Win32NativeTextOwner) {

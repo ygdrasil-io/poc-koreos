@@ -134,17 +134,19 @@ internal class Win32WindowRuntimeDriver internal constructor(
                 Win32ContactRouter(created.hwnd, command.surfaceId, port, resources, manager.nativeInputPayloadBudget(),
                     manager.nativeInputIngressCapacity(), manager::acceptSurfaceStimulus,
                     { event -> dispatchInteraction(entry, event) }, { isLive(entry) }, { cause ->
-                        val reason = (cause as? KadreException)?.failure
-                        if (reason is KadreFailure.SourceOverflow || reason is KadreFailure.ResourceLimitExceeded)
+                        val gestureFailure = cause is Win32GestureFailure
+                        val nativeCause = (cause as? Win32GestureFailure)?.nativeCause ?: cause
+                        val reason = (nativeCause as? KadreException)?.failure
+                        if (!gestureFailure && (reason is KadreFailure.SourceOverflow || reason is KadreFailure.ResourceLimitExceeded))
                             manager.nativeInputFailure(command.surfaceId, checkNotNull(reason))
                         else {
-                            val failure = platformFailure("rich-input", when (cause) {
-                                is org.graphiks.kffi.win32.managed.Win32PointerException -> "pointer-error-${cause.error}"
-                                is org.graphiks.kffi.win32.managed.Win32InteractionException -> "interaction-hresult-${cause.hresult.toUInt().toString(16)}"
+                            val failure = platformFailure("rich-input", when (nativeCause) {
+                                is org.graphiks.kffi.win32.managed.Win32PointerException -> "pointer-error-${nativeCause.error}"
+                                is org.graphiks.kffi.win32.managed.Win32InteractionException -> "interaction-hresult-${nativeCause.hresult.toUInt().toString(16)}"
                                 else -> "native-failed"
                             })
                             manager.acceptSurfaceStimulus(SurfaceStimulus.InputObservationChanged(command.surfaceId, true, true,
-                                touch=FeatureAvailability.Unavailable(failure),
+                                touch=if (gestureFailure) FeatureAvailability.Available else FeatureAvailability.Unavailable(failure),
                                 gestures=Capability.Supported(setOf(org.graphiks.kadre.input.GestureKind.Pan, org.graphiks.kadre.input.GestureKind.Pinch,
                                     org.graphiks.kadre.input.GestureKind.Rotation, org.graphiks.kadre.input.GestureKind.DoubleTap), FeatureAvailability.Unavailable(failure))))
                             failureReporter.report(KadreException(failure))
