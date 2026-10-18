@@ -22,6 +22,11 @@ import org.graphiks.kffi.win32.managed.Win32ManagedWindow
 import org.graphiks.kffi.win32.managed.Win32Structs
 import org.graphiks.kffi.win32.managed.Win32Keyboard
 import org.graphiks.kffi.win32.managed.Win32Pointer
+import org.graphiks.kffi.win32.managed.Win32WindowProperties
+import org.graphiks.kffi.win32.managed.Win32WindowOperations
+import org.graphiks.kadre.surface.PhysicalRect
+import org.graphiks.kadre.surface.PhysicalPoint
+import org.graphiks.kadre.surface.PhysicalSize
 import org.graphiks.kadre.input.KeyboardModifiers
 import org.graphiks.kadre.input.ModifierKey
 import java.lang.foreign.Arena
@@ -46,6 +51,7 @@ internal class KffiWin32HostPort : Win32NativeHostPort {
     private var pendingMessage: MemorySegment? = null
     private val dpiContextApplied = AtomicBoolean(false)
     private val topLevelWindows = ConcurrentHashMap<Win32TopLevelWindowHandle, Win32ManagedWindow>()
+    private val features = mutableMapOf<Long, Win32WindowFeatures>()
     private val closing = AtomicBoolean(false)
     private val commands = Win32UiCommandQueue(
         ::isMainThread,
@@ -98,6 +104,7 @@ internal class KffiWin32HostPort : Win32NativeHostPort {
     }
 
     override fun <T> onMainThread(block: () -> T): T = commands.invoke(block)
+    override fun deferWindowMutation(block: () -> Unit, onFailure: (Throwable) -> Unit) = commands.defer(block, onFailure)
     override fun postOnMainThread(block: () -> Unit, onFailure: (Throwable) -> Unit) = commands.post(block, onFailure)
     override fun stopWorkerCommands() = commands.stopWorkerAdmission()
 
@@ -151,6 +158,7 @@ internal class KffiWin32HostPort : Win32NativeHostPort {
     override fun waitForMessage(timeoutMillis: Long): Win32MessageWait {
         check(isMainThread()) { "the Win32 pump must run on its UI owner" }
         commands.drain()
+        features.values.toList().forEach { it.pollConfinement() }
         if (closing.get()) return Win32MessageWait.Quit
         init()
         val waitResult = MsgWaitForMultipleObjectsEx(
@@ -217,6 +225,7 @@ internal class KffiWin32HostPort : Win32NativeHostPort {
             messageHandler(hwnd, message, wParam, lParam)
         }
         topLevelWindows[Win32TopLevelWindowHandle(window.hwnd)] = window
+        features[window.hwnd] = Win32WindowFeatures(window.hwnd)
         return Win32TopLevelWindowHandle(window.hwnd)
     }
 
@@ -228,8 +237,12 @@ internal class KffiWin32HostPort : Win32NativeHostPort {
     override fun destroyWindow(hwnd: Long) {
         if (!isMainThread()) return onMainThread { destroyWindow(hwnd) }
         val entry = topLevelWindows.entries.firstOrNull { it.key.hwnd == hwnd } ?: return
-        entry.value.close()
-        topLevelWindows.remove(entry.key)
+        val owned = features[hwnd]
+        try { owned?.beforeDestroy() }
+        finally {
+            try { entry.value.close() }
+            finally { topLevelWindows.remove(entry.key); features.remove(hwnd)?.close() }
+        }
     }
 
     override fun destroyControlWindow(hwnd: Long) {
@@ -278,6 +291,46 @@ internal class KffiWin32HostPort : Win32NativeHostPort {
         return GetDpiForWindow(MemorySegment.ofAddress(hwnd)) / 96.0
     }
 
+    override fun readWindow(hwnd: Long): Win32WindowReadback = onMainThread {
+        val value = Win32WindowProperties.read(hwnd)
+        Win32WindowReadback(value.title,
+            PhysicalRect(PhysicalPoint(value.outer.x, value.outer.y), PhysicalSize(value.outer.width, value.outer.height)),
+            value.clientWidth to value.clientHeight, value.style, value.dpi / 96.0, value.minimized, value.maximized,
+            Win32WindowOperations.readTopmost(hwnd), checkNotNull(features[hwnd]).icon(), Win32WindowOperations.readContentProtection(hwnd))
+    }
+    override fun setWindowTitle(hwnd: Long, title: String) { check(isMainThread()); Win32WindowProperties.setTitle(hwnd, title) }
+    override fun setWindowStyle(hwnd: Long, style: Int) { check(isMainThread()); Win32WindowProperties.setStyle(hwnd, style) }
+    override fun setWindowBounds(hwnd: Long, bounds: PhysicalRect, frameChanged: Boolean) {
+        check(isMainThread())
+        Win32WindowProperties.setBounds(hwnd, bounds.origin.x, bounds.origin.y, bounds.size.width, bounds.size.height, frameChanged)
+    }
+    override fun outerSizeForClient(hwnd: Long, width: Int, height: Int, style: Int?): Pair<Int, Int> {
+        check(isMainThread())
+        val size = if (style == null) Win32WindowProperties.outerSize(hwnd, width, height)
+            else Win32WindowProperties.outerSize(hwnd, width, height, style)
+        return size.width to size.height
+    }
+    override fun monitorBounds(hwnd: Long): PhysicalRect {
+        check(isMainThread())
+        val rect = Win32WindowProperties.monitorBounds(hwnd)
+        return PhysicalRect(PhysicalPoint(rect.x, rect.y), PhysicalSize(rect.width, rect.height))
+    }
+    override fun applyTrackLimits(hwnd: Long, lParam: Long, minimum: PhysicalSize?, maximum: PhysicalSize?) {
+        check(isMainThread())
+        Win32WindowProperties.applyTrackLimits(hwnd, lParam, minimum?.width, minimum?.height, maximum?.width, maximum?.height)
+    }
+
+    override fun setWindowLevel(hwnd: Long, floating: Boolean) { check(isMainThread()); Win32WindowOperations.setTopmost(hwnd, floating) }
+    override fun setWindowIcon(hwnd: Long, image: org.graphiks.kadre.surface.BinaryImage?) { check(isMainThread()); checkNotNull(features[hwnd]).setIcon(image) }
+    override fun setContentProtection(hwnd: Long, enabled: Boolean) { check(isMainThread()); Win32WindowOperations.setContentProtection(hwnd, enabled) }
+    override fun requestAttention(hwnd: Long, attention: org.graphiks.kadre.window.WindowAttention) { check(isMainThread()); Win32WindowOperations.requestAttention(hwnd, attention.ordinal) }
+    override fun setCursorStyle(hwnd: Long, style: org.graphiks.kadre.surface.CursorStyle) { check(isMainThread()); checkNotNull(features[hwnd]).setCursor(style) }
+    override fun applyClientCursor(hwnd: Long) { check(isMainThread()); checkNotNull(features[hwnd]).applyCursor() }
+    override fun setPointerConfinement(hwnd: Long, enabled: Boolean): Boolean { check(isMainThread()); return checkNotNull(features[hwnd]).confine(enabled) }
+    override fun refreshPointerConfinement(hwnd: Long): Boolean { check(isMainThread()); return checkNotNull(features[hwnd]).refreshConfinement() }
+    override fun observeConfinementLoss(hwnd: Long, onLost: () -> Unit) { check(isMainThread()); checkNotNull(features[hwnd]).observeLoss(onLost) }
+    override fun beginMoveResize(hwnd: Long, hitTest: Int, clientX: Int, clientY: Int) { check(isMainThread()); Win32WindowOperations.beginMoveResize(hwnd, hitTest, clientX, clientY) }
+
     /** Diagnostic : GetWindowRect + IsIconic pour le placement réel du natif. */
     internal fun readWindowRectForDiagnostics(hwnd: Long): String {
         init()
@@ -305,8 +358,7 @@ internal class KffiWin32HostPort : Win32NativeHostPort {
         try {
             onMainThread {
                 try {
-                    topLevelWindows.values.forEach { runCatching(it::close) }
-                    topLevelWindows.clear()
+                    topLevelWindows.keys.toList().forEach { runCatching { destroyWindow(it.hwnd) } }
                     controlWindow?.close()
                     controlWindow = null
                     msgArena?.close()
@@ -323,7 +375,7 @@ internal class KffiWin32HostPort : Win32NativeHostPort {
     private companion object {
         // DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2 = ((DPI_CONTEXT_HANDLE)-4)
         const val DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2: Long = -4
-        const val WAKE_MESSAGE: Int = 0x8002 // WM_APP + 2, spec D2 de la phase 1
+        const val WAKE_MESSAGE: Int = Win32ControlWindow.COMMAND_MESSAGE
         const val STOP_WPARAM: Long = 0x57494E // "WIN" marker distinguishing stop from wake
         const val QS_ALLINPUT: Int = 0x00FF
         const val MWMO_INPUTAVAILABLE: Int = 0x0004

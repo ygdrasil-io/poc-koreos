@@ -16,6 +16,23 @@ internal open class DeterministicWin32HostPort : Win32NativeHostPort {
     private val topLevelHandlers = java.util.concurrent.ConcurrentHashMap<Long, (Long, Int, Long, Long) -> Long>()
     val scriptedClientSize = java.util.concurrent.ConcurrentHashMap<Long, Pair<Int, Int>>()
     val scriptedScaleFactor = java.util.concurrent.ConcurrentHashMap<Long, Double>()
+    val windowTitles = java.util.concurrent.ConcurrentHashMap<Long, String>()
+    val windowStyles = java.util.concurrent.ConcurrentHashMap<Long, Int>()
+    val floatingWindows = mutableSetOf<Long>()
+    val icons = mutableMapOf<Long, org.graphiks.kadre.surface.BinaryImage>()
+    val protectedWindows = mutableSetOf<Long>()
+    val cursors = mutableMapOf<Long, org.graphiks.kadre.surface.CursorStyle>()
+    val confinedWindows = mutableSetOf<Long>()
+    val confinementObservers = mutableMapOf<Long, () -> Unit>()
+    val nativeDrags = mutableListOf<Triple<Int, Int, Int>>()
+    var onNativeDrag: (() -> Unit)? = null
+    val attentionRequests = mutableListOf<Pair<Long, org.graphiks.kadre.window.WindowAttention>>()
+    var confinementAvailable = true
+    val windowBounds = java.util.concurrent.ConcurrentHashMap<Long, org.graphiks.kadre.surface.PhysicalRect>()
+    var beforeTitleWrite: (() -> Unit)? = null
+    var afterStyleWrite: (() -> Unit)? = null
+    var titleReadback: ((String) -> String)? = null
+    var beforeBoundsWrite: (() -> Unit)? = null
     val invalidateCount = AtomicInteger(0)
     val validateCount = AtomicInteger(0)
     val paintCount = AtomicInteger(0)
@@ -45,6 +62,7 @@ internal open class DeterministicWin32HostPort : Win32NativeHostPort {
         try { block() } catch (failure: Throwable) { onFailure(failure) }
     }
     override fun stopWorkerCommands() = Unit
+    override fun deferWindowMutation(block: () -> Unit, onFailure: (Throwable) -> Unit) = postOnMainThread(block, onFailure)
 
     override fun createControlWindow(
         messageHandler: (id: Int, wParam: Long, lParam: Long) -> Long,
@@ -116,6 +134,9 @@ internal open class DeterministicWin32HostPort : Win32NativeHostPort {
             val hwnd = nextTopLevelHwnd++
             topLevelHandlers[hwnd] = messageHandler
             topLevelHwndOrder.add(hwnd)
+            windowTitles[hwnd] = title
+            windowStyles[hwnd] = 0x00cf0000
+            windowBounds[hwnd] = org.graphiks.kadre.surface.PhysicalRect(org.graphiks.kadre.surface.PhysicalPoint(0, 0), org.graphiks.kadre.surface.PhysicalSize(width + 16, height + 39))
             return Win32TopLevelWindowHandle(hwnd)
         }
     }
@@ -149,6 +170,7 @@ internal open class DeterministicWin32HostPort : Win32NativeHostPort {
     fun topLevelHwndAt(index: Int): Long = topLevelHwndOrder.elementAtOrNull(index) ?: 0L
 
     override fun destroyWindow(hwnd: Long) {
+        confinedWindows.remove(hwnd); icons.remove(hwnd); cursors.remove(hwnd); confinementObservers.remove(hwnd)
         if (topLevelHandlers.remove(hwnd) != null) {
             destroyedTopLevelWindows.incrementAndGet()
             topLevelHwndOrder.remove(hwnd)
@@ -185,6 +207,55 @@ internal open class DeterministicWin32HostPort : Win32NativeHostPort {
         scriptedClientSize[hwnd] ?: (800 to 600)
 
     override fun readScaleFactor(hwnd: Long): Double = scriptedScaleFactor[hwnd] ?: 1.0
+
+    override fun readWindow(hwnd: Long): Win32WindowReadback {
+        errorIfWindowUnknown(hwnd)
+        return Win32WindowReadback(windowTitles.getValue(hwnd), windowBounds.getValue(hwnd), readClientPhysicalSize(hwnd), windowStyles.getValue(hwnd), readScaleFactor(hwnd),
+            floating = hwnd in floatingWindows, icon = icons[hwnd], contentProtection = hwnd in protectedWindows)
+    }
+    override fun setWindowTitle(hwnd: Long, title: String) {
+        beforeTitleWrite?.invoke()
+        errorIfWindowUnknown(hwnd)
+        windowTitles[hwnd] = titleReadback?.invoke(title) ?: title
+    }
+    override fun setWindowStyle(hwnd: Long, style: Int) {
+        errorIfWindowUnknown(hwnd)
+        windowStyles[hwnd] = style
+        afterStyleWrite?.invoke()
+    }
+    override fun setWindowBounds(hwnd: Long, bounds: org.graphiks.kadre.surface.PhysicalRect, frameChanged: Boolean) {
+        beforeBoundsWrite?.invoke()
+        errorIfWindowUnknown(hwnd)
+        windowBounds[hwnd] = bounds
+        val frame = frame(hwnd)
+        scriptedClientSize[hwnd] = (bounds.size.width - frame.first) to (bounds.size.height - frame.second)
+        dispatchWindowMessage(hwnd, WM_SIZE)
+    }
+    private fun frame(hwnd: Long, style: Int? = null): Pair<Int, Int> = if ((style ?: windowStyles.getValue(hwnd)) and 0x00c00000 != 0) 16 to 39 else 0 to 0
+    override fun outerSizeForClient(hwnd: Long, width: Int, height: Int, style: Int?): Pair<Int, Int> {
+        val frame = frame(hwnd, style)
+        val outerWidth = width.toLong() + frame.first
+        val outerHeight = height.toLong() + frame.second
+        require(outerWidth in 1..Int.MAX_VALUE.toLong() && outerHeight in 1..Int.MAX_VALUE.toLong()) { "outer size overflows Windows LONG" }
+        return outerWidth.toInt() to outerHeight.toInt()
+    }
+    override fun monitorBounds(hwnd: Long) = org.graphiks.kadre.surface.PhysicalRect(org.graphiks.kadre.surface.PhysicalPoint(-1920, 0), org.graphiks.kadre.surface.PhysicalSize(1920, 1080))
+    override fun applyTrackLimits(hwnd: Long, lParam: Long, minimum: org.graphiks.kadre.surface.PhysicalSize?, maximum: org.graphiks.kadre.surface.PhysicalSize?) = Unit
+
+    override fun setWindowLevel(hwnd: Long, floating: Boolean) { if (floating) floatingWindows.add(hwnd) else floatingWindows.remove(hwnd) }
+    override fun setWindowIcon(hwnd: Long, image: org.graphiks.kadre.surface.BinaryImage?) { if (image == null) icons.remove(hwnd) else icons[hwnd] = image }
+    override fun setContentProtection(hwnd: Long, enabled: Boolean) { if (enabled) protectedWindows.add(hwnd) else protectedWindows.remove(hwnd) }
+    override fun requestAttention(hwnd: Long, attention: org.graphiks.kadre.window.WindowAttention) { attentionRequests += hwnd to attention }
+    override fun setCursorStyle(hwnd: Long, style: org.graphiks.kadre.surface.CursorStyle) { cursors[hwnd] = style }
+    override fun applyClientCursor(hwnd: Long) = Unit
+    override fun setPointerConfinement(hwnd: Long, enabled: Boolean): Boolean {
+        if (!enabled) { confinedWindows.remove(hwnd); return true }
+        if (!confinementAvailable) return false
+        confinedWindows += hwnd; return true
+    }
+    override fun refreshPointerConfinement(hwnd: Long): Boolean = hwnd in confinedWindows
+    override fun observeConfinementLoss(hwnd: Long, onLost: () -> Unit) { confinementObservers[hwnd] = onLost }
+    override fun beginMoveResize(hwnd: Long, hitTest: Int, clientX: Int, clientY: Int) { nativeDrags += Triple(hitTest, clientX, clientY); onNativeDrag?.invoke() }
 
     override fun close() {
         destroyed = true

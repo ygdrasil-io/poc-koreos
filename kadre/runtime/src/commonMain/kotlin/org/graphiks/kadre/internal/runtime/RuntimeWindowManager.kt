@@ -101,6 +101,8 @@ public class RuntimeWindowManager public constructor(
     private val failureReporter: RuntimeFailureReporter,
     private val publicWindowCapabilities: Boolean = false,
     private val enabledWindowUpdateCapabilities: Set<WindowProperty> = emptySet(),
+    private val acceptedWindowLevels: Set<WindowLevel> = WindowLevel.entries.toSet(),
+    private val windowIconConstraints: org.graphiks.kadre.surface.ImageConstraints? = null,
     private val attentionPort: WindowAttentionPort? = null,
     private val acceptedAttention: Set<WindowAttention> = emptySet(),
     private val fullscreenAvailabilityFailure: KadreFailure.PlatformFailure? = null,
@@ -118,6 +120,7 @@ public class RuntimeWindowManager public constructor(
     }
 
     private val lock = RuntimeLock()
+    private val imageBudget = RuntimeImageBudget(resources)
     private val pendingCloseWork = RuntimeCallFrame { ArrayDeque<() -> Unit>() }
     private val drainingCloseWork = RuntimeCallFrame { false }
     private val pending = linkedMapOf<WindowRequestId, PendingWindow>()
@@ -401,6 +404,12 @@ public class RuntimeWindowManager public constructor(
         return surface.accept(stimulus)
     }
 
+    /** A native modal action consumed the triggering press; discard its deferred ordinary input. */
+    public fun invalidateDeferredInteractionInput(surfaceId: SurfaceId) {
+        val surface = lock.withLock { surfaces[surfaceId] } ?: return
+        surface.invalidateDeferredInteractionInput()
+    }
+
     /**
      * Unstable backend SPI for one synchronous native interaction callback.
      * The runtime assigns the public event stamp; a backend retains every native payload.
@@ -451,6 +460,9 @@ public class RuntimeWindowManager public constructor(
 
     override suspend fun requestWindow(spec: WindowSpec): KadreResult<WindowRequest> {
         currentCoroutineContext().ensureActive()
+        if(windowIconConstraints != null) spec.icon?.let { image ->
+            imageConstraintFailure(image, windowIconConstraints, "icon")?.let { return KadreResult.Failure(it) }
+        }
         if (unsupportedInitialWindowProperty(spec) != null) {
             return lock.withLock {
                 if (closed) {
@@ -487,6 +499,10 @@ public class RuntimeWindowManager public constructor(
                 )
 
                 else -> {
+                    val iconLease = when(val retained = imageBudget.retain(spec.icon)) {
+                        is KadreResult.Success -> retained.value
+                        is KadreResult.Failure -> return@withManagerLock retained.reason
+                    }
                     val requestId = RuntimeProcessIds.nextWindowRequestId()
                     val windowId = RuntimeProcessIds.nextWindowId()
                     val surfaceId = RuntimeProcessIds.nextSurfaceId()
@@ -496,6 +512,7 @@ public class RuntimeWindowManager public constructor(
                         surfaceId = surfaceId,
                         spec = spec,
                         admissionOrder = nextAdmissionOrder++,
+                        iconLease = iconLease,
                     )
                     pending[requestId] = record
                     reservedWindowSlots += 1
@@ -1466,7 +1483,19 @@ public class RuntimeWindowManager public constructor(
             record.request.terminate(WindowRequestOutcome.Rejected(failure))
             return
         }
+        val effectiveIconLease = when (val retained = imageBudget.retain(effectiveSpec.icon)) {
+            is KadreResult.Success -> retained.value
+            is KadreResult.Failure -> {
+                removePendingLocked(record)
+                safeCloseOwner(owner)
+                val failure = platformFailure("initial-image-readback-over-budget")
+                safeReport(KadreException(failure))
+                record.request.terminate(WindowRequestOutcome.Rejected(failure))
+                return
+            }
+        }
         if (pending.remove(record.request.id) !== record) {
+            effectiveIconLease.close()
             safeCloseOwner(owner)
             return
         }
@@ -1486,6 +1515,7 @@ public class RuntimeWindowManager public constructor(
             deliveryPolicy = surfaceDeliveryPolicy,
             inputDeliveryPolicy = surfaceInputDeliveryPolicy,
             resources = resources,
+            imageBudget = imageBudget,
             dropTransferBudget = dropTransferBudget,
             dropTransferScope = dropTransferScope,
             maxCollectorsPerFlow = sessionMaxCollectorsPerFlow,
@@ -1501,6 +1531,10 @@ public class RuntimeWindowManager public constructor(
             platform = platform,
             publicWindowCapabilities = publicWindowCapabilities,
             enabledWindowUpdateCapabilities = enabledWindowUpdateCapabilities,
+            acceptedWindowLevels = acceptedWindowLevels,
+            windowIconConstraints = windowIconConstraints,
+            imageBudget = imageBudget,
+            initialIconLease = effectiveIconLease,
             acceptedAttention = if (attentionPort == null) null else acceptedAttention,
             fullscreenAvailabilityFailure = fullscreenAvailabilityFailure,
             initialExclusiveFullscreenAvailability = exclusiveFullscreenAvailability,
@@ -1516,6 +1550,7 @@ public class RuntimeWindowManager public constructor(
             owner = owner,
             admissionOrder = record.admissionOrder,
         )
+        record.iconLease.close()
         check(surfaces.put(surface.id, surface) == null) { "duplicate runtime surface" }
         publishMembershipLocked()
         record.request.terminate(WindowRequestOutcome.OpenedHere(window))
@@ -1680,7 +1715,7 @@ public class RuntimeWindowManager public constructor(
                 return WindowProperty.OuterPosition
             }
             spec.blurBehind -> return WindowProperty.Blur
-            spec.icon != null -> return WindowProperty.Icon
+            spec.icon != null && (windowIconConstraints == null || WindowProperty.Icon !in enabledWindowUpdateCapabilities) -> return WindowProperty.Icon
         }
         if (!publicWindowCapabilities) return null
         fun unsupported(property: WindowProperty): Boolean = property !in enabledWindowUpdateCapabilities
@@ -1694,7 +1729,7 @@ public class RuntimeWindowManager public constructor(
             spec.fullscreen is FullscreenMode.Borderless && unsupported(WindowProperty.Fullscreen) -> WindowProperty.Fullscreen
             spec.decorations != WindowDecorations.System && unsupported(WindowProperty.Decorations) -> WindowProperty.Decorations
             spec.systemButtons != WindowSystemButtons.All && unsupported(WindowProperty.SystemButtons) -> WindowProperty.SystemButtons
-            spec.level != WindowLevel.Normal && unsupported(WindowProperty.Level) -> WindowProperty.Level
+            spec.level !in acceptedWindowLevels || spec.level != WindowLevel.Normal && unsupported(WindowProperty.Level) -> WindowProperty.Level
             spec.transparent && unsupported(WindowProperty.Transparency) -> WindowProperty.Transparency
             spec.contentProtection && unsupported(WindowProperty.ContentProtection) -> WindowProperty.ContentProtection
             else -> null
@@ -1702,6 +1737,7 @@ public class RuntimeWindowManager public constructor(
     }
 
     private fun removePendingLocked(record: PendingWindow) {
+        record.iconLease.close()
         if (pending.remove(record.request.id) != null) releaseWindowSlotsLocked(1)
     }
 
@@ -1766,6 +1802,7 @@ public class RuntimeWindowManager public constructor(
         val surfaceId: SurfaceId,
         val spec: WindowSpec,
         val admissionOrder: Long,
+        val iconLease: RuntimeImageLease,
         var cancellationOutcome: WindowCancellationOutcome? = null,
         var pendingCancellationIssued: Boolean = false,
         var openDispatching: Boolean = true,
@@ -1896,6 +1933,10 @@ internal class RuntimeWindow(
     private val platform: KadrePlatform,
     private val publicWindowCapabilities: Boolean,
     private val enabledWindowUpdateCapabilities: Set<WindowProperty>,
+    private val acceptedWindowLevels: Set<WindowLevel>,
+    private val windowIconConstraints: org.graphiks.kadre.surface.ImageConstraints?,
+    private val imageBudget: RuntimeImageBudget,
+    initialIconLease: RuntimeImageLease,
     private val acceptedAttention: Set<WindowAttention>?,
     private val fullscreenAvailabilityFailure: KadreFailure.PlatformFailure?,
     initialExclusiveFullscreenAvailability: ExclusiveFullscreenAvailability,
@@ -1914,6 +1955,8 @@ internal class RuntimeWindow(
             acceptedAttention,
             fullscreenAvailabilityFailure,
             initialExclusiveFullscreenAvailability,
+            acceptedWindowLevels,
+            windowIconConstraints,
         ),
     )
     private val supportedWindowUpdateProperties =
@@ -1926,6 +1969,7 @@ internal class RuntimeWindow(
         closeWindow = { manager.terminaliseWindowEventDelivery(this) },
     )
     private val updateLock = RuntimeLock()
+    private var iconLease: RuntimeImageLease = initialIconLease
     private val pendingUpdates = ArrayDeque<PendingWindowUpdate>()
     private var dispatchedUpdate: PendingWindowUpdate? = null
     private var publishingUpdate: PendingWindowUpdate? = null
@@ -1974,6 +2018,8 @@ internal class RuntimeWindow(
                 acceptedAttention,
                 fullscreenAvailabilityFailure,
                 availability,
+                acceptedWindowLevels,
+                windowIconConstraints,
             )
         }
     }
@@ -2091,7 +2137,15 @@ internal class RuntimeWindow(
             invalidRequiredClearField(update, supportedWindowUpdateProperties)?.let { field ->
                 return KadreResult.Failure(KadreFailure.InvalidRequest(field))
             }
-            val supportedUpdate = supportedMutationOnly(update, supportedWindowUpdateProperties)
+            val rejectedLevel = (update.level as? PropertyChange.Set)?.value?.let {
+                WindowProperty.Level in supportedWindowUpdateProperties && it !in acceptedWindowLevels
+            } == true
+            val supportedUpdate = supportedMutationOnly(update, supportedWindowUpdateProperties).let {
+                if(rejectedLevel) it.copy(level = PropertyChange.Unchanged) else it
+            }
+            (supportedUpdate.icon as? PropertyChange.Set)?.value?.let { image ->
+                imageConstraintFailure(image, windowIconConstraints, "icon")?.let { return KadreResult.Failure(it) }
+            }
             invalidChromeField(supportedUpdate, current)?.let { field ->
                 return KadreResult.Failure(KadreFailure.InvalidRequest(field))
             }
@@ -2167,7 +2221,8 @@ internal class RuntimeWindow(
             }
             val rejected = changedProperties(update)
                 .filterNot(supportedWindowUpdateProperties::contains)
-                .map { RejectedWindowField(it, KadreFailure.Unsupported(KadreOperation.UpdateWindow)) }
+                .map { RejectedWindowField(it, KadreFailure.Unsupported(KadreOperation.UpdateWindow)) } +
+                if(rejectedLevel) listOf(RejectedWindowField(WindowProperty.Level, KadreFailure.Unsupported(KadreOperation.UpdateWindow))) else emptyList()
             val mutationChanged = mutationChanged(current, candidate) || requiresNativeMutation(canonicalUpdate)
             val requestedLevel = (canonicalUpdate.level as? PropertyChange.Set)?.value
             val deferBehindFullscreenBarrier = fullscreenBarrier != null
@@ -2181,12 +2236,17 @@ internal class RuntimeWindow(
                 PendingWindowUpdate(operationId, null, canonicalUpdate, rejected) to
                     KadreResult.Success(updateOutcome(operationId, current, rejected))
             } else {
+                val imageLease = when(val retained = imageBudget.retain((canonicalUpdate.icon as? PropertyChange.Set)?.value)) {
+                    is KadreResult.Success -> retained.value
+                    is KadreResult.Failure -> return KadreResult.Failure(retained.reason)
+                }
                 val queued = PendingWindowUpdate(
                     operationId = operationId,
                     expectedRevision = update.expectedRevision,
                     update = canonicalUpdate,
                     rejected = rejected,
                     exclusiveTransition = resolvedExclusiveTransition,
+                    iconLease = imageLease,
                 )
                 pendingUpdates.addLast(queued)
                 queued to null
@@ -2215,8 +2275,11 @@ internal class RuntimeWindow(
         var publication: WindowStatePublication? = null
         var completion: PendingWindowUpdate? = null
         var outcome: KadreResult<WindowUpdateOutcome>? = null
+        var imageFailure: KadreFailure.PlatformFailure? = null
         updateLock.withLock {
             val pending = dispatchedUpdate?.takeIf { it.operationId == operationId } ?: return
+            imageFailure = adoptIcon(state.icon)
+            if (imageFailure != null) return@withLock
             dispatchedUpdate = null
             fullscreenBarrier?.takeIf { it.operationId == operationId }?.let { barrier ->
                 completeFullscreenBarrierLocked(
@@ -2241,6 +2304,11 @@ internal class RuntimeWindow(
             publication = WindowStatePublication(lifecycle, effective, operationId)
             completion = pending
             outcome = KadreResult.Success(updateOutcome(operationId, effective, pending.rejected + backendRejected))
+        }
+        imageFailure?.let {
+            rejectDispatchedUpdate(operationId, it)
+            manager.reportDetachedWindowUpdateFailure(it)
+            return
         }
         try {
             publishStatePublication(checkNotNull(publication))
@@ -2267,8 +2335,11 @@ internal class RuntimeWindow(
     ) {
         var publication: WindowStatePublication? = null
         var completion: PendingWindowUpdate? = null
+        var imageFailure: KadreFailure.PlatformFailure? = null
         updateLock.withLock {
             val pending = dispatchedUpdate?.takeIf { it.operationId == operationId } ?: return
+            imageFailure = adoptIcon(state.icon)
+            if (imageFailure != null) return@withLock
             dispatchedUpdate = null
             fullscreenBarrier?.takeIf { it.operationId == operationId }?.let { barrier ->
                 completeFullscreenBarrierLocked(
@@ -2297,6 +2368,11 @@ internal class RuntimeWindow(
             updateDesiredLevelAfterReadback(pending, candidate, backendRejected)
             publishingUpdate = pending
             completion = pending
+        }
+        imageFailure?.let {
+            rejectDispatchedUpdate(operationId, it)
+            manager.reportDetachedWindowUpdateFailure(it)
+            return
         }
         try {
             publication?.let(::publishStatePublication)
@@ -2816,6 +2892,7 @@ internal class RuntimeWindow(
             fullscreenBarrier?.takeIf {
                 it.operationId == operationId && it.phase == FullscreenPhase.PreparedLocal
             }?.let { fullscreenBarrier = null }
+            pending.iconLease?.close()
             closeEventDelivery = takePendingEventDeliveryCloseLocked()
         }
         if (closeEventDelivery) eventFlow.close()
@@ -2923,6 +3000,7 @@ internal class RuntimeWindow(
                 if (!pending.backendRegistrationEntered) {
                     dispatchedUpdate = null
                     pending.cancelled = true
+                    pending.iconLease?.close()
                     fullscreenBarrier?.takeIf {
                         it.operationId == pending.operationId && it.phase == FullscreenPhase.PreparedLocal
                     }?.let { fullscreenBarrier = null }
@@ -2937,6 +3015,7 @@ internal class RuntimeWindow(
             }
             pending.cancelled = true
             pendingUpdates.remove(pending)
+            pending.iconLease?.close()
         }
         if (closeEventDelivery) eventFlow.close()
         if (drainNext) dispatchNextUpdate()
@@ -3105,6 +3184,7 @@ internal class RuntimeWindow(
                 phase = WindowPhase.Closed,
                 revision = WindowRevision(current.revision.value + 1L),
             )
+            iconLease.close()
             if (dispatchedUpdate == null && eventPublicationsInFlight == 0) {
                 true
             } else {
@@ -3113,6 +3193,18 @@ internal class RuntimeWindow(
             }
         }
         if (closeEventDelivery) eventFlow.close()
+    }
+
+    private fun adoptIcon(image: org.graphiks.kadre.surface.BinaryImage?): KadreFailure.PlatformFailure? {
+        if (image === mutableState.value.icon) return null
+        if (image != null && imageConstraintFailure(image, windowIconConstraints, "icon") != null)
+            return KadreFailure.PlatformFailure(platform, "window-command-port", "invalid-image-readback")
+        val lease = when(val retained = imageBudget.retain(image)) {
+            is KadreResult.Success -> retained.value
+            is KadreResult.Failure -> return KadreFailure.PlatformFailure(platform, "window-command-port", "image-readback-over-budget")
+        }
+        iconLease.close(); iconLease = lease
+        return null
     }
 
     private fun takePendingEventDeliveryCloseLocked(): Boolean {
@@ -3146,6 +3238,9 @@ internal class RuntimeWindow(
             if (before.systemButtons != effective.systemButtons) add(WindowProperty.SystemButtons)
             if (before.fullscreen != effective.fullscreen) add(WindowProperty.Fullscreen)
             if (before.level != effective.level) add(WindowProperty.Level)
+            if (before.icon != effective.icon) add(WindowProperty.Icon)
+            if (before.transparent != effective.transparent) add(WindowProperty.Transparency)
+            if (before.contentProtection != effective.contentProtection) add(WindowProperty.ContentProtection)
         }
         if (changedProperties.isNotEmpty()) {
             publish(
@@ -3172,6 +3267,7 @@ internal data class PendingWindowUpdate(
     val expectedRevision: WindowRevision?,
     var update: WindowUpdate,
     val rejected: List<RejectedWindowField>,
+    val iconLease: RuntimeImageLease? = null,
     val result: CompletableDeferred<KadreResult<WindowUpdateOutcome>> = CompletableDeferred(),
     var cancelled: Boolean = false,
     var cancellationRequested: Boolean = false,
@@ -3184,7 +3280,9 @@ internal data class PendingWindowUpdate(
         is ExclusiveFullscreenTransition.Exit -> ExclusiveFullscreenPhase.Releasing
         null -> null
     },
-)
+) {
+    init { result.invokeOnCompletion { iconLease?.close() } }
+}
 
 internal sealed interface ExclusiveFullscreenTransition {
     val target: ExclusiveDisplayTarget?
@@ -3284,6 +3382,8 @@ private fun windowCapabilities(
     acceptedAttention: Set<WindowAttention>?,
     fullscreenAvailabilityFailure: KadreFailure.PlatformFailure?,
     exclusiveFullscreenAvailability: ExclusiveFullscreenAvailability,
+    acceptedWindowLevels: Set<WindowLevel>,
+    windowIconConstraints: org.graphiks.kadre.surface.ImageConstraints?,
 ): WindowCapabilities = WindowCapabilities(
     title = if (publicWindowCapabilities) {
         enabledWindowUpdateCapabilities.capability(WindowProperty.Title, Unit)
@@ -3342,14 +3442,15 @@ private fun windowCapabilities(
     level = if (publicWindowCapabilities) {
         enabledWindowUpdateCapabilities.capability(
             WindowProperty.Level,
-            setOf(WindowLevel.Normal, WindowLevel.Floating, WindowLevel.Modal),
+            acceptedWindowLevels,
         )
     } else {
         unsupported(KadreOperation.UpdateWindow)
     },
     transparency = enabledWindowUpdateCapabilities.capability(WindowProperty.Transparency, Unit),
     blurBehind = unsupported(KadreOperation.UpdateWindow),
-    icon = unsupported(KadreOperation.UpdateWindow),
+    icon = if (windowIconConstraints != null && WindowProperty.Icon in enabledWindowUpdateCapabilities)
+        Capability.Supported(windowIconConstraints, FeatureAvailability.Available) else unsupported(KadreOperation.UpdateWindow),
     attention = acceptedAttention?.let {
         Capability.Supported(it, FeatureAvailability.Available)
     } ?: unsupported(KadreOperation.RequestWindowAttention),
@@ -3423,6 +3524,7 @@ private fun candidateFor(
         level = resolveLevel(update.level, current.level),
         transparent = resolveResizable(update.transparency, current.transparent),
         contentProtection = resolveResizable(update.contentProtection, current.contentProtection),
+        icon = when(val change = update.icon) { is PropertyChange.Set -> change.value; PropertyChange.Clear -> null; else -> current.icon },
     )
 } catch (_: IllegalArgumentException) {
     null
@@ -3582,6 +3684,7 @@ private fun mutationChanged(current: WindowState, candidate: WindowState): Boole
         current.systemButtons != candidate.systemButtons ||
         current.level != candidate.level ||
         current.transparent != candidate.transparent ||
+        current.icon != candidate.icon ||
         current.contentProtection != candidate.contentProtection
 
 /**
@@ -3607,6 +3710,7 @@ private fun supportedMutationOnly(
     systemButtons = update.systemButtons.whenSupported(WindowProperty.SystemButtons, supportedProperties),
     level = update.level.whenSupported(WindowProperty.Level, supportedProperties),
     transparency = update.transparency.whenSupported(WindowProperty.Transparency, supportedProperties),
+    icon = update.icon.whenSupported(WindowProperty.Icon, supportedProperties),
     contentProtection = update.contentProtection.whenSupported(
         WindowProperty.ContentProtection,
         supportedProperties,

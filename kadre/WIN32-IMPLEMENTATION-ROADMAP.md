@@ -240,12 +240,14 @@ Pour chaque gap réellement rencontré : documenter le symbole ou owner manquant
 
 **Contenu :**
 
-- [ ] Livrer par sous-tranches titre/icône, visibilité, tailles et contraintes, position externe, décorations/boutons système, niveaux, maximisation et minimisation.
-- [ ] Relire les propriétés appliquées et corréler les observations à l’opération admise ; garder les événements externes distincts des résultats de commande.
-- [ ] Implémenter le fullscreen borderless (plein écran sans bordure), avec sauvegarde puis restauration cohérente des styles et de la géométrie ; réserver le changement exclusif de mode à la phase 9.
-- [ ] Qualifier attention, menu système, déplacement/redimensionnement natif, curseurs et hit testing ; appliquer le droit d’attention du host embedded lorsqu’il sera disponible.
-- [ ] Distinguer capture, confinement et verrouillage du pointeur : `SetCapture` seul ne constitue pas un pointer lock ; les modes dépendant de raw input attendent la phase 8.
-- [ ] Qualifier transparence et protection de contenu uniquement selon le contrat exact et le readback disponible ; aucune garantie de confidentialité universelle n’est inférée d’une API Windows.
+- [x] Livrer titre/icône RGBA8, visibilité, tailles et contraintes, position externe, décorations/boutons système, niveaux Normal/Floating, maximisation et minimisation ; Modal est exclu des contraintes natives.
+- [x] Relire les propriétés appliquées et corréler les observations à l’opération admise ; garder les événements externes distincts des résultats de commande.
+- [x] Implémenter le fullscreen borderless, avec sauvegarde puis restauration cohérente des styles et de la géométrie ; réserver le changement exclusif de mode à la phase 9.
+- [x] Qualifier attention, menu système, déplacement/redimensionnement natif et curseurs ; Enabled utilise le hit testing système, Disabled reste Unsupported faute de pass-through inter-processus qualifié. Le droit d’attention embedded reste lié au host de phase 12.
+- [x] Distinguer capture, confinement et verrouillage : Confined possède un bail ClipCursor arbitré et révocable ; Locked et raw input restent explicitement Unsupported jusqu’à la phase 8. Aucun pointer lock n’est inféré de SetCapture.
+- [x] Qualifier transparence/blur comme Unsupported faute de contrat renderer/compositeur exact ; protection de contenu = WDA_MONITOR posé puis relu, sans garantie universelle de confidentialité.
+
+La qualification complète, les limites matérielles et les preuves W32-012 à W32-016 sont détaillées dans [WIN32-PHASE-5-VALIDATION.md](WIN32-PHASE-5-VALIDATION.md). Les décisions Unsupported ci-dessus sont des résultats de qualification de cette phase, pas des sous-tranches laissées ouvertes.
 
 **Gate de sortie :** un champ refusé est identifié dans l’outcome prévu ; les styles et rectangles effectifs restent cohérents après failure/cancellation ; aucune action de focus ou d’attention n’est simulée par des frappes injectées. Les tests couvrent fermeture pendant une mutation, boucle modale native et restauration après fullscreen borderless.
 

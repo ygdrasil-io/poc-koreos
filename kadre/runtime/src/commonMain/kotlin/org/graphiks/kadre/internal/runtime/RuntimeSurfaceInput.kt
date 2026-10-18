@@ -689,6 +689,7 @@ internal class RuntimeSurfaceInput(
         is SurfaceStimulus.FocusChanged,
         is SurfaceStimulus.VisibilityChanged,
         is SurfaceStimulus.AppearanceChanged,
+        is SurfaceStimulus.PointerCaptureChanged,
         is SurfaceStimulus.RedrawConsumed,
         is SurfaceStimulus.InputObservationChanged,
         is SurfaceStimulus.Detached,

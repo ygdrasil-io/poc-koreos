@@ -79,6 +79,8 @@ Toutes les lignes possèdent les managers communs `windows`, `displays`, `device
 | `SurfaceCapabilities.platformAccess` | G, `withAndroidView` | G, `withAndroidView` | G, `withUIKitView` | G, `withWebElement` | N(PlatformSurfaceAccess) | N(PlatformSurfaceAccess) | N(PlatformSurfaceAccess) | N(PlatformSurfaceAccess) |
 | `WindowCapabilities.platformAccess` | N(PlatformWindowAccess) | — (aucune `Window`) | N(PlatformWindowAccess) | — (aucune `Window`) | G, `withDesktopHandle` | G, `withDesktopHandle` | G, `withDesktopHandle` | G, `withDesktopHandle` |
 
+Win32 phase 5 : propriétés/chrome/contraintes, fullscreen borderless réversible, niveaux Normal/Floating, icônes RGBA8 ≤256×256, attention du HWND et protection WDA_MONITOR avec readback sont livrés. La surface expose les mappings exacts de curseurs système, Hidden, curseurs RGBA8 ≤128×128 et confinement révocable. Move/resize est réservé au callback Primary vivant ; les vrais menus et boucles système sont qualifiés. Modal, Disabled hit testing, transparence/blur, Locked et raw input restent explicitement Unsupported selon leurs contraintes natives. [Matrice et preuves complètes](WIN32-PHASE-5-VALIDATION.md).
+
 Pour UIKit, les cellules de phase 8 se lisent comme des observations honnêtes du SDK, jamais
 comme des promesses matérielles de Simulator. Les displays republient l'énumération `UIScreen` :
 l'écran de la scène host est `DisplayType.HostViewport`, les autres écrans attachés sont
