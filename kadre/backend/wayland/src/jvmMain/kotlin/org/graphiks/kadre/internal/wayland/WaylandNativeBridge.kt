@@ -47,6 +47,12 @@ internal interface WaylandNativeBridge : AutoCloseable {
     /** Une erreur display a été constatée (toute primitive renvoyant -1). */
     fun connectionLost(): Boolean
 
+    /** Attache le seat annoncé au routeur d'entrée (thread pompe). */
+    fun attachSeat(router: WaylandInputRouter) {}
+
+    /** Détache le seat lié (teardown). */
+    fun detachSeat() {}
+
     /** Crée une fenêtre native (surface+xdg+toplevel+buffer) via kffi managé. */
     fun createWindowing(width: Int, height: Int): WaylandNativeWindow
 

@@ -126,6 +126,8 @@ public class WaylandBackendProvider private constructor(
                     null
                 },
             )
+            val inputRouter = WaylandInputRouter()
+            session.bridge.attachSeat(inputRouter)
             val attached = controller.attach(parentScope, request.applicationFactory, request.policy)
             if (attached is KadreResult.Failure) {
                 return attached

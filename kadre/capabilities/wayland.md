@@ -52,7 +52,20 @@ posés dans `WAYLAND-PHASE-0-DECISIONS.md` ; la tranche livrée est décrite par
 | scale de surface (`set_buffer_scale` v6) | `jvm` | sway `output scale 2` en cours de session | `waylandNativeTests` | `DSP-003` (P-2) | scale publié = `wl_output.scale` (entier) ; buffer = logique × scale ; pas d'upscale flou | `WaylandMetricsLinuxTest.scaleChangeMidSessionRepublishesTheInventory` |
 | redraw coalescent (`wl_surface.frame` pacing) | `jvm` | N demandes ⇒ 1 commit ; jamais horloge ni preuve de présentation | `:kadre:backend:wayland:jvmTest` | `SUR-003` (F2-2, SN-1) | surface sans frame : demande reste sale | `WaylandMetricsO2Test.redrawRequestsCoalesceIntoOneFrameCommit` |
 
-## 4. Limites des tranches 1, 2 et 3
+## 3 ter. Registre — tranche 4 (seats, pointeur, clavier brut)
+
+| feature | target | minimum déclaré | compile gate | runtime gate | état absent | tests |
+|---|---|---|---|---|---|---|
+| seat + routage par surface (`WaylandInputRouter`) | `jvm` | kffi WaylandSeat (capabilities gated, get_pointer/get_keyboard après annonce) | `:kadre:backend:wayland:jvmTest` | `INP-004` | touche hors focus jamais routée ni substituée ; leave ⇒ relâchements synthétiques exactement pour les retenues | `WaylandInputRouterO2Test` (8 preuves) |
+| pointeur : batches par `wl_pointer.frame` | `jvm` | coalescence position (dernière gagne), boutons, scroll value120/continu, `axis_stop` préservé | `:kadre:backend:wayland:jvmTest` | `INP-005` | rien publié avant la frame (v5+) ; sans frame : un lot par événement | `WaylandInputRouterO2Test` |
+| clavier brut (keymap fd, keys, modifiers, repeat_info) | `jvm` | bindings kffi livrés (tranche 2 XKB pour le texte) | `:kadre:backend:wayland:jvmTest` | `INP-006` | blur publié même sans touches ; unregistration neutralise | `WaylandInputRouterO2Test` |
+
+Résiduel tranche 4 : l'oracle O3 d'injection — sway headless n'accorde pas le
+focus pointeur au client (trail complet dans la PR kffi, test parké) ; les
+preuves INP-004..006 sont O2, l'O3 attend un compositor qui livre (weston,
+uinput) ou la tranche 2 XKB.
+
+## 4. Limites des tranches 1 à 4
 
 - Le support `WAYLAND_SOCKET` au run est refusé avant session
   (`PlatformFailure(Wayland, "start", "wayland-socket-unsupported")`) tant que
