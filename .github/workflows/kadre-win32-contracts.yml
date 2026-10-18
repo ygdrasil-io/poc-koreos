@@ -26,7 +26,10 @@ jobs:
         run: chmod +x gradlew
 
       - name: Win32 contract gate
-        run: scripts/test-kadre-win32-contracts.sh
+        run: >-
+          scripts/test-kadre-win32-contracts.sh
+          :kadre:runtime:jvmTest :kadre:platform:desktop:jvmTest
+          :kadre:contracts:validator:jvmTest :kadre:contracts:validator:validateContractRegistry
 
       - name: Require the Win32 gate
         if: always()

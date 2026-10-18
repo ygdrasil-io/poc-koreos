@@ -9,6 +9,8 @@ Kadre ne crée ni event tap, ni callback FFM, ni `MemorySegment` local. Les
 symboles bas niveau sont générés par Kextract ; l’adapter de confort KFFI reste
 la seule surface appelée par Kadre.
 
+Les besoins Win32-003/004/005 ont désormais leurs implémentations et preuves locales ; voir [la qualification phase6](WIN32-PHASE-6-VALIDATION.md). Ils restent ouverts jusqu'à publication/adoption distante et réception des catégories manuelles concernées.
+
 | ID | Statut | Priorité | Domaine | Besoin KFFI | Usage Kadre bloqué | Workaround autorisé | Référence |
 |---|---|---:|---|---|---|---|---|
 | KFFI-WIN32-003 | open — implémenté et testé localement, publication/adoption distante et réception IME requises | blocking | texte et IME phase 6 | Owner TSF STA révocable, ITextStoreACP/locks/sink de composition, input scopes, valeurs UTF-16 bornées, document epoch/transactions et géométrie candidats | TextInputSession Win32, surrounding text et révisions | Aucun contrôle caché ni FFI locale ; publication Maven locale opt-in pour la qualification conjointe après livraison du bridge | [Design phase 6](WIN32-PHASE-6-RICH-INPUT-DESIGN.md), audit du snapshot Win32 1.0.0-20261015.232828-61 |
