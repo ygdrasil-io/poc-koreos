@@ -15,8 +15,7 @@ L'implémentation couvre TSF, composition/caractères, contacts/stylets et geste
 | Gestes | Vrai Interaction Context, configuration/unités relues dans KFFI, callbacks publics Pan/Pinch/Rotation/DoubleTap, pas d'inertia | W32-020 |
 | Ownership/budget | Budget de session partagé images/texte/frames, queues bornées, annulation et révocation avant cleanup, historique dédupliqué même après reset | Suites runtime, KFFI et W32-017..020 |
 
-Le watchdog complet a passé au commit `b11a5802ff3060cdb0736bc16bf0040484710cef`, après intégration du master Wayland : **452 runtime, 133 Win32 portables, 42 Win32 natifs, 18 Desktop et 71 validator**, zéro échec/erreur/skip ; **23 JSON** validés au même SHA. KFFI : **110 core, 98 Win32 JVM, 38 natifs**, zéro échec/erreur/skip en exécution fraîche. La génération des **125 fonctions** concorde avec le SDK épinglé. Le harness manuel compile ; il n'a pas été exécuté comme réception.
-
+Après la revue et les corrections, la suite complète passe : **452 runtime, 140 Win32 portables, 42 Win32 natifs, 18 Desktop et 71 validator**, zéro échec/erreur/skip. Le watchdog complet de livraison passe au commit de code `b6820a2d9e63205faf78df30ef2867ea55c77d7d` : tests frais en 3m48s, génération en 58s et **23 JSON** validés au même SHA. Un précédent run avait révélé le deadlock worker/UI désormais corrigé par régression déterministe. KFFI : **110 core, 100 Win32 JVM, 38 natifs**, zéro échec/erreur/skip en exécution fraîche. La génération des **125 fonctions** concorde avec le SDK épinglé. Le harness manuel compile ; il n'a pas été exécuté comme réception. La [revue finale](WIN32-PHASE-6-REVIEW.md) décrit les quatre Important corrigés, le deadlock révélé par la gate, le Minor différé et les décisions chronologiques.
 Quatre mutations temporaires ont rendu rouges leurs sentinelles : accepter une epoch non admise, partager un token entre contacts, ignorer le DPI et poursuivre Translate/Dispatch malgré un filtre TRUE (**3 portables + 1 native**). Les octets source ont été restaurés dans un finally. La vraie gate23 a ensuite refusé un `W32-020.json` manquant et le même fichier portant un SHA périmé ; les octets de la preuve ont également été restaurés. Les preuves sont régénérées au HEAD de livraison après les derniers changements de rapport/CI.
 
 Le fixture d'injection établit explicitement le foreground/focus avant d'installer les collecteurs. Si Windows refuse la demande initiale, une paire DOWN/UP de préparation peut activer la cible, puis le readback est obligatoire. Cette préparation n'est ni un scénario mesuré ni une preuve d'activation par premier contact en arrière-plan. Des essais antérieurs avaient perdu le contact primaire ; cette limite et les corrections de fixture restent consignées dans le journal de validation.
@@ -33,9 +32,11 @@ L'alias `1.0.0-win32-rich-input-local-SNAPSHOT` est exclusivement local. La subs
 
 | Source KFFI testée | Artefact | SHA256 |
 | --- | --- | --- |
-| `e3800bba138806ca498498a9b703616d2bd729b7` | kffi-jvm | `11508EBC6E06DE32FC9DBE3E9E745C9E0B6D66E2ABD177837113F5406A1E1A59` |
-| même source | kffi-win32-jvm | `7CFC50339E1C74FE462CB3F539972D37CD63C54B24786F120EA3B215C5719244` |
+| `8ea72efd436623dc5f63d6c4c31391d4a76e09b2` | kffi-jvm | `11508EBC6E06DE32FC9DBE3E9E745C9E0B6D66E2ABD177837113F5406A1E1A59` |
+| même source | kffi-win32-jvm | `F9106A6E48AFE091C1B8A71267561F25C8260D7CE5A5E97A793BED078DDDA0A9` |
 | même source | classifier native-test-support | `3B415ECF95CDB7ADE8A12018FE7CB05BF76D67BB418D28664992C4AC4A5C97D0` |
+
+La PR KFFI #131 livre le commit `15b5341fa76d325349c5e3630a022ac6444c97f9`, sur historique linéaire ; son arbre `432225750dba1549eda277405bd59f643ff29dca` est identique à la source testée `8ea72efd436623dc5f63d6c4c31391d4a76e09b2`. Ce changement de présentation ne modifie aucun octet source ni jar local.
 
 Le classifier de test contient le client COM et le fixture d'injection ; aucun injecteur n'entre dans les jars de production. La publication Maven locale ne vaut pas publication Central. Après merge/publication KFFI : vérifier le workflow, épingler le snapshot timestampé Win32 root/JVM, résoudre avec `kadreKffiLocal=false`, puis relancer la même gate au nouveau HEAD. Les exigences KFFI restent ouvertes jusqu'à cette preuve distante.
 
