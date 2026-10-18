@@ -14,6 +14,14 @@ import org.graphiks.kffi.win32.managed.*
 import kotlin.test.*
 
 class Win32TextInputTest {
+    @Test fun failureRetiresNativeStoreBeforeNotifyingTheTerminalTarget() {
+        val native=Native(); val port=Win32TextInputPort(native)
+        var closedAtNotification: Int? = null
+        val owner=assertIs<KadreResult.Success<TextInputOwner>>(port.open(command().copy(
+            onTerminated={ closedAtNotification=native.owner.closed }))).value
+        owner.activate(); native.failNow()
+        assertEquals(1, closedAtNotification, "the terminal callback may destroy its window")
+    }
     @Test fun queuedUpdateSeesTerminalFailureBeforeItsContinuationResumes() = runTest {
         fixture { native, _, window, _ ->
             val session=assertIs<KadreResult.Success<TextInputSession>>(window.surface.input.openTextInput(TextInputConfig())).value

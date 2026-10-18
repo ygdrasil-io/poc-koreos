@@ -159,11 +159,15 @@ internal class Win32WindowRuntimeDriver internal constructor(
                 effectiveSpec = effectiveSpec,
                 initialSurfaceSnapshot = snapshot,
                 onSurfaceReady = {
-                    if (!entry.closeAdmitted && entries[command.requestId] === entry) {
-                        router.activate()
-                        port.showWindow(created.hwnd)
-                        observeWindow(entry)
-                    }
+                    // Runtime may finish admission on a worker under its manager lock.
+                    // Return before native activation can synchronously call that lock.
+                    port.postOnMainThread({
+                        if (!entry.closeAdmitted && entries[command.requestId] === entry) {
+                            router.activate()
+                            port.showWindow(created.hwnd)
+                            observeWindow(entry)
+                        }
+                    }, failureReporter::report)
                 },
             )
         } catch (failure: Throwable) {
