@@ -1,8 +1,8 @@
 # Adapter Win32 — phases 1 à 5 livrées, phase 6 en qualification
 
-Hôte exercé : Windows x64, bureau interactif, JVM 25. Les primitives KFFI #127/#128 sont fusionnées et publiées ; le snapshot distant `1.0.0-20261015.232828-61` est épinglé dans le catalogue. Maven local reste un opt-in de développement. Voir la [matrice de qualification complète](../WIN32-PHASE-5-VALIDATION.md).
+Hôte exercé : Windows x64, bureau interactif, JVM 25. KFFI #131 est fusionnée et publiée ; le snapshot distant `1.0.0-20261018.214839-64` est épinglé pour Win32 root et JVM et passe la gate complète avec Maven local désactivé. Maven local reste un opt-in de développement. Les phases1–5 restent couvertes par leurs [preuves antérieures](../WIN32-PHASE-5-VALIDATION.md).
 
-La branche phase6 installe les services ci-dessous avec les nouveaux artefacts KFFI locaux. [Qualification phase6](../WIN32-PHASE-6-VALIDATION.md) et [réception manuelle](../WIN32-PHASE-6-MANUAL.md) restent ouvertes avant sortie du draft et adoption distante.
+La branche phase6 installe les services ci-dessous avec les artefacts KFFI publiés. La [qualification automatisée distante](../WIN32-PHASE-6-VALIDATION.md) passe ; la [réception manuelle](../WIN32-PHASE-6-MANUAL.md) reste ouverte avant sortie du draft et annonce de phase complète.
 
 | Fonction | État livré | Gate et limite |
 | --- | --- | --- |
