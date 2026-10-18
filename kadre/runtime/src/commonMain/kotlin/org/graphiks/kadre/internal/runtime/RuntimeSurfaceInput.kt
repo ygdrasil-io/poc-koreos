@@ -74,8 +74,11 @@ internal class RuntimeSurfaceInput(
     private val sessionFailureHandler: (KadreFailure) -> Unit,
     private val payloadBudget: RuntimePayloadBudget = RuntimeRetainedPayloadBudget(resources.maxRetainedPayloadBytesPerSession),
     private val platform: KadrePlatform = KadrePlatform.Fake,
+    initialTextFocus: org.graphiks.kadre.surface.SurfaceFocus? = null,
 ) : SurfaceInput {
     private val lock = RuntimeLock()
+    private val textFocusTracked = initialTextFocus != null
+    private var textInputSuspended = initialTextFocus == org.graphiks.kadre.surface.SurfaceFocus.Unfocused
     private var currentState = unsupportedInputState(
         textInput = textInputPort.capability,
         dragAndDrop = if (dragAndDropAvailable) FeatureAvailability.Available else FeatureAvailability.Unsupported,
@@ -179,6 +182,8 @@ internal class RuntimeSurfaceInput(
                 },
                 payloadBudget = payloadBudget,
                 onTerminated = { reason -> terminateTextTarget(observationTarget, reason) },
+                resources = resources,
+                deliveryPolicy = deliveryPolicy.discreteEvents,
             ))
         } catch (cancelled: CancellationException) {
             clearTextInputOpening(observationTarget)
@@ -248,6 +253,7 @@ internal class RuntimeSurfaceInput(
                     observationTarget.session = session
                     activeTextTarget = observationTarget
                     textInputSession = session
+                    if (textInputSuspended) session.suspend()
                     KadreResult.Success(session)
                 }
             }
@@ -596,13 +602,17 @@ internal class RuntimeSurfaceInput(
     }
 
     fun suspendTextInput() {
-        val session = lock.withLock { textInputSession }
-        session?.suspend()
+        lock.withLock {
+            if (textFocusTracked) textInputSuspended = true
+            textInputSession?.suspend()
+        }
     }
 
     fun resumeTextInput() {
-        val session = lock.withLock { textInputSession }
-        session?.resume()
+        lock.withLock {
+            if (textFocusTracked) textInputSuspended = false
+            textInputSession?.resume()
+        }
     }
 
     fun close(failure: KadreFailure?) {

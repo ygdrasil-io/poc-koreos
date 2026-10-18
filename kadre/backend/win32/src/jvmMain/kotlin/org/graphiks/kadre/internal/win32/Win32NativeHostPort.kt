@@ -1,5 +1,9 @@
 package org.graphiks.kadre.internal.win32
 
+import org.graphiks.kadre.diagnostics.KadreFailure
+import org.graphiks.kadre.diagnostics.KadreOperation
+import org.graphiks.kadre.internal.runtime.TextInputPort
+
 internal enum class Win32PumpMessage { Wake, StopRequest }
 
 internal sealed interface Win32MessageWait {
@@ -70,6 +74,12 @@ internal interface Win32NativeHostPort : AutoCloseable {
     fun trackMouseLeave(hwnd: Long)
     fun cancelMouseLeave(hwnd: Long)
     fun readWheelSettings(): Win32WheelSettings
+
+    fun createTextInputPort(hwnd: Long): TextInputPort = Win32UnavailableTextInputPort(KadreFailure.Unsupported(KadreOperation.TextInput))
+    fun filterTextKey(hwnd: Long, message: Int, wParam: Long, lParam: Long): Boolean = false
+    fun handleTextCharacter(hwnd: Long, message: Int, wParam: Long, lParam: Long): Long? = null
+    fun setTextFocus(hwnd: Long, focused: Boolean) {}
+    fun closeTextInput(hwnd: Long) {}
 }
 
 internal data class Win32WindowReadback(

@@ -13,6 +13,7 @@ import org.graphiks.kadre.policy.InputDeliveryPolicy
 import org.graphiks.kadre.policy.CollectorOverflowAction
 import org.graphiks.kadre.policy.SlowCollectorCancellationException
 import org.graphiks.kadre.surface.SurfaceId
+import org.graphiks.kadre.surface.SurfaceFocus
 import kotlin.test.*
 import kotlin.time.Duration.Companion.nanoseconds
 
@@ -30,6 +31,16 @@ class RuntimeTextInputLifecycleTest {
         assertEquals(1, port.owners.single().activated)
         session.close(); assertEquals(0L, budget.used)
     }
+    @Test fun suspensionDuringOpenIsRememberedBeforeActivation() = runTest {
+        val port = Port(); val source = input(port, initialTextFocus=SurfaceFocus.Focused)
+        port.onOpen = { source.suspendTextInput() }
+        port.onActivate = { command -> assertTrue(command.onObservation(TextInputObservation.CompositionChanged(
+            TextRange(1, 1), "😀", TextRange(2, 2), TextDocumentRevision(0)))) }
+        val session = assertIs<KadreResult.Success<TextInputSession>>(source.openTextInput(config)).value
+        try { assertEquals(TextInputState.Suspended(TextDocumentRevision(0), TextRange(1, 1)), session.state.value) }
+        finally { session.close() }
+    }
+
     @Test fun terminationDuringOpenClosesOnlyThatOwner() = runTest {
         val port = Port(); val failure = KadreFailure.PlatformFailure(KadrePlatform.Fake, "text", "open")
         port.onOpen = { it.onTerminated(failure) }
@@ -169,13 +180,15 @@ class RuntimeTextInputLifecycleTest {
         assertEquals(1, reports)
     }
     private fun input(port: Port, budget: RuntimePayloadBudget = RuntimeRetainedPayloadBudget(1024),
-        policy: InputDeliveryPolicy = KadrePolicies.Default.input, reporter: (Throwable) -> Unit = {}) = RuntimeSurfaceInput(
+        policy: InputDeliveryPolicy = KadrePolicies.Default.input, reporter: (Throwable) -> Unit = {},
+        initialTextFocus: SurfaceFocus? = null) = RuntimeSurfaceInput(
         surfaceId=SurfaceId(1), deliveryPolicy=policy,
         eventStampSource={ EventStamp(SessionSequence(0), SessionInstant(0.nanoseconds), null) },
         eventCollectorGate=gate(), textInputPort=port, rawInputCoordinator=null,
         rawInputCapability=unsupported(KadreOperation.RawInputAccess), dragAndDropAvailable=false,
         resources=KadrePolicies.Default.resources, dropTransferBudget=RuntimeDropTransferBudget(1), dropTransferScope=null,
         textInputEventCollectorGate=gate(), failureReporter=reporter, sessionFailureHandler={}, payloadBudget=budget,
+        initialTextFocus=initialTextFocus,
     )
     private fun gate() = RuntimeEventCollectorAllocator(8).newGate(4)
     private class Port : TextInputPort {

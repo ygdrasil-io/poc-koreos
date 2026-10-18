@@ -41,6 +41,8 @@ public data class TextInputOpenCommand(
     public val onObservation: (TextInputObservation) -> Boolean,
     public val payloadBudget: RuntimePayloadBudget? = null,
     public val onTerminated: (KadreFailure) -> Unit = {},
+    public val resources: org.graphiks.kadre.policy.ResourceBudgetPolicy = org.graphiks.kadre.policy.KadrePolicies.Default.resources,
+    public val deliveryPolicy: org.graphiks.kadre.policy.EventDeliveryPolicy = org.graphiks.kadre.policy.KadrePolicies.Default.input.discreteEvents,
 )
 
 /** Immutable cursor geometry applied by the backend for one live owner. */

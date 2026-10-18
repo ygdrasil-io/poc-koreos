@@ -24,6 +24,11 @@ import org.graphiks.kffi.win32.managed.Win32Keyboard
 import org.graphiks.kffi.win32.managed.Win32Pointer
 import org.graphiks.kffi.win32.managed.Win32WindowProperties
 import org.graphiks.kffi.win32.managed.Win32WindowOperations
+import org.graphiks.kffi.win32.managed.Win32TextServices
+import org.graphiks.kffi.win32.managed.Win32TextStore
+import org.graphiks.kadre.internal.runtime.TextInputPort
+import org.graphiks.kadre.diagnostics.KadreFailure
+import org.graphiks.kadre.diagnostics.KadrePlatform
 import org.graphiks.kadre.surface.PhysicalRect
 import org.graphiks.kadre.surface.PhysicalPoint
 import org.graphiks.kadre.surface.PhysicalSize
@@ -44,7 +49,7 @@ import java.util.concurrent.atomic.AtomicBoolean
  * [translateAndDispatch]. The Per-Monitor V2 DPI context is applied once at
  * first window creation (spec D2).
  */
-internal class KffiWin32HostPort : Win32NativeHostPort {
+internal open class KffiWin32HostPort : Win32NativeHostPort {
     private val createdThread = Thread.currentThread()
     @Volatile private var controlWindow: Win32ControlWindow? = null
     private var msgArena: Arena? = null
@@ -52,6 +57,10 @@ internal class KffiWin32HostPort : Win32NativeHostPort {
     private val dpiContextApplied = AtomicBoolean(false)
     private val topLevelWindows = ConcurrentHashMap<Win32TopLevelWindowHandle, Win32ManagedWindow>()
     private val features = mutableMapOf<Long, Win32WindowFeatures>()
+    private val textPorts = mutableMapOf<Long, TextInputPort>()
+    private val nativeTextPorts = mutableMapOf<Long, KffiWin32TextPort>()
+    private var textServices: Win32TextServices? = null
+    private var textInitializationFailure: KadreFailure? = null
     private val closing = AtomicBoolean(false)
     private val commands = Win32UiCommandQueue(
         ::isMainThread,
@@ -60,11 +69,40 @@ internal class KffiWin32HostPort : Win32NativeHostPort {
 
     override fun isMainThread(): Boolean = Thread.currentThread() == createdThread
 
+    override fun createTextInputPort(hwnd: Long): TextInputPort = onMainThread {
+        textPorts.getOrPut(hwnd) {
+            if (textServices == null && textInitializationFailure == null) {
+                try { textServices = Win32TextServices.open() }
+                catch (_: Throwable) { textInitializationFailure = KadreFailure.PlatformFailure(KadrePlatform.Win32, "text-input", "sta-initialization-failed") }
+            }
+            val services = textServices
+            if (services == null) Win32UnavailableTextInputPort(checkNotNull(textInitializationFailure))
+            else KffiWin32TextPort(hwnd, this, services).let {
+                nativeTextPorts[hwnd] = it
+                Win32TextInputPort(it)
+            }
+        }
+    }
+    override fun filterTextKey(hwnd: Long, message: Int, wParam: Long, lParam: Long): Boolean =
+        textServices?.filterKey(hwnd, message, wParam, lParam) ?: false
+    override fun handleTextCharacter(hwnd: Long, message: Int, wParam: Long, lParam: Long): Long? =
+        (textPorts[hwnd] as? Win32TextInputPort)?.handleCharacter(message, wParam, lParam)
+    override fun setTextFocus(hwnd: Long, focused: Boolean) {
+        (textPorts[hwnd] as? Win32TextInputPort)?.setFocused(focused)
+    }
+    override fun closeTextInput(hwnd: Long) {
+        (textPorts.remove(hwnd) as? AutoCloseable)?.close()
+        nativeTextPorts.remove(hwnd)
+    }
+    internal fun textStoreForTesting(hwnd: Long): Win32TextStore? = nativeTextPorts[hwnd]?.lastStore
+    internal fun textServicesForTesting(): Win32TextServices = checkNotNull(textServices)
+
     override fun showWindow(hwnd: Long) { onMainThread { topLevelWindows.entries.firstOrNull { it.key.hwnd == hwnd }?.value?.setVisible(true) } }
     private class PreparedKey(val hwnd: Long, val message: Int, val wParam: Long, val lParam: Long, val input: Win32KeyInput?) {
         var consumed = false
     }
     private var preparedKey: PreparedKey? = null
+    internal fun preparedKeyForTesting(): Win32KeyInput? = preparedKey?.input
 
     override fun readKeyboardInput(hwnd: Long, message: Int, wParam: Long, lParam: Long): Win32KeyInput? {
         check(isMainThread())
@@ -204,6 +242,9 @@ internal class KffiWin32HostPort : Win32NativeHostPort {
                 Win32Structs.msg.getHwnd(message), id, Win32Structs.msg.getWParam(message),
                 Win32Structs.msg.getLParam(message), readKey(Win32Structs.msg.getWParam(message), Win32Structs.msg.getLParam(message)),
             ) else null
+            // Capture layout-dependent physical-key values before TSF can change native state.
+            if (preparedKey != null && filterTextKey(Win32Structs.msg.getHwnd(message), id,
+                    Win32Structs.msg.getWParam(message), Win32Structs.msg.getLParam(message))) return
             TranslateMessage(message)
             DispatchMessageW(message)
         } finally { preparedKey = previous }
@@ -222,6 +263,7 @@ internal class KffiWin32HostPort : Win32NativeHostPort {
         check(!closing.get()) { "Win32 host port is closed" }
         applyPerMonitorV2Once()
         val window = Win32ManagedWindow.open(title) { hwnd, message, wParam, lParam ->
+            if (message == WM_MOVE || message == WM_DPICHANGED) (textPorts[hwnd] as? Win32TextInputPort)?.refreshCursor()
             messageHandler(hwnd, message, wParam, lParam)
         }
         topLevelWindows[Win32TopLevelWindowHandle(window.hwnd)] = window
@@ -236,6 +278,7 @@ internal class KffiWin32HostPort : Win32NativeHostPort {
 
     override fun destroyWindow(hwnd: Long) {
         if (!isMainThread()) return onMainThread { destroyWindow(hwnd) }
+        closeTextInput(hwnd)
         val entry = topLevelWindows.entries.firstOrNull { it.key.hwnd == hwnd } ?: return
         val owned = features[hwnd]
         try { owned?.beforeDestroy() }
@@ -359,6 +402,9 @@ internal class KffiWin32HostPort : Win32NativeHostPort {
             onMainThread {
                 try {
                     topLevelWindows.keys.toList().forEach { runCatching { destroyWindow(it.hwnd) } }
+                    textServices?.close()
+                    textServices = null
+                    textPorts.clear(); nativeTextPorts.clear()
                     controlWindow?.close()
                     controlWindow = null
                     msgArena?.close()

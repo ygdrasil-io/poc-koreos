@@ -159,6 +159,7 @@ internal class RuntimeWindowSurface(
         sessionFailureHandler = sessionFailureHandler,
         payloadBudget = payloadBudget,
         platform = platform,
+        initialTextFocus = initialSnapshot.focus.takeIf { platform == KadrePlatform.Win32 },
     )
     private val interactionHandler = (liveCapabilities.handlerInteractions as? Capability.Supported<Set<InteractionKind>>)
         ?.constraints
