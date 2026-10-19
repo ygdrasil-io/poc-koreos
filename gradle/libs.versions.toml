@@ -22,9 +22,7 @@ webgpu-ktypes = "0.0.7"
 kffi-x11 = "1.0.0-SNAPSHOT"
 kffi-wayland = "1.0.0-SNAPSHOT"
 kffi-objc = "1.0.0-SNAPSHOT"
-# Dev pin for win32 phase 7: the OLE drop KFFI alias exists only in Maven local
-# until the upstream snapshot is published; restore the Central pin for delivery.
-kffi-win32 = "1.0.0-win32-ole-drop-local-SNAPSHOT"
+kffi-win32 = "1.0.0-20261019.082243-67"
 kffi-posix = "1.0.0-SNAPSHOT"
 coroutines = "1.10.1"
 kotlinx-browser = "0.5.0"

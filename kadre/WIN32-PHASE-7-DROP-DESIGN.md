@@ -1,6 +1,6 @@
 # Win32 phase 7 — drag-and-drop OLE et transferts bornés
 
-**Statut :** design en cours d'implémentation conjointe KFFI/Kadre ; aucune capability ni contrat activé par ce document.
+**Statut :** implémentation livrée conjointement avec KFFI #135 (snapshot `1.0.0-20261019.082243-67` épinglé) ; preuves W32-021/022 au gate, réception manuelle inter-applications encore ouverte.
 **Date :** 19 octobre 2026.
 **Base Kadre :** `91125c2e`, fusion de #476 (phase 6).
 **Base KFFI auditée :** snapshot Win32 `1.0.0-20261018.214839-64` (source `69ff1f9`, KFFI #131).
