@@ -212,7 +212,14 @@ public class WaylandBackendProvider private constructor(
                         outputsProvider = session.bridge::outputSnapshots,
                         rescan = session.bridge::onOutputsChanged,
                     )
-                    RuntimeSessionComponents(windows = driver.manager, displayPort = displayPort)
+                    val devicePort = WaylandInputDevicePort(session.bridge::seatDeviceSnapshots)
+                    session.bridge.onSeatProjectionChanged { devicePort.seatInventoryChanged() }
+                    RuntimeSessionComponents(
+                        windows = driver.manager,
+                        displayPort = displayPort,
+                        inputDevicePort = devicePort,
+                        gamepadPort = WaylandGamepadPort(),
+                    )
                 },
                 initialLifecycleState = LifecycleState(
                     AttachmentState.Attached,

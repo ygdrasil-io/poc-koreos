@@ -29,7 +29,12 @@ internal class KffiWaylandBridge private constructor(
                 bindOutput(name, version)
             }
             if (interfaceName == "wl_seat") {
-                synchronized(seatLock) { seatGlobalName = name }
+                synchronized(seatLock) {
+                    seatGlobalName = name
+                    seatDevices.remove(name)
+                    seatDevices[name] = WaylandSeatDevice(name, null, lastSeatCapabilities[name] ?: 0)
+                }
+                seatChangeListeners.forEach { it() }
             }
         },
     )
@@ -99,6 +104,9 @@ internal class KffiWaylandBridge private constructor(
     private var seatGlobalName: Int? = null
     private var boundSeat: org.graphiks.kffi.wayland.managed.WaylandSeat? = null
     private val seatLock = Any()
+    internal val seatDevices = LinkedHashMap<Int, WaylandSeatDevice>()
+    internal val lastSeatCapabilities = HashMap<Int, Int>()
+    internal val seatChangeListeners = ArrayList<() -> Unit>()
 
     /**
      * Binds the advertised seat and fans its raw events into [router].
@@ -112,8 +120,31 @@ internal class KffiWaylandBridge private constructor(
             boundSeat = bound
             bound
         }
+        seat.addSeatListener(
+            onCapabilities = { capabilities ->
+                synchronized(seatLock) {
+                    lastSeatCapabilities[seatGlobalName ?: -1] = capabilities
+                    seatGlobalName?.let { name ->
+                        seatDevices.remove(name)
+                        seatDevices[name] = WaylandSeatDevice(name, null, capabilities)
+                    }
+                }
+                seatChangeListeners.forEach { it() }
+            },
+        )
         seat.addPointerListener { event -> router.offer(event) }
         seat.addKeyboardListener { event -> router.offer(event) }
+    }
+
+    /** Live seat projection for the input-device port. */
+    override fun seatDeviceSnapshots(): List<WaylandSeatDevice> = synchronized(seatLock) { ArrayList(seatDevices.values) }
+
+    /** Hook invoked at every seat-projection change (registry or capabilities). */
+    override fun onSeatProjectionChanged(listener: () -> Unit): AutoCloseable {
+        synchronized(seatLock) { seatChangeListeners.add(listener) }
+        return AutoCloseable {
+            synchronized(seatLock) { seatChangeListeners.remove(listener) }
+        }
     }
 
     /** Releases the bound seat (session teardown). */

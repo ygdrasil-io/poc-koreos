@@ -47,6 +47,12 @@ internal interface WaylandNativeBridge : AutoCloseable {
     /** Une erreur display a été constatée (toute primitive renvoyant -1). */
     fun connectionLost(): Boolean
 
+    /** Projection seats courante (inventaire devices, design phase 9). */
+    fun seatDeviceSnapshots(): List<WaylandSeatDevice> = emptyList()
+
+    /** Hook invoqué à chaque changement de la projection seats. */
+    fun onSeatProjectionChanged(listener: () -> Unit): AutoCloseable = AutoCloseable { }
+
     /** Attache le seat annoncé au routeur d'entrée (thread pompe). */
     fun attachSeat(router: WaylandInputRouter) {}
 
