@@ -284,6 +284,37 @@ internal open class DeterministicWin32HostPort : Win32NativeHostPort {
         dropObservers[hwnd]?.performed(org.graphiks.kadre.surface.LogicalPoint(x, y))
     }
 
+    // Phase 8 raw input: activation routing and copied native motions.
+    var rawInputForeignRegistration = false
+    val rawInputRegisterCalls = AtomicInteger(0)
+    private var rawInputActivator: ((Long) -> Unit)? = null
+    private var rawInputMotionSink: ((deltaX: Int, deltaY: Int, device: Long) -> Unit)? = null
+    private var rawInputActiveHwnd: Long = 0L
+    override fun attachRawInputActivator(activator: (Long) -> Unit) { rawInputActivator = activator }
+    override fun activateRawInput(hwnd: Long) { rawInputActivator?.invoke(hwnd) }
+    override fun hasForeignRawInputRegistration(): Boolean = rawInputForeignRegistration
+
+    /** Broker-side registration entry (called by the test-injected native seam). */
+    fun registerRawInputOnTarget(hwnd: Long, onMotion: (deltaX: Int, deltaY: Int, device: Long) -> Unit): Boolean {
+        if (rawInputForeignRegistration) return false
+        rawInputRegisterCalls.incrementAndGet()
+        rawInputActiveHwnd = hwnd
+        rawInputMotionSink = onMotion
+        return true
+    }
+
+    override fun forwardRawInput(hwnd: Long, lParam: Long): Boolean {
+        if (hwnd != rawInputActiveHwnd) return false
+        val sink = rawInputMotionSink ?: return true
+        sink(lParam.toInt(), ((lParam shr 16) and 0xffffL).toInt(), 0L)
+        return true
+    }
+
+    /** Delivers one copied native motion through the registered sink. */
+    fun dispatchRawInputMotion(deltaX: Int, deltaY: Int, device: Long = 0L) {
+        rawInputMotionSink?.invoke(deltaX, deltaY, device)
+    }
+
     override fun close() {
         destroyed = true
     }

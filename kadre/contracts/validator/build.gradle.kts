@@ -33,7 +33,7 @@ val runtimeContractIds = listOf(
 // GMP-002 (refus honnête) est retiré : le service evdev le remplace (GMP-003)
 val waylandContractIds = listOf("BCK-017", "SES-001", "SUR-001", "WIN-010", "WIN-011", "WIN-012", "SUR-002", "DSP-002", "SUR-003", "INP-004", "INP-005", "INP-006", "WIN-013", "INT-005", "TXT-002", "TXT-003", "DRP-002", "DRP-003", "SES-003", "SUR-004", "INP-007")
 val linuxContractIds = listOf("GMP-003", "GMP-004")
-val win32ContractIds = listOf("W32-001", "W32-002", "W32-003", "BCK-025", "SES-002", "PMP-001", "W32-004", "W32-005", "W32-006", "W32-007", "W32-008", "W32-009", "W32-010", "W32-011", "W32-012", "W32-013", "W32-014", "W32-015", "W32-016", "W32-017", "W32-018", "W32-019", "W32-020", "W32-021", "W32-022")
+val win32ContractIds = listOf("W32-001", "W32-002", "W32-003", "BCK-025", "SES-002", "PMP-001", "W32-004", "W32-005", "W32-006", "W32-007", "W32-008", "W32-009", "W32-010", "W32-011", "W32-012", "W32-013", "W32-014", "W32-015", "W32-016", "W32-017", "W32-018", "W32-019", "W32-020", "W32-021", "W32-022", "W32-023")
 val contractEvidenceGateIds = appKitContractIds + runtimeContractIds + webContractIds + uikitContractIds + waylandContractIds + linuxContractIds + win32ContractIds
 check(contractEvidenceGateIds.distinct().size == contractEvidenceGateIds.size) {
     "each configured contract evidence gate must have exactly one explicit producer"
@@ -77,6 +77,7 @@ val validateContractRegistry by tasks.registering(JavaExec::class) {
             rootProject.file("kadre/contracts/driver/uikit/contracts/evidence.tsv"),
             rootProject.file("kadre/backend/wayland/contracts/evidence.tsv"),
             rootProject.file("kadre/backend/win32/contracts/evidence.tsv"),
+            rootProject.file("kadre/backend/linux/contracts/evidence.tsv"),
         ).joinToString(separator = ",") { it.absolutePath },
         contractEvidenceGateIds.joinToString(separator = ","),
     )
@@ -87,6 +88,7 @@ val validateContractRegistry by tasks.registering(JavaExec::class) {
         rootProject.file("kadre/contracts/driver/uikit/contracts/evidence.tsv"),
         rootProject.file("kadre/backend/wayland/contracts/evidence.tsv"),
         rootProject.file("kadre/backend/win32/contracts/evidence.tsv"),
+        rootProject.file("kadre/backend/linux/contracts/evidence.tsv"),
     )
 }
 

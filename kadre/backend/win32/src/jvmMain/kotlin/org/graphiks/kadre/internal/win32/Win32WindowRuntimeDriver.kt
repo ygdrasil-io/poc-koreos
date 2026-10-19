@@ -42,6 +42,7 @@ internal const val WM_ACTIVATE: Int = 0x0006
 internal const val WM_DPICHANGED: Int = 0x02E0
 internal const val WM_MOVE: Int = 0x0003
 internal const val WM_GETMINMAXINFO: Int = 0x0024
+internal const val WM_INPUT: Int = 0x00FF
 
 /** One UI owner for native peers, input normalization and synchronous interactions. */
 internal class Win32WindowRuntimeDriver internal constructor(
@@ -191,6 +192,8 @@ internal class Win32WindowRuntimeDriver internal constructor(
                                 failureReporter.report(failure)
                                 null
                             }
+                            // Phase 8: this window becomes the process raw-input target when armed.
+                            port.activateRawInput(created.hwnd)
                             port.showWindow(created.hwnd)
                             observeWindow(entry)
                         }
@@ -209,6 +212,7 @@ internal class Win32WindowRuntimeDriver internal constructor(
     private fun handleMessage(command: WindowOpenCommand, hwnd: Long, message: Int, wParam: Long, lParam: Long): Long =
         when (message) {
             WM_CLOSE -> { command.closeRequested(); 0L }
+            WM_INPUT -> if (port.forwardRawInput(hwnd, lParam)) 0L else port.defWindowProc(hwnd, message, wParam, lParam)
             WM_DESTROY -> { entries[command.requestId]?.let { releaseConfinement(it); it.closeAdmitted = true; it.closeDropFrontier(); it.input?.close() }; command.nativeClosed(); 0L }
             WM_SIZE, WM_MOVE, WM_DPICHANGED -> {
                 entries[command.requestId]?.let { if (message == WM_SIZE && wParam == 1L) { revokeInteractionAuthority(it); releaseConfinement(it) } else port.refreshPointerConfinement(hwnd) }

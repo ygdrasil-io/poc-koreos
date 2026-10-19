@@ -90,6 +90,17 @@ internal interface Win32NativeHostPort : AutoCloseable {
     /** Phase 7: OLE drop admission. False keeps drag-and-drop Unsupported for the session. */
     val dropTargetsAvailable: Boolean get() = false
     fun observeDrop(hwnd: Long, budgets: Win32DropBudgets, onFailure: (Throwable) -> Unit, callbacks: Win32DropCallbacks): AutoCloseable = error("OLE drop unavailable")
+
+    /**
+     * Phase 8: raw input. The process registration targets the activated top-level
+     * window (the OS refuses INPUTSINK, so a hidden control window would never see
+     * a WM_INPUT). The driver activates on window readiness; forwarded WM_INPUT
+     * payloads flow back through [forwardRawInput].
+     */
+    fun attachRawInputActivator(activator: (Long) -> Unit) {}
+    fun activateRawInput(hwnd: Long) {}
+    fun forwardRawInput(hwnd: Long, lParam: Long): Boolean = false
+    fun hasForeignRawInputRegistration(): Boolean = false
 }
 
 internal data class Win32WindowReadback(

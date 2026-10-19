@@ -60,6 +60,9 @@ tasks.named<Test>("jvmTest") {
     filter.excludeTestsMatching(
         "org.graphiks.kadre.internal.win32.Win32DropNativeContractTest",
     )
+    filter.excludeTestsMatching(
+        "org.graphiks.kadre.internal.win32.Win32RawInputNativeContractTest",
+    )
 }
 
 val onWindows = System.getProperty("os.name", "").contains("Windows", ignoreCase = true)
@@ -74,6 +77,9 @@ val win32NativeTests = tasks.register<Test>("win32NativeTests") {
     filter.includeTestsMatching("org.graphiks.kadre.internal.win32.Win32InputNativeContractTest")
     filter.includeTestsMatching(
         "org.graphiks.kadre.internal.win32.Win32DropNativeContractTest",
+    )
+    filter.includeTestsMatching(
+        "org.graphiks.kadre.internal.win32.Win32RawInputNativeContractTest",
     )
     testClassesDirs = tasks.named<Test>("jvmTest").get().testClassesDirs
     classpath = tasks.named<Test>("jvmTest").get().classpath
@@ -119,6 +125,16 @@ tasks.register<JavaExec>("win32DropManual") {
     dependsOn(tasks.named("jvmTestClasses"))
     classpath = tasks.named<Test>("jvmTest").get().classpath
     mainClass.set("org.graphiks.kadre.internal.win32.Win32DropManualHarness")
+    jvmArgs("--enable-native-access=ALL-UNNAMED")
+    onlyIf { onWindows }
+}
+
+tasks.register<JavaExec>("win32RawInputManual") {
+    group = "verification"
+    description = "Opens explicit raw-input reception; stdout contains counters only."
+    dependsOn(tasks.named("jvmTestClasses"))
+    classpath = tasks.named<Test>("jvmTest").get().classpath
+    mainClass.set("org.graphiks.kadre.internal.win32.Win32RawInputManualHarness")
     jvmArgs("--enable-native-access=ALL-UNNAMED")
     onlyIf { onWindows }
 }

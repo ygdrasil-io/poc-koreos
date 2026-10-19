@@ -22,6 +22,8 @@ import org.graphiks.kadre.diagnostics.KadreResult
 import org.graphiks.kadre.internal.runtime.RuntimeHostController
 import org.graphiks.kadre.internal.runtime.RuntimeFailureReporter
 import org.graphiks.kadre.internal.runtime.RuntimeSessionComponents
+import org.graphiks.kadre.internal.runtime.RawInputPort
+import org.graphiks.kffi.win32.managed.Win32RawInput
 import org.graphiks.kadre.internal.runtime.RuntimeSessionStopHandler
 import org.graphiks.kadre.internal.runtime.desktop.DesktopBackendKind
 import org.graphiks.kadre.internal.runtime.desktop.DesktopBackendProvider
@@ -38,11 +40,13 @@ public class Win32BackendProvider private constructor(
     private val availability: () -> Boolean,
     private val portFactory: () -> Win32NativeHostPort,
     private val loopStarted: ((Win32MessagePump) -> Unit)?,
+    private val rawInputPortFactory: (() -> RawInputPort?)?,
 ) : DesktopBackendProvider {
     public constructor() : this(
         ::isWindows,
         { KffiWin32HostPort() },
         null,
+        { ProcessWin32RawInputBroker.value.openPort() },
     )
 
     override val backend: DesktopBackendKind = DesktopBackendKind.Win32
@@ -71,11 +75,15 @@ public class Win32BackendProvider private constructor(
             } catch (unexpected: Exception) {
                 return KadreResult.Failure(KadreFailure.PlatformFailure(KadrePlatform.Win32, "start", "start-unexpected"))
             }
+            val nativePort = session.port
+            SessionRawInputTarget.port = nativePort as? KffiWin32HostPort
+            nativePort.attachRawInputActivator(ProcessWin32RawInputBroker.value::activateOn)
             try {
                 return runSession(request, session)
             } finally {
+                SessionRawInputTarget.port = null
                 try { session.teardown() }
-                finally { session.port.close() }
+                finally { nativePort.close() }
             }
         } finally {
             Win32HostLease.release()
@@ -103,7 +111,7 @@ public class Win32BackendProvider private constructor(
             val controller = RuntimeHostController.withComponents(
                 platform = KadrePlatform.Win32,
                 componentsFactory = { _, _ ->
-                    RuntimeSessionComponents(windows = driver.manager)
+                    RuntimeSessionComponents(windows = driver.manager, rawInputPort = rawInputPortFactory?.invoke())
                 },
                 initialLifecycleState = LifecycleState(
                     AttachmentState.Attached,
@@ -162,11 +170,34 @@ public class Win32BackendProvider private constructor(
             availability: () -> Boolean = ::isWindows,
             portFactory: () -> Win32NativeHostPort = { KffiWin32HostPort() },
             loopStarted: ((Win32MessagePump) -> Unit)? = null,
-        ): Win32BackendProvider = Win32BackendProvider(availability, portFactory, loopStarted)
+            rawInputPortFactory: (() -> RawInputPort?)? = null,
+        ): Win32BackendProvider = Win32BackendProvider(availability, portFactory, loopStarted, rawInputPortFactory)
 
         internal fun isWindows(): Boolean =
             System.getProperty("os.name", "").startsWith("Windows", ignoreCase = true)
     }
+}
+
+/** Bridges the process broker to the session's live KFFI host port. */
+internal object SessionRawInputTarget {
+    @Volatile internal var port: KffiWin32HostPort? = null
+}
+
+/** The one process broker, built lazily over the real KFFI frontier on the UI owner. */
+internal val ProcessWin32RawInputBroker: Lazy<Win32RawInputBroker> = lazy {
+    Win32RawInputBroker(
+        native = object : Win32RawInputNative {
+            override fun hasForeignRegistration(): Boolean = Win32RawInput.hasRegistration()
+            override fun register(
+                targetHwnd: Long,
+                onMotion: (deltaX: Int, deltaY: Int, device: Long) -> Unit,
+                onFailure: (Throwable) -> Unit,
+            ): AutoCloseable {
+                val port = checkNotNull(SessionRawInputTarget.port) { "no session port for raw input" }
+                return port.registerRawInput(targetHwnd, onMotion, onFailure)
+            }
+        },
+    )
 }
 
 /** Bridges the runtime's last-window-closed signal to the standalone session stop (once). */
