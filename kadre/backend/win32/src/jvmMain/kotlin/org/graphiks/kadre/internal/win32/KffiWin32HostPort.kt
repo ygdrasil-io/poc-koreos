@@ -27,8 +27,10 @@ import org.graphiks.kffi.win32.managed.Win32WindowOperations
 import org.graphiks.kffi.win32.managed.Win32TextServices
 import org.graphiks.kffi.win32.managed.Win32TextStore
 import org.graphiks.kadre.internal.runtime.TextInputPort
+import org.graphiks.kadre.diagnostics.KadreException
 import org.graphiks.kadre.diagnostics.KadreFailure
 import org.graphiks.kadre.diagnostics.KadrePlatform
+import org.graphiks.kffi.win32.managed.Win32DropFormats
 import org.graphiks.kadre.surface.PhysicalRect
 import org.graphiks.kadre.surface.PhysicalPoint
 import org.graphiks.kadre.surface.PhysicalSize
@@ -107,6 +109,33 @@ internal open class KffiWin32HostPort : Win32NativeHostPort {
     }
     internal fun textStoreForTesting(hwnd: Long): Win32TextStore? = nativeTextPorts[hwnd]?.lastStore
     internal fun textServicesForTesting(): Win32TextServices = checkNotNull(textServices)
+
+    // Phase 7: OLE drop services, opened once on the UI owner thread; a typed
+    // failure keeps every later registration refused without touching the session.
+    private var dropServices: org.graphiks.kffi.win32.managed.Win32DropServices? = null
+    private var dropInitializationFailure: KadreFailure? = null
+    private val dropTargets = ConcurrentHashMap<Long, org.graphiks.kffi.win32.managed.Win32DropTarget>()
+    override val dropTargetsAvailable: Boolean get() = Win32ControlWindow.isSupported()
+    override fun observeDrop(hwnd: Long, budgets: Win32DropBudgets, onFailure: (Throwable) -> Unit, callbacks: Win32DropCallbacks): AutoCloseable = onMainThread {
+        if (dropServices == null && dropInitializationFailure == null) {
+            dropServices = try {
+                org.graphiks.kffi.win32.managed.Win32DropServices.open().also {
+                    Win32DropFormats.registeredFormat(Win32DropFormats.INET_URL_W)
+                }
+            } catch (cause: Throwable) {
+                dropInitializationFailure = win32DropFailure(cause)
+                onFailure(KadreException(checkNotNull(dropInitializationFailure)))
+                null
+            }
+        }
+        val services = dropServices ?: throw KadreException(checkNotNull(dropInitializationFailure))
+        val urlFormat = Win32DropFormats.registeredFormat(Win32DropFormats.INET_URL_W)
+        val pump = { block: () -> Unit -> postOnMainThread(block, onFailure) }
+        val target = services.register(hwnd, KffiWin32DropAdmission(hwnd, ::pointerClientPosition, budgets, urlFormat, pump, callbacks), onFailure)
+        dropTargets[hwnd] = target
+        AutoCloseable { if (dropTargets.remove(hwnd) === target) target.close() }
+    }
+    internal fun dropTargetForTesting(hwnd: Long): org.graphiks.kffi.win32.managed.Win32DropTarget? = dropTargets[hwnd]
 
     override fun showWindow(hwnd: Long) { onMainThread { topLevelWindows.entries.firstOrNull { it.key.hwnd == hwnd }?.value?.setVisible(true) } }
     private class PreparedKey(val hwnd: Long, val message: Int, val wParam: Long, val lParam: Long, val input: Win32KeyInput?) {
@@ -414,6 +443,10 @@ internal open class KffiWin32HostPort : Win32NativeHostPort {
                 try {
                     topLevelWindows.keys.toList().forEach { runCatching { destroyWindow(it.hwnd) } }
                     contactServices.close()
+                    dropTargets.values.toList().forEach { runCatching { it.close() } }
+                    dropTargets.clear()
+                    dropServices?.close()
+                    dropServices = null
                     textServices?.close()
                     textServices = null
                     textPorts.clear(); nativeTextPorts.clear()

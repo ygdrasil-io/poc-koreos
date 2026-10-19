@@ -57,6 +57,9 @@ tasks.named<Test>("jvmTest") {
     filter.excludeTestsMatching(
         "org.graphiks.kadre.internal.win32.Win32SurfaceNativeContractTest",
     )
+    filter.excludeTestsMatching(
+        "org.graphiks.kadre.internal.win32.Win32DropNativeContractTest",
+    )
 }
 
 val onWindows = System.getProperty("os.name", "").contains("Windows", ignoreCase = true)
@@ -69,6 +72,9 @@ val win32NativeTests = tasks.register<Test>("win32NativeTests") {
     filter.includeTestsMatching("org.graphiks.kadre.internal.win32.Win32TextInputNativeContractTest")
     filter.includeTestsMatching("org.graphiks.kadre.internal.win32.Win32WindowMutationNativeContractTest")
     filter.includeTestsMatching("org.graphiks.kadre.internal.win32.Win32InputNativeContractTest")
+    filter.includeTestsMatching(
+        "org.graphiks.kadre.internal.win32.Win32DropNativeContractTest",
+    )
     testClassesDirs = tasks.named<Test>("jvmTest").get().testClassesDirs
     classpath = tasks.named<Test>("jvmTest").get().classpath
     jvmArgs(
@@ -103,6 +109,16 @@ tasks.register<JavaExec>("win32RichInputManual") {
     dependsOn(tasks.named("jvmTestClasses"))
     classpath = tasks.named<Test>("jvmTest").get().classpath
     mainClass.set("org.graphiks.kadre.internal.win32.Win32RichInputManualHarness")
+    jvmArgs("--enable-native-access=ALL-UNNAMED")
+    onlyIf { onWindows }
+}
+
+tasks.register<JavaExec>("win32DropManual") {
+    group = "verification"
+    description = "Opens explicit OLE drop reception; stdout contains counts and categories only."
+    dependsOn(tasks.named("jvmTestClasses"))
+    classpath = tasks.named<Test>("jvmTest").get().classpath
+    mainClass.set("org.graphiks.kadre.internal.win32.Win32DropManualHarness")
     jvmArgs("--enable-native-access=ALL-UNNAMED")
     onlyIf { onWindows }
 }

@@ -79,3 +79,6 @@ SES-003	jvm	scenario	wayland-embedded-outside-edt-rejected	org.graphiks.kadre.in
 SES-003	jvm	sentinel	wayland-embedded-host-loop-survives	org.graphiks.kadre.internal.wayland.WaylandEmbeddedO2Test	edtpAttachCreatesADetachableSessionWithoutKillingTheHostLoop[jvm]
 SUR-004	jvm	scenario	wayland-embedded-tick-bounded-and-closed	org.graphiks.kadre.internal.wayland.WaylandEmbeddedO2Test	pumpTickIsBoundedAndClosedPumpRejectsTicks[jvm]
 SUR-004	jvm	sentinel	wayland-embedded-no-tick-after-close	org.graphiks.kadre.internal.wayland.WaylandEmbeddedO2Test	pumpTickIsBoundedAndClosedPumpRejectsTicks[jvm]
+INP-007	jvm	scenario	wayland-devices-seat-projection-honest	org.graphiks.kadre.internal.wayland.WaylandDevicesO2Test	seatProjectionInventoryIsHonest[jvm]
+INP-007	jvm	scenario	wayland-devices-seat-removal-hotplug	org.graphiks.kadre.internal.wayland.WaylandDevicesO2Test	seatRemovalFiresDisconnectedAndNeverRekeys[jvm]
+INP-007	jvm	sentinel	wayland-devices-never-rekeys-reconnected-seats	org.graphiks.kadre.internal.wayland.WaylandDevicesO2Test	seatRemovalFiresDisconnectedAndNeverRekeys[jvm]

@@ -212,9 +212,15 @@ public class WaylandBackendProvider private constructor(
                         outputsProvider = session.bridge::outputSnapshots,
                         rescan = session.bridge::onOutputsChanged,
                     )
+                    val devicePort = WaylandInputDevicePort(session.bridge::seatDeviceSnapshots)
+                    session.bridge.onSeatProjectionChanged { devicePort.seatInventoryChanged() }
                     RuntimeSessionComponents(
                         windows = driver.manager,
                         displayPort = displayPort,
+                        inputDevicePort = devicePort,
+                        // the evdev service replaces the phase-9 honest
+                        // refusal: Wayland itself carries no gamepad
+                        // protocol, evdev serves them process-wide (D6)
                         gamepadPort = org.graphiks.kadre.internal.linux.EvdevGamepadService.openSessionView(),
                     )
                 },
