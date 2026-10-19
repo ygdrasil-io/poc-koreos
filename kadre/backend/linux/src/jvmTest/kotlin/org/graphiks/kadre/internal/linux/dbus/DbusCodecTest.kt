@@ -177,3 +177,4 @@ class DbusCodecTest {
         assertEquals(encoded.toList(), reencoded.toList())
     }
 }
+

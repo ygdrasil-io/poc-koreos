@@ -124,6 +124,12 @@ internal class DbusMessage(
                 'g' -> writer.signature((value as DbusValue.SignatureValue).signature)
                 'v' -> {
                     val variant = value as DbusValue.VariantValue
+                    // the variant signature must be one complete type and
+                    // never 'v' itself (spec); the real bus drops violators
+                    require(variant.signature.length == 1 || variant.signature.first() != 'v') {
+                        "variant signature may not be 'v'"
+                    }
+                    require(variant.signature != "v") { "a variant cannot wrap another variant" }
                     writer.signature(variant.signature)
                     writeValue(writer, variant.signature, variant.value)
                 }
