@@ -82,5 +82,3 @@ SUR-004	jvm	sentinel	wayland-embedded-no-tick-after-close	org.graphiks.kadre.int
 INP-007	jvm	scenario	wayland-devices-seat-projection-honest	org.graphiks.kadre.internal.wayland.WaylandDevicesO2Test	seatProjectionInventoryIsHonest[jvm]
 INP-007	jvm	scenario	wayland-devices-seat-removal-hotplug	org.graphiks.kadre.internal.wayland.WaylandDevicesO2Test	seatRemovalFiresDisconnectedAndNeverRekeys[jvm]
 INP-007	jvm	sentinel	wayland-devices-never-rekeys-reconnected-seats	org.graphiks.kadre.internal.wayland.WaylandDevicesO2Test	seatRemovalFiresDisconnectedAndNeverRekeys[jvm]
-GMP-002	jvm	scenario	wayland-gamepad-explicit-inventory-failure	org.graphiks.kadre.internal.wayland.WaylandDevicesO2Test	gamepadInventoryIsRefusedExplicitlyNotSilentlyEmpty[jvm]
-GMP-002	jvm	sentinel	wayland-gamepad-effects-unsupported	org.graphiks.kadre.internal.wayland.WaylandDevicesO2Test	gamepadInventoryIsRefusedExplicitlyNotSilentlyEmpty[jvm]

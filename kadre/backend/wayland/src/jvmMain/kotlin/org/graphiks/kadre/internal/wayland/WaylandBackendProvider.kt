@@ -218,7 +218,10 @@ public class WaylandBackendProvider private constructor(
                         windows = driver.manager,
                         displayPort = displayPort,
                         inputDevicePort = devicePort,
-                        gamepadPort = WaylandGamepadPort(),
+                        // the evdev service replaces the phase-9 honest
+                        // refusal: Wayland itself carries no gamepad
+                        // protocol, evdev serves them process-wide (D6)
+                        gamepadPort = org.graphiks.kadre.internal.linux.EvdevGamepadService.openSessionView(),
                     )
                 },
                 initialLifecycleState = LifecycleState(

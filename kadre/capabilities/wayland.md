@@ -113,9 +113,29 @@ exige une intégration toolkit distincte.
 | feature | target | minimum déclaré | compile gate | runtime gate | état absent | tests |
 |---|---|---|---|---|---|---|
 | inventaire devices (projection seats) | `jvm` | seats observables + capabilities réelles — PAS un inventaire physique complet (libinput/udev : bindings kffi requis) | `:kadre:backend:wayland:jvmTest` | `INP-007` | kind dérivé des capabilities ; retrait → Disconnected ; clé jamais réutilisée ; lecture post-close vide | `WaylandDevicesO2Test` (4 preuves) |
-| gamepads | `jvm` | aucune source protocolaire | `:kadre:backend:wayland:jvmTest` | `GMP-002` | inventaire vide avec `inventoryFailure` Unsupported explicite (jamais un vide muet) ; effets Unsupported | `WaylandDevicesO2Test.gamepadInventoryIsRefusedExplicitlyNotSilentlyEmpty` |
+| gamepads | `jvm` | service evdev process-wide (`:kadre:backend:linux`), cf. tranche 9 bis ci-dessous — remplace le refus honnête GMP-002 (retiré) | `:kadre:backend:linux:jvmTest` | `GMP-003`/`GMP-004` | inventaire evdev honnête (EACCES ⇒ `PermissionDenied`), jamais un vide muet | `EvdevGamepadBrokerTest` + `EvdevGamepadLinuxTest` |
 | apparence/thème, pression mémoire | `jvm` | — (aucune source définie en tranche 1) | — | — | `Unknown`/indisponibilité prévue, aucune synthèse | documenté design D1 |
 | raw input (pointeur relatif) | `jvm` | évalué, non activé (exige extensions phase 5 + unités/contexte lock) | — | — | `RawInputPort` Unsupported | documenté design D4 |
+
+## 3 decies. Registre — tranche 9 bis (gamepads evdev, service :kadre:backend:linux)
+
+Le service gamepad vit dans `:kadre:backend:linux` (evdev/udev via
+`kffi-evdev`) et sert les sessions Wayland : broker process-wide
+(identity stable D2, worker IO D3), vues par session, FF exclusif (D4).
+
+| feature | target | minimum déclaré | compile gate | runtime gate | état absent | tests |
+|---|---|---|---|---|---|---|
+| inventaire + hotplug + identité evdev | `jvm` | détection par capacités kernel (jamais les props udev), clé stable `(bustype,vendor,product,uniq)` au rebranchement | `:kadre:backend:linux:jvmTest` | `GMP-003` | nœud non-gamepad exclu ; EACCES ⇒ `PermissionDenied(InputMonitoring)` honnête | `EvdevGamepadBrokerTest` (6 preuves O2) + `EvdevGamepadLinuxTest` P-1/P-2 (O3 uinput) |
+| état + force feedback evdev | `jvm` | projection standard-map canonique (dpad/gâchettes boutons → axes), cycle FF upload→play→stop→erase avec ownership exclusif | `:kadre:backend:linux:jvmTest` | `GMP-004` | état strictement conforme au descripteur ; sans FF ⇒ `Unsupported(GamepadEffect)` | `EvdevGamepadBrokerTest` (5 preuves O2) + `EvdevGamepadLinuxTest` P-3/P-4 (O3 uinput) |
+
+Résiduel tranche 9 bis : les preuves O3 (oracle uinput D6) exigent un
+conteneur privilégié (`/dev/uinput`, mknod du nœud) et ne tournent pas
+sur le runner de gate ; les contrats GMP-003/GMP-004 s'appuient donc sur
+les preuves O2 portables, l'oracle uinput restant la vérité Linux locale
+(documenté dans `kadre/LINUX-EVDEV-GAMEPAD-DESIGN.md`). Le hotplug udev
+exige un démon udev vivant — le filet de sécurité est la réconciliation
+seconde des nœuds énumérés. GMP-002 (refus honnête wayland) est retiré
+du registre (`retirementRef` → `GMP-003`) : le service evdev le remplace.
 
 ## 4. Limites des tranches 1 à 4
 

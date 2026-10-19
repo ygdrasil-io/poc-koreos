@@ -47,6 +47,8 @@ dependencyResolutionManagement {
                     includeModule("org.graphiks", "kffi-win32-jvm")
                     includeModule("org.graphiks", "kffi-wayland")
                     includeModule("org.graphiks", "kffi-wayland-jvm")
+                    includeModule("org.graphiks", "kffi-evdev")
+                    includeModule("org.graphiks", "kffi-evdev-jvm")
                 }
             }
         }
@@ -128,6 +130,7 @@ include(":kadre:contracts:driver:wayland")
 include(":kadre:contracts:driver:win32")
 include(":kadre:runtime")
 include(":kadre:backend:appkit")
+include(":kadre:backend:linux")
 include(":kadre:backend:wayland")
 include(":kadre:backend:win32")
 include(":kadre:samples:desk-tour")

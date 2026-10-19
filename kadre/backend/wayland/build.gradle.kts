@@ -17,6 +17,8 @@ kotlin {
             api(project(":kadre:runtime"))
             implementation(libs.kffi.wayland)
             implementation(libs.kffi.posix)
+            // gamepads ride the process-wide evdev service (design D6)
+            implementation(project(":kadre:backend:linux"))
         }
         val jvmTest by getting {
             dependencies {

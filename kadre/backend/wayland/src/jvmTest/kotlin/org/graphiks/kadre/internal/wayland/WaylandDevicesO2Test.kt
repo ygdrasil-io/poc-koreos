@@ -76,16 +76,5 @@ class WaylandDevicesO2Test {
         assertTrue(events.isEmpty())
     }
 
-    @Test
-    fun gamepadInventoryIsRefusedExplicitlyNotSilentlyEmpty() {
-        // SN-1 : échec d'énumération explicite — jamais un inventaire vide
-        // muet qui lirait « aucun gamepad branché »
-        val port = WaylandGamepadPort()
-        val failure = port.inventoryFailure
-        assertTrue(failure is KadreFailure.Unsupported, "failure=$failure")
-        assertTrue(port.gamepads.isEmpty())
-        val outcome = port.startEffect(0L, org.graphiks.kadre.input.GamepadEffect.DualRumble(1.0, 1.0, kotlin.time.Duration.parse("1s")))
-        assertTrue(outcome is org.graphiks.kadre.diagnostics.KadreResult.Failure)
-        port.close()
-    }
+    
 }
