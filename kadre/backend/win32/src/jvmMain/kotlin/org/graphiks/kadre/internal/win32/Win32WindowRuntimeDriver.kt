@@ -12,7 +12,14 @@ import org.graphiks.kadre.window.*
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
 
-private fun win32SurfaceCapabilities(): SurfaceCapabilities {
+private fun win32HandlerInteractions(dropTargetsAvailable: Boolean): Set<InteractionKind> = buildSet {
+    add(InteractionKind.OpenWindow)
+    add(InteractionKind.BeginWindowMove)
+    add(InteractionKind.BeginWindowResize)
+    if (dropTargetsAvailable) add(InteractionKind.AcceptDrop)
+}
+
+private fun win32SurfaceCapabilities(dropTargetsAvailable: Boolean): SurfaceCapabilities {
     val unsupportedUpdate = Capability.Unsupported(KadreFailure.Unsupported(KadreOperation.UpdateSurface))
     return SurfaceCapabilities(
         cursor = Capability.Supported(WIN32_CURSOR_RESOURCES.keys, FeatureAvailability.Available),
@@ -20,12 +27,11 @@ private fun win32SurfaceCapabilities(): SurfaceCapabilities {
         pointerCapture = Capability.Supported(setOf(PointerCaptureMode.None, PointerCaptureMode.Confined), FeatureAvailability.Available),
         hitTesting = Capability.Supported(setOf(HitTestingMode.Enabled), FeatureAvailability.Available),
         inputDefaultBehavior = Capability.Supported(InputDefaultBehavior.entries.toSet(), FeatureAvailability.Available),
-        handlerInteractions = Capability.Supported(WIN32_HANDLER_INTERACTIONS, FeatureAvailability.Available),
+        handlerInteractions = Capability.Supported(win32HandlerInteractions(dropTargetsAvailable), FeatureAvailability.Available),
         armedInteractions = Capability.Unsupported(KadreFailure.Unsupported(KadreOperation.ArmInteraction)),
         platformAccess = Capability.Unsupported(KadreFailure.Unsupported(KadreOperation.PlatformSurfaceAccess)),
     )
 }
-private val WIN32_HANDLER_INTERACTIONS = setOf(InteractionKind.OpenWindow, InteractionKind.BeginWindowMove, InteractionKind.BeginWindowResize)
 
 internal const val WM_CLOSE: Int = 0x0010
 internal const val WM_DESTROY: Int = 0x0002
@@ -46,6 +52,7 @@ internal class Win32WindowRuntimeDriver internal constructor(
     enabledWindowUpdateCapabilities: Set<WindowProperty>,
 ) : AutoCloseable, WindowCommandPort, SurfaceCommandPort {
     private val closed = AtomicBoolean(false)
+    private val handlerInteractions = win32HandlerInteractions(port.dropTargetsAvailable)
     private val entries = ConcurrentHashMap<WindowRequestId, Win32WindowEntry>()
     private val queuedOpens = ConcurrentHashMap<WindowRequestId, WindowOpenCommand>()
     private val queuedUpdates = ConcurrentHashMap<WindowOperationId, WindowUpdateCommand>()
@@ -76,7 +83,7 @@ internal class Win32WindowRuntimeDriver internal constructor(
         attentionPort = attention,
         acceptedAttention = WindowAttention.entries.toSet(),
         publicSurfaceCapabilities = true,
-        enabledSurfaceCapabilities = win32SurfaceCapabilities(),
+        enabledSurfaceCapabilities = win32SurfaceCapabilities(port.dropTargetsAvailable),
         textInputPortFactory = TextInputPortFactory { surfaceId ->
             val entry = entries.values.firstOrNull { it.command.surfaceId == surfaceId }
             if (entry == null) Win32UnavailableTextInputPort(KadreFailure.Closed(KadreResourceKind.Surface))
@@ -100,6 +107,7 @@ internal class Win32WindowRuntimeDriver internal constructor(
         }
         if (closed.get()) { command.fail(KadreFailure.Closed(KadreResourceKind.Host)); return }
         var router: Win32InputRouter? = null
+        var dropRouter: Win32DropRouter? = null
         var window: Win32TopLevelWindowHandle? = null
         try {
             val created = port.createTopLevelWindow(
@@ -152,6 +160,10 @@ internal class Win32WindowRuntimeDriver internal constructor(
                             failureReporter.report(KadreException(failure))
                         }
                     }, { revokeInteractionAuthority(entry) }))
+            entry.drop = Win32DropRouter(command.surfaceId,
+                { source, position -> dispatchSynchronousDrop(entry, source, position) },
+                manager::acceptSurfaceStimulus,
+                { !closed.get() && !entry.closeAdmitted && entries[command.requestId] === entry }).also { dropRouter = it }
             entry.input = router
             val snapshot = initialSnapshot(created.hwnd)
             command.commit(
@@ -164,6 +176,21 @@ internal class Win32WindowRuntimeDriver internal constructor(
                     port.postOnMainThread({
                         if (!entry.closeAdmitted && entries[command.requestId] === entry) {
                             router.activate()
+                            entry.dropObserver = try {
+                                port.observeDrop(created.hwnd,
+                                    Win32DropBudgets(resources.maxCollectionElementsPerValue, resources.maxMetadataCodeUnitsPerValue,
+                                        resources.maxRetainedPayloadBytesPerSession.toInt()),
+                                    failureReporter::report,
+                                    Win32DropCallbacks(
+                                        entered = { source, position -> checkNotNull(entry.drop).entered(source, position) },
+                                        moved = { position -> entry.drop?.moved(position) },
+                                        exited = { entry.drop?.exited() },
+                                        performed = { position -> entry.drop?.performed(position) },
+                                    ))
+                            } catch (failure: Throwable) {
+                                failureReporter.report(failure)
+                                null
+                            }
                             port.showWindow(created.hwnd)
                             observeWindow(entry)
                         }
@@ -171,6 +198,7 @@ internal class Win32WindowRuntimeDriver internal constructor(
                 },
             )
         } catch (failure: Throwable) {
+            runCatching { dropRouter?.close() }
             router?.close()
             entries.remove(command.requestId)
             window?.let { port.destroyWindow(it.hwnd) }
@@ -181,7 +209,7 @@ internal class Win32WindowRuntimeDriver internal constructor(
     private fun handleMessage(command: WindowOpenCommand, hwnd: Long, message: Int, wParam: Long, lParam: Long): Long =
         when (message) {
             WM_CLOSE -> { command.closeRequested(); 0L }
-            WM_DESTROY -> { entries[command.requestId]?.let { releaseConfinement(it); it.closeAdmitted = true; it.input?.close() }; command.nativeClosed(); 0L }
+            WM_DESTROY -> { entries[command.requestId]?.let { releaseConfinement(it); it.closeAdmitted = true; it.closeDropFrontier(); it.input?.close() }; command.nativeClosed(); 0L }
             WM_SIZE, WM_MOVE, WM_DPICHANGED -> {
                 entries[command.requestId]?.let { if (message == WM_SIZE && wParam == 1L) { revokeInteractionAuthority(it); releaseConfinement(it) } else port.refreshPointerConfinement(hwnd) }
                 if (message == WM_SIZE && entries.containsKey(command.requestId)) {
@@ -247,6 +275,16 @@ internal class Win32WindowRuntimeDriver internal constructor(
         publishCaptureLoss(entry)
     }
 
+    /** Synchronous drop admission on the UI owner; the runtime closes the source on every refused path. */
+    private fun dispatchSynchronousDrop(entry: Win32WindowEntry, source: org.graphiks.kadre.internal.runtime.DropTransferSource,
+        position: org.graphiks.kadre.surface.LogicalPoint): org.graphiks.kadre.input.DropOfferId? {
+        if (!isLive(entry)) {
+            source.close()
+            return null
+        }
+        return manager.dispatchSynchronousDrop(entry.command.surfaceId, source, position) { KadreResult.Success(Unit) }
+    }
+
     private fun observeWindow(entry: Win32WindowEntry) {
         if (!isLive(entry)) return
         val current = currentState(entry) ?: return
@@ -267,7 +305,7 @@ internal class Win32WindowRuntimeDriver internal constructor(
 
     private fun dispatchInteraction(entry: Win32WindowEntry, event: RuntimeSynchronousInteraction) {
         val authority = entry.interactionGeneration
-        manager.dispatchSynchronousInteraction(entry.command.surfaceId, event, WIN32_HANDLER_INTERACTIONS) { action ->
+        manager.dispatchSynchronousInteraction(entry.command.surfaceId, event, handlerInteractions) { action ->
             if (action is InteractionAction.OpenWindow) {
                 // Native creation commits inline on this UI owner; no borrowed event leaves the callback.
                 runBlocking {
@@ -316,6 +354,7 @@ internal class Win32WindowRuntimeDriver internal constructor(
             platformFailure("close-window", "missing-peer"))
         if (entry.closeAdmitted) return OpenedWindowCloseOutcome.NativeCloseAlreadyCommitted
         entry.closeAdmitted = true
+        entry.closeDropFrontier()
         entry.input?.close()
         port.destroyWindow(entry.window.hwnd)
         entry.command.nativeClosed()
@@ -336,6 +375,7 @@ internal class Win32WindowRuntimeDriver internal constructor(
         val entry = entries[command.requestId] ?: return PendingWindowCancellationOutcome.TooLate
         if (entry.closeAdmitted) return PendingWindowCancellationOutcome.TooLate
         entries.remove(command.requestId)
+        entry.closeDropFrontier()
         entry.input?.close()
         port.destroyWindow(entry.window.hwnd)
         return PendingWindowCancellationOutcome.CancelledBeforeCommit
@@ -442,6 +482,7 @@ internal class Win32WindowRuntimeDriver internal constructor(
         queuedUpdates.values.toList().forEach { it.failed(KadreFailure.Closed(KadreResourceKind.Host)) }
         queuedUpdates.clear()
         entries.values.toList().forEach { entry ->
+            runCatching { entry.closeDropFrontier() }
             runCatching { entry.input?.close() }
             runCatching { port.destroyWindow(entry.window.hwnd) }
         }
@@ -458,6 +499,7 @@ internal class Win32WindowRuntimeDriver internal constructor(
             port.onMainThread {
                 if (entries.remove(entry.command.requestId) != null) {
                     entry.closeAdmitted = true
+                    entry.closeDropFrontier()
                     entry.input?.close()
                     pendingRedraws.remove(entry.command.surfaceId)
                     port.destroyWindow(entry.window.hwnd)
@@ -480,9 +522,18 @@ private fun platformFailure(operation: String, detail: String): KadreFailure.Pla
 internal class Win32WindowEntry(val window: Win32TopLevelWindowHandle, val command: WindowOpenCommand) {
     var closeAdmitted = false
     var input: Win32InputRouter? = null
+    var drop: Win32DropRouter? = null
+    var dropObserver: AutoCloseable? = null
     lateinit var mutations: Win32WindowMutations
     var mutating: Boolean = false
     var interactionGeneration: Long = 0L
+
+    /** Revokes the native drop target, then the router, before the HWND is destroyed. */
+    fun closeDropFrontier() {
+        runCatching { dropObserver?.close() }
+        dropObserver = null
+        drop?.close()
+    }
 }
 
 internal object Win32WindowRuntimeDriverFactory {
