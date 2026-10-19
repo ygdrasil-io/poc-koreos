@@ -235,7 +235,7 @@ export type KadreResourceKind =
   | "dropTransfer" | "dropItem" | "cursorImage" | "gamepadEffect"
   | "textInputSession" | "captureSource" | "captureSession" | "captureCollector"
   | "captureBuffer" | "retainedPayload" | "imageResource" | "eventSequence";
-export type KadrePlatform = "android" | "uikit" | "web" | "appKit" | "win32" | "x11" | "wayland" | "fake";
+export type KadrePlatform = "android" | "uikit" | "web" | "appKit" | "win32" | "x11" | "wayland" | "linux" | "fake";
 export type InteractionFailureReason = "missing" | "expired" | "consumed" | "wrongSurface";
 export type KadreStopReason =
   | "hostRequested"
