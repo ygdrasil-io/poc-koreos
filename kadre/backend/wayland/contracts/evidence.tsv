@@ -13,7 +13,7 @@ SES-001	jvm	scenario	wayland-server-absent-fails-before-session	org.graphiks.kad
 SES-001	jvm	scenario	wayland-wayland-socket-unsupported-fails	org.graphiks.kadre.internal.wayland.WaylandBackendProviderTest	runWithWaylandSocketFailsBeforeSession[jvm]
 SES-001	jvm	scenario	wayland-missing-global-fails-before-session	org.graphiks.kadre.internal.wayland.WaylandBackendProviderTest	missingGlobalFailsBeforeSession[jvm]
 SES-001	jvm	scenario	wayland-disconnect-after-admission	org.graphiks.kadre.internal.wayland.WaylandBackendProviderTest	disconnectAfterAdmissionFailsTheSessionWithoutReconnecting[jvm]
-SES-001	jvm	sentinel	wayland-attach-unsupported	org.graphiks.kadre.internal.wayland.WaylandBackendProviderTest	embeddedAttachIsUnsupportedInTrancheOne[jvm]
+SES-001	jvm	sentinel	wayland-attach-unsupported	org.graphiks.kadre.internal.wayland.WaylandBackendProviderTest	embeddedAttachOutsideTheEdtIsRejectedBeforeConnecting[jvm]
 SES-001	jvm	sentinel	wayland-stop-no-resurrection	org.graphiks.kadre.internal.wayland.WaylandBackendProviderTest	concurrentRunIsAlreadyInUse[jvm]
 SUR-001	jvm	scenario	wayland-pump-wake-rearm	org.graphiks.kadre.internal.wayland.WaylandNativeSessionLinuxTest	repeatedWakeKeepsThePumpResponsive
 SUR-001	jvm	scenario	wayland-pump-stop-during-poll	org.graphiks.kadre.internal.wayland.WaylandNativeSessionLinuxTest	stopFromAnotherThreadDuringPoll
