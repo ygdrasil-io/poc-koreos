@@ -63,3 +63,8 @@ WIN-013	jvm	scenario	wayland-update-exclusive-rejected-pre-primitive	org.graphik
 WIN-013	jvm	sentinel	wayland-update-min-above-max-rejected	org.graphiks.kadre.internal.wayland.WaylandAdvancedWindowO2Test	exclusiveFullscreenUpdateIsRejectedPrePrimitive[jvm]
 INT-005	jvm	scenario	wayland-move-serial-consumed-once	org.graphiks.kadre.internal.wayland.WaylandAdvancedWindowO2Test	serialLedgerConsumesEligibleSerialsOnce[jvm]
 INT-005	jvm	sentinel	wayland-move-refused-without-eligible-serial	org.graphiks.kadre.internal.wayland.WaylandAdvancedWindowO2Test	serialLedgerConsumesEligibleSerialsOnce[jvm]
+TXT-002	jvm	scenario	wayland-ime-open-marshals-converted-state	org.graphiks.kadre.internal.wayland.WaylandTextInputO2Test	openMarshalsConvertedSurroundingState[jvm]
+TXT-002	jvm	scenario	wayland-ime-delete-bytes-become-utf16	org.graphiks.kadre.internal.wayland.WaylandTextInputO2Test	deleteSurroundingBytesBecomeUtf16Ranges[jvm]
+TXT-002	jvm	sentinel	wayland-ime-obsolete-done-ignored	org.graphiks.kadre.internal.wayland.WaylandTextInputO2Test	obsoleteDoneBatchesAreIgnoredEntirely[jvm]
+TXT-003	jvm	scenario	wayland-ime-leave-purges-composition	org.graphiks.kadre.internal.wayland.WaylandTextInputO2Test	leavePurgesTheComposition[jvm]
+TXT-003	jvm	sentinel	wayland-ime-no-double-commit	org.graphiks.kadre.internal.wayland.WaylandTextInputO2Test	obsoleteDoneBatchesAreIgnoredEntirely[jvm]
