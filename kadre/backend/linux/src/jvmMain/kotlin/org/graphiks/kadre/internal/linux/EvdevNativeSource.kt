@@ -26,6 +26,7 @@ import org.graphiks.kffi.evdev.evdevIoctlInt
 import org.graphiks.kffi.evdev.evdevIoctlPtr
 import org.graphiks.kffi.evdev.evdevOpen
 import org.graphiks.kffi.evdev.evdevOpenReadWrite
+import org.graphiks.kffi.evdev.evdevUploadRumble
 import org.graphiks.kffi.evdev.evdevRead
 import org.graphiks.kffi.evdev.evdevWrite
 import org.graphiks.kffi.evdev.EVIOCSFF
@@ -244,24 +245,15 @@ private class KffiEvdevNativeGamepad(
 
     override fun uploadRumble(strong: Double, weak: Double, durationMillis: Int): EvdevNativeEffect? {
         if (!forceFeedback) return null
-        val allocated = Arena.ofConfined().use { arena ->
-            val segment = arena.allocate(FF_EFFECT_LAYOUT)
-            fun offset(vararg name: String) = FF_EFFECT_LAYOUT.byteOffset(
-                *name.map(MemoryLayout.PathElement::groupElement).toTypedArray(),
-            )
-            segment.set(ValueLayout.JAVA_SHORT, offset("type"), EvdevFf.RUMBLE.toShort())
-            segment.set(ValueLayout.JAVA_SHORT, offset("id"), (-1).toShort())
-            segment.set(ValueLayout.JAVA_SHORT, offset("replayLength"), durationMillis.coerceAtMost(0x7fff).toShort())
-            segment.set(ValueLayout.JAVA_SHORT, offset("rumble", "strongMagnitude"), magnitude(strong))
-            segment.set(ValueLayout.JAVA_SHORT, offset("rumble", "weakMagnitude"), magnitude(weak))
-            if (evdevIoctlPtr(fd, EVIOCSFF, segment) < 0) return null
-            segment.get(ValueLayout.JAVA_SHORT, offset("id")).toInt()
-        }
-        if (allocated < 0) return null
-        return KffiEvdevNativeEffect(fd, allocated)
+        val effectId = evdevUploadRumble(
+            fd = fd,
+            strong = strong,
+            weak = weak,
+            durationMillis = durationMillis,
+        )
+        if (effectId < 0) return null
+        return KffiEvdevNativeEffect(fd, effectId)
     }
-
-    private fun magnitude(value: Double): Short = (value.coerceIn(0.0, 1.0) * 0xffff).toInt().coerceIn(0, 0xffff).toShort()
 
     override fun close() {
         runCatching { evdevClose(fd) }
