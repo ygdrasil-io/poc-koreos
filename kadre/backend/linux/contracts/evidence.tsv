@@ -1,0 +1,13 @@
+contractId	target	kind	evidenceId	testClass	testName
+GMP-003	jvm	scenario	evdev-inventory-filters-non-gamepads	org.graphiks.kadre.internal.linux.EvdevGamepadBrokerTest	onlyGamepadNodesEnterTheInventory[jvm]
+GMP-003	jvm	scenario	evdev-replug-keeps-stable-key	org.graphiks.kadre.internal.linux.EvdevGamepadBrokerTest	repluggedDeviceKeepsItsStableKey[jvm]
+GMP-003	jvm	scenario	evdev-permission-denied-is-honest	org.graphiks.kadre.internal.linux.EvdevGamepadBrokerTest	permissionDeniedEnumerationSurfacesHonestly[jvm]
+GMP-003	jvm	scenario	evdev-broker-close-releases-nodes	org.graphiks.kadre.internal.linux.EvdevGamepadBrokerTest	brokerCloseReleasesNodes[jvm]
+GMP-003	jvm	sentinel	evdev-keyboard-excluded-from-inventory	org.graphiks.kadre.internal.linux.EvdevGamepadBrokerTest	onlyGamepadNodesEnterTheInventory[jvm]
+GMP-003	jvm	sentinel	evdev-closed-view-observes-nothing	org.graphiks.kadre.internal.linux.EvdevGamepadBrokerTest	closingAViewDetachesItWithoutStoppingTheBroker[jvm]
+GMP-004	jvm	scenario	evdev-state-canonical-and-descriptor-matched	org.graphiks.kadre.internal.linux.EvdevGamepadBrokerTest	stateEventsCarryCanonicalValuesMatchingTheDescriptor[jvm]
+GMP-004	jvm	scenario	evdev-ff-owns-upload-play-stop-erase	org.graphiks.kadre.internal.linux.EvdevGamepadBrokerTest	forceFeedbackFollowsUploadPlayStopEraseAndOwnership[jvm]
+GMP-004	jvm	scenario	evdev-ff-unsupported-is-honest	org.graphiks.kadre.internal.linux.EvdevGamepadBrokerTest	devicesWithoutForceFeedbackAdvertiseUnsupportedEffects[jvm]
+GMP-004	jvm	scenario	evdev-routing-suspension-gates-state	org.graphiks.kadre.internal.linux.EvdevGamepadBrokerTest	suspendedViewsReceiveNoStateUntilTheyResume[jvm]
+GMP-004	jvm	sentinel	evdev-second-live-effect-refused	org.graphiks.kadre.internal.linux.EvdevGamepadBrokerTest	forceFeedbackFollowsUploadPlayStopEraseAndOwnership[jvm]
+GMP-004	jvm	sentinel	evdev-synthetic-axis-never-vanishes	org.graphiks.kadre.internal.linux.EvdevGamepadBrokerTest	stateEventsCarryCanonicalValuesMatchingTheDescriptor[jvm]

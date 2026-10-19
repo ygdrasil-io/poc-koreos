@@ -185,8 +185,15 @@ internal class EvdevGamepadBroker(
     internal fun pumpOnce(): Boolean = drainHotplug() or pollGamepads()
 
     private fun run() {
+        var lastReconcile = 0L
         while (!closed.get()) {
             val worked = pumpOnce()
+            val now = System.currentTimeMillis()
+            if (now - lastReconcile >= RECONCILE_MILLIS) {
+                lastReconcile = now
+                // missed-hotplug safety net: cheap to re-read, idempotent
+                synchronized(lock) { reconcileInventoryLocked() }
+            }
             if (!worked) runCatching { Thread.sleep(POLL_IDLE_MILLIS) }
         }
     }
@@ -269,7 +276,15 @@ internal class EvdevGamepadBroker(
             gamepads.values.mapNotNull { gamepad -> nodes[gamepad.key]?.let { gamepad to it } }
         }
         var worked = false
+        val retired = ArrayList<Long>()
         snapshot.forEach { (gamepad, node) ->
+            if (node.isDisconnected) {
+                // the kernel reports the device gone (unplug/uinput destroy):
+                // retire it even though its node file may still be listed
+                retired.add(gamepad.key)
+                worked = true
+                return@forEach
+            }
             val events = runCatching { node.readEvents() }.getOrDefault(emptyList())
             if (events.isEmpty()) return@forEach
             worked = true
@@ -279,7 +294,24 @@ internal class EvdevGamepadBroker(
             }
             if (changed) publishState(gamepad)
         }
+        if (retired.isNotEmpty()) retireDevices(retired)
         return worked
+    }
+
+    private fun retireDevices(keys: List<Long>) {
+        synchronized(lock) {
+            keys.forEach { key ->
+                val devNode = keysByDevNode.entries.firstOrNull { it.value == key }?.key
+                if (devNode != null) {
+                    removeDeviceLocked(devNode)
+                } else {
+                    gamepads.remove(key)
+                    val node = nodes.remove(key)
+                    activeEffects.remove(key)?.let { owner -> runCatching(owner::close) }
+                    node?.let { runCatching(it::close) }
+                }
+            }
+        }
     }
 
     private fun publishState(gamepad: EvdevGamepad) {
@@ -334,6 +366,7 @@ internal class EvdevGamepadBroker(
 
     private companion object {
         const val POLL_IDLE_MILLIS = 10L
+        const val RECONCILE_MILLIS = 1_000L
         const val BROKER_JOIN_TIMEOUT_MILLIS = 2_000L
         const val IDENTITY_KEY_STRIDE = 64L
         const val DEFAULT_ELIGIBLE = true

@@ -20,6 +20,10 @@ GRADLEW="${KADRE_GRADLEW:-$REPO_ROOT/gradlew}"
 WAYLAND_BACKEND_BUILD="$REPO_ROOT/kadre/backend/wayland/build"
 EVIDENCE_DIRECTORY="$WAYLAND_BACKEND_BUILD/contract-evidence"
 EVIDENCE_FILES=("BCK-017.json" "SES-001.json" "SUR-001.json" "WIN-010.json" "WIN-011.json" "WIN-012.json" "SUR-002.json" "DSP-002.json" "SUR-003.json" "INP-004.json" "INP-005.json" "INP-006.json" "WIN-013.json" "INT-005.json" "TXT-002.json" "TXT-003.json" "DRP-002.json" "DRP-003.json" "SES-003.json" "SUR-004.json")
+# Le service gamepad evdev vit dans :kadre:backend:linux et sert les
+# sessions Wayland : ses preuves O2 portables alimentent la même gate.
+LINUX_BACKEND_BUILD="$REPO_ROOT/kadre/backend/linux/build"
+LINUX_EVIDENCE_FILES=("GMP-003.json" "GMP-004.json")
 DIAGNOSTICS_DIRECTORY="$WAYLAND_BACKEND_BUILD/ci-diagnostics"
 TEST_TIMEOUT_SECONDS="${KADRE_WAYLAND_TEST_TIMEOUT_SECONDS:-900}"
 EVIDENCE_TIMEOUT_SECONDS=600
@@ -81,6 +85,7 @@ source "$REPO_ROOT/build/wayland/weston.env"
 run_phase tests "$TEST_TIMEOUT_SECONDS" \
     "$GRADLEW" \
     :kadre:backend:wayland:waylandContractTests \
+    :kadre:backend:linux:jvmTest \
     --refresh-dependencies \
     --rerun-tasks \
     --no-daemon \
@@ -90,6 +95,7 @@ run_phase tests "$TEST_TIMEOUT_SECONDS" \
 run_phase evidence "$EVIDENCE_TIMEOUT_SECONDS" \
     "$GRADLEW" \
     :kadre:contracts:validator:generateWaylandContractEvidence \
+    :kadre:contracts:validator:generateLinuxContractEvidence \
     -PkadreContractCommit="$COMMIT" \
     --no-daemon \
     --stacktrace \
@@ -98,6 +104,13 @@ run_phase evidence "$EVIDENCE_TIMEOUT_SECONDS" \
 for evidence_file in "${EVIDENCE_FILES[@]}"; do
     if [[ ! -s "$EVIDENCE_DIRECTORY/$evidence_file" ]]; then
         echo "Missing or empty Wayland contract evidence: $EVIDENCE_DIRECTORY/$evidence_file" >&2
+        exit 1
+    fi
+done
+
+for evidence_file in "${LINUX_EVIDENCE_FILES[@]}"; do
+    if [[ ! -s "$LINUX_BACKEND_BUILD/contract-evidence/$evidence_file" ]]; then
+        echo "Missing or empty Linux evdev contract evidence: $LINUX_BACKEND_BUILD/contract-evidence/$evidence_file" >&2
         exit 1
     fi
 done

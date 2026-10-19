@@ -64,6 +64,8 @@ class EvdevGamepadBrokerTest {
         private val pending = ArrayDeque<EvdevInputEvent>()
         val closed = AtomicInteger(0)
 
+        override val isDisconnected: Boolean get() = false
+
         override fun axisBounds(code: Int): Pair<Int, Int>? = bounds[code]
 
         override fun readEvents(): List<EvdevInputEvent> {

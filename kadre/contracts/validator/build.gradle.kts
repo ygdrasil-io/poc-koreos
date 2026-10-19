@@ -31,8 +31,9 @@ val runtimeContractIds = listOf(
     "DSP-001", "RUN-007", "RUN-008", "INT-001", "CAP-001",
 )
 val waylandContractIds = listOf("BCK-017", "SES-001", "SUR-001", "WIN-010", "WIN-011", "WIN-012", "SUR-002", "DSP-002", "SUR-003", "INP-004", "INP-005", "INP-006", "WIN-013", "INT-005", "TXT-002", "TXT-003", "DRP-002", "DRP-003", "SES-003", "SUR-004")
+val linuxContractIds = listOf("GMP-003", "GMP-004")
 val win32ContractIds = listOf("W32-001", "W32-002", "W32-003", "BCK-025", "SES-002", "PMP-001", "W32-004", "W32-005", "W32-006", "W32-007", "W32-008", "W32-009", "W32-010", "W32-011", "W32-012", "W32-013", "W32-014", "W32-015", "W32-016", "W32-017", "W32-018", "W32-019", "W32-020")
-val contractEvidenceGateIds = appKitContractIds + runtimeContractIds + webContractIds + uikitContractIds + waylandContractIds + win32ContractIds
+val contractEvidenceGateIds = appKitContractIds + runtimeContractIds + webContractIds + uikitContractIds + waylandContractIds + linuxContractIds + win32ContractIds
 check(contractEvidenceGateIds.distinct().size == contractEvidenceGateIds.size) {
     "each configured contract evidence gate must have exactly one explicit producer"
 }
@@ -244,6 +245,75 @@ val generateWaylandContractEvidence by tasks.registering {
     description = "Generates and validates evidence for every active Wayland contract."
     dependsOn(validateWaylandContractEvidence)
     outputs.dir(waylandContractEvidenceDirectory)
+}
+
+val linuxContractRegistry = rootProject.file("kadre/contracts/registry/contracts.tsv")
+val linuxContractMapping = rootProject.file("kadre/backend/linux/contracts/evidence.tsv")
+val linuxJvmJUnitReports = rootProject.file("kadre/backend/linux/build/test-results/jvmTest")
+val linuxContractEvidenceDirectory = rootProject.file("kadre/backend/linux/build/contract-evidence")
+// Le service evdev sert les sessions Wayland depuis :kadre:backend:linux :
+// adapter `linux-evdev-jvm`, cible `jvm`, preuves O2 portables (l'oracle
+// uinput O3 tourne sous conteneur privilégié, cf. LINUX-EVDEV-GAMEPAD-DESIGN).
+val linuxContractAdapter = "linux-evdev-jvm"
+val linuxContractEvidenceTasks = linuxContractIds.filter(activeContractIds::contains).map { contractId ->
+    tasks.register<JavaExec>("generateLinux${contractId.replace("-", "")}ContractEvidence") {
+        group = "verification"
+        description = "Generates and validates $contractId evidence from the Linux evdev JUnit reports."
+        dependsOn("jvmMainClasses", ":kadre:backend:linux:jvmTest")
+        classpath(jvmMain.output.allOutputs, jvmMain.runtimeDependencyFiles)
+        mainClass.set("org.graphiks.kadre.contracts.GenerateContractEvidenceKt")
+        val output = linuxContractEvidenceDirectory.resolve("$contractId.json")
+        args(
+            linuxContractRegistry.absolutePath,
+            linuxContractMapping.absolutePath,
+            linuxJvmJUnitReports.absolutePath,
+            output.absolutePath,
+            contractEvidenceCommit.get(),
+            contractId,
+            contractEvidenceTarget,
+            linuxContractAdapter,
+        )
+        inputs.file(linuxContractRegistry)
+        inputs.file(linuxContractMapping)
+        inputs.dir(linuxJvmJUnitReports)
+        inputs.property("contractCommit", contractEvidenceCommit)
+        inputs.property("contractTarget", contractEvidenceTarget)
+        inputs.property("contractAdapter", linuxContractAdapter)
+        outputs.file(output)
+    }
+}
+
+val validateLinuxContractEvidence by tasks.registering(JavaExec::class) {
+    group = "verification"
+    description = "Validates every active Linux evdev contract evidence artifact."
+    dependsOn(linuxContractEvidenceTasks)
+    classpath(jvmMain.output.allOutputs, jvmMain.runtimeDependencyFiles)
+    mainClass.set("org.graphiks.kadre.contracts.ValidateContractEvidenceKt")
+    args(
+        linuxContractRegistry.absolutePath,
+        linuxContractMapping.absolutePath,
+        contractEvidenceCommit.get(),
+        contractEvidenceTarget,
+        "junit",
+        linuxContractIds.filter(activeContractIds::contains).joinToString(separator = ","),
+        rootProject.file("kadre/backend/linux/build").absolutePath,
+        "test-results/jvmTest",
+    )
+    inputs.file(linuxContractRegistry)
+    inputs.file(linuxContractMapping)
+    inputs.dir(linuxContractEvidenceDirectory)
+    inputs.property("contractCommit", contractEvidenceCommit)
+    inputs.property("contractTarget", contractEvidenceTarget)
+    inputs.property("contractExecutions", "junit")
+    inputs.property("contractGateIds", linuxContractIds)
+    inputs.property("junitReportRelativeDirectories", listOf("test-results/jvmTest"))
+}
+
+val generateLinuxContractEvidence by tasks.registering {
+    group = "verification"
+    description = "Generates and validates evidence for every active Linux evdev contract."
+    dependsOn(validateLinuxContractEvidence)
+    outputs.dir(linuxContractEvidenceDirectory)
 }
 
 val win32ContractRegistry = rootProject.file("kadre/contracts/registry/contracts.tsv")

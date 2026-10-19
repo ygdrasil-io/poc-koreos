@@ -212,7 +212,11 @@ public class WaylandBackendProvider private constructor(
                         outputsProvider = session.bridge::outputSnapshots,
                         rescan = session.bridge::onOutputsChanged,
                     )
-                    RuntimeSessionComponents(windows = driver.manager, displayPort = displayPort)
+                    RuntimeSessionComponents(
+                        windows = driver.manager,
+                        displayPort = displayPort,
+                        gamepadPort = org.graphiks.kadre.internal.linux.EvdevGamepadService.openSessionView(),
+                    )
                 },
                 initialLifecycleState = LifecycleState(
                     AttachmentState.Attached,

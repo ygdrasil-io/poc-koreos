@@ -15,6 +15,7 @@ import org.graphiks.kffi.evdev.UdevMonitor
 import org.graphiks.kffi.evdev.evdevBitsetHasGamepadButton
 import org.graphiks.kffi.evdev.evdevClose
 import org.graphiks.kffi.evdev.evdevDecodeEvents
+import org.graphiks.kffi.evdev.evdevErrno
 import org.graphiks.kffi.evdev.evdevEncodeEvent
 import org.graphiks.kffi.evdev.evdevGetAbs
 import org.graphiks.kffi.evdev.evdevGetBits
@@ -74,6 +75,9 @@ internal interface EvdevNativeGamepad : AutoCloseable {
     val forceFeedback: Boolean
     fun axisBounds(code: Int): Pair<Int, Int>?
 
+    /** True once the kernel reports the device gone (ENODEV on read). */
+    val isDisconnected: Boolean
+
     /** Decoded events readable right now (non-blocking). */
     fun readEvents(): List<EvdevInputEvent>
 
@@ -110,8 +114,16 @@ internal class KffiEvdevNativeSource : EvdevNativeSource {
 
     override fun listDevNodes(): List<String> {
         if (closed.get()) return emptyList()
-        val nodes = context?.listDevNodePaths() ?: return emptyList()
-        return nodes
+        val nodes = LinkedHashSet<String>()
+        context?.let { udev -> runCatching { udev.listInputNodes().forEach { nodes.add(it.devNode) } } }
+        // devtmpfs truth alongside udev: the kernel's own nodes cover
+        // environments where no udev daemon indexes them (containers)
+        runCatching {
+            java.io.File("/dev/input").listFiles().orEmpty()
+                .filter { file -> file.name.startsWith("event") }
+                .forEach { file -> nodes.add(file.absolutePath) }
+        }
+        return nodes.toList()
     }
 
     override fun openGamepad(devNode: String): EvdevNativeGamepad? {
@@ -136,7 +148,8 @@ internal class KffiEvdevNativeSource : EvdevNativeSource {
             val buttonCodes = decodeSetBits(keyBits).filter { code -> EvdevCodes.mapButton(code) != null || isSynthetic(code) }
             val axisCodes = absBits?.let(::decodeSetBits)?.filter { code -> EvdevCodes.mapAxis(code) != null } ?: emptyList()
             val synthetic = decodeSetBits(keyBits).filter(::isSynthetic)
-            val ffBits = evdevGetBits(fd, EvdevEvent.FF, 8)
+            // FF "codes" are the effect types (FF_RUMBLE 0x50 .. FF_MAX 0x7d)
+            val ffBits = evdevGetBits(fd, EvdevEvent.FF, FF_BITSET_BYTES)
             val forceFeedback = ffBits != null && decodeSetBits(ffBits).contains(EvdevFf.RUMBLE)
             val bounds = HashMap<Int, Pair<Int, Int>>()
             axisCodes.forEach { axis ->
@@ -189,6 +202,7 @@ internal class KffiEvdevNativeSource : EvdevNativeSource {
     private companion object {
         const val KEY_BITSET_BYTES = 256
         const val ABS_BITSET_BYTES = 8
+        const val FF_BITSET_BYTES = 16
     }
 }
 
@@ -207,13 +221,23 @@ private class KffiEvdevNativeGamepad(
     private val bounds: Map<Int, Pair<Int, Int>>,
 ) : EvdevNativeGamepad {
 
+    private val disconnected = AtomicBoolean(false)
+
+    override val isDisconnected: Boolean get() = disconnected.get()
+
     override fun axisBounds(code: Int): Pair<Int, Int>? = bounds[code]
 
     override fun readEvents(): List<EvdevInputEvent> {
         val buffer = readBuffer ?: return emptyList()
         synchronized(buffer) {
             val bytes = runCatching { evdevRead(fd, buffer) }.getOrDefault(-1)
-            if (bytes <= 0) return emptyList()
+            if (bytes <= 0) {
+                // EAGAIN is the idle case; ENODEV, or EOF on this
+                // non-blocking node, means the kernel device is gone
+                // (unplug/uinput destroy) and the node must retire
+                if (bytes == 0L || evdevErrno() == ENODEV) disconnected.set(true)
+                return emptyList()
+            }
             return evdevDecodeEvents(buffer, bytes)
         }
     }
@@ -246,6 +270,7 @@ private class KffiEvdevNativeGamepad(
     private companion object {
         // one worker reads at a time; the buffer is reused across polls
         val readBuffer: MemorySegment? = Arena.global().allocate(INPUT_EVENT_LAYOUT.byteSize() * 16)
+        const val ENODEV = 19
     }
 }
 

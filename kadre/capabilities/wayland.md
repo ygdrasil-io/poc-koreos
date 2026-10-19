@@ -108,6 +108,25 @@ Résiduel tranche 8 : les preuves O3 AWT externes (attach réel, input,
 non-blocage UI, teardown) et `supportedIntegrations` announce — JavaFX
 exige une intégration toolkit distincte.
 
+## 3 novies. Registre — tranche 9 (gamepads evdev, service :kadre:backend:linux)
+
+Le service gamepad vit dans `:kadre:backend:linux` (evdev/udev via
+`kffi-evdev`) et sert les sessions Wayland : broker process-wide
+(identity stable D2, worker IO D3), vues par session, FF exclusif (D4).
+
+| feature | target | minimum déclaré | compile gate | runtime gate | état absent | tests |
+|---|---|---|---|---|---|---|
+| inventaire + hotplug + identité evdev | `jvm` | détection par capacités kernel (jamais les props udev), clé stable `(bustype,vendor,product,uniq)` au rebranchement | `:kadre:backend:linux:jvmTest` | `GMP-003` | nœud non-gamepad exclu ; EACCES ⇒ `PermissionDenied(InputMonitoring)` honnête | `EvdevGamepadBrokerTest` (6 preuves O2) + `EvdevGamepadLinuxTest` P-1/P-2 (O3 uinput) |
+| état + force feedback evdev | `jvm` | projection standard-map canonique (dpad/gâchettes boutons → axes), cycle FF upload→play→stop→erase avec ownership exclusif | `:kadre:backend:linux:jvmTest` | `GMP-004` | état strictement conforme au descripteur ; sans FF ⇒ `Unsupported(GamepadEffect)` | `EvdevGamepadBrokerTest` (5 preuves O2) + `EvdevGamepadLinuxTest` P-3/P-4 (O3 uinput) |
+
+Résiduel tranche 9 : les preuves O3 (oracle uinput D6) exigent un
+conteneur privilégié (`/dev/uinput`, mknod du nœud) et ne tournent pas
+sur le runner de gate ; les contrats GMP-003/GMP-004 s'appuient donc sur
+les preuves O2 portables, l'oracle uinput restant la vérité Linux locale
+(documenté dans `kadre/LINUX-EVDEV-GAMEPAD-DESIGN.md`). Le hotplug udev
+exige un démon udev vivant — le filet de sécurité est la réconciliation
+seconde des nœuds énumérés.
+
 ## 4. Limites des tranches 1 à 4
 
 - Le support `WAYLAND_SOCKET` au run est refusé avant session

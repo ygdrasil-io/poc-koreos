@@ -15,7 +15,7 @@ kotlin {
     sourceSets {
         jvmMain.dependencies {
             api(project(":kadre:runtime"))
-            implementation("org.graphiks:kffi-evdev:1.0.0-SNAPSHOT")
+            implementation(libs.kffi.evdev)
         }
         val jvmTest by getting {
             dependencies {
@@ -27,6 +27,14 @@ kotlin {
 
 // Linux-only integration task mirroring the wayland one: the evdev
 // proofs load the real input stack and need /dev/input (+ uinput).
+// The O3 proofs load the real evdev/udev stack and need /dev/input (+ uinput):
+// they run only on Linux, in the dedicated task, never inside the portable jvmTest.
+tasks.named<Test>("jvmTest") {
+    filter.excludeTestsMatching(
+        "org.graphiks.kadre.internal.linux.EvdevGamepadLinuxTest",
+    )
+}
+
 val onLinux = System.getProperty("os.name", "").contains("Linux", ignoreCase = true)
 tasks.register<Test>("linuxEvdevTests") {
     group = "verification"
