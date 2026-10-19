@@ -36,7 +36,9 @@ class WaylandBackendProviderTest {
     }
 
     @Test
-    fun embeddedAttachIsUnsupportedInTrancheOne() {
+    fun embeddedAttachOutsideTheEdtIsRejectedBeforeConnecting() {
+        // phase 8 : l'attach EDT est conçu ; ce test (thread de test ≠ EDT)
+        // épingle le refus normatif hors EDT, sans connexion ouverte
         val provider = WaylandBackendProvider.forTesting { true }
         val request = DesktopEmbeddedRequest(
             parentScope = CoroutineScope(Job()),
@@ -45,7 +47,7 @@ class WaylandBackendProviderTest {
             policy = KadrePolicies.Default,
         )
         assertEquals(
-            KadreResult.Failure(KadreFailure.Unsupported(KadreOperation.HostAttach)),
+            KadreResult.Failure(KadreFailure.InvalidRequest("options")),
             provider.attach(request),
         )
     }
