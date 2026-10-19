@@ -77,6 +77,7 @@ val validateContractRegistry by tasks.registering(JavaExec::class) {
             rootProject.file("kadre/contracts/driver/uikit/contracts/evidence.tsv"),
             rootProject.file("kadre/backend/wayland/contracts/evidence.tsv"),
             rootProject.file("kadre/backend/win32/contracts/evidence.tsv"),
+            rootProject.file("kadre/backend/linux/contracts/evidence.tsv"),
         ).joinToString(separator = ",") { it.absolutePath },
         contractEvidenceGateIds.joinToString(separator = ","),
     )
@@ -87,6 +88,7 @@ val validateContractRegistry by tasks.registering(JavaExec::class) {
         rootProject.file("kadre/contracts/driver/uikit/contracts/evidence.tsv"),
         rootProject.file("kadre/backend/wayland/contracts/evidence.tsv"),
         rootProject.file("kadre/backend/win32/contracts/evidence.tsv"),
+        rootProject.file("kadre/backend/linux/contracts/evidence.tsv"),
     )
 }
 
