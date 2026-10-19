@@ -88,7 +88,7 @@ internal class WaylandHostSession private constructor(
 }
 
 /** Pont → pompe : les opérations réelles, sans état propre. */
-private class BridgePumpOperations(
+internal class BridgePumpOperations(
     private val bridge: WaylandNativeBridge,
 ) : PumpOperations {
     override fun dispatchPending(): Boolean = bridge.dispatchPending()

@@ -97,6 +97,17 @@ Résiduel tranche 7 : l'oracle O3 d'un drop extern (P-1/P-2) exige une
 source de drag externe ; transferts interrompus/budget/teardown SN-1..3
 à couvrir avec le harnais fd.
 
+## 3 octies. Registre — tranche 8 (embedded et lifecycle du host)
+
+| feature | target | minimum déclaré | compile gate | runtime gate | état absent | tests |
+|---|---|---|---|---|---|---|
+| attach AWT embedded (`AwtEventDispatchThread`) | `jvm` | thread EDT vérifié à l'attach (pas de relocation) | `:kadre:backend:wayland:jvmTest` | `SES-003` | hors EDT ⇒ `InvalidRequest("options")` ; JavaFX ⇒ `Unsupported(HostAttach)` ; fermer la session ne tue pas le scope hôte | `WaylandEmbeddedO2Test` (4 preuves) |
+| pompe non bloquante embarquée | `jvm` | poll sur worker IO, ticks bornés sur le thread hôte | `:kadre:backend:wayland:jvmTest` | `SUR-004` | aucun poll sur le thread hôte ; pas de vol de queue toolkit ; ticks ignorés après close | `WaylandEmbeddedO2Test.pumpTickIsBoundedAndClosedPumpRejectsTicks` |
+
+Résiduel tranche 8 : les preuves O3 AWT externes (attach réel, input,
+non-blocage UI, teardown) et `supportedIntegrations` announce — JavaFX
+exige une intégration toolkit distincte.
+
 ## 4. Limites des tranches 1 à 4
 
 - Le support `WAYLAND_SOCKET` au run est refusé avant session
