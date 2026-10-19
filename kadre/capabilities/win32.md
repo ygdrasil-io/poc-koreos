@@ -1,6 +1,6 @@
 # Adapter Win32 — phases 1 à 8 livrées
 
-Hôte exercé : Windows x64, bureau interactif, JVM 25. KFFI #135/#137/#138 sont fusionnées et publiées ; le catalogue consomme `1.0.0-SNAPSHOT` (dernière publication Central Portal, raw input qualifié au snapshot `1.0.0-20261019.140415-69`) et passe la gate complète avec Maven local désactivé. Maven local reste un opt-in de développement. Les phases 1–7 restent couvertes par leurs preuves antérieures ([phase 5](../WIN32-PHASE-5-VALIDATION.md), [phase 6](../WIN32-PHASE-6-VALIDATION.md), [phase 7](../WIN32-PHASE-7-DROP-DESIGN.md)).
+Hôte exercé : Windows x64, bureau interactif, JVM 25. KFFI #135/#137/#138/#140 sont fusionnées et publiées ; le catalogue consomme `1.0.0-SNAPSHOT` (dernière publication Central Portal, displays qualifiés au snapshot `1.0.0-20261019.191601-71`) et passe la gate complète avec Maven local désactivé. Maven local reste un opt-in de développement. Les phases 1–8 restent couvertes par leurs preuves antérieures ([phase 5](../WIN32-PHASE-5-VALIDATION.md), [phase 6](../WIN32-PHASE-6-VALIDATION.md), [phase 7](../WIN32-PHASE-7-DROP-DESIGN.md), [phase 8](../WIN32-PHASE-8-RAW-INPUT-DESIGN.md)).
 
 La phase 7 installe le drop OLE ci-dessous avec le snapshot publié ([design](../WIN32-PHASE-7-DROP-DESIGN.md)) ; la [réception manuelle](../WIN32-PHASE-7-MANUAL.md) inter-applications reste ouverte avant l'annonce de phase complète.
 
