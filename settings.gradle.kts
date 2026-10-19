@@ -12,6 +12,20 @@ pluginManagement {
     }
 }
 
+// Local Win32 qualification must use the paired core even when another desktop
+// backend brings the generic remote snapshot through its multiplatform metadata.
+if (providers.gradleProperty("kadreKffiLocal").orNull == "true") {
+    val localVersion = providers.gradleProperty("kadreKffiWin32Version").get()
+    gradle.beforeProject {
+        configurations.configureEach {
+            resolutionStrategy.dependencySubstitution {
+                substitute(module("org.graphiks:kffi")).using(module("org.graphiks:kffi:$localVersion"))
+                substitute(module("org.graphiks:kffi-jvm")).using(module("org.graphiks:kffi-jvm:$localVersion"))
+            }
+        }
+    }
+}
+
 dependencyResolutionManagement {
     // PREFER_SETTINGS: the repos declared here take precedence for resolution, but we
     // tolerate that a plugin (typically Kotlin/Wasm via `BinaryenSetupTask`) adds

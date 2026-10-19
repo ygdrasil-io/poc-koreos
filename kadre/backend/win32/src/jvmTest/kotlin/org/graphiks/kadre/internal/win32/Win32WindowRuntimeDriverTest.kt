@@ -10,6 +10,7 @@ import kotlin.test.assertTrue
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.async
 import org.graphiks.kadre.diagnostics.KadreFailure
 import org.graphiks.kadre.diagnostics.KadreResult
 import org.graphiks.kadre.diagnostics.KadrePlatform
@@ -24,6 +25,43 @@ import org.graphiks.kadre.internal.runtime.RuntimeFailureReporter
 
 @OptIn(KadrePlatformApi::class, DelicateKadreApi::class)
 class Win32WindowRuntimeDriverTest {
+    @Test fun workerCommitQueuesReadyBeforeAnyNativeActivation() = runBlocking {
+        val uiThread=Thread.currentThread()
+        val queued=java.util.concurrent.ConcurrentLinkedQueue<() -> Unit>()
+        val workerTasks=java.util.concurrent.ConcurrentLinkedQueue<Runnable>()
+        val dispatcher=object : kotlinx.coroutines.CoroutineDispatcher() {
+            override fun dispatch(context: kotlin.coroutines.CoroutineContext, block: Runnable) { workerTasks += block }
+        }
+        fun runWorkerTask() {
+            val task=requireNotNull(workerTasks.poll())
+            val thread=Thread { task.run() }.apply { isDaemon=true; start() }
+            thread.join(3_000)
+            assertTrue(!thread.isAlive, "worker admission must return without waiting for native UI")
+        }
+        val showThreads=java.util.concurrent.ConcurrentLinkedQueue<Thread>()
+        val port=object : DeterministicWin32HostPort() {
+            override fun isMainThread() = Thread.currentThread() === uiThread
+            override fun postOnMainThread(block: () -> Unit, onFailure: (Throwable) -> Unit) {
+                if (isMainThread()) block()
+                else {
+                    queued += { try { block() } catch (cause: Throwable) { onFailure(cause) } }
+                }
+            }
+            override fun showWindow(hwnd: Long) { showThreads += Thread.currentThread(); super.showWindow(hwnd) }
+        }
+        val driver=driver(port)
+        try {
+            val worker=kotlinx.coroutines.CoroutineScope(dispatcher).async { driver.manager.requestWindow(WindowSpec()) }
+            runWorkerTask() // Admission returns; its handoff/finish coroutine stays queued.
+            requireNotNull(queued.poll()).invoke() // UI prepares the peer before worker commit.
+            runWorkerTask() // Finish commit under the manager lock on a worker.
+            while (true) { val command=queued.poll() ?: break; command() }
+            runWorkerTask() // Deliver the request handoff.
+            val request=assertIs<KadreResult.Success<org.graphiks.kadre.window.WindowRequest>>(withTimeout(3_000) { worker.await() }).value
+            assertIs<WindowRequestOutcome.OpenedHere>(request.await())
+            assertEquals(listOf(uiThread), showThreads.toList(), "native readiness must never run under the worker's runtime lock")
+        } finally { driver.close() }
+    }
     private fun driver(
         port: DeterministicWin32HostPort,
         maxWindows: Int = 8,

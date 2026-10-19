@@ -1,6 +1,8 @@
-# Adapter Win32 — phases 1 à 5 complètes
+# Adapter Win32 — phases 1 à 5 livrées, phase 6 en qualification
 
-Hôte exercé : Windows x64, bureau interactif, JVM 25. Les primitives KFFI #127/#128 sont fusionnées et publiées ; le snapshot distant `1.0.0-20261015.232828-61` est épinglé dans le catalogue. Maven local reste un opt-in de développement. Voir la [matrice de qualification complète](../WIN32-PHASE-5-VALIDATION.md).
+Hôte exercé : Windows x64, bureau interactif, JVM 25. KFFI #131 est fusionnée et publiée ; le snapshot distant `1.0.0-20261018.214839-64` est épinglé pour Win32 root et JVM et passe la gate complète avec Maven local désactivé. Maven local reste un opt-in de développement. Les phases1–5 restent couvertes par leurs [preuves antérieures](../WIN32-PHASE-5-VALIDATION.md).
+
+La branche phase6 installe les services ci-dessous avec les artefacts KFFI publiés. La [qualification automatisée distante](../WIN32-PHASE-6-VALIDATION.md) passe ; la [réception manuelle](../WIN32-PHASE-6-MANUAL.md) reste ouverte avant sortie du draft et annonce de phase complète.
 
 | Fonction | État livré | Gate et limite |
 | --- | --- | --- |
@@ -18,14 +20,17 @@ Hôte exercé : Windows x64, bureau interactif, JVM 25. Les primitives KFFI #127
 | Transparence, blur | Unsupported(UpdateWindow) | Absence de contrat renderer/compositeur qualifié |
 | Fullscreen exclusif | Unsupported(UpdateWindow) | Phase 9 |
 | Métriques, DPI, redraw | Disponible | W32-007/008 |
-| Clavier | Available après installation | W32-009 ; HID/layout/repeat/release, aucune session texte |
-| Pointeur et wheel | Available après installation | W32-010 ; souris promue, coordonnées signées/logiques, réglages lignes/caractères, page refusé |
+| Clavier | Available après installation | W32-009 ; HID/layout/repeat/release, données copiées avant filtre TSF |
+| Pointeur et wheel | Available après installation | W32-010 ; souris promue filtrée lorsque les contacts sont traités, coordonnées logiques, réglages lignes/caractères, page refusé |
 | Focus et inputDefaultBehavior | Disponible | W32-011 ; reset commun, HostDefault/SuppressWhenPossible |
 | handlerInteractions | OpenWindow, BeginWindowMove, BeginWindowResize | W32-011/016 ; même callback vivant, Primary, autorité révoquée sur focus/cancel/release ; resize windowed/resizable |
 | armedInteractions | Unsupported(ArmInteraction) | Aucune activation armée |
 | Curseurs | 13 mappings système exacts, Hidden, RGBA8 personnalisé ≤128×128 | W32-015 ; hotspot, WM_SETCURSOR/HTCLIENT, handles partagés préservés |
 | pointerCapture | None, Confined | W32-015 ; bail ClipCursor au premier plan, retrait observable, aucune reprise implicite ; Locked réservé à la phase 8 |
 | hitTesting | Enabled | Disabled Unsupported(UpdateSurface), aucun faux pass-through entre processus |
-| Touch, gestures, IME/texte, drop, raw input | Non installés / refus explicite | Phases suivantes |
+| Texte/TSF | Installé sur STA, échec d'initialisation typé sans couper souris/clavier | W32-017/018 ; révisions et budget commun ; IME installé et DPI mixtes restent à recevoir |
+| Touch, pen, eraser | Route WM_POINTER installée, identités indépendantes | W32-019 ; injection touch et paquets pen automatisés ; réception physique non exécutée |
+| Gestes | Pan, Pinch, Rotation, DoubleTap après configuration native relue | W32-020 ; Interaction Context, deltas logiques, pas d'inertia/TouchpadPressure/PTP2 |
+| Drop, raw input | Non installés / refus explicite | Phases suivantes |
 
 Les tests qualifient les appels natifs, les vrais menus et les boucles système de déplacement/redimensionnement. Les messages postés ne prouvent pas l’état matériel d’un bouton. Souris physique, claviers/layouts physiques, DPI mixtes et hotplug restent des qualifications manuelles non exécutées ; les limites précises sont consignées dans la validation.

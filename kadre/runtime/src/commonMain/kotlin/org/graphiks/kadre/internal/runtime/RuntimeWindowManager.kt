@@ -120,7 +120,8 @@ public class RuntimeWindowManager public constructor(
     }
 
     private val lock = RuntimeLock()
-    private val imageBudget = RuntimeImageBudget(resources)
+    private var payloadBudget: RuntimePayloadBudget = RuntimeRetainedPayloadBudget(resources.maxRetainedPayloadBytesPerSession)
+    private val imageBudget = RuntimeImageBudget(resources, payloadBudget)
     private val pendingCloseWork = RuntimeCallFrame { ArrayDeque<() -> Unit>() }
     private val drainingCloseWork = RuntimeCallFrame { false }
     private val pending = linkedMapOf<WindowRequestId, PendingWindow>()
@@ -270,6 +271,14 @@ public class RuntimeWindowManager public constructor(
         pending[requestId]?.request ?: committed[requestId]?.request
     }
 
+    override fun installPayloadBudget(budget: RuntimePayloadBudget): Unit = lock.withLock {
+        check(sessionEventStampSource == null && pending.isEmpty() && committed.isEmpty()) {
+            "payload budget must be installed before window admission"
+        }
+        imageBudget.installPayloadBudget(budget)
+        payloadBudget = budget
+    }
+
     override fun installSessionConfiguration(
         deliveryPolicy: WindowDeliveryPolicy,
         inputDeliveryPolicy: InputDeliveryPolicy,
@@ -402,6 +411,14 @@ public class RuntimeWindowManager public constructor(
     public fun acceptSurfaceStimulus(stimulus: SurfaceStimulus): Boolean {
         val surface = lock.withLock { surfaces[stimulus.surfaceId] } ?: return false
         return surface.accept(stimulus)
+    }
+
+    /** Unstable native ingress SPI: shares the session reservation and configured queue limit. */
+    public fun nativeInputPayloadBudget(): RuntimePayloadBudget = lock.withLock { payloadBudget }
+    public fun nativeInputIngressCapacity(): Int = lock.withLock { surfaceInputDeliveryPolicy.discreteEvents.ingressCapacity }
+    public fun nativeInputFailure(surfaceId: SurfaceId, failure: KadreFailure) {
+        val surface = lock.withLock { surfaces[surfaceId] } ?: return
+        surface.nativeInputFailure(failure)
     }
 
     /** A native modal action consumed the triggering press; discard its deferred ordinary input. */
@@ -1516,6 +1533,7 @@ public class RuntimeWindowManager public constructor(
             inputDeliveryPolicy = surfaceInputDeliveryPolicy,
             resources = resources,
             imageBudget = imageBudget,
+            payloadBudget = payloadBudget,
             dropTransferBudget = dropTransferBudget,
             dropTransferScope = dropTransferScope,
             maxCollectorsPerFlow = sessionMaxCollectorsPerFlow,

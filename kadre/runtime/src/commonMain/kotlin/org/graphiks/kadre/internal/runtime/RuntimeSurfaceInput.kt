@@ -1,5 +1,8 @@
 package org.graphiks.kadre.internal.runtime
 
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -14,6 +17,7 @@ import org.graphiks.kadre.diagnostics.FeatureAvailability
 import org.graphiks.kadre.diagnostics.KadreException
 import org.graphiks.kadre.diagnostics.KadreFailure
 import org.graphiks.kadre.diagnostics.KadreOperation
+import org.graphiks.kadre.diagnostics.KadrePlatform
 import org.graphiks.kadre.diagnostics.KadreResourceKind
 import org.graphiks.kadre.diagnostics.KadreResult
 import org.graphiks.kadre.input.DropOfferId
@@ -68,8 +72,13 @@ internal class RuntimeSurfaceInput(
     private val textInputEventCollectorGate: RuntimeEventCollectorGate,
     private val failureReporter: (Throwable) -> Unit,
     private val sessionFailureHandler: (KadreFailure) -> Unit,
+    private val payloadBudget: RuntimePayloadBudget = RuntimeRetainedPayloadBudget(resources.maxRetainedPayloadBytesPerSession),
+    private val platform: KadrePlatform = KadrePlatform.Fake,
+    initialTextFocus: org.graphiks.kadre.surface.SurfaceFocus? = null,
 ) : SurfaceInput {
     private val lock = RuntimeLock()
+    private val textFocusTracked = initialTextFocus != null
+    private var textInputSuspended = initialTextFocus == org.graphiks.kadre.surface.SurfaceFocus.Unfocused
     private var currentState = unsupportedInputState(
         textInput = textInputPort.capability,
         dragAndDrop = if (dragAndDropAvailable) FeatureAvailability.Available else FeatureAvailability.Unsupported,
@@ -77,8 +86,13 @@ internal class RuntimeSurfaceInput(
     )
     private var nextPointerIdentity = 0L
     private var nextTouchIdentity = 0L
+    private val pointerIdsByNativeIdentity = IdentityKeyedMap<PointerId>()
+    private val retiringPointerIds = mutableSetOf<PointerId>()
+    private var pointerIdentityCount = 0
     private val touchIdsByNativeIdentity = IdentityKeyedMap<TouchId>()
-    private val retiringTouchIdsByNativeIdentity = IdentityKeyedMap<TouchId>()
+    private val reservedTouchIds = mutableSetOf<TouchId>()
+    private val retiringTouchIds = mutableSetOf<TouchId>()
+    private var touchIdentityCount = 0
     private var nextDropOfferIdentity = 0L
     private var mousePointerId: PointerId? = null
     private var activeDrop: RuntimeDropOffer? = null
@@ -95,10 +109,13 @@ internal class RuntimeSurfaceInput(
     private var terminalNotificationPending = false
     private var textInputSession: RuntimeTextInputSession? = null
     private var textInputOpening = false
+    private var openingTextTarget: TextInputObservationTarget? = null
+    private var activeTextTarget: TextInputObservationTarget? = null
     private val mutableState = MutableStateFlow(currentState)
     private val subscribers = linkedMapOf<InputEventSubscriber, RuntimeEventCollectorLease>()
 
     override val state: StateFlow<SurfaceInputState> = mutableState.asStateFlow()
+    internal val isClosed: Boolean get() = lock.withLock { terminal != null }
     override val events: Flow<InputEvent> = flow {
         val subscriber = InputEventSubscriber(deliveryPolicy)
         when (val registration = registerSubscriber(subscriber)) {
@@ -117,16 +134,18 @@ internal class RuntimeSurfaceInput(
     }
 
     override suspend fun openTextInput(config: TextInputConfig): KadreResult<TextInputSession> {
+        currentCoroutineContext().ensureActive()
+        val observationTarget = TextInputObservationTarget()
         val admitted = lock.withLock {
             when {
                 terminal != null -> TextInputOpenAdmission.Closed
                 textInputSession != null || textInputOpening -> TextInputOpenAdmission.AlreadyInUse
-                currentState.capabilities.textInput is Capability.Unsupported -> TextInputOpenAdmission.Unsupported(
-                    (currentState.capabilities.textInput as Capability.Unsupported).failure,
-                )
+                textAdmissionFailure(currentState.capabilities.textInput) != null -> TextInputOpenAdmission.Unsupported(
+                    checkNotNull(textAdmissionFailure(currentState.capabilities.textInput)))
 
                 else -> {
                     textInputOpening = true
+                    openingTextTarget = observationTarget
                     TextInputOpenAdmission.Admitted
                 }
             }
@@ -145,24 +164,64 @@ internal class RuntimeSurfaceInput(
         // reach the session this call opens, so an observation that a port delivers after that
         // session closed is rejected by the session's own guard rather than routed into a later
         // session that may now own the surface.
-        val observationTarget = TextInputObservationTarget()
+        if (config.surroundingText.length > resources.maxTextCodeUnitsPerValue) {
+            clearTextInputOpening(observationTarget)
+            return KadreResult.Failure(KadreFailure.ResourceLimitExceeded(KadreResourceKind.RetainedPayload,
+                resources.maxTextCodeUnitsPerValue.toLong()))
+        }
+        val initialLease = when (val reserved = payloadBudget.retain(config.surroundingText.length * 2L)) {
+            is KadreResult.Failure -> { clearTextInputOpening(observationTarget); return reserved }
+            is KadreResult.Success -> reserved.value
+        }
+        val opened = try {
+            textInputPort.open(TextInputOpenCommand(
+                surfaceId = surfaceId,
+                config = config,
+                onObservation = { observation ->
+                    lock.withLock { observationTarget.session.takeUnless { observationTarget.closed } }?.acceptObservation(observation) ?: false
+                },
+                payloadBudget = payloadBudget,
+                onTerminated = { reason -> terminateTextTarget(observationTarget, reason) },
+                resources = resources,
+                deliveryPolicy = deliveryPolicy.discreteEvents,
+            ))
+        } catch (cancelled: CancellationException) {
+            clearTextInputOpening(observationTarget)
+            initialLease.close()
+            throw cancelled
+        } catch (_: Throwable) {
+            val reason = textPlatformFailure("open-failed")
+            terminateTextTarget(observationTarget, reason)
+            initialLease.close(); clearTextInputOpening(observationTarget)
+            return KadreResult.Failure(reason)
+        }
         val owner = when (
-            val opened = textInputPort.open(
-                TextInputOpenCommand(
-                    surfaceId = surfaceId,
-                    config = config,
-                    onObservation = { observation ->
-                        lock.withLock { observationTarget.session }?.acceptObservation(observation) ?: false
-                    },
-                ),
-            )
+            opened
         ) {
             is KadreResult.Failure -> {
-                lock.withLock { textInputOpening = false }
+                initialLease.close(); clearTextInputOpening(observationTarget)
                 return opened
             }
 
             is KadreResult.Success -> opened.value
+        }
+        try { currentCoroutineContext().ensureActive() }
+        catch (cancelled: CancellationException) {
+            clearTextInputOpening(observationTarget)
+            initialLease.close()
+            closeTextOwner(owner)
+            throw cancelled
+        }
+        val earlyFailure = lock.withLock {
+            observationTarget.failure ?: when {
+                terminal != null || observationTarget.closed -> KadreFailure.Closed(KadreResourceKind.InputSource)
+                else -> textAdmissionFailure(currentState.capabilities.textInput)
+            }
+        }
+        if (earlyFailure != null) {
+            clearTextInputOpening(observationTarget)
+            initialLease.close(); closeTextOwner(owner)
+            return KadreResult.Failure(earlyFailure)
         }
         val session = RuntimeTextInputSession(
             owner = owner,
@@ -172,24 +231,86 @@ internal class RuntimeSurfaceInput(
             eventCollectorGate = textInputEventCollectorGate,
             failureReporter = failureReporter,
             onClosed = { closed -> clearTextInputSession(closed, observationTarget) },
+            resources = resources,
+            payloadBudget = payloadBudget,
+            initialPayloadLease = initialLease,
+            deliveryPolicy = deliveryPolicy.discreteEvents,
+            onTerminated = { reason -> terminateTextTarget(observationTarget, reason) },
+            sessionFailureHandler = sessionFailureHandler,
         )
-        lock.withLock { observationTarget.session = session }
         val result = lock.withLock {
             textInputOpening = false
+            if (openingTextTarget === observationTarget) openingTextTarget = null
             when {
+                observationTarget.failure != null -> KadreResult.Failure(checkNotNull(observationTarget.failure))
                 terminal != null -> KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.InputSource))
+                observationTarget.closed -> KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.TextInputSession))
                 textInputSession != null -> KadreResult.Failure(
                     KadreFailure.AlreadyInUse(KadreResourceKind.TextInputSession),
                 )
 
                 else -> {
+                    observationTarget.session = session
+                    activeTextTarget = observationTarget
                     textInputSession = session
+                    if (textInputSuspended) session.suspend()
                     KadreResult.Success(session)
                 }
             }
         }
-        if (result is KadreResult.Failure) session.close()
-        return result
+        if (result is KadreResult.Failure) { session.close(); return result }
+        try {
+            currentCoroutineContext().ensureActive()
+            owner.activate()
+            currentCoroutineContext().ensureActive()
+        }
+        catch (cancelled: CancellationException) { session.close(); throw cancelled }
+        catch (_: Throwable) { terminateTextTarget(observationTarget, textPlatformFailure("activation-failed")) }
+        val failure = lock.withLock {
+            observationTarget.failure ?: when {
+                terminal != null -> KadreFailure.Closed(KadreResourceKind.InputSource)
+                observationTarget.closed || session.isClosed -> KadreFailure.Closed(KadreResourceKind.TextInputSession)
+                else -> null
+            }
+        }
+        return if (failure == null) result else { session.close(); KadreResult.Failure(failure) }
+    }
+
+    private fun clearTextInputOpening(target: TextInputObservationTarget) = lock.withLock {
+        target.closed = true
+        if (openingTextTarget === target) { openingTextTarget = null; textInputOpening = false }
+    }
+
+    private fun terminateTextTarget(target: TextInputObservationTarget, reason: KadreFailure) {
+        val session = lock.withLock {
+            if (target.closed || target.failure != null) return
+            val ownsSession = target.session?.let { textInputSession === it } == true
+            if (openingTextTarget !== target && !ownsSession) return
+            target.failure = reason
+            val capability: Capability<Unit> = if (reason is KadreFailure.Unsupported) Capability.Unsupported(reason)
+            else Capability.Supported(Unit, try { FeatureAvailability.Unavailable(reason) }
+                catch (_: IllegalArgumentException) { FeatureAvailability.Unavailable(textPlatformFailure("terminated")) })
+            if (terminal == null && textAdmissionFailure(currentState.capabilities.textInput) == null) setStateLocked(currentState.copy(
+                capabilities = currentState.capabilities.copy(textInput = capability), revision = currentState.revision.next()))
+            target.session
+        }
+        session?.terminate(reason)
+        failureReporter(KadreException(reason))
+    }
+
+    private fun closeTextOwner(owner: TextInputOwner) {
+        try { owner.close() } catch (_: Throwable) { failureReporter(KadreException(textPlatformFailure("close-failed"))) }
+    }
+    private fun textPlatformFailure(code: String) = KadreFailure.PlatformFailure(platform, "text-input", code)
+    private fun textAdmissionFailure(capability: Capability<Unit>): KadreFailure? = when (capability) {
+        is Capability.Unsupported -> capability.failure
+        is Capability.Supported -> when (val availability = capability.availability) {
+            FeatureAvailability.Available -> null
+            is FeatureAvailability.Unavailable -> availability.failure
+            is FeatureAvailability.RequiresPermission -> KadreFailure.PermissionDenied(availability.permission)
+            is FeatureAvailability.RequiresInteraction -> KadreFailure.InteractionRequired(org.graphiks.kadre.diagnostics.InteractionFailureReason.Missing)
+            FeatureAvailability.Unsupported -> KadreFailure.Unsupported(KadreOperation.TextInput)
+        }
     }
 
     @OptIn(DelicateKadreApi::class)
@@ -319,15 +440,27 @@ internal class RuntimeSurfaceInput(
 
     fun accept(stimulus: SurfaceStimulus): Boolean {
         var admission: InputPublicationAdmission? = null
+        var withdrawnText: Pair<TextInputObservationTarget, KadreFailure>? = null
         val accepted = lock.withLock {
             if (terminal != null) return@withLock false
             if (stimulus is SurfaceStimulus.InputObservationChanged) {
-                return@withLock updateObservationCapabilitiesLocked(stimulus)
+                val changed = updateObservationCapabilitiesLocked(stimulus)
+                if (stimulus.textInput != null) {
+                    textAdmissionFailure(stimulus.textInput)?.let { reason ->
+                        val target = activeTextTarget ?: openingTextTarget
+                        if (target != null) withdrawnText = target to reason
+                    }
+                }
+                return@withLock changed
             }
-            val publication = reduceLocked(stimulus) ?: return@withLock false
+            val publication = try { reduceLocked(stimulus) } catch (_: InputIdentityOverflow) {
+                admission = identityOverflowLocked()
+                return@withLock false
+            } ?: return@withLock false
             admission = enqueuePublicationLocked(publication)
             true
         }
+        withdrawnText?.let { (target, reason) -> terminateTextTarget(target, reason) }
         admission?.let(::finishPublicationAdmission)
         return accepted
     }
@@ -336,16 +469,19 @@ internal class RuntimeSurfaceInput(
         event: InteractionEvent,
         pointerPressure: Double? = null,
         keyInput: RuntimeSynchronousInteraction.KeyPressed? = null,
+        nativeInput: RuntimeSynchronousInteraction? = null,
     ): Boolean = when (event) {
         is InteractionEvent.PointerPressed -> accept(
             SurfaceStimulus.PointerButtonChanged(
                 surfaceId = surfaceId,
-                kind = PointerKind.Mouse,
+                kind = (nativeInput as? RuntimeSynchronousInteraction.PointerPressed)?.kind ?: PointerKind.Mouse,
                 button = event.button,
                 buttonState = PointerButtonState.Pressed,
                 position = event.position,
                 pressure = pointerPressure,
-                pen = null,
+                pen = (nativeInput as? RuntimeSynchronousInteraction.PointerPressed)?.pen,
+                nativeIdentity = (nativeInput as? RuntimeSynchronousInteraction.PointerPressed)?.nativeIdentity,
+                deviceId = (nativeInput as? RuntimeSynchronousInteraction.PointerPressed)?.deviceId,
             ),
             event.stamp,
         )
@@ -363,11 +499,37 @@ internal class RuntimeSurfaceInput(
             event.stamp,
         )
 
-        is InteractionEvent.TouchStarted -> acceptInteractionTouch(event)
+        is InteractionEvent.TouchStarted -> if (nativeInput is RuntimeSynchronousInteraction.TouchContactStarted) accept(
+            SurfaceStimulus.TouchChanged(surfaceId, nativeInput.nativeIdentity, TouchPhase.Started,
+                nativeInput.position, nativeInput.pressure, nativeInput.deviceId), event.stamp,
+        ) else acceptInteractionTouch(event)
 
         // A drop entry is published when its runtime-owned offer is created, before this
         // interaction callback is dispatched. It must not be reinjected as ordinary input.
         is InteractionEvent.DropEntered -> false
+    }
+
+    /** Reserves an identity without publishing a contact before its synchronous handler. */
+    internal fun reserveTouch(nativeIdentity: Any): TouchId? {
+        var admission: InputPublicationAdmission? = null
+        val id = lock.withLock {
+            if (terminal != null || touchIdsByNativeIdentity[nativeIdentity] != null) return@withLock null
+            try {
+                newTouchIdLocked().also {
+                    touchIdsByNativeIdentity[nativeIdentity] = it
+                    reservedTouchIds += it
+                }
+            } catch (_: InputIdentityOverflow) { admission = identityOverflowLocked(); null }
+        }
+        admission?.let(::finishPublicationAdmission)
+        return id
+    }
+
+    internal fun abandonTouch(nativeIdentity: Any, id: TouchId) = lock.withLock {
+        if (touchIdsByNativeIdentity[nativeIdentity] == id && reservedTouchIds.remove(id)) {
+            touchIdsByNativeIdentity.remove(nativeIdentity)
+            touchIdentityCount--
+        }
     }
 
     private fun acceptInteractionTouch(event: InteractionEvent.TouchStarted): Boolean {
@@ -399,7 +561,10 @@ internal class RuntimeSurfaceInput(
         var admission: InputPublicationAdmission? = null
         val accepted = lock.withLock {
             if (terminal != null) return@withLock false
-            val publication = reduceLocked(stimulus, stamp) ?: return@withLock false
+            val publication = try { reduceLocked(stimulus, stamp) } catch (_: InputIdentityOverflow) {
+                admission = identityOverflowLocked()
+                return@withLock false
+            } ?: return@withLock false
             admission = enqueuePublicationLocked(publication)
             true
         }
@@ -418,8 +583,7 @@ internal class RuntimeSurfaceInput(
                 modifiers = KeyboardModifiers(emptySet()),
                 revision = currentState.revision.next(),
             )
-            touchIdsByNativeIdentity.clear()
-            retiringTouchIdsByNativeIdentity.clear()
+            clearIdentityTablesLocked()
             setStateLocked(neutral)
             admission = enqueuePublicationLocked(
                 InputPublication(
@@ -438,13 +602,17 @@ internal class RuntimeSurfaceInput(
     }
 
     fun suspendTextInput() {
-        val session = lock.withLock { textInputSession }
-        session?.suspend()
+        lock.withLock {
+            if (textFocusTracked) textInputSuspended = true
+            textInputSession?.suspend()
+        }
     }
 
     fun resumeTextInput() {
-        val session = lock.withLock { textInputSession }
-        session?.resume()
+        lock.withLock {
+            if (textFocusTracked) textInputSuspended = false
+            textInputSession?.resume()
+        }
     }
 
     fun close(failure: KadreFailure?) {
@@ -454,6 +622,7 @@ internal class RuntimeSurfaceInput(
         val admission = lock.withLock {
             if (terminal != null) return
             terminal = failure?.let(FlowTerminal::Failed) ?: FlowTerminal.Closed
+            openingTextTarget?.closed = true
             terminalNotificationPending = true
             activeTextInput = textInputSession
             textInputSession = null
@@ -461,8 +630,7 @@ internal class RuntimeSurfaceInput(
             activeDrop = null
             transfersToClose = activeDropTransfers.toList()
             activeDropTransfers.clear()
-            touchIdsByNativeIdentity.clear()
-            retiringTouchIdsByNativeIdentity.clear()
+            clearIdentityTablesLocked()
             InputPublicationAdmission(ensurePublicationDrainLocked())
         }
         activeTextInput?.close()
@@ -477,6 +645,8 @@ internal class RuntimeSurfaceInput(
         observationTarget: TextInputObservationTarget,
     ) {
         lock.withLock {
+            observationTarget.closed = true
+            if (activeTextTarget === observationTarget) activeTextTarget = null
             if (observationTarget.session === session) observationTarget.session = null
             if (textInputSession === session) textInputSession = null
         }
@@ -486,7 +656,7 @@ internal class RuntimeSurfaceInput(
         data object Admitted : TextInputOpenAdmission
         data object AlreadyInUse : TextInputOpenAdmission
         data object Closed : TextInputOpenAdmission
-        data class Unsupported(val failure: KadreFailure.Unsupported) : TextInputOpenAdmission
+        data class Unsupported(val failure: KadreFailure) : TextInputOpenAdmission
     }
 
     private fun reduceLocked(
@@ -524,6 +694,7 @@ internal class RuntimeSurfaceInput(
                 position = stimulus.position,
                 pressure = null,
                 pen = null,
+                nativeIdentity = stimulus.nativeIdentity,
             )
             updateStateLocked(pointers = replacePointer(currentState.pointers, pointer))
             InputPublication(
@@ -544,6 +715,7 @@ internal class RuntimeSurfaceInput(
                 position = stimulus.position,
                 pressure = stimulus.pressure,
                 pen = stimulus.pen,
+                nativeIdentity = stimulus.nativeIdentity,
             )
             updateStateLocked(pointers = replacePointer(currentState.pointers, pointer))
             InputPublication(
@@ -562,7 +734,7 @@ internal class RuntimeSurfaceInput(
         }
 
         is SurfaceStimulus.PointerButtonChanged -> {
-            val id = mousePointerIdLocked()
+            val id = pointerIdLocked(stimulus.nativeIdentity)
             val existing = currentState.pointers.firstOrNull { it.id == id }
             val buttons = (existing?.pressedButtons ?: emptySet()).toMutableSet()
             when (stimulus.buttonState) {
@@ -595,8 +767,13 @@ internal class RuntimeSurfaceInput(
         }
 
         is SurfaceStimulus.PointerLeft -> {
-            val id = mousePointerId ?: return null
+            val id = (if (stimulus.nativeIdentity == null) mousePointerId else pointerIdsByNativeIdentity[stimulus.nativeIdentity])
+                ?: return null
             val existing = currentState.pointers.firstOrNull { it.id == id } ?: return null
+            if (stimulus.nativeIdentity != null) {
+                pointerIdsByNativeIdentity.remove(stimulus.nativeIdentity)
+                retiringPointerIds += id
+            }
             InputPublication(
                 InputEvent.PointerLeft(
                     id,
@@ -700,34 +877,34 @@ internal class RuntimeSurfaceInput(
         stimulus: SurfaceStimulus.TouchChanged,
         stamp: EventStamp,
     ): InputPublication? {
-        if (retiringTouchIdsByNativeIdentity[stimulus.nativeIdentity] != null) return null
         val existingId = touchIdsByNativeIdentity[stimulus.nativeIdentity]
+        val newlyAllocated = stimulus.phase == TouchPhase.Started && existingId == null
         val touchId = when (stimulus.phase) {
             TouchPhase.Started -> {
-                if (existingId != null) return null
-                check(nextTouchIdentity < Long.MAX_VALUE) { "touch identity space exhausted" }
-                TouchId(nextTouchIdentity)
+                if (existingId != null && existingId !in reservedTouchIds) return null
+                existingId ?: newTouchIdLocked()
             }
 
             TouchPhase.Moved,
             TouchPhase.Ended,
             TouchPhase.Cancelled,
-            -> existingId ?: return null
+            -> existingId?.takeUnless { it in reservedTouchIds } ?: return null
         }
         val touch = try {
             TouchState(touchId, stimulus.position, stimulus.pressure)
         } catch (_: IllegalArgumentException) {
+            if (newlyAllocated) touchIdentityCount--
             return null
         }
         if (stimulus.phase == TouchPhase.Started) {
-            nextTouchIdentity += 1L
             touchIdsByNativeIdentity[stimulus.nativeIdentity] = touchId
+            reservedTouchIds.remove(touchId)
         }
         updateStateLocked(touches = replaceTouch(currentState.touches, touch))
         val terminal = stimulus.phase == TouchPhase.Ended || stimulus.phase == TouchPhase.Cancelled
         if (terminal) {
             touchIdsByNativeIdentity.remove(stimulus.nativeIdentity)
-            retiringTouchIdsByNativeIdentity[stimulus.nativeIdentity] = touchId
+            retiringTouchIds += touchId
         }
         return InputPublication(
             event = InputEvent.TouchChanged(
@@ -751,6 +928,7 @@ internal class RuntimeSurfaceInput(
         stimulus: SurfaceStimulus.InputObservationChanged,
     ): Boolean {
         val capabilities = currentState.capabilities.copy(
+            textInput = stimulus.textInput ?: currentState.capabilities.textInput,
             keyboard = if (stimulus.keyboardInstalled) {
                 FeatureAvailability.Available
             } else {
@@ -761,12 +939,12 @@ internal class RuntimeSurfaceInput(
             } else {
                 FeatureAvailability.Unsupported
             },
-            touch = if (stimulus.touchInstalled) {
+            touch = stimulus.touch ?: if (stimulus.touchInstalled) {
                 FeatureAvailability.Available
             } else {
                 FeatureAvailability.Unsupported
             },
-            gestures = if (stimulus.gestureKinds.isEmpty()) {
+            gestures = stimulus.gestures ?: if (stimulus.gestureKinds.isEmpty()) {
                 unsupported(KadreOperation.GestureInput)
             } else {
                 Capability.Supported(stimulus.gestureKinds.toSet(), FeatureAvailability.Available)
@@ -787,8 +965,9 @@ internal class RuntimeSurfaceInput(
         position: org.graphiks.kadre.surface.LogicalPoint,
         pressure: Double?,
         pen: org.graphiks.kadre.input.PenState?,
+        nativeIdentity: Any?,
     ): PointerState {
-        val id = mousePointerIdLocked()
+        val id = pointerIdLocked(nativeIdentity)
         val existing = currentState.pointers.firstOrNull { it.id == id }
         return PointerState(
             id = id,
@@ -800,9 +979,32 @@ internal class RuntimeSurfaceInput(
         )
     }
 
-    private fun mousePointerIdLocked(): PointerId = mousePointerId ?: run {
+    private fun pointerIdLocked(nativeIdentity: Any?): PointerId {
+        val existing = if (nativeIdentity == null) mousePointerId else pointerIdsByNativeIdentity[nativeIdentity]
+        if (existing != null) return existing
+        if (pointerIdentityCount >= resources.maxCollectionElementsPerValue) throw InputIdentityOverflow()
         check(nextPointerIdentity < Long.MAX_VALUE) { "pointer identity space exhausted" }
-        PointerId(nextPointerIdentity++).also { mousePointerId = it }
+        val id = PointerId(nextPointerIdentity++)
+        pointerIdentityCount++
+        if (nativeIdentity == null) mousePointerId = id else pointerIdsByNativeIdentity[nativeIdentity] = id
+        return id
+    }
+
+    private fun newTouchIdLocked(): TouchId {
+        if (touchIdentityCount >= resources.maxCollectionElementsPerValue) throw InputIdentityOverflow()
+        check(nextTouchIdentity < Long.MAX_VALUE) { "touch identity space exhausted" }
+        touchIdentityCount++
+        return TouchId(nextTouchIdentity++)
+    }
+
+    private fun identityOverflowLocked(): InputPublicationAdmission = terminaliseLocked(
+        KadreFailure.SourceOverflow(KadreResourceKind.InputSource),
+        deliveryPolicy.discreteEvents.ingressOverflow == IngressOverflowAction.FailSession,
+    )
+
+    private fun clearIdentityTablesLocked() {
+        pointerIdsByNativeIdentity.clear(); retiringPointerIds.clear(); pointerIdentityCount = 0; mousePointerId = null
+        touchIdsByNativeIdentity.clear(); reservedTouchIds.clear(); retiringTouchIds.clear(); touchIdentityCount = 0
     }
 
     private fun updateStateLocked(
@@ -882,8 +1084,7 @@ internal class RuntimeSurfaceInput(
             capabilities = unavailableInputCapabilities(currentState.capabilities, failure),
             revision = currentState.revision.next(),
         )
-        touchIdsByNativeIdentity.clear()
-        retiringTouchIdsByNativeIdentity.clear()
+        clearIdentityTablesLocked()
         setStateLocked(neutral)
         terminal = FlowTerminal.Failed(failure)
         terminalNotificationPending = true
@@ -953,6 +1154,7 @@ internal class RuntimeSurfaceInput(
         lock.withLock {
             when (effect) {
                 is InputStateAfterDelivery.RemovePointer -> {
+                    if (retiringPointerIds.remove(effect.id)) pointerIdentityCount--
                     val currentPointer = currentState.pointers.firstOrNull { it.id == effect.id }
                     if (currentPointer == effect.expected) {
                         updateStateLocked(pointers = currentState.pointers.filterNot { it.id == effect.id })
@@ -960,10 +1162,9 @@ internal class RuntimeSurfaceInput(
                 }
 
                 is InputStateAfterDelivery.RemoveTouch -> {
-                    val currentId = retiringTouchIdsByNativeIdentity[effect.nativeIdentity]
                     val currentTouch = currentState.touches.firstOrNull { it.id == effect.id }
-                    if (currentId == effect.id) {
-                        retiringTouchIdsByNativeIdentity.remove(effect.nativeIdentity)
+                    if (retiringTouchIds.remove(effect.id)) {
+                        touchIdentityCount--
                         if (currentTouch == effect.expected) {
                             updateStateLocked(touches = currentState.touches.filterNot { it.id == effect.id })
                         }
@@ -971,6 +1172,17 @@ internal class RuntimeSurfaceInput(
                 }
             }
         }
+    }
+
+    internal fun interactionOverflow() = closeFromDeliveryOverflow(
+        deliveryPolicy.discreteEvents.ingressOverflow == IngressOverflowAction.FailSession,
+    )
+
+    internal fun nativeIngressFailure(failure: KadreFailure) {
+        val admission = lock.withLock {
+            terminaliseLocked(failure, deliveryPolicy.discreteEvents.ingressOverflow == IngressOverflowAction.FailSession)
+        }
+        finishPublicationAdmission(admission)
     }
 
     private fun closeFromDeliveryOverflow(failSession: Boolean) {
@@ -1060,6 +1272,8 @@ internal class RuntimeSurfaceInput(
  */
 private class TextInputObservationTarget {
     var session: RuntimeTextInputSession? = null
+    var failure: KadreFailure? = null
+    var closed: Boolean = false
 }
 
 private data class InputPublication(
@@ -1067,6 +1281,8 @@ private data class InputPublication(
     val scrollBoundary: Long? = null,
     val afterDelivery: InputStateAfterDelivery? = null,
 )
+
+private class InputIdentityOverflow : RuntimeException()
 
 private sealed interface InputStateAfterDelivery {
     data class RemovePointer(

@@ -12,6 +12,30 @@ import kotlin.test.assertTrue
 
 class ContractRegistryTest {
     @Test
+    fun completeWin32RichInputHasNativeScenariosAndPortableSentinels() {
+        val ids = (17..20).map { "W32-%03d".format(it) }.toSet()
+        val records = ContractRegistry.parse(repositoryFile("kadre/contracts/registry/contracts.tsv").readText()).filter { it.contractId in ids }
+        assertEquals(ids, records.map { it.contractId }.toSet())
+        assertTrue(records.all { it.status == ContractStatus.Active && it.oracle == ContractOracle.O3 && it.sentinels.isNotEmpty() })
+        val fixture = createTempDirectory("win32-rich-input-gates-")
+        val registry = fixture.resolve("contracts.tsv").also { target ->
+            target.writeText(repositoryFile("kadre/contracts/registry/contracts.tsv").readText().lineSequence()
+                .filterIndexed { index, line -> index == 0 || line.substringBefore('\t') in ids }.joinToString("\n"))
+        }
+        val mapping = fixture.resolve("evidence.tsv").also { target ->
+            target.writeText(repositoryFile("kadre/backend/win32/contracts/evidence.tsv").readText().lineSequence()
+                .filterIndexed { index, line -> index == 0 || line.substringBefore('\t') in ids }.joinToString("\n"))
+        }
+        assertEquals(emptyList(), validateContractRegistry(registry, listOf(mapping), ids))
+        val complete = mapping.readText()
+        for (record in records) {
+            val sentinel = record.sentinels.first()
+            mapping.writeText(complete.lineSequence().filterNot { it.split('\t').getOrNull(3) == sentinel }.joinToString("\n"))
+            assertTrue(validateContractRegistry(registry, listOf(mapping), ids).any { "missing sentinel: $sentinel" in it })
+        }
+    }
+
+    @Test
     fun realRegistryActivatesTheExactPhaseElevenSurfaceCaptureContracts() {
         val recordsById = ContractRegistry.parse(repositoryFile("kadre/contracts/registry/contracts.tsv").readText())
             .associateBy(ContractRecord::contractId)
