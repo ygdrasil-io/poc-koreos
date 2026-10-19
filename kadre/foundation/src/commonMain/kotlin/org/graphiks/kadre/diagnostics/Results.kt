@@ -199,7 +199,7 @@ public enum class KadreResourceKind {
     EventSequence,
 }
 
-public enum class KadrePlatform { Android, UIKit, Web, AppKit, Win32, X11, Wayland, Fake }
+public enum class KadrePlatform { Android, UIKit, Web, AppKit, Win32, X11, Wayland, Linux, Fake }
 
 private fun requireStableIdentifier(value: String, name: String) {
     require(value.isNotEmpty() && value.length <= 256 && value.all { it.code in 0x21..0x7e }) {
