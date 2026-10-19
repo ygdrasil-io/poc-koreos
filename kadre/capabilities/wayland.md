@@ -137,6 +137,24 @@ exige un démon udev vivant — le filet de sécurité est la réconciliation
 seconde des nœuds énumérés. GMP-002 (refus honnête wayland) est retiré
 du registre (`retirementRef` → `GMP-003`) : le service evdev le remplace.
 
+## 3 undecies. Registre — tranche 10 (capture portal, contrôle)
+
+Le plan de contrôle capture vit dans `:kadre:backend:linux` : D-Bus en
+pur protocole (D2, sockets `kffi-posix`), disponibilité observée (D1),
+`HostPickerOnly` tant que le pipeline PipeWire n'est pas prouvé (D4).
+
+| feature | target | minimum déclaré | compile gate | runtime gate | état absent | tests |
+|---|---|---|---|---|---|---|
+| codec + connexion D-Bus | `jvm` | wire format v1 (alignements, variantes, dict entries), SASL EXTERNAL (uid hex ASCII), serials/corrélations, refus uint64 | `:kadre:backend:linux:jvmTest` | `CAP-003` | round-trip byte-pour-byte ; sériels croisés jamais répondus ; refus picker explicite | `DbusCodecTest` (6) + `DbusConnectionTest` (7) |
+| contrôle portal ScreenCast | `jvm` | CreateSession fire-and-forget corrélé par le path `/…/request/SENDER/TOKEN`, AddMatch pour les signaux Response | `:kadre:backend:linux:jvmTest` | `CAP-002` | auth échouée/portail absent ⇒ `Unavailable` explicite ; réservations refusées `pipewire-stream-pending` | `LinuxCapturePortTest` (5) + `LinuxCapturePortalLinuxTest` (O3 dbus-daemon réel) |
+
+Résiduel tranche 10 : le stream PipeWire (T4 du design — bindings
+kextract + chemin SHM/CPU, fd `OpenPipeWireRemote` via SCM_RIGHTS) et
+les variantes portal réelles GNOME/KDE/wlroots restent à livrer ; la
+gate s'appuie sur les preuves O2, l'oracle conteneur (dbus-daemon +
+peer portal factice) tournant localement en tâche dédiée. Les sockets
+abstract D-Bus et `t` (uint64) sont refusés explicitement.
+
 ## 4. Limites des tranches 1 à 4
 
 - Le support `WAYLAND_SOCKET` au run est refusé avant session

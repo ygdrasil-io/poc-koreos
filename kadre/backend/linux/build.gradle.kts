@@ -16,10 +16,13 @@ kotlin {
         jvmMain.dependencies {
             api(project(":kadre:runtime"))
             implementation(libs.kffi.evdev)
+            // the D-Bus control plane rides the posix AF_UNIX surface
+            implementation(libs.kffi.posix)
         }
         val jvmTest by getting {
             dependencies {
                 implementation(kotlin("test"))
+                implementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.10.2")
             }
         }
     }
@@ -33,12 +36,15 @@ tasks.named<Test>("jvmTest") {
     filter.excludeTestsMatching(
         "org.graphiks.kadre.internal.linux.EvdevGamepadLinuxTest",
     )
+    filter.excludeTestsMatching(
+        "org.graphiks.kadre.internal.linux.LinuxCapturePortalLinuxTest",
+    )
 }
 
 val onLinux = System.getProperty("os.name", "").contains("Linux", ignoreCase = true)
 tasks.register<Test>("linuxEvdevTests") {
     group = "verification"
-    description = "Runs the Linux-only evdev gamepad proofs (real nodes / uinput)."
+    description = "Runs the Linux-only proofs: evdev gamepads (real nodes / uinput) and the capture portal (real dbus-daemon)."
     enabled = onLinux
     testClassesDirs = tasks.named<Test>("jvmTest").get().testClassesDirs
     classpath = tasks.named<Test>("jvmTest").get().classpath
@@ -48,6 +54,9 @@ tasks.register<Test>("linuxEvdevTests") {
     )
     filter.includeTestsMatching(
         "org.graphiks.kadre.internal.linux.EvdevGamepadLinuxTest",
+    )
+    filter.includeTestsMatching(
+        "org.graphiks.kadre.internal.linux.LinuxCapturePortalLinuxTest",
     )
     forkEvery = 1
     reports.junitXml.outputLocation.set(layout.buildDirectory.dir("test-results/linuxEvdevTests"))

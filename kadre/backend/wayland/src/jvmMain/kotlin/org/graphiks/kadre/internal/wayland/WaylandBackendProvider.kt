@@ -222,6 +222,8 @@ public class WaylandBackendProvider private constructor(
                         // refusal: Wayland itself carries no gamepad
                         // protocol, evdev serves them process-wide (D6)
                         gamepadPort = org.graphiks.kadre.internal.linux.EvdevGamepadService.openSessionView(),
+                        // capture rides the portal control plane (phase 10)
+                        capturePort = org.graphiks.kadre.internal.linux.capture.LinuxCaptureService.create(),
                     )
                 },
                 initialLifecycleState = LifecycleState(

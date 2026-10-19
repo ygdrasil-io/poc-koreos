@@ -24,7 +24,7 @@ EVIDENCE_FILES=("BCK-017.json" "SES-001.json" "SUR-001.json" "WIN-010.json" "WIN
 # Le service gamepad evdev vit dans :kadre:backend:linux et sert les
 # sessions Wayland : ses preuves O2 portables alimentent la même gate.
 LINUX_BACKEND_BUILD="$REPO_ROOT/kadre/backend/linux/build"
-LINUX_EVIDENCE_FILES=("GMP-003.json" "GMP-004.json")
+LINUX_EVIDENCE_FILES=("GMP-003.json" "GMP-004.json" "CAP-002.json" "CAP-003.json")
 DIAGNOSTICS_DIRECTORY="$WAYLAND_BACKEND_BUILD/ci-diagnostics"
 TEST_TIMEOUT_SECONDS="${KADRE_WAYLAND_TEST_TIMEOUT_SECONDS:-900}"
 EVIDENCE_TIMEOUT_SECONDS=600
