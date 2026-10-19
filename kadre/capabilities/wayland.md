@@ -108,6 +108,15 @@ Résiduel tranche 8 : les preuves O3 AWT externes (attach réel, input,
 non-blocage UI, teardown) et `supportedIntegrations` announce — JavaFX
 exige une intégration toolkit distincte.
 
+## 3 novies. Registre — tranche 9 (services Linux, devices, gamepads)
+
+| feature | target | minimum déclaré | compile gate | runtime gate | état absent | tests |
+|---|---|---|---|---|---|---|
+| inventaire devices (projection seats) | `jvm` | seats observables + capabilities réelles — PAS un inventaire physique complet (libinput/udev : bindings kffi requis) | `:kadre:backend:wayland:jvmTest` | `INP-007` | kind dérivé des capabilities ; retrait → Disconnected ; clé jamais réutilisée ; lecture post-close vide | `WaylandDevicesO2Test` (4 preuves) |
+| gamepads | `jvm` | aucune source protocolaire | `:kadre:backend:wayland:jvmTest` | `GMP-002` | inventaire vide avec `inventoryFailure` Unsupported explicite (jamais un vide muet) ; effets Unsupported | `WaylandDevicesO2Test.gamepadInventoryIsRefusedExplicitlyNotSilentlyEmpty` |
+| apparence/thème, pression mémoire | `jvm` | — (aucune source définie en tranche 1) | — | — | `Unknown`/indisponibilité prévue, aucune synthèse | documenté design D1 |
+| raw input (pointeur relatif) | `jvm` | évalué, non activé (exige extensions phase 5 + unités/contexte lock) | — | — | `RawInputPort` Unsupported | documenté design D4 |
+
 ## 4. Limites des tranches 1 à 4
 
 - Le support `WAYLAND_SOCKET` au run est refusé avant session
