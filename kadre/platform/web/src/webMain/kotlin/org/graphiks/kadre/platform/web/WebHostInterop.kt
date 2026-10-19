@@ -720,6 +720,7 @@ internal fun KadrePlatform.interopName(): String = when (this) {
     KadrePlatform.Win32 -> "win32"
     KadrePlatform.X11 -> "x11"
     KadrePlatform.Wayland -> "wayland"
+    KadrePlatform.Linux -> "linux"
     KadrePlatform.Fake -> "fake"
 }
 
