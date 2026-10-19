@@ -31,6 +31,7 @@ import org.graphiks.kadre.diagnostics.KadreException
 import org.graphiks.kadre.diagnostics.KadreFailure
 import org.graphiks.kadre.diagnostics.KadrePlatform
 import org.graphiks.kffi.win32.managed.Win32DropFormats
+import org.graphiks.kffi.win32.managed.Win32RawInputFlags
 import org.graphiks.kadre.surface.PhysicalRect
 import org.graphiks.kadre.surface.PhysicalPoint
 import org.graphiks.kadre.surface.PhysicalSize
@@ -214,6 +215,64 @@ internal open class KffiWin32HostPort : Win32NativeHostPort {
         }
         controlWindow = window
         return Win32ControlWindowHandle(window.hwnd)
+    }
+
+    // Phase 8: the process registration targets the activated top-level window
+    // (the OS refuses INPUTSINK; a hidden control window never sees a WM_INPUT).
+    private var rawInputOwner: org.graphiks.kffi.win32.managed.Win32RawInput? = null
+    private var rawInputHwnd: Long = 0L
+    private var rawInputActivator: ((Long) -> Unit)? = null
+
+    override fun attachRawInputActivator(activator: (Long) -> Unit) {
+        check(isMainThread()) { "the raw-input activator attaches on the UI owner" }
+        rawInputActivator = activator
+    }
+
+    override fun activateRawInput(hwnd: Long) {
+        check(isMainThread()) { "raw input activates on the UI owner" }
+        rawInputActivator?.invoke(hwnd)
+    }
+
+    override fun forwardRawInput(hwnd: Long, lParam: Long): Boolean {
+        check(isMainThread()) { "WM_INPUT is read on the UI owner" }
+        println("DBG forward hwnd=$hwnd rawInputHwnd=$rawInputHwnd owner=${rawInputOwner != null}")
+        val owner = rawInputOwner ?: return false
+        if (hwnd != rawInputHwnd) return false
+        val motion = owner.read(lParam)
+        println("DBG read motion=$motion")
+        if (motion == null) return true
+        rawInputMotionConsumer?.invoke(motion.deltaX, motion.deltaY, motion.device)
+        return true
+    }
+
+    internal var rawInputMotionConsumer: ((deltaX: Int, deltaY: Int, device: Long) -> Unit)? = null
+        private set
+
+    /** Installs (or moves) the process registration onto [hwnd]; caller arbitrates ownership. */
+    internal fun registerRawInput(
+        hwnd: Long,
+        onMotion: (deltaX: Int, deltaY: Int, device: Long) -> Unit,
+        onFailure: (Throwable) -> Unit,
+    ): AutoCloseable {
+        check(isMainThread()) { "raw input must register on the UI owner" }
+        check(hwnd != 0L) { "raw input registration needs a live window" }
+        val owner = org.graphiks.kffi.win32.managed.Win32RawInput.register(hwnd, onMotion, onFailure)
+        rawInputOwner = owner
+        rawInputHwnd = hwnd
+        rawInputMotionConsumer = onMotion
+        return AutoCloseable {
+            if (rawInputOwner === owner) {
+                rawInputOwner = null
+                rawInputHwnd = 0L
+                rawInputMotionConsumer = null
+            }
+            owner.close()
+        }
+    }
+
+    override fun hasForeignRawInputRegistration(): Boolean {
+        init()
+        return org.graphiks.kffi.win32.managed.Win32RawInput.hasRegistration()
     }
 
     override fun postWake(hwnd: Long): Boolean =

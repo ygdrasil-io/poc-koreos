@@ -1,6 +1,6 @@
-# Adapter Win32 — phases 1 à 7 livrées
+# Adapter Win32 — phases 1 à 8 livrées
 
-Hôte exercé : Windows x64, bureau interactif, JVM 25. KFFI #135 est fusionnée et publiée ; le catalogue consomme `1.0.0-SNAPSHOT` (dernière publication Central Portal, qualifiée au snapshot `1.0.0-20261019.082243-67`) et passe la gate complète avec Maven local désactivé. Maven local reste un opt-in de développement. Les phases 1–6 restent couvertes par leurs [preuves antérieures](../WIN32-PHASE-5-VALIDATION.md) et [phase 6](../WIN32-PHASE-6-VALIDATION.md).
+Hôte exercé : Windows x64, bureau interactif, JVM 25. KFFI #135 est fusionnée et publiée ; la branche phase 8 consomme le prérequis KFFI `feat/win32-raw-input` ([PR #137](https://github.com/Graphiks-org/kffi/pull/137)) depuis Maven local et reste en qualification jusqu'à publication du snapshot distant. Les phases 1–7 restent couvertes par leurs preuves antérieures ([phase 5](../WIN32-PHASE-5-VALIDATION.md), [phase 6](../WIN32-PHASE-6-VALIDATION.md), [phase 7](../WIN32-PHASE-7-DROP-DESIGN.md)).
 
 La phase 7 installe le drop OLE ci-dessous avec le snapshot publié ([design](../WIN32-PHASE-7-DROP-DESIGN.md)) ; la [réception manuelle](../WIN32-PHASE-7-MANUAL.md) inter-applications reste ouverte avant l'annonce de phase complète.
 
@@ -32,6 +32,6 @@ La phase 7 installe le drop OLE ci-dessous avec le snapshot publié ([design](..
 | Touch, pen, eraser | Route WM_POINTER installée, identités indépendantes | W32-019 ; injection touch et paquets pen automatisés ; réception physique non exécutée |
 | Gestes | Pan, Pinch, Rotation, DoubleTap après configuration native relue | W32-020 ; Interaction Context, deltas logiques, pas d'inertia/TouchpadPressure/PTP2 |
 | Drop (OLE) | Installé : `IDropTarget` managé par fenêtre, admission synchrone `AcceptDrop`, transferts bornés | W32-021/022 ; formats déclarés CF_HDROP (fichiers, Replayable), CF_UNICODETEXT (texte), `UniformResourceLocatorW` (URL), TYMED_ISTREAM (binaire SingleUse) ; sources à rendu différé = failure plateforme explicite ; fichiers virtuels et drag sortant non couverts ; réception inter-applications manuelle ouverte |
-| Raw input | Non installé / refus explicite | Phase 8 |
+| Raw input | Installé : registration souris relative process-lifetime, fan-out par accès, pré-vol anti-vol | W32-023 ; foreground-only (`RIDEV_INPUTSINK` refusé par l'OS pour la souris), retrait refusé par l'OS (`RIDEV_REMOVE` → ERROR_INVALID_FLAGS) donc registration process-lifetime ; absolu/clavier/HID autres consommés sans publication ; `Locked` reste travail ouvert |
 
 Les tests qualifient les appels natifs, les vrais menus et les boucles système de déplacement/redimensionnement. Les messages postés ne prouvent pas l’état matériel d’un bouton. Souris physique, claviers/layouts physiques, DPI mixtes et hotplug restent des qualifications manuelles non exécutées ; les limites précises sont consignées dans la validation.
