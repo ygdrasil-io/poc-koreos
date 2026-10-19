@@ -86,6 +86,17 @@ xdg-activation/icône (`Unsupported` documenté), pointer constraints
 Résiduel tranche 6 : l'enter IME exige une surface focusée (résiduel
 injection T4) ; touch/gestures/pen hors tranche 1 (protocoles propres).
 
+## 3 septies. Registre — tranche 7 (drag-and-drop, destinataire)
+
+| feature | target | minimum déclaré | compile gate | runtime gate | état absent | tests |
+|---|---|---|---|---|---|---|
+| présentateur drop (offres immuables, négociation) | `jvm` | kffi WaylandDataDevice/Offer (mavenLocal en cours de phase) | `:kadre:backend:wayland:jvmTest` | `DRP-002` | MIME gelés à l'announce ; drop sans accept ⇒ refus déterministe sans receive ; mime non annoncé refusé avant tout fd | `WaylandDropO2Test` (6 preuves) |
+| lifetimes des offres et terminaisons | `jvm` | terminaisons observables uniquement protocolaires | `:kadre:backend:wayland:jvmTest` | `DRP-003` | leave ⇒ LeftSurface avec destroy ; offre détruite ne ressert jamais ; drag source et clipboard absents du catalogue (aucune extension implicite) | `WaylandDropO2Test` |
+
+Résiduel tranche 7 : l'oracle O3 d'un drop extern (P-1/P-2) exige une
+source de drag externe ; transferts interrompus/budget/teardown SN-1..3
+à couvrir avec le harnais fd.
+
 ## 4. Limites des tranches 1 à 4
 
 - Le support `WAYLAND_SOCKET` au run est refusé avant session
