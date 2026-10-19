@@ -1,6 +1,6 @@
 # Adapter Win32 — phases 1 à 7 livrées
 
-Hôte exercé : Windows x64, bureau interactif, JVM 25. KFFI #135 est fusionnée et publiée ; le snapshot distant `1.0.0-20261019.082243-67` est épinglé pour Win32 root et JVM et passe la gate complète avec Maven local désactivé. Maven local reste un opt-in de développement. Les phases 1–6 restent couvertes par leurs [preuves antérieures](../WIN32-PHASE-5-VALIDATION.md) et [phase 6](../WIN32-PHASE-6-VALIDATION.md).
+Hôte exercé : Windows x64, bureau interactif, JVM 25. KFFI #135 est fusionnée et publiée ; le catalogue consomme `1.0.0-SNAPSHOT` (dernière publication Central Portal, qualifiée au snapshot `1.0.0-20261019.082243-67`) et passe la gate complète avec Maven local désactivé. Maven local reste un opt-in de développement. Les phases 1–6 restent couvertes par leurs [preuves antérieures](../WIN32-PHASE-5-VALIDATION.md) et [phase 6](../WIN32-PHASE-6-VALIDATION.md).
 
 La phase 7 installe le drop OLE ci-dessous avec le snapshot publié ([design](../WIN32-PHASE-7-DROP-DESIGN.md)) ; la [réception manuelle](../WIN32-PHASE-7-MANUAL.md) inter-applications reste ouverte avant l'annonce de phase complète.
 
