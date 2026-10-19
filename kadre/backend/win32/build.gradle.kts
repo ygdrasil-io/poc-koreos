@@ -63,6 +63,9 @@ tasks.named<Test>("jvmTest") {
     filter.excludeTestsMatching(
         "org.graphiks.kadre.internal.win32.Win32RawInputNativeContractTest",
     )
+    filter.excludeTestsMatching(
+        "org.graphiks.kadre.internal.win32.Win32DisplaysNativeContractTest",
+    )
 }
 
 val onWindows = System.getProperty("os.name", "").contains("Windows", ignoreCase = true)
@@ -80,6 +83,9 @@ val win32NativeTests = tasks.register<Test>("win32NativeTests") {
     )
     filter.includeTestsMatching(
         "org.graphiks.kadre.internal.win32.Win32RawInputNativeContractTest",
+    )
+    filter.includeTestsMatching(
+        "org.graphiks.kadre.internal.win32.Win32DisplaysNativeContractTest",
     )
     testClassesDirs = tasks.named<Test>("jvmTest").get().testClassesDirs
     classpath = tasks.named<Test>("jvmTest").get().classpath
