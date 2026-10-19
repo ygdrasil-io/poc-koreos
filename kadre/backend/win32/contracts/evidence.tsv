@@ -94,3 +94,12 @@ W32-020	jvm	scenario	win32-native-recognized-gestures	org.graphiks.kadre.interna
 W32-020	jvm	sentinel	win32-no-uninstalled-gesture	org.graphiks.kadre.internal.win32.Win32GestureTest	gestureReadbackAdvertisesOnlyInstalledKinds[jvm]
 W32-020	jvm	sentinel	win32-gesture-reset-cancels	org.graphiks.kadre.internal.win32.Win32GestureTest	resetEndsTrackedGesturesBeforeCapabilityWithdrawal[jvm]
 W32-020	jvm	sentinel	win32-native-gesture-units	org.graphiks.kadre.internal.win32.Win32GestureTest	combinedManipulationUsesIncrementalDeltas[jvm]
+W32-021	jvm	scenario	win32-native-ole-admission	org.graphiks.kadre.internal.win32.Win32DropNativeContractTest	realOleTargetRoutesAnAcceptedDropToThePublicTransfer
+W32-021	jvm	scenario	win32-native-ole-refusal	org.graphiks.kadre.internal.win32.Win32DropNativeContractTest	refusedAdmissionAnswersNoneAndTerminatesTheOfferAsRejected
+W32-021	jvm	scenario	win32-native-ole-revoke-before-destroy	org.graphiks.kadre.internal.win32.Win32DropNativeContractTest	targetCloseRevokesTheRegistrationBeforeTheWindowIsDestroyed
+W32-021	jvm	sentinel	win32-drop-stale-offer	org.graphiks.kadre.internal.win32.Win32DropFlowTest	exitTerminatesTheOfferAndLaterObservationsAreStale[jvm]
+W32-021	jvm	sentinel	win32-drop-source-closed-on-reject	org.graphiks.kadre.internal.win32.Win32DropFlowTest	rejectedDropClosesTheSourceAnswersNoneAndIgnoresLaterObservations[jvm]
+W32-021	jvm	sentinel	win32-drop-teardown-revokes	org.graphiks.kadre.internal.win32.Win32DropFlowTest	windowCloseRevokesTheTargetBeforeDestroyingTheWindow[jvm]
+W32-022	jvm	scenario	win32-drop-public-transfer	org.graphiks.kadre.internal.win32.Win32DropFlowTest	acceptedDropRoutesEnterMovePerformAndClaimToThePublicTransfer[jvm]
+W32-022	jvm	scenario	win32-native-ole-transfer-media	org.graphiks.kadre.internal.win32.Win32DropNativeContractTest	realOleTargetRoutesAnAcceptedDropToThePublicTransfer
+W32-022	jvm	sentinel	win32-drop-unavailable-inert	org.graphiks.kadre.internal.win32.Win32DropFlowTest	unavailablePortKeepsWindowsUnobservedAndEnterInert[jvm]

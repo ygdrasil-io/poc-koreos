@@ -1,8 +1,8 @@
-# Adapter Win32 — phases 1 à 5 livrées, phase 6 en qualification
+# Adapter Win32 — phases 1 à 6 livrées, phase 7 en qualification
 
 Hôte exercé : Windows x64, bureau interactif, JVM 25. KFFI #131 est fusionnée et publiée ; le snapshot distant `1.0.0-20261018.214839-64` est épinglé pour Win32 root et JVM et passe la gate complète avec Maven local désactivé. Maven local reste un opt-in de développement. Les phases1–5 restent couvertes par leurs [preuves antérieures](../WIN32-PHASE-5-VALIDATION.md).
 
-La branche phase6 installe les services ci-dessous avec les artefacts KFFI publiés. La [qualification automatisée distante](../WIN32-PHASE-6-VALIDATION.md) passe ; la [réception manuelle](../WIN32-PHASE-6-MANUAL.md) reste ouverte avant sortie du draft et annonce de phase complète.
+La branche phase7 ajoute le drop OLE (W32-021/022, [design](../WIN32-PHASE-7-DROP-DESIGN.md), [réception manuelle](../WIN32-PHASE-7-MANUAL.md)) sur le prérequis KFFI `feat/win32-ole-drop` consommé depuis Maven local ; elle reste en qualification jusqu'à publication du snapshot distant, épinglage et exécution de la gate complète.
 
 | Fonction | État livré | Gate et limite |
 | --- | --- | --- |
@@ -23,7 +23,7 @@ La branche phase6 installe les services ci-dessous avec les artefacts KFFI publi
 | Clavier | Available après installation | W32-009 ; HID/layout/repeat/release, données copiées avant filtre TSF |
 | Pointeur et wheel | Available après installation | W32-010 ; souris promue filtrée lorsque les contacts sont traités, coordonnées logiques, réglages lignes/caractères, page refusé |
 | Focus et inputDefaultBehavior | Disponible | W32-011 ; reset commun, HostDefault/SuppressWhenPossible |
-| handlerInteractions | OpenWindow, BeginWindowMove, BeginWindowResize | W32-011/016 ; même callback vivant, Primary, autorité révoquée sur focus/cancel/release ; resize windowed/resizable |
+| handlerInteractions | OpenWindow, BeginWindowMove, BeginWindowResize, AcceptDrop (après installation du target OLE) | W32-011/016/021 ; même callback vivant, Primary, autorité révoquée sur focus/cancel/release ; resize windowed/resizable |
 | armedInteractions | Unsupported(ArmInteraction) | Aucune activation armée |
 | Curseurs | 13 mappings système exacts, Hidden, RGBA8 personnalisé ≤128×128 | W32-015 ; hotspot, WM_SETCURSOR/HTCLIENT, handles partagés préservés |
 | pointerCapture | None, Confined | W32-015 ; bail ClipCursor au premier plan, retrait observable, aucune reprise implicite ; Locked réservé à la phase 8 |
@@ -31,6 +31,7 @@ La branche phase6 installe les services ci-dessous avec les artefacts KFFI publi
 | Texte/TSF | Installé sur STA, échec d'initialisation typé sans couper souris/clavier | W32-017/018 ; révisions et budget commun ; IME installé et DPI mixtes restent à recevoir |
 | Touch, pen, eraser | Route WM_POINTER installée, identités indépendantes | W32-019 ; injection touch et paquets pen automatisés ; réception physique non exécutée |
 | Gestes | Pan, Pinch, Rotation, DoubleTap après configuration native relue | W32-020 ; Interaction Context, deltas logiques, pas d'inertia/TouchpadPressure/PTP2 |
-| Drop, raw input | Non installés / refus explicite | Phases suivantes |
+| Drop (OLE) | Installé : `IDropTarget` managé par fenêtre, admission synchrone `AcceptDrop`, transferts bornés | W32-021/022 ; formats déclarés CF_HDROP (fichiers, Replayable), CF_UNICODETEXT (texte), `UniformResourceLocatorW` (URL), TYMED_ISTREAM (binaire SingleUse) ; sources à rendu différé = failure plateforme explicite ; fichiers virtuels et drag sortant non couverts ; réception inter-applications manuelle ouverte |
+| Raw input | Non installé / refus explicite | Phase 8 |
 
 Les tests qualifient les appels natifs, les vrais menus et les boucles système de déplacement/redimensionnement. Les messages postés ne prouvent pas l’état matériel d’un bouton. Souris physique, claviers/layouts physiques, DPI mixtes et hotplug restent des qualifications manuelles non exécutées ; les limites précises sont consignées dans la validation.

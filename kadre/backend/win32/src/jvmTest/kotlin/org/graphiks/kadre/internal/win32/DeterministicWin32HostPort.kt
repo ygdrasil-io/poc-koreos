@@ -257,6 +257,33 @@ internal open class DeterministicWin32HostPort : Win32NativeHostPort {
     override fun observeConfinementLoss(hwnd: Long, onLost: () -> Unit) { confinementObservers[hwnd] = onLost }
     override fun beginMoveResize(hwnd: Long, hitTest: Int, clientX: Int, clientY: Int) { nativeDrags += Triple(hitTest, clientX, clientY); onNativeDrag?.invoke() }
 
+    // Phase 7 drop: the fake records the observed callbacks; tests drive them directly.
+    var dropAvailable = false
+    var dropRevocations = AtomicInteger(0)
+        private set
+    val dropObservers = java.util.concurrent.ConcurrentHashMap<Long, Win32DropCallbacks>()
+    override val dropTargetsAvailable: Boolean get() = dropAvailable
+    override fun observeDrop(hwnd: Long, budgets: Win32DropBudgets, onFailure: (Throwable) -> Unit, callbacks: Win32DropCallbacks): AutoCloseable {
+        check(dropAvailable) { "drop targets unavailable on this fake" }
+        dropObservers[hwnd] = callbacks
+        return AutoCloseable {
+            if (dropObservers.remove(hwnd) != null) dropRevocations.incrementAndGet()
+        }
+    }
+
+    /** Drives the observed callbacks like the native adapter would after its own position conversion. */
+    fun dispatchDropEnter(hwnd: Long, source: org.graphiks.kadre.internal.runtime.DropTransferSource, x: Double, y: Double): Boolean =
+        dropObservers[hwnd]?.entered(source, org.graphiks.kadre.surface.LogicalPoint(x, y)) ?: false
+    fun dispatchDropMoved(hwnd: Long, x: Double, y: Double) {
+        dropObservers[hwnd]?.moved(org.graphiks.kadre.surface.LogicalPoint(x, y))
+    }
+    fun dispatchDropExited(hwnd: Long) {
+        dropObservers[hwnd]?.exited()
+    }
+    fun dispatchDropPerformed(hwnd: Long, x: Double, y: Double) {
+        dropObservers[hwnd]?.performed(org.graphiks.kadre.surface.LogicalPoint(x, y))
+    }
+
     override fun close() {
         destroyed = true
     }

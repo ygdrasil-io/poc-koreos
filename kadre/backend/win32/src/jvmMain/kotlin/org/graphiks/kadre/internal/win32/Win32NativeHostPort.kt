@@ -86,6 +86,10 @@ internal interface Win32NativeHostPort : AutoCloseable {
     fun handleTextCharacter(hwnd: Long, message: Int, wParam: Long, lParam: Long): Long? = null
     fun setTextFocus(hwnd: Long, focused: Boolean) {}
     fun closeTextInput(hwnd: Long) {}
+
+    /** Phase 7: OLE drop admission. False keeps drag-and-drop Unsupported for the session. */
+    val dropTargetsAvailable: Boolean get() = false
+    fun observeDrop(hwnd: Long, budgets: Win32DropBudgets, onFailure: (Throwable) -> Unit, callbacks: Win32DropCallbacks): AutoCloseable = error("OLE drop unavailable")
 }
 
 internal data class Win32WindowReadback(
