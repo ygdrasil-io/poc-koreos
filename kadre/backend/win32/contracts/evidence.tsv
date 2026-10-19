@@ -109,3 +109,6 @@ W32-023	jvm	scenario	jvm-raw-foreign-refusal	org.graphiks.kadre.internal.win32.W
 W32-023	jvm	sentinel	win32-raw-no-ordinary-injection	org.graphiks.kadre.internal.win32.Win32RawInputBrokerTest	providerWithoutRawInputPortKeepsPublicRequestUnsupported[jvm]
 W32-023	jvm	sentinel	win32-raw-foreign-preserved	org.graphiks.kadre.internal.win32.Win32RawInputBrokerTest	foreignRegistrationKeepsRawInputUnavailableWithoutStealing[jvm]
 W32-023	jvm	sentinel	win32-raw-close-no-mutation	org.graphiks.kadre.internal.win32.Win32RawInputBrokerTest	admittedAccessFansNativeMotionOutToItsLease[jvm]
+W32-024	jvm	scenario	win32-displays-native-inventory	org.graphiks.kadre.internal.win32.Win32DisplaysNativeContractTest	realInventoryEnumeratesThePrimaryWithRealBoundsAndModes
+W32-024	jvm	scenario	jvm-displays-assembler-all-or-nothing	org.graphiks.kadre.internal.win32.Win32DisplayPortTest	assemblerSkipsDegenerateDisplaysAndWithdrawsWhenNothingUsableRemains[jvm]
+W32-024	jvm	sentinel	win32-displays-no-degenerate-bounds	org.graphiks.kadre.internal.win32.Win32DisplayPortTest	assemblerSkipsDegenerateDisplaysAndWithdrawsWhenNothingUsableRemains[jvm]

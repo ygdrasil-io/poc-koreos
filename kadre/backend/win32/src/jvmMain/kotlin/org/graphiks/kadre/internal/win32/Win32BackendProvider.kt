@@ -22,7 +22,9 @@ import org.graphiks.kadre.diagnostics.KadreResult
 import org.graphiks.kadre.internal.runtime.RuntimeHostController
 import org.graphiks.kadre.internal.runtime.RuntimeFailureReporter
 import org.graphiks.kadre.internal.runtime.RuntimeSessionComponents
+import org.graphiks.kadre.internal.runtime.DisplayPort
 import org.graphiks.kadre.internal.runtime.RawInputPort
+import org.graphiks.kffi.win32.managed.Win32Displays
 import org.graphiks.kffi.win32.managed.Win32RawInput
 import org.graphiks.kadre.internal.runtime.RuntimeSessionStopHandler
 import org.graphiks.kadre.internal.runtime.desktop.DesktopBackendKind
@@ -41,12 +43,14 @@ public class Win32BackendProvider private constructor(
     private val portFactory: () -> Win32NativeHostPort,
     private val loopStarted: ((Win32MessagePump) -> Unit)?,
     private val rawInputPortFactory: (() -> RawInputPort?)?,
+    private val displayPortFactory: (() -> DisplayPort?)?,
 ) : DesktopBackendProvider {
     public constructor() : this(
         ::isWindows,
         { KffiWin32HostPort() },
         null,
         { ProcessWin32RawInputBroker.value.openPort() },
+        { Win32DisplayPort { Win32Displays.snapshot() } },
     )
 
     override val backend: DesktopBackendKind = DesktopBackendKind.Win32
@@ -108,10 +112,20 @@ public class Win32BackendProvider private constructor(
                     session.pump.requestStop()
                 },
             ).also { ownedDriver = it }
+            val displayPortRef = java.util.concurrent.atomic.AtomicReference<Win32DisplayPort?>(null)
+            driver.attachDisplayRescan { displayPortRef.get()?.onDisplayChanged() }
             val controller = RuntimeHostController.withComponents(
                 platform = KadrePlatform.Win32,
                 componentsFactory = { _, _ ->
-                    RuntimeSessionComponents(windows = driver.manager, rawInputPort = rawInputPortFactory?.invoke())
+                    val displayPort = (displayPortFactory?.invoke() ?: Win32DisplayPort(
+                        inventoryProvider = { Win32Displays.snapshot() },
+                    )) as Win32DisplayPort
+                    displayPortRef.set(displayPort)
+                    RuntimeSessionComponents(
+                        windows = driver.manager,
+                        rawInputPort = rawInputPortFactory?.invoke(),
+                        displayPort = displayPort,
+                    )
                 },
                 initialLifecycleState = LifecycleState(
                     AttachmentState.Attached,
@@ -171,7 +185,8 @@ public class Win32BackendProvider private constructor(
             portFactory: () -> Win32NativeHostPort = { KffiWin32HostPort() },
             loopStarted: ((Win32MessagePump) -> Unit)? = null,
             rawInputPortFactory: (() -> RawInputPort?)? = null,
-        ): Win32BackendProvider = Win32BackendProvider(availability, portFactory, loopStarted, rawInputPortFactory)
+            displayPortFactory: (() -> DisplayPort?)? = null,
+        ): Win32BackendProvider = Win32BackendProvider(availability, portFactory, loopStarted, rawInputPortFactory, displayPortFactory)
 
         internal fun isWindows(): Boolean =
             System.getProperty("os.name", "").startsWith("Windows", ignoreCase = true)
