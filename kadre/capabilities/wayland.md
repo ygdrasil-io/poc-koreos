@@ -149,11 +149,17 @@ pur protocole (D2, sockets `kffi-posix`), disponibilité observée (D1),
 | contrôle portal ScreenCast | `jvm` | CreateSession/SelectSources/Start corrélés par le `handle_token` du corps (une seule vérité), OpenPipeWireRemote → fd réel | `:kadre:backend:linux:jvmTest` | `CAP-002` | auth échouée/portail absent ⇒ `Unavailable` explicite ; refus picker ⇒ `PermissionDenied` ; cibles non-HostChoice refusées | `LinuxCapturePortTest` (9) + `LinuxCapturePortalLinuxTest` (O3 dbus-daemon réel) |
 | stream PipeWire (SHM/CPU) | `jvm` | bindings `kffi-pipewire` (kextract), codec SPA POD pur Kotlin, négociation par états, frames copiées avant réenfilage, livraison bornée sur thread dédié | `:kadre:backend:linux:jvmTest` | `CAP-004` | format hors sous-ensemble portable ⇒ terminaison honnête ; budget dépassé ⇒ `ResourceLimitExceeded` ; layout divergent ⇒ refus ; pas de frame après close | `SpaPodTest` (9) + `PipeWireStreamClientTest` (10) + O3 conteneur (daemon pipewire réel) |
 
-Résiduel tranche 10 : les variantes portal réelles GNOME/KDE/wlroots
-restent à tester (gate de sortie phase 10), DMA-BUF exige sa preuve de
-mapping, et `CaptureTarget.Source`/`Surface` restent refusés tant que le
-chemin exact vers une cible arbitraire n'est pas prouvé. Les sockets
-abstract D-Bus et `t` (uint64) sont refusés explicitement.
+Résiduel tranche 10 : la livraison de frames jusqu'au bout est prouvée
+en O2 sur seam et le chemin O3 réel est tracé jusqu'au stream PAUSED
+(portal complet + fd PipeWire réel via SCM_RIGHTS, connexion du core,
+événements natifs) — la complétion de la négociation bloque sur la
+policy de linkage vidéo du conteneur (un consommateur de référence en C
+pur contre le même node `videotestsrc` converge exactement : code kadre
+fidèle, gap environnemental, harnais O3 livré dans
+`LinuxCaptureStreamLinuxTest`). Restent ensuite : variantes portal
+réelles GNOME/KDE/wlroots (gate de sortie phase 10), DMA-BUF (preuve de
+mapping), `CaptureTarget.Source`/`Surface` (chemin exact non prouvé).
+Les sockets abstract D-Bus et `t` (uint64) sont refusés explicitement.
 
 ## 4. Limites des tranches 1 à 4
 

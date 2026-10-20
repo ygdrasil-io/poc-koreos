@@ -64,6 +64,45 @@ internal class KffiDbusTransport(
         }
     }
 
+    /**
+     * Sends raw message bytes carrying one SCM_RIGHTS descriptor — the
+     * peer-side mirror of [receive], used by the oracle to answer
+     * OpenPipeWireRemote the way a real portal does. The receiver gets a
+     * kernel duplicate; our copy of [fd] stays owned by the caller.
+     */
+    internal fun sendWithUnixFd(bytes: ByteArray, fd: Int): Boolean {
+        Arena.ofConfined().use { arena ->
+            var offset = 0
+            while (offset < bytes.size) {
+                val chunkSize = bytes.size - offset
+                val payload = arena.allocate(chunkSize.toLong())
+                for (index in 0 until chunkSize) {
+                    payload.set(ValueLayout.JAVA_BYTE, index.toLong(), bytes[offset + index])
+                }
+                val control = arena.allocate(CONTROL_BUFFER.toLong())
+                val controlLength = (cmsghdr.layout.byteSize() + Int.SIZE_BYTES).toInt()
+                control.set(ValueLayout.JAVA_LONG, cmsghdr.layout.byteOffset(groupElement("cmsg_len")), controlLength.toLong())
+                control.set(ValueLayout.JAVA_INT, cmsghdr.layout.byteOffset(groupElement("cmsg_level")), LinuxPosix.SOL_SOCKET)
+                control.set(ValueLayout.JAVA_INT, cmsghdr.layout.byteOffset(groupElement("cmsg_type")), LinuxPosix.SCM_RIGHTS)
+                control.set(ValueLayout.JAVA_INT, cmsghdr.layout.byteSize(), fd)
+
+                val vector = iovec.allocate(arena)
+                vector.set(ValueLayout.ADDRESS, iovec.layout.byteOffset(groupElement("iov_base")), payload)
+                vector.set(ValueLayout.JAVA_LONG, iovec.layout.byteOffset(groupElement("iov_len")), chunkSize.toLong())
+                val message = msghdr.allocate(arena)
+                message.set(ValueLayout.ADDRESS, msghdr.layout.byteOffset(groupElement("msg_iov")), vector)
+                message.set(ValueLayout.JAVA_LONG, msghdr.layout.byteOffset(groupElement("msg_iovlen")), 1L)
+                message.set(ValueLayout.ADDRESS, msghdr.layout.byteOffset(groupElement("msg_control")), control)
+                message.set(ValueLayout.JAVA_LONG, msghdr.layout.byteOffset(groupElement("msg_controllen")), controlLength.toLong())
+
+                val written = runCatching { LinuxPosix.sendmsg(this.fd, message, 0) }.getOrDefault(-1)
+                if (written <= 0) return false
+                offset += written.toInt()
+            }
+            return true
+        }
+    }
+
     /** Walks the cmsghdr chain and collects SCM_RIGHTS descriptors. */
     private fun parseScmRights(control: MemorySegment, controlLength: Int): IntArray {
         val headerSize = cmsghdr.layout.byteSize().toInt()

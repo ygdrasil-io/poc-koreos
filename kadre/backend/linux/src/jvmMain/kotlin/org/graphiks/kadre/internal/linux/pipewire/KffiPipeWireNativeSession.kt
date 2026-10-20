@@ -53,6 +53,9 @@ internal class KffiPipeWireNativeSession(
 ) : PipeWireNativeSession {
 
     private val closed = AtomicBoolean(false)
+
+    /** Pods must outlive the pw calls — pw retains the pointers. */
+    private val podArena = java.lang.foreign.Arena.ofShared()
     private val stateLock = ReentrantLock()
     private val stateChanged = stateLock.newCondition()
 
@@ -65,10 +68,10 @@ internal class KffiPipeWireNativeSession(
     init {
         loop = PipeWireThreadLoop.create("kadre-pipewire", null)
         check(loop.start() == 0) { "pw_thread_loop_start failed" }
+        // pw_context_new / pw_stream_new TAKE OWNERSHIP of the properties
+        // (they free them) — never close the facades after the transfer
         context = java.lang.foreign.Arena.ofConfined().use { arena ->
-            PipeWireProperties.fromString(arena, STREAM_PROPERTIES).use { properties ->
-                PipeWireContext.create(loop, properties)
-            }
+            PipeWireContext.create(loop, PipeWireProperties.fromString(arena, STREAM_PROPERTIES))
         }
         core = context.connectFd(fd, null)
         stream = java.lang.foreign.Arena.ofConfined().use { arena ->
@@ -110,15 +113,13 @@ internal class KffiPipeWireNativeSession(
             },
             )
         }
-        withPods(listOf(enumFormatPod())) { pods ->
-            loop.withLock {
-                stream.connect(
-                    direction = spa_direction.SPA_DIRECTION_INPUT.value.toInt(),
-                    targetId = targetNodeId,
-                    flagsMask = KFFI_PW_STREAM_FLAG_AUTOCONNECT() or KFFI_PW_STREAM_FLAG_MAP_BUFFERS(),
-                    pods = pods,
-                )
-            }
+        loop.withLock {
+            stream.connect(
+                direction = spa_direction.SPA_DIRECTION_INPUT.value.toInt(),
+                targetId = targetNodeId,
+                flagsMask = KFFI_PW_STREAM_FLAG_AUTOCONNECT() or KFFI_PW_STREAM_FLAG_MAP_BUFFERS(),
+                pods = pinPods(listOf(enumFormatPod())),
+            )
         }
     }
 
@@ -147,10 +148,8 @@ internal class KffiPipeWireNativeSession(
 
     override fun updateBufferParams(count: Int, blocks: Int?, size: Int?, stride: Int?) {
         if (closed.get()) return
-        withPods(listOf(buffersProposal(count, blocks, size, stride))) { pods ->
-            loop.withLock {
-                stream.updateParams(pods)
-            }
+        loop.withLock {
+            stream.updateParams(pinPods(listOf(buffersProposal(count, blocks, size, stride))))
         }
     }
 
@@ -187,6 +186,7 @@ internal class KffiPipeWireNativeSession(
         runCatching { core.close() }
         runCatching { context.close() }
         runCatching { loop.close() }
+        runCatching { podArena.close() }
         stateLock.withLock {
             lastObservedState = PipeWireStreamStates.UNCONNECTED
             stateChanged.signalAll()
@@ -203,9 +203,13 @@ internal class KffiPipeWireNativeSession(
         return bytes
     }
 
-    /** Pods are serialized synchronously by the pw call: heap segments suffice. */
-    private inline fun <T> withPods(pods: List<ByteArray>, block: (List<MemorySegment>) -> T): T =
-        block(pods.map(MemorySegment::ofArray))
+    /** Copies the pods into the session arena (native memory, pw-held). */
+    private fun pinPods(pods: List<ByteArray>): List<MemorySegment> =
+        pods.map { bytes ->
+            val segment = podArena.allocate(bytes.size.toLong())
+            segment.asByteBuffer().put(bytes)
+            segment
+        }
 
     private fun enumFormatPod(): ByteArray = SpaPodWriter.toByteArray(
         SpaValue.ObjectValue(
@@ -214,45 +218,9 @@ internal class KffiPipeWireNativeSession(
             properties = listOf(
                 SpaValue.PropValue(KFFI_SPA_FORMAT_MEDIA_TYPE(), 0, SpaValue.IdValue(KFFI_SPA_MEDIA_TYPE_VIDEO())),
                 SpaValue.PropValue(KFFI_SPA_FORMAT_MEDIA_SUBTYPE(), 0, SpaValue.IdValue(KFFI_SPA_MEDIA_SUBTYPE_RAW())),
-                SpaValue.PropValue(
-                    KFFI_SPA_FORMAT_VIDEO_FORMAT(),
-                    0,
-                    SpaValue.ChoiceValue(
-                        choiceType = KFFI_SPA_CHOICE_ENUM(),
-                        flags = 0,
-                        values = listOf(
-                            SpaValue.IdValue(KFFI_SPA_VIDEO_FORMAT_BGRX()),
-                            SpaValue.IdValue(KFFI_SPA_VIDEO_FORMAT_BGRA()),
-                            SpaValue.IdValue(KFFI_SPA_VIDEO_FORMAT_RGBA()),
-                        ),
-                    ),
-                ),
-                SpaValue.PropValue(
-                    KFFI_SPA_FORMAT_VIDEO_SIZE(),
-                    0,
-                    SpaValue.ChoiceValue(
-                        choiceType = KFFI_SPA_CHOICE_RANGE(),
-                        flags = 0,
-                        values = listOf(
-                            SpaValue.RectangleValue(1024, 768),
-                            SpaValue.RectangleValue(1, 1),
-                            SpaValue.RectangleValue(16384, 16384),
-                        ),
-                    ),
-                ),
-                SpaValue.PropValue(
-                    KFFI_SPA_FORMAT_VIDEO_FRAMERATE(),
-                    0,
-                    SpaValue.ChoiceValue(
-                        choiceType = KFFI_SPA_CHOICE_RANGE(),
-                        flags = 0,
-                        values = listOf(
-                            SpaValue.FractionValue(0, 1),
-                            SpaValue.FractionValue(0, 1),
-                            SpaValue.FractionValue(1000, 1),
-                        ),
-                    ),
-                ),
+                SpaValue.PropValue(KFFI_SPA_FORMAT_VIDEO_FORMAT(), 0, SpaValue.IdValue(KFFI_SPA_VIDEO_FORMAT_BGRX())),
+                SpaValue.PropValue(KFFI_SPA_FORMAT_VIDEO_SIZE(), 0, SpaValue.RectangleValue(320, 240)),
+                SpaValue.PropValue(KFFI_SPA_FORMAT_VIDEO_FRAMERATE(), 0, SpaValue.FractionValue(25, 1)),
             ),
         ),
     )

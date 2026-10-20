@@ -290,3 +290,40 @@ class LinuxCapturePortTest {
         assertEquals("pipewire-remote-refused", platform.code)
     }
 }
+
+/** TEMPORARY wire debug: hexdumps the SelectSources frame. */
+class ScratchWireDumpTest {
+    @Test
+    fun dumpSelectSourcesBytes() {
+        val script = LinuxCapturePortTest.BusScript(authOk = true, portalOwned = true)
+        kotlinx.coroutines.test.runTest {
+            val capturePort = LinuxCapturePort(connectionFactory = { DbusConnection(script, uidProvider = { 1000 }) })
+            try {
+                capturePort.reserve(CapturePortTarget.HostChoice, CaptureRequest())
+            } catch (_: Throwable) {
+            } finally {
+                capturePort.close()
+            }
+        }
+        val body = DbusMessage.encodeBody(
+            "a{sv}",
+            listOf(
+                DbusValue.ArrayValue(
+                    "{sv}",
+                    listOf(
+                        DbusValue.DictEntryValue(
+                            DbusValue.StringValue("handle_token"),
+                            DbusValue.VariantValue("s", DbusValue.StringValue("kadre1")),
+                        ),
+                        DbusValue.DictEntryValue(
+                            DbusValue.StringValue("multiple"),
+                            DbusValue.VariantValue("b", DbusValue.BooleanValue(false)),
+                        ),
+                    ),
+                ),
+            ),
+            java.nio.ByteOrder.LITTLE_ENDIAN,
+        )
+        println("WIRE body " + body.size + " hex " + body.joinToString("") { "%02x".format(it) })
+    }
+}
