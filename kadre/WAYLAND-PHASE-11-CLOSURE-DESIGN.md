@@ -88,6 +88,22 @@ soit classés limite structurelle documentée (ex. focus pointer sway
 headless), soit re-qualifiés non-support avec refus typé. La checklist
 §9 de la roadmap est passée ligne par ligne dans le document de clôture.
 
+## Résultats de qualification (D2/D4, conteneur noble/Alpine pinés)
+
+- **musl : NON qualifié.** Alpine (musl 1.2.5, sway 1.12-rc3, wayland-client
+  musl) : les preuves session passent, puis SIGSEGV déterministes dans
+  `libwayland-client.so.0` (roundtrip du harnais metrics, chemins fenêtres —
+  4 `hs_err_pid*.log` identiques). glibc 2.39 (Noble) reste l'unique libc
+  qualifiée ; le job matrice reste glibc-only et musl est un résiduel
+  d'investigation (UB tolérée par glibc, probable wire/kffi), pas un
+  non-support définitif.
+- **Consumers : compilation publiée prouvée, exécution résiduelle.**
+  `validateKotlinConsumer`/`validateJavaConsumer` compilent contre le
+  repository contractTest (job `consumers` du workflow matrice). La preuve
+  d'exécution headless bloque sur le graphe runtime : le repo contractTest
+  ne porte pas `win32`/`kffi-objc` et un POM déclare `win32:1.0.0` sans
+  suffixe snapshot — couverture à étendre avant d'activer le test.
+
 ## Contrats prévus
 
 `CLS-001` (matrice compositors honnête : chaque famille versionnée

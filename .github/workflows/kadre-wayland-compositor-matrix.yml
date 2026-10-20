@@ -84,3 +84,32 @@ jobs:
             kadre/backend/wayland/build/test-results/
             kadre/backend/wayland/build/ci-diagnostics/
             build/wayland/
+
+  # D4 : les consumers Kotlin/Java compilent contre les artefacts PUBLIÉS
+  # (publication transitive) — la preuve d'exécution headless reste un
+  # résiduel documenté (graphe runtime non couvert par le repo contractTest).
+  consumers:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 25
+          cache: gradle
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      - name: Compile the consumers against the published artifacts
+        run: ./gradlew :kadre:validateKotlinConsumer :kadre:validateJavaConsumer --no-daemon
+
+      - name: Upload consumer diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wayland-matrix-consumers
+          if-no-files-found: warn
+          path: build/kadre-contract-repository/
