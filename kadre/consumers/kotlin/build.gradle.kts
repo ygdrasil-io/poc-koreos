@@ -15,7 +15,14 @@ repositories {
 }
 
 dependencies {
+    // Dépendances explicites (phase 13, clôture wayland-D4) : la transitivité
+    // POM à travers le repo contractuel ne garantit pas la résolution des
+    // modules frères — le consumer les déclare lui-même.
     implementation("org.graphiks.kadre:kadre:$kadreVersion")
+    implementation("org.graphiks.kadre:foundation:$kadreVersion")
+    implementation("org.graphiks.kadre:runtime:$kadreVersion")
+    implementation("org.graphiks.kadre:desktop:$kadreVersion")
+    implementation("org.graphiks.kadre.internal:win32:$kadreVersion")
 }
 
 kotlin {
