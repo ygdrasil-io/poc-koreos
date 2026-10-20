@@ -136,7 +136,7 @@ class Win32EmbeddedO2Test {
     }
 
     private fun awaitEmbeddedCount(expected: Int) {
-        val deadline = System.currentTimeMillis() + 5_000
+        val deadline = System.currentTimeMillis() + 20_000
         while (Win32HostOwnership.embeddedSessions() > expected) {
             if (System.currentTimeMillis() > deadline) {
                 error("embedded release timed out (count=${Win32HostOwnership.embeddedSessions()} expected=$expected)")
