@@ -23,6 +23,7 @@ import org.graphiks.kadre.internal.runtime.RuntimeHostController
 import org.graphiks.kadre.internal.runtime.RuntimeFailureReporter
 import org.graphiks.kadre.internal.runtime.RuntimeSessionComponents
 import org.graphiks.kadre.internal.runtime.DisplayPort
+import org.graphiks.kadre.internal.runtime.CapturePort
 import org.graphiks.kadre.internal.runtime.GamepadPort
 import org.graphiks.kadre.internal.runtime.RawInputPort
 import org.graphiks.kffi.win32.managed.Win32Displays
@@ -46,6 +47,7 @@ public class Win32BackendProvider private constructor(
     private val rawInputPortFactory: (() -> RawInputPort?)?,
     private val displayPortFactory: (() -> DisplayPort?)?,
     private val gamepadPortFactory: (() -> GamepadPort?)?,
+    private val capturePortFactory: (() -> CapturePort?)?,
 ) : DesktopBackendProvider {
     public constructor() : this(
         ::isWindows,
@@ -54,6 +56,7 @@ public class Win32BackendProvider private constructor(
         { ProcessWin32RawInputBroker.value.openPort() },
         { Win32DisplayPort { Win32Displays.snapshot() } },
         { ProcessWin32GamepadBroker.value.openSessionView() },
+        { Win32CapturePort() },
     )
 
     override val backend: DesktopBackendKind = DesktopBackendKind.Win32
@@ -129,6 +132,7 @@ public class Win32BackendProvider private constructor(
                         rawInputPort = rawInputPortFactory?.invoke(),
                         displayPort = displayPort,
                         gamepadPort = gamepadPortFactory?.invoke(),
+                        capturePort = capturePortFactory?.invoke(),
                     )
                 },
                 initialLifecycleState = LifecycleState(
@@ -191,7 +195,8 @@ public class Win32BackendProvider private constructor(
             rawInputPortFactory: (() -> RawInputPort?)? = null,
             displayPortFactory: (() -> DisplayPort?)? = null,
             gamepadPortFactory: (() -> GamepadPort?)? = null,
-        ): Win32BackendProvider = Win32BackendProvider(availability, portFactory, loopStarted, rawInputPortFactory, displayPortFactory, gamepadPortFactory)
+            capturePortFactory: (() -> CapturePort?)? = null,
+        ): Win32BackendProvider = Win32BackendProvider(availability, portFactory, loopStarted, rawInputPortFactory, displayPortFactory, gamepadPortFactory, capturePortFactory)
 
         internal fun isWindows(): Boolean =
             System.getProperty("os.name", "").startsWith("Windows", ignoreCase = true)

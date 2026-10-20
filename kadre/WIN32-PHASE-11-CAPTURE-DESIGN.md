@@ -19,15 +19,15 @@ Livrer le chemin de capture WGC (Windows Graphics Capture) pour fenêtre de sess
 
 ## 4. Port, admission et sources (Kadre)
 
-- Sources honnêtes : moniteurs (clés `win32-display`, via `Win32Displays.snapshot()`) + fenêtres de session (`win32-surface`, via surface registry — HWND jamais publié) ; pas d'EnumWindows global (fuite de titres de fenêtres étrangères inutile et non contractée).
-- Décisions par target : `Surface` = résolu par registry de session uniquement (patron AppKit : `register()`→AutoCloseable révocable, `resolve()`→Available/Revoked/Unknown ; mismatch natif vérifié) ; `Source(key)` = moniteurs/surfaces publiées au snapshot courant (révision exacte exigée par le runtime) ; `HostChoice` = **refusé honnêtement** (`Unsupported(CaptureOpen)`, `hostPicker=Unsupported`) — le picker OS Win32 desktop n'existe pas ; chemin séparé futur.
+- Sources livrées : **moniteurs** (clés `win32-display`, via `Win32Displays.snapshot()`, taille = bounds) ; **Surface = travail ouvert** (registry de session non câblée dans cette tranche — la cible est refusée proprement plutôt que satisfaite à moitié) ; **HostChoice refusé** (`Unsupported(CaptureOpen)`, `hostPicker=Unsupported`) — le picker OS Win32 desktop n'existe pas ; chemin séparé futur.
+- Décisions par target : `Source(key)` = moniteurs publiées au snapshot courant (révision exacte exigée par le runtime, clé inconnue → `InvalidRequest("target")`) ; `Surface` = refus honnête.
 - Permissions : Windows desktop n'impose pas de gate OS pour WGC → `Granted` publié ; disponibilité **vérifiée à l'exécution** par sonde (activation échouée → `Unavailable` cause typée ; jamais supposée).
-- Capabilities : `screen`/`window`/`surface` = `Supported(constraints)` si sonde OK ; formats annoncés = **Bgra8 seul**.
+- Capabilities : `screen`/`window` = `Supported(constraints)` si sonde OK ; formats annoncés = **Bgra8 seul** ; région `Unsupported`.
 
 ## 5. Streaming, delivery et terminaison
 
-- Config : taille = frame native (pas de rescale implicite — `preferredSize` ignoré si ≠, consigné) ; région refusée (`InvalidRequest("region")`) ; curseur `EmbeddedWhenAvailable` → `IsCursorCaptureEnabled=true`, autres modes refusés ; `minimumFrameInterval` non contracté (WGC ne l'expose pas sur cette tranche — consigné).
-- Frame : `FrameArrived` → `TryGetNextFrame` → QI `DxgiInterfaceAccess` → staging `CopyResource` + `Map` → **copie scalaire immédiate** (`CapturePortFrame(Bgra8, 1 plane)`) ; `> maxFrameBytes` → `ResourceLimitExceeded(CaptureBuffer)` et frame jetée ; timestamps WGC → `sourceTimestamp` ; resize item → `ContentSize` change → `onReconfigured` (révision +1 exacte).
+- Config : taille = frame native (pas de rescale implicite) ; région refusée (`Unsupported(CaptureOpen)`) ; format non-Bgra8 demandé explicitement refusé ; curseur Embedded/EmbeddedWhenAvailable → actif, Hidden → désactivé ; `minimumFrameInterval` non contracté (consigné).
+- Frame : `FrameArrived` → `TryGetNextFrame` → QI `DxgiInterfaceAccess` → staging `CopyResource` + `Map` → **copie scalaire immédiate** (`CapturePortFrame(Bgra8, 1 plane)`) ; `> maxFrameBytes` → `ResourceLimitExceeded(CaptureBuffer)` et frame jetée ; timestamps WGC → `sourceTimestamp` ; si la première frame diffère de la taille source → `onReconfigured` (révision +1 exacte).
 - Terminaisons typées : `Item.Closed` → `SourceLost` (sans id inventé) ; device loss (RemoveDevice/test de santé) → `Failed(PlatformFailure)` + tout owner fermé ; cancel collector / stop session / teardown parent → `Stopped(...)` ; **aucune frame après terminaison** ; `close` port/réservation/stream idempotents.
 
 ## 6. Matrice de réception et gates
@@ -37,7 +37,9 @@ Livrer le chemin de capture WGC (Windows Graphics Capture) pour fenêtre de sess
 | W32-027 — contrôle capture win32 | sonde disponibilité typée, sources = moniteurs + surfaces de session seulement, HostChoice refusé, permissions honnêtes, HWND jamais publié | une fenêtre étrangère inventoriée, un HWND croisé dans l'état public, ou un HostChoice satisfait par cible arbitraire |
 | W32-028 — frames bornées et terminaisons | start→frames Bgra8 copiées sous budget, reconfigure révision +1, SourceLost sans id, device loss ferme tout, budget refusé avant allocation | une frame hors emprunt vivante, un budget dépassé alloué, ou une frame livrée après terminaison |
 
-Tests portables : port à FakeNative (admission, budgets, révisions, terminaisons). Natifs O3 : session réelle sur la fenêtre du test (CreateForWindow propre), frames lues avec métadonnées only (pattern checklist AppKit), absence de WGC → `Unavailable` honnête. Charter manuel : multi-moniteur, resize live, contenu protégé (WDA), fermeture fenêtre à chaud.
+Tests portables : port à FakeNative (disponibilité honnête, inventaire moniteurs, refus de cibles, forme des requêtes). Natifs O3 : vraie session runtime — énumération moniteur réelle, flux BGRA8 réel via `collectFrames` (packé, borné, terminaison `Stopped(Requested)`), absence de WGC → `Unavailable` honnête. Charter manuel : multi-moniteur, resize live, contenu protégé (WDA), fermeture fenêtre à chaud.
+
+As-built streaming : frames **tirées par un poller daemon kffi (16 ms)** — la registration `FrameArrived` répond 0x8000001C sur les hôtes observés (consigné) ; `TryGetNextFrame` livrant le même contrat de flux, la voie événementielle reste une optimisation future sans changement de contrat. La taille du pool = taille de l'item (par valeur : `width | height shl 32` en registre x64) ; si la première frame diffère de la taille source → `onReconfigured` (révision +1 exacte).
 
 ## 7. Hors périmètre assumé de cette livraison
 
