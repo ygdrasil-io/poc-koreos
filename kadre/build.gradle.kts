@@ -228,7 +228,7 @@ val win32ConsumerRun = tasks.register<GradleBuild>("win32ConsumerRun") { // Grad
     group = "verification"
     description = "Runs the published-umbrella consumer session on the win32 provider."
     dependsOn(contractPublications)
-    tasks = listOf(":kadre:consumers:kotlin:win32ConsumerRun")
+    tasks = listOf(":win32ConsumerRun")
     dir = file("consumers/kotlin")
     startParameter.projectProperties["kadreRepository"] =
         layout.buildDirectory.dir("kadre-contract-repository").get().asFile.absolutePath
