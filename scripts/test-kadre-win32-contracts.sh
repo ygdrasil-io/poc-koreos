@@ -76,6 +76,9 @@ rm -rf "$EVIDENCE_DIRECTORY"
 cd "$REPO_ROOT"
 
 # Bureau interactif requis : un runner sans bureau = échec de gate, pas un skip.
+# :kadre:win32ConsumerRun publie l'umbrella (cible Android incluse) : il exige
+# ANDROID_HOME — fourni sur les runners CI, absent des machines sans SDK Android
+# (hors scope local : la gate complète est une preuve CI).
 run_phase tests "$TEST_TIMEOUT_SECONDS" \
     "$GRADLEW" \
     :kadre:backend:win32:win32ContractTests \
