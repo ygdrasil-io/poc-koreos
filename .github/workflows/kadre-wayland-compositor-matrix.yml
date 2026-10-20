@@ -23,7 +23,7 @@ jobs:
     steps:
       - id: set
         run: |
-          input="${{ github.event.inputs.compositors || 'sway,weston' }}"
+          input="${{ github.event.inputs.compositors || 'sway,weston,mutter,kwin' }}"
           list="$(printf '%s' "$input" | awk -F, '{ for (i = 1; i <= NF; i++) gsub(/ /, "", $i) } { for (i = 1; i <= NF; i++) printf "\"%s\"%s", $i, (i < NF ? "," : "") }')"
           echo "list=[$list]" >> "$GITHUB_OUTPUT"
 
@@ -46,6 +46,7 @@ jobs:
             sway)    sudo apt-get install -y --no-install-recommends sway ;;
             weston)  sudo apt-get install -y --no-install-recommends weston ;;
             mutter)  sudo apt-get install -y --no-install-recommends mutter dbus ;;
+            kwin)    sudo apt-get install -y --no-install-recommends kwin-wayland dbus ;;
             *) echo "unknown compositor '${{ matrix.compositor }}'" >&2; exit 64 ;;
           esac
 
@@ -69,8 +70,8 @@ jobs:
           source build/wayland/weston.env
           # The two output-reconfiguration metrics proofs stimulate the
           # compositor through swaymsg (sway IPC, by design): they run in
-          # the sway family only. Weston and mutter exercise the session
-          # and windows surfaces.
+          # the sway family only. Weston, mutter and kwin exercise the
+          # session and windows surfaces.
           if [[ "${{ matrix.compositor }}" == "sway" ]]; then
             ./gradlew :kadre:backend:wayland:waylandNativeTests \
               :kadre:backend:linux:jvmTest \
