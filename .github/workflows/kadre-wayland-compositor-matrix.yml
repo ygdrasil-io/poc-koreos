@@ -10,7 +10,7 @@ on:
       compositors:
         description: "Comma-separated compositor families to exercise"
         required: false
-        default: "sway,weston"
+        default: "sway,weston,mutter,kwin"
   schedule:
     # nightly at 03:20 UTC
     - cron: "20 3 * * *"
