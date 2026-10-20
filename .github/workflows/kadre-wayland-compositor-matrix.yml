@@ -1,0 +1,115 @@
+name: Kadre Wayland Compositor Matrix
+
+# Matrice de compositors versionnée (design WAYLAND-PHASE-11-CLOSURE-DESIGN
+# D1) : chaque famille exécute les preuves O3 du backend Wayland et publie
+# sa version réelle dans la trace. Job d'acceptation — la gate bloquante
+# reste sway (kadre-wayland-contracts.yml).
+on:
+  workflow_dispatch:
+    inputs:
+      compositors:
+        description: "Comma-separated compositor families to exercise"
+        required: false
+        default: "sway,weston"
+  schedule:
+    # nightly at 03:20 UTC
+    - cron: "20 3 * * *"
+
+jobs:
+  families:
+    runs-on: ubuntu-24.04
+    outputs:
+      list: ${{ steps.set.outputs.list }}
+    steps:
+      - id: set
+        run: |
+          input="${{ github.event.inputs.compositors || 'sway,weston' }}"
+          list="$(printf '%s' "$input" | awk -F, '{ for (i = 1; i <= NF; i++) gsub(/ /, "", $i) } { for (i = 1; i <= NF; i++) printf "\"%s\"%s", $i, (i < NF ? "," : "") }')"
+          echo "list=[$list]" >> "$GITHUB_OUTPUT"
+
+  matrix:
+    needs: families
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        compositor: ${{ fromJSON(needs.families.outputs.list) }}
+    name: ${{ matrix.compositor }} O3 proofs
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install the ${{ matrix.compositor }} compositor
+        run: |
+          sudo apt-get update
+          case "${{ matrix.compositor }}" in
+            sway)    sudo apt-get install -y --no-install-recommends sway ;;
+            weston)  sudo apt-get install -y --no-install-recommends weston ;;
+            *) echo "unknown compositor '${{ matrix.compositor }}'" >&2; exit 64 ;;
+          esac
+
+      - name: Record the real compositor version (proof B-3)
+        run: KADRE_WAYLAND_COMPOSITOR=${{ matrix.compositor }} scripts/ci-wayland-runtime.sh version
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 25
+          cache: gradle
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      - name: Start the ${{ matrix.compositor }} headless runtime
+        run: KADRE_WAYLAND_COMPOSITOR=${{ matrix.compositor }} scripts/ci-wayland-runtime.sh start
+
+      - name: Run the Wayland O3 proofs
+        run: |
+          source build/wayland/weston.env
+          ./gradlew :kadre:backend:wayland:waylandNativeTests \
+            :kadre:backend:linux:jvmTest \
+            --no-daemon --stacktrace --console=plain
+
+      - name: Stop the compositor
+        if: always()
+        run: KADRE_WAYLAND_COMPOSITOR=${{ matrix.compositor }} scripts/ci-wayland-runtime.sh stop || true
+
+      - name: Upload diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wayland-matrix-${{ matrix.compositor }}
+          if-no-files-found: warn
+          path: |
+            kadre/backend/wayland/build/test-results/
+            kadre/backend/wayland/build/ci-diagnostics/
+            build/wayland/
+
+  # D4 : les consumers Kotlin/Java compilent contre les artefacts PUBLIÉS
+  # (publication transitive) — la preuve d'exécution headless reste un
+  # résiduel documenté (graphe runtime non couvert par le repo contractTest).
+  consumers:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 25
+          cache: gradle
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      - name: Compile the consumers against the published artifacts
+        run: ./gradlew :kadre:validateKotlinConsumer :kadre:validateJavaConsumer --no-daemon
+
+      - name: Upload consumer diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wayland-matrix-consumers
+          if-no-files-found: warn
+          path: build/kadre-contract-repository/

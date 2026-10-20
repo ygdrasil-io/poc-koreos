@@ -161,6 +161,26 @@ réelles GNOME/KDE/wlroots (gate de sortie phase 10), DMA-BUF (preuve de
 mapping), `CaptureTarget.Source`/`Surface` (chemin exact non prouvé).
 Les sockets abstract D-Bus et `t` (uint64) sont refusés explicitement.
 
+## 3 duodecies. Registre — tranche 11 (compatibilité, distribution, fermeture)
+
+Phase de clôture (design `WAYLAND-PHASE-11-CLOSURE-DESIGN.md`) : la gate
+bloquante reste Sway (wlroots) ; la matrice de compositors et le stress
+tournent en acceptation dédiée (`kadre-wayland-compositor-matrix.yml`,
+dispatch + nocturne), chaque famille publiant sa version réelle (B-3).
+
+| feature | target | minimum déclaré | compile gate | runtime gate | état absent | tests |
+|---|---|---|---|---|---|---|
+| matrice de compositors (sway, weston) | `jvm` | `ci-wayland-runtime.sh` sélecteur `KADRE_WAYLAND_COMPOSITOR` ; sway 1.9 / weston 13 (noble) validés sur les preuves O3 session/fenêtres/metrics | `waylandNativeTests` par famille | matrice (acceptation) | famille inconnue ⇒ refus explicite du provisionneur (exit 64) ; mutter/kwin : résiduel documenté | `WaylandNativeSessionLinuxTest`, `WaylandWindowsLinuxTest`, `WaylandMetricsLinuxTest` sous chaque famille |
+| stress : rafales de fenêtres, interruption du compositor, teardown répété | `jvm` | 6×8 fenêtres, SIGKILL du compositor dédié ⇒ `Failed(PlatformFailure(Wayland,"display","connection-lost"))`, 12 cycles < 90 s, fds stables (`/proc/self/fd`) | `waylandStressTests` (Linux) | acceptation | aucune fuite tolérée au-delà de +2 fds (sockets de rapport) ; jamais de callback après terminaison | `WaylandStressLinuxTest` (3 preuves O3) |
+| libc : glibc qualifié, musl refusé | `jvm` | glibc 2.39 (gate + matrice) ; musl 1.2.5 : session verte puis SIGSEGV déterministes dans `libwayland-client` (metrics, fenêtres) | — | — | musl NON publié comme supporté — résiduel d'investigation, pas un non-support définitif | hs_err pinés dans le design (D2) |
+| consumers Kotlin/Java contre l'artefact publié | `jvm` | compilation transitive depuis le repository contractTest (`validateKotlinConsumer`, `validateJavaConsumer`) | job `consumers` de la matrice | — | exécution headless du consumer : résiduel (graphe runtime non couvert par le repo contractTest, `win32:1.0.0` sans snapshot) | tâches GradleBuild |
+
+Résiduel tranche 11 : mutter et kwin headless en conteneur (familles GNOME/
+KDE), la qualification musl (crash libwayland-client à investiguer côté
+kffi-wayland), la preuve d'exécution des consumers, les contrats CLS-001/
+CLS-002 (enregistrement après couverture matrice), et le passage ligne par
+ligne de la checklist §9 de la roadmap.
+
 ## 4. Limites des tranches 1 à 4
 
 - Le support `WAYLAND_SOCKET` au run est refusé avant session

@@ -33,14 +33,22 @@ class WaylandMetricsLinuxTest {
             socketExists = { true },
         )
 
-    /** Locates the sway IPC socket created in the compositor runtime dir. */
+    /**
+     * Locates the sway IPC socket created in the compositor runtime dir.
+     * The gate exports the dir via weston.env (XDG_RUNTIME_DIR); the
+     * legacy fixed path stays as the fallback for direct runs.
+     */
     private fun swaymsgSocket(controller: WaylandCompositorController): String {
-        val runtimeDir = File("/tmp/kadre-wayland-runtime")
-        return runtimeDir.listFiles()
-            ?.filter { it.name.startsWith("sway-ipc") }
-            ?.maxByOrNull { it.lastModified() }
+        val candidates = listOfNotNull(
+            System.getenv("XDG_RUNTIME_DIR")?.takeIf { it.isNotBlank() },
+            "/tmp/kadre-wayland-runtime",
+            "/tmp/kadre-wayland-runtime-sway",
+        ).distinct().map(::File)
+        return candidates
+            .flatMap { dir -> dir.listFiles()?.filter { it.name.startsWith("sway-ipc") }?.toList() ?: emptyList() }
+            .maxByOrNull { it.lastModified() }
             ?.absolutePath
-            ?: error("sway IPC socket not found")
+            ?: error("sway IPC socket not found in $candidates")
     }
 
     private fun swaymsg(socket: String, vararg command: String) {
