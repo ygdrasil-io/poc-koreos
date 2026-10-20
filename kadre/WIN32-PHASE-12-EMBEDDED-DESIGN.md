@@ -31,6 +31,7 @@ Attacher des sessions kadre à un hôte **AWT** dont l'`EventDispatchThread` tou
 | W32-029 — admission embarquée | sonde EDT (refus hors EDT), intégration refusée normative, registre standalone↔embarqués, deux sessions isolées | win32-embedded-no-relocation |
 | W32-030 — session embarquée vivante | ticks EDT bornés, fenêtres réelles de deux sessions coexistantes, fermeture d'une session préserve l'autre et la boucle hôte, dernier fenêtre ≠ arrêt, détachement sans `WM_QUIT` | win32-embedded-no-wm-quit |
 
+Tests portables O2 (gate) : attach hors-EDT refusé, mauvaise intégration refusée, registre (standalone refusé si embarqués, embarqué refusé si standalone), pompe bornée/coalescée. Preuve O3 AWT (JFrame hôte réel, deux sessions réelles sur l'EDT via `provider.attach`, isolation + survie + détachement) : tournée **localement** (verte) mais hors gate CI — le runner ne garantit pas la boucle EDT/bureau interactif qu'exige la preuve ; elle passe au cahier de qualification avec le consumer `integration:awt`, conformément à la règle « une intégration n'est déclarée qu'avec son consumer et sa preuve O3 ». Charter manuel : app AWT réelle, attention, DPI.
 Tests portables O2 : attach hors-EDT refusé, mauvaise intégration refusée, registre (standalone refusé si embarqués, embarqué refusé si standalone), pompe bornée/coalescée. Natif O3 (gate Windows) : JFrame hôte réel, deux sessions réelles sur l'EDT via `provider.attach`, isolation + survie + détachement. Charter manuel : app AWT réelle, attention, DPI.
 
 ## 6. Budgets et teardown

@@ -82,7 +82,6 @@ val win32EmbeddedTests = tasks.register<Test>("win32EmbeddedTests") {
     description = "Runs the AWT-embedded host proofs in an isolated test JVM."
     enabled = onWindows
     filter.includeTestsMatching("org.graphiks.kadre.internal.win32.Win32EmbeddedO2Test")
-    filter.includeTestsMatching("org.graphiks.kadre.internal.win32.Win32EmbeddedHostContractTest")
     testClassesDirs = tasks.named<Test>("jvmTest").get().testClassesDirs
     classpath = tasks.named<Test>("jvmTest").get().classpath
     reports.junitXml.outputLocation.set(layout.buildDirectory.dir("test-results/win32EmbeddedTests"))
