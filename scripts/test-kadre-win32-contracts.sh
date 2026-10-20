@@ -39,6 +39,7 @@ if [[ -z "$COMMIT" ]]; then
 fi
 
 run_phase() {
+    local start_seconds=$SECONDS
     local phase="$1"
     local timeout_seconds="$2"
     shift 2
@@ -63,11 +64,11 @@ run_phase() {
         return "$tee_status"
     fi
     if (( status == 0 )); then
-        echo "Kadre Win32 $phase: passed"
+        echo "Kadre Win32 $phase: passed in $((SECONDS - start_seconds)) s"
         return 0
     fi
 
-    echo "Kadre Win32 $phase: failed (status $status; log: $log_file)" >&2
+    echo "Kadre Win32 $phase: failed in $((SECONDS - start_seconds)) s (status $status; log: $log_file)" >&2
     return "$status"
 }
 
@@ -78,6 +79,7 @@ cd "$REPO_ROOT"
 run_phase tests "$TEST_TIMEOUT_SECONDS" \
     "$GRADLEW" \
     :kadre:backend:win32:win32ContractTests \
+    :kadre:win32ConsumerRun \
     --refresh-dependencies \
     --rerun-tasks \
     --no-daemon \

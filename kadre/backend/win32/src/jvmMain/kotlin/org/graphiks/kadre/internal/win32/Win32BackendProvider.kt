@@ -114,6 +114,7 @@ public class Win32BackendProvider private constructor(
         val released = AtomicBoolean(false)
         fun releaseOnce() {
             if (!released.compareAndSet(false, true)) return
+            if (SessionRawInputTarget.port === port) SessionRawInputTarget.port = null
 
             runCatching { session.port.stopWorkerCommands() }
             runCatching { ownedEmbeddedDriver?.close() }

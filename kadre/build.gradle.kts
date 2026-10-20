@@ -221,3 +221,17 @@ tasks.configureEach {
         enabled = false
     }
 }
+
+// Preuve consumer exécutée (phase 13) : le consumer tourne la session
+// standalone win32 via la découverte ServiceLoader depuis le repo contractuel.
+val win32ConsumerRun = tasks.register<GradleBuild>("win32ConsumerRun") { // GradleBuild: projet consumer séparé (repo contractuel)
+    group = "verification"
+    description = "Runs the published-umbrella consumer session on the win32 provider."
+    dependsOn(contractPublications)
+    tasks = listOf(":kadre:consumers:kotlin:win32ConsumerRun")
+    dir = file("consumers/kotlin")
+    startParameter.projectProperties["kadreRepository"] =
+        layout.buildDirectory.dir("kadre-contract-repository").get().asFile.absolutePath
+    startParameter.projectProperties["kadreVersion"] =
+        project(":kadre").version.toString()
+}

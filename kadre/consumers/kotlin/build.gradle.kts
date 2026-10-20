@@ -21,3 +21,16 @@ dependencies {
 kotlin {
     jvmToolchain(25)
 }
+
+dependencies {
+    // Provider win32 publié (phase 13) : l'exécution de découverte ServiceLoader
+    // a besoin du jar provider sur le classpath runtime ; jamais project(...).
+    implementation("org.graphiks.kadre.internal:win32:$kadreVersion")
+}
+
+tasks.register<JavaExec>("win32ConsumerRun") {
+    group = "verification"
+    description = "Runs the win32 discovery + standalone session consumer proof."
+    mainClass.set("Win32DiscoveryMainKt")
+    classpath = sourceSets["main"].runtimeClasspath
+}

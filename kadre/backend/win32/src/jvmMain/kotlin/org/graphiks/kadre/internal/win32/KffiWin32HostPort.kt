@@ -235,7 +235,6 @@ internal open class KffiWin32HostPort : Win32NativeHostPort {
 
     override fun forwardRawInput(hwnd: Long, lParam: Long): Boolean {
         check(isMainThread()) { "WM_INPUT is read on the UI owner" }
-        println("DBG forward hwnd=$hwnd rawInputHwnd=$rawInputHwnd owner=${rawInputOwner != null}")
         val owner = rawInputOwner ?: return false
         if (hwnd != rawInputHwnd) return false
         val motion = owner.read(lParam)

@@ -74,14 +74,27 @@ tasks.named<Test>("jvmTest") {
     // tâche de test, isolée des autres suites du module.
     filter.excludeTestsMatching("org.graphiks.kadre.internal.win32.Win32EmbeddedO2Test")
     filter.excludeTestsMatching("org.graphiks.kadre.internal.win32.Win32EmbeddedHostContractTest")
+    filter.excludeTestsMatching("org.graphiks.kadre.internal.win32.Win32StressNativeContractTest")
+    filter.excludeTestsMatching("org.graphiks.kadre.internal.win32.Win32ClassloaderReuseTest")
 }
 
 val onWindows = System.getProperty("os.name", "").contains("Windows", ignoreCase = true)
+val win32ReuseTests = tasks.register<Test>("win32ReuseTests") {
+    group = "verification"
+    description = "Runs the classloader reuse qualification in an isolated test JVM."
+    enabled = onWindows
+    filter.includeTestsMatching("org.graphiks.kadre.internal.win32.Win32ClassloaderReuseTest")
+    testClassesDirs = tasks.named<Test>("jvmTest").get().testClassesDirs
+    classpath = tasks.named<Test>("jvmTest").get().classpath
+    reports.junitXml.outputLocation.set(layout.buildDirectory.dir("test-results/win32ReuseTests"))
+}
 val win32EmbeddedTests = tasks.register<Test>("win32EmbeddedTests") {
     group = "verification"
     description = "Runs the AWT-embedded host proofs in an isolated test JVM."
     enabled = onWindows
     filter.includeTestsMatching("org.graphiks.kadre.internal.win32.Win32EmbeddedO2Test")
+    filter.includeTestsMatching("org.graphiks.kadre.internal.win32.Win32StressNativeContractTest")
+
     testClassesDirs = tasks.named<Test>("jvmTest").get().testClassesDirs
     classpath = tasks.named<Test>("jvmTest").get().classpath
     reports.junitXml.outputLocation.set(layout.buildDirectory.dir("test-results/win32EmbeddedTests"))
@@ -132,7 +145,7 @@ val win32NativeTests = tasks.register<Test>("win32NativeTests") {
 val win32ContractTests = tasks.register("win32ContractTests") {
     group = "verification"
     description = "Runs the O2 portable suite and the Windows-only O3 proofs feeding the contract evidence."
-    dependsOn(tasks.named("jvmTest"), win32NativeTests, win32EmbeddedTests)
+    dependsOn(tasks.named("jvmTest"), win32NativeTests, win32EmbeddedTests, win32ReuseTests)
 }
 
 tasks.register<JavaExec>("win32RichInputManual") {
