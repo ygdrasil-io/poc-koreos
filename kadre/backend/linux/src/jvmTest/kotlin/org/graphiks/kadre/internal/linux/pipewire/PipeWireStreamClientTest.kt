@@ -136,7 +136,7 @@ internal class PipeWireStreamClientTest {
     @Test
     fun negotiationReachesStreamingWithTheEffectiveConfiguration() {
         val session = FakeSession()
-        val client = PipeWireStreamClient(session)
+        val client = PipeWireStreamClient { session }
         client.use {
             session.state = PipeWireStreamStates.CONNECTING
             it.events.onParamChanged(paramFormat, formatPod(spaBgrx, 64, 48))
@@ -158,7 +158,7 @@ internal class PipeWireStreamClientTest {
     @Test
     fun framesArriveDetachedWithExactLayouts() {
         val session = FakeSession()
-        val client = PipeWireStreamClient(session)
+        val client = PipeWireStreamClient { session }
         client.use {
             session.state = PipeWireStreamStates.STREAMING
             it.events.onParamChanged(paramFormat, formatPod(spaBgrx, 32, 16))
@@ -181,7 +181,7 @@ internal class PipeWireStreamClientTest {
     @Test
     fun slowConsumersDropCountedFramesInsteadOfBlockingTheLoop() {
         val session = FakeSession()
-        val client = PipeWireStreamClient(session)
+        val client = PipeWireStreamClient { session }
         client.use {
             session.state = PipeWireStreamStates.STREAMING
             it.events.onParamChanged(paramFormat, formatPod(spaBgrx, 32, 16))
@@ -222,7 +222,7 @@ internal class PipeWireStreamClientTest {
     @Test
     fun overBudgetFramesTerminateWithTheResourceLimit() {
         val session = FakeSession()
-        val client = PipeWireStreamClient(session)
+        val client = PipeWireStreamClient { session }
         client.use {
             session.state = PipeWireStreamStates.STREAMING
             it.events.onParamChanged(paramFormat, formatPod(spaBgrx, 32, 16))
@@ -243,7 +243,7 @@ internal class PipeWireStreamClientTest {
     @Test
     fun formatsOutsideThePortableSubsetAreRefused() {
         val session = FakeSession()
-        val client = PipeWireStreamClient(session)
+        val client = PipeWireStreamClient { session }
         client.use {
             session.state = PipeWireStreamStates.CONNECTING
             it.events.onParamChanged(paramFormat, formatPod(99, 64, 48))
@@ -255,7 +255,7 @@ internal class PipeWireStreamClientTest {
     @Test
     fun formatChangesRepublishAnIncrementedConfiguration() {
         val session = FakeSession()
-        val client = PipeWireStreamClient(session)
+        val client = PipeWireStreamClient { session }
         client.use {
             session.state = PipeWireStreamStates.STREAMING
             it.events.onParamChanged(paramFormat, formatPod(spaBgrx, 32, 16))
@@ -271,7 +271,7 @@ internal class PipeWireStreamClientTest {
     @Test
     fun sourceLossAfterStreamingTerminatesHonestly() {
         val session = FakeSession()
-        val client = PipeWireStreamClient(session)
+        val client = PipeWireStreamClient { session }
         client.use {
             session.state = PipeWireStreamStates.STREAMING
             it.events.onParamChanged(paramFormat, formatPod(spaBgrx, 32, 16))
@@ -285,7 +285,7 @@ internal class PipeWireStreamClientTest {
     @Test
     fun layoutViolationsRefuseTheFrame() {
         val session = FakeSession()
-        val client = PipeWireStreamClient(session)
+        val client = PipeWireStreamClient { session }
         client.use {
             session.state = PipeWireStreamStates.STREAMING
             it.events.onParamChanged(paramFormat, formatPod(spaBgrx, 32, 16))
@@ -309,7 +309,7 @@ internal class PipeWireStreamClientTest {
     fun negotiationTimeoutStaysBounded() {
         val session = FakeSession()
         session.state = PipeWireStreamStates.CONNECTING
-        val client = PipeWireStreamClient(session)
+        val client = PipeWireStreamClient { session }
         client.use {
             val started = System.currentTimeMillis()
             val result = it.start(RecordingListener(), 1 shl 20, 150)
@@ -322,7 +322,7 @@ internal class PipeWireStreamClientTest {
     @Test
     fun teardownIsIdempotentAndSilencesLateEvents() {
         val session = FakeSession()
-        val client = PipeWireStreamClient(session)
+        val client = PipeWireStreamClient { session }
         session.state = PipeWireStreamStates.STREAMING
         client.events.onParamChanged(paramFormat, formatPod(spaBgrx, 32, 16))
         val listener = RecordingListener()

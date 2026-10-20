@@ -43,7 +43,7 @@ import kotlin.time.Duration.Companion.seconds
  * (counted), never blocks the PipeWire loop thread.
  */
 internal class PipeWireStreamClient(
-    private val session: PipeWireNativeSession,
+    sessionFactory: (PipeWireStreamEvents) -> PipeWireNativeSession,
 ) : AutoCloseable {
 
     private val lock = Any()
@@ -80,6 +80,8 @@ internal class PipeWireStreamClient(
             handleProcess()
         }
     }
+
+    private val session: PipeWireNativeSession = sessionFactory(events)
 
     /**
      * Waits for the negotiation to reach STREAMING (or a terminal state) and

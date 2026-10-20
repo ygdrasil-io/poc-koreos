@@ -5,31 +5,42 @@ import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
 import org.graphiks.kadre.capture.CaptureRequest
+import org.graphiks.kadre.capture.CaptureSourceKind
 import org.graphiks.kadre.diagnostics.KadreFailure
 import org.graphiks.kadre.diagnostics.KadreResult
+import org.graphiks.kadre.internal.linux.dbus.DbusChunk
 import org.graphiks.kadre.internal.linux.dbus.DbusConnection
 import org.graphiks.kadre.internal.linux.dbus.DbusMessage
 import org.graphiks.kadre.internal.linux.dbus.DbusTransport
 import org.graphiks.kadre.internal.linux.dbus.DbusValue
+import org.graphiks.kadre.internal.runtime.CapturePortReservation
 import org.graphiks.kadre.internal.runtime.CapturePortSourceKey
 import org.graphiks.kadre.internal.runtime.CapturePortSources
 import org.graphiks.kadre.internal.runtime.CapturePortTarget
-
+import org.graphiks.kadre.internal.runtime.CapturePortSnapshot
 
 /**
- * O2 proofs of the capture control plane (design D1/D4): availability is
- * observed through the scripted bus seam — auth failure, missing portal
- * name owner and a live portal each produce their exact snapshot — and
- * reservations stay refused until the PipeWire stream tranche lands.
+ * O2 proofs of the capture control plane (design D1/D4 +
+ * LINUX-PIPEWIRE-STREAM-DESIGN D9): availability is observed through the
+ * scripted bus seam, and a HostChoice reservation walks the whole ScreenCast
+ * chain — CreateSession, SelectSources, Start, OpenPipeWireRemote — ending
+ * in a reservation that owns the fd and the node id. Stream negotiation
+ * itself needs libpipewire and lives in the container oracle.
  */
 class LinuxCapturePortTest {
 
-    private class BusScript(
+    /** A scripted session bus playing org.freedesktop.portal.ScreenCast. */
+    internal class BusScript(
         val authOk: Boolean,
         val portalOwned: Boolean,
+        val pickerRefused: Boolean = false,
+        val honestPipewireFd: Boolean = true,
+        val sourceType: Long = 1,
     ) : DbusTransport {
         val sent = ArrayList<ByteArray>()
+        var closed = false
         private val incoming = ArrayDeque<ByteArray>()
+        private val fdBatches = ArrayDeque<IntArray>()
 
         override fun send(bytes: ByteArray): Boolean {
             sent.add(bytes)
@@ -47,25 +58,88 @@ class LinuxCapturePortTest {
             }
         }
 
-        override fun receive(timeoutMillis: Long): org.graphiks.kadre.internal.linux.dbus.DbusChunk? {
+        override fun receive(timeoutMillis: Long): DbusChunk? {
             val last = sent.lastOrNull() ?: return null
             if (last.size > 16) {
                 val decoded = runCatching { DbusMessage.decode(last) }.getOrNull()
                 if (decoded != null && incoming.isEmpty()) {
                     when (decoded.member()) {
                         "Hello" -> enqueue(methodReturn(decoded.serial, DbusValue.StringValue(":1.99")))
+                        "AddMatch" -> enqueue(methodReturn(decoded.serial))
                         "GetNameOwner" ->
                             if (portalOwned) {
                                 enqueue(methodReturn(decoded.serial, DbusValue.StringValue(":1.5")))
                             } else {
                                 enqueue(error(decoded.serial, "org.freedesktop.DBus.Error.NameHasNoOwner"))
                             }
+                        "CreateSession" -> {
+                            val token = handleToken(decoded) ?: "kadre_session0"
+                            enqueue(
+                                responseSignal(
+                                    path = "/org/freedesktop/portal/desktop/request/1_99/$token",
+                                    code = 0,
+                                    "session_handle" to variant("o", DbusValue.ObjectPathValue("/org/freedesktop/portal/desktop/session/1_99/$token")),
+                                ),
+                            )
+                        }
+                        "SelectSources" -> {
+                            val token = handleToken(decoded) ?: "kadre0"
+                            enqueue(
+                                responseSignal(
+                                    path = "/org/freedesktop/portal/desktop/request/1_99/$token",
+                                    code = if (pickerRefused) 1 else 0,
+                                ),
+                            )
+                        }
+                        "Start" -> {
+                            val token = handleToken(decoded) ?: "kadre1"
+                            val stream = DbusValue.ArrayValue(
+                                elementSignature = "{sv}",
+                                elements = listOf(
+                                    entry("source_id", variant("u", DbusValue.Uint32Value(42))),
+                                    entry("source_type", variant("u", DbusValue.Uint32Value(sourceType))),
+                                    entry("size", variant("(ii)", DbusValue.StructValue(listOf(DbusValue.Int32Value(640), DbusValue.Int32Value(480))))),
+                                ),
+                            )
+                            enqueue(
+                                responseSignal(
+                                    path = "/org/freedesktop/portal/desktop/request/1_99/$token",
+                                    code = 0,
+                                    "streams" to variant("aa{sv}", DbusValue.ArrayValue(elementSignature = "a{sv}", elements = listOf(stream))),
+                                ),
+                            )
+                        }
+                        "OpenPipeWireRemote" -> {
+                            enqueue(methodReturn(decoded.serial, DbusValue.UnixFdValue(0)))
+                            if (honestPipewireFd) fdBatches.add(intArrayOf(777))
+                        }
+                        "Close" -> Unit // fire-and-forget: the portal expects no reply
                         else -> enqueue(error(decoded.serial, "org.freedesktop.DBus.Error.ServiceUnknown"))
                     }
                 }
             }
-            return org.graphiks.kadre.internal.linux.dbus.DbusChunk(incoming.removeFirstOrNull() ?: ByteArray(0))
+            return DbusChunk(incoming.removeFirstOrNull() ?: ByteArray(0), fdBatches.removeFirstOrNull() ?: IntArray(0))
         }
+
+        private fun handleToken(message: DbusMessage): String? {
+            fun scan(value: DbusValue): String? = when (value) {
+                is DbusValue.DictEntryValue ->
+                    if ((value.key as? DbusValue.StringValue)?.value == "handle_token") {
+                        ((value.value as? DbusValue.VariantValue)?.value as? DbusValue.StringValue)?.value
+                    } else {
+                        null
+                    }
+                is DbusValue.ArrayValue -> value.elements.firstNotNullOfOrNull(::scan)
+                is DbusValue.VariantValue -> scan(value.value)
+                else -> null
+            }
+            return message.body.firstNotNullOfOrNull(::scan)
+        }
+
+        private fun variant(signature: String, value: DbusValue) = DbusValue.VariantValue(signature, value)
+
+        private fun entry(key: String, value: DbusValue.VariantValue) =
+            DbusValue.DictEntryValue(DbusValue.StringValue(key), value)
 
         private fun enqueue(bytes: ByteArray) {
             incoming.add(bytes)
@@ -83,6 +157,26 @@ class LinuxCapturePortTest {
                 body = body.toList(),
             ).encode()
 
+        private fun responseSignal(path: String, code: Int, vararg results: Pair<String, DbusValue.VariantValue>): ByteArray =
+            DbusMessage(
+                type = DbusMessage.TYPE_SIGNAL,
+                flags = 0,
+                serial = 900,
+                fields = mapOf(
+                    DbusMessage.FIELD_PATH to DbusValue.ObjectPathValue(path),
+                    DbusMessage.FIELD_INTERFACE to DbusValue.StringValue("org.freedesktop.portal.Request"),
+                    DbusMessage.FIELD_MEMBER to DbusValue.StringValue("Response"),
+                ),
+                bodySignature = "ua{sv}",
+                body = listOf(
+                    DbusValue.Uint32Value(code.toLong()),
+                    DbusValue.ArrayValue(
+                        elementSignature = "{sv}",
+                        elements = results.map { (key, value) -> DbusValue.DictEntryValue(DbusValue.StringValue(key), value) },
+                    ),
+                ),
+            ).encode()
+
         private fun error(replySerial: Int, name: String): ByteArray =
             DbusMessage(
                 type = DbusMessage.TYPE_ERROR,
@@ -96,7 +190,9 @@ class LinuxCapturePortTest {
                 body = listOf(DbusValue.StringValue("nope")),
             ).encode()
 
-        override fun close() = Unit
+        override fun close() {
+            closed = true
+        }
     }
 
     private fun port(script: BusScript): LinuxCapturePort =
@@ -134,17 +230,12 @@ class LinuxCapturePortTest {
     fun refreshReObservesTheBus() = runPortTest(BusScript(authOk = true, portalOwned = true)) {
         val refreshed = it.refreshSources()
         val success = assertIs<KadreResult.Success<*>>(refreshed)
-        val snapshot = success.value as org.graphiks.kadre.internal.runtime.CapturePortSnapshot
+        val snapshot = success.value as CapturePortSnapshot
         assertIs<CapturePortSources.HostPickerOnly>(snapshot.sources)
     }
 
     @Test
-    fun reservationsStayRefusedUntilPipeWireLands() = runPortTest(BusScript(authOk = true, portalOwned = true)) {
-        val hostChoice = it.reserve(CapturePortTarget.HostChoice, CaptureRequest())
-        val pending = assertIs<KadreResult.Failure>(hostChoice)
-        assertIs<KadreFailure.PlatformFailure>(pending.reason)
-        assertTrue(pending.reason.toString().contains("pipewire-stream-pending"))
-
+    fun sourceAndSurfaceTargetsStayRefused() = runPortTest(BusScript(authOk = true, portalOwned = true)) {
         val bySource = it.reserve(CapturePortTarget.Source(CapturePortSourceKey("portal", 1)), CaptureRequest())
         assertIs<KadreFailure.Unsupported>(assertIs<KadreResult.Failure>(bySource).reason)
 
@@ -153,5 +244,49 @@ class LinuxCapturePortTest {
         val surfaceId = org.graphiks.kadre.surface.SurfaceId::class.java.getDeclaredConstructor(Long::class.java).apply { isAccessible = true }.newInstance(1L)
         val bySurface = it.reserve(CapturePortTarget.Surface(surfaceId), CaptureRequest())
         assertIs<KadreResult.Failure>(bySurface)
+    }
+
+    @Test
+    fun hostChoiceReservationWalksThePortalToTheNodeAndFd() {
+        val script = BusScript(authOk = true, portalOwned = true)
+        runPortTest(script) {
+            val reserved = it.reserve(CapturePortTarget.HostChoice, CaptureRequest())
+            val reservation = assertIs<KadreResult.Success<*>>(reserved).value as CapturePortReservation
+            assertEquals(CapturePortSourceKey("portal-screencast", 42), reservation.source.key)
+            assertEquals(CaptureSourceKind.Display, reservation.source.kind)
+            assertEquals(640, reservation.source.size?.width)
+            assertEquals(480, reservation.source.size?.height)
+            reservation.close()
+            reservation.close()
+            // the session Close rode the bus during teardown, idempotently
+            val closeCalls = script.sent.count { bytes ->
+                bytes.size > 16 && runCatching { DbusMessage.decode(bytes).member() == "Close" }.getOrDefault(false)
+            }
+            assertEquals(1, closeCalls)
+            assertTrue(script.closed, "the reservation owns its connection")
+        }
+    }
+
+    @Test
+    fun windowKindMapsFromThePortalSourceType() = runPortTest(BusScript(authOk = true, portalOwned = true, sourceType = 2)) {
+        val reserved = it.reserve(CapturePortTarget.HostChoice, CaptureRequest())
+        val reservation = assertIs<KadreResult.Success<*>>(reserved).value as CapturePortReservation
+        assertEquals(CaptureSourceKind.Window, reservation.source.kind)
+        reservation.close()
+    }
+
+    @Test
+    fun refusedPickerSurfacesAsPermissionDenied() = runPortTest(BusScript(authOk = true, portalOwned = true, pickerRefused = true)) {
+        val reserved = it.reserve(CapturePortTarget.HostChoice, CaptureRequest())
+        val failure = assertIs<KadreResult.Failure>(reserved).reason
+        assertIs<KadreFailure.PermissionDenied>(failure)
+    }
+
+    @Test
+    fun dishonestFdIndexRefusesTheReservation() = runPortTest(BusScript(authOk = true, portalOwned = true, honestPipewireFd = false)) {
+        val reserved = it.reserve(CapturePortTarget.HostChoice, CaptureRequest())
+        val failure = assertIs<KadreResult.Failure>(reserved).reason
+        val platform = assertIs<KadreFailure.PlatformFailure>(failure)
+        assertEquals("pipewire-remote-refused", platform.code)
     }
 }
