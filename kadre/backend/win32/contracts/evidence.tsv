@@ -12,7 +12,7 @@ W32-003	jvm	scenario	win32-init-off-windows-fails-actionably	org.graphiks.kadre.
 W32-003	jvm	sentinel	win32-no-native-load-off-windows	org.graphiks.kadre.internal.win32.Win32NativeContractTest	controlWindowCreated
 BCK-025	jvm	scenario	win32-provider-discovery	org.graphiks.kadre.internal.win32.Win32DiscoveryTest	serviceLoaderFindsExactlyOneWin32Provider[jvm]
 BCK-025	jvm	scenario	win32-provider-availability-exact	org.graphiks.kadre.internal.win32.Win32DiscoveryTest	availabilityIsExactForTheRunningOs[jvm]
-BCK-025	jvm	scenario	win32-provider-attach-unsupported	org.graphiks.kadre.internal.win32.Win32BackendProviderTest	embeddedAttachIsUnsupportedInTrancheOne[jvm]
+BCK-025	jvm	scenario	win32-provider-attach-unsupported	org.graphiks.kadre.internal.win32.Win32BackendProviderTest	embeddedAttachWithUnbuiltIntegrationIsRefusedNormatively[jvm]
 BCK-025	jvm	sentinel	win32-no-native-load-at-discovery	org.graphiks.kadre.internal.win32.Win32BackendProviderTest	discoveryOnNonWindowsIsUnavailableWithoutNativeLoad[jvm]
 SES-002	jvm	scenario	sess002-headless-completes	org.graphiks.kadre.internal.win32.Win32BackendProviderTest	emptyApplicationCompletesThroughThePump[jvm]
 SES-002	jvm	scenario	sess002-start-failure-before-session	org.graphiks.kadre.internal.win32.Win32BackendProviderTest	controlWindowStartFailureBecomesPlatformFailureBeforeSession[jvm]
@@ -128,3 +128,10 @@ W32-028	jvm	scenario	win32-capture-native-frames	org.graphiks.kadre.internal.win
 W32-028	jvm	scenario	jvm-capture-request-refusals	org.graphiks.kadre.internal.win32.Win32CapturePortTest	regionAndForeignFormatRequestsAreRefused[jvm]
 W32-028	jvm	scenario	jvm-capture-invalid-target	org.graphiks.kadre.internal.win32.Win32CapturePortTest	unknownSourceKeyIsAnInvalidTarget[jvm]
 W32-028	jvm	sentinel	win32-capture-request-shape-enforced	org.graphiks.kadre.internal.win32.Win32CapturePortTest	regionAndForeignFormatRequestsAreRefused[jvm]
+W32-029	jvm	scenario	jvm-embedded-edt-refusals	org.graphiks.kadre.internal.win32.Win32EmbeddedO2Test	attachOutsideTheEdtIsRejectedNormatively
+W32-029	jvm	scenario	jvm-embedded-integration-normative	org.graphiks.kadre.internal.win32.Win32EmbeddedO2Test	wrongIntegrationIsRefusedWithHostAttach
+W32-029	jvm	scenario	jvm-embedded-ownership	org.graphiks.kadre.internal.win32.Win32EmbeddedO2Test	ownershipRegistryKeepsStandaloneAndEmbeddedExclusive
+W32-029	jvm	sentinel	win32-embedded-no-relocation	org.graphiks.kadre.internal.win32.Win32EmbeddedO2Test	attachOutsideTheEdtIsRejectedNormatively
+W32-030	jvm	scenario	jvm-embedded-pump-lifecycle	org.graphiks.kadre.internal.win32.Win32EmbeddedO2Test	closedEmbeddedPumpRejectsTicksAndBoundedTickSurvivesIdle
+W32-030	jvm	scenario	jvm-embedded-session-isolation	org.graphiks.kadre.internal.win32.Win32EmbeddedO2Test	embeddedSessionsCoexistOnTheirOwnPortsAndDetachWithoutTouchingEachOther
+W32-030	jvm	sentinel	win32-embedded-closed-pump-refuses	org.graphiks.kadre.internal.win32.Win32EmbeddedO2Test	closedEmbeddedPumpRejectsTicksAndBoundedTickSurvivesIdle

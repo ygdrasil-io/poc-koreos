@@ -7,17 +7,52 @@ internal class Win32SessionStartException(
 
 internal object Win32HostLease {
     private val lock = Object()
-    private var held = false
 
-    /** Process-wide standalone host exclusivity (spec D1). */
-    fun acquire(): Boolean = synchronized(lock) {
-        if (held) false else {
-            held = true
+    /** Process-wide standalone host exclusivity (spec D1), exclusive against embedded sessions. */
+    fun acquire(): Boolean = Win32HostOwnership.tryAcquireStandalone()
+
+    fun release() = Win32HostOwnership.releaseStandalone()
+}
+
+/**
+ * Process-wide ownership registry (phase 12): one standalone host XOR N
+ * embedded sessions. The gate requires concurrent embedded sessions to
+ * coexist, so embedded uses a counted registry while standalone keeps its
+ * exclusive acquisition.
+ */
+internal object Win32HostOwnership {
+    private val lock = Object()
+    private var standaloneHeld = false
+    private var embedded = 0
+
+    internal fun embeddedSessions(): Int = synchronized(lock) { embedded }
+
+    internal fun tryAcquireStandalone(): Boolean = synchronized(lock) {
+        if (standaloneHeld || embedded > 0) false else {
+            standaloneHeld = true
             true
         }
     }
 
-    fun release() = synchronized(lock) { held = false }
+    internal fun releaseStandalone() = synchronized(lock) { standaloneHeld = false }
+
+    internal fun tryRegisterEmbedded(): Boolean = synchronized(lock) {
+        if (standaloneHeld) false else {
+            embedded++
+            true
+        }
+    }
+
+    internal fun releaseEmbedded() = synchronized(lock) {
+        check(embedded > 0) { "no embedded session is registered" }
+        embedded--
+    }
+
+    /** Test isolation only: tests share the process-wide registry. */
+    internal fun resetForTesting() = synchronized(lock) {
+        standaloneHeld = false
+        embedded = 0
+    }
 }
 
 /**
