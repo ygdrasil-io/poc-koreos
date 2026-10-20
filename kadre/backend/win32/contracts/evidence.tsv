@@ -112,3 +112,11 @@ W32-023	jvm	sentinel	win32-raw-close-no-mutation	org.graphiks.kadre.internal.win
 W32-024	jvm	scenario	win32-displays-native-inventory	org.graphiks.kadre.internal.win32.Win32DisplaysNativeContractTest	realInventoryEnumeratesThePrimaryWithRealBoundsAndModes
 W32-024	jvm	scenario	jvm-displays-assembler-all-or-nothing	org.graphiks.kadre.internal.win32.Win32DisplayPortTest	assemblerSkipsDegenerateDisplaysAndWithdrawsWhenNothingUsableRemains[jvm]
 W32-024	jvm	sentinel	win32-displays-no-degenerate-bounds	org.graphiks.kadre.internal.win32.Win32DisplayPortTest	assemblerSkipsDegenerateDisplaysAndWithdrawsWhenNothingUsableRemains[jvm]
+W32-025	jvm	scenario	win32-gamepad-native-inventory	org.graphiks.kadre.internal.win32.Win32GamepadNativeContractTest	absentSlotsPublishNothingAndNeverInventRumbleSuccess
+W32-025	jvm	scenario	jvm-gamepad-broker-transitions	org.graphiks.kadre.internal.win32.Win32GamepadBrokerTest	connectedSlotPublishesOnceAndIdenticalStateStaysQuiet[jvm]
+W32-025	jvm	scenario	jvm-gamepad-hotplug-disconnect	org.graphiks.kadre.internal.win32.Win32GamepadBrokerTest	disconnectEmitsDisconnectedEventAndGamepadLeavesInventory[jvm]
+W32-025	jvm	sentinel	win32-gamepad-no-invented-pad	org.graphiks.kadre.internal.win32.Win32GamepadBrokerTest	emptyHostStaysEmptyWithoutInventingGamepads[jvm]
+W32-026	jvm	scenario	jvm-gamepad-canonical-state	org.graphiks.kadre.internal.win32.Win32GamepadBrokerTest	fullButtonMaskMapsEveryStandardButtonInCanonicalOrder[jvm]
+W32-026	jvm	scenario	jvm-gamepad-axis-normalization	org.graphiks.kadre.internal.win32.Win32GamepadBrokerTest	canonicalAxesNormalizeThumbsWithInvertedYAndTriggersOver255[jvm]
+W32-026	jvm	scenario	jvm-gamepad-rumble-roundtrip	org.graphiks.kadre.internal.win32.Win32GamepadBrokerTest	dualRumbleWritesBothMotorsAndStopZeroesThem[jvm]
+W32-026	jvm	sentinel	win32-gamepad-absence-never-rumbles	org.graphiks.kadre.internal.win32.Win32GamepadBrokerTest	effectOnDisconnectedSlotFailsClosed[jvm]

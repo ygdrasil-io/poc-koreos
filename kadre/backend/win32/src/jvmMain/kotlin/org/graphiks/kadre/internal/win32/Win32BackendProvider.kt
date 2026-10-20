@@ -23,6 +23,7 @@ import org.graphiks.kadre.internal.runtime.RuntimeHostController
 import org.graphiks.kadre.internal.runtime.RuntimeFailureReporter
 import org.graphiks.kadre.internal.runtime.RuntimeSessionComponents
 import org.graphiks.kadre.internal.runtime.DisplayPort
+import org.graphiks.kadre.internal.runtime.GamepadPort
 import org.graphiks.kadre.internal.runtime.RawInputPort
 import org.graphiks.kffi.win32.managed.Win32Displays
 import org.graphiks.kffi.win32.managed.Win32RawInput
@@ -44,6 +45,7 @@ public class Win32BackendProvider private constructor(
     private val loopStarted: ((Win32MessagePump) -> Unit)?,
     private val rawInputPortFactory: (() -> RawInputPort?)?,
     private val displayPortFactory: (() -> DisplayPort?)?,
+    private val gamepadPortFactory: (() -> GamepadPort?)?,
 ) : DesktopBackendProvider {
     public constructor() : this(
         ::isWindows,
@@ -51,6 +53,7 @@ public class Win32BackendProvider private constructor(
         null,
         { ProcessWin32RawInputBroker.value.openPort() },
         { Win32DisplayPort { Win32Displays.snapshot() } },
+        { ProcessWin32GamepadBroker.value.openSessionView() },
     )
 
     override val backend: DesktopBackendKind = DesktopBackendKind.Win32
@@ -125,6 +128,7 @@ public class Win32BackendProvider private constructor(
                         windows = driver.manager,
                         rawInputPort = rawInputPortFactory?.invoke(),
                         displayPort = displayPort,
+                        gamepadPort = gamepadPortFactory?.invoke(),
                     )
                 },
                 initialLifecycleState = LifecycleState(
@@ -186,7 +190,8 @@ public class Win32BackendProvider private constructor(
             loopStarted: ((Win32MessagePump) -> Unit)? = null,
             rawInputPortFactory: (() -> RawInputPort?)? = null,
             displayPortFactory: (() -> DisplayPort?)? = null,
-        ): Win32BackendProvider = Win32BackendProvider(availability, portFactory, loopStarted, rawInputPortFactory, displayPortFactory)
+            gamepadPortFactory: (() -> GamepadPort?)? = null,
+        ): Win32BackendProvider = Win32BackendProvider(availability, portFactory, loopStarted, rawInputPortFactory, displayPortFactory, gamepadPortFactory)
 
         internal fun isWindows(): Boolean =
             System.getProperty("os.name", "").startsWith("Windows", ignoreCase = true)
@@ -238,4 +243,14 @@ internal class Win32LastWindowStopBridge {
         }
         target?.close()
     }
+}
+
+/**
+ * The one process gamepad broker, built lazily over the real KFFI XInput
+ * frontier. XInput has no registration handle the OS lets us revoke, so the
+ * polling daemon is process-lifetime; each session only opens a detachable
+ * view ([Win32GamepadBroker.openSessionView]).
+ */
+internal val ProcessWin32GamepadBroker: Lazy<Win32GamepadBroker> = lazy {
+    Win32GamepadBroker(KffiWin32XInputNative)
 }
