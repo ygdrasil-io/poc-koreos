@@ -45,6 +45,7 @@ jobs:
           case "${{ matrix.compositor }}" in
             sway)    sudo apt-get install -y --no-install-recommends sway ;;
             weston)  sudo apt-get install -y --no-install-recommends weston ;;
+            mutter)  sudo apt-get install -y --no-install-recommends mutter dbus ;;
             *) echo "unknown compositor '${{ matrix.compositor }}'" >&2; exit 64 ;;
           esac
 
@@ -66,9 +67,20 @@ jobs:
       - name: Run the Wayland O3 proofs
         run: |
           source build/wayland/weston.env
-          ./gradlew :kadre:backend:wayland:waylandNativeTests \
-            :kadre:backend:linux:jvmTest \
-            --no-daemon --stacktrace --console=plain
+          # The two output-reconfiguration metrics proofs stimulate the
+          # compositor through swaymsg (sway IPC, by design): they run in
+          # the sway family only. Weston and mutter exercise the session
+          # and windows surfaces.
+          if [[ "${{ matrix.compositor }}" == "sway" ]]; then
+            ./gradlew :kadre:backend:wayland:waylandNativeTests \
+              :kadre:backend:linux:jvmTest \
+              --no-daemon --stacktrace --console=plain
+          else
+            ./gradlew :kadre:backend:wayland:waylandNativeTests \
+              --tests "org.graphiks.kadre.internal.wayland.WaylandNativeSessionLinuxTest" \
+              --tests "org.graphiks.kadre.internal.wayland.WaylandWindowsLinuxTest" \
+              --no-daemon --stacktrace --console=plain
+          fi
 
       - name: Stop the compositor
         if: always()
