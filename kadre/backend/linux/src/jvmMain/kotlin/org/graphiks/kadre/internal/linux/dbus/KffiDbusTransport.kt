@@ -2,8 +2,12 @@ package org.graphiks.kadre.internal.linux.dbus
 
 import java.lang.foreign.Arena
 import java.lang.foreign.MemoryLayout.PathElement.groupElement
+import java.lang.foreign.MemorySegment
 import java.lang.foreign.ValueLayout
 import org.graphiks.kffi.posix.LinuxPosix
+import org.graphiks.kffi.posix.generated.cmsghdr
+import org.graphiks.kffi.posix.generated.iovec
+import org.graphiks.kffi.posix.generated.msghdr
 import org.graphiks.kffi.posix.generated.sockaddr_un
 
 /**
@@ -31,18 +35,28 @@ internal class KffiDbusTransport(
         }
     }
 
-    override fun receive(timeoutMillis: Long): ByteArray? {
-        val scratch = ByteArray(4096)
+    override fun receive(timeoutMillis: Long): DbusChunk? {
+        val scratch = ByteArray(RECEIVE_BUFFER)
         val deadline = System.currentTimeMillis() + timeoutMillis.coerceAtLeast(0)
         Arena.ofConfined().use { arena ->
             while (true) {
-                val buffer = arena.allocate(scratch.size.toLong())
-                val read = runCatching { LinuxPosix.recv(fd, buffer, LinuxPosix.MSG_DONTWAIT) }.getOrDefault(-1)
+                val buffer = arena.allocate(RECEIVE_BUFFER.toLong())
+                val control = arena.allocate(CONTROL_BUFFER.toLong())
+                val vector = iovec.allocate(arena)
+                vector.set(ValueLayout.ADDRESS, iovec.layout.byteOffset(groupElement("iov_base")), buffer)
+                vector.set(ValueLayout.JAVA_LONG, iovec.layout.byteOffset(groupElement("iov_len")), RECEIVE_BUFFER.toLong())
+                val message = msghdr.allocate(arena)
+                message.set(ValueLayout.ADDRESS, msghdr.layout.byteOffset(groupElement("msg_iov")), vector)
+                message.set(ValueLayout.JAVA_LONG, msghdr.layout.byteOffset(groupElement("msg_iovlen")), 1L)
+                message.set(ValueLayout.ADDRESS, msghdr.layout.byteOffset(groupElement("msg_control")), control)
+                message.set(ValueLayout.JAVA_LONG, msghdr.layout.byteOffset(groupElement("msg_controllen")), CONTROL_BUFFER.toLong())
+                val read = runCatching { LinuxPosix.recvmsg(fd, message, LinuxPosix.MSG_DONTWAIT) }.getOrDefault(-1)
                 if (read > 0) {
                     for (index in 0 until read) {
                         scratch[index.toInt()] = buffer.get(ValueLayout.JAVA_BYTE, index)
                     }
-                    return scratch.copyOf(read.toInt())
+                    val controlLength = message.get(ValueLayout.JAVA_LONG, msghdr.layout.byteOffset(groupElement("msg_controllen"))).toInt()
+                    return DbusChunk(scratch.copyOf(read.toInt()), parseScmRights(control, controlLength))
                 }
                 if (System.currentTimeMillis() >= deadline) return null
                 Thread.sleep(2)
@@ -50,11 +64,40 @@ internal class KffiDbusTransport(
         }
     }
 
+    /** Walks the cmsghdr chain and collects SCM_RIGHTS descriptors. */
+    private fun parseScmRights(control: MemorySegment, controlLength: Int): IntArray {
+        val headerSize = cmsghdr.layout.byteSize().toInt()
+        val levelOffset = cmsghdr.layout.byteOffset(groupElement("cmsg_level"))
+        val typeOffset = cmsghdr.layout.byteOffset(groupElement("cmsg_type"))
+        val lengthOffset = cmsghdr.layout.byteOffset(groupElement("cmsg_len"))
+        val fds = ArrayList<Int>()
+        var offset = 0
+        while (offset + headerSize <= controlLength) {
+            val length = control.get(ValueLayout.JAVA_LONG, (offset + lengthOffset).toLong()).toInt()
+            if (length < headerSize || offset + length > controlLength) break
+            val level = control.get(ValueLayout.JAVA_INT, (offset + levelOffset).toLong())
+            val type = control.get(ValueLayout.JAVA_INT, (offset + typeOffset).toLong())
+            if (level == LinuxPosix.SOL_SOCKET && type == LinuxPosix.SCM_RIGHTS) {
+                val dataStart = offset + headerSize
+                val count = (length - headerSize) / Int.SIZE_BYTES
+                for (index in 0 until count) {
+                    fds += control.get(ValueLayout.JAVA_INT, (dataStart + index * Int.SIZE_BYTES).toLong())
+                }
+            }
+            // CMSG_ALIGN: headers sit at sizeof(size_t) boundaries
+            offset += (length + 7) and 7.inv()
+        }
+        return fds.toIntArray()
+    }
+
     override fun close() {
         runCatching { LinuxPosix.close(fd) }
     }
 
     companion object {
+        private const val RECEIVE_BUFFER = 4096
+        private const val CONTROL_BUFFER = 256
+
         /**
          * Connects to the session bus. Address forms: `unix:path=…`
          * (the `$XDG_RUNTIME_DIR/bus` default) — abstract sockets are a

@@ -172,7 +172,10 @@ internal class ScreenCastPortal(
             timeoutMillis = timeoutMillis,
         )
 
-    /** OpenPipeWireRemote: the fd index of the returned handle. */
+    /**
+     * OpenPipeWireRemote: the actual fd (SCM_RIGHTS duplicate), owned by the
+     * caller; null when the portal refuses or the index is dishonest.
+     */
     fun openPipeWireRemote(sessionHandle: String, timeoutMillis: Long = 5_000): Int? {
         val call = DbusMessage(
             type = DbusMessage.TYPE_METHOD_CALL,
@@ -192,7 +195,11 @@ internal class ScreenCastPortal(
         )
         val replied = connection.call(call, timeoutMillis)
         val reply = replied.reply ?: return null
-        return (reply.body.firstOrNull() as? DbusValue.UnixFdValue)?.index
+        val index = (reply.body.firstOrNull() as? DbusValue.UnixFdValue)?.index ?: return null
+        // 'h' is an index into the SCM_RIGHTS descriptors of THIS frame
+        val fds = replied.unixFds
+        if (index !in fds.indices) return null
+        return fds[index]
     }
 
     private fun optionsDictionary(vararg entries: Pair<String, DbusValue>): DbusValue.ArrayValue =

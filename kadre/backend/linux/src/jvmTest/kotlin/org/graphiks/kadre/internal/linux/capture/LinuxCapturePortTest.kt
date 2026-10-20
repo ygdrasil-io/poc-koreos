@@ -47,7 +47,7 @@ class LinuxCapturePortTest {
             }
         }
 
-        override fun receive(timeoutMillis: Long): ByteArray? {
+        override fun receive(timeoutMillis: Long): org.graphiks.kadre.internal.linux.dbus.DbusChunk? {
             val last = sent.lastOrNull() ?: return null
             if (last.size > 16) {
                 val decoded = runCatching { DbusMessage.decode(last) }.getOrNull()
@@ -64,7 +64,7 @@ class LinuxCapturePortTest {
                     }
                 }
             }
-            return incoming.removeFirstOrNull() ?: ByteArray(0)
+            return org.graphiks.kadre.internal.linux.dbus.DbusChunk(incoming.removeFirstOrNull() ?: ByteArray(0))
         }
 
         private fun enqueue(bytes: ByteArray) {

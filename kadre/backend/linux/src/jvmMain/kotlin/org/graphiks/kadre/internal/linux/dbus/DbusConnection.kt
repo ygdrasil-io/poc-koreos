@@ -5,6 +5,12 @@ import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.locks.ReentrantLock
 import kotlin.concurrent.withLock
 
+/** One received transport chunk: payload bytes plus SCM_RIGHTS fds. */
+internal class DbusChunk(
+    val bytes: ByteArray,
+    val unixFds: IntArray = IntArray(0),
+)
+
 /** One byte-direction of the transport — the O2 seam. */
 internal interface DbusTransport : AutoCloseable {
     /** Sends raw bytes; false when the peer is gone. */
@@ -13,8 +19,9 @@ internal interface DbusTransport : AutoCloseable {
     /**
      * Receives the next chunk within the budget; null on timeout or when
      * the peer is gone. Implementations must NEVER block past the budget.
+     * File descriptors arrive through the control data (SCM_RIGHTS).
      */
-    fun receive(timeoutMillis: Long): ByteArray?
+    fun receive(timeoutMillis: Long): DbusChunk?
 }
 
 /**
@@ -38,6 +45,9 @@ internal class DbusConnection(
     private var unixFdSupport = false
     private val signalObservers = ArrayList<(DbusMessage) -> Unit>()
     private var buffer = ByteArray(0)
+
+    /** Fds that arrived with the bytes not yet parsed into a message. */
+    private var pendingUnixFds = IntArray(0)
 
     /** The last SCM_RIGHTS fds received alongside a message. */
     @Volatile
@@ -88,13 +98,16 @@ internal class DbusConnection(
             }
             if (System.currentTimeMillis() > deadline) return null
             val chunk = transport.receive(deadline - System.currentTimeMillis()) ?: continue
-            buffer += chunk
+            buffer += chunk.bytes
+            if (chunk.unixFds.isNotEmpty()) pendingUnixFds += chunk.unixFds
         }
     }
 
     class DbusCallResult(
         val reply: DbusMessage?,
         val error: DbusMessage?,
+        /** The SCM_RIGHTS fds that arrived with the reply frame. */
+        val unixFds: List<Int> = emptyList(),
     )
 
     /**
@@ -123,9 +136,9 @@ internal class DbusConnection(
                     ?: return DbusCallResult(null, null)
                 when {
                     incoming.type == DbusMessage.TYPE_METHOD_RETURN && incoming.replySerial() == serial ->
-                        return DbusCallResult(incoming, null)
+                        return DbusCallResult(incoming, null, frameUnixFds)
                     incoming.type == DbusMessage.TYPE_ERROR && incoming.replySerial() == serial ->
-                        return DbusCallResult(null, incoming)
+                        return DbusCallResult(null, incoming, frameUnixFds)
                     else -> dispatchSignal(incoming)
                 }
             }
@@ -168,12 +181,16 @@ internal class DbusConnection(
         observers.forEach { runCatching { it(message) } }
     }
 
+    /** Fds of the frame [nextMessage] returned last. */
+    private var frameUnixFds: List<Int> = emptyList()
+
     private fun nextMessage(deadline: Long): DbusMessage? {
         while (true) {
             val parsed = tryParseMessage() ?: run {
                 if (System.currentTimeMillis() > deadline) return null
                 val chunk = transport.receive(deadline - System.currentTimeMillis()) ?: return null
-                buffer += chunk
+                buffer += chunk.bytes
+                if (chunk.unixFds.isNotEmpty()) pendingUnixFds += chunk.unixFds
                 null
             }
             if (parsed != null) return parsed
@@ -195,7 +212,14 @@ internal class DbusConnection(
         if (buffer.size < total) return null
         val frame = buffer.copyOf(total)
         buffer = buffer.copyOfRange(total, buffer.size)
-        return runCatching { DbusMessage.decode(frame) }.getOrNull()
+        val fds = pendingUnixFds
+        val decoded = runCatching { DbusMessage.decode(frame, fds.size) }.getOrNull() ?: return null
+        // the fds ride with the frame that consumed them; leftovers (if
+        // any) belong to the next frame in the same batch
+        pendingUnixFds = IntArray(0)
+        frameUnixFds = fds.toList()
+        receivedUnixFds = fds.toList()
+        return decoded
     }
 
     private fun readUint32(bytes: ByteArray, offset: Int, endianness: ByteOrder): Long =
