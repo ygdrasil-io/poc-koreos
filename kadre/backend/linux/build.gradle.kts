@@ -16,6 +16,7 @@ kotlin {
         jvmMain.dependencies {
             api(project(":kadre:runtime"))
             implementation(libs.kffi.evdev)
+            implementation(libs.kffi.pipewire)
             // the D-Bus control plane rides the posix AF_UNIX surface
             implementation(libs.kffi.posix)
         }
@@ -52,12 +53,9 @@ tasks.register<Test>("linuxEvdevTests") {
         "--enable-native-access=ALL-UNNAMED",
         "-XX:ErrorFile=${layout.buildDirectory.file("ci-diagnostics/hs_err_pid%p.log").get().asFile.absolutePath}",
     )
-    filter.includeTestsMatching(
-        "org.graphiks.kadre.internal.linux.EvdevGamepadLinuxTest",
-    )
-    filter.includeTestsMatching(
-        "org.graphiks.kadre.internal.linux.LinuxCapturePortalLinuxTest",
-    )
+    filter.includeTestsMatching("org.graphiks.kadre.internal.linux.EvdevGamepadLinuxTest")
+    filter.includeTestsMatching("org.graphiks.kadre.internal.linux.LinuxCapturePortalLinuxTest")
+    filter.includeTestsMatching("org.graphiks.kadre.internal.linux.LinuxCaptureStreamLinuxTest")
     forkEvery = 1
     reports.junitXml.outputLocation.set(layout.buildDirectory.dir("test-results/linuxEvdevTests"))
 }
