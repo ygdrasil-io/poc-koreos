@@ -108,7 +108,9 @@ internal class DbusWriter(endianness: ByteOrder = ByteOrder.LITTLE_ENDIAN) {
     }
 
     fun boolean(value: Boolean) {
-        ensure(1); buffer.put(if (value) 1 else 0)
+        // spec: BOOLEAN is a 4-byte uint32, not a single byte — the real
+        // daemon disconnects senders of single-byte booleans
+        uint32(if (value) 1L else 0L)
     }
 
     fun uint16(value: Int) {
@@ -169,7 +171,7 @@ internal class DbusReader(private val bytes: ByteArray, private val endianness: 
         return bytes[position - 1]
     }
 
-    fun boolean(): Boolean = byte() != 0.toByte()
+    fun boolean(): Boolean = uint32() != 0L
 
     fun uint16(): Int {
         align(2)

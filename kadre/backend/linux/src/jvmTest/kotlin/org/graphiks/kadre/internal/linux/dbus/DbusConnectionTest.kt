@@ -25,6 +25,13 @@ class DbusConnectionTest {
             incoming.add(bytes)
         }
 
+        fun enqueueChunk(bytes: ByteArray, unixFds: IntArray) {
+            incoming.add(bytes)
+            fdBatches.add(unixFds)
+        }
+
+        private val fdBatches = ArrayDeque<IntArray>()
+
         fun enqueueLine(line: String) = enqueue((line + "\r\n").toByteArray())
 
         override fun send(bytes: ByteArray): Boolean {
@@ -32,7 +39,11 @@ class DbusConnectionTest {
             return true
         }
 
-        override fun receive(timeoutMillis: Long): ByteArray? = incoming.removeFirstOrNull() ?: ByteArray(0)
+        override fun receive(timeoutMillis: Long): org.graphiks.kadre.internal.linux.dbus.DbusChunk? {
+            val bytes = incoming.removeFirstOrNull() ?: ByteArray(0)
+            // fds ride the chunk that carries the frame they annotate
+            return org.graphiks.kadre.internal.linux.dbus.DbusChunk(bytes, fdBatches.removeFirstOrNull() ?: IntArray(0))
+        }
         override fun close() {
             closed = true
         }
@@ -117,6 +128,30 @@ class DbusConnectionTest {
         val replied = connection.call(call, 1_000)
         assertNotNull(replied.reply)
         assertEquals("/req/1", (replied.reply.body.single() as DbusValue.ObjectPathValue).value)
+    }
+
+    @Test
+    fun callDeliversTheReplyFrameUnixFds() {
+        val transport = ScriptedTransport()
+        transport.enqueueLine("OK guid")
+        val connection = DbusConnection(transport, uidProvider = { 1 })
+        assertTrue(connection.performHandshake(1_000))
+
+        // the portal-style reply: one 'h' body plus the SCM_RIGHTS batch
+        transport.enqueueChunk(methodReturn(1, DbusValue.UnixFdValue(0)), intArrayOf(777))
+        val call = DbusMessage(
+            type = DbusMessage.TYPE_METHOD_CALL,
+            flags = 0,
+            serial = 0,
+            fields = mapOf(DbusMessage.FIELD_MEMBER to DbusValue.StringValue("OpenPipeWireRemote")),
+            bodySignature = null,
+            body = emptyList(),
+        )
+        val replied = connection.call(call, 1_000)
+        assertNotNull(replied.reply)
+        assertEquals(0, (replied.reply.body.single() as DbusValue.UnixFdValue).index)
+        assertEquals(listOf(777), replied.unixFds)
+        assertEquals(listOf(777), connection.receivedUnixFds)
     }
 
     @Test
