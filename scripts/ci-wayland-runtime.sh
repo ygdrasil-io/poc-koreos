@@ -8,8 +8,9 @@
 # KADRE_WAYLAND_COMPOSITOR sélectionne la famille (design
 # WAYLAND-PHASE-11-CLOSURE-DESIGN D1) : sway (défaut, wlroots — gate
 # bloquante), weston (déterminisme historique B-5), mutter (famille
-# GNOME, 46+ : bus D-Bus privé + moniteur virtuel). Chaque famille
-# respecte le même contrat start|stop|version + fichier d'env.
+# GNOME, 46+ : bus D-Bus privé + moniteur virtuel), kwin (famille KDE,
+# 5.27+ : bus D-Bus privé + sortie virtuelle). Chaque famille respecte
+# le même contrat start|stop|version + fichier d'env.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -85,26 +86,38 @@ CONFIG
             weston --backend=headless-backend.so --idle-time=0 >"$LOG_FILE" 2>&1 &
         pid=$!
         ;;
-    mutter)
-        command -v mutter >/dev/null || { echo "mutter is not installed." >&2; exit 1; }
+    mutter|kwin)
+        local compositor_bin
+        local -a compositor_args
+        if [[ "$COMPOSITOR" == "mutter" ]]; then
+            command -v mutter >/dev/null || { echo "mutter is not installed." >&2; exit 1; }
+            compositor_bin="mutter"
+            compositor_args=(--headless --wayland --virtual-monitor 800x600)
+        else
+            command -v kwin_wayland >/dev/null || { echo "kwin_wayland is not installed." >&2; exit 1; }
+            compositor_bin="kwin_wayland"
+            compositor_args=(--virtual --no-lockscreen)
+        fi
         command -v dbus-daemon >/dev/null || { echo "dbus-daemon is not installed." >&2; exit 1; }
-        # mutter exige un bus session : bus PRIVÉ confiné au runtime dir,
-        # jamais le bus de l'hôte ; les preuves ne le consomment pas
+        # mutter et kwin exigent un bus session : bus PRIVÉ confiné au
+        # runtime dir, jamais le bus de l'hôte ; les preuves ne le
+        # consomment pas
         umask 077
         rm -f "$RUNTIME_DIR/bus"
         dbus-daemon --session --address="unix:path=$RUNTIME_DIR/bus" \
             --nofork --nopidfile >"$LOG_FILE.dbus" 2>&1 &
         local dbus_pid=$!
         echo "$dbus_pid" > "$DBUS_PID_FILE"
-        # mutter tente de lancer Xwayland : le répertoire doit exister
+        # le compositeur peut tenter de lancer Xwayland : le répertoire
+        # doit exister
         mkdir -p /tmp/.X11-unix && chmod 1777 /tmp/.X11-unix 2>/dev/null || true
         env XDG_RUNTIME_DIR="$RUNTIME_DIR" \
             DBUS_SESSION_BUS_ADDRESS="unix:path=$RUNTIME_DIR/bus" \
-            mutter --headless --wayland --virtual-monitor 800x600 >>"$LOG_FILE" 2>&1 &
+            "$compositor_bin" "${compositor_args[@]}" >>"$LOG_FILE" 2>&1 &
         pid=$!
         ;;
     *)
-        echo "Unknown KADRE_WAYLAND_COMPOSITOR '$COMPOSITOR' (sway|weston|mutter)." >&2
+        echo "Unknown KADRE_WAYLAND_COMPOSITOR '$COMPOSITOR' (sway|weston|mutter|kwin)." >&2
         exit 64
         ;;
     esac
@@ -140,6 +153,7 @@ version)
     sway) sway --version ;;
     weston) weston --version ;;
     mutter) mutter --version ;;
+    kwin) kwin_wayland --version ;;
     esac
     ;;
 *)
