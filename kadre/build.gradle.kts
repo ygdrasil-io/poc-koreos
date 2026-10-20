@@ -255,7 +255,7 @@ val win32ConsumerRun = tasks.register<GradleBuild>("win32ConsumerRun") { // Grad
     tasks = listOf(":win32ConsumerRun")
     dir = file("consumers/kotlin")
     startParameter.projectProperties["kadreRepository"] =
-        layout.buildDirectory.dir("kadre-contract-repository").get().asFile.absolutePath
+        rootProject.layout.buildDirectory.dir("kadre-contract-repository").get().asFile.absolutePath
     startParameter.projectProperties["kadreVersion"] =
         project(":kadre").version.toString()
 }
