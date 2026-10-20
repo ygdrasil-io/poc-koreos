@@ -96,6 +96,8 @@ val contractPublications = tasks.register("publishContractArtifacts") {
 tasks.register<GradleBuild>("validateKotlinConsumer") {
     dependsOn(
         ":kadre:publishAllPublicationsToContractTestRepository",
+        ":kadre:foundation:publishAllPublicationsToContractTestRepository",
+        ":kadre:runtime:publishAllPublicationsToContractTestRepository",
         ":kadre:platform:desktop:publishAllPublicationsToContractTestRepository",
         ":kadre:backend:win32:publishAllPublicationsToContractTestRepository",
     )
