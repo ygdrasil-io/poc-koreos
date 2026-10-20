@@ -16,6 +16,7 @@ kotlin {
         jvmMain.dependencies {
             api(project(":kadre:runtime"))
             implementation(libs.kffi.evdev)
+            implementation(libs.kffi.pipewire)
             // the D-Bus control plane rides the posix AF_UNIX surface
             implementation(libs.kffi.posix)
         }

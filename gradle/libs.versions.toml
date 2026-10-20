@@ -25,6 +25,7 @@ kffi-objc = "1.0.0-SNAPSHOT"
 kffi-win32 = "1.0.0-SNAPSHOT"
 kffi-posix = "1.0.0-SNAPSHOT"
 kffi-evdev = "1.0.0-SNAPSHOT"
+kffi-pipewire = "1.0.0-SNAPSHOT"
 coroutines = "1.10.1"
 kotlinx-browser = "0.5.0"
 koin = "4.0.0"
@@ -46,6 +47,9 @@ kffi-x11 = { module = "org.graphiks:kffi-x11", version.ref = "kffi-x11" }
 
 # kffi evdev FFI snapshot
 kffi-evdev = { module = "org.graphiks:kffi-evdev", version.ref = "kffi-evdev" }
+
+# kffi pipewire FFI snapshot
+kffi-pipewire = { module = "org.graphiks:kffi-pipewire", version.ref = "kffi-pipewire" }
 
 # kffi Wayland FFI snapshot
 kffi-wayland = { module = "org.graphiks:kffi-wayland", version.ref = "kffi-wayland" }
