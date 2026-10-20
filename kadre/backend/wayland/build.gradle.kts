@@ -77,6 +77,31 @@ val waylandNativeTests = tasks.register<Test>("waylandNativeTests") {
     reports.junitXml.outputLocation.set(layout.buildDirectory.dir("test-results/waylandNativeTests"))
 }
 
+// Stress phase 11 : files, interruption, teardown répété — tâche dédiée
+// hors gate bloquante (design WAYLAND-PHASE-11-CLOSURE-DESIGN D5).
+val waylandStressTests = tasks.register<Test>("waylandStressTests") {
+    group = "verification"
+    description = "Runs the Linux-only Wayland stress proofs (queues, interruption, repeated teardown)."
+    enabled = onLinux
+    testClassesDirs = tasks.named<Test>("jvmTest").get().testClassesDirs
+    classpath = tasks.named<Test>("jvmTest").get().classpath
+    jvmArgs(
+        "--enable-native-access=ALL-UNNAMED",
+        "--add-opens=java.base/java.io=ALL-UNNAMED",
+        "-XX:ErrorFile=${layout.buildDirectory.file("ci-diagnostics/hs_err_pid%p.log").get().asFile.absolutePath}",
+    )
+    filter.includeTestsMatching(
+        "org.graphiks.kadre.internal.wayland.WaylandStressLinuxTest",
+    )
+    testLogging {
+        events("failed")
+        exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL
+        showStandardStreams = true
+    }
+    forkEvery = 1
+    reports.junitXml.outputLocation.set(layout.buildDirectory.dir("test-results/waylandStressTests"))
+}
+
 // Les preuves contractuelles consomment les deux suites : O2 (portable) et
 // O3 (compositor réel). L'agrégat garantit que les deux répertoires JUnit
 // existent là où la gate tourne.
