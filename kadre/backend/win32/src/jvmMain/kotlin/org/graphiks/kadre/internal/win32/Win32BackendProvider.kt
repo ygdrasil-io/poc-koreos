@@ -4,6 +4,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
 import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
@@ -67,7 +68,118 @@ public class Win32BackendProvider private constructor(
     override fun isAvailable(): Boolean = availability()
 
     override fun attach(request: DesktopEmbeddedRequest): KadreResult<KadreSession> {
-        return KadreResult.Failure(KadreFailure.Unsupported(KadreOperation.HostAttach))
+        // D1 (design phase 12) : seule l'intégration EDT est conçue ; toute
+        // autre suit le refus normatif Unsupported(HostAttach).
+        if (request.integration != DesktopIntegrationKind.AwtEventDispatchThread) {
+            return KadreResult.Failure(KadreFailure.Unsupported(KadreOperation.HostAttach))
+        }
+        // Pas de relocation cachée : le thread appelant DOIT être l'EDT.
+        if (!awtDispatchThreadProbe()) {
+            return KadreResult.Failure(KadreFailure.InvalidRequest("options"))
+        }
+        if (!availability()) {
+            return KadreResult.Failure(KadreFailure.Unsupported(KadreOperation.HostAttach))
+        }
+        if (!Win32HostOwnership.tryRegisterEmbedded()) {
+            return KadreResult.Failure(KadreFailure.AlreadyInUse(KadreResourceKind.Host))
+        }
+        val registration = AutoCloseable { Win32HostOwnership.releaseEmbedded() }
+        return try {
+            attachSession(request, registration)
+        } catch (start: Win32SessionStartException) {
+            registration.close()
+            KadreResult.Failure(KadreFailure.PlatformFailure(KadrePlatform.Win32, "start", start.reason))
+        } catch (unexpected: Exception) {
+            registration.close()
+            KadreResult.Failure(KadreFailure.PlatformFailure(KadrePlatform.Win32, "start", "start-unexpected"))
+        }
+    }
+
+    /**
+     * Session embarquée (design phase 12, §4) : le port est créé sur l'EDT
+     * (thread UI enregistré), les fenêtres sont réelles, et la pompe est
+     * drainée par des ticks EDT bornés — jamais de boucle bloquante, jamais
+     * de WM_QUIT vers la boucle hôte.
+     */
+    private fun attachSession(
+        request: DesktopEmbeddedRequest,
+        registration: AutoCloseable,
+    ): KadreResult<KadreSession> {
+        val parentScope = request.parentScope
+        val port = portFactory()
+        SessionRawInputTarget.port = port as? KffiWin32HostPort
+        port.attachRawInputActivator(ProcessWin32RawInputBroker.value::activateOn)
+        val session = Win32HostSession.start(port)
+        var ownedEmbeddedDriver: Win32WindowRuntimeDriver? = null
+        val released = AtomicBoolean(false)
+        fun releaseOnce() {
+            if (!released.compareAndSet(false, true)) return
+
+            runCatching { session.port.stopWorkerCommands() }
+            runCatching { ownedEmbeddedDriver?.close() }
+            runCatching { session.teardown() }
+            runCatching { port.close() }
+            registration.close()
+        }
+        try {
+            val nativeFailure = AtomicReference<Throwable?>(null)
+            var controllerRef: RuntimeHostController? = null
+            val driver = Win32WindowRuntimeDriverFactory.create(
+                port = session.port,
+                resources = request.policy.resources,
+                onLastWindowClosed = null, // gate embarquée : le dernier fenêtre n'arrête jamais la session
+                failureReporter = RuntimeFailureReporter { failure ->
+                    nativeFailure.compareAndSet(null, failure)
+                    controllerRef?.fail(KadreFailure.PlatformFailure(KadrePlatform.Win32, "input", "native-input-failed"))
+                },
+            ).also { ownedEmbeddedDriver = it }
+            val embeddedPump = Win32EmbeddedPump(
+                pump = session.pump,
+                postTick = { runnable -> runCatching { awtEventQueuePost(runnable) } },
+            )
+            val controller = RuntimeHostController.withComponents(
+                platform = KadrePlatform.Win32,
+                componentsFactory = { _, _ ->
+                    val displayPort = (displayPortFactory?.invoke()
+                        ?: Win32DisplayPort(inventoryProvider = { Win32Displays.snapshot() })) as Win32DisplayPort
+                    RuntimeSessionComponents(
+                        windows = driver.manager,
+                        rawInputPort = rawInputPortFactory?.invoke(),
+                        displayPort = displayPort,
+                        gamepadPort = gamepadPortFactory?.invoke(),
+                        capturePort = capturePortFactory?.invoke(),
+                    )
+                },
+                initialLifecycleState = LifecycleState(
+                    AttachmentState.Attached,
+                    VisibilityState.Background,
+                    ActivationState.Inactive,
+                ),
+                failureReporter = RuntimeFailureReporter { failure ->
+                    nativeFailure.compareAndSet(null, failure)
+                },
+                sessionStopHandler = RuntimeSessionStopHandler {
+                    embeddedPump.close()
+                    null
+                },
+                sessionObserver = { _, _ -> releaseOnce() },
+            ).also { controllerRef = it }
+            embeddedPump.start()
+            val attached = controller.attach(parentScope, request.applicationFactory, request.policy)
+            if (attached is KadreResult.Failure) {
+                embeddedPump.close()
+                releaseOnce()
+                return attached
+            }
+            parentScope.coroutineContext[Job]?.invokeOnCompletion { releaseOnce() }
+            nativeFailure.get()?.let { failure ->
+                controllerRef?.fail(KadreFailure.PlatformFailure(KadrePlatform.Win32, "input", "native-input-failed"))
+            }
+            return attached
+        } catch (failure: Throwable) {
+            releaseOnce()
+            throw failure
+        }
     }
 
     override fun run(request: DesktopStandaloneRequest): KadreResult<SessionOutcome> {
@@ -200,6 +312,18 @@ public class Win32BackendProvider private constructor(
 
         internal fun isWindows(): Boolean =
             System.getProperty("os.name", "").startsWith("Windows", ignoreCase = true)
+
+        // Ponts AWT par réflexion : zéro dépendance AWT dans le runtime commun.
+        internal var awtDispatchThreadProbe: () -> Boolean = ::isAwtDispatchThread
+        internal var awtEventQueuePost: (Runnable) -> Unit = ::postToAwtEventQueue
+
+        private fun isAwtDispatchThread(): Boolean = runCatching {
+            Class.forName("java.awt.EventQueue").getMethod("isDispatchThread").invoke(null) as Boolean
+        }.getOrDefault(false)
+
+        private fun postToAwtEventQueue(runnable: Runnable) {
+            Class.forName("java.awt.EventQueue").getMethod("invokeLater", Runnable::class.java).invoke(null, runnable)
+        }
     }
 }
 

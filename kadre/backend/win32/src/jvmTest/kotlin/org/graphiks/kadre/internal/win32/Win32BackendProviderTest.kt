@@ -230,12 +230,12 @@ class Win32BackendProviderTest {
     }
 
     @Test
-    fun embeddedAttachIsUnsupportedInTrancheOne() {
+    fun embeddedAttachWithUnbuiltIntegrationIsRefusedNormatively() {
         val provider = Win32BackendProvider()
         val request = DesktopEmbeddedRequest(
             parentScope = CoroutineScope(Job() + EmptyCoroutineContext),
             applicationFactory = KadreApplicationFactory { KadreApplication { } },
-            integration = DesktopIntegrationKind.AwtEventDispatchThread,
+            integration = DesktopIntegrationKind.AppKitMainLoop, // jamais construite pour win32
             policy = KadrePolicies.Default,
         )
         assertEquals(

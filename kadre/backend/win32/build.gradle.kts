@@ -69,9 +69,24 @@ tasks.named<Test>("jvmTest") {
     filter.excludeTestsMatching(
         "org.graphiks.kadre.internal.win32.Win32GamepadNativeContractTest",
     )
+    // Les preuves embarquées partagent un état process global (registre de
+    // sessions, EDT, broker raw input) : elles tournent dans leur propre
+    // tâche de test, isolée des autres suites du module.
+    filter.excludeTestsMatching("org.graphiks.kadre.internal.win32.Win32EmbeddedO2Test")
+    filter.excludeTestsMatching("org.graphiks.kadre.internal.win32.Win32EmbeddedHostContractTest")
 }
 
 val onWindows = System.getProperty("os.name", "").contains("Windows", ignoreCase = true)
+val win32EmbeddedTests = tasks.register<Test>("win32EmbeddedTests") {
+    group = "verification"
+    description = "Runs the AWT-embedded host proofs in an isolated test JVM."
+    enabled = onWindows
+    filter.includeTestsMatching("org.graphiks.kadre.internal.win32.Win32EmbeddedO2Test")
+    filter.includeTestsMatching("org.graphiks.kadre.internal.win32.Win32EmbeddedHostContractTest")
+    testClassesDirs = tasks.named<Test>("jvmTest").get().testClassesDirs
+    classpath = tasks.named<Test>("jvmTest").get().classpath
+    reports.junitXml.outputLocation.set(layout.buildDirectory.dir("test-results/win32EmbeddedTests"))
+}
 val win32NativeTests = tasks.register<Test>("win32NativeTests") {
     group = "verification"
     description = "Runs the Windows-only Win32 O3 frontier proofs."
@@ -118,7 +133,7 @@ val win32NativeTests = tasks.register<Test>("win32NativeTests") {
 val win32ContractTests = tasks.register("win32ContractTests") {
     group = "verification"
     description = "Runs the O2 portable suite and the Windows-only O3 proofs feeding the contract evidence."
-    dependsOn(tasks.named("jvmTest"), win32NativeTests)
+    dependsOn(tasks.named("jvmTest"), win32NativeTests, win32EmbeddedTests)
 }
 
 tasks.register<JavaExec>("win32RichInputManual") {
