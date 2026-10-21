@@ -45,6 +45,11 @@ tasks.named<Test>("jvmTest") {
     filter.excludeTestsMatching(
         "org.graphiks.kadre.internal.wayland.WaylandMetricsLinuxTest",
     )
+    // les preuves stress exigent un compositor ET leur tâche dédiée : hors
+    // jvmTest portable (sinon l'evidence lit la même classe deux fois)
+    filter.excludeTestsMatching(
+        "org.graphiks.kadre.internal.wayland.WaylandStressLinuxTest",
+    )
 }
 
 val onLinux = System.getProperty("os.name", "").contains("Linux", ignoreCase = true)
