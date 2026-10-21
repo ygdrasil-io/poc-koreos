@@ -31,7 +31,7 @@ val runtimeContractIds = listOf(
     "DSP-001", "RUN-007", "RUN-008", "INT-001", "CAP-001",
 )
 // GMP-002 (refus honnête) est retiré : le service evdev le remplace (GMP-003)
-val waylandContractIds = listOf("BCK-017", "SES-001", "SUR-001", "WIN-010", "WIN-011", "WIN-012", "SUR-002", "DSP-002", "SUR-003", "INP-004", "INP-005", "INP-006", "WIN-013", "INT-005", "TXT-002", "TXT-003", "DRP-002", "DRP-003", "SES-003", "SUR-004", "INP-007")
+val waylandContractIds = listOf("CLS-001", "BCK-017", "SES-001", "SUR-001", "WIN-010", "WIN-011", "WIN-012", "SUR-002", "DSP-002", "SUR-003", "INP-004", "INP-005", "INP-006", "WIN-013", "INT-005", "TXT-002", "TXT-003", "DRP-002", "DRP-003", "SES-003", "SUR-004", "INP-007")
 val linuxContractIds = listOf("GMP-003", "GMP-004", "CAP-002", "CAP-003", "CAP-004")
 val win32ContractIds = listOf("W32-001", "W32-002", "W32-003", "BCK-025", "SES-002", "PMP-001", "W32-004", "W32-005", "W32-006", "W32-007", "W32-008", "W32-009", "W32-010", "W32-011", "W32-012", "W32-013", "W32-014", "W32-015", "W32-016", "W32-017", "W32-018", "W32-019", "W32-020", "W32-021", "W32-022", "W32-023", "W32-024", "W32-025", "W32-026", "W32-027", "W32-028", "W32-029", "W32-030", "W32-031", "W32-032")
 val contractEvidenceGateIds = appKitContractIds + runtimeContractIds + webContractIds + uikitContractIds + waylandContractIds + linuxContractIds + win32ContractIds
@@ -174,6 +174,7 @@ val waylandContractRegistry = rootProject.file("kadre/contracts/registry/contrac
 val waylandContractMapping = rootProject.file("kadre/backend/wayland/contracts/evidence.tsv")
 val waylandJvmJUnitReports = rootProject.file("kadre/backend/wayland/build/test-results/jvmTest")
 val waylandNativeJUnitReports = rootProject.file("kadre/backend/wayland/build/test-results/waylandNativeTests")
+val waylandStressJUnitReports = rootProject.file("kadre/backend/wayland/build/test-results/waylandStressTests")
 val waylandContractEvidenceDirectory = rootProject.file("kadre/backend/wayland/build/contract-evidence")
 // La gate Wayland distingue adapter, libc, compositor/version et protocoles testés
 // (roadmap §7) : adapter `wayland-jvm`, cible `jvm`, preuves exécutées sous Linux.
@@ -182,14 +183,14 @@ val waylandContractEvidenceTasks = waylandContractIds.filter(activeContractIds::
     tasks.register<JavaExec>("generateWayland${contractId.replace("-", "")}ContractEvidence") {
         group = "verification"
         description = "Generates and validates $contractId evidence from the Wayland JUnit reports."
-        dependsOn("jvmMainClasses", ":kadre:backend:wayland:waylandContractTests")
+        dependsOn("jvmMainClasses", ":kadre:backend:wayland:waylandContractTests", ":kadre:backend:wayland:waylandStressTests")
         classpath(jvmMain.output.allOutputs, jvmMain.runtimeDependencyFiles)
         mainClass.set("org.graphiks.kadre.contracts.GenerateContractEvidenceKt")
         val output = waylandContractEvidenceDirectory.resolve("$contractId.json")
         args(
             waylandContractRegistry.absolutePath,
             waylandContractMapping.absolutePath,
-            listOf(waylandJvmJUnitReports, waylandNativeJUnitReports).joinToString(
+            listOf(waylandJvmJUnitReports, waylandNativeJUnitReports, waylandStressJUnitReports).joinToString(
                 separator = System.getProperty("path.separator"),
             ) {
                 it.absolutePath
@@ -203,6 +204,7 @@ val waylandContractEvidenceTasks = waylandContractIds.filter(activeContractIds::
         inputs.file(waylandContractRegistry)
         inputs.file(waylandContractMapping)
         inputs.dir(waylandJvmJUnitReports)
+        inputs.dir(waylandStressJUnitReports)
         inputs.dir(waylandNativeJUnitReports)
         inputs.property("contractCommit", contractEvidenceCommit)
         inputs.property("contractTarget", contractEvidenceTarget)
@@ -228,6 +230,7 @@ val validateWaylandContractEvidence by tasks.registering(JavaExec::class) {
         listOf(
             "test-results/jvmTest",
             "test-results/waylandNativeTests",
+            "test-results/waylandStressTests",
         ).joinToString(separator = System.getProperty("path.separator")),
     )
     inputs.file(waylandContractRegistry)
@@ -239,7 +242,7 @@ val validateWaylandContractEvidence by tasks.registering(JavaExec::class) {
     inputs.property("contractGateIds", waylandContractIds)
     inputs.property(
         "junitReportRelativeDirectories",
-        listOf("test-results/jvmTest", "test-results/waylandNativeTests"),
+        listOf("test-results/jvmTest", "test-results/waylandNativeTests", "test-results/waylandStressTests"),
     )
 }
 

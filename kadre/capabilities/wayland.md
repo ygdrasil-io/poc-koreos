@@ -170,16 +170,35 @@ dispatch + nocturne), chaque famille publiant sa version réelle (B-3).
 
 | feature | target | minimum déclaré | compile gate | runtime gate | état absent | tests |
 |---|---|---|---|---|---|---|
-| matrice de compositors (sway, weston) | `jvm` | `ci-wayland-runtime.sh` sélecteur `KADRE_WAYLAND_COMPOSITOR` ; sway 1.9 / weston 13 (noble) validés sur les preuves O3 session/fenêtres/metrics | `waylandNativeTests` par famille | matrice (acceptation) | famille inconnue ⇒ refus explicite du provisionneur (exit 64) ; mutter/kwin : résiduel documenté | `WaylandNativeSessionLinuxTest`, `WaylandWindowsLinuxTest`, `WaylandMetricsLinuxTest` sous chaque famille |
-| stress : rafales de fenêtres, interruption du compositor, teardown répété | `jvm` | 6×8 fenêtres, SIGKILL du compositor dédié ⇒ `Failed(PlatformFailure(Wayland,"display","connection-lost"))`, 12 cycles < 90 s, fds stables (`/proc/self/fd`) | `waylandStressTests` (Linux) | acceptation | aucune fuite tolérée au-delà de +2 fds (sockets de rapport) ; jamais de callback après terminaison | `WaylandStressLinuxTest` (3 preuves O3) |
+| matrice de compositors (sway, weston, mutter, kwin) | `jvm` | `ci-wayland-runtime.sh` sélecteur `KADRE_WAYLAND_COMPOSITOR` ; sway 1.9 / weston 13 / mutter 46.2 / kwin 5.27 (noble) validés — mutter/kwin : bus D-Bus privé + sortie virtuelle, preuves session/fenêtres (les metrics exigent l'IPC sway) | `waylandNativeTests` par famille | matrice (acceptation, 4 familles) | famille inconnue ⇒ refus explicite du provisionneur (exit 64) | `WaylandNativeSessionLinuxTest`, `WaylandWindowsLinuxTest` sous chaque famille ; `WaylandMetricsLinuxTest` sous sway |
+| stress : rafales de fenêtres, interruption du compositor, teardown répété | `jvm` | 6×8 fenêtres, SIGKILL du compositor dédié ⇒ échec typé (`connection-lost` en session, échec pré-session si le kill devance le démarrage), 12 cycles < 90 s, fds stables (`/proc/self/fd`) | `waylandStressTests` (Linux) | `CLS-001` (gate) | aucune fuite tolérée au-delà de +2 fds (sockets de rapport) ; jamais de callback après terminaison ; compositor absent ⇒ refus typé AVANT session | `WaylandStressLinuxTest` (4 preuves O3, sentinelles incluses) |
 | libc : glibc qualifié, musl refusé | `jvm` | glibc 2.39 (gate + matrice) ; musl 1.2.5 : session verte puis SIGSEGV déterministes dans `libwayland-client` (metrics, fenêtres) | — | — | musl NON publié comme supporté — résiduel d'investigation, pas un non-support définitif | hs_err pinés dans le design (D2) |
 | consumers Kotlin/Java contre l'artefact publié | `jvm` | compilation transitive depuis le repository contractTest (`validateKotlinConsumer`, `validateJavaConsumer`) | job `consumers` de la matrice | — | exécution headless du consumer : résiduel (graphe runtime non couvert par le repo contractTest, `win32:1.0.0` sans snapshot) | tâches GradleBuild |
 
-Résiduel tranche 11 : mutter et kwin headless en conteneur (familles GNOME/
-KDE), la qualification musl (crash libwayland-client à investiguer côté
-kffi-wayland), la preuve d'exécution des consumers, les contrats CLS-001/
-CLS-002 (enregistrement après couverture matrice), et le passage ligne par
-ligne de la checklist §9 de la roadmap.
+Résiduel tranche 11 : la qualification musl (crash libwayland-client à
+investiguer côté kffi-wayland), la preuve d'exécution des consumers, et
+`CLS-002` (portabilité de publication : la compilation transitive vit au
+job CI `consumers` — un build Gradde n'est pas une rangée d'evidence
+JUnit ; l'enregistrement suivra la couverture du graphe runtime). Découverte
+de la clôture : une session ATTENDANTE contre le socket PERSISTANT d'un
+compositor mort ne termine pas (connect réussit, la déconnexion n'est pas
+observée par la pompe) — le traitement EOF/POLLHUP est un résiduel côté
+pompe/kffi-wayland, documenté ici.
+
+## 3 terdecies. Checklist de fermeture (roadmap §9)
+
+| Item | État à la clôture |
+|---|---|
+| Provider découvert sans charge native, sélection et failures d'attach conformes | ✅ tranche 1 (BCK-017), probe sans FFM |
+| Standalone et intégrations embedded annoncées (thread, ownership, arrêt) | ✅ standalone tranches 1-3 ; embedded AWT livré (SES-003), preuves O3 AWT réelles = résiduel documenté (tranche 8) |
+| Fenêtres/surfaces/redraw/renderer sans concurrence de commits ni fuite de handles | ✅ tranches 2-3 (WIN-010..012, SUR-002/003) ; renderer externe hors périmètre (§8 roadmap) |
+| Chaque propriété de fenêtre : autorité définie, branches support/refus prouvées | ✅ tranche 5 (WIN-013, INT-005) ; xdg-decoration résiduel documenté |
+| Input, IME, interactions, drop, outputs, services, devices, gamepads, raw input : décision explicite | ✅ tranches 4-9 (INP-004..007, TXT-002/003, DRP-002/003, DSP-002/003, GMP-003/004) ; raw input évalué non activé (D4 design) |
+| Capture : contrôle portal, transport, pixels, lifetime par target promise | contrôle + transport prouvés (CAP-002/003/004) ; pixels de bout en bout = résiduel (tranche 10) ; Source/Surface refusés honnêtement |
+| Aucun inventaire partiel, focus, écran primaire, permission ou état fabriqué | ✅ invariant transversal (refus typés partout, sentinelles par contrat) |
+| Chaque contrat actif : scénarios, sentinelles, preuves Linux requises | ✅ 22 contrats wayland + 5 linux en gate, evidence générée et vérifiée |
+| Bindings dans KFFI, aucun module vide ni duplication runtime | ✅ kffi-wayland/posix/evdev/pipewire publiés ; kadre n'embarque aucun FFM |
+| Publications, consumers, matrice, limites documentées = code livré | compilation transitive prouvée (job consumers) ; exécution consumer + musl = résiduels ; matrice 4 familles verte (sway 1.9, weston 13, mutter 46.2, kwin 5.27) |
 
 ## 4. Limites des tranches 1 à 4
 

@@ -38,7 +38,7 @@ class WaylandMetricsLinuxTest {
      * The gate exports the dir via weston.env (XDG_RUNTIME_DIR); the
      * legacy fixed path stays as the fallback for direct runs.
      */
-    private fun swaymsgSocket(controller: WaylandCompositorController): String {
+    private fun swaymsgSocket(@Suppress("UNUSED_PARAMETER") controller: WaylandCompositorController?): String {
         val candidates = listOfNotNull(
             System.getenv("XDG_RUNTIME_DIR")?.takeIf { it.isNotBlank() },
             "/tmp/kadre-wayland-runtime",
@@ -94,6 +94,10 @@ class WaylandMetricsLinuxTest {
 
     @Test
     fun scaleChangeMidSessionRepublishesTheInventory() {
+        // the sway IPC stimulus is a PRECONDITION of this proof: resolve it
+        // before any session resource so its absence fails cleanly (the
+        // weston family excludes this class — it has no sway IPC)
+        val ipcPrecondition = swaymsgSocket(null)
         compositor().use { controller ->
             val bridge = KffiWaylandBridge.connect(controller.socketAddress)
             assertNotNull(bridge)
@@ -109,7 +113,7 @@ class WaylandMetricsLinuxTest {
                 }
                 // P-1: inventaire initial 640x480 scale 1
                 runBlocking { awaitSnapshot(port, states) { it.displays.single().scaleFactor == 1.0 } }
-                val ipc = swaymsgSocket(controller)
+                val ipc = ipcPrecondition
                 swaymsg(ipc, "output HEADLESS-1 scale 2")
                 // P-2: le changement de scale est republishé au prochain done
                 runBlocking { awaitSnapshot(port, states) { it.displays.single().scaleFactor == 2.0 } }
@@ -124,6 +128,7 @@ class WaylandMetricsLinuxTest {
 
     @Test
     fun outputAdditionExtendsTheInventory() {
+        val ipcPrecondition = swaymsgSocket(null)
         compositor().use { controller ->
             val bridge = KffiWaylandBridge.connect(controller.socketAddress)
             assertNotNull(bridge)
@@ -138,7 +143,7 @@ class WaylandMetricsLinuxTest {
                     if (result is KadreResult.Success) states.add(result.value)
                 }
                 runBlocking { awaitSnapshot(port, states) { it.displays.size == 1 } }
-                val ipc = swaymsgSocket(controller)
+                val ipc = ipcPrecondition
                 swaymsg(ipc, "create_output")
                 runBlocking { awaitSnapshot(port, states) { it.displays.size == 2 } }
                 assertEquals(2.0, 2.0)
