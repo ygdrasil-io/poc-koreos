@@ -30,13 +30,16 @@ kotlin {
         binaries {
             executable {
                 mainClass.set("org.graphiks.kadre.samples.desktour.DeskTourMainKt")
-                // État de départ inchangé du sample : `-XstartOnFirstThread` est spécifique
-                // macOS — la démo desktop vise cette plateforme, le flux jvm ne change pas.
+                // `-XstartOnFirstThread` est spécifique macOS (AppKit exige le thread
+                // principal) : les JVM Windows/Linux le refusent au démarrage — l'hôte
+                // win32 n'exige aucun thread principal, il n'est posé que sur macOS.
                 applicationDefaultJvmArgs.set(
-                    listOf(
-                        "-XstartOnFirstThread",
-                        "--enable-native-access=ALL-UNNAMED",
-                    ),
+                    buildList {
+                        if (providers.systemProperty("os.name").get().contains("mac", ignoreCase = true)) {
+                            add("-XstartOnFirstThread")
+                        }
+                        add("--enable-native-access=ALL-UNNAMED")
+                    },
                 )
             }
         }

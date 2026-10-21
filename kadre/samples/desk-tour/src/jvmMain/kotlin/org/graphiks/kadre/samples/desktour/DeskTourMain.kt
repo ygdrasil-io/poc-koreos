@@ -21,7 +21,6 @@ import org.graphiks.kadre.platform.desktop.DesktopBackend
 import org.graphiks.kadre.platform.desktop.DesktopHostOptions
 import org.graphiks.kadre.platform.desktop.runKadreApplication
 import org.graphiks.kadre.samples.desktour.appkit.ComposeMount
-import org.graphiks.kadre.samples.desktour.appkit.mountComposeAppKit
 import org.graphiks.kadre.samples.desktour.core.ActionDispatcher
 import org.graphiks.kadre.samples.desktour.core.ActivityStatus
 import org.graphiks.kadre.samples.desktour.core.KadreTourGateway
@@ -37,7 +36,7 @@ import org.graphiks.kadre.window.WindowSpec
 
 internal fun deskTourHostOptions(): DesktopHostOptions.Standalone =
     DesktopHostOptions.Standalone(
-        backend = DesktopBackend.AppKit,
+        backend = DesktopBackend.Auto, // AppKit sur macOS, win32 sur Windows
         stopWhenLastWindowClosed = true,
     )
 
@@ -80,7 +79,7 @@ public fun main() {
                     onToggleApiDetails = { store.toggleApiDetails() },
                 )
             }
-            val mount = when (val result = window.mountComposeAppKit(this, bridgeContent)) {
+            val mount = when (val result = window.mountCompose(this, bridgeContent)) {
                 is KadreResult.Success -> result.value
                 is KadreResult.Failure -> error("Compose bridge unavailable: ${result.reason}")
             }
@@ -134,7 +133,7 @@ public fun main() {
                         notes.forEach { note ->
                             if (note.key in mounted || !mountAttempted.add(note.key)) return@forEach
                             val noteWindow = gateway.noteWindow(note.key) ?: return@forEach
-                            val mountResult = noteWindow.mountComposeAppKit(this) {
+                            val mountResult = noteWindow.mountCompose(this) {
                                 // La note est relue du store à chaque composition : un renommage
                                 // depuis le Bureau se voit donc aussi dans sa propre fenêtre.
                                 val liveState by store.state.collectAsState()

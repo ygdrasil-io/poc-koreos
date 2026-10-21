@@ -3,9 +3,10 @@
 Kadre Desk Tour est une démo Kadre de référence. Elle montre comment intégrer une
 UI Compose dans une fenêtre détenue par Kadre, sans créer de fenêtre top-level
 Compose — et, sur le web, comment la même visite vit dans une page, sans fenêtre
-du tout. Le module est multiplateforme (jvm + wasmJs) avec deux hôtes livrés :
-le **bureau** (host AppKit, binaire exécutable sur macOS) et le **web** (host
-wasmJs, servi en statique dans un navigateur). Cela ne redéfinit pas la démo
+du tout. Le module est multiplateforme (jvm + wasmJs) avec trois hôtes livrés :
+le **bureau macOS** (host AppKit, pont Metal), le **bureau Windows** (host win32,
+pont raster Skia blitté par GDI) et le **web** (host wasmJs, servi en statique
+dans un navigateur). Cela ne redéfinit pas la démo
 comme une démo « macOS » ou « navigateur » : le modèle d'intégration vise les
 plateformes Kadre, et les deux hôtes portent les mêmes scénarios.
 
@@ -22,9 +23,11 @@ Le module est un miroir à deux faces qui partagent la même moitié :
   contrat `NoteWindowHost`) et `ui` (l'application Compose entière, la note
   comprise). Compilés pour les deux cibles, ils ne connaissent ni le DOM ni
   AppKit.
-- `jvmMain` — le host bureau : `DeskTourMain` (attach AppKit, la fenêtre
-  principale EST une fenêtre Kadre), le bridge Compose–AppKit (`appkit/`) et
-  `KadreNoteWindows` — chaque note est une **seconde fenêtre Kadre**.
+- `jvmMain` — le host bureau : `DeskTourMain` (attach Auto — AppKit sur macOS,
+  win32 sur Windows — la fenêtre principale EST une fenêtre Kadre), les bridges
+  Compose–natifs (`appkit/` Metal, `win32/` raster Skia + GDI, choisis par le
+  handle natif loué) et `KadreNoteWindows` — chaque note est une **seconde
+  fenêtre Kadre**.
 - `wasmJsMain` — le host web : `DeskTourWebMain` (attach Kadre sur le
   conteneur de la page, qui EST la fenêtre de la démo), `WebTourGateway` et
   `DemoNoteWindows` — chaque note est un **div de la démo** avec son propre

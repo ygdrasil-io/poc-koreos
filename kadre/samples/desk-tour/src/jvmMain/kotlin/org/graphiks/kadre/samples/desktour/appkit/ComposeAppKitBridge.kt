@@ -478,11 +478,11 @@ private class ComposeAppKitMount(
 
 }
 
-private data class ObservedPointer(val id: PointerId, val kind: PointerKind, val position: LogicalPoint)
+internal data class ObservedPointer(val id: PointerId, val kind: PointerKind, val position: LogicalPoint)
 
-private fun SurfaceState.pixelSize() = IntSize(physicalSize.width, physicalSize.height)
-private fun PointerKind.isMouse() = this == PointerKind.Mouse || this == PointerKind.Touchpad
-private fun PointerButton.composeButton(): ComposePointerButton? = when (this) {
+internal fun SurfaceState.pixelSize() = IntSize(physicalSize.width, physicalSize.height)
+internal fun PointerKind.isMouse() = this == PointerKind.Mouse || this == PointerKind.Touchpad
+internal fun PointerButton.composeButton(): ComposePointerButton? = when (this) {
     PointerButton.Primary -> ComposePointerButton.Primary
     PointerButton.Secondary -> ComposePointerButton.Secondary
     PointerButton.Auxiliary -> ComposePointerButton.Tertiary
@@ -490,12 +490,12 @@ private fun PointerButton.composeButton(): ComposePointerButton? = when (this) {
     PointerButton.Forward -> ComposePointerButton.Forward
     else -> null
 }
-private fun KeyboardModifiers.composeModifiers() = PointerKeyboardModifiers(
+internal fun KeyboardModifiers.composeModifiers() = PointerKeyboardModifiers(
     isCtrlPressed = ModifierKey.Control in pressed, isMetaPressed = ModifierKey.Meta in pressed,
     isAltPressed = ModifierKey.Alt in pressed, isShiftPressed = ModifierKey.Shift in pressed,
     isCapsLockOn = ModifierKey.CapsLock in pressed, isNumLockOn = ModifierKey.NumLock in pressed,
 )
-private fun LogicalKey.composeKey(): Key? = when (this) {
+internal fun LogicalKey.composeKey(): Key? = when (this) {
     is LogicalKey.Character -> when (value.lowercase()) {
         "a" -> Key.A; "b" -> Key.B; "c" -> Key.C; "d" -> Key.D; "e" -> Key.E
         "f" -> Key.F; "g" -> Key.G; "h" -> Key.H; "i" -> Key.I; "j" -> Key.J
