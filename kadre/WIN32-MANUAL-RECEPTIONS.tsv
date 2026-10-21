@@ -1,0 +1,15 @@
+# Réceptions manuelles win32 — template à remplir par l'opérateur (un essai par ligne).
+# Colonons : phase | réception (cf. charters WIN32-PHASE-*-MANUAL.md) | date | hôte (OS build, matériel) | résultat (pass/fail) | limites observées.
+# Après exécution : rapportez le contenu — il est consigné dans le cahier de fermeture (WIN32-PHASE-13-MANUAL.md).
+6	IME réel (composition CJK)				
+6	DPI mixtes avec IME				
+7	drag inter-applications physique				
+7	delayed rendering / fichiers virtuels				
+8	souris physique — deltas raw input				
+9	multi-moniteurs réels / hotplug / résolution				
+9	contraste accessibilité				
+10	manette physique — mapping M1				
+10	rumble physique M2 / hotplug M3 / 4e slot M4				
+11	capture — multi-moniteurs / resize live / WDA				
+12	app AWT réelle — attention / DPI / apartment COM				
+13	app longue durée — SOH / réveil / réutilisation consumer				
