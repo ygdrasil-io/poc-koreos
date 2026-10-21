@@ -126,6 +126,7 @@ include(":kadre:contracts:driver:android")
 // La liaison Compose Android (phase 9) — android-only, hors de l'allowlist `check` du
 // root : la gate de phase (Task 4, instrumentation) en est propriétaire.
 include(":kadre:integration:compose")
+include(":kadre:integration:awt")
 include(":kadre:contracts:driver:wayland")
 include(":kadre:contracts:driver:win32")
 include(":kadre:runtime")
@@ -135,6 +136,7 @@ include(":kadre:backend:wayland")
 include(":kadre:backend:win32")
 include(":kadre:samples:desk-tour")
 include(":kadre:samples:hello-kadre")
+include(":kadre:samples:embedded-awt")
 
 // Les samples Android migrés (phase 9, AND-010) : applications Android AGP pures qui
 // consomment les artefacts PUBLIÉS du repository contractuel (l'umbrella `kadre-android`,

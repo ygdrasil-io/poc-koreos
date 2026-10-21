@@ -62,7 +62,10 @@ public class Win32BackendProvider private constructor(
 
     override val backend: DesktopBackendKind = DesktopBackendKind.Win32
 
-    override val supportedIntegrations: Set<DesktopIntegrationKind> = emptySet()
+    // Fermeture phase 12 : l'intégration EDT est annoncée avec son consumer
+    // (kadre/integration/awt) et sa preuve O3 sur la vraie boucle (gate Windows).
+    override val supportedIntegrations: Set<DesktopIntegrationKind> =
+        setOf(DesktopIntegrationKind.AwtEventDispatchThread)
 
     /** Discovery never touches the generated init: exact availability, zero native load. */
     override fun isAvailable(): Boolean = availability()

@@ -30,6 +30,10 @@
 
 `scripts/test-kadre-win32-contracts.sh` journalise désormais la durée de chaque phase (tests, evidence) dans `build/ci-diagnostics/<phase>.log` (`Kadre Win32 <phase>: passed in <n> s`). Cibles TEST-STRATEGY : p95 job ≤ 8 min, gate ≤ 10 min, timeout dur 15 min. Toute dérive répétée = ajout de capacité runner ou scission de gate, jamais de réduction du périmètre de preuve.
 
+## Réceptions manuelles — exécution
+
+Le template `WIN32-MANUAL-RECEPTIONS.tsv` (racine kadre) liste chaque réception ouverte avec sa phase et son charter ; l'opérateur remplit un essai par ligne (date, hôte, résultat, limites) et rapporte le contenu pour consignation ici.
+
 ## Réutilisation et classloaders
 
 Preuve automatisée : `Win32ClassloaderReuseTest` (3 sessions séquentielles avec échange de context classloader, real provider). Limite assumée : la découverte ServiceLoader (`DesktopProviderCatalog`) est un cache process-wide paresseux — un rechargement d'application dans un classloader enfant ne re-découvre pas les providers ; le owner vivant reste le process. Consigné comme topologie supportée : un classloader par process pour les sessions kadre.
