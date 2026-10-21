@@ -98,14 +98,19 @@ jobs:
             kadre/backend/wayland/build/ci-diagnostics/
             build/wayland/
 
-  # D4 : les consumers Kotlin/Java compilent contre les artefacts PUBLIÉS
-  # (publication transitive) — la preuve d'exécution headless reste un
-  # résiduel documenté (graphe runtime non couvert par le repo contractTest).
+  # D4 : les consumers Kotlin/Java compilent ET EXÉCUTENT contre les
+  # artefacts publiés (publication transitive + session headless réelle
+  # sous sway, ConsumerSessionTest).
   consumers:
     runs-on: ubuntu-24.04
-    timeout-minutes: 25
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
+
+      - name: Install the sway compositor
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends sway
 
       - uses: actions/setup-java@v5
         with:
@@ -116,8 +121,17 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
-      - name: Compile the consumers against the published artifacts
-        run: ./gradlew :kadre:validateKotlinConsumer :kadre:validateJavaConsumer --no-daemon
+      - name: Start the sway headless runtime
+        run: KADRE_WAYLAND_COMPOSITOR=sway scripts/ci-wayland-runtime.sh start
+
+      - name: Compile and run the consumers against the published artifacts
+        run: |
+          source build/wayland/weston.env
+          ./gradlew :kadre:validateKotlinConsumer :kadre:validateJavaConsumer --no-daemon
+
+      - name: Stop the compositor
+        if: always()
+        run: KADRE_WAYLAND_COMPOSITOR=sway scripts/ci-wayland-runtime.sh stop || true
 
       - name: Upload consumer diagnostics
         if: always()
