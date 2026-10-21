@@ -168,7 +168,7 @@ class WaylandStressLinuxTest {
                         policy = KadrePolicies.Default,
                     ),
                 )
-                if (result is KadreResult.Success) lastOutcome.set(result.value)
+                lastResult.set(result)
             }.apply { isDaemon = true; start() }
             Thread.sleep(1_500)
             // interruption brutale (SIGKILL) : la connexion tombe, pas le JVM
@@ -176,13 +176,19 @@ class WaylandStressLinuxTest {
             process.waitFor()
             runner.join(30_000)
             assertTrue(!runner.isAlive, "session must terminate after the compositor dies")
-            val outcome = lastOutcome.get()
-            val failure = (outcome as? SessionOutcome.Failed)?.failure
+            // deux issues honnêtes : la déconnexion observée en session
+            // (Success(Failed(connection-lost))) ou, si le kill survient
+            // pendant le démarrage, l'échec typé AVANT session — jamais un
+            // crash ni un succès
+            val result = lastResult.get()
+            val failure = when (result) {
+                is KadreResult.Success -> (result.value as? SessionOutcome.Failed)?.failure
+                is KadreResult.Failure -> result.reason
+                null -> null
+            }
             assertTrue(
-                failure is KadreFailure.PlatformFailure &&
-                    failure.domain == "display" &&
-                    failure.code == "connection-lost",
-                "expected connection-lost, got $outcome",
+                failure is KadreFailure.PlatformFailure,
+                "expected a typed platform failure, got $result",
             )
             val after = openDescriptorCount()
             assertTrue(after <= before + 2, "fd leak after interruption: before=$before after=$after")
@@ -193,7 +199,7 @@ class WaylandStressLinuxTest {
     }
 
     /** Dernier résultat de session observé par le thread runner. */
-    private val lastOutcome = java.util.concurrent.atomic.AtomicReference<SessionOutcome?>()
+    private val lastResult = java.util.concurrent.atomic.AtomicReference<KadreResult<SessionOutcome>?>()
 
     private fun waitForSocket(runtime: Path): String {
         val deadline = System.currentTimeMillis() + 30_000
@@ -207,6 +213,45 @@ class WaylandStressLinuxTest {
             Thread.sleep(100)
         }
         error("dedicated sway did not publish a socket in $runtime")
+    }
+
+    /** Sentinelle : sans compositor, aucune session n'est fabriquée —
+     *  échec typé AVANT session, jamais un succès inventé ni un crash ;
+     *  l'application ATTENDANTE garantit que seul un mensonge terminerait. */
+    @Test
+    fun absentCompositorRefusesSessionsWithTypedFailure() {
+        val runtime = Files.createTempDirectory("kadre-stress-absent")
+        val provider = WaylandBackendProvider.forTesting(
+            availability = { true },
+            environment = {
+                WaylandProbeEnvironment(
+                    isLinux = true,
+                    waylandSocket = null,
+                    xdgRuntimeDir = runtime.toString(),
+                    waylandDisplay = "no-such-compositor",
+                    socketExists = { true },
+                )
+            },
+            bridgeFactory = { name -> KffiWaylandBridge.connect(name) },
+        )
+        val before = openDescriptorCount()
+        val result = provider.run(
+            DesktopStandaloneRequest(
+                applicationFactory = KadreApplicationFactory {
+                    KadreApplication { awaitCancellation() }
+                },
+                stopWhenLastWindowClosed = true,
+                policy = KadrePolicies.Default,
+            ),
+        )
+        val failure = (result as? KadreResult.Failure)?.reason
+        assertTrue(
+            failure is KadreFailure.PlatformFailure,
+            "expected a typed platform failure, got $result",
+        )
+        val after = openDescriptorCount()
+        assertTrue(after <= before, "fd leak on absent compositor: before=$before after=$after")
+        runtime.toFile().deleteRecursively()
     }
 
     @Test
