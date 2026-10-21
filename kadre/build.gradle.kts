@@ -91,16 +91,11 @@ val contractPublications = tasks.register("publishContractArtifacts") {
     // de la liaison depuis le repository contractuel — le même parti pris consumateur que le
     // `android-devicetest` ci-dessus (jamais un `project(...)` qui contournerait la preuve).
     dependsOn(":kadre:integration:compose:publishAllPublicationsToContractTestRepository")
+    dependsOn(":kadre:backend:win32:publishAllPublicationsToContractTestRepository")
 }
 
 tasks.register<GradleBuild>("validateKotlinConsumer") {
-    dependsOn(
-        ":kadre:publishAllPublicationsToContractTestRepository",
-        ":kadre:foundation:publishAllPublicationsToContractTestRepository",
-        ":kadre:runtime:publishAllPublicationsToContractTestRepository",
-        ":kadre:platform:desktop:publishAllPublicationsToContractTestRepository",
-        ":kadre:backend:win32:publishAllPublicationsToContractTestRepository",
-    )
+    dependsOn(contractPublications)
     dir = file("consumers/kotlin")
     tasks = listOf("compileKotlin")
     startParameter.projectProperties = mapOf(
@@ -110,11 +105,7 @@ tasks.register<GradleBuild>("validateKotlinConsumer") {
 }
 
 tasks.register<GradleBuild>("validateJavaConsumer") {
-    dependsOn(
-        ":kadre:publishAllPublicationsToContractTestRepository",
-        ":kadre:platform:desktop:publishAllPublicationsToContractTestRepository",
-        ":kadre:backend:win32:publishAllPublicationsToContractTestRepository",
-    )
+    dependsOn(contractPublications)
     dir = file("consumers/java")
     tasks = listOf("compileJava")
     startParameter.projectProperties = mapOf(
@@ -124,11 +115,7 @@ tasks.register<GradleBuild>("validateJavaConsumer") {
 }
 
 tasks.register<GradleBuild>("validateWebKotlinConsumer") {
-    dependsOn(
-        ":kadre:publishAllPublicationsToContractTestRepository",
-        ":kadre:platform:desktop:publishAllPublicationsToContractTestRepository",
-        ":kadre:backend:win32:publishAllPublicationsToContractTestRepository",
-    )
+    dependsOn(contractPublications)
     dir = file("consumers/web")
     tasks = listOf("compileKotlinJs", "compileKotlinWasmJs")
     startParameter.projectProperties = mapOf(
@@ -138,11 +125,7 @@ tasks.register<GradleBuild>("validateWebKotlinConsumer") {
 }
 
 tasks.register<GradleBuild>("validateTypeScriptConsumer") {
-    dependsOn(
-        ":kadre:publishAllPublicationsToContractTestRepository",
-        ":kadre:platform:desktop:publishAllPublicationsToContractTestRepository",
-        ":kadre:backend:win32:publishAllPublicationsToContractTestRepository",
-    )
+    dependsOn(contractPublications)
     dir = file("consumers/typescript")
     tasks = listOf("check")
     startParameter.projectProperties = mapOf(
@@ -176,11 +159,7 @@ tasks.register<GradleBuild>("validateSwiftConsumer") {
         "Runs the external swift consumer (consumers/swift) against the contract repository — " +
             "macOS only (xcodebuild + iOS/tvOS simulators), never wired into :kadre:check."
     if (swiftConsumerOnMacOs) {
-        dependsOn(
-        ":kadre:publishAllPublicationsToContractTestRepository",
-        ":kadre:platform:desktop:publishAllPublicationsToContractTestRepository",
-        ":kadre:backend:win32:publishAllPublicationsToContractTestRepository",
-    )
+        dependsOn(contractPublications)
         dependsOn(":kadre:platform:uikit:publishAllPublicationsToContractTestRepository")
         dependsOn(":kadre:foundation:publishAllPublicationsToContractTestRepository")
     }
@@ -245,17 +224,14 @@ tasks.configureEach {
 }
 
 // Preuve consumer exécutée (phase 13) : le consumer tourne la session
-// standalone win32 via la découverte ServiceLoader depuis le repo contractuel.
-val win32ConsumerRun = tasks.register<GradleBuild>("win32ConsumerRun") { // GradleBuild: projet consumer séparé (repo contractuel)
+// standalone win32 via la découverte ServiceLoader depuis le repo contractuel
+// — le backend win32 rejoint `contractPublications` (clôture wayland-D4).
+val win32ConsumerRun = tasks.register<GradleBuild>("win32ConsumerRun") {
     group = "verification"
     description = "Runs the published-umbrella consumer session on the win32 provider."
-    dependsOn(
-        ":kadre:publishAllPublicationsToContractTestRepository",
-        ":kadre:platform:desktop:publishAllPublicationsToContractTestRepository",
-        ":kadre:backend:win32:publishAllPublicationsToContractTestRepository",
-    )
-    tasks = listOf(":win32ConsumerRun")
+    dependsOn(contractPublications)
     dir = file("consumers/kotlin")
+    tasks = listOf(":win32ConsumerRun")
     startParameter.projectProperties["kadreRepository"] =
         rootProject.layout.buildDirectory.dir("kadre-contract-repository").get().asFile.absolutePath
     startParameter.projectProperties["kadreVersion"] =
