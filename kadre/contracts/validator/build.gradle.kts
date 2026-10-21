@@ -230,6 +230,7 @@ val validateWaylandContractEvidence by tasks.registering(JavaExec::class) {
         listOf(
             "test-results/jvmTest",
             "test-results/waylandNativeTests",
+            "test-results/waylandStressTests",
         ).joinToString(separator = System.getProperty("path.separator")),
     )
     inputs.file(waylandContractRegistry)
@@ -241,7 +242,7 @@ val validateWaylandContractEvidence by tasks.registering(JavaExec::class) {
     inputs.property("contractGateIds", waylandContractIds)
     inputs.property(
         "junitReportRelativeDirectories",
-        listOf("test-results/jvmTest", "test-results/waylandNativeTests"),
+        listOf("test-results/jvmTest", "test-results/waylandNativeTests", "test-results/waylandStressTests"),
     )
 }
 
