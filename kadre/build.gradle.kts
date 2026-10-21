@@ -95,6 +95,7 @@ val contractPublications = tasks.register("publishContractArtifacts") {
     // de la liaison depuis le repository contractuel — le même parti pris consumateur que le
     // `android-devicetest` ci-dessus (jamais un `project(...)` qui contournerait la preuve).
     dependsOn(":kadre:integration:compose:publishAllPublicationsToContractTestRepository")
+    dependsOn(":kadre:backend:win32:publishAllPublicationsToContractTestRepository")
 }
 
 tasks.register<GradleBuild>("validateKotlinConsumer") {
@@ -224,4 +225,19 @@ tasks.configureEach {
     if (nativePublicationTask || nativeMetadataTask) {
         enabled = false
     }
+}
+
+// Preuve consumer exécutée (phase 13) : le consumer tourne la session
+// standalone win32 via la découverte ServiceLoader depuis le repo contractuel
+// — le backend win32 rejoint `contractPublications` (clôture wayland-D4).
+val win32ConsumerRun = tasks.register<GradleBuild>("win32ConsumerRun") {
+    group = "verification"
+    description = "Runs the published-umbrella consumer session on the win32 provider."
+    dependsOn(contractPublications)
+    dir = file("consumers/kotlin")
+    tasks = listOf(":win32ConsumerRun")
+    startParameter.projectProperties["kadreRepository"] =
+        rootProject.layout.buildDirectory.dir("kadre-contract-repository").get().asFile.absolutePath
+    startParameter.projectProperties["kadreVersion"] =
+        project(":kadre").version.toString()
 }

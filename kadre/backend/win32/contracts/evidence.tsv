@@ -135,3 +135,9 @@ W32-029	jvm	sentinel	win32-embedded-no-relocation	org.graphiks.kadre.internal.wi
 W32-030	jvm	scenario	jvm-embedded-pump-lifecycle	org.graphiks.kadre.internal.win32.Win32EmbeddedO2Test	closedEmbeddedPumpRejectsTicksAndBoundedTickSurvivesIdle
 W32-030	jvm	scenario	jvm-embedded-session-isolation	org.graphiks.kadre.internal.win32.Win32EmbeddedO2Test	embeddedSessionsCoexistOnTheirOwnPortsAndDetachWithoutTouchingEachOther
 W32-030	jvm	sentinel	win32-embedded-closed-pump-refuses	org.graphiks.kadre.internal.win32.Win32EmbeddedO2Test	closedEmbeddedPumpRejectsTicksAndBoundedTickSurvivesIdle
+W32-031	jvm	scenario	win32-stress-cycles-standalone	org.graphiks.kadre.internal.win32.Win32StressNativeContractTest	repeatedStandaloneSessionsStayBoundedAcrossFiftyCycles
+W32-031	jvm	scenario	win32-stress-churn-bursts	org.graphiks.kadre.internal.win32.Win32StressNativeContractTest	windowChurnBurstsStayBoundedInsideOneSession
+W32-031	jvm	scenario	win32-stress-ownership-interleave	org.graphiks.kadre.internal.win32.Win32StressNativeContractTest	standaloneAndEmbeddedInterleaveOverTheOwnershipRegistry
+W32-031	jvm	sentinel	win32-stress-registry-baseline	org.graphiks.kadre.internal.win32.Win32StressNativeContractTest	standaloneAndEmbeddedInterleaveOverTheOwnershipRegistry
+W32-032	jvm	scenario	win32-reuse-classloader-swap	org.graphiks.kadre.internal.win32.Win32ClassloaderReuseTest	sequentialSessionsSurviveAContextClassloaderSwap
+W32-032	jvm	sentinel	win32-reuse-third-session-completes	org.graphiks.kadre.internal.win32.Win32ClassloaderReuseTest	sequentialSessionsSurviveAContextClassloaderSwap

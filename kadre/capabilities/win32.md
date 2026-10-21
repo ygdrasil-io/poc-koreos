@@ -7,7 +7,7 @@ La phase 7 installe le drop OLE ci-dessous avec le snapshot publié ([design](..
 | Fonction | État livré | Gate et limite |
 | --- | --- | --- |
 | Standalone Desktop / pompe | Disponible Windows | BCK-025, SES-002, PMP-001 ; queue UI bornée, progression dans les boucles modales |
-| Embedded Desktop | Unsupported(HostAttach) | Host de phase 12 |
+| Embedded Desktop (AWT EDT) | Provider : sessions embarquées sur l'EDT hôte (HWND kadre sur la boucle hôte, ticks bornés 64 msgs / backoff 8 ms, registre standalone↔embarqués, détachement sans `WM_QUIT`) | Phase 12 ; `supportedIntegrations` vide tant que le consumer `integration:awt` et sa preuve O3 ne sont pas livrés (l'attach est atteignable au niveau provider) ; JavaFX = intégration future ; apartment COM de l'EDT = restriction de topologie ; preuve O3 AWT au cahier de qualification |
 | Fenêtres, close, lease HWND | Disponible | W32-004/005/006 ; owner unique |
 | Titre, taille cliente, min/max, position physique | Disponible | W32-012 ; readback, DPI effectif, corrélation et annulation |
 | Décorations, resizable, boutons | Disponible | W32-012 ; styles relus et cadre recalculé |
@@ -18,7 +18,6 @@ La phase 7 installe le drop OLE ci-dessous avec le snapshot publié ([design](..
 | Visibilité / minimise / maximise / restore | Actions système et observations natives | W32-016 ; aucune commande ajoutée à Window, dimensions positives préservées minimisées |
 | Protection du contenu | WDA_MONITOR exact posé/relu | W32-014 ; aucune garantie universelle de confidentialité |
 | Transparence, blur | Unsupported(UpdateWindow) | Absence de contrat renderer/compositeur qualifié |
-| Fullscreen exclusif | Unsupported(UpdateWindow) | Phase 9 |
 | Métriques, DPI, redraw | Disponible | W32-007/008 |
 | Clavier | Available après installation | W32-009 ; HID/layout/repeat/release, données copiées avant filtre TSF |
 | Pointeur et wheel | Available après installation | W32-010 ; souris promue filtrée lorsque les contacts sont traités, coordonnées logiques, réglages lignes/caractères, page refusé |
