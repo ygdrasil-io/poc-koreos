@@ -20,7 +20,7 @@ GRADLEW="${KADRE_GRADLEW:-$REPO_ROOT/gradlew}"
 WAYLAND_BACKEND_BUILD="$REPO_ROOT/kadre/backend/wayland/build"
 EVIDENCE_DIRECTORY="$WAYLAND_BACKEND_BUILD/contract-evidence"
 # GMP-002.json absent : le contrat est retiré, remplacé par le service evdev
-EVIDENCE_FILES=("BCK-017.json" "SES-001.json" "SUR-001.json" "WIN-010.json" "WIN-011.json" "WIN-012.json" "SUR-002.json" "DSP-002.json" "SUR-003.json" "INP-004.json" "INP-005.json" "INP-006.json" "WIN-013.json" "INT-005.json" "TXT-002.json" "TXT-003.json" "DRP-002.json" "DRP-003.json" "SES-003.json" "SUR-004.json" "INP-007.json")
+EVIDENCE_FILES=("CLS-001.json" "BCK-017.json" "SES-001.json" "SUR-001.json" "WIN-010.json" "WIN-011.json" "WIN-012.json" "SUR-002.json" "DSP-002.json" "SUR-003.json" "INP-004.json" "INP-005.json" "INP-006.json" "WIN-013.json" "INT-005.json" "TXT-002.json" "TXT-003.json" "DRP-002.json" "DRP-003.json" "SES-003.json" "SUR-004.json" "INP-007.json")
 # Le service gamepad evdev vit dans :kadre:backend:linux et sert les
 # sessions Wayland : ses preuves O2 portables alimentent la même gate.
 LINUX_BACKEND_BUILD="$REPO_ROOT/kadre/backend/linux/build"
@@ -86,6 +86,7 @@ source "$REPO_ROOT/build/wayland/weston.env"
 run_phase tests "$TEST_TIMEOUT_SECONDS" \
     "$GRADLEW" \
     :kadre:backend:wayland:waylandContractTests \
+    :kadre:backend:wayland:waylandStressTests \
     :kadre:backend:linux:jvmTest \
     --refresh-dependencies \
     --rerun-tasks \

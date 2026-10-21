@@ -104,13 +104,20 @@ headless), soit re-qualifiés non-support avec refus typé. La checklist
   ne porte pas `win32`/`kffi-objc` et un POM déclare `win32:1.0.0` sans
   suffixe snapshot — couverture à étendre avant d'activer le test.
 
-## Contrats prévus
+## Contrats
 
-`CLS-001` (matrice compositors honnête : chaque famille versionnée
-exécute les preuves O3, les extensions absentes produisent leurs refus
-documentés), `CLS-002` (portabilité de publication : consumers compilés
-et exécutés contre l'artefact publié, musl qualifié). Enregistrement
-après vérification des numéros libres.
+`CLS-001` est enregistré (gate `kadre-wayland-contracts`) : honnêteté du
+lifecycle face au compositor réel — rafales de fenêtres, interruption
+brutale (`connection-lost` typé), teardown répété borné sans fuite. La
+matrice (quatre familles, job d'acceptation) REJOUE les mêmes preuves
+par famille — la version de chaque compositor est tracée (B-3), une
+extension absente produit son refus documenté.
+
+`CLS-002` (portabilité de publication) n'est PAS enregistré : la preuve
+de compilation transitive vit au niveau CI (job `consumers` de la
+matrice — un build Gradle n'est pas une rangée d'evidence JUnit), musl
+est non qualifié (ci-dessus) et l'exécution headless des consumers est
+un résiduel. Le registre ne publie que ce que la gate prouve.
 
 ## Risques et garde-fous
 

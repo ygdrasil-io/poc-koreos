@@ -82,3 +82,7 @@ SUR-004	jvm	sentinel	wayland-embedded-no-tick-after-close	org.graphiks.kadre.int
 INP-007	jvm	scenario	wayland-devices-seat-projection-honest	org.graphiks.kadre.internal.wayland.WaylandDevicesO2Test	seatProjectionInventoryIsHonest[jvm]
 INP-007	jvm	scenario	wayland-devices-seat-removal-hotplug	org.graphiks.kadre.internal.wayland.WaylandDevicesO2Test	seatRemovalFiresDisconnectedAndNeverRekeys[jvm]
 INP-007	jvm	sentinel	wayland-devices-never-rekeys-reconnected-seats	org.graphiks.kadre.internal.wayland.WaylandDevicesO2Test	seatRemovalFiresDisconnectedAndNeverRekeys[jvm]
+CLS-001	jvm	scenario	stress-window-churn-drains-queues	org.graphiks.kadre.internal.wayland.WaylandStressLinuxTest	windowChurnBurstsKeepTheDriverQueuesDrained[jvm]
+CLS-001	jvm	scenario	stress-compositor-interruption-connection-lost	org.graphiks.kadre.internal.wayland.WaylandStressLinuxTest	compositorInterruptionSurfacesConnectionLostWithoutLeaking[jvm]
+CLS-001	jvm	scenario	stress-repeated-teardown-bounded-leak-free	org.graphiks.kadre.internal.wayland.WaylandStressLinuxTest	repeatedTeardownStaysBoundedAndLeakFree[jvm]
+CLS-001	jvm	sentinel	stress-absent-compositor-refuses-cleanly	org.graphiks.kadre.internal.wayland.WaylandStressLinuxTest	absentCompositorRefusesSessionsWithTypedFailure[jvm]
