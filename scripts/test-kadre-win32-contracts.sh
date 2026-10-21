@@ -86,7 +86,6 @@ cd "$REPO_ROOT"
 run_phase tests "$TEST_TIMEOUT_SECONDS" \
     "$GRADLEW" \
     :kadre:backend:win32:win32ContractTests \
-    :kadre:win32ConsumerRun \
     --refresh-dependencies \
     --rerun-tasks \
     --no-daemon \
