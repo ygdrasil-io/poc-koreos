@@ -11,6 +11,9 @@ val kadreVersion = providers.gradleProperty("kadreVersion")
 
 repositories {
     maven { url = uri(kadreRepository) }
+    // kadre depends on kffi snapshot artifacts: consumers resolve them from
+    // the Sonatype snapshots repository (the release flow publishes there)
+    maven("https://central.sonatype.com/repository/maven-snapshots/")
     mavenCentral()
 }
 
@@ -22,17 +25,18 @@ dependencies {
     implementation("org.graphiks.kadre:foundation-jvm:$kadreVersion")
     implementation("org.graphiks.kadre:runtime-jvm:$kadreVersion")
     implementation("org.graphiks.kadre:desktop-jvm:$kadreVersion")
+    // Provider win32 publié (phase 13) : l'exécution de découverte ServiceLoader
+    // a besoin du jar provider sur le classpath runtime ; jamais project(...).
     implementation("org.graphiks.kadre.internal:win32:$kadreVersion")
+    testImplementation(kotlin("test"))
+}
+
+tasks.withType<Test>().configureEach {
+    useJUnitPlatform()
 }
 
 kotlin {
     jvmToolchain(25)
-}
-
-dependencies {
-    // Provider win32 publié (phase 13) : l'exécution de découverte ServiceLoader
-    // a besoin du jar provider sur le classpath runtime ; jamais project(...).
-    implementation("org.graphiks.kadre.internal:win32:$kadreVersion")
 }
 
 tasks.register<JavaExec>("win32ConsumerRun") {

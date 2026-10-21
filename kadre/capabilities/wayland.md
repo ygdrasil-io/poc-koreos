@@ -175,15 +175,31 @@ dispatch + nocturne), chaque famille publiant sa version réelle (B-3).
 | libc : glibc qualifié, musl refusé | `jvm` | glibc 2.39 (gate + matrice) ; musl 1.2.5 : session verte puis SIGSEGV déterministes dans `libwayland-client` (metrics, fenêtres) | — | — | musl NON publié comme supporté — résiduel d'investigation, pas un non-support définitif | hs_err pinés dans le design (D2) |
 | consumers Kotlin/Java contre l'artefact publié | `jvm` | compilation transitive depuis le repository contractTest (`validateKotlinConsumer`, `validateJavaConsumer`) | job `consumers` de la matrice | — | exécution headless du consumer : résiduel (graphe runtime non couvert par le repo contractTest, `win32:1.0.0` sans snapshot) | tâches GradleBuild |
 
-Résiduel tranche 11 : la qualification musl (crash libwayland-client à
-investiguer côté kffi-wayland), la preuve d'exécution des consumers, et
-`CLS-002` (portabilité de publication : la compilation transitive vit au
-job CI `consumers` — un build Gradde n'est pas une rangée d'evidence
-JUnit ; l'enregistrement suivra la couverture du graphe runtime). Découverte
+Résiduel tranche 11 — relevé de clôture (chaque ligne porte sa DÉCISION) :
+
+| Résiduel | Décision de clôture |
+|---|---|
+| exécution des consumers contre l'artefact publié | **LIVRÉ** : le repo contractTest porte le graphe runtime complet (linux, win32) et le job `consumers` de la matrice compile ET exécute une session headless réelle sous sway (`ConsumerSessionTest`) |
+| EOF/HUP du pair fermé | **CORRIGÉ** côté kffi-wayland : HUP/ERR/NVAL terminaux au poll (jamais un simple lisible) |
+| pair silencieux (socket tenu ouvert sans parler) | **LIMITE STRUCTURELLE** : indistinguable d'un compositor inactif (aucun délai protocolaire) — documenté, pas de timeout inventé |
+| musl | **NON-QUALIFIÉ** (preuve d'échec : SIGSEGV libwayland-client, 4 hs_err) — glibc 2.39 reste l'unique libc publiée |
+| DMA-BUF | **REFUSÉ** sans preuve de mapping/synchronisation (refus typé, D12 capture) |
+| `CaptureTarget.Source`/`Surface` | **REFUSÉS** tant que le chemin exact vers une cible arbitraire n'est pas prouvé (D4 capture) |
+| variantes portal réelles GNOME/KDE/wlroots | **RÉSIDUEL ENVIRONNEMENTAL** : exige les vrais xdg-desktop-portal installés ; la procédure (conteneur + harnais `LinuxCaptureStreamLinuxTest`) est livrée |
+| oracle d'injection O3 (tranche 4) | **RÉSIDUEL ENVIRONNEMENTAL** : exige un compositor accordant le focus pointeur headless (weston comme oracle documenté) |
+| xdg-decoration / pointer constraints / xdg-activation (tranche 5) | **REFUSÉS** (bindings kffi non générés) — `Unsupported(Decorations)` typé, jamais de repli Borderless |
+| drop extern O3 + transferts interrompus (tranche 7) | **RÉSIDUEL ENVIRONNEMENTAL** : exige une source de drag externe (harnais fd documenté) |
+| preuves AWT embedded réelles (tranche 8) | **RÉSIDUEL ENVIRONNEMENTAL** : AWT + compositor dans le même conteneur |
+| `WAYLAND_SOCKET` au run | **REFUSÉ AVANT SESSION** (typé) tant que `wl_display_connect_to_fd` (KFFI-WAYLAND-001) n'est pas généré |
+| `CLS-002` | **NON ENREGISTRÉ** (un build Gradle n'est pas une rangée d'evidence JUnit ; la preuve vit au job CI `consumers`) | Découverte
 de la clôture : une session ATTENDANTE contre le socket PERSISTANT d'un
-compositor mort ne termine pas (connect réussit, la déconnexion n'est pas
-observée par la pompe) — le traitement EOF/POLLHUP est un résiduel côté
-pompe/kffi-wayland, documenté ici.
+compositor mort ne termine pas quand un processus survivant (enfant du
+compositor) tient le socket ouvert sans jamais parler — un pair
+silencieux est indistinguable d'un compositor inactif en sémantique
+Wayland : LIMITE STRUCTURELLE documentée (aucun délai d'inactivité n'est
+défini par le protocole). Le traitement EOF/POLLHUP réel (pair fermé)
+est en revanche corrigé côté kffi-wayland : HUP/ERR/NVAL sont terminaux
+à l'arrivée du poll, jamais traités comme un simple événement lisible.
 
 ## 3 terdecies. Checklist de fermeture (roadmap §9)
 

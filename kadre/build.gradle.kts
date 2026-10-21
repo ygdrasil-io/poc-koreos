@@ -80,6 +80,10 @@ val contractPublications = tasks.register("publishContractArtifacts") {
     dependsOn(":kadre:foundation:publishAllPublicationsToContractTestRepository")
     dependsOn(":kadre:backend:appkit:publishAllPublicationsToContractTestRepository")
     dependsOn(":kadre:backend:wayland:publishAllPublicationsToContractTestRepository")
+    // phase 11 : le graphe runtime COMPLET — le consumer exécute une session
+    // réelle, linux et win32 doivent rider l'agrégateur depuis ce repository
+    dependsOn(":kadre:backend:linux:publishAllPublicationsToContractTestRepository")
+    dependsOn(":kadre:backend:win32:publishAllPublicationsToContractTestRepository")
     dependsOn(":kadre:platform:desktop:publishAllPublicationsToContractTestRepository")
     dependsOn(":kadre:platform:web:publishAllPublicationsToContractTestRepository")
     dependsOn(":kadre:runtime:publishAllPublicationsToContractTestRepository")
@@ -97,7 +101,7 @@ val contractPublications = tasks.register("publishContractArtifacts") {
 tasks.register<GradleBuild>("validateKotlinConsumer") {
     dependsOn(contractPublications)
     dir = file("consumers/kotlin")
-    tasks = listOf("compileKotlin")
+    tasks = listOf("test")
     startParameter.projectProperties = mapOf(
         "kadreRepository" to contractTestRepository.get().asFile.absolutePath,
         "kadreVersion" to project.version.toString(),
