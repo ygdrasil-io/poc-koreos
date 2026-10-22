@@ -143,6 +143,14 @@ jobs:
       - name: Grant execute permission
         run: chmod +x gradlew scripts/test-uikit-simulator.sh
 
+      # xcodegen n'est PAS préinstallé sur l'image (constaté night-zero 38795989334 —
+      # « A problem occurred starting process 'command 'xcodegen'' » sur
+      # :generateConsumerProject) : run_consumer, inclus dans la gate par famille, en
+      # dépend dure. Miroir du step « Install xcodegen » des jobs contracts
+      # (kadre-uikit-contracts.yml) — même cause, même remède.
+      - name: Install xcodegen
+        run: brew install xcodegen
+
       # H2 (diagnostic run PR 38109607559, run verte 38111601105, repris des contracts) :
       # sur le device FRAIS du runner, la première app lancée par XCTest peut rester
       # connectée SANS jamais être activée (stall FrontBoard/SpringBoard du premier
