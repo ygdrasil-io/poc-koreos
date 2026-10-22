@@ -2,8 +2,21 @@
 # (registry + on-device evidence for the eleven active AND contracts) runs on every
 # pull request and every push to master, against a booted, pinned Android 35
 # google_apis x86_64 emulator (KVM) on the ubuntu runner — mirroring
-# kadre-web-contracts.yml (triggers, ubuntu-latest, 15-minute hard timeout,
-# temurin JDK 25 + Gradle cache).
+# kadre-web-contracts.yml (triggers, ubuntu-latest, temurin JDK 25) except for
+# the budget: 30 minutes, not 15, and the Gradle cache rides
+# gradle/actions/setup-gradle instead of setup-java's.
+#
+# 2026-10-22 budget fix: the gate never went green once at 15 minutes. The
+# cold Gradle build alone took ~12 min — setup-java's gradle cache restore is
+# exact-key only and this repository touches *.gradle* files in almost every
+# commit, so the restore missed on every single run while ~500 MB Linux
+# entries piled up unused — plus ~2 min of emulator setup and ~6 min of
+# on-device tests: the job cap killed the run mid-tests ("cancelled", tests
+# 0 failed at kill time) on all 60 latest runs. The cap moves to 30 minutes,
+# the Gradle User Home moves to setup-gradle (which restores the newest saved
+# entry, not exact-key-or-nothing), and the gate watchdog rises to 1500 s —
+# still strictly inside the job cap so TEST-STRATEGY §9's clean exit-124
+# fires before GitHub's opaque cancellation.
 #
 # Phase 11 (AND-011): the gate script provisions the emulator's simulated
 # secondary display (`overlay_display_devices`, 1280x720/160) before its Gradle
@@ -44,18 +57,30 @@ jobs:
   android-contracts:
     name: android-contracts
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 30
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
       - name: Set up JDK 25
+        # No `cache: gradle` here (moved to setup-gradle below): setup-java's
+        # gradle key hashes every *.gradle* file, so this active repository
+        # missed the exact key on virtually every commit and rebuilt cold
+        # (~12 min of downloads + compile per run — see the header note).
         uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: "25"
-          cache: gradle
+
+      - name: Set up Gradle caching
+        # gradle/actions/setup-gradle caches the Gradle User Home and restores
+        # the most recently saved entry rather than exact-key-or-nothing, so a
+        # build-script change degrades to a warm-ish cache instead of a full
+        # cold rebuild. Defaults fit the security model: only default-branch
+        # (master push) jobs write entries; pull_request jobs restore
+        # read-only. The wrapper still drives the build — no version input.
+        uses: gradle/actions/setup-gradle@v6
 
       - name: Enable KVM group perms
         # The standard android-runner udev rule: /dev/kvm exists on the ubuntu
@@ -144,7 +169,13 @@ jobs:
       - name: Run the Android contract gate on the booted emulator
         # The gate handles the rest: serial re-validation, boot re-check, then
         # :kadre:contracts:validator:androidContractsCheck under the watchdog
-        # (900s external child timeout inside the 15-minute job hard cap).
+        # (1500s external child timeout inside the 30-minute job hard cap —
+        # the watchdog must stay strictly inside the cap so §9's clean
+        # exit-124 failure fires before GitHub's opaque "cancelled"). 1500 s
+        # leaves headroom for one cold rebuild (dependency refresh or cache
+        # miss) on top of the ~6 min of on-device tests.
+        env:
+          KADRE_ANDROID_WATCHDOG_TIMEOUT_S: "1500"
         run: scripts/test-kadre-android-contracts.sh --serial "$KADRE_CI_EMULATOR_SERIAL"
 
       - name: Upload Android diagnostics and evidence
