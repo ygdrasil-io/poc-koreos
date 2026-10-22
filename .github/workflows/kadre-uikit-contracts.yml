@@ -24,7 +24,11 @@ jobs:
     # Gradle ~4m30 avant le premier compile, xcodebuild tué à 25 min. Le SLO p95 ≤ 8 min
     # s'entend gate CHAUD. Le cache ~/.konan ci-dessous retire le re-téléchargement du
     # toolchain Kotlin/Native de chaque run à froid.
-    timeout-minutes: 40
+    # Rebasé 40 → 55 (run 39702777665, PR #501) : la gate consumer de #470 (3 publications +
+    # consumer-kmp + 4 runs xcodebuild) consomme À FROID ~40 min à elle seule avant que la
+    # gate driver ne commence — le cap 40, calibré sur la gate driver seule (dernier vert
+    # 38699060487 : 14m36s chaud), tuait le job en pleine preuve consumer.
+    timeout-minutes: 55
 
     steps:
       - name: Checkout
