@@ -944,7 +944,7 @@ Les autres déclarations capture conservent exactement les signatures monomorphe
 ## 8. Diagnostics et capabilities
 
 ```kotlin
-public enum class KadrePlatform { Android, UIKit, Web, AppKit, Win32, X11, Wayland, Fake }
+public enum class KadrePlatform { Android, UIKit, Web, AppKit, Win32, X11, Wayland, Linux, Fake }
 public enum class DiagnosticSeverity { Info, Warning, Error, Fatal }
 public enum class KadreSubsystem { Application, Host, Lifecycle, Surface, Window, Display, Input, Gamepad, Capture, Policy }
 

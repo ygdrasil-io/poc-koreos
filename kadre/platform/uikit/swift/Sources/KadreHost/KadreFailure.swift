@@ -82,6 +82,7 @@ public enum KadrePlatform: Equatable, Sendable {
     case win32
     case x11
     case wayland
+    case linux
     case fake
 }
 

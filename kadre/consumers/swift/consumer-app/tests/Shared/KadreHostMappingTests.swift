@@ -348,6 +348,7 @@ final class KadreHostMappingTests: XCTestCase {
             (.win32, "win32"),
             (.x11, "x11"),
             (.wayland, "wayland"),
+            (.linux, "linux"),
             (.fake, "fake"),
         ]
         assertEnumTable(
