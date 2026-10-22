@@ -24,7 +24,11 @@ jobs:
     # Gradle ~4m30 avant le premier compile, xcodebuild tué à 25 min. Le SLO p95 ≤ 8 min
     # s'entend gate CHAUD. Le cache ~/.konan ci-dessous retire le re-téléchargement du
     # toolchain Kotlin/Native de chaque run à froid.
-    timeout-minutes: 40
+    # Rebasé 40 → 55 (run 39702777665, PR #501) : la gate consumer de #470 (3 publications +
+    # consumer-kmp + 4 runs xcodebuild) consomme À FROID ~40 min à elle seule avant que la
+    # gate driver ne commence — le cap 40, calibré sur la gate driver seule (dernier vert
+    # 38699060487 : 14m36s chaud), tuait le job en pleine preuve consumer.
+    timeout-minutes: 55
 
     steps:
       - name: Checkout
@@ -47,6 +51,15 @@ jobs:
 
       - name: Grant execute permission
         run: chmod +x gradlew scripts/test-uikit-simulator.sh
+
+      # xcodegen n'est PAS préinstallé sur l'image (constaté night-zero 38795989334 :
+      # « A problem occurred starting process 'command 'xcodegen'' » sur
+      # :generateConsumerProject) — le consumer-aggregator régénère son xcodeproj
+      # en dépendance dure des suites consumer. La version brew (non épinglée) régénère
+      # le pbxproj à partir de project.yml, source de vérité ; le pbxproj commité reste
+      # la référence de revue.
+      - name: Install xcodegen
+        run: brew install xcodegen
 
       # H2 (diagnostic run PR 38109607559, run verte 38111601105) : sur le device FRAIS du
       # runner, la première app lancée par XCTest peut rester connectée SANS jamais être
@@ -104,6 +117,11 @@ jobs:
 
       - name: Grant execute permission
         run: chmod +x gradlew scripts/test-uikit-simulator.sh
+
+      # xcodegen n'est PAS préinstallé sur l'image (night-zero 38795989334) — voir la
+      # note complète dans le job iOS ci-dessus.
+      - name: Install xcodegen
+        run: brew install xcodegen
 
       - name: Run tvOS simulator UIKit contract gate
         run: ./scripts/test-uikit-simulator.sh tvos

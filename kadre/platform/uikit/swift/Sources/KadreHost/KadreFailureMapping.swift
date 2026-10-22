@@ -157,6 +157,7 @@ enum KadrePlatformMapper {
         if platform === KadreUikit.KadrePlatform.win32 { return .win32 }
         if platform === KadreUikit.KadrePlatform.x11 { return .x11 }
         if platform === KadreUikit.KadrePlatform.wayland { return .wayland }
+        if platform === KadreUikit.KadrePlatform.linux { return .linux }
         if platform === KadreUikit.KadrePlatform.fake { return .fake }
         fatalError("KadrePlatform Kotlin élargi hors du masque §3 : \(platform)")
     }
