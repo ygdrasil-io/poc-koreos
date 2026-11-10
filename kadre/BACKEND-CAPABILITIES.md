@@ -39,14 +39,13 @@ Les checks runtime sont l’autorité. Une table statique de versions ne peut ja
 | UIKit `UIWindowScene` | la scène | `G`, `surfaceView` fournie | `G`, `UIWindow` de la scène | `C + S`, via activation d’une nouvelle scène | `sceneDidDisconnect` |
 | Web JS `org.w3c.dom.HTMLElement` | élément DOM + browsing context | `G`, l’élément | toujours `null` | `H + S`; sans provider `Rejected(Unsupported)` | `pagehide`, destruction du context ou policy DOM |
 | Web Wasm `org.w3c.dom.HTMLElement` | élément DOM + browsing context | `G`, l’élément | toujours `null` | `H + S`; sans provider `Rejected(Unsupported)` | `pagehide`, destruction du context ou policy DOM |
-| Desktop `Embedded` | boucle UI identifiée dans les options | toujours `null`; surfaces accessibles via `Window.surface` | `null` jusqu’à première fenêtre de la session | `G`, `OpenedHere` | fermeture explicite du host ou arrêt de l’intégration |
-| Desktop `Standalone` | processus/loop lancé par la commodité | toujours `null`; surfaces accessibles via `Window.surface` | `null` jusqu’à première fenêtre | `G`, `OpenedHere` | arrêt demandé ; fermeture dernière fenêtre si option activée |
+| Desktop `Standalone` | process et boucle possédés par Kadre (`runKadreApplication`) | toujours `null`; surfaces accessibles via `Window.surface` | `null` jusqu’à première fenêtre | `G`, `OpenedHere` | dernière fenêtre fermée (règle fixe) ; arrêt de la boucle OS |
 
 Une session desktop peut rester headless pendant toute sa vie. La première fenêtre `OpenedHere` devient `primary`; sa fermeture choisit la première fenêtre vivante dans l’ordre d’admission stable de `WindowManagerState.windows`, ou `null`.
 
-`Standalone(stopWhenLastWindowClosed = true)` ne stoppe pas une session initialement headless. La règle s’arme après l’admission de sa première `Window` et la première transition ultérieure de `WindowManagerState.windows` de non vide à vide propose `SessionStopReason.HostRequested`. Les `WindowRequest` encore pending ne comptent pas comme fenêtres et sont fermées par le teardown si elles n’ouvrent pas une fenêtre avant cette transition sérialisée.
+La règle du dernier conteneur est une sémantique fixe du runtime (ownership-first) : elle s’arme après l’admission de sa première `Window` et la première transition ultérieure de `WindowManagerState.windows` de non vide à vide termine la session `SessionOutcome.Completed`. Une session initialement headless n’est pas terminée par cette seule règle. Les `WindowRequest` encore pending ne comptent pas comme fenêtres et sont fermées par le teardown si elles n’ouvrent pas une fenêtre avant cette transition sérialisée.
 
-Un host `Standalone` headless publie `Background + Inactive` jusqu’à sa première fenêtre visible/active. Un host `Embedded` sans fenêtre publie `Foreground + Active` tant que son intégration UI est attachée et non suspendue ; dès qu’il possède une fenêtre, visibilité et activation suivent l’agrégat de ses fenêtres. Aucun booléen applicatif ne falsifie ces axes.
+Un run desktop headless publie `Background + Inactive` jusqu’à sa première fenêtre visible/active ; dès qu’il possède une fenêtre, visibilité et activation suivent l’agrégat de ses fenêtres. Aucun booléen applicatif ne falsifie ces axes.
 
 Android ne crée jamais une seconde `Activity` ou `View` au nom de l’application. Un host Android qui veut une nouvelle Activity lance lui-même son composant et attache une nouvelle session ; ce mécanisme n’est pas présenté comme `requestWindow` v1.
 
@@ -469,52 +468,36 @@ vrais pixels sont l’affaire du cahier manuel `kadre/contracts/driver/web/manua
 
 ### 6.4 Desktop (`org.graphiks.kadre.platform.desktop`)
 
+> Le mode embedded (`DesktopIntegration`, `DesktopHostOptions`, `attachKadreDesktop`) est **supprimé par ownership-first** (2026-11) : Kadre possède le process, il n’existe plus de boucle UI fournie par un hôte ni d’intégration AWT/JavaFX/AppKit embarquée.
+
 ```kotlin
-public enum class DesktopBackend { Auto, AppKit, Win32, X11, Wayland }
-public enum class DesktopIntegration { AppKitMainLoop, AwtEventDispatchThread, JavaFxApplicationThread }
-
-public sealed interface DesktopHostOptions {
-    public data class Embedded(
-        public val integration: DesktopIntegration,
-        public val backend: DesktopBackend = DesktopBackend.Auto,
-    ) : DesktopHostOptions
-
-    public data class Standalone(
-        public val backend: DesktopBackend = DesktopBackend.Auto,
-        public val stopWhenLastWindowClosed: Boolean = true,
-    ) : DesktopHostOptions
-}
-
-public fun CoroutineScope.attachKadreDesktop(
-    applicationFactory: KadreApplicationFactory,
-    options: DesktopHostOptions,
-    policy: KadrePolicy = KadrePolicies.Default,
-): KadreResult<KadreSession>
-
-public fun CoroutineScope.attachKadreDesktop(
-    options: DesktopHostOptions,
-    policy: KadrePolicy = KadrePolicies.Default,
+// module umbrella `kadre` — l’entrée ownership commune
+public suspend fun runKadreApplication(
+    options: KadreRunOptions = KadreRunOptions(),
     application: KadreApplication,
-): KadreResult<KadreSession>
+): KadreResult<SessionOutcome>
 
-public fun runKadreApplication(
+// `platform:desktop` — surcharges JVM avec sélection de backend explicite
+public suspend fun runKadreApplication(
     applicationFactory: KadreApplicationFactory,
-    options: DesktopHostOptions.Standalone = DesktopHostOptions.Standalone(),
-    policy: KadrePolicy = KadrePolicies.Default,
-): SessionOutcome
+    backend: DesktopBackend = DesktopBackend.Auto,
+    options: KadreRunOptions = KadreRunOptions(),
+): KadreResult<SessionOutcome>
 
-public fun runKadreApplication(
-    options: DesktopHostOptions.Standalone = DesktopHostOptions.Standalone(),
-    policy: KadrePolicy = KadrePolicies.Default,
+public suspend fun runKadreApplication(
+    options: KadreRunOptions = KadreRunOptions(),
+    backend: DesktopBackend = DesktopBackend.Auto,
     application: KadreApplication,
-): SessionOutcome
+): KadreResult<SessionOutcome>
 ```
 
-`attachKadreDesktop` n’a volontairement pas d’option par défaut : une intégration embarquée doit nommer la boucle réellement possédée par le host. `runKadreApplication` n’accepte que `Standalone`, ce qui rend impossible une combinaison bloquante/embedded incohérente. Dans les overloads directs, `application` est le dernier paramètre pour conserver la trailing lambda idiomatique ; ces overloads sont mono-session et partagent exactement policy, failures et lifecycle avec les overloads factory.
+`runKadreApplication` est l’unique surface desktop : Kadre possède le process et l’entrée y déroule la boucle OS du backend sélectionné (le thread appelant est bloqué le temps de la session). Dans l’overload direct, `application` est le dernier paramètre pour conserver la trailing lambda idiomatique ; les overloads sont mono-session et partagent exactement policy, failures et lifecycle. `KadreRunOptions` porte `policy` et `firstWindow` (spec appliquée au premier conteneur OS du boot) — rien qui référence un hôte.
 
-Un échec de l’attach interne du runner, avant toute `KadreSession`, lève `KadreException` avec la failure d’attachement. Dès qu’une session existe, le runner ne lève plus de failure fonctionnelle et retourne son unique `SessionOutcome` terminal.
+La façade possède le fil main du run : un dispatcher single-thread dédié créé par appel, passé au boot via `DesktopRunRequest.mainDispatcher` et fermé au teardown de la session, sur tous les chemins — aucun état process-global (`Dispatchers.setMain` n’est jamais installé) et l’entrée fonctionne sans implémentation `Dispatchers.Main` sur la JVM desktop.
 
-`DesktopBackend.Auto` choisit une fois le backend compatible disponible avant attachement. Après admission, aucune bascule de backend n’est autorisée. Une combinaison OS/backend/integration incompatible retourne `InvalidRequest("options")`; un backend demandé mais indisponible retourne `Unsupported(HostAttach)`.
+Un boot qui échoue avant la session retourne `KadreResult.Failure` explicite, jamais une exception fonctionnelle : `Unsupported(HostAttach)` lorsqu’aucun backend disponible n’existe, `InvalidRequest("options")` pour une combinaison OS/backend incompatible, `AlreadyInUse(Host)` si une session vit déjà dans le process, `UnsupportedPolicy(component)`, `TemporarilyUnavailable`, ou `PlatformFailure` de la platform du backend (`discovery-exception`, `availability-exception`, `duplicate-provider`, `run-exception`). Dès qu’une session existe, son `SessionOutcome` terminal fait autorité : dernière fenêtre fermée ⇒ `Completed` (règle fixe du dernier conteneur), boucle OS arrêtée ⇒ `Stopped(SystemTermination)`, machinerie de la plateforme cassée ⇒ `Failed`.
+
+`DesktopBackend.Auto` choisit une fois le backend compatible disponible avant le boot. Après admission, aucune bascule de backend n’est autorisée.
 
 ## 7. Capability changes
 

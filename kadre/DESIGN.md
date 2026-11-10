@@ -30,8 +30,8 @@
 
 Kadre devient une bibliothèque Kotlin Multiplatform idiomatique de gestion :
 
-- des surfaces de présentation fournies par l’hôte et des fenêtres top-level ;
-- du lifecycle applicatif attaché à un hôte ;
+- des surfaces de présentation fournies par l’OS et des fenêtres top-level que Kadre possède ;
+- du lifecycle applicatif du process que Kadre lance ;
 - du clavier, du pointeur, du tactile, des gestes et des gamepads ;
 - de la capture d’écran et de fenêtre ;
 - de l’interop native strictement nécessaire aux renderers externes.
@@ -60,7 +60,7 @@ Les handles natifs nécessaires à un renderer externe restent accessibles derri
 
 ## 3. Principes structurants
 
-1. **Embeddable-first.** L’hôte natif possède le processus, la scène, l’`Activity`, la page ou la boucle principale. Kadre y attache une session.
+1. **Ownership-first.** Kadre possède le processus d’un point de vue applicatif, la boucle, les conteneurs de fenêtres et toutes les surfaces. L’application est une `KadreApplication` que Kadre lance ; elle ne fournit jamais de ressource native à Kadre.
 2. **Coroutines-first.** `suspend`, `Flow`, `StateFlow` et structured concurrency constituent l’API commune principale.
 3. **Une session, une hiérarchie.** Toute fenêtre, capture et ressource de périphérique appartient à une `KadreSession`.
 4. **Aucun état global applicatif.** Aucun handler, session ou application courant n’est stocké dans un singleton public ou interne process-wide. Les brokers internes imposés par des ressources OS process-wide restent autorisés, sans notion de session courante.
@@ -147,9 +147,9 @@ public data class KadreLaunchContext(
 )
 
 public enum class KadreLaunchReason {
-    InitialHostAttachment,
-    AdditionalHostRequested,
-    HostRestoration,
+    ProcessLaunch,
+    WindowRequested,
+    ProcessRestoration,
 }
 
 public interface KadreScope : CoroutineScope {
@@ -189,11 +189,9 @@ public sealed interface SessionOutcome {
 }
 
 public enum class SessionStopReason {
-    HostRequested,
     ApplicationRequested,
     ApplicationCancelled,
-    ParentCancelled,
-    HostDetached,
+    SystemTermination,
 }
 
 public class RestorationToken internal constructor(
@@ -203,6 +201,11 @@ public class RestorationToken internal constructor(
     public override fun hashCode(): Int
     public override fun toString(): String
 }
+
+public data class KadreRunOptions(
+    public val policy: KadrePolicy = KadrePolicies.Default,
+    public val firstWindow: WindowSpec? = null,
+)
 ```
 
 Contrats :
@@ -211,20 +214,21 @@ Contrats :
 - `awaitTermination()` est idempotent, attend la terminaison logique publique de la session et retourne toujours le même résultat terminal ; il ne prétend pas joindre une coroutine applicative qui ignore la cancellation ;
 - appeler `awaitTermination()` depuis un job enfant de la session échoue immédiatement avec `IllegalStateException` au lieu de deadlocker ;
 - le retour du corps de `KadreApplication.run` ferme immédiatement l’admission de nouveaux enfants applicatifs ; le job applicatif passe en `Completing`, attend uniquement les enfants déjà admis, puis produit `SessionOutcome.Completed` et déclenche le teardown ;
-- `KadreSession.requestStop()` propose `Stopped(HostRequested)` et `KadreScope.requestStop()` propose `Stopped(ApplicationRequested)` ; le premier motif d’arrêt non fatal accepté fait autorité ;
-- une annulation directe du job exposé par `KadreScope.coroutineContext`, alors que le parent et le host restent actifs, produit `Stopped(ApplicationCancelled)` ;
-- l’annulation du `parentScope` produit `Stopped(ParentCancelled)` ;
-- le détachement définitif de l’hôte produit `Stopped(HostDetached)` ;
+- `KadreSession.requestStop()` propose `Stopped(SystemTermination)` — le handle parle pour le propriétaire du process — et `KadreScope.requestStop()` propose `Stopped(ApplicationRequested)` ; le premier motif d’arrêt non fatal accepté fait autorité ;
+- une annulation directe du job applicatif exposé par `KadreScope.coroutineContext`, alors que la scope racine possédée par le boot reste active, produit `Stopped(ApplicationCancelled)` ;
+- la mort de la scope racine possédée par le boot autour de l’application produit `Stopped(SystemTermination)` ;
+- la terminaison système du process — boucle OS arrêtée, scène détruite par l’OS, page cachée — produit `Stopped(SystemTermination)` ;
+- la fermeture du dernier conteneur OS possédé par la session (règle du dernier conteneur) produit `Completed` : c’est une règle fixe du runtime, uniforme sur toutes les plateformes ; il n’existe plus d’option `stopWhenLastWindowClosed` ;
 - une exception non gérée produit un diagnostic fatal, devient un `KadreFailure.ApplicationFailure` stable et termine la session avec `Failed` ;
 - une exception de `KadreApplicationFactory.create` suit exactement le même chemin d’échec ;
-- une factory crée exactement une instance de `KadreApplication` par session et peut être invoquée simultanément pour plusieurs scènes ;
+- une factory crée exactement une instance de `KadreApplication` par session ; le contrôleur de processus admet exactement une session par boot — `requestWindow` ouvre `OpenedHere` dans la session courante, jamais une session cachée ;
 - un consumer qui capture de l’état mutable dans la factory reste responsable de sa synchronisation entre sessions.
 
-`KadreScope.coroutineContext` contient le job applicatif ordinaire, jamais le `SupervisorJob` racine de session. Il reprend le contexte du `parentScope` en remplaçant uniquement son `Job` par ce job applicatif. `KadreApplication.run` et les enfants lancés via le receiver utilisent donc le dispatcher du parent ; les appels natifs marshallent séparément vers le thread du host. Lorsque le corps de `run` retourne, Kadre complète explicitement le job applicatif : une tentative ultérieure de `launch` via un receiver capturé crée un job immédiatement annulé et ne retarde pas la terminaison. Les enfants admis auparavant restent structurés et doivent tous terminer pour qu’un retour normal devienne `Completed` ; jusque-là, la session reste `Running` mais n’admet plus de nouvel enfant applicatif. Un consumer doit utiliser `withContext` pour déplacer ses calculs lourds au lieu de supposer que le dispatcher applicatif est un thread UI ou un worker.
+`KadreScope.coroutineContext` contient le job applicatif ordinaire, jamais le `SupervisorJob` racine de la scope possédée par le boot. **Dispatcher garanti** : `KadreApplication.run` et les enfants lancés via le receiver s’exécutent sur le dispatcher principal du boot Kadre — `Dispatchers.Main.immediate` côté Kotlin sur les plateformes qui en disposent, le dispatcher single-thread possédé et fourni par la façade desktop sur JVM —, stable across recréation Android ; il n’existe plus de `parentScope` dont hériter, et l’application ne fournit jamais de dispatcher à Kadre. Les appels natifs marshallent séparément vers le thread de la boucle OS. Lorsque le corps de `run` retourne, Kadre complète explicitement le job applicatif : une tentative ultérieure de `launch` via un receiver capturé crée un job immédiatement annulé et ne retarde pas la terminaison. Les enfants admis auparavant restent structurés et doivent tous terminer pour qu’un retour normal devienne `Completed` ; jusque-là, la session reste `Running` mais n’admet plus de nouvel enfant applicatif. Un consumer doit utiliser `withContext` pour déplacer ses calculs lourds au lieu de supposer que le dispatcher applicatif est un thread UI ou un worker.
 
-Lorsqu’un scope parent est lui-même possédé par le lifecycle du host, la notification terminale du host est admise avant l’annulation de ce scope et produit déterministement `HostDetached`. `ParentCancelled` est réservé à une annulation externe observée alors que le host reste attaché.
+La scope racine de la session est possédée par le boot Kadre (`SupervisorJob` + dispatcher principal du boot) : aucune scope parente n’est admise, héritée ou validée. La notification terminale du système est admise avant l’annulation de cette scope et produit déterministement `Stopped(SystemTermination)` ; la mort de la scope elle-même suit le même chemin. Il n’existe pas de sémantique `HostDetached` ni `ParentCancelled` : le process a une terminaison système, pas un détachement.
 
-`RestorationToken` est opaque et fourni par le host pour recoller la session à l’état durable détenu par l’application. Sa représentation n’est pas publique, son `toString()` est redacted et le consumer peut seulement le comparer ou l’utiliser comme clé pendant le lifetime autorisé par le host. Kadre ne sérialise, ne persiste et ne restaure aucun état applicatif. Un lancement `HostRestoration` sans token reste autorisé lorsque le host ne possède pas d’identité persistante.
+`RestorationToken` est opaque et fourni par l’OS pour recoller la session à l’état durable détenu par l’application. Sa représentation n’est pas publique, son `toString()` est redacted et le consumer peut seulement le comparer ou l’utiliser comme clé pendant le lifetime autorisé par l’OS. Kadre ne sérialise, ne persiste et ne restaure aucun état applicatif. Un lancement `ProcessRestoration` sans token reste autorisé lorsque l’OS ne possède pas d’identité persistante.
 
 Une erreur non liée à la cancellation, observée avant `Terminated`, surclasse un motif `Stopped` ou `Completed` et produit `Failed`. La première failure admise devient la failure primaire. Toute failure ultérieure de cleanup, y compris un timeout, reste un diagnostic secondaire et ne remplace pas cette primaire. `ShutdownTimedOut` devient la failure primaire uniquement lorsque le teardown partait encore d’un outcome non fatal. Les `CancellationException` déclenchées par le teardown ne remplacent jamais le résultat.
 
@@ -234,30 +238,27 @@ Le teardown suit cet ordre normatif : fermeture de l’admission des callbacks e
 
 `ExecutionPolicy.shutdownTimeout` commence à l’entrée dans `Stopping` sur l’horloge monotone de la session. Il borne l’attente coopérative du job applicatif et l’achèvement des coroutines et ressources possédées par Kadre tant que le runtime continue à scheduler les jobs Kadre. À la première opportunité de scheduling suivant l’échéance, Kadre annule ses jobs internes, détache synchroniquement les derniers bridges capables de l’être, révoque tout accès applicatif aux ressources et applique la règle de priorité des failures ci-dessus. La session passe alors à `Terminated` et `awaitTermination()` retourne, même si du code applicatif non coopératif continue à s’exécuter dans son job déjà annulé.
 
-Ce timeout n’est pas une garantie hard real-time : une boucle consumer synchrone qui monopolise l’unique dispatcher UI/JS, un processus suspendu ou un runtime détruit peut empêcher Kadre d’observer l’échéance. Le délai mesure donc du temps monotone, mais sa réaction exige une opportunité de scheduling. `SessionState.Terminated` est une frontière de ressources publique, pas une affirmation que chaque job consumer est `isCompleted`. Un job consumer encore incomplet n’est ni reparenté ni considéré achevé : il reste enfant annulé du scope fourni par le host jusqu’à ce qu’il coopère, sans accès à une ressource Kadre vivante. Kadre garantit ainsi la révocation logique et la fin de ses propres jobs lorsqu’ils peuvent être schedulés, pas la préemption de code arbitraire ni la survie du runtime.
+Ce timeout n’est pas une garantie hard real-time : une boucle consumer synchrone qui monopolise l’unique dispatcher UI/JS, un processus suspendu ou un runtime détruit peut empêcher Kadre d’observer l’échéance. Le délai mesure donc du temps monotone, mais sa réaction exige une opportunité de scheduling. `SessionState.Terminated` est une frontière de ressources publique, pas une affirmation que chaque job consumer est `isCompleted`. Un job consumer encore incomplet n’est ni reparenté ni considéré achevé : il reste enfant annulé de la scope possédée par le boot jusqu’à ce qu’il coopère, sans accès à une ressource Kadre vivante. Kadre garantit ainsi la révocation logique et la fin de ses propres jobs lorsqu’ils peuvent être schedulés, pas la préemption de code arbitraire ni la survie du runtime.
 
-## 6. Host SPI
+## 6. SPI runtime du processus
 
 ```kotlin
-@ExperimentalKadreApi
-public interface KadreHost {
-    public val platform: KadrePlatform
-
-    public fun attach(
-        parentScope: CoroutineScope,
-        applicationFactory: KadreApplicationFactory,
-        policy: KadrePolicy = KadrePolicies.Default,
-    ): KadreResult<KadreSession>
+// groupe interne `org.graphiks.kadre.internal` — public technique, instable consommateur
+public class RuntimeProcessController {
+    public fun boot(request: RuntimeBootRequest): KadreResult<KadreSession>
+    public fun terminate(reason: SessionStopReason)
+    public fun fail(failure: KadreFailure.PlatformFailure)
+    public fun emitMemoryPressure(level: MemoryPressureLevel)
 }
 ```
 
-`attach` valide synchroniquement le host, le `parentScope` et la policy, puis retourne sans attendre l’exécution applicative. `parentScope.coroutineContext` doit contenir un `Job` actif ; l’absence de `Job` retourne `InvalidRequest` et un job déjà annulé retourne `ParentScopeCancelled`, sans créer de session. Un succès contient une session en état `Starting`; tout échec ultérieur devient son `SessionOutcome`.
+Il n’existe plus de `KadreHost` public ni d’opération d’attach. Le runtime est réécrit autour d’un contrôleur de processus : `boot` valide la requête (`InvalidRequest` si le boot ne peut pas appliquer son `firstWindow`), admet exactement une session par process — un boot pendant qu’une session vit échoue `AlreadyInUse` sans toucher à la session vivante — et démarre l’application dans une scope racine possédée (`SupervisorJob` + dispatcher principal du boot, fourni par la façade desktop ou `Dispatchers.Main.immediate`). `terminate` est l’unique chemin de terminaison système (`Stopped(SystemTermination)`) ; la règle du dernier conteneur produit `Completed` ; `fail` termine la session `Failed` quand la machinerie de la plateforme casse ; `emitMemoryPressure` relaie un niveau de pression mémoire de l’OS.
 
-L’admission de la session constitue le point de linéarisation entre `attach` et un détachement concurrent du host. Si le host est déjà détaché avant cette admission, `attach` échoue synchroniquement sans session. S’il se détache après, `attach` peut retourner la session `Starting`, qui termine avec `HostDetached`. La transition vers `Running` et l’admission d’un arrêt sont sérialisées : `KadreApplicationFactory.create` et `KadreApplication.run` ne commencent jamais après l’admission du motif terminal. Un `run` déjà commencé est annulé par le teardown ordinaire. Comme `create` est non suspendu, un appel déjà commencé n’est pas préempté ; son résultat tardif est ignoré et `run` n’est pas invoqué. Une exception de factory observée avant `Terminated` conserve la priorité définie en section 5, tandis qu’une exception tardive après cette frontière est seulement reportée comme erreur de cleanup et ne réouvre pas l’outcome.
+Les ports d’attach de l’ancien monde deviennent des ports de boot internes, instanciés uniquement par les classes d’entrée Kadre : ils reçoivent toujours l’`Activity`, la scène ou la racine que l’OS vient de créer — c’est le mécanisme OS, plus un choix de design — mais leur visibilité est interne stricte et leur sémantique est renommée : l’OS livre à Kadre. Sur desktop, ce SPI est `DesktopRunRequest` (`applicationFactory`, `policy`, `firstWindow`, `mainDispatcher`) consommé par les backends découverts ; il n’existe aucune implémentation tierce publique.
 
-Les adaptateurs officiels implémentent ce SPI. L’artifact `test` l’utilise pour exécuter exactement les mêmes contrats sans backend natif. L’annotation expérimentale permet les backends tiers pendant l’incubation sans transformer immédiatement le SPI en garantie stable.
+L’admission du boot constitue le point de linéarisation : une fois la session admise, elle et son `state` font autorité. La transition vers `Running` et l’admission d’un arrêt sont sérialisées : `KadreApplicationFactory.create` et `KadreApplication.run` ne commencent jamais après l’admission du motif terminal. Un `run` déjà commencé est annulé par le teardown ordinaire. Comme `create` est non suspendu, un appel déjà commencé n’est pas préempté ; son résultat tardif est ignoré et `run` n’est pas invoqué. Une exception de factory observée avant `Terminated` conserve la priorité définie en section 5, tandis qu’une exception tardive après cette frontière est seulement reportée comme erreur de cleanup et ne réouvre pas l’outcome.
 
-Les adaptateurs mono-session offrent une surcharge acceptant directement un `KadreApplication`. Les hosts capables de créer une scène ou activité supplémentaire exigent une `KadreApplicationFactory`; Kadre ne réutilise jamais silencieusement une instance applicative dans deux sessions.
+Une session par process, par construction : le vocabulaire multi-sessions qui subsiste (arbitrage des brokers OS process-wide, `AllForegroundSessions`) est vestigial — il décrit des ressources OS partagées, pas des sessions Kadre concurrentes. L’artifact `test` à venir actualisera la même entrée sur horloge virtuelle (fake process) au lieu d’un fake host.
 
 ### 6.1 Brokers process-wide internes
 
@@ -279,7 +280,7 @@ public interface KadreLifecycle {
     public val state: StateFlow<LifecycleState>
     public val capabilities: StateFlow<LifecycleCapabilities>
     public val events: Flow<LifecycleEvent>
-    public val signals: Flow<HostSignal>
+    public val signals: Flow<SystemSignal>
 }
 
 public data class LifecycleCapabilities(
@@ -287,14 +288,16 @@ public data class LifecycleCapabilities(
 )
 
 public data class LifecycleState(
-    public val attachment: AttachmentState,
+    public val phase: SessionPhase,
     public val visibility: VisibilityState,
     public val activation: ActivationState,
 )
 
-public enum class AttachmentState {
-    Attached,
-    Detached,
+public enum class SessionPhase {
+    NotStarted,
+    Running,
+    Terminating,
+    Terminated,
 }
 
 public enum class VisibilityState {
@@ -313,13 +316,13 @@ public data class LifecycleEvent(
     public val stamp: EventStamp,
 )
 
-public sealed interface HostSignal {
+public sealed interface SystemSignal {
     public val stamp: EventStamp
 
     public data class MemoryPressure(
         public val level: MemoryPressureLevel,
         public override val stamp: EventStamp,
-    ) : HostSignal
+    ) : SystemSignal
 }
 
 public enum class MemoryPressureLevel {
@@ -328,23 +331,24 @@ public enum class MemoryPressureLevel {
 }
 ```
 
-Les trois axes sont orthogonaux. `Detached` est terminal et impose le snapshot canonique `Detached + Background + Inactive`. Une transition vers `Background` publie toujours `Inactive` auparavant ou dans le même snapshot atomique. Une transition vers `Active` exige `Attached + Foreground`. Les backends dédupliquent les notifications répétées et ne publient que des snapshots valides.
+Le lifecycle observe le process, plus un hôte applicatif : `phase` est le miroir de `SessionState` exposé une seule fois, et les axes `visibility`/`activation` portent ce que l’OS observe des conteneurs du process. Les trois axes sont corrélés par construction. `Terminated` est terminal et impose le snapshot canonique `Terminated + Background + Inactive`. Une transition vers `Background` publie toujours `Inactive` auparavant ou dans le même snapshot atomique. Une transition vers `Active` exige `Running + Foreground`. `AttachmentState` et `HostSignal` n’existent plus : le host est désormais l’OS qui fournit le conteneur (`HostSurface` garde son nom avec cette définition), jamais une application hôte. Les backends dédupliquent les notifications répétées et ne publient que des snapshots valides.
 
-Les deux `StateFlow` contiennent dès la création le state courant du host, toujours `Attached`, et les capabilities initiales ; le state initial n’est pas rejoué dans `events`. Ces valeurs sont disponibles avant le passage de la session à `Running`.
+L’agrégation multi-conteneurs est la règle : `visibility = Foreground` si au moins un conteneur OS du process est visible, `activation = Active` si au moins un conteneur a le focus ; `primarySurface` est la surface du conteneur focalisé (`null` si aucun), et toutes les surfaces restent atteignables via `Window.surface`.
+
+Les deux `StateFlow` contiennent dès la création le state initial publié par le boot de la plateforme et les capabilities initiales ; le state initial n’est pas rejoué dans `events`. Ces valeurs sont disponibles avant le passage de la session à `Running`.
 
 Mapping normatif :
 
-| Host | `Foreground` | `Active` | `Detached` |
+| Plateforme | `Foreground` | `Active` | Terminaison du conteneur |
 |---|---|---|---|
 | Android | `LifecycleOwner` au moins `STARTED` | au moins `RESUMED` et fenêtre interactive | `LifecycleOwner.onDestroy` ou premier détachement de la `View` fournie |
 | UIKit | scène en foreground | `sceneDidBecomeActive` | `sceneDidDisconnect` |
 | Web | document visible et élément connecté | document actif et élément recevant l’input | détachement selon la policy Web |
-| Desktop `Standalone` | au moins une fenêtre de session visible | au moins une fenêtre de session active | arrêt du host standalone |
-| Desktop `Embedded` | intégration host attachée et non suspendue, ou fenêtre visible | intégration host active sans fenêtre, ou fenêtre active | fermeture explicite de l’intégration |
+| Desktop (boucle possédée) | au moins une fenêtre de session visible | au moins une fenêtre de session active | dernière fenêtre fermée ⇒ `Completed` (règle fixe) ; arrêt de la boucle OS ⇒ `SystemTermination` |
 
 `state` est mis à jour avant que `events` rende la transition observable. Un collector peut donc voir un état plus récent, mais jamais un état antérieur à l’événement reçu.
 
-`signals` porte les notifications non durables du host qui ne sont pas des axes de lifecycle, notamment la pression mémoire. Elles sont hot, sans replay et suivent `KadrePolicy.hostSignals`, séparée des transitions lifecycle critiques. `LifecycleCapabilities.memoryPressure` vaut uniquement `Available`, `Unsupported` ou `Unavailable`; dans ce dernier cas sa failure vaut exactement `Closed(Host)`, `TemporarilyUnavailable` ou `PlatformFailure`. Permission et interaction n’ont aucun sens pour ce signal passif. La capability est mise à jour avant son diagnostic `CapabilityChanged(resource = Host, operation = null)`. Les profils ordinaires utilisent `Latest`; remplacer ou dropper un signal reste observable par son span ou les compteurs mais ne termine pas la session. Kadre ne fabrique pas de signal sur un host qui ne l’expose pas ; une application conserve ses propres seuils de cache et ne dépend pas de la réception d’un signal pour rester correcte.
+`signals` porte les notifications non durables du système qui ne sont pas des axes de lifecycle, notamment la pression mémoire. Elles sont hot, sans replay et suivent `KadrePolicy.hostSignals`, séparée des transitions lifecycle critiques. `LifecycleCapabilities.memoryPressure` vaut uniquement `Available`, `Unsupported` ou `Unavailable`; dans ce dernier cas sa failure vaut exactement `Closed(Host)`, `TemporarilyUnavailable` ou `PlatformFailure`. Permission et interaction n’ont aucun sens pour ce signal passif. La capability est mise à jour avant son diagnostic `CapabilityChanged(resource = Host, operation = null)`. Les profils ordinaires utilisent `Latest`; remplacer ou dropper un signal reste observable par son span ou les compteurs mais ne termine pas la session. Kadre ne fabrique pas de signal sur une plateforme qui ne l’expose pas ; une application conserve ses propres seuils de cache et ne dépend pas de la réception d’un signal pour rester correcte.
 
 ### 7.1 Contrats normatifs des flux
 
@@ -653,7 +657,7 @@ val policy = KadrePolicies.Default.copy(
 )
 ```
 
-Les capacités de buffer, limites de collectors d’événements, budgets de ressources, budgets capture/payload en octets, `dropTransferClaimTimeout` et `shutdownTimeout` sont finis, strictement positifs et validés à la construction. `maxEventCollectorsPerFlow` ne peut pas dépasser `maxEventCollectorsPerSession`. Construire ou `copy` une policy numériquement invalide lève immédiatement `IllegalArgumentException`, conformément aux erreurs de programmation Kotlin ; `attach` vérifie ensuite seulement la compatibilité structurelle du host et ne normalise aucune valeur. L’ingress discret choisit `CloseSource` ou `FailSession`; chaque collector peut aussi choisir `CancelSlowCollector`. Les données continues peuvent choisir `DropOldestAndReport`, `DropLatestAndReport`, `CloseSource` ou `FailSession`. Il n’existe pas de variante `Unlimited` pour une file, une durée d’attente ou une ressource possédée par Kadre.
+Les capacités de buffer, limites de collectors d’événements, budgets de ressources, budgets capture/payload en octets, `dropTransferClaimTimeout` et `shutdownTimeout` sont finis, strictement positifs et validés à la construction. `maxEventCollectorsPerFlow` ne peut pas dépasser `maxEventCollectorsPerSession`. Construire ou `copy` une policy numériquement invalide lève immédiatement `IllegalArgumentException`, conformément aux erreurs de programmation Kotlin ; le boot vérifie ensuite seulement la compatibilité structurelle du backend et ne normalise aucune valeur. L’ingress discret choisit `CloseSource` ou `FailSession`; chaque collector peut aussi choisir `CancelSlowCollector`. Les données continues peuvent choisir `DropOldestAndReport`, `DropLatestAndReport`, `CloseSource` ou `FailSession`. Il n’existe pas de variante `Unlimited` pour une file, une durée d’attente ou une ressource possédée par Kadre.
 
 Chaque source non mixte possède une file d’ingress bornée avant le fan-out, puis chaque collector possède sa propre file bornée. Les flows mixtes utilisent le scheduler borné défini ci-dessus à ces deux niveaux. `CloseSource` ferme exactement l’owner indiqué par la table normative ; `CancelSlowCollector` termine uniquement le collector concerné avec `SlowCollectorCancellationException`.
 
@@ -663,15 +667,15 @@ Tous les calculs de coût utilisent une arithmétique vérifiée : une addition 
 
 `maxWindowsPerSession` couvre les fenêtres vivantes, pas seulement les requêtes pendantes. `Default` et `Realtime` routent les gamepads vers la session active ; `Recording` les route vers toutes les sessions foreground. Les trois profils utilisent un ownership exclusif des effets. Seule une policy custom peut demander `SharedWhenSupported`, puis uniquement si le backend garantit cette capability. `maxConcurrentRawInputAccesses` compte les accès raw vivants de cette session avant toute demande de permission ou admission de source native. Atteindre un budget retourne `KadreFailure.ResourceLimitExceeded`; Kadre n’alloue jamais d’abord pour diagnostiquer ensuite.
 
-`ExecutionPriority` influence uniquement les workers internes et leur cadence de réveil. Les dispatchers UI/main propriétaires restent imposés par le host et ne sont jamais remplaçables par une policy applicative. `shutdownTimeout` suit le contrat schedulable et la priorité des failures de la section 5 ; son dépassement produit toujours un diagnostic fatal et devient `ShutdownTimedOut` seulement en l’absence de failure primaire antérieure.
+`ExecutionPriority` influence uniquement les workers internes et leur cadence de réveil. Le dispatcher principal du boot Kadre est imposé par la plateforme et n’est jamais remplaçable par une policy applicative. `shutdownTimeout` suit le contrat schedulable et la priorité des failures de la section 5 ; son dépassement produit toujours un diagnostic fatal et devient `ShutdownTimedOut` seulement en l’absence de failure primaire antérieure.
 
 `Coalesced` a une sémantique propre au type : une position, taille, pression ou valeur analogique absolue conserve la dernière valeur par surface/contact/contrôle ; une demande de redraw conserve un marqueur par surface ; les deltas de pointeur, pan, rotation et scroll s’additionnent ; les facteurs de pinch se composent multiplicativement ; des `MemoryPressure` agrégées conservent le niveau le plus sévère observé. `Latest` conserve une valeur par clé logique documentée — kind de signal, surface de redraw, contact tactile ou contrôle gamepad — afin qu’une catégorie ne remplace pas silencieusement une autre ; son `EventDeliverySpan` rend les remplacements observables dès qu’il y en a au moins un. `Latest` ferme aussi la valeur remplacée lorsqu’elle possède une ressource. Toute nouvelle catégorie continue doit définir sa clé et sa réduction `Coalesced` dans le catalogue fermé avant d’être exposée.
 
 Le coalescing peut avoir lieu une première fois à l’ingress puis une seconde fois dans la file d’un collector. Cette composition est aplatie : un événement sans span compte pour un événement source, un événement déjà agrégé contribue son `eventCount`, les comptes sont additionnés avec arithmétique vérifiée et les bornes deviennent la première `firstSequence` et la dernière `lastSequence`. L’enveloppe intermédiaire ne compte jamais comme un événement supplémentaire. Un drop ou compteur de perte utilise de même le nombre d’événements sources représentés, pas seulement le nombre d’entrées de file supprimées.
 
-La policy exposée par `KadreScope.policy` est celle effectivement garantie. `KadrePolicies.Default` constitue le minimum structurel obligatoire de tout host adapter déclaré supporté : son `attach` ne peut pas échouer avec `UnsupportedPolicy`. Ses limites sont des plafonds appliqués paresseusement, pas une préallocation de toute la mémoire ni une promesse qu’une capability native absente ou une requête arbitrairement coûteuse deviendra disponible. `UnsupportedPolicy` à l’attach concerne uniquement l’incapacité structurelle à implémenter un mode de delivery ou d’ownership. Une fenêtre, image ou configuration capture particulière qui dépasse ensuite un budget retourne `ResourceLimitExceeded` à son opération ; elle ne rend pas rétroactivement la policy unsupported. Un profil personnalisé, `Realtime` ou `Recording` structurellement impossible échoue pendant `attach` ; aucun profil n’est dégradé silencieusement. `Recording` garantit seulement l’absence de perte ajoutée par Kadre dans ses domaines enregistrables après l’ingress natif ; une coalescence ou perte imposée en amont par l’OS est signalée lorsqu’elle est détectable.
+La policy exposée par `KadreScope.policy` est celle effectivement garantie. `KadrePolicies.Default` constitue le minimum structurel obligatoire de tout backend déclaré supporté : son boot ne peut pas échouer avec `UnsupportedPolicy`. Ses limites sont des plafonds appliqués paresseusement, pas une préallocation de toute la mémoire ni une promesse qu’une capability native absente ou une requête arbitrairement coûteuse deviendra disponible. `UnsupportedPolicy` au boot concerne uniquement l’incapacité structurelle à implémenter un mode de delivery ou d’ownership. Une fenêtre, image ou configuration capture particulière qui dépasse ensuite un budget retourne `ResourceLimitExceeded` à son opération ; elle ne rend pas rétroactivement la policy unsupported. Un profil personnalisé, `Realtime` ou `Recording` structurellement impossible échoue pendant le boot ; aucun profil n’est dégradé silencieusement. `Recording` garantit seulement l’absence de perte ajoutée par Kadre dans ses domaines enregistrables après l’ingress natif ; une coalescence ou perte imposée en amont par l’OS est signalée lorsqu’elle est détectable.
 
-Si une capability dynamique change après `attach` et rend une garantie impossible, le backend met d’abord à jour la capability puis ferme la source concernée ou la session selon l’action d’overflow/failure configurée. Il ne remplace jamais la policy exposée, ne redimensionne pas silencieusement les buffers et ne bascule pas vers un profil plus faible.
+Si une capability dynamique change après le boot et rend une garantie impossible, le backend met d’abord à jour la capability puis ferme la source concernée ou la session selon l’action d’overflow/failure configurée. Il ne remplace jamais la policy exposée, ne redimensionne pas silencieusement les buffers et ne bascule pas vers un profil plus faible.
 
 Les callbacks natifs ne sont jamais bloqués pour promettre un lossless impossible. Toute perte incrémente synchroniquement un compteur typé dans `KadreDiagnostics.counters`, puis tente d’émettre un diagnostic détaillé, sauf lorsque la perte concerne précisément le flux de diagnostics. La garantie ne dépend donc jamais de la livraison de ce flow lui-même.
 
@@ -813,7 +817,7 @@ public sealed interface WindowCancellationOutcome {
 - `close()` est non bloquant et abandonne le handle. Tant que la requête est pending, il tente une annulation best-effort ; si l’opération native reste irréversible, le handle atteint `RequesterDetached` tandis que le host peut encore créer une session sans réintroduire de ressource dans la session demandeuse. Après un outcome terminal, `close()` ne ferme jamais la `Window` ou la nouvelle session déjà transférée par cet outcome.
 - Desktop peut atteindre `OpenedHere`.
 - UIKit atteint `OpenedInNewSession` lorsque l’OS connecte la nouvelle `UIWindowScene` et que sa session est attachée avec la factory du host.
-- La nouvelle application reçoit `KadreLaunchReason.AdditionalHostRequested` et l’`originatingRequestId`.
+- La nouvelle application reçoit `KadreLaunchReason.WindowRequested` et l’`originatingRequestId`.
 - Une plateforme sans multi-window crée une requête immédiatement `Rejected(Unsupported)` ; elle ne retourne jamais un faux succès.
 - Fermer la session demandeuse appelle `close()` sur ses requêtes encore `Pending`; une opération annulable devient `Cancelled`, une opération native déjà irréversible devient `RequesterDetached`. Une nouvelle session déjà ouverte ou créée ensuite n’est pas fermée.
 
@@ -1816,7 +1820,7 @@ KadreSession Job
     └── branches CaptureSession
 ```
 
-- Le job racine est un `SupervisorJob(parentScope.job)` : l’annulation du parent ferme la session, mais un échec Kadre ne cancelle jamais arbitrairement le scope du host.
+- Le job racine est un `SupervisorJob()` possédé par le boot Kadre : la terminaison du process ferme la session, mais un échec Kadre ne cancelle jamais arbitrairement la scope possédée ;
 - le sous-arbre de `KadreApplication.run` utilise un `Job` ordinaire : l’échec non géré de n’importe quel enfant applicatif termine toute la session ;
 - une erreur locale correctement matérialisée ferme seulement la ressource concernée ; une erreur backend inattendue est promue en échec de session ;
 - Les fonctions publiques suspendues sont appelables depuis toute coroutine.
@@ -1954,38 +1958,33 @@ public fun HTMLElement.attachKadre(
 ### 15.4 Desktop
 
 ```kotlin
-public fun CoroutineScope.attachKadreDesktop(
-    applicationFactory: KadreApplicationFactory,
-    options: DesktopHostOptions,
-    policy: KadrePolicy = KadrePolicies.Default,
-): KadreResult<KadreSession>
-
-public fun CoroutineScope.attachKadreDesktop(
-    options: DesktopHostOptions,
-    policy: KadrePolicy = KadrePolicies.Default,
+// module umbrella `kadre` — l’entrée ownership commune
+public suspend fun runKadreApplication(
+    options: KadreRunOptions = KadreRunOptions(),
     application: KadreApplication,
-): KadreResult<KadreSession>
+): KadreResult<SessionOutcome>
 
-public fun runKadreApplication(
+// `platform:desktop` — surcharges JVM avec sélection de backend explicite
+public suspend fun runKadreApplication(
     applicationFactory: KadreApplicationFactory,
-    options: DesktopHostOptions.Standalone = DesktopHostOptions.Standalone(),
-    policy: KadrePolicy = KadrePolicies.Default,
-): SessionOutcome
+    backend: DesktopBackend = DesktopBackend.Auto,
+    options: KadreRunOptions = KadreRunOptions(),
+): KadreResult<SessionOutcome>
 
-public fun runKadreApplication(
-    options: DesktopHostOptions.Standalone = DesktopHostOptions.Standalone(),
-    policy: KadrePolicy = KadrePolicies.Default,
+public suspend fun runKadreApplication(
+    options: KadreRunOptions = KadreRunOptions(),
+    backend: DesktopBackend = DesktopBackend.Auto,
     application: KadreApplication,
-): SessionOutcome
+): KadreResult<SessionOutcome>
 ```
 
-- `attachKadreDesktop` est l’API primaire embarquable et non bloquante. Ses overloads `application` placent la fun-interface en dernier paramètre pour autoriser `scope.attachKadreDesktop(options) { … }`, enveloppent l’instance dans une factory mono-session privée à cet appel et ne la réutilisent jamais pour une seconde session implicite.
-- `runKadreApplication` est une commodité Desktop uniquement, bloquante et appelée depuis le main thread du processus ; elle n’établit aucun contrat commun avec Android, UIKit ou Web. Si l’attach standalone échoue avant création d’une session, elle lève `KadreException` avec la failure exacte de `OPERATION-CONTRACTS.md`; après création, elle retourne exclusivement le `SessionOutcome` terminal de cette session.
-- `Embedded` conserve la session après fermeture de la dernière fenêtre ; `Standalone(stopWhenLastWindowClosed = true)` s’arme après sa première fenêtre admise, puis la première transition non-vide → vide demande `HostRequested`. Une session standalone qui reste toujours headless ne s’arrête pas pour cette seule raison.
+- `runKadreApplication` est l’entrée ownership : Kadre possède le process et l’entrée y déroule la boucle principale. Elle est `suspend` pour garder la forme commune aux plateformes, mais l’implémentation JVM **bloque le thread appelant** le temps de la session ; le code applicatif partagé est le même sur toutes les plateformes. Les overloads `application` placent la fun-interface en dernier paramètre pour autoriser `runKadreApplication(options) { … }` et enveloppent l’instance dans une factory mono-session privée à cet appel.
+- L’entrée umbrella laisse la façade choisir le backend (`DesktopBackend.Auto` : AppKit, Win32, Wayland puis X11 selon l’OS) ; les overloads `platform:desktop` permettent de le nommer. Après sélection, aucune bascule de backend n’est autorisée.
+- Un boot qui échoue avant la session retourne `KadreResult.Failure` explicite, jamais une exception fonctionnelle : `Unsupported(HostAttach)` lorsqu’aucun backend disponible n’existe sur le classpath, `InvalidRequest("options")` pour une combinaison OS/backend incompatible, `AlreadyInUse(Host)` si une session vit déjà dans le process, `UnsupportedPolicy(component)` pour un profil structurellement impossible, `TemporarilyUnavailable` ou `PlatformFailure` (platform du backend, codes `discovery-exception`, `availability-exception`, `duplicate-provider`, `run-exception`).
+- La façade possède le fil main du run : un dispatcher single-thread dédié par appel, passé au boot et fermé au teardown de la session — aucun état process-global (pas de `Dispatchers.setMain`), l’entrée fonctionne sur une JVM desktop sans implémentation `Dispatchers.Main`.
+- La règle du dernier conteneur est fixe : la fermeture de la dernière fenêtre de la session produit `SessionOutcome.Completed` (une session restée headless n’est pas terminée par cette seule règle) ; l’arrêt de la boucle OS produit `Stopped(SystemTermination)`. L’app ne peut demander l’arrêt que via `KadreScope.requestStop()`.
 - Une fenêtre desktop expose séparément son objet top-level et sa `HostSurface` de contenu.
 - AppKit refuse explicitement un lancement hors du main thread au lieu de déplacer silencieusement la possession de `NSApplication`.
-- Sélection typée AppKit, Win32, X11 ou Wayland.
-- `DesktopHostOptions.Embedded` identifie explicitement l’intégration de boucle existante (`AppKit`, `AWT/Compose` ou `JavaFX`). Aucun custom pump public n’entre dans v1. `attachKadreDesktop` refuse une combinaison qu’il ne sait pas pomper ; il ne démarre jamais une seconde boucle UI cachée.
 - Un échec après démarrage ne déclenche pas un fallback silencieux.
 
 ## 16. Interop plateforme

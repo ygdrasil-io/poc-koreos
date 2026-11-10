@@ -33,7 +33,7 @@ le reste vient de `helloKadreApplication` (commonMain).
 
 | Étape | Quoi | API |
 |---|---|---|
-| 1 | Démarrer le runtime et laisser la plateforme choisir le backend | `runKadreApplication`, `DesktopHostOptions.Standalone` |
+| 1 | Démarrer le runtime et laisser la plateforme choisir le backend | `runKadreApplication` (entrée ownership, backend auto) |
 | 2 | Lister les écrans détectés | `KadreScope.displays` |
 | 3 | Créer une fenêtre (titre, taille logique) et attendre son ouverture | `windows.requestWindow(WindowSpec(...))`, `WindowRequest.await()` |
 | 4 | Imprimer les événements de fenêtre (géométrie, propriétés) | `window.events` |
@@ -61,7 +61,7 @@ fermeture système — la session vit tant que la page vit. Le main web passe
 *Bureau* — cliquez dans puis hors de la fenêtre (`[surface]` focus), déplacez et
 redimensionnez (`[fenêtre]` géométrie), tapez au clavier et scrollez (`[entrée]`),
 fermez avec le bouton rouge : le protocole de fermeture s'exécute et le processus
-se termine (`stopWhenLastWindowClosed = true`).
+se termine (règle fixe du dernier conteneur — `Completed`).
 
 *Web* — ouvrez la console (F12), bougez la souris sur la page (`[entrée]`), cliquez
 dans et hors du conteneur (`[surface]` focus), redimensionnez la fenêtre du

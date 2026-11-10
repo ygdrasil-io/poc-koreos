@@ -12,6 +12,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.TestResult
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
@@ -388,7 +389,7 @@ class RuntimeProcessControllerCommonTest {
      * installs the test scheduler as Main so every owned coroutine is driven by virtual time.
      */
     @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
-    private fun runProcessTest(body: suspend TestScope.() -> Unit): Unit = runTest {
+    private fun runProcessTest(body: suspend TestScope.() -> Unit): TestResult = runTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
         try {
             body()
