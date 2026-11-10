@@ -1,5 +1,5 @@
 // Klib ABI Dump
-// Targets: [js, wasmJs]
+// Targets: [iosArm64, iosSimulatorArm64, js, tvosArm64, tvosSimulatorArm64, wasmJs]
 // Rendering settings:
 // - Signature version: 2
 // - Show manifest properties: true
@@ -318,6 +318,7 @@ final enum class org.graphiks.kadre.diagnostics/KadrePlatform : kotlin/Enum<org.
     enum entry Android // org.graphiks.kadre.diagnostics/KadrePlatform.Android|null[0]
     enum entry AppKit // org.graphiks.kadre.diagnostics/KadrePlatform.AppKit|null[0]
     enum entry Fake // org.graphiks.kadre.diagnostics/KadrePlatform.Fake|null[0]
+    enum entry Linux // org.graphiks.kadre.diagnostics/KadrePlatform.Linux|null[0]
     enum entry UIKit // org.graphiks.kadre.diagnostics/KadrePlatform.UIKit|null[0]
     enum entry Wayland // org.graphiks.kadre.diagnostics/KadrePlatform.Wayland|null[0]
     enum entry Web // org.graphiks.kadre.diagnostics/KadrePlatform.Web|null[0]
