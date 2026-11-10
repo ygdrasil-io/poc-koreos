@@ -39,7 +39,9 @@ tasks.named("check") {
     dependsOn(":kadre:runtime:check")
     dependsOn("validateKotlinConsumer")
     dependsOn("validateJavaConsumer")
-    // pin : la pureté est vérifiée à chaque check local avec les artefacts publiés
+    // pin : le câblage consumer de jvmTest (publications vers le repo contractuel,
+    // system properties kadreRepository/kadreVersion) reste exercé à chaque check
+    // local — NO-SOURCE depuis l'élagage, les tests reviennent avec les tâches suivantes.
     dependsOn("jvmTest")
 }
 
