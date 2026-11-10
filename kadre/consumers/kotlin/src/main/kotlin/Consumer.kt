@@ -1,17 +1,14 @@
-import kotlinx.coroutines.CoroutineScope
 import org.graphiks.kadre.application.KadreApplication
-import org.graphiks.kadre.application.KadreApplicationFactory
+import org.graphiks.kadre.application.KadreRunOptions
 import org.graphiks.kadre.application.SessionOutcome
 import org.graphiks.kadre.diagnostics.KadreFailure
 import org.graphiks.kadre.diagnostics.KadreResourceKind
 import org.graphiks.kadre.diagnostics.KadreResult
 import org.graphiks.kadre.diagnostics.flatMap
 import org.graphiks.kadre.diagnostics.map
-import org.graphiks.kadre.platform.desktop.DesktopHostOptions
-import org.graphiks.kadre.platform.desktop.attachKadreDesktop
-import org.graphiks.kadre.platform.desktop.runKadreApplication
 import org.graphiks.kadre.policy.KadrePolicies
 import org.graphiks.kadre.policy.KadrePolicy
+import org.graphiks.kadre.runKadreApplication
 
 public object Consumer {
     public fun policyCopies(): List<KadrePolicy> = listOf(
@@ -33,23 +30,10 @@ public object Consumer {
 
     public fun rawInputResource(): KadreResourceKind = KadreResourceKind.RawInputAccess
 
-    public fun attachBothForms(scope: CoroutineScope): List<KadreResult<*>> {
-        val options = DesktopHostOptions.Embedded(
-            integration = org.graphiks.kadre.platform.desktop.DesktopIntegration.AppKitMainLoop,
-        )
-        val factory = KadreApplicationFactory { KadreApplication { requestStop() } }
-        return listOf(
-            scope.attachKadreDesktop(factory, options),
-            scope.attachKadreDesktop(options) { requestStop() },
-        )
-    }
-
     public fun runnersCompile(): List<Any> {
-        val factoryRunner: (KadreApplicationFactory, DesktopHostOptions.Standalone, KadrePolicy) -> SessionOutcome =
+        val runner: suspend (KadreRunOptions, KadreApplication) -> KadreResult<SessionOutcome> =
             ::runKadreApplication
-        val directRunner: (DesktopHostOptions.Standalone, KadrePolicy, KadreApplication) -> SessionOutcome =
-            ::runKadreApplication
-        return listOf(factoryRunner, directRunner)
+        return listOf(runner)
     }
 
     public fun describe(outcome: SessionOutcome): String = when (outcome) {

@@ -2,11 +2,13 @@ import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlinx.coroutines.runBlocking
 import org.graphiks.kadre.application.KadreApplication
+import org.graphiks.kadre.application.KadreRunOptions
 import org.graphiks.kadre.application.SessionOutcome
-import org.graphiks.kadre.platform.desktop.DesktopHostOptions
-import org.graphiks.kadre.platform.desktop.runKadreApplication
+import org.graphiks.kadre.diagnostics.getOrNull
 import org.graphiks.kadre.policy.KadrePolicies
+import org.graphiks.kadre.runKadreApplication
 
 /**
  * Exécutable publication proof (design WAYLAND-PHASE-11-CLOSURE-DESIGN D4) :
@@ -27,10 +29,11 @@ class ConsumerSessionTest {
             display != null && runtime != null && Files.exists(Path.of(runtime, display)),
             "no live compositor — this proof runs under the compositor matrix job",
         )
-        val outcome = runKadreApplication(
-            DesktopHostOptions.Standalone(),
-            KadrePolicies.Default,
-        ) { KadreApplication { } }
+        val outcome = runBlocking {
+            runKadreApplication(
+                options = KadreRunOptions(policy = KadrePolicies.Default),
+            ) { KadreApplication { } }
+        }.getOrNull() ?: error("run failed")
         assertEquals(SessionOutcome.Completed, outcome)
     }
 }
