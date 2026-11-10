@@ -38,11 +38,10 @@ import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.seconds
 
 /**
- * The session semantics of the ownership-first controller, merged here from the deleted
+ * The session semantics of the ownership-first controller, merged here from the old
  * `RuntimeHostControllerTest`: every scenario that still applies to a booted session, driven
  * through [RuntimeProcessController.boot]. Attach-specific races (parent-scope validation and
- * cancellation, host detachment) died with the attach contract; the embedded seams keep their
- * own transitional suite in `RuntimeEmbeddedHostControllerTest`.
+ * cancellation, host detachment) died with the attach contract and its embedded seam.
  */
 class RuntimeProcessControllerTest {
     @Test

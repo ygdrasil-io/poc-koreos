@@ -44,6 +44,16 @@ import kotlin.coroutines.AbstractCoroutineContextElement
 import kotlin.coroutines.CoroutineContext
 import kotlin.coroutines.cancellation.CancellationException
 
+/**
+ * The launch identity a boot carries into the application's `KadreLaunchContext`: why the
+ * process was launched and which window request caused it, when the platform states one.
+ * A `null` launch reports [KadreLaunchReason.ProcessLaunch].
+ */
+internal data class KadreLaunchInfo(
+    val reason: KadreLaunchReason,
+    val originatingRequestId: org.graphiks.kadre.window.WindowRequestId?,
+)
+
 @OptIn(InternalCoroutinesApi::class)
 internal class SessionRuntime(
     override val id: SessionId,
@@ -279,26 +289,6 @@ internal class SessionRuntime(
             if (finished || selectedOutcome != null) return
             runtimeLifecycle.emitMemoryPressure(level)
         }
-    }
-
-    fun hostDetached() {
-        requestTermination(SessionOutcome.Stopped(SessionStopReason.SystemTermination))
-    }
-
-    fun hostDetachedImmediately() {
-        val final = lock.withLock {
-            if (finished) return
-            selectedOutcome = selectOutcome(
-                selectedOutcome,
-                SessionOutcome.Stopped(SessionStopReason.SystemTermination),
-            )
-            mutableState.value = SessionState.Stopping
-            revokeTargetResources()
-            startupJob?.cancel()
-            applicationJob?.cancel()
-            checkNotNull(selectedOutcome)
-        }
-        finish(final)
     }
 
     fun hostFailed(failure: KadreFailure.PlatformFailure) {

@@ -58,6 +58,16 @@ public fun main(args: Array<String>) {
                     is WindowRequestOutcome.OpenedHere -> opened.window
                     else -> error("window did not open: $opened")
                 }
+                // Sentinel: the ownership rule completes the session when its LAST container
+                // closes, so a second window stays open across the terminal observation below.
+                val sentinelOpened = when (val request = windows.requestWindow(sentinelSpec("Kadre Phase 3 sentinel"))) {
+                    is KadreResult.Failure -> error("sentinel window request failed: ${request.reason}")
+                    is KadreResult.Success -> request.value.await()
+                }
+                val sentinel = when (sentinelOpened) {
+                    is WindowRequestOutcome.OpenedHere -> sentinelOpened.window
+                    else -> error("sentinel window did not open: $sentinelOpened")
+                }
                 val surface = window.surface
                 recorder.metadata(
                     options = options,
@@ -162,6 +172,13 @@ public fun main(args: Array<String>) {
                 closeAndObserveTerminal()
                 stateCollector.cancel()
                 eventCollector.cancel()
+                // The observation is done: the sentinel closes last, so the fixed
+                // last-container rule ends the session only after the record is complete.
+                sentinel.close()
+                withTimeout(5.seconds) {
+                    window.state.first { it.phase == org.graphiks.kadre.window.WindowPhase.Closed }
+                    sentinel.state.first { it.phase == org.graphiks.kadre.window.WindowPhase.Closed }
+                }
                 requestStop()
             },
         ) }.getOrNull() ?: error("harness run failed")
@@ -175,6 +192,12 @@ private fun stateRevisionVisible(
     current: org.graphiks.kadre.surface.SurfaceState,
     event: SurfaceEvent,
 ): Boolean = current.revision.value >= event.stateRevision.value
+
+/** The second window kept open across a terminal observation (ownership sentinel). */
+internal fun sentinelSpec(title: String): WindowSpec = WindowSpec(
+    title = title,
+    contentSize = org.graphiks.kadre.surface.LogicalSize(160.0, 100.0),
+)
 
 private fun printHelp(recorder: HarnessRecorder) {
     recorder.line(

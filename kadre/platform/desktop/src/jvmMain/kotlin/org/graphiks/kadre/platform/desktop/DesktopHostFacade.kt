@@ -1,22 +1,16 @@
 package org.graphiks.kadre.platform.desktop
 
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.asCoroutineDispatcher
 import org.graphiks.kadre.application.KadreApplicationFactory
 import org.graphiks.kadre.application.KadreRunOptions
-import org.graphiks.kadre.application.KadreSession
 import org.graphiks.kadre.application.SessionOutcome
 import org.graphiks.kadre.diagnostics.KadreFailure
 import org.graphiks.kadre.diagnostics.KadreOperation
 import org.graphiks.kadre.diagnostics.KadrePlatform
-import org.graphiks.kadre.diagnostics.KadreResourceKind
 import org.graphiks.kadre.diagnostics.KadreResult
 import org.graphiks.kadre.internal.runtime.desktop.DesktopBackendKind
 import org.graphiks.kadre.internal.runtime.desktop.DesktopBackendProvider
-import org.graphiks.kadre.internal.runtime.desktop.DesktopEmbeddedRequest
-import org.graphiks.kadre.internal.runtime.desktop.DesktopIntegrationKind
 import org.graphiks.kadre.internal.runtime.desktop.DesktopRunRequest
-import org.graphiks.kadre.policy.KadrePolicies
 import org.graphiks.kadre.policy.KadrePolicy
 import java.util.ServiceConfigurationError
 import java.util.concurrent.Executors
@@ -26,39 +20,6 @@ internal class DesktopHostFacade(
     private val operatingSystem: DesktopOperatingSystem,
     private val catalog: DesktopProviderCatalog,
 ) {
-    fun attach(
-        parentScope: CoroutineScope,
-        applicationFactory: KadreApplicationFactory,
-        options: DesktopHostOptions,
-        policy: KadrePolicy,
-    ): KadreResult<KadreSession> {
-        val embedded = options as? DesktopHostOptions.Embedded
-            ?: return KadreResult.Failure(KadreFailure.InvalidRequest("options"))
-        val integration = embedded.integration.toInternal()
-        val selection = selectProvider(embedded.backend, integration)
-        if (selection is ProviderSelection.Failure) return KadreResult.Failure(selection.failure)
-        val selected = selection as ProviderSelection.Selected
-        val provider = selected.provider
-        val request = DesktopEmbeddedRequest(
-            parentScope,
-            applicationFactory,
-            integration,
-            policy,
-            embedded.allowUserAttention,
-        )
-
-        val result = try {
-            provider.attach(request)
-        } catch (cancellation: CancellationException) {
-            throw cancellation
-        } catch (error: LinkageError) {
-            return KadreResult.Failure(providerFailure(selected.backend, "attach-exception"))
-        } catch (exception: Exception) {
-            return KadreResult.Failure(providerFailure(selected.backend, "attach-exception"))
-        }
-        return normalizeAttachResult(selected.backend, policy, result)
-    }
-
     /**
      * The ownership-first run: selects a backend, then boots one application in a process Kadre
      * owns. The facade owns the run's main thread — a dedicated single-thread dispatcher created
@@ -72,7 +33,7 @@ internal class DesktopHostFacade(
         backend: DesktopBackend,
         options: KadreRunOptions,
     ): KadreResult<SessionOutcome> {
-        val selection = selectProvider(backend, integration = null)
+        val selection = selectProvider(backend)
         if (selection is ProviderSelection.Failure) return KadreResult.Failure(selection.failure)
         val selected = selection as ProviderSelection.Selected
         val provider = selected.provider
@@ -101,7 +62,7 @@ internal class DesktopHostFacade(
             return when (result) {
                 is KadreResult.Success -> result
                 is KadreResult.Failure -> KadreResult.Failure(
-                    normalizeStandaloneFailure(selected.backend, options.policy, result.reason),
+                    normalizeRunFailure(selected.backend, options.policy, result.reason),
                 )
             }
         } finally {
@@ -112,11 +73,8 @@ internal class DesktopHostFacade(
         }
     }
 
-    private fun selectProvider(
-        requested: DesktopBackend,
-        integration: DesktopIntegrationKind?,
-    ): ProviderSelection {
-        val candidates = candidatesFor(requested, integration)
+    private fun selectProvider(requested: DesktopBackend): ProviderSelection {
+        val candidates = candidatesFor(requested)
             ?: return ProviderSelection.Failure(KadreFailure.InvalidRequest("options"))
         if (candidates.isEmpty()) return ProviderSelection.Failure(KadreFailure.InvalidRequest("options"))
 
@@ -132,7 +90,6 @@ internal class DesktopHostFacade(
             return ProviderSelection.Failure(providerFailure(candidates.first(), "discovery-exception"))
         }
 
-        var foundAvailableBackend = false
         for (candidate in candidates) {
             val matching = providers[candidate].orEmpty()
             if (matching.size > 1) {
@@ -148,33 +105,13 @@ internal class DesktopHostFacade(
             } catch (exception: Exception) {
                 return ProviderSelection.Failure(providerFailure(candidate, "availability-exception"))
             }
-            if (!available) continue
-            foundAvailableBackend = true
-            if (integration == null) return ProviderSelection.Selected(candidate, provider)
-
-            val supportsIntegration = try {
-                integration in provider.supportedIntegrations
-            } catch (cancellation: CancellationException) {
-                throw cancellation
-            } catch (error: LinkageError) {
-                return ProviderSelection.Failure(providerFailure(candidate, "metadata-exception"))
-            } catch (exception: Exception) {
-                return ProviderSelection.Failure(providerFailure(candidate, "metadata-exception"))
-            }
-            if (supportsIntegration) return ProviderSelection.Selected(candidate, provider)
+            if (available) return ProviderSelection.Selected(candidate, provider)
         }
 
-        return if (foundAvailableBackend && integration != null) {
-            ProviderSelection.Failure(KadreFailure.InvalidRequest("options"))
-        } else {
-            ProviderSelection.Failure(KadreFailure.Unsupported(KadreOperation.HostAttach))
-        }
+        return ProviderSelection.Failure(KadreFailure.Unsupported(KadreOperation.HostAttach))
     }
 
-    private fun candidatesFor(
-        requested: DesktopBackend,
-        integration: DesktopIntegrationKind?,
-    ): List<DesktopBackendKind>? {
+    private fun candidatesFor(requested: DesktopBackend): List<DesktopBackendKind>? {
         val operatingSystemCandidates = when (operatingSystem) {
             DesktopOperatingSystem.MacOS -> listOf(DesktopBackendKind.AppKit)
             DesktopOperatingSystem.Windows -> listOf(DesktopBackendKind.Win32)
@@ -189,32 +126,14 @@ internal class DesktopHostFacade(
             DesktopBackend.Wayland -> listOf(DesktopBackendKind.Wayland)
         }
         if (requested != DesktopBackend.Auto && requestedCandidates.single() !in operatingSystemCandidates) return null
-        if (integration == DesktopIntegrationKind.AppKitMainLoop) {
-            return requestedCandidates.filter { it == DesktopBackendKind.AppKit }.takeIf { it.isNotEmpty() }
-        }
         return requestedCandidates
     }
 
-    private fun normalizeAttachResult(
-        backend: DesktopBackendKind,
-        policy: KadrePolicy,
-        result: KadreResult<KadreSession>,
-    ): KadreResult<KadreSession> = when (result) {
-        is KadreResult.Success -> result
-        is KadreResult.Failure -> KadreResult.Failure(
-            if (result.reason.isValidAttachFailure(backend, policy)) {
-                result.reason
-            } else {
-                providerFailure(backend, "invalid-attach-failure")
-            },
-        )
-    }
-
-    private fun normalizeStandaloneFailure(
+    private fun normalizeRunFailure(
         backend: DesktopBackendKind,
         policy: KadrePolicy,
         failure: KadreFailure,
-    ): KadreFailure = if (failure.isValidStandaloneFailure(backend, policy)) {
+    ): KadreFailure = if (failure.isValidRunFailure(backend, policy)) {
         failure
     } else {
         providerFailure(backend, "invalid-run-failure")
@@ -233,12 +152,6 @@ private sealed interface ProviderSelection {
     data class Failure(val failure: KadreFailure) : ProviderSelection
 }
 
-private fun DesktopIntegration.toInternal(): DesktopIntegrationKind = when (this) {
-    DesktopIntegration.AppKitMainLoop -> DesktopIntegrationKind.AppKitMainLoop
-    DesktopIntegration.AwtEventDispatchThread -> DesktopIntegrationKind.AwtEventDispatchThread
-    DesktopIntegration.JavaFxApplicationThread -> DesktopIntegrationKind.JavaFxApplicationThread
-}
-
 private fun providerFailure(backend: DesktopBackendKind, code: String): KadreFailure.PlatformFailure =
     KadreFailure.PlatformFailure(backend.toPlatform(), "desktop-provider", code)
 
@@ -249,29 +162,14 @@ private fun DesktopBackendKind.toPlatform(): KadrePlatform = when (this) {
     DesktopBackendKind.Wayland -> KadrePlatform.Wayland
 }
 
-private fun KadreFailure.isValidAttachFailure(
-    backend: DesktopBackendKind,
-    policy: KadrePolicy,
-): Boolean = when (this) {
-    is KadreFailure.Unsupported -> operation == KadreOperation.HostAttach
-    is KadreFailure.InvalidRequest -> field == "parentScope" || field == "options"
-    is KadreFailure.AlreadyInUse -> resource == KadreResourceKind.Host
-    is KadreFailure.Closed -> resource == KadreResourceKind.Host
-    KadreFailure.ParentScopeCancelled -> true
-    is KadreFailure.UnsupportedPolicy -> policy != KadrePolicies.Default
-    is KadreFailure.TemporarilyUnavailable -> true
-    is KadreFailure.PlatformFailure -> platform == backend.toPlatform()
-    else -> false
-}
-
-private fun KadreFailure.isValidStandaloneFailure(
+private fun KadreFailure.isValidRunFailure(
     backend: DesktopBackendKind,
     policy: KadrePolicy,
 ): Boolean = when (this) {
     is KadreFailure.Unsupported -> operation == KadreOperation.HostAttach
     is KadreFailure.InvalidRequest -> field == "options"
-    is KadreFailure.AlreadyInUse -> resource == KadreResourceKind.Host
-    is KadreFailure.UnsupportedPolicy -> policy != KadrePolicies.Default
+    is KadreFailure.AlreadyInUse -> resource == org.graphiks.kadre.diagnostics.KadreResourceKind.Host
+    is KadreFailure.UnsupportedPolicy -> policy != org.graphiks.kadre.policy.KadrePolicies.Default
     is KadreFailure.TemporarilyUnavailable -> true
     is KadreFailure.PlatformFailure -> platform == backend.toPlatform()
     else -> false

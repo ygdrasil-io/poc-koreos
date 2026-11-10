@@ -2,7 +2,6 @@ package org.graphiks.kadre.internal.appkit
 
 import kotlinx.coroutines.runBlocking
 import org.graphiks.kadre.application.ActivationState
-import org.graphiks.kadre.application.KadreSession
 import org.graphiks.kadre.application.LifecycleCapabilities
 import org.graphiks.kadre.application.LifecycleState
 import org.graphiks.kadre.application.MemoryPressureLevel
@@ -15,12 +14,10 @@ import org.graphiks.kadre.diagnostics.KadreOperation
 import org.graphiks.kadre.diagnostics.KadrePlatform
 import org.graphiks.kadre.diagnostics.KadreResourceKind
 import org.graphiks.kadre.diagnostics.KadreResult
-import org.graphiks.kadre.internal.runtime.RuntimeHostController
 import org.graphiks.kadre.internal.runtime.RuntimeProcessController
 import org.graphiks.kadre.internal.runtime.RuntimeBootRequest
 import org.graphiks.kadre.internal.runtime.RuntimeSessionComponents
 import org.graphiks.kadre.internal.runtime.RuntimeSessionComponentsFactory
-import org.graphiks.kadre.internal.runtime.RuntimeSessionObserver
 import org.graphiks.kadre.internal.runtime.RuntimeSessionStopHandler
 import org.graphiks.kadre.internal.runtime.CapturePort
 import org.graphiks.kadre.internal.runtime.DisplayPort
@@ -29,8 +26,6 @@ import org.graphiks.kadre.internal.runtime.InputDevicePort
 import org.graphiks.kadre.internal.runtime.RawInputPort
 import org.graphiks.kadre.internal.runtime.desktop.DesktopBackendKind
 import org.graphiks.kadre.internal.runtime.desktop.DesktopBackendProvider
-import org.graphiks.kadre.internal.runtime.desktop.DesktopEmbeddedRequest
-import org.graphiks.kadre.internal.runtime.desktop.DesktopIntegrationKind
 import org.graphiks.kadre.internal.runtime.desktop.DesktopRunRequest
 import org.graphiks.kadre.window.WindowProperty
 import java.util.concurrent.atomic.AtomicBoolean
@@ -70,77 +65,8 @@ public class AppKitBackendProvider private constructor(
     )
 
     override val backend: DesktopBackendKind = DesktopBackendKind.AppKit
-    override val supportedIntegrations: Set<DesktopIntegrationKind> =
-        setOf(DesktopIntegrationKind.AppKitMainLoop)
 
     override fun isAvailable(): Boolean = availability()
-
-    override fun attach(request: DesktopEmbeddedRequest): KadreResult<KadreSession> {
-        if (!isAvailable()) {
-            return KadreResult.Failure(KadreFailure.Unsupported(KadreOperation.HostAttach))
-        }
-        if (request.integration != DesktopIntegrationKind.AppKitMainLoop || !nativeApplication.isMainThread()) {
-            return KadreResult.Failure(KadreFailure.InvalidRequest("options"))
-        }
-        if (!nativeApplication.isRunning()) {
-            return KadreResult.Failure(KadreFailure.TemporarilyUnavailable(retryable = true))
-        }
-
-        val observation = try {
-            nativeApplication.startLifecycleObservation(broker::accept)
-        } catch (_: Exception) {
-            return KadreResult.Failure(lifecycleObservationFailure())
-        } catch (_: LinkageError) {
-            return KadreResult.Failure(lifecycleObservationFailure())
-        }
-        val owner = AppKitEmbeddedSessionOwner(observation)
-        val attentionOwner = if (request.allowUserAttention) {
-            broker.newUserAttentionOwner(nativeApplication)
-        } else {
-            null
-        }
-        val memoryPressureAvailability = broker.memoryPressureAvailability()
-        val registration = try {
-            val hostFactory: (LifecycleState) -> AppKitRuntimeHost = { initial ->
-                AppKitRuntimeHost(
-                    RuntimeHostController.withComponents(
-                        platform = KadrePlatform.AppKit,
-                        componentsFactory = windowComponentsFactory(
-                            request.policy.resources,
-                            attentionOwner = attentionOwner,
-                        ),
-                        initialLifecycleState = initial,
-                        initialLifecycleCapabilities = LifecycleCapabilities(memoryPressureAvailability),
-                        sessionObserver = RuntimeSessionObserver { _, _ -> owner.close() },
-                    ),
-                )
-            }
-            if (attentionOwner == null) broker.createEmbeddedHost(hostFactory)
-            else broker.createEmbeddedHost(attentionOwner, hostFactory)
-        } catch (_: Exception) {
-            owner.close()
-            attentionOwner?.close()
-            return KadreResult.Failure(lifecycleObservationFailure())
-        } catch (_: LinkageError) {
-            owner.close()
-            attentionOwner?.close()
-            return KadreResult.Failure(lifecycleObservationFailure())
-        }
-        if (registration == null) {
-            owner.close()
-            attentionOwner?.close()
-            return KadreResult.Failure(KadreFailure.AlreadyInUse(KadreResourceKind.Host))
-        }
-        owner.install(registration)
-
-        val attached = registration.host.controller.attach(
-            request.parentScope,
-            request.applicationFactory,
-            request.policy,
-        )
-        if (attached is KadreResult.Failure) owner.close()
-        return attached
-    }
 
     override fun run(request: DesktopRunRequest): KadreResult<SessionOutcome> {
         if (!isAvailable()) {
@@ -302,12 +228,6 @@ public class AppKitBackendProvider private constructor(
             "stop-exception",
         )
 
-        private fun lifecycleObservationFailure(): KadreFailure.PlatformFailure = KadreFailure.PlatformFailure(
-            KadrePlatform.AppKit,
-            "appkit-host",
-            "lifecycle-observation-exception",
-        )
-
         private fun fullscreenAvailabilityFailure(): KadreFailure.PlatformFailure =
             KadreFailure.PlatformFailure(
                 KadrePlatform.AppKit,
@@ -362,37 +282,3 @@ private val APPKIT_PUBLIC_WINDOW_UPDATE_CAPABILITIES: Set<WindowProperty> = setO
     WindowProperty.Fullscreen,
     WindowProperty.Transparency,
 )
-
-private class AppKitEmbeddedSessionOwner(
-    private val observation: AutoCloseable,
-) : AutoCloseable {
-    private val lock = Any()
-    private var closed = false
-    private var registration: AppKitProcessBroker.EmbeddedRegistration<AppKitRuntimeHost>? = null
-
-    fun install(value: AppKitProcessBroker.EmbeddedRegistration<AppKitRuntimeHost>) {
-        val closeImmediately = synchronized(lock) {
-            check(registration == null) { "AppKit embedded registration was already installed" }
-            if (closed) {
-                true
-            } else {
-                registration = value
-                false
-            }
-        }
-        if (closeImmediately) value.close()
-    }
-
-    override fun close() {
-        val target = synchronized(lock) {
-            if (closed) return
-            closed = true
-            registration
-        }
-        try {
-            observation.close()
-        } finally {
-            target?.close()
-        }
-    }
-}

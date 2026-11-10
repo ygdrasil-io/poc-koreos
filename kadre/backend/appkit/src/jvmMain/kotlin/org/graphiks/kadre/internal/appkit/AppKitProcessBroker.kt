@@ -1,16 +1,12 @@
 package org.graphiks.kadre.internal.appkit
 
-import org.graphiks.kadre.application.ActivationState
 import org.graphiks.kadre.application.LifecycleCapabilities
 import org.graphiks.kadre.application.LifecycleState
 import org.graphiks.kadre.application.MemoryPressureLevel
-import org.graphiks.kadre.application.SessionPhase
-import org.graphiks.kadre.application.VisibilityState
 import org.graphiks.kadre.diagnostics.FeatureAvailability
 import org.graphiks.kadre.diagnostics.KadreFailure
 import org.graphiks.kadre.diagnostics.KadrePlatform
 import org.graphiks.kadre.diagnostics.KadreResult
-import org.graphiks.kadre.internal.runtime.RuntimeHostController
 import org.graphiks.kadre.window.WindowAttention
 import org.graphiks.kadre.window.WindowId
 import java.util.concurrent.atomic.AtomicBoolean
@@ -28,26 +24,6 @@ internal interface AppKitLifecycleTarget {
     fun emitMemoryPressure(level: MemoryPressureLevel) = Unit
 
     fun detach()
-}
-
-internal class AppKitRuntimeHost(
-    val controller: RuntimeHostController,
-) : AppKitLifecycleTarget {
-    override fun updateLifecycle(state: LifecycleState) {
-        controller.updateLifecycle(state)
-    }
-
-    override fun updateLifecycleCapabilities(capabilities: LifecycleCapabilities) {
-        controller.updateLifecycleCapabilities(capabilities)
-    }
-
-    override fun emitMemoryPressure(level: MemoryPressureLevel) {
-        controller.emitMemoryPressure(level)
-    }
-
-    override fun detach() {
-        controller.detach()
-    }
 }
 
 /** Coordinates process-wide AppKit ownership without retaining a current Kadre session. */
@@ -69,14 +45,10 @@ internal class AppKitProcessBroker(
     },
 ) {
     private val lock = Any()
-    private val deliveryLock = Any()
-    private val embeddedHosts = linkedMapOf<AppKitLifecycleTarget, AppKitUserAttentionOwner?>()
     private val attentionTokens = linkedMapOf<WindowId, AppKitUserAttentionToken>()
     private val nextAttentionOwnerId = AtomicLong(0L)
     private var standaloneOwned = false
     private var standaloneMemoryTarget: AppKitLifecycleTarget? = null
-    private var terminated = false
-    private var lifecycleState: LifecycleState = EMBEDDED_INITIAL_LIFECYCLE
     private val rawInputBroker = lazy {
         AppKitRawInputBroker(
             permission = AppKitPermissionBroker(KffiAppKitRawInputNative),
@@ -124,7 +96,7 @@ internal class AppKitProcessBroker(
     ): AppKitExclusiveFullscreenPort = exclusiveDisplayBroker.value.openPort(executor, windowPort)
 
     fun memoryPressureAvailability(): FeatureAvailability = synchronized(lock) {
-        if (terminated || memoryPressureNative == null) {
+        if (memoryPressureNative == null) {
             FeatureAvailability.Unsupported
         } else {
             memoryPressureBroker.value.activate()
@@ -134,37 +106,13 @@ internal class AppKitProcessBroker(
     fun tryAcquireStandalone(
         attentionOwner: AppKitUserAttentionOwner? = null,
     ): StandaloneLease? = synchronized(lock) {
-        if (terminated || standaloneOwned || embeddedHosts.isNotEmpty()) return@synchronized null
+        if (standaloneOwned) return@synchronized null
         standaloneOwned = true
         StandaloneLease(this, attentionOwner)
     }
 
     fun newUserAttentionOwner(nativeApplication: AppKitNativeApplication): AppKitUserAttentionOwner =
         AppKitUserAttentionOwner(this, nativeApplication, nextAttentionOwnerId.getAndIncrement())
-
-    fun <T : AppKitLifecycleTarget> createEmbeddedHost(
-        factory: (LifecycleState) -> T,
-    ): EmbeddedRegistration<T>? = registerEmbeddedHost(null, factory)
-
-    fun <T : AppKitLifecycleTarget> createEmbeddedHost(
-        attentionOwner: AppKitUserAttentionOwner,
-        factory: (LifecycleState) -> T,
-    ): EmbeddedRegistration<T>? = registerEmbeddedHost(attentionOwner, factory)
-
-    private fun <T : AppKitLifecycleTarget> registerEmbeddedHost(
-        attentionOwner: AppKitUserAttentionOwner?,
-        factory: (LifecycleState) -> T,
-    ): EmbeddedRegistration<T>? = synchronized(deliveryLock) delivery@{
-        synchronized(lock) {
-            if (terminated || standaloneOwned) {
-                null
-            } else {
-                val host = factory(lifecycleState)
-                check(embeddedHosts.put(host, attentionOwner) == null) { "AppKit host is already registered" }
-                EmbeddedRegistration(this, host, attentionOwner)
-            }
-        }
-    }
 
     fun requestUserAttention(
         owner: AppKitUserAttentionOwner,
@@ -246,67 +194,11 @@ internal class AppKitProcessBroker(
         }
     }
 
-    fun accept(signal: AppKitLifecycleSignal) {
-        synchronized(deliveryLock) delivery@{
-            if (signal == AppKitLifecycleSignal.HostTerminated) {
-                val targets = synchronized(lock) {
-                    if (terminated) {
-                        null
-                    } else {
-                        terminated = true
-                        lifecycleState = DETACHED_LIFECYCLE
-                        embeddedHosts.toList().also { embeddedHosts.clear() }
-                    }
-                }
-                if (targets == null) return@delivery
-                targets.forEach { (target, owner) ->
-                    try {
-                        target.detach()
-                    } finally {
-                        owner?.close()
-                    }
-                }
-                if (rawInputBroker.isInitialized()) rawInputBroker.value.close()
-                if (gameControllerBroker.isInitialized()) gameControllerBroker.value.close()
-                if (exclusiveDisplayBroker.isInitialized()) exclusiveDisplayBroker.value.close()
-                if (displayBroker.isInitialized()) displayBroker.value.close()
-                if (memoryPressureBroker.isInitialized()) memoryPressureBroker.value.close()
-                return@delivery
-            }
-
-            val delivery = synchronized(lock) {
-                if (terminated) {
-                    null
-                } else {
-                    val next = lifecycleState.after(signal)
-                    if (next == lifecycleState) {
-                        null
-                    } else {
-                        lifecycleState = next
-                        next to embeddedHosts.keys.toList()
-                    }
-                }
-            }
-            if (delivery == null) return@delivery
-            delivery.second.forEach { host -> host.updateLifecycle(delivery.first) }
-            if (signal == AppKitLifecycleSignal.BecameActive && rawInputBroker.isInitialized()) {
-                rawInputBroker.value.reprobeForHostActivation()
-            }
-        }
-    }
-
     private fun releaseStandalone(attentionOwner: AppKitUserAttentionOwner?) {
         synchronized(lock) {
             check(standaloneOwned) { "AppKit standalone ownership is not held" }
             standaloneOwned = false
             standaloneMemoryTarget = null
-        }
-        attentionOwner?.close()
-    }
-
-    private fun releaseEmbedded(host: AppKitLifecycleTarget, attentionOwner: AppKitUserAttentionOwner?) {
-        synchronized(deliveryLock) {
-            synchronized(lock) { embeddedHosts.remove(host) }
         }
         attentionOwner?.close()
     }
@@ -328,18 +220,6 @@ internal class AppKitProcessBroker(
 
         override fun close() {
             if (closed.compareAndSet(false, true)) broker.releaseStandalone(attentionOwner)
-        }
-    }
-
-    internal class EmbeddedRegistration<T : AppKitLifecycleTarget> internal constructor(
-        private val broker: AppKitProcessBroker,
-        val host: T,
-        private val attentionOwner: AppKitUserAttentionOwner?,
-    ) : AutoCloseable {
-        private val closed = AtomicBoolean(false)
-
-        override fun close() {
-            if (closed.compareAndSet(false, true)) broker.releaseEmbedded(host, attentionOwner)
         }
     }
 
@@ -388,42 +268,7 @@ internal class AppKitProcessBroker(
         val token: Long,
     )
 
-    private fun LifecycleState.after(signal: AppKitLifecycleSignal): LifecycleState = when (signal) {
-        AppKitLifecycleSignal.BecameActive -> LifecycleState(
-            SessionPhase.Running,
-            VisibilityState.Foreground,
-            ActivationState.Active,
-        )
-        AppKitLifecycleSignal.BecameInactive -> LifecycleState(
-            SessionPhase.Running,
-            visibility,
-            ActivationState.Inactive,
-        )
-        AppKitLifecycleSignal.DidHide -> LifecycleState(
-            SessionPhase.Running,
-            VisibilityState.Background,
-            ActivationState.Inactive,
-        )
-        AppKitLifecycleSignal.DidUnhide -> LifecycleState(
-            SessionPhase.Running,
-            VisibilityState.Foreground,
-            ActivationState.Inactive,
-        )
-        AppKitLifecycleSignal.HostTerminated -> error("terminal lifecycle is handled separately")
-    }
-
     private companion object {
-        val EMBEDDED_INITIAL_LIFECYCLE: LifecycleState = LifecycleState(
-            SessionPhase.Running,
-            VisibilityState.Foreground,
-            ActivationState.Active,
-        )
-        val DETACHED_LIFECYCLE: LifecycleState = LifecycleState(
-            SessionPhase.Terminated,
-            VisibilityState.Background,
-            ActivationState.Inactive,
-        )
-
         fun userAttentionFailure(code: String): KadreFailure.PlatformFailure = KadreFailure.PlatformFailure(
             KadrePlatform.AppKit,
             "user-attention",
@@ -442,8 +287,7 @@ internal class AppKitProcessBroker(
 
     private fun deliverMemoryPressure(level: MemoryPressureLevel) {
         val targets = synchronized(lock) {
-            if (terminated) emptyList()
-            else embeddedHosts.keys.toList() + listOfNotNull(standaloneMemoryTarget)
+            if (!standaloneOwned) emptyList() else listOfNotNull(standaloneMemoryTarget)
         }
         targets.forEach { target ->
             try {

@@ -62,6 +62,16 @@ public fun main(args: Array<String>) {
                     is WindowRequestOutcome.OpenedHere -> opened.window
                     else -> error("window did not open: $opened")
                 }
+                // Sentinel: the ownership rule completes the session when its LAST container
+                // closes, so a second window stays open across the terminal observation below.
+                val sentinelOpened = when (val request = windows.requestWindow(sentinelSpec("Kadre Phase 4 sentinel"))) {
+                    is KadreResult.Failure -> error("sentinel window request failed: ${request.reason}")
+                    is KadreResult.Success -> request.value.await()
+                }
+                val sentinel = when (sentinelOpened) {
+                    is WindowRequestOutcome.OpenedHere -> sentinelOpened.window
+                    else -> error("sentinel window did not open: $sentinelOpened")
+                }
                 val input = window.surface.input
                 val initialInputState = awaitPhase4InputReadiness(input)
                 recorder.metadata(options)
@@ -103,8 +113,16 @@ public fun main(args: Array<String>) {
                     recorder.line("COMMAND\tclose\t${window.close()}")
                     withTimeout(5.seconds) {
                         window.surface.state.first { it.attachment == SurfaceAttachmentState.Detached }
+                        // The input stream's own terminal is its teardown reset (capabilities
+                        // withdrawn): with the sentinel window open across the observation,
+                        // that reset lands right after the surface detaches, so the stability
+                        // window opens on the reset — the same no-late-anything claim.
+                        input.state.first { it.capabilities.keyboard == FeatureAvailability.Unsupported }
                     }
-                    val terminalRevision = latestRevision.get()
+                    // The recorder collector may deliver the terminal snapshot after this
+                    // probe saw it: anchor on whichever view is furthest along, so the
+                    // catch-up delivery is not mistaken for a late revision.
+                    val terminalRevision = maxOf(latestRevision.get(), input.state.value.revision.value)
                     val terminalEventCount = observedEventCount.get()
                     delay(250.milliseconds)
                     val noLateRevision = latestRevision.get() == terminalRevision
@@ -144,6 +162,12 @@ public fun main(args: Array<String>) {
                 closeAndObserveTerminal()
                 stateCollector.cancel()
                 eventCollector.cancel()
+                // The observation is done: the sentinel closes last, so the fixed
+                // last-container rule ends the session only after the record is complete.
+                sentinel.close()
+                withTimeout(5.seconds) {
+                    sentinel.state.first { it.phase == org.graphiks.kadre.window.WindowPhase.Closed }
+                }
                 requestStop()
             },
         ) }.getOrNull() ?: error("harness run failed")

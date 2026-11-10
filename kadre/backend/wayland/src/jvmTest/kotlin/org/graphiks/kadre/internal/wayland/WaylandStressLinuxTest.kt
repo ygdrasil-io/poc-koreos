@@ -111,16 +111,21 @@ class WaylandStressLinuxTest {
             val before = openDescriptorCount()
             // 6 rafales × 8 fenêtres ouvertes puis fermées : la file du
             // driver encaisse les créations/destroys sans retarder le
-            // terminaison ni fuir
+            // terminaison ni fuir. La fenêtre sentinelle reste ouverte sur
+            // TOUTES les rafales : la règle du dernier conteneur (fixe) ne
+            // complète la session qu'à sa fermeture, après la dernière rafale.
             val request = DesktopRunRequest(
                 applicationFactory = KadreApplicationFactory {
                     KadreApplication {
+                        val sentinel = openWindow("churn-sentinel")
                         repeat(6) { burst ->
                             val windows = (0 until 8).map { openWindow("churn-$burst-$it") }
                             windows.forEach { window ->
                                 run { window.close(); awaitClosed(window) }
                             }
                         }
+                        sentinel.close()
+                        awaitClosed(sentinel)
                     }
                 },
                 policy = KadrePolicies.Default,
@@ -129,8 +134,7 @@ class WaylandStressLinuxTest {
             val outcome = (result as? KadreResult.Success<SessionOutcome>)?.value
                 ?: error("churn session failed: $result")
             assertTrue(
-                outcome == SessionOutcome.Completed ||
-                    outcome == org.graphiks.kadre.application.SessionStopReason.SystemTermination.let(SessionOutcome::Stopped),
+                outcome == SessionOutcome.Completed,
                 "unexpected session outcome: $outcome",
             )
             val after = openDescriptorCount()

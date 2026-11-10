@@ -1,5 +1,7 @@
 # Win32 phase 12 — hôte embarqué AWT (EDT), sessions isolées sans seconde pompe
 
+> Périmé — supprimé par ownership-first (2026-11)
+
 ## 1. Intention et critères de réussite
 
 Attacher des sessions kadre à un hôte **AWT** dont l'`EventDispatchThread` tourne déjà, sans seconde pompe cachée : les HWND kadre sont créés sur l'EDT (thread propriétaire enregistré par le port), les messages sont drainés par des **ticks EDT bornés**, la boucle AWT reste propriétaire et survit au détachement, deux sessions embarquées sont isolées, et aucun détachement ne poste `WM_QUIT`. JavaFX = intégration séparée future (pas de référence livrée ; glass possède sa propre pompe native). `supportedIntegrations` reste **vide** tant que le consumer et la preuve O3 ne sont pas livrés ensemble (posture D3 de la phase 8 Wayland) — l'attach est atteignable au niveau provider uniquement.

@@ -2,7 +2,6 @@ package org.graphiks.kadre.internal.win32
 
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
-import kotlin.coroutines.EmptyCoroutineContext
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
@@ -10,11 +9,8 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import kotlin.test.assertIs
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.awaitCancellation
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.setMain
 import org.graphiks.kadre.application.KadreApplication
@@ -26,8 +22,6 @@ import org.graphiks.kadre.diagnostics.KadreOperation
 import org.graphiks.kadre.diagnostics.KadrePlatform
 import org.graphiks.kadre.diagnostics.KadreResourceKind
 import org.graphiks.kadre.diagnostics.KadreResult
-import org.graphiks.kadre.internal.runtime.desktop.DesktopEmbeddedRequest
-import org.graphiks.kadre.internal.runtime.desktop.DesktopIntegrationKind
 import org.graphiks.kadre.internal.runtime.desktop.DesktopRunRequest
 import org.graphiks.kadre.policy.KadrePolicies
 
@@ -240,21 +234,6 @@ class Win32BackendProviderTest {
         assertEquals(
             KadreResult.Success(SessionOutcome.Completed),
             provider.run(standaloneRequest()),
-        )
-    }
-
-    @Test
-    fun embeddedAttachWithUnbuiltIntegrationIsRefusedNormatively() {
-        val provider = Win32BackendProvider()
-        val request = DesktopEmbeddedRequest(
-            parentScope = CoroutineScope(Job() + EmptyCoroutineContext),
-            applicationFactory = KadreApplicationFactory { KadreApplication { } },
-            integration = DesktopIntegrationKind.AppKitMainLoop, // jamais construite pour win32
-            policy = KadrePolicies.Default,
-        )
-        assertEquals(
-            KadreResult.Failure(KadreFailure.Unsupported(KadreOperation.HostAttach)),
-            runBlocking { provider.attach(request) },
         )
     }
 

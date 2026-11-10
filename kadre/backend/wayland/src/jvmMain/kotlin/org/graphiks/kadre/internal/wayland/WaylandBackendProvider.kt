@@ -1,12 +1,8 @@
 package org.graphiks.kadre.internal.wayland
 
 import java.util.concurrent.atomic.AtomicBoolean
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.runBlocking
 import org.graphiks.kadre.application.ActivationState
-import org.graphiks.kadre.application.KadreApplication
-import org.graphiks.kadre.application.KadreApplicationFactory
-import org.graphiks.kadre.application.KadreSession
 import org.graphiks.kadre.application.LifecycleState
 import org.graphiks.kadre.application.SessionPhase
 import org.graphiks.kadre.application.SessionOutcome
@@ -18,17 +14,13 @@ import org.graphiks.kadre.diagnostics.KadrePlatform
 import org.graphiks.kadre.diagnostics.KadreResourceKind
 import org.graphiks.kadre.diagnostics.KadreResult
 import org.graphiks.kadre.internal.runtime.RuntimeFailureReporter
-import org.graphiks.kadre.internal.runtime.RuntimeHostController
 import org.graphiks.kadre.internal.runtime.RuntimeProcessController
 import org.graphiks.kadre.internal.runtime.RuntimeBootRequest
 import org.graphiks.kadre.internal.runtime.RuntimeSessionComponents
 import org.graphiks.kadre.internal.runtime.RuntimeSessionStopHandler
 import org.graphiks.kadre.internal.runtime.desktop.DesktopBackendKind
 import org.graphiks.kadre.internal.runtime.desktop.DesktopBackendProvider
-import org.graphiks.kadre.internal.runtime.desktop.DesktopEmbeddedRequest
-import org.graphiks.kadre.internal.runtime.desktop.DesktopIntegrationKind
 import org.graphiks.kadre.internal.runtime.desktop.DesktopRunRequest
-import org.graphiks.kadre.policy.KadrePolicies
 import org.graphiks.kffi.posix.PosixWakeup
 
 /**
@@ -54,110 +46,7 @@ public class WaylandBackendProvider private constructor(
 
     override val backend: DesktopBackendKind = DesktopBackendKind.Wayland
 
-    override val supportedIntegrations: Set<DesktopIntegrationKind> = emptySet()
-
     override fun isAvailable(): Boolean = WaylandProbe.check(environment()).available
-
-    override fun attach(request: DesktopEmbeddedRequest): KadreResult<KadreSession> {
-        // D1 : seule l'intégration EDT est conçue ; toute autre suit le
-        // refus normatif Unsupported(HostAttach)
-        if (request.integration != DesktopIntegrationKind.AwtEventDispatchThread) {
-            return KadreResult.Failure(KadreFailure.Unsupported(KadreOperation.HostAttach))
-        }
-        // pas de relocation cachée : le thread appelant DOIT être l'EDT
-        if (!awtDispatchThreadProbe()) {
-            return KadreResult.Failure(KadreFailure.InvalidRequest("options"))
-        }
-        if (!availability()) {
-            return KadreResult.Failure(KadreFailure.Unsupported(KadreOperation.HostAttach))
-        }
-        if (!hostLease.compareAndSet(false, true)) {
-            return KadreResult.Failure(KadreFailure.AlreadyInUse(KadreResourceKind.Host))
-        }
-        return try {
-            val session = try {
-                WaylandHostSession.start(bridgeFactory, socketName(), environment(), wakeFactory)
-            } catch (start: WaylandSessionStartException) {
-                return KadreResult.Failure(KadreFailure.PlatformFailure(KadrePlatform.Wayland, "start", start.code))
-            } catch (unexpected: Exception) {
-                return KadreResult.Failure(KadreFailure.PlatformFailure(KadrePlatform.Wayland, "start", "start-unexpected"))
-            }
-            try {
-                attachSession(request, session)
-            } finally {
-                session.teardown()
-            }
-        } finally {
-            hostLease.set(false)
-        }
-    }
-
-    /** Session embarquée : pompe non bloquante pilotée par l'EDT (D2). */
-    private fun attachSession(
-        request: DesktopEmbeddedRequest,
-        session: WaylandHostSession,
-    ): KadreResult<KadreSession> {
-        val parentScope = request.parentScope
-        val embeddedPump = WaylandEmbeddedPump(
-            ops = BridgePumpOperations(session.bridge),
-            wake = session.wake,
-            postTick = { runnable -> awtInvokeLater(runnable) },
-        )
-        val inputRouter = WaylandInputRouter()
-        session.bridge.attachSeat(inputRouter)
-        val driver = WaylandWindowRuntimeDriver.create(
-            session = session,
-            resources = request.policy.resources,
-            failureReporter = RuntimeFailureReporter { },
-            publicWindowCapabilities = true,
-            onLastWindowClosed = null,
-        )
-        val controller = RuntimeHostController.withComponents(
-            platform = KadrePlatform.Wayland,
-            componentsFactory = { _, _ ->
-                RuntimeSessionComponents(windows = driver.manager)
-            },
-            initialLifecycleState = LifecycleState(
-                SessionPhase.Running,
-                VisibilityState.Background,
-                ActivationState.Inactive,
-            ),
-            sessionStopHandler = RuntimeSessionStopHandler { _ ->
-                embeddedPump.requestStop()
-                null
-            },
-        )
-        val attached = controller.attach(parentScope, request.applicationFactory, request.policy)
-        if (attached is KadreResult.Failure) {
-            embeddedPump.close()
-            driver.close()
-            return attached
-        }
-        // D4 : la fermeture de session (ou du scope parent) arrête la pompe
-        // embarquée et draine le driver SANS toucher à la boucle AWT —
-        // l'EDT vit, d'autres sessions peuvent s'attacher ensuite
-        parentScope.coroutineContext[Job]?.invokeOnCompletion {
-            embeddedPump.close()
-            driver.close()
-        }
-        embeddedPump.start()
-        return attached
-    }
-
-    /** EDT check injectable (tests O2 sans toolkit). */
-    internal var awtDispatchThreadProbe: () -> Boolean = ::isAwtDispatchThread
-
-    private fun isAwtDispatchThread(): Boolean = runCatching {
-        Class.forName("java.awt.EventQueue")
-            .getMethod("isDispatchThread")
-            .invoke(null) as Boolean
-    }.getOrDefault(false)
-
-    private fun awtInvokeLater(runnable: Runnable) {
-        Class.forName("java.awt.EventQueue")
-            .getMethod("invokeLater", Runnable::class.java)
-            .invoke(null, runnable)
-    }
 
     /**
      * Session standalone avec fenêtres réelles (tranche 2) : la pompe tourne
