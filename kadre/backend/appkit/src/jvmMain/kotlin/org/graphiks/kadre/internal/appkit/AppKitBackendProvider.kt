@@ -199,6 +199,7 @@ public class AppKitBackendProvider private constructor(
                     applicationFactory = request.applicationFactory,
                     policy = request.policy,
                     firstWindow = request.firstWindow,
+                    mainDispatcher = request.mainDispatcher,
                 ),
             )
             if (booted is KadreResult.Failure) return booted

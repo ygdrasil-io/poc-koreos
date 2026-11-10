@@ -1,10 +1,11 @@
 package org.graphiks.kadre.platform.desktop
 
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.asCoroutineDispatcher
 import org.graphiks.kadre.application.KadreApplicationFactory
+import org.graphiks.kadre.application.KadreRunOptions
 import org.graphiks.kadre.application.KadreSession
 import org.graphiks.kadre.application.SessionOutcome
-import org.graphiks.kadre.diagnostics.KadreException
 import org.graphiks.kadre.diagnostics.KadreFailure
 import org.graphiks.kadre.diagnostics.KadreOperation
 import org.graphiks.kadre.diagnostics.KadrePlatform
@@ -18,6 +19,7 @@ import org.graphiks.kadre.internal.runtime.desktop.DesktopRunRequest
 import org.graphiks.kadre.policy.KadrePolicies
 import org.graphiks.kadre.policy.KadrePolicy
 import java.util.ServiceConfigurationError
+import java.util.concurrent.Executors
 import kotlin.coroutines.cancellation.CancellationException
 
 internal class DesktopHostFacade(
@@ -57,34 +59,56 @@ internal class DesktopHostFacade(
         return normalizeAttachResult(selected.backend, policy, result)
     }
 
+    /**
+     * The ownership-first run: selects a backend, then boots one application in a process Kadre
+     * owns. The facade owns the run's main thread — a dedicated single-thread dispatcher created
+     * per call, handed to the provider through [DesktopRunRequest.mainDispatcher] and closed at
+     * session teardown (when the provider's run returns), on every path. This is what makes the
+     * public entry work on a desktop JVM where no `Dispatchers.Main` implementation exists,
+     * without any process-global state (no `Dispatchers.setMain`).
+     */
     fun run(
         applicationFactory: KadreApplicationFactory,
-        options: DesktopHostOptions.Standalone,
-        policy: KadrePolicy,
-    ): SessionOutcome {
-        val selection = selectProvider(options.backend, integration = null)
-        if (selection is ProviderSelection.Failure) throw KadreException(selection.failure)
+        backend: DesktopBackend,
+        options: KadreRunOptions,
+    ): KadreResult<SessionOutcome> {
+        val selection = selectProvider(backend, integration = null)
+        if (selection is ProviderSelection.Failure) return KadreResult.Failure(selection.failure)
         val selected = selection as ProviderSelection.Selected
         val provider = selected.provider
+
+        val executor = Executors.newSingleThreadExecutor { runnable ->
+            Thread(runnable, "kadre-desktop-main").apply { isDaemon = true }
+        }
+        val mainDispatcher = executor.asCoroutineDispatcher()
         val request = DesktopRunRequest(
             applicationFactory = applicationFactory,
-            policy = policy,
+            policy = options.policy,
+            firstWindow = options.firstWindow,
+            mainDispatcher = mainDispatcher,
         )
 
-        val result = try {
-            provider.run(request)
-        } catch (cancellation: CancellationException) {
-            throw cancellation
-        } catch (error: LinkageError) {
-            throw KadreException(providerFailure(selected.backend, "run-exception"))
-        } catch (exception: Exception) {
-            throw KadreException(providerFailure(selected.backend, "run-exception"))
-        }
-        return when (result) {
-            is KadreResult.Success -> result.value
-            is KadreResult.Failure -> throw KadreException(
-                normalizeStandaloneFailure(selected.backend, policy, result.reason),
-            )
+        try {
+            val result = try {
+                provider.run(request)
+            } catch (cancellation: CancellationException) {
+                throw cancellation
+            } catch (error: LinkageError) {
+                return KadreResult.Failure(providerFailure(selected.backend, "run-exception"))
+            } catch (exception: Exception) {
+                return KadreResult.Failure(providerFailure(selected.backend, "run-exception"))
+            }
+            return when (result) {
+                is KadreResult.Success -> result
+                is KadreResult.Failure -> KadreResult.Failure(
+                    normalizeStandaloneFailure(selected.backend, options.policy, result.reason),
+                )
+            }
+        } finally {
+            // Session teardown: a provider only returns from run once its session terminated,
+            // so the run's owned main thread closes here — success, explicit failure, thrown
+            // provider bug and cancellation alike. Nothing process-wide survives the run.
+            mainDispatcher.close()
         }
     }
 

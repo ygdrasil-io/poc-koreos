@@ -136,7 +136,7 @@ class Win32WindowMutationNativeContractTest {
 
     @Test fun publicWorkerUpdatesAndClosesWithoutWaitingOnAStoppedPump() {
         var effective: WindowState? = null
-        val outcome = runKadreApplication(options = DesktopHostOptions.Standalone(backend = DesktopBackend.Win32),
+        val outcome = runBlocking { runKadreApplication(options = KadreRunOptions(), backend = DesktopBackend.Win32,
             application = KadreApplication {
                 withTimeout(6000) {
                     val request = assertIs<KadreResult.Success<WindowRequest>>(windows.requestWindow(WindowSpec())).value
@@ -146,7 +146,7 @@ class Win32WindowMutationNativeContractTest {
                     effective = assertIs<WindowUpdateOutcome.Applied>(applied.value).state
                     window.close()
                 }
-            })
+            }) }.getOrNull() ?: error("run failed")
         assertEquals("worker mutation", assertNotNull(effective).title)
         assertTrue(outcome == SessionOutcome.Completed || outcome is SessionOutcome.Stopped, "session outcome: $outcome")
     }

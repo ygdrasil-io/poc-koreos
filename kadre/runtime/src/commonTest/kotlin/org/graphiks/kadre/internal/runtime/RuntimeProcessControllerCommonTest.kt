@@ -325,6 +325,36 @@ class RuntimeProcessControllerCommonTest {
     }
 
     @Test
+    fun bootRunsTheProvidedMainDispatcherInsteadOfMainImmediate() = runProcessTest {
+        val controller = RuntimeProcessController.withPrimarySurface(KadrePlatform.Web) { id ->
+            val surface = RuntimeHostSurface(id, initialSurfaceState())
+            RuntimePrimarySurface(surface, surface::close)
+        }
+        val provided = StandardTestDispatcher(testScheduler)
+
+        val session = assertIs<KadreResult.Success<KadreSession>>(
+            controller.boot(
+                RuntimeBootRequest(
+                    platform = KadrePlatform.Web,
+                    applicationFactory = KadreApplicationFactory { KadreApplication { awaitCancellation() } },
+                    mainDispatcher = provided,
+                ),
+            ),
+        ).value
+        testScheduler.advanceUntilIdle()
+
+        assertEquals(SessionState.Running, session.state.value)
+        assertSame(
+            provided,
+            controller.ownedRootScope?.coroutineContext?.get(kotlin.coroutines.ContinuationInterceptor),
+            "the owned root scope must run on the boot-provided dispatcher, not on Main",
+        )
+
+        session.requestStop()
+        testScheduler.advanceUntilIdle()
+    }
+
+    @Test
     fun systemTerminationProducesStoppedSystemTermination() = runProcessTest {
         val controller = RuntimeProcessController.withPrimarySurface(KadrePlatform.Web) { id ->
             val surface = RuntimeHostSurface(id, initialSurfaceState())

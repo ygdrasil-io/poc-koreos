@@ -2,17 +2,18 @@ package org.graphiks.kadre.platform.desktop
 
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExecutorCoroutineDispatcher
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.runBlocking
 import org.graphiks.kadre.application.KadreApplication
 import org.graphiks.kadre.application.KadreApplicationFactory
+import org.graphiks.kadre.application.KadreRunOptions
 import org.graphiks.kadre.application.KadreSession
 import org.graphiks.kadre.application.SessionId
 import org.graphiks.kadre.application.SessionOutcome
 import org.graphiks.kadre.application.SessionState
-import org.graphiks.kadre.diagnostics.KadreException
 import org.graphiks.kadre.diagnostics.KadreFailure
 import org.graphiks.kadre.diagnostics.KadreOperation
 import org.graphiks.kadre.diagnostics.KadrePlatform
@@ -38,6 +39,7 @@ import org.graphiks.kadre.internal.runtime.WindowUpdateCommand
 import org.graphiks.kadre.policy.KadrePolicies
 import org.graphiks.kadre.window.WindowRequestOutcome
 import org.graphiks.kadre.window.WindowSpec
+import java.util.concurrent.ExecutorService
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -324,43 +326,100 @@ class DesktopHostTest {
     }
 
     @Test
-    fun standaloneReturnsOutcomeAndThrowsOnlyForPreSessionFailure() {
+    fun standaloneReturnsTheOutcomeAndAnExplicitPreSessionFailure() {
         val provider = RecordingProvider(DesktopBackendKind.AppKit, setOf(DesktopIntegrationKind.AppKitMainLoop))
         val facade = DesktopHostFacade(DesktopOperatingSystem.MacOS) { listOf(provider) }
-        val options = DesktopHostOptions.Standalone(DesktopBackend.AppKit, stopWhenLastWindowClosed = false)
 
-        assertEquals(SessionOutcome.Completed, facade.run(factory, options, KadrePolicies.Recording))
+        val outcome = facade.run(factory, DesktopBackend.AppKit, KadreRunOptions(policy = KadrePolicies.Recording))
+        assertEquals(KadreResult.Success(SessionOutcome.Completed), outcome)
         val request = provider.standaloneRequests.single()
         assertSame(factory, request.applicationFactory)
         assertSame(KadrePolicies.Recording, request.policy)
         assertNull(request.firstWindow)
-        assertFalse(request.javaClass.declaredFields.any { it.name == "allowUserAttention" })
-        assertFalse(request.javaClass.declaredFields.any { it.name == "stopWhenLastWindowClosed" })
 
         provider.runResult = KadreResult.Failure(KadreFailure.AlreadyInUse(KadreResourceKind.Host))
-        val exception = assertFailsWith<KadreException> {
-            facade.run(factory, options, KadrePolicies.Default)
-        }
-        assertEquals(KadreFailure.AlreadyInUse(KadreResourceKind.Host), exception.failure)
+        val failure = facade.run(factory, DesktopBackend.AppKit, KadreRunOptions())
+        assertEquals(KadreResult.Failure(KadreFailure.AlreadyInUse(KadreResourceKind.Host)), failure)
     }
 
     @Test
-    fun standaloneRunTransmitsTheRequestThroughRunAndNeverAttaches() {
+    fun runTransmitsTheRunOptionsAndAnOwnedDispatcherThroughRunAndNeverAttaches() {
         val provider = RecordingProvider(DesktopBackendKind.AppKit, setOf(DesktopIntegrationKind.AppKitMainLoop))
         val facade = DesktopHostFacade(DesktopOperatingSystem.MacOS) { listOf(provider) }
+        val firstWindow = WindowSpec(title = "première")
 
         val outcome = facade.run(
             factory,
-            DesktopHostOptions.Standalone(DesktopBackend.AppKit, stopWhenLastWindowClosed = true),
-            KadrePolicies.Recording,
+            DesktopBackend.AppKit,
+            KadreRunOptions(policy = KadrePolicies.Recording, firstWindow = firstWindow),
         )
 
-        assertEquals(SessionOutcome.Completed, outcome)
+        assertEquals(KadreResult.Success(SessionOutcome.Completed), outcome)
         val request = provider.standaloneRequests.single()
         assertSame(factory, request.applicationFactory)
         assertSame(KadrePolicies.Recording, request.policy)
-        assertNull(request.firstWindow)
+        assertSame(firstWindow, request.firstWindow)
+        val dispatcher = assertIs<ExecutorCoroutineDispatcher>(request.mainDispatcher)
+        assertTrue(
+            (dispatcher.executor as ExecutorService).isShutdown,
+            "the facade must close the dispatcher it owns once the run has returned",
+        )
         assertEquals(0, provider.embeddedRequests.size, "the ownership run path must never fall back to attach")
+    }
+
+    @Test
+    fun runKadreApplicationReturnsExplicitFailureWhenNoBackendIsAvailable() {
+        var factoryInvoked = false
+        val facade = DesktopHostFacade(DesktopOperatingSystem.MacOS) { emptyList() }
+
+        val result = facade.run(
+            KadreApplicationFactory {
+                factoryInvoked = true
+                KadreApplication { }
+            },
+            DesktopBackend.AppKit,
+            KadreRunOptions(),
+        )
+
+        assertEquals(KadreResult.Failure(KadreFailure.Unsupported(KadreOperation.HostAttach)), result)
+        assertFalse(factoryInvoked)
+    }
+
+    @Test
+    fun runClosesTheOwnedDispatcherWhenTheProviderFailsExplicitly() {
+        val provider = RecordingProvider(DesktopBackendKind.AppKit, setOf(DesktopIntegrationKind.AppKitMainLoop))
+            .apply { runResult = KadreResult.Failure(KadreFailure.AlreadyInUse(KadreResourceKind.Host)) }
+        val facade = DesktopHostFacade(DesktopOperatingSystem.MacOS) { listOf(provider) }
+
+        val result = facade.run(factory, DesktopBackend.AppKit, KadreRunOptions())
+
+        assertEquals(KadreResult.Failure(KadreFailure.AlreadyInUse(KadreResourceKind.Host)), result)
+        val dispatcher = assertIs<ExecutorCoroutineDispatcher>(provider.standaloneRequests.single().mainDispatcher)
+        assertTrue(
+            (dispatcher.executor as ExecutorService).isShutdown,
+            "a provider failure must not leak the facade-owned main dispatcher",
+        )
+    }
+
+    @Test
+    fun runClosesTheOwnedDispatcherWhenTheProviderThrows() {
+        val provider = RecordingProvider(DesktopBackendKind.AppKit, setOf(DesktopIntegrationKind.AppKitMainLoop))
+            .apply { runError = IllegalStateException("provider") }
+        val facade = DesktopHostFacade(DesktopOperatingSystem.MacOS) { listOf(provider) }
+
+        val result = facade.run(factory, DesktopBackend.AppKit, KadreRunOptions())
+
+        assertEquals(
+            KadreResult.Failure(
+                KadreFailure.PlatformFailure(KadrePlatform.AppKit, "desktop-provider", "run-exception"),
+            ),
+            result,
+        )
+        val dispatcher = assertIs<ExecutorCoroutineDispatcher>(provider.standaloneRequests.single().mainDispatcher)
+        assertTrue(
+            (dispatcher.executor as ExecutorService).isShutdown,
+            "a provider exception must not leak the facade-owned main dispatcher",
+        )
     }
 
     @Test
@@ -503,6 +562,7 @@ private class RecordingProvider(
     val standaloneRequests = mutableListOf<DesktopRunRequest>()
     var attachResult: KadreResult<KadreSession> = KadreResult.Success(session)
     var runResult: KadreResult<SessionOutcome> = KadreResult.Success(SessionOutcome.Completed)
+    var runError: RuntimeException? = null
 
     override fun isAvailable(): Boolean = available
 
@@ -514,6 +574,7 @@ private class RecordingProvider(
 
     override fun run(request: DesktopRunRequest): KadreResult<SessionOutcome> {
         standaloneRequests += request
+        runError?.let { throw it }
         return runResult
     }
 }

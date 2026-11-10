@@ -1,5 +1,6 @@
 package org.graphiks.kadre.internal.runtime
 
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -45,6 +46,11 @@ import org.graphiks.kadre.window.WindowSpec
  *   anything — a first window that can never exist is an invalid request.
  * - [primarySurface] is reserved for the platform boots whose OS delivers the first container's
  *   surface at boot (the mobile and web plans); the desktop core leaves it null.
+ * - [mainDispatcher] is the dispatcher the owned root scope runs on. The desktop boot owns a
+ *   dedicated single-thread dispatcher per run — no `Dispatchers.Main` implementation exists on
+ *   the desktop JVM classpath, and the process must not install process-global state — so the
+ *   desktop facade creates one and passes it here. A null value keeps the mobile path on
+ *   [Dispatchers.Main.immediate].
  */
 public data class RuntimeBootRequest(
     public val platform: KadrePlatform,
@@ -52,6 +58,7 @@ public data class RuntimeBootRequest(
     public val policy: KadrePolicy = KadrePolicies.Default,
     public val firstWindow: WindowSpec? = null,
     public val primarySurface: HostSurface? = null,
+    public val mainDispatcher: CoroutineDispatcher? = null,
 )
 
 /**
@@ -93,8 +100,9 @@ public class RuntimeProcessController private constructor(
 
     /**
      * The root scope owned for the live session's boot
-     * (`CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)`), or null while no session
-     * is live. Internal seam for tests and backend introspection of the owned lifetime.
+     * (`CoroutineScope(SupervisorJob() + request's mainDispatcher)` —
+     * [Dispatchers.Main.immediate] when the boot provides none), or null while no session is
+     * live. Internal seam for tests and backend introspection of the owned lifetime.
      */
     internal val ownedRootScope: CoroutineScope?
         get() = lock.withLock { ownedScope }
@@ -118,8 +126,12 @@ public class RuntimeProcessController private constructor(
         }
 
         // The root scope is owned, not inherited: each admitted boot gets its own, so nothing is
-        // shared between sequential sessions and no caller scope can leak in.
-        val rootScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+        // shared between sequential sessions and no caller scope can leak in. The boot request's
+        // dispatcher defines the main thread of the process — provided by the desktop facade
+        // (which owns a dedicated single-thread dispatcher per run), Main.immediate otherwise.
+        val rootScope = CoroutineScope(
+            SupervisorJob() + (request.mainDispatcher ?: Dispatchers.Main.immediate),
+        )
         val clock = clockFactory.start()
         val session = try {
             SessionRuntime(

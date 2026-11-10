@@ -6,14 +6,16 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import org.graphiks.kadre.application.KadreApplication
+import org.graphiks.kadre.application.KadreRunOptions
 import org.graphiks.kadre.diagnostics.DelicateKadreApi
 import org.graphiks.kadre.diagnostics.KadreResult
+import org.graphiks.kadre.diagnostics.getOrNull
 import org.graphiks.kadre.input.RawInputAccess
 import org.graphiks.kadre.input.RawInputState
 import org.graphiks.kadre.platform.desktop.DesktopBackend
-import org.graphiks.kadre.platform.desktop.DesktopHostOptions
 import org.graphiks.kadre.platform.desktop.runKadreApplication
 import org.graphiks.kadre.surface.SurfaceAttachmentState
 import org.graphiks.kadre.window.WindowRequestOutcome
@@ -46,11 +48,9 @@ public fun main(args: Array<String>) {
     }
 
     try {
-        val outcome = runKadreApplication(
-            options = DesktopHostOptions.Standalone(
-                backend = DesktopBackend.AppKit,
-                stopWhenLastWindowClosed = false,
-            ),
+        val outcome = runBlocking { runKadreApplication(
+            options = KadreRunOptions(),
+            backend = DesktopBackend.AppKit,
             application = KadreApplication {
                 val opened = when (val request = windows.requestWindow(WindowSpec(title = "Kadre Phase 8 raw input"))) {
                     is KadreResult.Failure -> error("window request failed: ${request.reason}")
@@ -176,7 +176,7 @@ public fun main(args: Array<String>) {
                 ordinaryInputCollector.cancel()
                 requestStop()
             },
-        )
+        ) }.getOrNull() ?: error("harness run failed")
         recorder.line("SESSION_OUTCOME\t$outcome")
     } finally {
         recorder.close()
