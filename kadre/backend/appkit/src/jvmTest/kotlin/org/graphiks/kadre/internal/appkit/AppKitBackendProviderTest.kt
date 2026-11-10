@@ -213,8 +213,10 @@ import kotlin.test.assertTrue
 class AppKitBackendProviderTest {
     @BeforeTest
     fun installProcessMainDispatcher() {
-        // The process controller owns its root scope on Dispatchers.Main.immediate; the
-        // standalone runs below stand it up on the Default pool like the production host.
+        // The tests approximate the owned root scope's main dispatcher with
+        // Dispatchers.Main stood up on the Default pool. Production wires no Main at
+        // all: the desktop facade owns a dedicated single-thread dispatcher per run and
+        // hands it to the boot (RuntimeBootRequest.mainDispatcher).
         Dispatchers.setMain(Dispatchers.Default)
     }
 

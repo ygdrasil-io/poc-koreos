@@ -6,7 +6,7 @@ import kotlinx.coroutines.runBlocking
 import org.graphiks.kadre.application.KadreApplication
 import org.graphiks.kadre.application.KadreRunOptions
 import org.graphiks.kadre.application.SessionOutcome
-import org.graphiks.kadre.diagnostics.getOrNull
+import org.graphiks.kadre.diagnostics.KadreResult
 import org.graphiks.kadre.policy.KadrePolicies
 import org.graphiks.kadre.runKadreApplication
 
@@ -29,11 +29,15 @@ class ConsumerSessionTest {
             display != null && runtime != null && Files.exists(Path.of(runtime, display)),
             "no live compositor — this proof runs under the compositor matrix job",
         )
-        val outcome = runBlocking {
+        val result = runBlocking {
             runKadreApplication(
                 options = KadreRunOptions(policy = KadrePolicies.Default),
             ) { KadreApplication { } }
-        }.getOrNull() ?: error("run failed")
+        }
+        val outcome = when (result) {
+            is KadreResult.Success<SessionOutcome> -> result.value
+            is KadreResult.Failure -> error("run failed: ${result.reason}")
+        }
         assertEquals(SessionOutcome.Completed, outcome)
     }
 }

@@ -163,6 +163,8 @@ class Win32InputNativeContractTest {
             }) }.getOrNull() ?: error("run failed")
         assertTrue(workerThread != ownerThread, "application coroutines must exercise worker-to-UI admission")
         assertEquals(PhysicalKey.Code(7, 4), assertNotNull(observed).physicalKey)
-        assertTrue(outcome == SessionOutcome.Completed || outcome is SessionOutcome.Stopped, "session outcome: $outcome")
+        // Deterministic last-window outcome (no driver-side pump-stop wiring): the
+        // controller's last-container rule owns the Completed terminal reason.
+        assertEquals(SessionOutcome.Completed, outcome)
     }
 }

@@ -98,9 +98,12 @@ public class Win32BackendProvider private constructor(
             val driver = Win32WindowRuntimeDriverFactory.create(
                 port = session.port,
                 resources = request.policy.resources,
-                // The fixed last-container rule is the controller's: the runtime ends the
-                // session when its windows empty; this wiring only makes the owned loop exit.
-                onLastWindowClosed = { session.pump.requestStop() },
+                // No driver-side last-window wiring: the controller's last-container rule
+                // alone owns the Completed outcome, then the stop handler stops the pump.
+                // A pump-side stop here would race terminate(SystemTermination) against
+                // the controller watcher's Completed and make the outcome interleaving-
+                // dependent (same determinism as AppKit, which wires nothing here).
+                onLastWindowClosed = null,
                 failureReporter = RuntimeFailureReporter { failure ->
                     nativeFailure.compareAndSet(null, failure)
                     session.pump.requestStop()

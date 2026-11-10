@@ -148,6 +148,8 @@ class Win32WindowMutationNativeContractTest {
                 }
             }) }.getOrNull() ?: error("run failed")
         assertEquals("worker mutation", assertNotNull(effective).title)
-        assertTrue(outcome == SessionOutcome.Completed || outcome is SessionOutcome.Stopped, "session outcome: $outcome")
+        // Deterministic last-window outcome (no driver-side pump-stop wiring): the
+        // controller's last-container rule owns the Completed terminal reason.
+        assertEquals(SessionOutcome.Completed, outcome)
     }
 }

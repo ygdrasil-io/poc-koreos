@@ -14,7 +14,6 @@ import org.graphiks.kadre.application.KadreApplication
 import org.graphiks.kadre.application.KadreApplicationFactory
 import org.graphiks.kadre.application.KadreScope
 import org.graphiks.kadre.application.SessionOutcome
-import org.graphiks.kadre.application.SessionStopReason
 import org.graphiks.kadre.contracts.driver.wayland.WaylandCompositorController
 import org.graphiks.kadre.diagnostics.KadreResult
 import org.graphiks.kadre.internal.runtime.desktop.DesktopRunRequest
@@ -140,11 +139,10 @@ class WaylandWindowsLinuxTest {
             )
             val result = provider.run(request)
             val outcome = assertIs<KadreResult.Success<SessionOutcome>>(result).value
-            assertTrue(
-                outcome == SessionOutcome.Completed ||
-                    outcome == SessionOutcome.Stopped(SessionStopReason.SystemTermination),
-                "unexpected session outcome: $outcome",
-            )
+            // SN-6/déterminisme : sans câblage driver du dernier conteneur, la règle
+            // fixe du contrôleur porte seule le motif terminal — fermeture de la
+            // dernière fenêtre ⇒ Completed, jamais l'interleaving pompe/terminate.
+            assertEquals(SessionOutcome.Completed, outcome)
         }
     }
 

@@ -133,7 +133,8 @@ public class RuntimeProcessController private constructor(
         }
         lock.withLock {
             // No `Process` kind exists in the closed KadreResourceKind set; `Host` is the
-            // nearest kind (the process lease) and is renamed with the old world in Task 7.
+            // nearest kind (the process lease). The kind survived the old world's removal —
+            // renaming it to a process-shaped kind is a possible follow-up slice.
             if (liveSession != null) return KadreResult.Failure(KadreFailure.AlreadyInUse(KadreResourceKind.Host))
         }
 
@@ -169,8 +170,9 @@ public class RuntimeProcessController private constructor(
 
         val installFailure = lock.withLock {
             if (liveSession != null) {
-                // Same resource kind as the fast check: no `Process` kind exists in the closed
-                // KadreResourceKind set; `Host` is the nearest kind (renamed with Task 7).
+                // Same resource kind as the fast check: no `Process` kind exists in the
+                // closed KadreResourceKind set; `Host` is the nearest kind (the process
+                // lease, kept through the old world's removal — rename is a follow-up).
                 KadreFailure.AlreadyInUse(KadreResourceKind.Host)
             } else {
                 liveSession = session

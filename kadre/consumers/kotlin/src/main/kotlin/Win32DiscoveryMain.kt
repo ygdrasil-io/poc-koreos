@@ -4,7 +4,6 @@ import org.graphiks.kadre.application.KadreApplication
 import org.graphiks.kadre.application.KadreRunOptions
 import org.graphiks.kadre.application.SessionOutcome
 import org.graphiks.kadre.diagnostics.KadreResult
-import org.graphiks.kadre.diagnostics.getOrNull
 import org.graphiks.kadre.platform.desktop.DesktopBackend
 import org.graphiks.kadre.platform.desktop.runKadreApplication
 import org.graphiks.kadre.policy.KadrePolicies
@@ -22,7 +21,7 @@ public fun main() {
         return
     }
     val opened = java.util.concurrent.atomic.AtomicBoolean(false)
-    val outcome = runBlocking {
+    val result = runBlocking {
         runKadreApplication(
             options = KadreRunOptions(policy = KadrePolicies.Default),
             backend = DesktopBackend.Win32,
@@ -52,7 +51,11 @@ public fun main() {
                 requestStop()
             },
         )
-    }.getOrNull() ?: error("run failed")
+    }
+    val outcome = when (result) {
+        is KadreResult.Success<SessionOutcome> -> result.value
+        is KadreResult.Failure -> error("run failed: ${result.reason}")
+    }
     check(opened.get()) { "the consumer window never opened" }
     check(
         outcome == SessionOutcome.Completed || outcome is SessionOutcome.Stopped,
