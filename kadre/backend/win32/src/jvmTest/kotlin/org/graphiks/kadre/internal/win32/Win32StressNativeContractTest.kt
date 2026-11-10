@@ -2,6 +2,8 @@ package org.graphiks.kadre.internal.win32
 
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
+import kotlin.test.AfterTest
+import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
@@ -12,6 +14,8 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.setMain
 import kotlinx.coroutines.withTimeout
 import org.graphiks.kadre.application.KadreApplication
 import org.graphiks.kadre.application.KadreApplicationFactory
@@ -19,7 +23,7 @@ import org.graphiks.kadre.application.KadreSession
 import org.graphiks.kadre.diagnostics.KadreResult
 import org.graphiks.kadre.internal.runtime.desktop.DesktopEmbeddedRequest
 import org.graphiks.kadre.internal.runtime.desktop.DesktopIntegrationKind
-import org.graphiks.kadre.internal.runtime.desktop.DesktopStandaloneRequest
+import org.graphiks.kadre.internal.runtime.desktop.DesktopRunRequest
 import org.graphiks.kadre.policy.KadrePolicies
 import org.graphiks.kadre.surface.LogicalSize
 import org.graphiks.kadre.window.WindowSpec
@@ -35,6 +39,18 @@ import org.graphiks.kadre.window.WindowSpec
 class Win32StressNativeContractTest {
     private fun windowsGuard(): Boolean = System.getProperty("os.name").startsWith("Windows")
 
+    @BeforeTest
+    fun installProcessMainDispatcher() {
+        // The process controller owns its root scope on Dispatchers.Main.immediate; the
+        // standalone runs below stand it up on the Default pool like the production host.
+        Dispatchers.setMain(Dispatchers.Default)
+    }
+
+    @AfterTest
+    fun resetProcessMainDispatcher() {
+        Dispatchers.resetMain()
+    }
+
     @Test
     fun repeatedStandaloneSessionsStayBoundedAcrossFiftyCycles() {
         if (!windowsGuard()) return
@@ -46,7 +62,7 @@ class Win32StressNativeContractTest {
             if (cycle == 25) midThreads = Thread.activeCount()
             val outcome = assertIs<KadreResult.Success<*>>(
                 provider.run(
-                    DesktopStandaloneRequest(
+                    DesktopRunRequest(
                         applicationFactory = KadreApplicationFactory { KadreApplication {
                             val requested = windows.requestWindow(
                                 WindowSpec(title = "kadre stress $cycle", contentSize = LogicalSize(160.0, 120.0)),
@@ -54,7 +70,6 @@ class Win32StressNativeContractTest {
                             check(requested is KadreResult.Success<*>)
                             requestStop()
                         } },
-                        stopWhenLastWindowClosed = true,
                         policy = KadrePolicies.Default,
                     ),
                 ),
@@ -77,7 +92,7 @@ class Win32StressNativeContractTest {
         val churned = java.util.concurrent.atomic.AtomicInteger(0)
         val burstDone = CountDownLatch(1)
         provider.run(
-            DesktopStandaloneRequest(
+            DesktopRunRequest(
                 applicationFactory = KadreApplicationFactory { KadreApplication {
                     launch {
                         repeat(2) { burst ->
@@ -95,7 +110,6 @@ class Win32StressNativeContractTest {
                         burstDone.countDown()
                     }
                 } },
-                stopWhenLastWindowClosed = true,
                 policy = KadrePolicies.Default,
             ),
         )
@@ -116,11 +130,10 @@ class Win32StressNativeContractTest {
                 // standalone first: it owns the host exclusively during its run
                 assertIs<KadreResult.Success<*>>(
                     provider.run(
-                        DesktopStandaloneRequest(
+                        DesktopRunRequest(
                             applicationFactory = KadreApplicationFactory { KadreApplication {
                                 requestStop()
                             } },
-                            stopWhenLastWindowClosed = true,
                             policy = KadrePolicies.Default,
                         ),
                     ),

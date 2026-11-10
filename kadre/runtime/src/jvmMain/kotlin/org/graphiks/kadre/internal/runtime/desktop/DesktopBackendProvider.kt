@@ -6,6 +6,8 @@ import org.graphiks.kadre.application.KadreSession
 import org.graphiks.kadre.application.SessionOutcome
 import org.graphiks.kadre.diagnostics.KadreResult
 import org.graphiks.kadre.policy.KadrePolicy
+import org.graphiks.kadre.policy.KadrePolicies
+import org.graphiks.kadre.window.WindowSpec
 
 public enum class DesktopBackendKind { AppKit, Win32, X11, Wayland }
 
@@ -19,10 +21,15 @@ public class DesktopEmbeddedRequest(
     public val allowUserAttention: Boolean = false,
 )
 
-public class DesktopStandaloneRequest(
+/**
+ * The ownership-first run request: one application, one process Kadre owns. There is no
+ * `stopWhenLastWindowClosed` field — the last-container rule is fixed runtime semantics
+ * (the process controller ends the session when its last OS container closes).
+ */
+public data class DesktopRunRequest(
     public val applicationFactory: KadreApplicationFactory,
-    public val stopWhenLastWindowClosed: Boolean,
-    public val policy: KadrePolicy,
+    public val policy: KadrePolicy = KadrePolicies.Default,
+    public val firstWindow: WindowSpec? = null,
 )
 
 public interface DesktopBackendProvider {
@@ -33,5 +40,5 @@ public interface DesktopBackendProvider {
 
     public fun attach(request: DesktopEmbeddedRequest): KadreResult<KadreSession>
 
-    public fun run(request: DesktopStandaloneRequest): KadreResult<SessionOutcome>
+    public fun run(request: DesktopRunRequest): KadreResult<SessionOutcome>
 }

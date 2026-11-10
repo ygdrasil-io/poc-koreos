@@ -38,6 +38,7 @@ import kotlin.time.Duration.Companion.seconds
  */
 @OptIn(DelicateKadreApi::class)
 public fun main(args: Array<String>) {
+    installManualHarnessMainDispatcher()
     val options = Phase7DropHarnessOptions.parse(args)
     val recorder = Phase7DropHarnessRecorder(options.recordPath)
     val commands = Channel<String>(Channel.UNLIMITED)

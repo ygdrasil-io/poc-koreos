@@ -35,6 +35,7 @@ import kotlin.time.Duration.Companion.seconds
  * source titles, and native handles are intentionally never persisted.
  */
 public fun main(args: Array<String>) {
+    installManualHarnessMainDispatcher()
     val options = Phase11CaptureHarnessOptions.parse(args)
     val recorder = Phase11CaptureHarnessRecorder(options.recordPath)
     val commands = Channel<String>(Channel.UNLIMITED)

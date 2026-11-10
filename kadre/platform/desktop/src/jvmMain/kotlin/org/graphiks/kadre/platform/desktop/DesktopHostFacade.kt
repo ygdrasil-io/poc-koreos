@@ -14,7 +14,7 @@ import org.graphiks.kadre.internal.runtime.desktop.DesktopBackendKind
 import org.graphiks.kadre.internal.runtime.desktop.DesktopBackendProvider
 import org.graphiks.kadre.internal.runtime.desktop.DesktopEmbeddedRequest
 import org.graphiks.kadre.internal.runtime.desktop.DesktopIntegrationKind
-import org.graphiks.kadre.internal.runtime.desktop.DesktopStandaloneRequest
+import org.graphiks.kadre.internal.runtime.desktop.DesktopRunRequest
 import org.graphiks.kadre.policy.KadrePolicies
 import org.graphiks.kadre.policy.KadrePolicy
 import java.util.ServiceConfigurationError
@@ -66,10 +66,9 @@ internal class DesktopHostFacade(
         if (selection is ProviderSelection.Failure) throw KadreException(selection.failure)
         val selected = selection as ProviderSelection.Selected
         val provider = selected.provider
-        val request = DesktopStandaloneRequest(
-            applicationFactory,
-            options.stopWhenLastWindowClosed,
-            policy,
+        val request = DesktopRunRequest(
+            applicationFactory = applicationFactory,
+            policy = policy,
         )
 
         val result = try {

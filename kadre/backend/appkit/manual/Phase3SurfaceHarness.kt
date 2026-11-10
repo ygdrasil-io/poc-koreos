@@ -33,6 +33,7 @@ import kotlin.time.Duration.Companion.seconds
 
 /** External AppKit observation tool. It logs Kadre state; it does not render application content. */
 public fun main(args: Array<String>) {
+    installManualHarnessMainDispatcher()
     val options = HarnessOptions.parse(args)
     val recorder = HarnessRecorder(options.recordPath)
     val commands = Channel<String>(Channel.UNLIMITED)

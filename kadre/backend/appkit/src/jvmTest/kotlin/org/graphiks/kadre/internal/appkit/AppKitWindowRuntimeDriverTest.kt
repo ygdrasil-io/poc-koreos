@@ -12,6 +12,8 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.setMain
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.yield
 import kotlinx.coroutines.flow.take
@@ -43,7 +45,7 @@ import org.graphiks.kadre.internal.runtime.TextInputOpenCommand
 import org.graphiks.kadre.internal.runtime.TextInputOwner
 import org.graphiks.kadre.internal.runtime.TextInputPort
 import org.graphiks.kadre.internal.runtime.WindowOpenCommand
-import org.graphiks.kadre.internal.runtime.desktop.DesktopStandaloneRequest
+import org.graphiks.kadre.internal.runtime.desktop.DesktopRunRequest
 import org.graphiks.kadre.input.KeyLocation
 import org.graphiks.kadre.input.KeyState
 import org.graphiks.kadre.input.KeyboardModifiers
@@ -111,6 +113,8 @@ import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.Duration.Companion.milliseconds
+import kotlin.test.AfterTest
+import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -119,6 +123,18 @@ import kotlin.test.assertTrue
 
 @OptIn(DelicateKadreApi::class)
 class AppKitWindowRuntimeDriverTest {
+    @BeforeTest
+    fun installProcessMainDispatcher() {
+        // The process controller owns its root scope on Dispatchers.Main.immediate; the
+        // standalone run below stands it up on the Default pool like the production host.
+        Dispatchers.setMain(Dispatchers.Default)
+    }
+
+    @AfterTest
+    fun resetProcessMainDispatcher() {
+        Dispatchers.resetMain()
+    }
+
     @Test
     fun captureRegistryTracksLiveSurfacesIndependentlyAndRevokesBeforePeerRelease() = runBlocking {
         val registry = AppKitCaptureSurfaceRegistry()
@@ -248,7 +264,7 @@ class AppKitWindowRuntimeDriverTest {
         try {
             val result = standaloneExecutor.submit(Callable {
                 provider.run(
-                    DesktopStandaloneRequest(
+                    DesktopRunRequest(
                         KadreApplicationFactory {
                             KadreApplication {
                                 withTimeout(2.seconds) {
@@ -266,7 +282,6 @@ class AppKitWindowRuntimeDriverTest {
                                 requestStop()
                             }
                         },
-                        stopWhenLastWindowClosed = false,
                         policy = KadrePolicies.Default,
                     ),
                 )

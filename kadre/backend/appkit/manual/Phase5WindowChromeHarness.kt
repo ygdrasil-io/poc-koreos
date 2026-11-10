@@ -38,6 +38,7 @@ import kotlin.time.Duration.Companion.seconds
  * from the automated contract proofs.
  */
 public fun main(args: Array<String>) {
+    installManualHarnessMainDispatcher()
     val options = Phase5ChromeHarnessOptions.parse(args)
     val recorder = Phase5ChromeHarnessRecorder(options.recordPath)
     val commands = Channel<String>(Channel.UNLIMITED)

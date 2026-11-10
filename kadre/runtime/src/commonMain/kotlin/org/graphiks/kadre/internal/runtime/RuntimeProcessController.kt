@@ -13,6 +13,7 @@ import org.graphiks.kadre.application.KadreLaunchReason
 import org.graphiks.kadre.application.KadreSession
 import org.graphiks.kadre.application.LifecycleCapabilities
 import org.graphiks.kadre.application.LifecycleState
+import org.graphiks.kadre.application.MemoryPressureLevel
 import org.graphiks.kadre.application.SessionId
 import org.graphiks.kadre.application.SessionOutcome
 import org.graphiks.kadre.application.SessionStopReason
@@ -168,13 +169,39 @@ public class RuntimeProcessController private constructor(
      * stopped, scene destroyed, page hidden), so the live session stops as
      * `Stopped(SystemTermination)`. Idempotent: with no live session this is a no-op. The owned
      * root scope of the boot is cancelled when the session reaches its terminal state.
+     *
+     * Public for backend integration (the desktop providers call it when their OS loop ends),
+     * consumer-unstable like the rest of this class.
      */
-    internal fun terminate(reason: SessionStopReason) {
+    public fun terminate(reason: SessionStopReason) {
         require(reason == SessionStopReason.SystemTermination) {
             "RuntimeProcessController.terminate only admits SessionStopReason.SystemTermination"
         }
         val session = lock.withLock { liveSession } ?: return
         session.systemTerminating()
+    }
+
+    /**
+     * Fails the live session as [SessionOutcome.Failed] — the platform's own machinery broke
+     * (pump failure, native input read failure, display connection lost). Idempotent: with no
+     * live session this is a no-op.
+     *
+     * Public for backend integration (the desktop providers own the failure paths of their
+     * loops), consumer-unstable like the rest of this class.
+     */
+    public fun fail(failure: KadreFailure.PlatformFailure) {
+        val session = lock.withLock { liveSession } ?: return
+        session.hostFailed(failure)
+    }
+
+    /**
+     * Delivers one OS memory-pressure level to the live session. With no live session this is a
+     * no-op. Public for backend integration (the AppKit standalone lease forwards the native
+     * dispatch source here), consumer-unstable like the rest of this class.
+     */
+    public fun emitMemoryPressure(level: MemoryPressureLevel) {
+        val session = lock.withLock { liveSession } ?: return
+        session.emitMemoryPressure(level)
     }
 
     private fun installLastContainerRule(

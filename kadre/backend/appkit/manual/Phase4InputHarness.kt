@@ -37,6 +37,7 @@ import kotlin.time.Duration.Companion.seconds
  * synthesises input: responder routing, trackpad fractions and momentum require a real peripheral.
  */
 public fun main(args: Array<String>) {
+    installManualHarnessMainDispatcher()
     val options = Phase4HarnessOptions.parse(args)
     val recorder = Phase4HarnessRecorder(options.recordPath)
     val commands = Channel<String>(Channel.UNLIMITED)

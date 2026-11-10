@@ -22,7 +22,7 @@ import org.graphiks.kadre.internal.runtime.desktop.DesktopBackendKind
 import org.graphiks.kadre.internal.runtime.desktop.DesktopBackendProvider
 import org.graphiks.kadre.internal.runtime.desktop.DesktopEmbeddedRequest
 import org.graphiks.kadre.internal.runtime.desktop.DesktopIntegrationKind
-import org.graphiks.kadre.internal.runtime.desktop.DesktopStandaloneRequest
+import org.graphiks.kadre.internal.runtime.desktop.DesktopRunRequest
 import org.graphiks.kadre.internal.runtime.OpenedWindowCloseCommand
 import org.graphiks.kadre.internal.runtime.OpenedWindowCloseOutcome
 import org.graphiks.kadre.internal.runtime.PendingWindowCancellationCommand
@@ -44,6 +44,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
+import kotlin.test.assertNull
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
@@ -332,14 +333,34 @@ class DesktopHostTest {
         val request = provider.standaloneRequests.single()
         assertSame(factory, request.applicationFactory)
         assertSame(KadrePolicies.Recording, request.policy)
-        assertFalse(request.stopWhenLastWindowClosed)
+        assertNull(request.firstWindow)
         assertFalse(request.javaClass.declaredFields.any { it.name == "allowUserAttention" })
+        assertFalse(request.javaClass.declaredFields.any { it.name == "stopWhenLastWindowClosed" })
 
         provider.runResult = KadreResult.Failure(KadreFailure.AlreadyInUse(KadreResourceKind.Host))
         val exception = assertFailsWith<KadreException> {
             facade.run(factory, options, KadrePolicies.Default)
         }
         assertEquals(KadreFailure.AlreadyInUse(KadreResourceKind.Host), exception.failure)
+    }
+
+    @Test
+    fun standaloneRunTransmitsTheRequestThroughRunAndNeverAttaches() {
+        val provider = RecordingProvider(DesktopBackendKind.AppKit, setOf(DesktopIntegrationKind.AppKitMainLoop))
+        val facade = DesktopHostFacade(DesktopOperatingSystem.MacOS) { listOf(provider) }
+
+        val outcome = facade.run(
+            factory,
+            DesktopHostOptions.Standalone(DesktopBackend.AppKit, stopWhenLastWindowClosed = true),
+            KadrePolicies.Recording,
+        )
+
+        assertEquals(SessionOutcome.Completed, outcome)
+        val request = provider.standaloneRequests.single()
+        assertSame(factory, request.applicationFactory)
+        assertSame(KadrePolicies.Recording, request.policy)
+        assertNull(request.firstWindow)
+        assertEquals(0, provider.embeddedRequests.size, "the ownership run path must never fall back to attach")
     }
 
     @Test
@@ -479,7 +500,7 @@ private class RecordingProvider(
 ) : DesktopBackendProvider {
     val session = StubSession()
     val embeddedRequests = mutableListOf<DesktopEmbeddedRequest>()
-    val standaloneRequests = mutableListOf<DesktopStandaloneRequest>()
+    val standaloneRequests = mutableListOf<DesktopRunRequest>()
     var attachResult: KadreResult<KadreSession> = KadreResult.Success(session)
     var runResult: KadreResult<SessionOutcome> = KadreResult.Success(SessionOutcome.Completed)
 
@@ -491,7 +512,7 @@ private class RecordingProvider(
         return attachResult
     }
 
-    override fun run(request: DesktopStandaloneRequest): KadreResult<SessionOutcome> {
+    override fun run(request: DesktopRunRequest): KadreResult<SessionOutcome> {
         standaloneRequests += request
         return runResult
     }

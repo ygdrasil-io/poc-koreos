@@ -24,6 +24,9 @@ kotlin {
             kotlin.srcDir("manual")
             dependencies {
                 implementation(kotlin("test"))
+                // the process controller's owned root scope lives on Dispatchers.Main:
+                // the standalone-run tests install a Main dispatcher with setMain
+                implementation(libs.kotlinx.coroutines.test)
                 implementation(project(":kadre:platform:desktop"))
             }
         }

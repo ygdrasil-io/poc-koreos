@@ -28,6 +28,7 @@ import java.util.concurrent.TimeUnit
  */
 @OptIn(DelicateKadreApi::class)
 public fun main(args: Array<String>) {
+    installManualHarnessMainDispatcher()
     val options = Phase10HidOptions.parse(args)
     val recorder = Phase10HidRecorder(options.recordPath)
     val commands = Channel<String>(Channel.UNLIMITED)

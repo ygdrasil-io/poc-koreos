@@ -1,16 +1,14 @@
 package org.graphiks.kadre.internal.appkit
 
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
 import kotlinx.coroutines.runBlocking
 import org.graphiks.kadre.application.ActivationState
 import org.graphiks.kadre.application.AttachmentState
 import org.graphiks.kadre.application.KadreSession
 import org.graphiks.kadre.application.LifecycleCapabilities
 import org.graphiks.kadre.application.LifecycleState
+import org.graphiks.kadre.application.MemoryPressureLevel
 import org.graphiks.kadre.application.SessionOutcome
+import org.graphiks.kadre.application.SessionStopReason
 import org.graphiks.kadre.application.VisibilityState
 import org.graphiks.kadre.diagnostics.KadreFailure
 import org.graphiks.kadre.diagnostics.KadreOperation
@@ -18,6 +16,8 @@ import org.graphiks.kadre.diagnostics.KadrePlatform
 import org.graphiks.kadre.diagnostics.KadreResourceKind
 import org.graphiks.kadre.diagnostics.KadreResult
 import org.graphiks.kadre.internal.runtime.RuntimeHostController
+import org.graphiks.kadre.internal.runtime.RuntimeProcessController
+import org.graphiks.kadre.internal.runtime.RuntimeBootRequest
 import org.graphiks.kadre.internal.runtime.RuntimeSessionComponents
 import org.graphiks.kadre.internal.runtime.RuntimeSessionComponentsFactory
 import org.graphiks.kadre.internal.runtime.RuntimeSessionObserver
@@ -31,7 +31,7 @@ import org.graphiks.kadre.internal.runtime.desktop.DesktopBackendKind
 import org.graphiks.kadre.internal.runtime.desktop.DesktopBackendProvider
 import org.graphiks.kadre.internal.runtime.desktop.DesktopEmbeddedRequest
 import org.graphiks.kadre.internal.runtime.desktop.DesktopIntegrationKind
-import org.graphiks.kadre.internal.runtime.desktop.DesktopStandaloneRequest
+import org.graphiks.kadre.internal.runtime.desktop.DesktopRunRequest
 import org.graphiks.kadre.window.WindowProperty
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.coroutines.cancellation.CancellationException
@@ -142,7 +142,7 @@ public class AppKitBackendProvider private constructor(
         return attached
     }
 
-    override fun run(request: DesktopStandaloneRequest): KadreResult<SessionOutcome> {
+    override fun run(request: DesktopRunRequest): KadreResult<SessionOutcome> {
         if (!isAvailable()) {
             return KadreResult.Failure(KadreFailure.Unsupported(KadreOperation.HostAttach))
         }
@@ -155,65 +155,76 @@ public class AppKitBackendProvider private constructor(
                 attentionOwner.close()
                 return KadreResult.Failure(KadreFailure.AlreadyInUse(KadreResourceKind.Host))
             }
-        val parentScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
         try {
             val nativeLoopReturned = AtomicBoolean(false)
-            val lastWindowStop = AppKitLastWindowStopBridge()
             val memoryPressureAvailability = broker.memoryPressureAvailability()
-            val host = AppKitRuntimeHost(
-                RuntimeHostController.withComponents(
+            val controller = RuntimeProcessController.withComponents(
+                platform = KadrePlatform.AppKit,
+                componentsFactory = windowComponentsFactory(
+                    request.policy.resources,
+                    attentionOwner = attentionOwner,
+                    activateProcessOnFirstPresentation = true,
+                ),
+                initialLifecycleState = LifecycleState(
+                    AttachmentState.Attached,
+                    VisibilityState.Background,
+                    ActivationState.Inactive,
+                ),
+                initialLifecycleCapabilities = LifecycleCapabilities(memoryPressureAvailability),
+                // Stop AppKit before committing the terminal outcome so a native stop failure
+                // can still become the authoritative SessionOutcome.
+                sessionStopHandler = RuntimeSessionStopHandler {
+                    if (nativeLoopReturned.get()) {
+                        null
+                    } else {
+                        requestNativeStop()
+                    }
+                },
+            )
+            // The broker's dispatch source keeps its standalone channel: memory-pressure
+            // levels flow to the process controller's live session.
+            lease.installMemoryTarget(object : AppKitLifecycleTarget {
+                override fun updateLifecycle(state: LifecycleState) = Unit
+
+                override fun detach() = Unit
+
+                override fun emitMemoryPressure(level: MemoryPressureLevel) {
+                    controller.emitMemoryPressure(level)
+                }
+            })
+            val booted = controller.boot(
+                RuntimeBootRequest(
                     platform = KadrePlatform.AppKit,
-                    componentsFactory = windowComponentsFactory(
-                        request.policy.resources,
-                        if (request.stopWhenLastWindowClosed) lastWindowStop::request else null,
-                        attentionOwner,
-                        activateProcessOnFirstPresentation = true,
-                    ),
-                    initialLifecycleState = LifecycleState(
-                        AttachmentState.Attached,
-                        VisibilityState.Background,
-                        ActivationState.Inactive,
-                    ),
-                    initialLifecycleCapabilities = LifecycleCapabilities(memoryPressureAvailability),
-                    // Stop AppKit before committing the terminal outcome so a native stop failure
-                    // can still become the authoritative SessionOutcome.
-                    sessionStopHandler = RuntimeSessionStopHandler {
-                        if (nativeLoopReturned.get()) {
-                            null
-                        } else {
-                            requestNativeStop()
-                        }
-                    },
+                    applicationFactory = request.applicationFactory,
+                    policy = request.policy,
+                    firstWindow = request.firstWindow,
                 ),
             )
-            lease.installMemoryTarget(host)
-            val attached = host.controller.attach(parentScope, request.applicationFactory, request.policy)
-            if (attached is KadreResult.Failure) return attached
-            val session = (attached as KadreResult.Success).value
-            lastWindowStop.install(session)
+            if (booted is KadreResult.Failure) return booted
+            val session = (booted as KadreResult.Success).value
 
             try {
                 nativeApplication.run()
                 nativeLoopReturned.set(true)
-                host.detach()
             } catch (_: CancellationException) {
                 nativeLoopReturned.set(true)
                 // After admission, cancellation of the native loop means the host disappeared.
-                // Detach so the session's HostDetached outcome remains authoritative instead of
-                // leaking a bridge implementation exception from the blocking runner.
-                host.detach()
+                // The session stops as a system termination instead of leaking a bridge
+                // implementation exception from the blocking runner.
             } catch (_: Exception) {
                 nativeLoopReturned.set(true)
-                host.controller.fail(runFailure())
+                controller.fail(runFailure())
             } catch (_: LinkageError) {
                 nativeLoopReturned.set(true)
-                host.controller.fail(runFailure())
+                controller.fail(runFailure())
             }
+            // The owned OS loop has returned: whatever the session's own outcome, the process
+            // is done with its containers.
+            controller.terminate(SessionStopReason.SystemTermination)
 
             return KadreResult.Success(runBlocking { session.awaitTermination() })
         } finally {
-            parentScope.cancel(CancellationException("AppKit standalone host released"))
             lease.close()
         }
     }
@@ -306,7 +317,6 @@ public class AppKitBackendProvider private constructor(
 
     private fun windowComponentsFactory(
         resources: org.graphiks.kadre.policy.ResourceBudgetPolicy,
-        onLastWindowClosed: (() -> Unit)? = null,
         attentionOwner: AppKitProcessBroker.AppKitUserAttentionOwner? = null,
         activateProcessOnFirstPresentation: Boolean = false,
     ): RuntimeSessionComponentsFactory = RuntimeSessionComponentsFactory { _, _ ->
@@ -322,7 +332,6 @@ public class AppKitBackendProvider private constructor(
                 fullscreenAvailabilityFailure()
             },
             publicSurfaceCapabilities = true,
-            onLastWindowClosed = onLastWindowClosed,
             captureSurfaceRegistry = captureSurfaceRegistry,
             broker = broker,
             attentionOwner = attentionOwner,
@@ -352,30 +361,6 @@ private val APPKIT_PUBLIC_WINDOW_UPDATE_CAPABILITIES: Set<WindowProperty> = setO
     WindowProperty.Fullscreen,
     WindowProperty.Transparency,
 )
-
-private class AppKitLastWindowStopBridge {
-    private val lock = Any()
-    private var session: KadreSession? = null
-    private var requested = false
-
-    fun install(value: KadreSession) {
-        val stop = synchronized(lock) {
-            check(session == null) { "AppKit last-window session was already installed" }
-            session = value
-            requested
-        }
-        if (stop) value.close()
-    }
-
-    fun request() {
-        val target = synchronized(lock) {
-            if (requested) return
-            requested = true
-            session
-        }
-        target?.close()
-    }
-}
 
 private class AppKitEmbeddedSessionOwner(
     private val observation: AutoCloseable,

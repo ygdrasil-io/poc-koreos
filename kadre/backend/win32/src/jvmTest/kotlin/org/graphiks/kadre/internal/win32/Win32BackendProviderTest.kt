@@ -3,15 +3,20 @@ package org.graphiks.kadre.internal.win32
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import kotlin.coroutines.EmptyCoroutineContext
+import kotlin.test.AfterTest
+import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import kotlin.test.assertIs
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.setMain
 import org.graphiks.kadre.application.KadreApplication
 import org.graphiks.kadre.application.KadreApplicationFactory
 import org.graphiks.kadre.application.SessionOutcome
@@ -23,10 +28,22 @@ import org.graphiks.kadre.diagnostics.KadreResourceKind
 import org.graphiks.kadre.diagnostics.KadreResult
 import org.graphiks.kadre.internal.runtime.desktop.DesktopEmbeddedRequest
 import org.graphiks.kadre.internal.runtime.desktop.DesktopIntegrationKind
-import org.graphiks.kadre.internal.runtime.desktop.DesktopStandaloneRequest
+import org.graphiks.kadre.internal.runtime.desktop.DesktopRunRequest
 import org.graphiks.kadre.policy.KadrePolicies
 
 class Win32BackendProviderTest {
+    @BeforeTest
+    fun installProcessMainDispatcher() {
+        // The process controller owns its root scope on Dispatchers.Main.immediate; the
+        // standalone runs below stand it up on the Default pool like the production host.
+        Dispatchers.setMain(Dispatchers.Default)
+    }
+
+    @AfterTest
+    fun resetProcessMainDispatcher() {
+        Dispatchers.resetMain()
+    }
+
     @Test
     fun stopCompletesAWorkerCommandAlreadyWaitingInTheUiQueue() {
         val owner = Thread.currentThread()
@@ -44,11 +61,11 @@ class Win32BackendProviderTest {
                 assertTrue(admitted.await(2, TimeUnit.SECONDS))
                 pump.requestStop()
             })
-        val result = provider.run(DesktopStandaloneRequest(
+        val result = provider.run(DesktopRunRequest(
             applicationFactory = KadreApplicationFactory { KadreApplication {
                 try { port.onMainThread { error("stopped command must not run") } }
                 finally { released.set(true) }
-            } }, stopWhenLastWindowClosed = true, policy = KadrePolicies.Default))
+            } }, policy = KadrePolicies.Default))
         val outcome = assertIs<KadreResult.Success<SessionOutcome>>(result).value
         assertTrue(outcome is SessionOutcome.Stopped || outcome == SessionOutcome.Completed, "shutdown outcome: $outcome")
         assertTrue(released.get(), "shutdown must release the waiting Java future before awaiting application termination")
@@ -79,17 +96,15 @@ class Win32BackendProviderTest {
         assertEquals(1, portsCreated, "the pump and driver must share their UI endpoint")
     }
 
-    private fun blockingRequest(): DesktopStandaloneRequest =
-        DesktopStandaloneRequest(
+    private fun blockingRequest(): DesktopRunRequest =
+        DesktopRunRequest(
             applicationFactory = KadreApplicationFactory { KadreApplication { awaitCancellation() } },
-            stopWhenLastWindowClosed = true,
             policy = KadrePolicies.Default,
         )
 
-    private fun standaloneRequest(): DesktopStandaloneRequest =
-        DesktopStandaloneRequest(
+    private fun standaloneRequest(): DesktopRunRequest =
+        DesktopRunRequest(
             applicationFactory = KadreApplicationFactory { KadreApplication { } },
-            stopWhenLastWindowClosed = true,
             policy = KadrePolicies.Default,
         )
 
@@ -204,11 +219,10 @@ class Win32BackendProviderTest {
             availability = { true },
             portFactory = { port },
         )
-        val request = DesktopStandaloneRequest(
+        val request = DesktopRunRequest(
             applicationFactory = KadreApplicationFactory {
                 KadreApplication { requestStop() }
             },
-            stopWhenLastWindowClosed = true,
             policy = KadrePolicies.Default,
         )
         val outcome = provider.run(request)

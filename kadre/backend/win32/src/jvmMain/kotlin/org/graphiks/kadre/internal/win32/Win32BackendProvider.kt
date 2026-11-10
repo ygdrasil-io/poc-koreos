@@ -2,18 +2,14 @@ package org.graphiks.kadre.internal.win32
 
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
-import kotlin.coroutines.cancellation.CancellationException
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
 import kotlinx.coroutines.runBlocking
 import org.graphiks.kadre.application.ActivationState
 import org.graphiks.kadre.application.AttachmentState
 import org.graphiks.kadre.application.KadreSession
 import org.graphiks.kadre.application.LifecycleState
 import org.graphiks.kadre.application.SessionOutcome
+import org.graphiks.kadre.application.SessionStopReason
 import org.graphiks.kadre.application.VisibilityState
 import org.graphiks.kadre.diagnostics.KadreFailure
 import org.graphiks.kadre.diagnostics.KadreOperation
@@ -21,6 +17,8 @@ import org.graphiks.kadre.diagnostics.KadrePlatform
 import org.graphiks.kadre.diagnostics.KadreResourceKind
 import org.graphiks.kadre.diagnostics.KadreResult
 import org.graphiks.kadre.internal.runtime.RuntimeHostController
+import org.graphiks.kadre.internal.runtime.RuntimeProcessController
+import org.graphiks.kadre.internal.runtime.RuntimeBootRequest
 import org.graphiks.kadre.internal.runtime.RuntimeFailureReporter
 import org.graphiks.kadre.internal.runtime.RuntimeSessionComponents
 import org.graphiks.kadre.internal.runtime.DisplayPort
@@ -34,12 +32,12 @@ import org.graphiks.kadre.internal.runtime.desktop.DesktopBackendKind
 import org.graphiks.kadre.internal.runtime.desktop.DesktopBackendProvider
 import org.graphiks.kadre.internal.runtime.desktop.DesktopEmbeddedRequest
 import org.graphiks.kadre.internal.runtime.desktop.DesktopIntegrationKind
-import org.graphiks.kadre.internal.runtime.desktop.DesktopStandaloneRequest
+import org.graphiks.kadre.internal.runtime.desktop.DesktopRunRequest
 
 /**
- * Session standalone headless (tranche 1) : la pompe tourne sur le thread
- * appelant (D1) ; `stopWhenLastWindowClosed` n'a pas d'effet tant qu'aucune
- * fenêtre n'existe (la session ne s'arrête pas faute de fenêtre).
+ * Session standalone (tranche 1) : la pompe tourne sur le thread appelant
+ * (D1) ; la règle du dernier conteneur vient du contrôleur de process (une
+ * session sans fenêtre ne s'arrête pas faute de conteneur).
  */
 public class Win32BackendProvider private constructor(
     private val availability: () -> Boolean,
@@ -186,7 +184,7 @@ public class Win32BackendProvider private constructor(
         }
     }
 
-    override fun run(request: DesktopStandaloneRequest): KadreResult<SessionOutcome> {
+    override fun run(request: DesktopRunRequest): KadreResult<SessionOutcome> {
         if (!availability()) {
             return KadreResult.Failure(KadreFailure.Unsupported(KadreOperation.HostAttach))
         }
@@ -217,18 +215,18 @@ public class Win32BackendProvider private constructor(
     }
 
     private fun runSession(
-        request: DesktopStandaloneRequest,
+        request: DesktopRunRequest,
         session: Win32HostSession,
     ): KadreResult<SessionOutcome> {
-        val parentScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
         var ownedDriver: Win32WindowRuntimeDriver? = null
         try {
-            val lastWindowStop = Win32LastWindowStopBridge()
             val nativeFailure = AtomicReference<Throwable?>(null)
             val driver = Win32WindowRuntimeDriverFactory.create(
                 port = session.port,
                 resources = request.policy.resources,
-                onLastWindowClosed = if (request.stopWhenLastWindowClosed) lastWindowStop::request else null,
+                // The fixed last-container rule is the controller's: the runtime ends the
+                // session when its windows empty; this wiring only makes the owned loop exit.
+                onLastWindowClosed = { session.pump.requestStop() },
                 failureReporter = RuntimeFailureReporter { failure ->
                     nativeFailure.compareAndSet(null, failure)
                     session.pump.requestStop()
@@ -236,7 +234,7 @@ public class Win32BackendProvider private constructor(
             ).also { ownedDriver = it }
             val displayPortRef = java.util.concurrent.atomic.AtomicReference<Win32DisplayPort?>(null)
             driver.attachDisplayRescan { displayPortRef.get()?.onDisplayChanged() }
-            val controller = RuntimeHostController.withComponents(
+            val controller = RuntimeProcessController.withComponents(
                 platform = KadrePlatform.Win32,
                 componentsFactory = { _, _ ->
                     val displayPort = (displayPortFactory?.invoke() ?: Win32DisplayPort(
@@ -261,13 +259,19 @@ public class Win32BackendProvider private constructor(
                     null
                 },
             )
-            val attached = controller.attach(parentScope, request.applicationFactory, request.policy)
-            if (attached is KadreResult.Failure) {
-                return attached
+            val booted = controller.boot(
+                RuntimeBootRequest(
+                    platform = KadrePlatform.Win32,
+                    applicationFactory = request.applicationFactory,
+                    policy = request.policy,
+                    firstWindow = request.firstWindow,
+                ),
+            )
+            if (booted is KadreResult.Failure) {
+                return booted
             }
-            val kadreSession = (attached as KadreResult.Success).value
+            val kadreSession = (booted as KadreResult.Success).value
             loopStarted?.invoke(session.pump)
-            lastWindowStop.install(kadreSession)
             var outcome: SessionOutcome? = null
             while (outcome == null) {
                 val step = try { session.pump.runOnce() }
@@ -278,7 +282,7 @@ public class Win32BackendProvider private constructor(
                     PumpStep.Stopped -> {
                         if (nativeFailure.get() != null) {
                             controller.fail(KadreFailure.PlatformFailure(KadrePlatform.Win32, "input", "native-input-failed"))
-                        } else controller.detach()
+                        } else controller.terminate(SessionStopReason.SystemTermination)
                         session.port.stopWorkerCommands()
                         runBlocking { kadreSession.awaitTermination() }
                     }
@@ -299,7 +303,6 @@ public class Win32BackendProvider private constructor(
         } finally {
             session.port.stopWorkerCommands()
             ownedDriver?.close()
-            parentScope.cancel(CancellationException("win32 standalone host released"))
         }
     }
 
@@ -351,31 +354,6 @@ internal val ProcessWin32RawInputBroker: Lazy<Win32RawInputBroker> = lazy {
             }
         },
     )
-}
-
-/** Bridges the runtime's last-window-closed signal to the standalone session stop (once). */
-internal class Win32LastWindowStopBridge {
-    private val lock = Any()
-    private var session: KadreSession? = null
-    private var requested = false
-
-    fun install(value: KadreSession) {
-        val stop = synchronized(lock) {
-            check(session == null) { "win32 last-window session was already installed" }
-            session = value
-            requested
-        }
-        if (stop) value.close()
-    }
-
-    fun request() {
-        val target = synchronized(lock) {
-            if (requested) return
-            requested = true
-            session
-        }
-        target?.close()
-    }
 }
 
 /**

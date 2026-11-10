@@ -23,6 +23,7 @@ import org.graphiks.kadre.application.KadreLaunchContext
 import org.graphiks.kadre.application.KadreLaunchReason
 import org.graphiks.kadre.application.KadreScope
 import org.graphiks.kadre.application.KadreSession
+import org.graphiks.kadre.application.MemoryPressureLevel
 import org.graphiks.kadre.application.SessionOutcome
 import org.graphiks.kadre.application.SessionState
 import org.graphiks.kadre.application.SessionStopReason
@@ -293,6 +294,34 @@ class RuntimeProcessControllerCommonTest {
 
         sessionB.requestStop()
         testScheduler.advanceUntilIdle()
+    }
+
+    @Test
+    fun platformFailureFailsTheLiveSession() = runProcessTest {
+        val controller = RuntimeProcessController.withPrimarySurface(KadrePlatform.Web) { id ->
+            val surface = RuntimeHostSurface(id, initialSurfaceState())
+            RuntimePrimarySurface(surface, surface::close)
+        }
+        val session = assertIs<KadreResult.Success<KadreSession>>(
+            controller.boot(
+                RuntimeBootRequest(
+                    platform = KadrePlatform.Web,
+                    applicationFactory = KadreApplicationFactory { KadreApplication { awaitCancellation() } },
+                ),
+            ),
+        ).value
+        testScheduler.advanceUntilIdle()
+        assertEquals(SessionState.Running, session.state.value)
+
+        val failure = KadreFailure.PlatformFailure(KadrePlatform.Web, "pump", "get-message-failed")
+        controller.fail(failure)
+        testScheduler.advanceUntilIdle()
+
+        assertEquals(SessionState.Terminated(SessionOutcome.Failed(failure)), session.state.value)
+
+        // Idempotent without a live session: a second fail (or a memory-pressure level) is a no-op.
+        controller.fail(failure)
+        controller.emitMemoryPressure(MemoryPressureLevel.Critical)
     }
 
     @Test

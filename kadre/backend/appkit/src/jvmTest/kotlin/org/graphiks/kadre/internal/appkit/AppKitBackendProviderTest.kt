@@ -13,6 +13,8 @@ import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.setMain
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.yield
@@ -123,7 +125,7 @@ import org.graphiks.kadre.internal.runtime.desktop.DesktopBackendKind
 import org.graphiks.kadre.internal.runtime.desktop.DesktopBackendProvider
 import org.graphiks.kadre.internal.runtime.desktop.DesktopEmbeddedRequest
 import org.graphiks.kadre.internal.runtime.desktop.DesktopIntegrationKind
-import org.graphiks.kadre.internal.runtime.desktop.DesktopStandaloneRequest
+import org.graphiks.kadre.internal.runtime.desktop.DesktopRunRequest
 import org.graphiks.kadre.internal.appkit.manual.Phase10ManualInventoryFormatter
 import org.graphiks.kadre.internal.appkit.manual.Phase10GamepadObservationSet
 import org.graphiks.kadre.input.InputEvent
@@ -198,6 +200,8 @@ import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicReference
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.Duration.Companion.milliseconds
+import kotlin.test.AfterTest
+import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -208,6 +212,18 @@ import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
 class AppKitBackendProviderTest {
+    @BeforeTest
+    fun installProcessMainDispatcher() {
+        // The process controller owns its root scope on Dispatchers.Main.immediate; the
+        // standalone runs below stand it up on the Default pool like the production host.
+        Dispatchers.setMain(Dispatchers.Default)
+    }
+
+    @AfterTest
+    fun resetProcessMainDispatcher() {
+        Dispatchers.resetMain()
+    }
+
     @OptIn(
         org.graphiks.kadre.diagnostics.DelicateKadreApi::class,
         org.graphiks.kadre.diagnostics.KadrePlatformApi::class,
@@ -998,7 +1014,7 @@ class AppKitBackendProviderTest {
 
         assertEquals(
             KadreResult.Failure(KadreFailure.InvalidRequest("options")),
-            provider.run(DesktopStandaloneRequest(factory, true, KadrePolicies.Default)),
+            provider.run(DesktopRunRequest(factory, KadrePolicies.Default)),
         )
         assertEquals(
             KadreResult.Failure(KadreFailure.InvalidRequest("options")),
@@ -1960,7 +1976,7 @@ class AppKitBackendProviderTest {
         ) { true }
 
         val result = provider.run(
-            DesktopStandaloneRequest(
+            DesktopRunRequest(
                 KadreApplicationFactory {
                     KadreApplication {
                         assertEquals(0, native.stopCount)
@@ -1973,13 +1989,14 @@ class AppKitBackendProviderTest {
                         kotlinx.coroutines.awaitCancellation()
                     }
                 },
-                stopWhenLastWindowClosed = true,
                 KadrePolicies.Default,
             ),
         )
 
+        // The fixed last-container rule ends the session as Completed when its only
+        // window closes (the old world mapped this to a HostRequested stop).
         assertEquals(
-            KadreResult.Success(SessionOutcome.Stopped(SessionStopReason.HostRequested)),
+            KadreResult.Success(SessionOutcome.Completed),
             result,
         )
         assertEquals(1, native.stopCount)
@@ -2046,12 +2063,11 @@ class AppKitBackendProviderTest {
         val provider = AppKitBackendProvider.forTesting(native, AppKitProcessBroker()) { false }
 
         val result = provider.run(
-            DesktopStandaloneRequest(
+            DesktopRunRequest(
                 KadreApplicationFactory {
                     factoryInvoked = true
                     KadreApplication { }
                 },
-                true,
                 KadrePolicies.Default,
             ),
         )
@@ -2071,9 +2087,8 @@ class AppKitBackendProviderTest {
         val provider = AppKitBackendProvider.forTesting(native, AppKitProcessBroker()) { true }
 
         val result = provider.run(
-            DesktopStandaloneRequest(
+            DesktopRunRequest(
                 KadreApplicationFactory { KadreApplication { requestStop() } },
-                stopWhenLastWindowClosed = true,
                 KadrePolicies.Default,
             ),
         )
@@ -2098,9 +2113,8 @@ class AppKitBackendProviderTest {
         try {
             val result = executor.submit<KadreResult<SessionOutcome>> {
                 provider.run(
-                    DesktopStandaloneRequest(
+                    DesktopRunRequest(
                         KadreApplicationFactory { KadreApplication { requestStop() } },
-                        stopWhenLastWindowClosed = true,
                         KadrePolicies.Default,
                     ),
                 )
@@ -2127,7 +2141,7 @@ class AppKitBackendProviderTest {
     }
 
     @Test
-    fun nativeCancellationAfterAdmissionReturnsHostDetachedAndReleasesOwnership() {
+    fun nativeCancellationAfterAdmissionReturnsSystemTerminationAndReleasesOwnership() {
         val cancellation = kotlinx.coroutines.CancellationException("cancelled")
         val applicationStarted = CountDownLatch(1)
         val applicationCancelled = CountDownLatch(1)
@@ -2138,7 +2152,7 @@ class AppKitBackendProviderTest {
         // The native loop waits for this application to start, proving that cancellation occurs
         // after session admission and must therefore be represented by the session outcome.
         val result = provider.run(
-            DesktopStandaloneRequest(
+            DesktopRunRequest(
                 KadreApplicationFactory {
                     KadreApplication {
                         applicationStarted.countDown()
@@ -2149,13 +2163,12 @@ class AppKitBackendProviderTest {
                         }
                     }
                 },
-                false,
                 KadrePolicies.Default,
             ),
         )
 
         assertEquals(
-            KadreResult.Success(SessionOutcome.Stopped(SessionStopReason.HostDetached)),
+            KadreResult.Success(SessionOutcome.Stopped(SessionStopReason.SystemTermination)),
             result,
         )
         assertTrue(applicationCancelled.await(2, TimeUnit.SECONDS))
@@ -2170,9 +2183,8 @@ class AppKitBackendProviderTest {
         val provider = AppKitBackendProvider.forTesting(native, AppKitProcessBroker()) { true }
 
         val result = provider.run(
-            DesktopStandaloneRequest(
+            DesktopRunRequest(
                 KadreApplicationFactory { KadreApplication { kotlinx.coroutines.awaitCancellation() } },
-                stopWhenLastWindowClosed = false,
                 KadrePolicies.Default,
             ),
         )
@@ -2194,11 +2206,10 @@ class AppKitBackendProviderTest {
         val provider = AppKitBackendProvider.forTesting(native, AppKitProcessBroker()) { true }
 
         val result = provider.run(
-            DesktopStandaloneRequest(
+            DesktopRunRequest(
                 KadreApplicationFactory {
                     KadreApplication { throw IllegalStateException("application") }
                 },
-                stopWhenLastWindowClosed = false,
                 KadrePolicies.Default,
             ),
         )
@@ -2224,9 +2235,8 @@ class AppKitBackendProviderTest {
         assertEquals(
             KadreResult.Failure(KadreFailure.AlreadyInUse(KadreResourceKind.Host)),
             provider.run(
-                DesktopStandaloneRequest(
+                DesktopRunRequest(
                     KadreApplicationFactory { KadreApplication { } },
-                    true,
                     KadrePolicies.Default,
                 ),
             ),
@@ -2245,18 +2255,20 @@ class AppKitBackendProviderTest {
     fun sequentialRunsReleaseAllProcessAndSessionState() {
         val native = RecordingNativeApplication()
         val provider = AppKitBackendProvider.forTesting(native, AppKitProcessBroker()) { true }
-        val request = DesktopStandaloneRequest(
+        val request = DesktopRunRequest(
             KadreApplicationFactory { KadreApplication { kotlinx.coroutines.awaitCancellation() } },
-            true,
             KadrePolicies.Default,
         )
 
+        // The native run loop returns immediately on the recording native; the owned OS
+        // loop ending is a system termination of the process (the old world detached the
+        // host instead).
         assertEquals(
-            KadreResult.Success(SessionOutcome.Stopped(SessionStopReason.HostDetached)),
+            KadreResult.Success(SessionOutcome.Stopped(SessionStopReason.SystemTermination)),
             provider.run(request),
         )
         assertEquals(
-            KadreResult.Success(SessionOutcome.Stopped(SessionStopReason.HostDetached)),
+            KadreResult.Success(SessionOutcome.Stopped(SessionStopReason.SystemTermination)),
             provider.run(request),
         )
         assertEquals(2, native.runCount)
@@ -3202,7 +3214,7 @@ class AppKitBackendProviderTest {
         val proofFailure = AtomicReference<Throwable?>(null)
 
         val result = provider.run(
-            DesktopStandaloneRequest(
+            DesktopRunRequest(
                 KadreApplicationFactory {
                     KadreApplication {
                         var openedWindow: Window? = null
@@ -3596,7 +3608,6 @@ class AppKitBackendProviderTest {
                         }
                     }
                 },
-                false,
                 KadrePolicies.Default,
             ),
         )
@@ -3604,9 +3615,12 @@ class AppKitBackendProviderTest {
         proofFailure.get()?.let { failure ->
             throw AssertionError("O3 proof stage: ${proofStage.get()}", failure)
         }
-        assertEquals(
-            KadreResult.Success(SessionOutcome.Stopped(SessionStopReason.ApplicationRequested)),
-            result,
+        // Same honest race as runPublicAppKitGeometrySession: the proof closes its
+        // windows then requests stop, so either terminal outcome is legitimate.
+        assertTrue(
+            result == KadreResult.Success(SessionOutcome.Completed) ||
+                result == KadreResult.Success(SessionOutcome.Stopped(SessionStopReason.ApplicationRequested)),
+            "unexpected O3 proof exit: $result",
         )
         assertTrue(stopRequestedOffMainThread.get())
         assertTrue(publicHandleObserved.get())
@@ -3678,7 +3692,13 @@ class AppKitBackendProviderTest {
                 report,
             )
             assertTrue(report.contains("TERMINAL\tSurfaceState(attachment=Detached"), report)
-            assertTrue(report.contains("SESSION_OUTCOME\tStopped(reason=ApplicationRequested)"), report)
+            assertTrue(
+                // The harness closes its window then finishes: under the fixed last-container
+                // rule either terminal outcome is the honest exit.
+                report.contains("SESSION_OUTCOME\tCompleted") ||
+                    report.contains("SESSION_OUTCOME\tStopped(reason=ApplicationRequested)"),
+                report,
+            )
             assertTrue(
                 report.contains("COMMAND\tresult-rejected\tM7 requires terminal observation before recording"),
                 report,
@@ -3754,7 +3774,13 @@ class AppKitBackendProviderTest {
                 report,
             )
             assertTrue(report.contains("TERMINAL\tWindowState(phase=Closed"), report)
-            assertTrue(report.contains("SESSION_OUTCOME\tStopped(reason=ApplicationRequested)"), report)
+            assertTrue(
+                // The harness closes its window then finishes: under the fixed last-container
+                // rule either terminal outcome is the honest exit.
+                report.contains("SESSION_OUTCOME\tCompleted") ||
+                    report.contains("SESSION_OUTCOME\tStopped(reason=ApplicationRequested)"),
+                report,
+            )
             (1..4).forEach { scenario ->
                 assertTrue(
                     report.contains(
@@ -3917,7 +3943,13 @@ class AppKitBackendProviderTest {
                 report,
             )
             assertTrue(report.contains("TERMINAL\tWindowState(phase=Closed"), report)
-            assertTrue(report.contains("SESSION_OUTCOME\tStopped(reason=ApplicationRequested)"), report)
+            assertTrue(
+                // The harness closes its window then finishes: under the fixed last-container
+                // rule either terminal outcome is the honest exit.
+                report.contains("SESSION_OUTCOME\tCompleted") ||
+                    report.contains("SESSION_OUTCOME\tStopped(reason=ApplicationRequested)"),
+                report,
+            )
             (1..5).forEach { scenario ->
                 assertTrue(
                     report.contains(
@@ -4043,7 +4075,13 @@ class AppKitBackendProviderTest {
             assertTrue(report.contains("TERMINAL_STABILITY\tnoLateRevision=true\tnoLateEvent=true"), report)
             assertTrue(report.contains("COMMAND\tresult-rejected\tM7 requires terminal observation before recording"), report)
             assertFalse(report.contains("SCENARIO\tM7\tpass\tpremature terminal claim"), report)
-            assertTrue(report.contains("SESSION_OUTCOME\tStopped(reason=ApplicationRequested)"), report)
+            assertTrue(
+                // The harness closes its window then finishes: under the fixed last-container
+                // rule either terminal outcome is the honest exit.
+                report.contains("SESSION_OUTCOME\tCompleted") ||
+                    report.contains("SESSION_OUTCOME\tStopped(reason=ApplicationRequested)"),
+                report,
+            )
             assertFalse(report.lineSequence().any { it.startsWith("SCENARIO\t") && "\tpass\t" in it }, report)
         } finally {
             Files.deleteIfExists(record)
@@ -4094,7 +4132,13 @@ class AppKitBackendProviderTest {
             )
             assertTrue(report.contains("COMMAND\tresult-rejected\tM5 requires terminal observation before recording"), report)
             assertTrue(report.contains("TERMINAL_STABILITY\tnoLateRevision=true\tnoLateEvent=true"), report)
-            assertTrue(report.contains("SESSION_OUTCOME\tStopped(reason=ApplicationRequested)"), report)
+            assertTrue(
+                // The harness closes its window then finishes: under the fixed last-container
+                // rule either terminal outcome is the honest exit.
+                report.contains("SESSION_OUTCOME\tCompleted") ||
+                    report.contains("SESSION_OUTCOME\tStopped(reason=ApplicationRequested)"),
+                report,
+            )
             assertFalse(report.lineSequence().any { it.startsWith("SCENARIO\t") && "\tpass\t" in it }, report)
         } finally {
             Files.deleteIfExists(record)
@@ -4728,7 +4772,7 @@ private fun runPublicAppKitGeometrySession(
     val provider = AppKitBackendProvider.forTesting(native, AppKitProcessBroker()) { true }
     val exerciseFailure = AtomicReference<Throwable?>(null)
     val result = provider.run(
-        DesktopStandaloneRequest(
+        DesktopRunRequest(
             KadreApplicationFactory {
                 KadreApplication {
                     withTimeout(5.seconds) {
@@ -4752,14 +4796,17 @@ private fun runPublicAppKitGeometrySession(
                     }
                 }
             },
-            stopWhenLastWindowClosed = false,
             policy = policy,
         ),
     )
     exerciseFailure.get()?.let { throw it }
-    assertEquals(
-        KadreResult.Success(SessionOutcome.Stopped(SessionStopReason.ApplicationRequested)),
-        result,
+    // Under the fixed last-container rule the proof's exit is a race the runtime must
+    // resolve either way: the watcher completing the session when its last window
+    // closes, or the application's own requestStop landing first.
+    assertTrue(
+        result == KadreResult.Success(SessionOutcome.Completed) ||
+            result == KadreResult.Success(SessionOutcome.Stopped(SessionStopReason.ApplicationRequested)),
+        "unexpected proof exit: $result",
     )
 }
 

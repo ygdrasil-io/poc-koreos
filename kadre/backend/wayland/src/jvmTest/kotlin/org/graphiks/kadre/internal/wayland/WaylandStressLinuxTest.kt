@@ -2,10 +2,15 @@ package org.graphiks.kadre.internal.wayland
 
 import java.nio.file.Files
 import java.nio.file.Path
+import kotlin.test.AfterTest
+import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.setMain
 import org.graphiks.kadre.application.KadreApplication
 import org.graphiks.kadre.application.KadreApplicationFactory
 import org.graphiks.kadre.application.KadreScope
@@ -13,7 +18,7 @@ import org.graphiks.kadre.application.SessionOutcome
 import org.graphiks.kadre.contracts.driver.wayland.WaylandCompositorController
 import org.graphiks.kadre.diagnostics.KadreFailure
 import org.graphiks.kadre.diagnostics.KadreResult
-import org.graphiks.kadre.internal.runtime.desktop.DesktopStandaloneRequest
+import org.graphiks.kadre.internal.runtime.desktop.DesktopRunRequest
 import org.graphiks.kadre.policy.KadrePolicies
 import org.graphiks.kadre.surface.LogicalSize
 import org.graphiks.kadre.window.Window
@@ -33,6 +38,18 @@ import org.graphiks.kadre.window.WindowSpec
     org.graphiks.kadre.diagnostics.DelicateKadreApi::class,
 )
 class WaylandStressLinuxTest {
+
+    @BeforeTest
+    fun installProcessMainDispatcher() {
+        // The process controller owns its root scope on Dispatchers.Main.immediate; the
+        // standalone runs below stand it up on the Default pool like the production host.
+        Dispatchers.setMain(Dispatchers.Default)
+    }
+
+    @AfterTest
+    fun resetProcessMainDispatcher() {
+        Dispatchers.resetMain()
+    }
 
     private fun compositor(): WaylandCompositorController =
         WaylandCompositorController(socketName = "kadre-wayland-stress-o3").also { it.start() }
@@ -95,7 +112,7 @@ class WaylandStressLinuxTest {
             // 6 rafales × 8 fenêtres ouvertes puis fermées : la file du
             // driver encaisse les créations/destroys sans retarder le
             // terminaison ni fuir
-            val request = DesktopStandaloneRequest(
+            val request = DesktopRunRequest(
                 applicationFactory = KadreApplicationFactory {
                     KadreApplication {
                         repeat(6) { burst ->
@@ -106,7 +123,6 @@ class WaylandStressLinuxTest {
                         }
                     }
                 },
-                stopWhenLastWindowClosed = false,
                 policy = KadrePolicies.Default,
             )
             val result = provider.run(request)
@@ -160,11 +176,10 @@ class WaylandStressLinuxTest {
             val before = openDescriptorCount()
             val runner = Thread {
                 val result = provider.run(
-                    DesktopStandaloneRequest(
+                    DesktopRunRequest(
                         applicationFactory = KadreApplicationFactory {
                             KadreApplication { awaitCancellation() }
                         },
-                        stopWhenLastWindowClosed = true,
                         policy = KadrePolicies.Default,
                     ),
                 )
@@ -236,11 +251,10 @@ class WaylandStressLinuxTest {
         )
         val before = openDescriptorCount()
         val result = provider.run(
-            DesktopStandaloneRequest(
+            DesktopRunRequest(
                 applicationFactory = KadreApplicationFactory {
                     KadreApplication { awaitCancellation() }
                 },
-                stopWhenLastWindowClosed = true,
                 policy = KadrePolicies.Default,
             ),
         )
@@ -263,9 +277,8 @@ class WaylandStressLinuxTest {
             val cycles = 12
             repeat(cycles) {
                 val result = provider.run(
-                    DesktopStandaloneRequest(
+                    DesktopRunRequest(
                         applicationFactory = KadreApplicationFactory { KadreApplication { } },
-                        stopWhenLastWindowClosed = true,
                         policy = KadrePolicies.Default,
                     ),
                 )
