@@ -344,7 +344,9 @@ Mapping normatif :
 | Android | `LifecycleOwner` au moins `STARTED` | au moins `RESUMED` et fenêtre interactive | `LifecycleOwner.onDestroy` ou premier détachement de la `View` fournie |
 | UIKit | scène en foreground | `sceneDidBecomeActive` | `sceneDidDisconnect` |
 | Web | document visible et élément connecté | document actif et élément recevant l’input | détachement selon la policy Web |
-| Desktop (boucle possédée) | au moins une fenêtre de session visible | au moins une fenêtre de session active | dernière fenêtre fermée ⇒ `Completed` (règle fixe) ; arrêt de la boucle OS ⇒ `SystemTermination` |
+| Desktop (boucle possédée — état cible) | au moins une fenêtre de session visible | au moins une fenêtre de session active | dernière fenêtre fermée ⇒ `Completed` (règle fixe) ; arrêt de la boucle OS ⇒ `SystemTermination` |
+
+Ligne Desktop = état cible : le câblage des axes `visibility`/`activation` est livré par les plans 2–4 ; à la fusion du plan 1, les axes desktop restent à leurs valeurs initiales (`Running + Background + Inactive`, §15.4) — seuls `phase` et la terminaison de session sont drivés.
 
 `state` est mis à jour avant que `events` rende la transition observable. Un collector peut donc voir un état plus récent, mais jamais un état antérieur à l’événement reçu.
 
@@ -1842,6 +1844,8 @@ Sauf contrat plus restrictif explicitement indiqué, tout `AutoCloseable` public
 
 ### 15.1 Android
 
+> Section plateforme figée pré-ownership — elle décrit l’ancien monde (`attachKadre`) ; les plans 2–4 la dissolvent ; §5–§6 font autorité.
+
 ```kotlin
 public fun ComponentActivity.attachKadre(
     surfaceView: View,
@@ -1884,6 +1888,8 @@ public fun View.attachKadre(
 
 ### 15.2 UIKit et SwiftUI
 
+> Section plateforme figée pré-ownership — elle décrit l’ancien monde (`KadreIos.attach`) ; les plans 2–4 la dissolvent ; §5–§6 font autorité.
+
 ```kotlin
 public object KadreIos {
     public fun attach(
@@ -1911,6 +1917,8 @@ public object KadreIos {
 - L’attach, le lifecycle par scène et les propriétaires sont livrés (phase 1) ; les observations dynamiques de surface (métriques, apparence, visibilité — re-lectures sur déclencheurs SDK réels), le redraw coalescé, l’apply fermé (les quatre champs update refusés `Unsupported(UpdateSurface)`) et le bail natif `withUIKitView` sont livrés (phase 2) ; la façade Swift est livrée (phase 3) ; les demandes de scènes `requestWindow` sont livrées (phase 4) — `Window.apply`, l’attention et la fermeture de fenêtres enfants restent hors périmètre : une fenêtre enfant n’est jamais une `Window` Kadre. L’input ordinaire est livré (phase 5) : touch (recognizer Kadre-owned ajouté additivement à la vue du host, `cancelsTouchesInView = false`, identité de contact bornée), hover (iOS seul), gestes (double-tap et pan sur iOS et tvOS ; pinch et rotation iOS seuls — `API_UNAVAILABLE(tvos)` dans le SDK Apple), clavier physique par les closures `GCKeyboard` et télécommande (charter manuel pour le bout réel — `XCUIRemote` est de l’UI-testing). La politique de perte des gestes est livrée telle quelle : un geste `Cancelled`/`Failed` n’est jamais publié — le runtime ne retient aucun état de geste, la notification terminale est explicitement perdue. Sur la route clavier GC, `LogicalKey` reste `Unidentified` et les modifiers restent vides (limites de GameController, sans équivalent FlagsChanged) ; le clavier intégré iPad (non-GameController) n’a pas de couverture prouvée ; le handler `keyChangedHandler` de `GCKeyboard` est process-global : une seconde session attachée prend la livraison des touches, et le teardown de la première la coupe pour la suivante — les annonces peuvent alors sur-déclarer `keyboardInstalled` (limite mono-consumateur documentée, l’arbitrage process-wide des sources d’entrée restant un follow-up) ; le text input est livré (phase 6) : un receiver natif possédé par l’adaptateur — un `UITextField` posé dans la hiérarchie du host à l’open et retiré au close, invisible par `alpha = 0` sur une vue 1×1 à l’origine et jamais `isHidden` (une vue cachée ne peut pas devenir first responder) —, un document shadow immédiat semé depuis la config, sous la discipline des révisions acceptées (le write-back Kotlin→champ écrit le champ d’abord puis l’ombre ; une révision périmée répond `StaleRevision` typé sans toucher ni le champ ni le document), un open exclusif — un second `openTextInput` répond `AlreadyInUse(TextInputSession)` par l’admission du runtime, le CAS `liveOwner` du port restant la défense en profondeur —, et des plages de suppression/remplacement livrées pour ce qu’UIKit les nomme : le hook `shouldChangeCharactersInRange` résout sa plage contre l’ombre au moment du hook, la frontière de graphème est celle calculée par UIKit (la paire surrogate entière d’un emoji), jamais recomposée par Kadre — honnête là où le web laisse les types delete non computables sans observation ; la config (`purpose`, `action`, `capitalization`, `autocorrect`) mappe les traits UIKit (`keyboardType`, `returnKeyType`, `autocapitalizationType`, `autocorrectionType`, `secureTextEntry`) à la construction. Les limites livrées : le couplage focus→Suspend n’existe pas côté UIKit — les hooks de focus du receiver ne font que compter, la session reste `Active` à la perte et au retour du first responder, les jambes `Suspended`/resume restent au charter ; le clavier logiciel ne redimensionne rien (aucune notification keyboard-frame observée, le layout de la surface reste au host) ; l’IME réel et les langues réelles restent des charters manuels — la composition v1 est une réception sans publication : le texte marqué vit dans le receiver, le commit IME ne publie rien et l’ombre est resynchronisée d’un bloc à ce commit.
 
 ### 15.3 Web
+
+> Section plateforme figée pré-ownership — elle décrit l’ancien monde (`HTMLElement.attachKadre`) ; les plans 2–4 la dissolvent ; §5–§6 font autorité.
 
 ```kotlin
 public fun HTMLElement.attachKadre(
@@ -2042,6 +2050,8 @@ L’API Kotlin partagée est la surface normative. Pendant l’incubation initia
 Les adapters étrangers exposent uniquement la façade host fermée par `INTEROP-EXPORTS.md` : session, state, arrêt et outcome. Ils traduisent `KadreResult` vers le modèle typé du langage au lieu de faire de `CoroutineScope`, `Flow`, `Continuation` ou `Throwable` une convention d’intégration. Le lifecycle reste possédé et déjà observable par l’Activity, la scène ou la page ; Kadre ne publie pas un second wrapper étranger divergent. Les exports Java, Swift, JS et Wasm possèdent chacun un consumer compile test. Les headers/frameworks générés et les déclarations TypeScript exportées sont contrôlés comme des artefacts d’API en plus des dumps ABI Kotlin.
 
 ## 17. Testabilité
+
+> Section figée pré-ownership — elle décrit l’ancien monde (fake host, `attach`) ; les plans 2–4 la dissolvent (fake process, spec ownership-first §5.8) ; §5–§6 font autorité.
 
 L’artifact `test` fournit :
 

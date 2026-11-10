@@ -74,17 +74,17 @@ kadre/
 | Projet | Rôle | Publication | Dépendances Kadre autorisées |
 |---|---|---|---|
 | `kadre` | umbrella KMP et point d’entrée de dépendance | publique principale | `foundation`, puis `platform:*` selon la target |
-| `foundation` | contrats, types, outcomes, policies et Host SPI publics | transitive contractuelle | aucune |
+| `foundation` | contrats, types, outcomes, policies et l’API application/lifecycle ownership (plus aucun Host SPI public) | transitive contractuelle | aucune |
 | `runtime` | sessions, coroutines, ownership, flows, budgets et SPI d’implémentation | transitive interne | `foundation` |
 | `platform:android` | attach `Activity`/`View` et traduction du lifecycle Android — hors build — résurrection par le plan 2/3/4 (ownership-first) | transitive contractuelle | `foundation`, `runtime` |
 | `platform:uikit` | attach `UIWindowScene`/`UIViewController` et scènes UIKit — hors build — résurrection par le plan 2/3/4 (ownership-first) | transitive contractuelle | `foundation`, `runtime` |
 | `platform:web` | attach DOM partagé JS/Wasm et traduction browser — hors build — résurrection par le plan 2/3/4 (ownership-first) | transitive contractuelle | `foundation`, `runtime` |
-| `platform:desktop` | hosts desktop, boucle embedded/standalone et sélection de backend | transitive contractuelle | `foundation`, `runtime`, backends en runtime |
+| `platform:desktop` | hosts desktop, boucle standalone ownership et sélection de backend | transitive contractuelle | `foundation`, `runtime`, backends en runtime |
 | `backend:appkit` | provider desktop AppKit | transitive interne | `runtime`, KFFI AppKit/ObjC |
 | `backend:win32` | provider desktop Win32 | transitive interne | `runtime`, KFFI Win32 |
 | `backend:x11` | provider desktop X11 | transitive interne | `runtime`, KFFI X11 |
 | `backend:wayland` | provider desktop Wayland | transitive interne | `runtime`, KFFI Wayland |
-| `test` | fake host, horloge et contrôleurs virtuels publics | publique optionnelle | `foundation`, `runtime` |
+| `test` | fake process (à créer, spec ownership-first §5.8), horloge et contrôleurs virtuels publics | publique optionnelle | `foundation`, `runtime` |
 | `integration:*` | glue de lifecycle pour un framework tiers — `integration:awt` et `integration:compose` hors build — résurrection par le plan 2/3/4 (ownership-first) | publique optionnelle | `kadre`, framework concerné |
 | `contracts:*` | oracles, scénarios, drivers et validation CI | non publiée | selon la section 9 |
 | `samples:*` | applications consommatrices réelles — `samples:embedded-awt` et `samples:android-*` hors build — résurrection par le plan 2/3/4 (ownership-first) | non publiée | `kadre` ou une intégration |

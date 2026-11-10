@@ -44,7 +44,7 @@ Pour les opérations officielles, `InvalidRequest.field` est toujours non null e
 |---|---|
 | boot `runKadreApplication` (umbrella et overloads desktop) | `"options"`, `"firstWindow"` |
 | `HostSurface.apply` | `"cursor"`, `"pointerCapture"`, `"hitTesting"`, `"inputDefaultBehavior"` |
-| `WindowManager.requestWindow` et validation de `WebWindowProvider` | `"title"`, `"contentSize"`, `"minimumSize"`, `"maximumSize"`, `"sizeConstraints"`, `"fullscreen"`, `"icon"`, `"element"`, `"element.ownerDocument"`, `"parentScope"` |
+| `WindowManager.requestWindow` | `"title"`, `"contentSize"`, `"minimumSize"`, `"maximumSize"`, `"sizeConstraints"`, `"fullscreen"`, `"icon"` ; validation du `WebWindowProvider` (plan web, hors build) : `"element"`, `"element.ownerDocument"` — l’ancien champ `"parentScope"` n’est plus produisible dans le monde ownership |
 | `Window.apply` | `"title"`, `"outerPosition"`, `"contentSize"`, `"minimumSize"`, `"maximumSize"`, `"sizeConstraints"`, `"resizable"`, `"fullscreen"`, `"decorations"`, `"systemButtons"`, `"level"`, `"transparency"`, `"blurBehind"`, `"icon"`, `"contentProtection"` |
 | `Window.requestAttention` | `"attention"` |
 | `Window.respondToCloseRequest` | `"requestId"` |

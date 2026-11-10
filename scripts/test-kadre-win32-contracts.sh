@@ -76,11 +76,10 @@ rm -rf "$EVIDENCE_DIRECTORY"
 cd "$REPO_ROOT"
 
 # Bureau interactif requis : un runner sans bureau = échec de gate, pas un skip.
-# La preuve consumer EXÉCUTÉE reste locale pour cette tranche : la résolution
-# transitive des modules frères à travers le repo contractuel est le résidu
-# wayland-D4 (foundation/runtime introuvables malgré leurs publishes).
-# ownership-first: réactivé par le plan Android/UIKit/Web
-# (:kadre:integration:awt:jvmTest, le porteur consumer de cette preuve)
+# ownership-first : la preuve consumer EXÉCUTÉE portée par integration:awt est
+# supprimée DÉFINITIVEMENT avec le monde embedded (spec §5.8) — elle ne revient
+# pas avec les plans 2–4 ; le point d'entrée win32 exécutable restant est
+# Win32DiscoveryMain (task win32ConsumerRun du build consumers/kotlin).
 run_phase tests "$TEST_TIMEOUT_SECONDS" \
     "$GRADLEW" \
     :kadre:backend:win32:win32ContractTests \
