@@ -31,7 +31,14 @@ public data class KadreLaunchContext(
     public val restorationToken: RestorationToken?,
 )
 
-public enum class KadreLaunchReason { InitialHostAttachment, AdditionalHostRequested, HostRestoration }
+public enum class KadreLaunchReason {
+    InitialHostAttachment,
+    AdditionalHostRequested,
+    HostRestoration,
+    ProcessLaunch,
+    WindowRequested,
+    ProcessRestoration,
+}
 
 public interface KadreScope : CoroutineScope {
     public val sessionId: SessionId
@@ -75,6 +82,7 @@ public enum class SessionStopReason {
     ApplicationCancelled,
     ParentCancelled,
     HostDetached,
+    SystemTermination,
 }
 
 public class RestorationToken internal constructor(private val encoded: String) {

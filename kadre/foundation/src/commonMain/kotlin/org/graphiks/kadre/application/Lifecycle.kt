@@ -39,6 +39,8 @@ public enum class AttachmentState { Attached, Detached }
 public enum class VisibilityState { Foreground, Background }
 public enum class ActivationState { Active, Inactive }
 
+public enum class SessionPhase { NotStarted, Running, Terminating, Terminated }
+
 public data class LifecycleEvent(
     public val previous: LifecycleState,
     public val current: LifecycleState,
@@ -52,6 +54,15 @@ public sealed interface HostSignal {
         public val level: MemoryPressureLevel,
         override val stamp: EventStamp,
     ) : HostSignal
+}
+
+public sealed interface SystemSignal {
+    public val stamp: EventStamp
+
+    public data class MemoryPressure(
+        public val level: MemoryPressureLevel,
+        override val stamp: EventStamp,
+    ) : SystemSignal
 }
 
 public enum class MemoryPressureLevel { Moderate, Critical }
