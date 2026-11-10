@@ -6,11 +6,14 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.yield
 import org.graphiks.kadre.application.KadreApplication
+import org.graphiks.kadre.application.KadreRunOptions
 import org.graphiks.kadre.diagnostics.KadreResult
+import org.graphiks.kadre.diagnostics.getOrNull
 import org.graphiks.kadre.platform.desktop.DesktopBackend
-import org.graphiks.kadre.platform.desktop.DesktopHostOptions
 import org.graphiks.kadre.platform.desktop.runKadreApplication
 import org.graphiks.kadre.surface.PropertyChange
 import org.graphiks.kadre.window.WindowDecorations
@@ -38,6 +41,7 @@ import kotlin.time.Duration.Companion.seconds
  * from the automated contract proofs.
  */
 public fun main(args: Array<String>) {
+    installManualHarnessMainDispatcher()
     val options = Phase5ChromeHarnessOptions.parse(args)
     val recorder = Phase5ChromeHarnessRecorder(options.recordPath)
     val commands = Channel<String>(Channel.UNLIMITED)
@@ -48,11 +52,9 @@ public fun main(args: Array<String>) {
     }
 
     try {
-        val outcome = runKadreApplication(
-            options = DesktopHostOptions.Standalone(
-                backend = DesktopBackend.AppKit,
-                stopWhenLastWindowClosed = false,
-            ),
+        val outcome = runBlocking { runKadreApplication(
+            options = KadreRunOptions(),
+            backend = DesktopBackend.AppKit,
             application = KadreApplication {
                 val opened = when (
                     val request = windows.requestWindow(WindowSpec(title = "Kadre Phase 5 window chrome"))
@@ -64,6 +66,18 @@ public fun main(args: Array<String>) {
                     is WindowRequestOutcome.OpenedHere -> opened.window
                     else -> error("window did not open: $opened")
                 }
+                // Sentinel: the ownership rule completes the session when its LAST container
+                // closes, so a second window stays open across the terminal observation below.
+                val sentinelOpened = when (
+                    val request = windows.requestWindow(sentinelSpec("Kadre Phase 5 chrome sentinel"))
+                ) {
+                    is KadreResult.Failure -> error("sentinel window request failed: ${request.reason}")
+                    is KadreResult.Success -> request.value.await()
+                }
+                val sentinel = when (sentinelOpened) {
+                    is WindowRequestOutcome.OpenedHere -> sentinelOpened.window
+                    else -> error("sentinel window did not open: $sentinelOpened")
+                }
                 recorder.metadata(options)
                 recorder.line("SNAPSHOT\tinitial\t${window.state.value}")
                 recorder.line("CAPABILITIES\t${window.capabilities.value}")
@@ -71,6 +85,7 @@ public fun main(args: Array<String>) {
 
                 val latestRevision = AtomicLong(window.state.value.revision.value)
                 val observedEventCount = AtomicInteger()
+                val closingEventRevision = AtomicLong(-1L)
                 val stateCollector = launch(start = CoroutineStart.UNDISPATCHED) {
                     window.state.collect { state ->
                         latestRevision.set(state.revision.value)
@@ -80,6 +95,7 @@ public fun main(args: Array<String>) {
                 val eventCollector = launch(start = CoroutineStart.UNDISPATCHED) {
                     window.events.collect { event ->
                         observedEventCount.incrementAndGet()
+                        if (event is WindowEvent.Closing) closingEventRevision.set(event.stateRevision.value)
                         recorder.line(
                             "EVENT\t${event::class.simpleName}" +
                                 "\tstateRevisionVisible=${stateRevisionVisible(window.state.value.revision.value, event)}" +
@@ -95,6 +111,13 @@ public fun main(args: Array<String>) {
                     recorder.line("COMMAND\tclose\t${window.close()}")
                     val terminal = withTimeout(5.seconds) {
                         window.state.first { it.phase == WindowPhase.Closed }
+                    }
+                    // With the sentinel window open across the observation, AppKit delivers
+                    // the coalesced Closing callback AFTER the terminal state: drain the
+                    // close pipeline before opening the stability window — the same
+                    // no-late-anything claim, anchored on the pipeline's last message.
+                    withTimeout(2.seconds) {
+                        while (closingEventRevision.get() < 0L) yield()
                     }
                     val terminalEventCount = observedEventCount.get()
                     delay(250.milliseconds)
@@ -167,9 +190,15 @@ public fun main(args: Array<String>) {
                 closeAndObserveTerminal()
                 stateCollector.cancel()
                 eventCollector.cancel()
+                // The observation is done: the sentinel closes last, so the fixed
+                // last-container rule ends the session only after the record is complete.
+                sentinel.close()
+                withTimeout(5.seconds) {
+                    sentinel.state.first { it.phase == WindowPhase.Closed }
+                }
                 requestStop()
             },
-        )
+        ) }.getOrNull() ?: error("harness run failed")
         recorder.line("SESSION_OUTCOME\t$outcome")
     } finally {
         recorder.close()

@@ -8,36 +8,42 @@ public interface KadreLifecycle {
     public val state: StateFlow<LifecycleState>
     public val capabilities: StateFlow<LifecycleCapabilities>
     public val events: Flow<LifecycleEvent>
-    public val signals: Flow<HostSignal>
+    public val signals: Flow<SystemSignal>
 }
 
 public data class LifecycleCapabilities(public val memoryPressure: FeatureAvailability)
 
+/**
+ * The lifecycle of the session's process, observed by the application: the session phase
+ * mirrors [SessionState], and the visibility/activation axes carry what the OS observes of
+ * the process's containers.
+ */
 public data class LifecycleState(
-    public val attachment: AttachmentState,
+    public val phase: SessionPhase,
     public val visibility: VisibilityState,
     public val activation: ActivationState,
 ) {
     init {
-        if (attachment == AttachmentState.Detached) {
+        if (phase == SessionPhase.Terminated) {
             require(visibility == VisibilityState.Background && activation == ActivationState.Inactive) {
-                "detached lifecycle must be background and inactive"
+                "terminated lifecycle must be background and inactive"
             }
         }
         if (visibility == VisibilityState.Background) {
             require(activation == ActivationState.Inactive) { "background lifecycle must be inactive" }
         }
         if (activation == ActivationState.Active) {
-            require(attachment == AttachmentState.Attached && visibility == VisibilityState.Foreground) {
-                "active lifecycle must be attached and foreground"
+            require(phase == SessionPhase.Running && visibility == VisibilityState.Foreground) {
+                "active lifecycle must be running and foreground"
             }
         }
     }
 }
 
-public enum class AttachmentState { Attached, Detached }
 public enum class VisibilityState { Foreground, Background }
 public enum class ActivationState { Active, Inactive }
+
+public enum class SessionPhase { NotStarted, Running, Terminating, Terminated }
 
 public data class LifecycleEvent(
     public val previous: LifecycleState,
@@ -45,13 +51,13 @@ public data class LifecycleEvent(
     public val stamp: EventStamp,
 )
 
-public sealed interface HostSignal {
+public sealed interface SystemSignal {
     public val stamp: EventStamp
 
     public data class MemoryPressure(
         public val level: MemoryPressureLevel,
         override val stamp: EventStamp,
-    ) : HostSignal
+    ) : SystemSignal
 }
 
 public enum class MemoryPressureLevel { Moderate, Critical }

@@ -38,8 +38,9 @@ internal object Win32RawInputManualHarness {
         var totalX = 0.0
         var totalY = 0.0
         var suspensions = 0
-        runKadreApplication(
-            options = DesktopHostOptions.Standalone(backend = DesktopBackend.Win32),
+        runBlocking { runKadreApplication(
+            options = KadreRunOptions(),
+            backend = DesktopBackend.Win32,
             application = KadreApplication {
                 val requested = windows.requestWindow(WindowSpec(title = "Kadre raw input — bouger la souris ici",
                     contentSize = LogicalSize(560.0, 420.0)))
@@ -78,7 +79,7 @@ internal object Win32RawInputManualHarness {
                 window.state.first { it.phase == WindowPhase.Closed }
                 SwingUtilities.invokeLater { viewer.dispose() }
             },
-        )
+        ) }.getOrNull() ?: error("run failed")
         println("Événements=$count somme=($totalX,$totalY) suspensions=$suspensions")
     }
 }

@@ -59,7 +59,7 @@ internal fun helloKadreApplication(
     }
     // La fermeture est un protocole en deux temps : le système demande (bouton
     // rouge), l'application répond. Accepter ferme la fenêtre ; côté bureau,
-    // `stopWhenLastWindowClosed` achève alors la session.
+    // la règle fixe du dernier conteneur achève alors la session (`Completed`).
     if (window != null) {
         val closeRequest = window.events.filterIsInstance<WindowEvent.CloseRequested>().first()
         println("[fenêtre] demande de fermeture reçue — raison=${closeRequest.reason}")

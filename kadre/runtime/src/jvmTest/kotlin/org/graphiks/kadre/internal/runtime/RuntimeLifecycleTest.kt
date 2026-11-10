@@ -2,17 +2,19 @@ package org.graphiks.kadre.internal.runtime
 
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.awaitCancellation
-import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.filterIsInstance
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.take
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
+import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.test.setMain
+import kotlinx.coroutines.withContext
 import org.graphiks.kadre.application.ActivationState
-import org.graphiks.kadre.application.AttachmentState
-import org.graphiks.kadre.application.HostSignal
+import org.graphiks.kadre.application.EventStamp
 import org.graphiks.kadre.application.KadreApplication
 import org.graphiks.kadre.application.KadreApplicationFactory
 import org.graphiks.kadre.application.KadreScope
@@ -20,14 +22,19 @@ import org.graphiks.kadre.application.KadreSession
 import org.graphiks.kadre.application.LifecycleCapabilities
 import org.graphiks.kadre.application.LifecycleState
 import org.graphiks.kadre.application.MemoryPressureLevel
+import org.graphiks.kadre.application.SessionInstant
 import org.graphiks.kadre.application.SessionOutcome
+import org.graphiks.kadre.application.SessionPhase
+import org.graphiks.kadre.application.SessionSequence
 import org.graphiks.kadre.application.SessionStopReason
+import org.graphiks.kadre.application.SystemSignal
 import org.graphiks.kadre.application.VisibilityState
 import org.graphiks.kadre.diagnostics.FeatureAvailability
 import org.graphiks.kadre.diagnostics.KadrePlatform
 import org.graphiks.kadre.diagnostics.KadreResult
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicLong
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -38,11 +45,14 @@ import kotlin.time.Duration.Companion.seconds
 
 class RuntimeLifecycleTest {
     @Test
-    fun memoryPressureDoesNotPublishAfterSessionStopHasBeenAdmitted() = runTest {
+    fun memoryPressureDoesNotPublishAfterSessionStopHasBeenAdmitted() = runProcessTest {
         val stopEntered = CountDownLatch(1)
         val releaseStop = CountDownLatch(1)
-        val host = RuntimeHostController(
+        val controller = RuntimeProcessController.withComponents(
             platform = KadrePlatform.Fake,
+            componentsFactory = { _, _ ->
+                RuntimeSessionComponents(windows = UnsupportedWindowManager(RuntimeProcessIds::nextWindowRequestId))
+            },
             initialLifecycleCapabilities = LifecycleCapabilities(FeatureAvailability.Available),
             sessionStopHandler = RuntimeSessionStopHandler {
                 stopEntered.countDown()
@@ -51,14 +61,14 @@ class RuntimeLifecycleTest {
             },
         )
         lateinit var scope: KadreScope
-        val session = attach(host) {
+        val session = boot(controller) {
             scope = this
             awaitCancellation()
         }
         testScheduler.runCurrent()
-        val signals = mutableListOf<HostSignal.MemoryPressure>()
+        val signals = mutableListOf<SystemSignal.MemoryPressure>()
         val collector = backgroundScope.launch {
-            scope.lifecycle.signals.filterIsInstance<HostSignal.MemoryPressure>().collect { signal ->
+            scope.lifecycle.signals.filterIsInstance<SystemSignal.MemoryPressure>().collect { signal ->
                 signals += signal
             }
         }
@@ -73,7 +83,7 @@ class RuntimeLifecycleTest {
         }
         assertTrue(stopEntered.await(2, TimeUnit.SECONDS))
 
-        host.emitMemoryPressure(MemoryPressureLevel.Critical)
+        controller.emitMemoryPressure(MemoryPressureLevel.Critical)
         testScheduler.runCurrent()
         assertEquals(emptyList(), signals)
 
@@ -83,54 +93,50 @@ class RuntimeLifecycleTest {
             "session close did not complete after its stop handler was released",
         )
         testScheduler.advanceUntilIdle()
-        assertEquals(SessionOutcome.Stopped(SessionStopReason.HostRequested), session.awaitTermination())
+        assertEquals(SessionOutcome.Stopped(SessionStopReason.SystemTermination), session.awaitTermination())
         collector.cancel()
     }
 
     @Test
     fun lifecyclePublishesSnapshotBeforeEventAndDeduplicates() = runTest {
-        val host = RuntimeHostController(KadrePlatform.Fake)
-        lateinit var scope: KadreScope
-        val session = attach(host) {
-            scope = this
-            awaitCancellation()
-        }
-        testScheduler.runCurrent()
-
-        val observations = mutableListOf<Pair<LifecycleState, LifecycleState>>()
-        val collector = backgroundScope.launch {
-            val event = scope.lifecycle.events.first()
-            observations += scope.lifecycle.state.value to event.current
-        }
-        testScheduler.runCurrent()
-
+        val lifecycle = lifecycle()
         val background = LifecycleState(
-            AttachmentState.Attached,
+            SessionPhase.Running,
             VisibilityState.Background,
             ActivationState.Inactive,
         )
-        host.updateLifecycle(background)
-        host.updateLifecycle(background)
+
+        val observations = mutableListOf<Pair<LifecycleState, LifecycleState>>()
+        val collector = launch {
+            val event = lifecycle.events.first()
+            observations += lifecycle.state.value to event.current
+        }
+        testScheduler.runCurrent()
+
+        lifecycle.updateState(background)
+        lifecycle.updateState(background)
         testScheduler.runCurrent()
 
         assertEquals(listOf(background to background), observations)
         collector.cancel()
-        session.close()
-        testScheduler.runCurrent()
     }
 
     @Test
-    fun newSessionReceivesCurrentSnapshotWithoutHistoricalEvent() = runTest {
-        val host = RuntimeHostController(KadrePlatform.Fake)
+    fun bootedSessionReceivesTheBootInitialSnapshot() = runProcessTest {
         val background = LifecycleState(
-            AttachmentState.Attached,
+            SessionPhase.Running,
             VisibilityState.Background,
             ActivationState.Inactive,
         )
-        host.updateLifecycle(background)
-
+        val controller = RuntimeProcessController.withComponents(
+            platform = KadrePlatform.Fake,
+            componentsFactory = { _, _ ->
+                RuntimeSessionComponents(windows = UnsupportedWindowManager(RuntimeProcessIds::nextWindowRequestId))
+            },
+            initialLifecycleState = background,
+        )
         lateinit var scope: KadreScope
-        val session = attach(host) {
+        val session = boot(controller) {
             scope = this
             awaitCancellation()
         }
@@ -142,94 +148,66 @@ class RuntimeLifecycleTest {
     }
 
     @Test
-    fun memoryPressureRequiresCapabilityAndDetachIsTerminal() = runTest {
-        val host = RuntimeHostController(KadrePlatform.Fake)
-        lateinit var scope: KadreScope
-        val session = attach(host) {
-            scope = this
-            awaitCancellation()
-        }
+    fun memoryPressureRequiresCapabilityAndTerminatedStateIsFrozen() = runTest {
+        val lifecycle = lifecycle()
         testScheduler.runCurrent()
 
-        assertFailsWith<IllegalArgumentException> { host.emitMemoryPressure(MemoryPressureLevel.Moderate) }
-        host.updateLifecycleCapabilities(LifecycleCapabilities(FeatureAvailability.Available))
-        val signal = backgroundScope.launch {
+        assertFailsWith<IllegalArgumentException> { lifecycle.emitMemoryPressure(MemoryPressureLevel.Moderate) }
+        lifecycle.updateCapabilities(LifecycleCapabilities(FeatureAvailability.Available))
+        val signal = launch {
             assertEquals(
                 MemoryPressureLevel.Critical,
-                assertIs<HostSignal.MemoryPressure>(scope.lifecycle.signals.first()).level,
+                assertIs<SystemSignal.MemoryPressure>(lifecycle.signals.first()).level,
             )
         }
         testScheduler.runCurrent()
-        host.emitMemoryPressure(MemoryPressureLevel.Critical)
+        lifecycle.emitMemoryPressure(MemoryPressureLevel.Critical)
         testScheduler.runCurrent()
         signal.join()
 
-        host.detach()
-        testScheduler.runCurrent()
+        val terminated = LifecycleState(
+            SessionPhase.Terminated,
+            VisibilityState.Background,
+            ActivationState.Inactive,
+        )
+        assertEquals(terminated, lifecycle.updateState(terminated))
         assertEquals(
-            SessionOutcome.Stopped(SessionStopReason.HostDetached),
-            session.awaitTermination(),
+            terminated,
+            lifecycle.updateState(
+                LifecycleState(SessionPhase.Running, VisibilityState.Foreground, ActivationState.Active),
+            ),
         )
-        assertEquals(AttachmentState.Detached, scope.lifecycle.state.value.attachment)
-        assertFailsWith<IllegalArgumentException> {
-            host.updateLifecycle(
-                LifecycleState(AttachmentState.Attached, VisibilityState.Foreground, ActivationState.Active),
-            )
-        }
-        assertIs<KadreResult.Failure>(
-            host.attach(this, KadreApplicationFactory { KadreApplication { } }),
-        )
-    }
-
-    @Test
-    fun controllersDoNotShareLifecycle() = runTest {
-        val first = RuntimeHostController(KadrePlatform.Fake)
-        val second = RuntimeHostController(KadrePlatform.Fake)
-        lateinit var firstScope: KadreScope
-        lateinit var secondScope: KadreScope
-        val firstSession = attach(first) { firstScope = this; awaitCancellation() }
-        val secondSession = attach(second) { secondScope = this; awaitCancellation() }
-        testScheduler.runCurrent()
-
-        first.updateLifecycle(
-            LifecycleState(AttachmentState.Attached, VisibilityState.Background, ActivationState.Inactive),
-        )
-
-        assertEquals(VisibilityState.Background, firstScope.lifecycle.state.value.visibility)
-        assertEquals(VisibilityState.Foreground, secondScope.lifecycle.state.value.visibility)
-        firstSession.close()
-        secondSession.close()
-        testScheduler.runCurrent()
+        assertFailsWith<IllegalArgumentException> { lifecycle.emitMemoryPressure(MemoryPressureLevel.Moderate) }
     }
 
     @Test
     fun lifecycleEventsAndSignalsShareAStrictlyIncreasingSessionSequence() = runTest {
         var now = Duration.ZERO
-        val host = RuntimeHostController.withClock(
-            KadrePlatform.Fake,
-            RuntimeClockFactory { RuntimeClock { now } },
+        val nextSequence = AtomicLong(0L)
+        val lifecycle = lifecycle(
+            nextStamp = {
+                EventStamp(
+                    SessionSequence(nextSequence.incrementAndGet()),
+                    SessionInstant(now),
+                    null,
+                )
+            },
         )
-        lateinit var scope: KadreScope
-        val session = attach(host) { scope = this; awaitCancellation() }
         testScheduler.runCurrent()
 
         val events = mutableListOf<org.graphiks.kadre.application.LifecycleEvent>()
-        val signals = mutableListOf<HostSignal>()
-        val eventCollector = backgroundScope.launch { scope.lifecycle.events.take(2).toList(events) }
-        val signalCollector = backgroundScope.launch { scope.lifecycle.signals.take(1).toList(signals) }
+        val signals = mutableListOf<SystemSignal>()
+        val eventCollector = launch { lifecycle.events.take(2).toList(events) }
+        val signalCollector = launch { lifecycle.signals.take(1).toList(signals) }
         testScheduler.runCurrent()
 
         now = 2.seconds
-        host.updateLifecycle(
-            LifecycleState(AttachmentState.Attached, VisibilityState.Background, ActivationState.Inactive),
-        )
+        lifecycle.updateState(LifecycleState(SessionPhase.Running, VisibilityState.Background, ActivationState.Inactive))
         now = 5.seconds
-        host.updateLifecycle(
-            LifecycleState(AttachmentState.Attached, VisibilityState.Foreground, ActivationState.Active),
-        )
-        host.updateLifecycleCapabilities(LifecycleCapabilities(FeatureAvailability.Available))
+        lifecycle.updateState(LifecycleState(SessionPhase.Running, VisibilityState.Foreground, ActivationState.Active))
+        lifecycle.updateCapabilities(LifecycleCapabilities(FeatureAvailability.Available))
         now = 8.seconds
-        host.emitMemoryPressure(MemoryPressureLevel.Moderate)
+        lifecycle.emitMemoryPressure(MemoryPressureLevel.Moderate)
         testScheduler.runCurrent()
         eventCollector.join()
         signalCollector.join()
@@ -239,15 +217,43 @@ class RuntimeLifecycleTest {
         assertEquals(3, sequences.distinct().size)
         assertTrue(sequences.zipWithNext().all { (previous, next) -> previous < next })
         assertEquals(listOf(2.seconds, 5.seconds, 8.seconds), timestamps)
-
-        session.close()
-        testScheduler.runCurrent()
     }
 
-    private fun kotlinx.coroutines.test.TestScope.attach(
-        host: RuntimeHostController,
+    private fun lifecycle(
+        nextStamp: () -> EventStamp = {
+            EventStamp(SessionSequence(0L), SessionInstant(Duration.ZERO), null)
+        },
+    ): RuntimeLifecycle = RuntimeLifecycle(
+        initialState = LifecycleState(SessionPhase.Running, VisibilityState.Foreground, ActivationState.Active),
+        initialCapabilities = LifecycleCapabilities(FeatureAvailability.Unsupported),
+        nextStamp = nextStamp,
+        collectorAllocator = RuntimeEventCollectorAllocator(Int.MAX_VALUE),
+        maxCollectorsPerFlow = Int.MAX_VALUE,
+    )
+
+    private suspend fun kotlinx.coroutines.test.TestScope.boot(
+        controller: RuntimeProcessController,
         application: suspend KadreScope.() -> Unit,
     ): KadreSession = assertIs<KadreResult.Success<KadreSession>>(
-        host.attach(this, KadreApplicationFactory { KadreApplication(application) }),
+        controller.boot(
+            RuntimeBootRequest(
+                platform = KadrePlatform.Fake,
+                applicationFactory = KadreApplicationFactory { KadreApplication(application) },
+            ),
+        ),
     ).value
+
+    /**
+     * The controller's owned root scope lives on `Dispatchers.Main.immediate`; a process test
+     * installs the test scheduler as Main so every owned coroutine is driven by virtual time.
+     */
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+    private fun runProcessTest(body: suspend TestScope.() -> Unit): Unit = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        try {
+            body()
+        } finally {
+            Dispatchers.resetMain()
+        }
+    }
 }

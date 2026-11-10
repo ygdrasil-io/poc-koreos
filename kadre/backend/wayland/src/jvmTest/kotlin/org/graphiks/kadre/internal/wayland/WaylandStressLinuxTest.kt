@@ -2,10 +2,15 @@ package org.graphiks.kadre.internal.wayland
 
 import java.nio.file.Files
 import java.nio.file.Path
+import kotlin.test.AfterTest
+import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.setMain
 import org.graphiks.kadre.application.KadreApplication
 import org.graphiks.kadre.application.KadreApplicationFactory
 import org.graphiks.kadre.application.KadreScope
@@ -13,7 +18,7 @@ import org.graphiks.kadre.application.SessionOutcome
 import org.graphiks.kadre.contracts.driver.wayland.WaylandCompositorController
 import org.graphiks.kadre.diagnostics.KadreFailure
 import org.graphiks.kadre.diagnostics.KadreResult
-import org.graphiks.kadre.internal.runtime.desktop.DesktopStandaloneRequest
+import org.graphiks.kadre.internal.runtime.desktop.DesktopRunRequest
 import org.graphiks.kadre.policy.KadrePolicies
 import org.graphiks.kadre.surface.LogicalSize
 import org.graphiks.kadre.window.Window
@@ -33,6 +38,18 @@ import org.graphiks.kadre.window.WindowSpec
     org.graphiks.kadre.diagnostics.DelicateKadreApi::class,
 )
 class WaylandStressLinuxTest {
+
+    @BeforeTest
+    fun installProcessMainDispatcher() {
+        // The process controller owns its root scope on Dispatchers.Main.immediate; the
+        // standalone runs below stand it up on the Default pool like the production host.
+        Dispatchers.setMain(Dispatchers.Default)
+    }
+
+    @AfterTest
+    fun resetProcessMainDispatcher() {
+        Dispatchers.resetMain()
+    }
 
     private fun compositor(): WaylandCompositorController =
         WaylandCompositorController(socketName = "kadre-wayland-stress-o3").also { it.start() }
@@ -94,27 +111,30 @@ class WaylandStressLinuxTest {
             val before = openDescriptorCount()
             // 6 rafales × 8 fenêtres ouvertes puis fermées : la file du
             // driver encaisse les créations/destroys sans retarder le
-            // terminaison ni fuir
-            val request = DesktopStandaloneRequest(
+            // terminaison ni fuir. La fenêtre sentinelle reste ouverte sur
+            // TOUTES les rafales : la règle du dernier conteneur (fixe) ne
+            // complète la session qu'à sa fermeture, après la dernière rafale.
+            val request = DesktopRunRequest(
                 applicationFactory = KadreApplicationFactory {
                     KadreApplication {
+                        val sentinel = openWindow("churn-sentinel")
                         repeat(6) { burst ->
                             val windows = (0 until 8).map { openWindow("churn-$burst-$it") }
                             windows.forEach { window ->
                                 run { window.close(); awaitClosed(window) }
                             }
                         }
+                        sentinel.close()
+                        awaitClosed(sentinel)
                     }
                 },
-                stopWhenLastWindowClosed = false,
                 policy = KadrePolicies.Default,
             )
             val result = provider.run(request)
             val outcome = (result as? KadreResult.Success<SessionOutcome>)?.value
                 ?: error("churn session failed: $result")
             assertTrue(
-                outcome == SessionOutcome.Completed ||
-                    outcome == org.graphiks.kadre.application.SessionStopReason.HostDetached.let(SessionOutcome::Stopped),
+                outcome == SessionOutcome.Completed,
                 "unexpected session outcome: $outcome",
             )
             val after = openDescriptorCount()
@@ -160,11 +180,10 @@ class WaylandStressLinuxTest {
             val before = openDescriptorCount()
             val runner = Thread {
                 val result = provider.run(
-                    DesktopStandaloneRequest(
+                    DesktopRunRequest(
                         applicationFactory = KadreApplicationFactory {
                             KadreApplication { awaitCancellation() }
                         },
-                        stopWhenLastWindowClosed = true,
                         policy = KadrePolicies.Default,
                     ),
                 )
@@ -236,11 +255,10 @@ class WaylandStressLinuxTest {
         )
         val before = openDescriptorCount()
         val result = provider.run(
-            DesktopStandaloneRequest(
+            DesktopRunRequest(
                 applicationFactory = KadreApplicationFactory {
                     KadreApplication { awaitCancellation() }
                 },
-                stopWhenLastWindowClosed = true,
                 policy = KadrePolicies.Default,
             ),
         )
@@ -263,9 +281,8 @@ class WaylandStressLinuxTest {
             val cycles = 12
             repeat(cycles) {
                 val result = provider.run(
-                    DesktopStandaloneRequest(
+                    DesktopRunRequest(
                         applicationFactory = KadreApplicationFactory { KadreApplication { } },
-                        stopWhenLastWindowClosed = true,
                         policy = KadrePolicies.Default,
                     ),
                 )

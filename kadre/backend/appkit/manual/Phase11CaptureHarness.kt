@@ -6,16 +6,18 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeoutOrNull
 import org.graphiks.kadre.application.KadreApplication
+import org.graphiks.kadre.application.KadreRunOptions
 import org.graphiks.kadre.capture.CaptureFrame
 import org.graphiks.kadre.capture.CaptureRequest
 import org.graphiks.kadre.capture.CaptureSession
 import org.graphiks.kadre.capture.CaptureSources
 import org.graphiks.kadre.capture.CaptureTarget
 import org.graphiks.kadre.diagnostics.KadreResult
+import org.graphiks.kadre.diagnostics.getOrNull
 import org.graphiks.kadre.platform.desktop.DesktopBackend
-import org.graphiks.kadre.platform.desktop.DesktopHostOptions
 import org.graphiks.kadre.platform.desktop.runKadreApplication
 import org.graphiks.kadre.window.WindowRequestOutcome
 import org.graphiks.kadre.window.WindowSpec
@@ -35,6 +37,7 @@ import kotlin.time.Duration.Companion.seconds
  * source titles, and native handles are intentionally never persisted.
  */
 public fun main(args: Array<String>) {
+    installManualHarnessMainDispatcher()
     val options = Phase11CaptureHarnessOptions.parse(args)
     val recorder = Phase11CaptureHarnessRecorder(options.recordPath)
     val commands = Channel<String>(Channel.UNLIMITED)
@@ -45,11 +48,9 @@ public fun main(args: Array<String>) {
     }
 
     try {
-        val outcome = runKadreApplication(
-            options = DesktopHostOptions.Standalone(
-                backend = DesktopBackend.AppKit,
-                stopWhenLastWindowClosed = false,
-            ),
+        val outcome = runBlocking { runKadreApplication(
+            options = KadreRunOptions(),
+            backend = DesktopBackend.AppKit,
             application = KadreApplication {
                 val opened = when (val request = windows.requestWindow(WindowSpec(title = "Kadre Phase 11 capture"))) {
                     is KadreResult.Failure -> error("window request failed: ${request.reason}")
@@ -174,7 +175,7 @@ public fun main(args: Array<String>) {
                 window.close()
                 requestStop()
             },
-        )
+        ) }.getOrNull() ?: error("harness run failed")
         recorder.line("SESSION_OUTCOME\t$outcome")
     } finally {
         recorder.close()

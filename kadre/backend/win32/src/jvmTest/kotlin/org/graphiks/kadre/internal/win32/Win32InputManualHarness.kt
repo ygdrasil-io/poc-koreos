@@ -14,7 +14,7 @@ import org.graphiks.kadre.window.*
 internal object Win32InputManualHarness {
     @JvmStatic fun main(args: Array<String>) {
         println("Win32 input harness: Escape or the close button exits. Output contains the keys you enter.")
-        println(runKadreApplication(options = DesktopHostOptions.Standalone(backend = DesktopBackend.Win32),
+        println(runBlocking { runKadreApplication(options = KadreRunOptions(), backend = DesktopBackend.Win32,
             application = KadreApplication {
                 val request = (windows.requestWindow(WindowSpec(title = "Kadre input — Escape to close")) as KadreResult.Success).value
                 val window = (request.await() as WindowRequestOutcome.OpenedHere).window
@@ -33,6 +33,6 @@ internal object Win32InputManualHarness {
                 window.state.first { it.phase == WindowPhase.Closed }
                 events.cancelAndJoin()
                 closes.cancelAndJoin()
-            }))
+            }) }.getOrNull() ?: error("run failed"))
     }
 }

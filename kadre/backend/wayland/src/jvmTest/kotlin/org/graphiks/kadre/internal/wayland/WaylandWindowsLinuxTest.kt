@@ -1,18 +1,22 @@
 package org.graphiks.kadre.internal.wayland
 
+import kotlin.test.AfterTest
+import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.setMain
 import org.graphiks.kadre.application.KadreApplication
 import org.graphiks.kadre.application.KadreApplicationFactory
 import org.graphiks.kadre.application.KadreScope
 import org.graphiks.kadre.application.SessionOutcome
-import org.graphiks.kadre.application.SessionStopReason
 import org.graphiks.kadre.contracts.driver.wayland.WaylandCompositorController
 import org.graphiks.kadre.diagnostics.KadreResult
-import org.graphiks.kadre.internal.runtime.desktop.DesktopStandaloneRequest
+import org.graphiks.kadre.internal.runtime.desktop.DesktopRunRequest
 import org.graphiks.kadre.platform.desktop.DesktopNativeWindowHandle
 import org.graphiks.kadre.platform.desktop.withDesktopHandle
 import org.graphiks.kadre.policy.KadrePolicies
@@ -38,6 +42,18 @@ import org.graphiks.kadre.surface.LogicalSize
     org.graphiks.kadre.diagnostics.DelicateKadreApi::class,
 )
 class WaylandWindowsLinuxTest {
+
+    @BeforeTest
+    fun installProcessMainDispatcher() {
+        // The process controller owns its root scope on Dispatchers.Main.immediate; the
+        // standalone runs below stand it up on the Default pool like the production host.
+        Dispatchers.setMain(Dispatchers.Default)
+    }
+
+    @AfterTest
+    fun resetProcessMainDispatcher() {
+        Dispatchers.resetMain()
+    }
 
     private fun compositor(): WaylandCompositorController =
         WaylandCompositorController(socketName = "kadre-wayland-windows-o3").also { it.start() }
@@ -99,7 +115,7 @@ class WaylandWindowsLinuxTest {
     fun twoWindowsAreMappedAndIndependentWithDeterministicSuccession() {
         compositor().use { controller ->
             val provider = providerFor(controller)
-            val request = DesktopStandaloneRequest(
+            val request = DesktopRunRequest(
                 applicationFactory = KadreApplicationFactory {
                     KadreApplication {
                         val a = openWindow("p1-a", 96.0, 64.0)
@@ -119,16 +135,14 @@ class WaylandWindowsLinuxTest {
                         run { b.close().orThrow(); awaitClosed(b) }
                     }
                 },
-                stopWhenLastWindowClosed = true,
                 policy = KadrePolicies.Default,
             )
             val result = provider.run(request)
             val outcome = assertIs<KadreResult.Success<SessionOutcome>>(result).value
-            assertTrue(
-                outcome == SessionOutcome.Completed ||
-                    outcome == SessionOutcome.Stopped(SessionStopReason.HostDetached),
-                "unexpected session outcome: $outcome",
-            )
+            // SN-6/déterminisme : sans câblage driver du dernier conteneur, la règle
+            // fixe du contrôleur porte seule le motif terminal — fermeture de la
+            // dernière fenêtre ⇒ Completed, jamais l'interleaving pompe/terminate.
+            assertEquals(SessionOutcome.Completed, outcome)
         }
     }
 
@@ -136,7 +150,7 @@ class WaylandWindowsLinuxTest {
     fun initialPropertiesArePreservedOnANonImposingConfigure() {
         compositor().use { controller ->
             val provider = providerFor(controller)
-            val request = DesktopStandaloneRequest(
+            val request = DesktopRunRequest(
                 applicationFactory = KadreApplicationFactory {
                     KadreApplication {
                         // P-2/F1-4 : le configure non-imposé de Weston ne doit
@@ -150,7 +164,6 @@ class WaylandWindowsLinuxTest {
                         run { window.close().orThrow(); awaitClosed(window) }
                     }
                 },
-                stopWhenLastWindowClosed = true,
                 policy = KadrePolicies.Default,
             )
             assertIs<KadreResult.Success<SessionOutcome>>(provider.run(request))
@@ -161,7 +174,7 @@ class WaylandWindowsLinuxTest {
     fun secondCloseAfterTerminalCloseKeepsTheSessionHealthy() {
         compositor().use { controller ->
             val provider = providerFor(controller)
-            val request = DesktopStandaloneRequest(
+            val request = DesktopRunRequest(
                 applicationFactory = KadreApplicationFactory {
                     KadreApplication {
                         val window = openWindow("sn6", 64.0, 64.0)
@@ -173,7 +186,6 @@ class WaylandWindowsLinuxTest {
                         assertEquals(WindowPhase.Closed, window.state.value.phase)
                     }
                 },
-                stopWhenLastWindowClosed = true,
                 policy = KadrePolicies.Default,
             )
             assertIs<KadreResult.Success<SessionOutcome>>(provider.run(request))

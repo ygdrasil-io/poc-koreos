@@ -313,10 +313,7 @@ class AppKitWindowSessionIntegrationTest {
     }
 
     @Test
-    fun embeddedDriversSharingOneBrokerKeepPeersStimuliAndTeardownSessionLocal() = runBlocking {
-        val broker = AppKitProcessBroker()
-        val firstRegistration = assertNotNull(broker.createEmbeddedHost(::PassiveLifecycleTarget))
-        val secondRegistration = assertNotNull(broker.createEmbeddedHost(::PassiveLifecycleTarget))
+    fun driversKeepPeersStimuliAndTeardownSessionLocal() = runBlocking {
         val firstPort = DeterministicAppKitNativeWindowPort("first-session")
         val secondPort = DeterministicAppKitNativeWindowPort("second-session")
         val first = AppKitWindowRuntimeDriverFactory { firstPort }.create(KadrePolicies.Default.resources)
@@ -346,15 +343,12 @@ class AppKitWindowSessionIntegrationTest {
             assertEquals(emptyList(), secondPort.closedWindowTitles)
 
             first.close()
-            firstRegistration.close()
 
             assertEquals(1, second.manager.state.value.windows.size)
             assertEquals(emptyList(), secondPort.closedWindowTitles)
         } finally {
             first.close()
-            firstRegistration.close()
             second.close()
-            secondRegistration.close()
         }
     }
 

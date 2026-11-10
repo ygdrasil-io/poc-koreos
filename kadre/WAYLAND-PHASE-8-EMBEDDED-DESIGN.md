@@ -1,5 +1,7 @@
 # Wayland — Phase 8 : embedded et lifecycle du host
 
+> Périmé — supprimé par ownership-first (2026-11)
+
 Design de la phase 8 (roadmap §Phase 8). Prérequis : phases 2 et 4
 stabilisées (#460/#475).
 

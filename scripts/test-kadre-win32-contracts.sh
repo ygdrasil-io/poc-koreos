@@ -76,17 +76,13 @@ rm -rf "$EVIDENCE_DIRECTORY"
 cd "$REPO_ROOT"
 
 # Bureau interactif requis : un runner sans bureau = échec de gate, pas un skip.
-# :kadre:win32ConsumerRun publie l'umbrella (cible Android incluse) : il exige
-# ANDROID_HOME — fourni sur les runners CI, absent des machines sans SDK Android
-# (hors scope local : la gate complète est une preuve CI).
-# La preuve consumer EXÉCUTÉE reste locale pour cette tranche : la résolution
-# transitive des modules frères à travers le repo contractuel est le résidu
-# wayland-D4 (foundation/runtime introuvables malgré leurs publishes) — elle
-# est livrée avec le consumer integration:awt, qui la porte naturellement.
+# ownership-first : la preuve consumer EXÉCUTÉE portée par integration:awt est
+# supprimée DÉFINITIVEMENT avec le monde embedded (spec §5.8) — elle ne revient
+# pas avec les plans 2–4 ; le point d'entrée win32 exécutable restant est
+# Win32DiscoveryMain (task win32ConsumerRun du build consumers/kotlin).
 run_phase tests "$TEST_TIMEOUT_SECONDS" \
     "$GRADLEW" \
     :kadre:backend:win32:win32ContractTests \
-    :kadre:integration:awt:jvmTest \
     --refresh-dependencies \
     --rerun-tasks \
     --no-daemon \

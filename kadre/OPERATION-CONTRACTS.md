@@ -42,9 +42,9 @@ Pour les opérations officielles, `InvalidRequest.field` est toujours non null e
 
 | Opération | Fields admis exactement |
 |---|---|
-| attach Android/UIKit/Web/Desktop | `"parentScope"`, `"surfaceView"`, `"view"`, `"window"`, `"element"`, `"options"` |
+| boot `runKadreApplication` (umbrella et overloads desktop) | `"options"`, `"firstWindow"` |
 | `HostSurface.apply` | `"cursor"`, `"pointerCapture"`, `"hitTesting"`, `"inputDefaultBehavior"` |
-| `WindowManager.requestWindow` et validation de `WebWindowProvider` | `"title"`, `"contentSize"`, `"minimumSize"`, `"maximumSize"`, `"sizeConstraints"`, `"fullscreen"`, `"icon"`, `"element"`, `"element.ownerDocument"`, `"parentScope"` |
+| `WindowManager.requestWindow` | `"title"`, `"contentSize"`, `"minimumSize"`, `"maximumSize"`, `"sizeConstraints"`, `"fullscreen"`, `"icon"` ; validation du `WebWindowProvider` (plan web, hors build) : `"element"`, `"element.ownerDocument"` — l’ancien champ `"parentScope"` n’est plus produisible dans le monde ownership |
 | `Window.apply` | `"title"`, `"outerPosition"`, `"contentSize"`, `"minimumSize"`, `"maximumSize"`, `"sizeConstraints"`, `"resizable"`, `"fullscreen"`, `"decorations"`, `"systemButtons"`, `"level"`, `"transparency"`, `"blurBehind"`, `"icon"`, `"contentProtection"` |
 | `Window.requestAttention` | `"attention"` |
 | `Window.respondToCloseRequest` | `"requestId"` |
@@ -57,27 +57,28 @@ Pour les opérations officielles, `InvalidRequest.field` est toujours non null e
 | `DroppedItem.collectBytes` | `"maxBytes"` |
 | `CaptureManager.open` | `"request.target"`, `"request.preferredSize"`, `"request.preferredFormats"`, `"request.region"`, `"request.cursorMode"`, `"request.minimumFrameInterval"` |
 
-Les autres opérations officielles n’admettent pas `InvalidRequest`. Une révision attendue incorrecte utilise `StaleRevision`, une contrainte valide mais non supportée utilise `Unsupported` ou l’outcome documenté, et un payload valide hors budget utilise `ResourceLimitExceeded`. Un `KadreHost` tiers peut ajouter un field ASCII stable à son attach uniquement s’il le documente dans son propre contrat ; lui seul peut employer `field = null` lorsque l’entrée fautive ne peut pas être attribuée plus précisément.
+Les autres opérations officielles n’admettent pas `InvalidRequest`. Une révision attendue incorrecte utilise `StaleRevision`, une contrainte valide mais non supportée utilise `Unsupported` ou l’outcome documenté, et un payload valide hors budget utilise `ResourceLimitExceeded`. Les fields du boot sont fermés : un backend découvert ne peut pas ajouter le sien, et `field = null` n’est admis pour aucune opération officielle.
 
 ### 1.2 Registre de `PermissionDenied`
 
 Une opération fonctionnelle admet `PermissionDenied` uniquement dans ces couples : `SurfaceInput.requestRawInput → RawInput`, et les opérations de capture `refreshSources/open/collectFrames → CaptureScreen|CaptureWindow`. `requestPermission` retourne un refus utilisateur comme state `Denied`, jamais comme failure. `DisplayManager.requestAccess` suit de même `DisplayInventory.PermissionDenied`. `PermissionDenied(InputMonitoring)` peut apparaître dans `DeviceInventory.Unavailable` ou `RawInputState.Suspended`, pas comme failure directe d’une autre opération. Aucun backend ne réutilise arbitrairement une permission existante pour encoder un refus sans rapport.
 
-## 2. Attachement et session
+## 2. Entrée ownership et session
 
 | Opération | Succès / résultat | Failures directes admises | Cancellation et autorité |
 |---|---|---|---|
-| `KadreHost.attach` et overloads de plateforme | `Success(KadreSession)` en `Starting` | `Unsupported(HostAttach)`, `Invalid(field d’attachement)`, `Busy(Host)`, `Closed(Host)`, `ParentScopeCancelled`, `UnsupportedPolicy(component)`, `Temporary`, `Platform` | non suspendue ; aucune session en cas d’échec. Après admission, la session et son `state` font autorité. `Default` exclut `UnsupportedPolicy`, mais pas un backend explicitement demandé et absent. |
+| `runKadreApplication` (umbrella et overloads desktop) | `Success(SessionOutcome)` terminal de l’unique session du process | `Unsupported(HostAttach)` (aucun backend disponible), `Invalid("options")` (backend/OS incompatibles), `Busy(Host)` (une session vit déjà dans le process), `UnsupportedPolicy(component)`, `Temporary`, `Platform` (platform du backend : `discovery-exception`, `availability-exception`, `duplicate-provider`, `run-exception`, et `runtime-session-components`/`create-failed` à l’admission) | `suspend` par forme commune ; l’implémentation JVM bloque le thread appelant le temps de la session. Un échec avant session retourne `Failure` sans exception fonctionnelle ; après admission, l’outcome de la session fait autorité et une interruption/cancellation y est traduite en arrêt, pas en faux succès. Les erreurs de programmation de l’invocation restent `IllegalArgumentException` ou `IllegalStateException`. |
 | `KadreScope.requestStop` | `Unit` | aucune | non bloquante ; propose `ApplicationRequested`, première proposition terminale gagnante. |
-| `KadreSession.requestStop` / `close` | `Unit` | aucune | non bloquante ; propose `HostRequested`, première proposition terminale gagnante. |
+| `KadreSession.requestStop` / `close` | `Unit` | aucune | non bloquante ; propose `SystemTermination` — le handle parle pour le propriétaire du process — première proposition terminale gagnante. |
 | `KadreSession.awaitTermination` | `SessionOutcome` | aucune failure directe | annuler le waiter ne stoppe pas la session ; `state.value` fait autorité. Depuis un enfant de la session : `IllegalStateException`. |
-| `runKadreApplication` | `SessionOutcome` si une session a été créée | avant création : `KadreException` portant `Unsupported(HostAttach)`, `Invalid("options")`, `Busy(Host)`, `UnsupportedPolicy(component)`, `Temporary` ou `Platform` | bloquante desktop ; une interruption/cancellation après création est traduite en arrêt de session, pas en faux succès. Les erreurs de programmation de l’invocation restent `IllegalArgumentException` ou `IllegalStateException`. |
 
-Les callbacks `KadreApplicationFactory.create` et `KadreApplication.run` ne retournent pas de résultat fonctionnel. Toute exception non-cancellation observée avant `Terminated` devient la failure primaire `ApplicationFailure`; une `CancellationException` suit le motif d’arrêt déjà admis. La lambda `WindowManager.requestWindow(configure)` s’exécute avant toute admission : son exception est propagée telle quelle et aucune requête n’est créée.
+Le boot est linéaire : exactement une session par process, par construction (`RuntimeProcessController` admet un boot à la fois ; un boot pendant qu’une session vit échoue `Busy(Host)` et laisse la session vivante intacte). La règle du dernier conteneur est fixe : la fermeture du dernier conteneur OS possédé par la session (dernière fenêtre desktop) termine `SessionOutcome.Completed` ; la terminaison système du process (boucle OS arrêtée, handle de session fermé) termine `Stopped(SystemTermination)` ; la machinerie de la plateforme qui casse termine `Failed(PlatformFailure)`.
 
-Les fields d’attach suivent le registre de section 1.1. `runKadreApplication` lève `KadreException` uniquement lorsque l’attach standalone échoue avant de produire une session ; il ne fabrique jamais un `SessionOutcome` pour ce cas.
+Les callbacks `KadreApplicationFactory.create` et `KadreApplication.run` ne retournent pas de résultat fonctionnel. Toute exception non-cancellation observée avant `Terminated` devient la failure primaire `ApplicationFailure`; une `CancellationException` suit le motif d’arrêt déjà admis (`ApplicationCancelled` si l’application s’annule elle-même, `SystemTermination` si la scope possédée par le boot meurt autour d’elle). La lambda `WindowManager.requestWindow(configure)` s’exécute avant toute admission : son exception est propagée telle quelle et aucune requête n’est créée.
 
-`SessionOutcome.Failed` admet exactement `ApplicationFailure`, `ShutdownTimedOut`, `ResourceLimitExceeded`, `SourceOverflow` et `PlatformFailure`. `UnsupportedPolicy` et `ParentScopeCancelled` sont synchrones à `attach` et ne peuvent pas appartenir à une session qui n’a pas été créée. Une failure fonctionnelle isolée de fenêtre, périphérique ou capture ne devient pas un outcome de session sauf `FailSession`, teardown fatal ou exception applicative non gérée.
+Les fields du boot suivent le registre de section 1.1. `runKadreApplication` retourne `KadreResult.Failure` portant la failure exacte lorsque le boot échoue avant de produire une session ; il ne fabrique jamais un `SessionOutcome` pour ce cas et ne lève aucune `KadreException` fonctionnelle.
+
+`SessionOutcome.Failed` admet exactement `ApplicationFailure`, `ShutdownTimedOut`, `ResourceLimitExceeded`, `SourceOverflow` et `PlatformFailure`. `UnsupportedPolicy` est synchrone au boot et ne peut pas appartenir à une session qui n’a pas été créée. Une failure fonctionnelle isolée de fenêtre, périphérique ou capture ne devient pas un outcome de session sauf `FailSession`, teardown fatal ou exception applicative non gérée.
 
 ## 3. Surface et display
 
@@ -258,7 +259,7 @@ Les méthodes `Virtual*Controller`, `VirtualKadreClock.advanceBy` et constructeu
 - `KadreResult.isSuccess`, `isFailure`, `getOrNull`, `failureOrNull`, `map`, `flatMap` et `fold` sont purs ; une exception des lambdas `transform`/`fold` est propagée telle quelle, sans conversion. `getOrThrow` retourne la value ou lève `KadreException` avec la failure inchangée ;
 - `InteractionHandler.onInteraction` suit la ligne callback de la section 9 et ne peut jamais laisser une exception traverser la frontière native ;
 - `KadreApplicationFactory.asHostRef()` est pur, sans état global et ne peut échouer ;
-- les overloads `attachKadre`/`attachKadreDesktop` délèguent exactement à la ligne `KadreHost.attach` ;
+- les overloads `runKadreApplication` (application directe, sélection de backend, entrée umbrella `DesktopBackend.Auto`) délèguent tous exactement à la même façade desktop et partagent la ligne de la section 2 ;
 - les observers Java/Swift/JS de la façade host suivent les règles de callback de `INTEROP-EXPORTS.md` et ne possèdent jamais la session.
 
 ## 10. Enum `KadreOperation` fermé

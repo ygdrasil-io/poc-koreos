@@ -3,12 +3,15 @@ package org.graphiks.kadre.internal.wayland
 import java.util.ServiceLoader
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
+import kotlin.test.AfterTest
+import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Job
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.setMain
 import org.graphiks.kadre.application.KadreApplication
 import org.graphiks.kadre.application.KadreApplicationFactory
 import org.graphiks.kadre.application.SessionOutcome
@@ -20,36 +23,27 @@ import org.graphiks.kadre.diagnostics.KadreResourceKind
 import org.graphiks.kadre.diagnostics.KadreResult
 import org.graphiks.kadre.internal.runtime.desktop.DesktopBackendKind
 import org.graphiks.kadre.internal.runtime.desktop.DesktopBackendProvider
-import org.graphiks.kadre.internal.runtime.desktop.DesktopEmbeddedRequest
-import org.graphiks.kadre.internal.runtime.desktop.DesktopIntegrationKind
-import org.graphiks.kadre.internal.runtime.desktop.DesktopStandaloneRequest
+import org.graphiks.kadre.internal.runtime.desktop.DesktopRunRequest
 import org.graphiks.kadre.policy.KadrePolicies
 
 class WaylandBackendProviderTest {
+    @BeforeTest
+    fun installProcessMainDispatcher() {
+        // The process controller owns its root scope on Dispatchers.Main.immediate; the
+        // standalone runs below stand it up on the Default pool like the production host.
+        Dispatchers.setMain(Dispatchers.Default)
+    }
+
+    @AfterTest
+    fun resetProcessMainDispatcher() {
+        Dispatchers.resetMain()
+    }
 
     @Test
     fun discoveryFindsExactlyOneWaylandProvider() {
         val providers = ServiceLoader.load(DesktopBackendProvider::class.java).toList()
         val provider = providers.single { it.backend == DesktopBackendKind.Wayland }
-        assertEquals(emptySet(), provider.supportedIntegrations)
         assertEquals(isLinux(), provider.isAvailable())
-    }
-
-    @Test
-    fun embeddedAttachOutsideTheEdtIsRejectedBeforeConnecting() {
-        // phase 8 : l'attach EDT est conçu ; ce test (thread de test ≠ EDT)
-        // épingle le refus normatif hors EDT, sans connexion ouverte
-        val provider = WaylandBackendProvider.forTesting { true }
-        val request = DesktopEmbeddedRequest(
-            parentScope = CoroutineScope(Job()),
-            applicationFactory = KadreApplicationFactory { KadreApplication { } },
-            integration = DesktopIntegrationKind.AwtEventDispatchThread,
-            policy = KadrePolicies.Default,
-        )
-        assertEquals(
-            KadreResult.Failure(KadreFailure.InvalidRequest("options")),
-            provider.attach(request),
-        )
     }
 
     private fun environment(waylandSocket: String? = null): WaylandProbeEnvironment =
@@ -61,13 +55,12 @@ class WaylandBackendProviderTest {
             socketExists = { true },
         )
 
-    private fun standaloneRequest(factoryInvoked: (Boolean) -> Unit): DesktopStandaloneRequest =
-        DesktopStandaloneRequest(
+    private fun standaloneRequest(factoryInvoked: (Boolean) -> Unit): DesktopRunRequest =
+        DesktopRunRequest(
             applicationFactory = KadreApplicationFactory {
                 factoryInvoked(true)
                 KadreApplication { }
             },
-            stopWhenLastWindowClosed = true,
             policy = KadrePolicies.Default,
         )
 
@@ -174,9 +167,8 @@ class WaylandBackendProviderTest {
             wakeFactory = { SessionFakeWakeup() },
         )
         val outcome = provider.run(
-            DesktopStandaloneRequest(
+            DesktopRunRequest(
                 applicationFactory = KadreApplicationFactory { KadreApplication { } },
-                stopWhenLastWindowClosed = true,
                 policy = KadrePolicies.Default,
             ),
         )
@@ -195,9 +187,8 @@ class WaylandBackendProviderTest {
             wakeFactory = { SessionFakeWakeup() },
         )
         val outcome = provider.run(
-            DesktopStandaloneRequest(
+            DesktopRunRequest(
                 applicationFactory = KadreApplicationFactory { KadreApplication { requestStop() } },
-                stopWhenLastWindowClosed = true,
                 policy = KadrePolicies.Default,
             ),
         )
@@ -232,9 +223,8 @@ class WaylandBackendProviderTest {
             wakeFactory = { SessionFakeWakeup() },
         )
         val outcome = failingProvider.run(
-            DesktopStandaloneRequest(
+            DesktopRunRequest(
                 applicationFactory = KadreApplicationFactory { KadreApplication { } },
-                stopWhenLastWindowClosed = true,
                 policy = KadrePolicies.Default,
             ),
         )

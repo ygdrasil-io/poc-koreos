@@ -1,7 +1,12 @@
 package org.graphiks.kadre.internal.runtime
 
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.test.setMain
 import org.graphiks.kadre.application.KadreApplication
 import org.graphiks.kadre.application.KadreApplicationFactory
 import org.graphiks.kadre.application.KadreScope
@@ -24,12 +29,16 @@ import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertNull
 
+/**
+ * The unsupported managers of a booted session, driven through [RuntimeProcessController.boot]
+ * since the embedded host controller died with the attach world: the managers must exist
+ * before the application runs and reject unsupported operations honestly.
+ */
 class UnsupportedManagersTest {
     @Test
-    fun managersExistBeforeApplicationAndRejectUnsupportedOperationsHonestly() = runTest {
-        val host = RuntimeHostController(KadrePlatform.Fake)
+    fun managersExistBeforeApplicationAndRejectUnsupportedOperationsHonestly() = runProcessTest {
         lateinit var scope: KadreScope
-        val session = attach(host) {
+        val session = boot {
             scope = this
             awaitCancellation()
         }
@@ -81,32 +90,57 @@ class UnsupportedManagersTest {
     }
 
     @Test
-    fun rejectedWindowRequestsReceiveProcessUniqueIds() = runTest {
-        val firstHost = RuntimeHostController(KadrePlatform.Fake)
-        val secondHost = RuntimeHostController(KadrePlatform.Fake)
+    fun rejectedWindowRequestsReceiveProcessUniqueIds() = runProcessTest {
+        val controller = controller()
         lateinit var firstScope: KadreScope
         lateinit var secondScope: KadreScope
-        val firstSession = attach(firstHost) { firstScope = this; awaitCancellation() }
-        val secondSession = attach(secondHost) { secondScope = this; awaitCancellation() }
+        val first = boot(controller) { firstScope = this; awaitCancellation() }
+        testScheduler.runCurrent()
+        first.close()
+        testScheduler.advanceUntilIdle()
+        val second = boot(controller) { secondScope = this; awaitCancellation() }
         testScheduler.runCurrent()
 
-        val first = assertIs<KadreResult.Success<org.graphiks.kadre.window.WindowRequest>>(
+        val firstRequest = assertIs<KadreResult.Success<org.graphiks.kadre.window.WindowRequest>>(
             firstScope.windows.requestWindow(),
         ).value
-        val second = assertIs<KadreResult.Success<org.graphiks.kadre.window.WindowRequest>>(
+        val secondRequest = assertIs<KadreResult.Success<org.graphiks.kadre.window.WindowRequest>>(
             secondScope.windows.requestWindow(),
         ).value
-        assertEquals(false, first.id == second.id)
+        assertEquals(false, firstRequest.id == secondRequest.id)
 
-        firstSession.close()
-        secondSession.close()
+        second.close()
         testScheduler.runCurrent()
     }
 
-    private fun kotlinx.coroutines.test.TestScope.attach(
-        host: RuntimeHostController,
+    private fun controller(): RuntimeProcessController = RuntimeProcessController.withComponents(
+        platform = KadrePlatform.Fake,
+        componentsFactory = UnsupportedRuntimeSessionComponentsFactory,
+    )
+
+    private suspend fun TestScope.boot(
+        controller: RuntimeProcessController = controller(),
         application: suspend KadreScope.() -> Unit,
     ): KadreSession = assertIs<KadreResult.Success<KadreSession>>(
-        host.attach(this, KadreApplicationFactory { KadreApplication(application) }),
+        controller.boot(
+            RuntimeBootRequest(
+                platform = KadrePlatform.Fake,
+                applicationFactory = KadreApplicationFactory { KadreApplication(application) },
+            ),
+        ),
     ).value
+
+    /**
+     * The controller's owned root scope lives on `Dispatchers.Main.immediate`; a process test
+     * installs the test scheduler as Main so every owned coroutine is driven by virtual time.
+     */
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+    private fun runProcessTest(body: suspend TestScope.() -> Unit): Unit = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        try {
+            body()
+        } finally {
+            Dispatchers.resetMain()
+        }
+    }
 }
