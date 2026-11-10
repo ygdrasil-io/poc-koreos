@@ -13,6 +13,7 @@ import org.graphiks.kadre.application.KadreLaunchReason
 import org.graphiks.kadre.application.KadreSession
 import org.graphiks.kadre.application.LifecycleCapabilities
 import org.graphiks.kadre.application.LifecycleState
+import org.graphiks.kadre.application.SessionId
 import org.graphiks.kadre.application.SessionOutcome
 import org.graphiks.kadre.application.SessionStopReason
 import org.graphiks.kadre.application.VisibilityState
@@ -85,7 +86,7 @@ public class RuntimeProcessController private constructor(
     private val sessionComponentsFactory: RuntimeSessionComponentsFactory =
         RuntimeSessionComponentsFactory { sessionId, sessionScope ->
             val components = componentsFactory.create(sessionId, sessionScope)
-            installLastContainerRule(components.windows, sessionScope)
+            installLastContainerRule(sessionId, components.windows, sessionScope)
             components
         }
 
@@ -110,6 +111,8 @@ public class RuntimeProcessController private constructor(
             return KadreResult.Failure(KadreFailure.InvalidRequest("firstWindow"))
         }
         lock.withLock {
+            // No `Process` kind exists in the closed KadreResourceKind set; `Host` is the
+            // nearest kind (the process lease) and is renamed with the old world in Task 7.
             if (liveSession != null) return KadreResult.Failure(KadreFailure.AlreadyInUse(KadreResourceKind.Host))
         }
 
@@ -141,6 +144,8 @@ public class RuntimeProcessController private constructor(
 
         val installFailure = lock.withLock {
             if (liveSession != null) {
+                // Same resource kind as the fast check: no `Process` kind exists in the closed
+                // KadreResourceKind set; `Host` is the nearest kind (renamed with Task 7).
                 KadreFailure.AlreadyInUse(KadreResourceKind.Host)
             } else {
                 liveSession = session
@@ -172,7 +177,11 @@ public class RuntimeProcessController private constructor(
         session.systemTerminating()
     }
 
-    private fun installLastContainerRule(windows: WindowManager, sessionScope: CoroutineScope) {
+    private fun installLastContainerRule(
+        sessionId: SessionId,
+        windows: WindowManager,
+        sessionScope: CoroutineScope,
+    ) {
         // The watcher lives on the session's own scope, so it dies with the session and never
         // outlives the boot. StateFlow replays the current value at subscription: a session that
         // never had a window is never terminated by this rule. The rule fires exactly once —
@@ -184,7 +193,12 @@ public class RuntimeProcessController private constructor(
                     seenWindow = true
                     true
                 } else if (seenWindow) {
-                    lock.withLock { liveSession }?.lastContainerClosed()
+                    // A dying watcher must only ever terminate its own session: the fire path
+                    // never suspends, so its resumption can run after this session terminated
+                    // (cancelled job notwithstanding), when a later boot is already live.
+                    lock.withLock { liveSession }
+                        ?.takeIf { it.id == sessionId }
+                        ?.lastContainerClosed()
                     false
                 } else {
                     true

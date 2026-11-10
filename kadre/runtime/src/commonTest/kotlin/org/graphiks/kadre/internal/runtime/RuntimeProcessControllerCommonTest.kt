@@ -6,6 +6,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.FlowCollector
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -77,6 +78,7 @@ import org.graphiks.kadre.window.WindowState
 import org.graphiks.kadre.window.WindowSystemButtons
 import org.graphiks.kadre.window.WindowUpdate
 import org.graphiks.kadre.window.WindowUpdateOutcome
+import kotlin.coroutines.resume
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -221,6 +223,78 @@ class RuntimeProcessControllerCommonTest {
         assertEquals(SessionState.Terminated(SessionOutcome.Completed), session.state.value)
     }
 
+    /**
+     * The last-container rule must never terminate a session other than the watcher's own.
+     *
+     * The scripted manager is the deterministic clock for the production race: a watcher
+     * resumption dispatched while its session was alive can run its fire path after that
+     * session terminated (the fire path never suspends, so cancelling the watcher's job cannot
+     * stop it — the uncontended fast path), at a moment when a later boot is already live. Here
+     * [ScriptedLastContainerWindows.deliver] dispatches that resumption on the test's clock:
+     * session A's dying watcher runs with session B live, and only B's own state may end B.
+     */
+    @Test
+    fun lastContainerRuleNeverTerminatesALaterSession() = runProcessTest {
+        val aWindows = ScriptedLastContainerWindows()
+        val bWindows = LastContainerRuleWindows()
+        var servedFirstSession = false
+        val controller = RuntimeProcessController.withComponents(
+            platform = KadrePlatform.Web,
+            componentsFactory = { _, _ ->
+                if (!servedFirstSession) {
+                    servedFirstSession = true
+                    RuntimeSessionComponents(windows = aWindows)
+                } else {
+                    RuntimeSessionComponents(windows = bWindows)
+                }
+            },
+        )
+        val sessionA = assertIs<KadreResult.Success<KadreSession>>(
+            controller.boot(
+                RuntimeBootRequest(
+                    platform = KadrePlatform.Web,
+                    applicationFactory = KadreApplicationFactory { KadreApplication { awaitCancellation() } },
+                ),
+            ),
+        ).value
+        testScheduler.advanceUntilIdle()
+        assertEquals(SessionState.Running, sessionA.state.value)
+
+        aWindows.presentOneWindow()
+        aWindows.deliver()
+        testScheduler.runCurrent()
+        assertEquals(SessionState.Running, sessionA.state.value)
+
+        // A's dying publication is recorded but not yet dispatched to the watcher.
+        aWindows.presentNoWindows()
+        controller.terminate(SessionStopReason.SystemTermination)
+        testScheduler.advanceUntilIdle()
+        assertEquals(
+            SessionState.Terminated(SessionOutcome.Stopped(SessionStopReason.SystemTermination)),
+            sessionA.state.value,
+        )
+
+        val sessionB = assertIs<KadreResult.Success<KadreSession>>(
+            controller.boot(
+                RuntimeBootRequest(
+                    platform = KadrePlatform.Web,
+                    applicationFactory = KadreApplicationFactory { KadreApplication { awaitCancellation() } },
+                ),
+            ),
+        ).value
+        testScheduler.advanceUntilIdle()
+        assertEquals(SessionState.Running, sessionB.state.value)
+
+        // A's watcher runs its fire path now, with B live: it must not terminate B.
+        aWindows.deliver()
+        testScheduler.advanceUntilIdle()
+
+        assertEquals(SessionState.Running, sessionB.state.value)
+
+        sessionB.requestStop()
+        testScheduler.advanceUntilIdle()
+    }
+
     @Test
     fun systemTerminationProducesStoppedSystemTermination() = runProcessTest {
         val controller = RuntimeProcessController.withPrimarySurface(KadrePlatform.Web) { id ->
@@ -263,6 +337,78 @@ class RuntimeProcessControllerCommonTest {
             Dispatchers.resetMain()
         }
     }
+}
+
+/**
+ * A scripted [WindowManager] `state` for the cross-session interleaving: subscriptions park
+ * non-cancellably (`suspendCoroutine`, not tied to the watcher's job), a publication is only
+ * recorded, and [deliver] dispatches it to the parked watcher on the test's clock. This is the
+ * deterministic stand-in for the production race — a resumption dispatched while the session
+ * was alive whose fire path runs after that session terminated and a later boot is live: the
+ * fire path never suspends, so cancelling the watcher's job cannot stop it.
+ */
+private class ScriptedLastContainerWindows :
+    WindowManager by UnsupportedWindowManager(RuntimeProcessIds::nextWindowRequestId),
+    RuntimeSessionWindowManager,
+    StateFlow<WindowManagerState> {
+    private val window = OneSessionWindow()
+    private var current: WindowManagerState = noWindows()
+    private var parked: kotlin.coroutines.Continuation<WindowManagerState>? = null
+
+    override val state: StateFlow<WindowManagerState> get() = this
+    override val value: WindowManagerState get() = current
+    override val replayCache: List<WindowManagerState> get() = listOf(current)
+
+    fun presentOneWindow() {
+        current = oneWindow(current.revision.value + 1L)
+    }
+
+    fun presentNoWindows() {
+        current = noWindows(current.revision.value + 1L)
+    }
+
+    /** Dispatches the recorded publication to the parked watcher — the in-flight resumption. */
+    fun deliver() {
+        val continuation = parked ?: return
+        parked = null
+        continuation.resume(current)
+    }
+
+    override suspend fun collect(collector: FlowCollector<WindowManagerState>): Nothing {
+        collector.emit(current)
+        while (true) {
+            val next = kotlin.coroutines.suspendCoroutine { continuation -> parked = continuation }
+            collector.emit(next)
+        }
+    }
+
+    override fun installSessionConfiguration(
+        deliveryPolicy: WindowDeliveryPolicy,
+        inputDeliveryPolicy: InputDeliveryPolicy,
+        source: () -> EventStamp,
+        sessionFailureHandler: (KadreFailure) -> Unit,
+        collectorAllocator: Any,
+        maxCollectorsPerFlow: Int,
+        dropTransferScope: CoroutineScope?,
+        diagnostics: (KadreDiagnostic) -> Unit,
+        rawInputPort: RawInputPort?,
+    ) {
+        // The rule under test observes `state` only; the configuration seam is not exercised.
+    }
+
+    private fun oneWindow(revision: Long): WindowManagerState = WindowManagerState(
+        primary = window,
+        windows = listOf(window),
+        capabilities = unsupportedWindowManagerCapabilities(),
+        revision = WindowManagerRevision(revision),
+    )
+
+    private fun noWindows(revision: Long = 0L): WindowManagerState = WindowManagerState(
+        primary = null,
+        windows = emptyList(),
+        capabilities = unsupportedWindowManagerCapabilities(),
+        revision = WindowManagerRevision(revision),
+    )
 }
 
 /** The window-manager seam the last-container rule is tested through (ledger ruling 2). */
