@@ -6,6 +6,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.filterIsInstance
 import kotlinx.coroutines.flow.first
@@ -2767,6 +2768,7 @@ class AppKitBackendProviderTest {
                 KadreApplicationFactory {
                     KadreApplication {
                         var openedWindow: Window? = null
+                        var sentinelWindow: Window? = null
                         try {
                         // Cross the native boundary before requesting stop so this test cannot
                         // accidentally exercise only the pre-run pending-stop handoff.
@@ -3050,6 +3052,21 @@ class AppKitBackendProviderTest {
                             },
                         )
                         nativeSurfaceRedrawObserved.set(true)
+
+                        // Sentinel: the close stages below close the proof's working window
+                        // and keep observing the two-phase close and the post-close surface
+                        // teardown from inside the app coroutine; under the fixed
+                        // last-container rule a second window stays open so the session
+                        // survives the close-then-observe sequence. The sentinel is closed
+                        // at the end of the proof, before the explicit stop — the session's
+                        // component close must never revoke a still-open window on an
+                        // AppKit run loop that is already stopping.
+                        val sentinel = assertIs<WindowRequestOutcome.OpenedHere>(
+                            windows.requestWindow(WindowSpec(title = "Kadre O3 close sentinel"))
+                                .appKitSuccessValue()
+                                .await(),
+                        ).window
+                        sentinelWindow = sentinel
                         proofStage.set("native-close-reject")
                         val performNativeUserClose: suspend () -> Unit = {
                             assertEquals(
@@ -3130,15 +3147,37 @@ class AppKitBackendProviderTest {
                             KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.Surface)),
                             window.surface.requestRedraw(),
                         )
-                        withTimeout(5.seconds) { windows.state.first { it.windows.isEmpty() } }
+                        withTimeout(5.seconds) {
+                            windows.state.first { manager -> manager.windows.none { it === window } }
+                        }
                         terminalCloseObserved.set(true)
                         nativeSurfaceTerminalObserved.set(true)
                         collector.cancel()
                         inputCollector.cancel()
+
+                        // The sentinel outlived the terminal record; close it now, before
+                        // the explicit stop (see the comment at its opening). Closing the
+                        // last container may let the watcher complete the session first;
+                        // the catch below treats that cancellation as the expected exit.
+                        assertIs<WindowCloseOutcome.Accepted>(
+                            sentinel.close().appKitSuccessValue(),
+                        )
+                        withTimeout(5.seconds) {
+                            sentinel.state.first { it.phase == WindowPhase.Closed }
+                        }
                         proofStage.set("session-stop")
                         stopRequestedOffMainThread.set(!native.isMainThread())
                         requestStop()
                         } catch (failure: Throwable) {
+                            if (
+                                failure is kotlin.coroutines.cancellation.CancellationException &&
+                                terminalCloseObserved.get() &&
+                                !kotlinx.coroutines.currentCoroutineContext().isActive
+                            ) {
+                                // The last-container rule completed the session while the
+                                // sentinel was closing: the expected exit, not a proof failure.
+                                throw failure
+                            }
                             proofFailure.set(failure)
                             displaySnapshotFailure.get()?.let(failure::addSuppressed)
                             openedWindow?.let { window ->
@@ -3147,6 +3186,18 @@ class AppKitBackendProviderTest {
                                         window.close()
                                         withTimeout(5.seconds) {
                                             window.state.first { it.phase == WindowPhase.Closed }
+                                        }
+                                    } catch (cleanupFailure: Throwable) {
+                                        failure.addSuppressed(cleanupFailure)
+                                    }
+                                }
+                            }
+                            sentinelWindow?.let { sentinel ->
+                                if (sentinel.state.value.phase != WindowPhase.Closed) {
+                                    try {
+                                        sentinel.close()
+                                        withTimeout(5.seconds) {
+                                            sentinel.state.first { it.phase == WindowPhase.Closed }
                                         }
                                     } catch (cleanupFailure: Throwable) {
                                         failure.addSuppressed(cleanupFailure)
@@ -3164,14 +3215,19 @@ class AppKitBackendProviderTest {
         proofFailure.get()?.let { failure ->
             throw AssertionError("O3 proof stage: ${proofStage.get()}", failure)
         }
-        // Same honest race as runPublicAppKitGeometrySession: the proof closes its
-        // windows then requests stop, so either terminal outcome is legitimate.
+        // The sentinel close and the explicit requestStop race the watcher's last-container
+        // completion: the proof may stop the session itself, or the sentinel's close may
+        // complete it first. Either terminal outcome is the honest exit.
         assertTrue(
             result == KadreResult.Success(SessionOutcome.Completed) ||
                 result == KadreResult.Success(SessionOutcome.Stopped(SessionStopReason.ApplicationRequested)),
             "unexpected O3 proof exit: $result",
         )
-        assertTrue(stopRequestedOffMainThread.get())
+        assertTrue(
+            stopRequestedOffMainThread.get() ||
+                result == KadreResult.Success(SessionOutcome.Completed),
+            "the loop must stop by an explicit off-main-thread request or by the last-container rule",
+        )
         assertTrue(publicHandleObserved.get())
         assertTrue(nativeRejectObserved.get())
         assertTrue(terminalCloseObserved.get())
