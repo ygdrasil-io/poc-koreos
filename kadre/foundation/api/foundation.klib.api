@@ -29,21 +29,7 @@ final enum class org.graphiks.kadre.application/ActivationState : kotlin/Enum<or
     final fun values(): kotlin/Array<org.graphiks.kadre.application/ActivationState> // org.graphiks.kadre.application/ActivationState.values|values#static(){}[0]
 }
 
-final enum class org.graphiks.kadre.application/AttachmentState : kotlin/Enum<org.graphiks.kadre.application/AttachmentState> { // org.graphiks.kadre.application/AttachmentState|null[0]
-    enum entry Attached // org.graphiks.kadre.application/AttachmentState.Attached|null[0]
-    enum entry Detached // org.graphiks.kadre.application/AttachmentState.Detached|null[0]
-
-    final val entries // org.graphiks.kadre.application/AttachmentState.entries|#static{}entries[0]
-        final fun <get-entries>(): kotlin.enums/EnumEntries<org.graphiks.kadre.application/AttachmentState> // org.graphiks.kadre.application/AttachmentState.entries.<get-entries>|<get-entries>#static(){}[0]
-
-    final fun valueOf(kotlin/String): org.graphiks.kadre.application/AttachmentState // org.graphiks.kadre.application/AttachmentState.valueOf|valueOf#static(kotlin.String){}[0]
-    final fun values(): kotlin/Array<org.graphiks.kadre.application/AttachmentState> // org.graphiks.kadre.application/AttachmentState.values|values#static(){}[0]
-}
-
 final enum class org.graphiks.kadre.application/KadreLaunchReason : kotlin/Enum<org.graphiks.kadre.application/KadreLaunchReason> { // org.graphiks.kadre.application/KadreLaunchReason|null[0]
-    enum entry AdditionalHostRequested // org.graphiks.kadre.application/KadreLaunchReason.AdditionalHostRequested|null[0]
-    enum entry HostRestoration // org.graphiks.kadre.application/KadreLaunchReason.HostRestoration|null[0]
-    enum entry InitialHostAttachment // org.graphiks.kadre.application/KadreLaunchReason.InitialHostAttachment|null[0]
     enum entry ProcessLaunch // org.graphiks.kadre.application/KadreLaunchReason.ProcessLaunch|null[0]
     enum entry ProcessRestoration // org.graphiks.kadre.application/KadreLaunchReason.ProcessRestoration|null[0]
     enum entry WindowRequested // org.graphiks.kadre.application/KadreLaunchReason.WindowRequested|null[0]
@@ -82,9 +68,6 @@ final enum class org.graphiks.kadre.application/SessionPhase : kotlin/Enum<org.g
 final enum class org.graphiks.kadre.application/SessionStopReason : kotlin/Enum<org.graphiks.kadre.application/SessionStopReason> { // org.graphiks.kadre.application/SessionStopReason|null[0]
     enum entry ApplicationCancelled // org.graphiks.kadre.application/SessionStopReason.ApplicationCancelled|null[0]
     enum entry ApplicationRequested // org.graphiks.kadre.application/SessionStopReason.ApplicationRequested|null[0]
-    enum entry HostDetached // org.graphiks.kadre.application/SessionStopReason.HostDetached|null[0]
-    enum entry HostRequested // org.graphiks.kadre.application/SessionStopReason.HostRequested|null[0]
-    enum entry ParentCancelled // org.graphiks.kadre.application/SessionStopReason.ParentCancelled|null[0]
     enum entry SystemTermination // org.graphiks.kadre.application/SessionStopReason.SystemTermination|null[0]
 
     final val entries // org.graphiks.kadre.application/SessionStopReason.entries|#static{}entries[0]
@@ -1246,20 +1229,13 @@ abstract fun interface org.graphiks.kadre.interaction/InteractionHandler { // or
     abstract fun onInteraction(org.graphiks.kadre.interaction/InteractionContext, org.graphiks.kadre.interaction/InteractionEvent) // org.graphiks.kadre.interaction/InteractionHandler.onInteraction|onInteraction(org.graphiks.kadre.interaction.InteractionContext;org.graphiks.kadre.interaction.InteractionEvent){}[0]
 }
 
-abstract interface org.graphiks.kadre.application/KadreHost { // org.graphiks.kadre.application/KadreHost|null[0]
-    abstract val platform // org.graphiks.kadre.application/KadreHost.platform|{}platform[0]
-        abstract fun <get-platform>(): org.graphiks.kadre.diagnostics/KadrePlatform // org.graphiks.kadre.application/KadreHost.platform.<get-platform>|<get-platform>(){}[0]
-
-    abstract fun attach(kotlinx.coroutines/CoroutineScope, org.graphiks.kadre.application/KadreApplicationFactory, org.graphiks.kadre.policy/KadrePolicy = ...): org.graphiks.kadre.diagnostics/KadreResult<org.graphiks.kadre.application/KadreSession> // org.graphiks.kadre.application/KadreHost.attach|attach(kotlinx.coroutines.CoroutineScope;org.graphiks.kadre.application.KadreApplicationFactory;org.graphiks.kadre.policy.KadrePolicy){}[0]
-}
-
 abstract interface org.graphiks.kadre.application/KadreLifecycle { // org.graphiks.kadre.application/KadreLifecycle|null[0]
     abstract val capabilities // org.graphiks.kadre.application/KadreLifecycle.capabilities|{}capabilities[0]
         abstract fun <get-capabilities>(): kotlinx.coroutines.flow/StateFlow<org.graphiks.kadre.application/LifecycleCapabilities> // org.graphiks.kadre.application/KadreLifecycle.capabilities.<get-capabilities>|<get-capabilities>(){}[0]
     abstract val events // org.graphiks.kadre.application/KadreLifecycle.events|{}events[0]
         abstract fun <get-events>(): kotlinx.coroutines.flow/Flow<org.graphiks.kadre.application/LifecycleEvent> // org.graphiks.kadre.application/KadreLifecycle.events.<get-events>|<get-events>(){}[0]
     abstract val signals // org.graphiks.kadre.application/KadreLifecycle.signals|{}signals[0]
-        abstract fun <get-signals>(): kotlinx.coroutines.flow/Flow<org.graphiks.kadre.application/HostSignal> // org.graphiks.kadre.application/KadreLifecycle.signals.<get-signals>|<get-signals>(){}[0]
+        abstract fun <get-signals>(): kotlinx.coroutines.flow/Flow<org.graphiks.kadre.application/SystemSignal> // org.graphiks.kadre.application/KadreLifecycle.signals.<get-signals>|<get-signals>(){}[0]
     abstract val state // org.graphiks.kadre.application/KadreLifecycle.state|{}state[0]
         abstract fun <get-state>(): kotlinx.coroutines.flow/StateFlow<org.graphiks.kadre.application/LifecycleState> // org.graphiks.kadre.application/KadreLifecycle.state.<get-state>|<get-state>(){}[0]
 }
@@ -1630,27 +1606,6 @@ sealed interface <#A: out kotlin/Any?> org.graphiks.kadre.surface/PropertyChange
         final fun equals(kotlin/Any?): kotlin/Boolean // org.graphiks.kadre.surface/PropertyChange.Unchanged.equals|equals(kotlin.Any?){}[0]
         final fun hashCode(): kotlin/Int // org.graphiks.kadre.surface/PropertyChange.Unchanged.hashCode|hashCode(){}[0]
         final fun toString(): kotlin/String // org.graphiks.kadre.surface/PropertyChange.Unchanged.toString|toString(){}[0]
-    }
-}
-
-sealed interface org.graphiks.kadre.application/HostSignal { // org.graphiks.kadre.application/HostSignal|null[0]
-    abstract val stamp // org.graphiks.kadre.application/HostSignal.stamp|{}stamp[0]
-        abstract fun <get-stamp>(): org.graphiks.kadre.application/EventStamp // org.graphiks.kadre.application/HostSignal.stamp.<get-stamp>|<get-stamp>(){}[0]
-
-    final class MemoryPressure : org.graphiks.kadre.application/HostSignal { // org.graphiks.kadre.application/HostSignal.MemoryPressure|null[0]
-        constructor <init>(org.graphiks.kadre.application/MemoryPressureLevel, org.graphiks.kadre.application/EventStamp) // org.graphiks.kadre.application/HostSignal.MemoryPressure.<init>|<init>(org.graphiks.kadre.application.MemoryPressureLevel;org.graphiks.kadre.application.EventStamp){}[0]
-
-        final val level // org.graphiks.kadre.application/HostSignal.MemoryPressure.level|{}level[0]
-            final fun <get-level>(): org.graphiks.kadre.application/MemoryPressureLevel // org.graphiks.kadre.application/HostSignal.MemoryPressure.level.<get-level>|<get-level>(){}[0]
-        final val stamp // org.graphiks.kadre.application/HostSignal.MemoryPressure.stamp|{}stamp[0]
-            final fun <get-stamp>(): org.graphiks.kadre.application/EventStamp // org.graphiks.kadre.application/HostSignal.MemoryPressure.stamp.<get-stamp>|<get-stamp>(){}[0]
-
-        final fun component1(): org.graphiks.kadre.application/MemoryPressureLevel // org.graphiks.kadre.application/HostSignal.MemoryPressure.component1|component1(){}[0]
-        final fun component2(): org.graphiks.kadre.application/EventStamp // org.graphiks.kadre.application/HostSignal.MemoryPressure.component2|component2(){}[0]
-        final fun copy(org.graphiks.kadre.application/MemoryPressureLevel = ..., org.graphiks.kadre.application/EventStamp = ...): org.graphiks.kadre.application/HostSignal.MemoryPressure // org.graphiks.kadre.application/HostSignal.MemoryPressure.copy|copy(org.graphiks.kadre.application.MemoryPressureLevel;org.graphiks.kadre.application.EventStamp){}[0]
-        final fun equals(kotlin/Any?): kotlin/Boolean // org.graphiks.kadre.application/HostSignal.MemoryPressure.equals|equals(kotlin.Any?){}[0]
-        final fun hashCode(): kotlin/Int // org.graphiks.kadre.application/HostSignal.MemoryPressure.hashCode|hashCode(){}[0]
-        final fun toString(): kotlin/String // org.graphiks.kadre.application/HostSignal.MemoryPressure.toString|toString(){}[0]
     }
 }
 
@@ -5105,19 +5060,19 @@ final class org.graphiks.kadre.application/LifecycleEvent { // org.graphiks.kadr
 }
 
 final class org.graphiks.kadre.application/LifecycleState { // org.graphiks.kadre.application/LifecycleState|null[0]
-    constructor <init>(org.graphiks.kadre.application/AttachmentState, org.graphiks.kadre.application/VisibilityState, org.graphiks.kadre.application/ActivationState) // org.graphiks.kadre.application/LifecycleState.<init>|<init>(org.graphiks.kadre.application.AttachmentState;org.graphiks.kadre.application.VisibilityState;org.graphiks.kadre.application.ActivationState){}[0]
+    constructor <init>(org.graphiks.kadre.application/SessionPhase, org.graphiks.kadre.application/VisibilityState, org.graphiks.kadre.application/ActivationState) // org.graphiks.kadre.application/LifecycleState.<init>|<init>(org.graphiks.kadre.application.SessionPhase;org.graphiks.kadre.application.VisibilityState;org.graphiks.kadre.application.ActivationState){}[0]
 
     final val activation // org.graphiks.kadre.application/LifecycleState.activation|{}activation[0]
         final fun <get-activation>(): org.graphiks.kadre.application/ActivationState // org.graphiks.kadre.application/LifecycleState.activation.<get-activation>|<get-activation>(){}[0]
-    final val attachment // org.graphiks.kadre.application/LifecycleState.attachment|{}attachment[0]
-        final fun <get-attachment>(): org.graphiks.kadre.application/AttachmentState // org.graphiks.kadre.application/LifecycleState.attachment.<get-attachment>|<get-attachment>(){}[0]
+    final val phase // org.graphiks.kadre.application/LifecycleState.phase|{}phase[0]
+        final fun <get-phase>(): org.graphiks.kadre.application/SessionPhase // org.graphiks.kadre.application/LifecycleState.phase.<get-phase>|<get-phase>(){}[0]
     final val visibility // org.graphiks.kadre.application/LifecycleState.visibility|{}visibility[0]
         final fun <get-visibility>(): org.graphiks.kadre.application/VisibilityState // org.graphiks.kadre.application/LifecycleState.visibility.<get-visibility>|<get-visibility>(){}[0]
 
-    final fun component1(): org.graphiks.kadre.application/AttachmentState // org.graphiks.kadre.application/LifecycleState.component1|component1(){}[0]
+    final fun component1(): org.graphiks.kadre.application/SessionPhase // org.graphiks.kadre.application/LifecycleState.component1|component1(){}[0]
     final fun component2(): org.graphiks.kadre.application/VisibilityState // org.graphiks.kadre.application/LifecycleState.component2|component2(){}[0]
     final fun component3(): org.graphiks.kadre.application/ActivationState // org.graphiks.kadre.application/LifecycleState.component3|component3(){}[0]
-    final fun copy(org.graphiks.kadre.application/AttachmentState = ..., org.graphiks.kadre.application/VisibilityState = ..., org.graphiks.kadre.application/ActivationState = ...): org.graphiks.kadre.application/LifecycleState // org.graphiks.kadre.application/LifecycleState.copy|copy(org.graphiks.kadre.application.AttachmentState;org.graphiks.kadre.application.VisibilityState;org.graphiks.kadre.application.ActivationState){}[0]
+    final fun copy(org.graphiks.kadre.application/SessionPhase = ..., org.graphiks.kadre.application/VisibilityState = ..., org.graphiks.kadre.application/ActivationState = ...): org.graphiks.kadre.application/LifecycleState // org.graphiks.kadre.application/LifecycleState.copy|copy(org.graphiks.kadre.application.SessionPhase;org.graphiks.kadre.application.VisibilityState;org.graphiks.kadre.application.ActivationState){}[0]
     final fun equals(kotlin/Any?): kotlin/Boolean // org.graphiks.kadre.application/LifecycleState.equals|equals(kotlin.Any?){}[0]
     final fun hashCode(): kotlin/Int // org.graphiks.kadre.application/LifecycleState.hashCode|hashCode(){}[0]
     final fun toString(): kotlin/String // org.graphiks.kadre.application/LifecycleState.toString|toString(){}[0]

@@ -4,11 +4,11 @@ import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.runBlocking
 import org.graphiks.kadre.application.ActivationState
-import org.graphiks.kadre.application.AttachmentState
 import org.graphiks.kadre.application.KadreApplication
 import org.graphiks.kadre.application.KadreApplicationFactory
 import org.graphiks.kadre.application.KadreSession
 import org.graphiks.kadre.application.LifecycleState
+import org.graphiks.kadre.application.SessionPhase
 import org.graphiks.kadre.application.SessionOutcome
 import org.graphiks.kadre.application.SessionStopReason
 import org.graphiks.kadre.application.VisibilityState
@@ -118,7 +118,7 @@ public class WaylandBackendProvider private constructor(
                 RuntimeSessionComponents(windows = driver.manager)
             },
             initialLifecycleState = LifecycleState(
-                AttachmentState.Attached,
+                SessionPhase.Running,
                 VisibilityState.Background,
                 ActivationState.Inactive,
             ),
@@ -225,7 +225,7 @@ public class WaylandBackendProvider private constructor(
                 )
             },
             initialLifecycleState = LifecycleState(
-                AttachmentState.Attached,
+                SessionPhase.Running,
                 VisibilityState.Background,
                 ActivationState.Inactive,
             ),

@@ -60,7 +60,7 @@ import org.graphiks.kadre.application.KadreApplicationFactory
 import org.graphiks.kadre.application.KadreLifecycle
 import org.graphiks.kadre.application.KadreScope
 import org.graphiks.kadre.application.KadreSession
-import org.graphiks.kadre.application.HostSignal
+import org.graphiks.kadre.application.SystemSignal
 import org.graphiks.kadre.application.MemoryPressureLevel
 import org.graphiks.kadre.application.SessionOutcome
 import org.graphiks.kadre.application.SessionStopReason
@@ -422,7 +422,7 @@ class AppKitBackendProviderTest {
 
             assertEquals(FeatureAvailability.Available, lifecycle.capabilities.value.memoryPressure)
             val signal = async(start = CoroutineStart.UNDISPATCHED) {
-                lifecycle.signals.filterIsInstance<HostSignal.MemoryPressure>().first()
+                lifecycle.signals.filterIsInstance<SystemSignal.MemoryPressure>().first()
             }
             memoryPressureNative.emit(MemoryPressureLevel.Critical)
             assertEquals(MemoryPressureLevel.Critical, withTimeout(2.seconds) { signal.await() }.level)
@@ -453,10 +453,10 @@ class AppKitBackendProviderTest {
             val first = firstLifecycle.await()
             val second = secondLifecycle.await()
             val firstCritical = async(start = CoroutineStart.UNDISPATCHED) {
-                first.signals.filterIsInstance<HostSignal.MemoryPressure>().first()
+                first.signals.filterIsInstance<SystemSignal.MemoryPressure>().first()
             }
             val secondCritical = async(start = CoroutineStart.UNDISPATCHED) {
-                second.signals.filterIsInstance<HostSignal.MemoryPressure>().first()
+                second.signals.filterIsInstance<SystemSignal.MemoryPressure>().first()
             }
 
             memoryPressureNative.emit(MemoryPressureLevel.Critical)
@@ -465,13 +465,13 @@ class AppKitBackendProviderTest {
 
             val closedSessionLateSignal = async(start = CoroutineStart.UNDISPATCHED) {
                 withTimeoutOrNull(200.milliseconds) {
-                    first.signals.filterIsInstance<HostSignal.MemoryPressure>().first { signal ->
+                    first.signals.filterIsInstance<SystemSignal.MemoryPressure>().first { signal ->
                         signal.level == MemoryPressureLevel.Moderate
                     }
                 }
             }
             val liveSessionModerate = async(start = CoroutineStart.UNDISPATCHED) {
-                second.signals.filterIsInstance<HostSignal.MemoryPressure>().first { signal ->
+                second.signals.filterIsInstance<SystemSignal.MemoryPressure>().first { signal ->
                     signal.level == MemoryPressureLevel.Moderate
                 }
             }
@@ -1127,7 +1127,7 @@ class AppKitBackendProviderTest {
 
             first.close()
             assertEquals(
-                SessionOutcome.Stopped(SessionStopReason.HostRequested),
+                SessionOutcome.Stopped(SessionStopReason.SystemTermination),
                 first.awaitTermination(),
             )
             native.awaitObserverCount(1)
@@ -1137,7 +1137,7 @@ class AppKitBackendProviderTest {
 
             native.emit(AppKitLifecycleSignal.HostTerminated)
             assertEquals(
-                SessionOutcome.Stopped(SessionStopReason.HostDetached),
+                SessionOutcome.Stopped(SessionStopReason.SystemTermination),
                 second.awaitTermination(),
             )
             native.awaitObserverCount(0)
@@ -1994,7 +1994,7 @@ class AppKitBackendProviderTest {
         )
 
         // The fixed last-container rule ends the session as Completed when its only
-        // window closes (the old world mapped this to a HostRequested stop).
+        // window closes (the old world mapped this to a host-requested stop).
         assertEquals(
             KadreResult.Success(SessionOutcome.Completed),
             result,
@@ -4209,7 +4209,7 @@ class AppKitBackendProviderTest {
 
             session.close()
             assertEquals(
-                SessionOutcome.Stopped(SessionStopReason.HostRequested),
+                SessionOutcome.Stopped(SessionStopReason.SystemTermination),
                 session.awaitTermination(),
             )
         } finally {

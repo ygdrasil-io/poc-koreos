@@ -5,9 +5,9 @@ import java.util.concurrent.atomic.AtomicReference
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.runBlocking
 import org.graphiks.kadre.application.ActivationState
-import org.graphiks.kadre.application.AttachmentState
 import org.graphiks.kadre.application.KadreSession
 import org.graphiks.kadre.application.LifecycleState
+import org.graphiks.kadre.application.SessionPhase
 import org.graphiks.kadre.application.SessionOutcome
 import org.graphiks.kadre.application.SessionStopReason
 import org.graphiks.kadre.application.VisibilityState
@@ -153,7 +153,7 @@ public class Win32BackendProvider private constructor(
                     )
                 },
                 initialLifecycleState = LifecycleState(
-                    AttachmentState.Attached,
+                    SessionPhase.Running,
                     VisibilityState.Background,
                     ActivationState.Inactive,
                 ),
@@ -250,7 +250,7 @@ public class Win32BackendProvider private constructor(
                     )
                 },
                 initialLifecycleState = LifecycleState(
-                    AttachmentState.Attached,
+                    SessionPhase.Running,
                     VisibilityState.Background,
                     ActivationState.Inactive,
                 ),

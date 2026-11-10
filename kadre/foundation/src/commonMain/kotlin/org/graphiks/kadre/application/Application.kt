@@ -3,14 +3,10 @@ package org.graphiks.kadre.application
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.StateFlow
 import org.graphiks.kadre.capture.CaptureManager
-import org.graphiks.kadre.diagnostics.ExperimentalKadreApi
 import org.graphiks.kadre.diagnostics.KadreDiagnostics
 import org.graphiks.kadre.diagnostics.KadreFailure
-import org.graphiks.kadre.diagnostics.KadrePlatform
-import org.graphiks.kadre.diagnostics.KadreResult
 import org.graphiks.kadre.display.DisplayManager
 import org.graphiks.kadre.input.DeviceManager
-import org.graphiks.kadre.policy.KadrePolicies
 import org.graphiks.kadre.policy.KadrePolicy
 import org.graphiks.kadre.surface.HostSurface
 import org.graphiks.kadre.window.WindowManager
@@ -32,9 +28,6 @@ public data class KadreLaunchContext(
 )
 
 public enum class KadreLaunchReason {
-    InitialHostAttachment,
-    AdditionalHostRequested,
-    HostRestoration,
     ProcessLaunch,
     WindowRequested,
     ProcessRestoration,
@@ -77,11 +70,8 @@ public sealed interface SessionOutcome {
 }
 
 public enum class SessionStopReason {
-    HostRequested,
     ApplicationRequested,
     ApplicationCancelled,
-    ParentCancelled,
-    HostDetached,
     SystemTermination,
 }
 
@@ -90,15 +80,4 @@ public class RestorationToken internal constructor(private val encoded: String) 
     override fun equals(other: Any?): Boolean = other is RestorationToken && encoded == other.encoded
     override fun hashCode(): Int = encoded.hashCode()
     override fun toString(): String = "RestorationToken(<redacted>)"
-}
-
-@ExperimentalKadreApi
-public interface KadreHost {
-    public val platform: KadrePlatform
-
-    public fun attach(
-        parentScope: CoroutineScope,
-        applicationFactory: KadreApplicationFactory,
-        policy: KadrePolicy = KadrePolicies.Default,
-    ): KadreResult<KadreSession>
 }

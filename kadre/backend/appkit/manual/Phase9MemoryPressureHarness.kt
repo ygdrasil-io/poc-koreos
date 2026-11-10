@@ -17,7 +17,7 @@ import org.graphiks.kadre.application.KadreApplication
 import org.graphiks.kadre.application.KadreApplicationFactory
 import org.graphiks.kadre.application.KadreLifecycle
 import org.graphiks.kadre.application.KadreSession
-import org.graphiks.kadre.application.HostSignal
+import org.graphiks.kadre.application.SystemSignal
 import org.graphiks.kadre.application.LifecycleCapabilities
 import org.graphiks.kadre.application.MemoryPressureLevel
 import org.graphiks.kadre.diagnostics.FeatureAvailability
@@ -88,8 +88,8 @@ public fun main(args: Array<String>): Unit = runBlocking {
         recorder.line("CAPABILITY\t$label\t${broker.memoryPressureAvailability()}")
         sessions.forEach { (index, entry) ->
             recorder.line(
-                "SESSION\tindex=$index\tclosed=${entry.closed}\tattachment=" +
-                    entry.lifecycle.state.value.attachment +
+                "SESSION\tindex=$index\tclosed=${entry.closed}\tphase=" +
+                    entry.lifecycle.state.value.phase +
                     "\tmemoryEvents=${entry.memoryEventCount.get()}",
             )
         }
@@ -244,7 +244,7 @@ private suspend fun createPhase9MemoryPressureSession(
     val memoryEventCount = AtomicInteger()
     val observedLevels = ConcurrentHashMap.newKeySet<MemoryPressureLevel>()
     val collector = parentScope.launch(start = CoroutineStart.UNDISPATCHED) {
-        observedLifecycle.signals.filterIsInstance<HostSignal.MemoryPressure>().collect { signal ->
+        observedLifecycle.signals.filterIsInstance<SystemSignal.MemoryPressure>().collect { signal ->
             memoryEventCount.incrementAndGet()
             observedLevels += signal.level
             recorder.line("MEMORY_PRESSURE\tindex=$index\tlevel=${signal.level}\tstamp=${signal.stamp}")

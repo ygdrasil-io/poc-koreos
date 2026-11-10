@@ -9,7 +9,7 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import org.graphiks.kadre.application.ActivationState
-import org.graphiks.kadre.application.AttachmentState
+import org.graphiks.kadre.application.SessionPhase
 import org.graphiks.kadre.application.KadreApplication
 import org.graphiks.kadre.application.KadreApplicationFactory
 import org.graphiks.kadre.application.KadreLifecycle
@@ -227,7 +227,7 @@ class AppKitProcessBrokerTest {
             broker.accept(AppKitLifecycleSignal.DidHide)
 
             val hidden = LifecycleState(
-                AttachmentState.Attached,
+                SessionPhase.Running,
                 VisibilityState.Background,
                 ActivationState.Inactive,
             )
@@ -236,7 +236,7 @@ class AppKitProcessBrokerTest {
 
             firstSession.close()
             assertEquals(
-                SessionOutcome.Stopped(SessionStopReason.HostRequested),
+                SessionOutcome.Stopped(SessionStopReason.SystemTermination),
                 firstSession.awaitTermination(),
             )
             firstRegistration.close()
@@ -245,12 +245,12 @@ class AppKitProcessBrokerTest {
             broker.accept(AppKitLifecycleSignal.HostTerminated)
 
             assertEquals(
-                SessionOutcome.Stopped(SessionStopReason.HostDetached),
+                SessionOutcome.Stopped(SessionStopReason.SystemTermination),
                 secondSession.awaitTermination(),
             )
             assertEquals(
                 LifecycleState(
-                    AttachmentState.Detached,
+                    SessionPhase.Terminated,
                     VisibilityState.Background,
                     ActivationState.Inactive,
                 ),
@@ -277,7 +277,7 @@ class AppKitProcessBrokerTest {
             broker.accept(AppKitLifecycleSignal.BecameInactive)
             assertEquals(
                 LifecycleState(
-                    AttachmentState.Attached,
+                    SessionPhase.Running,
                     VisibilityState.Foreground,
                     ActivationState.Inactive,
                 ),
@@ -288,7 +288,7 @@ class AppKitProcessBrokerTest {
             broker.accept(AppKitLifecycleSignal.DidUnhide)
             assertEquals(
                 LifecycleState(
-                    AttachmentState.Attached,
+                    SessionPhase.Running,
                     VisibilityState.Foreground,
                     ActivationState.Inactive,
                 ),
@@ -298,7 +298,7 @@ class AppKitProcessBrokerTest {
             broker.accept(AppKitLifecycleSignal.BecameActive)
             assertEquals(
                 LifecycleState(
-                    AttachmentState.Attached,
+                    SessionPhase.Running,
                     VisibilityState.Foreground,
                     ActivationState.Active,
                 ),
@@ -371,7 +371,7 @@ class AppKitProcessBrokerTest {
 
             assertEquals(
                 LifecycleState(
-                    AttachmentState.Attached,
+                    SessionPhase.Running,
                     VisibilityState.Background,
                     ActivationState.Inactive,
                 ),

@@ -2,12 +2,12 @@ package org.graphiks.kadre.internal.appkit
 
 import kotlinx.coroutines.runBlocking
 import org.graphiks.kadre.application.ActivationState
-import org.graphiks.kadre.application.AttachmentState
 import org.graphiks.kadre.application.KadreSession
 import org.graphiks.kadre.application.LifecycleCapabilities
 import org.graphiks.kadre.application.LifecycleState
 import org.graphiks.kadre.application.MemoryPressureLevel
 import org.graphiks.kadre.application.SessionOutcome
+import org.graphiks.kadre.application.SessionPhase
 import org.graphiks.kadre.application.SessionStopReason
 import org.graphiks.kadre.application.VisibilityState
 import org.graphiks.kadre.diagnostics.KadreFailure
@@ -167,7 +167,7 @@ public class AppKitBackendProvider private constructor(
                     activateProcessOnFirstPresentation = true,
                 ),
                 initialLifecycleState = LifecycleState(
-                    AttachmentState.Attached,
+                    SessionPhase.Running,
                     VisibilityState.Background,
                     ActivationState.Inactive,
                 ),

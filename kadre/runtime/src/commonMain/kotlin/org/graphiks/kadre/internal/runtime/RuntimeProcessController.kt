@@ -8,7 +8,6 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.takeWhile
 import kotlinx.coroutines.launch
 import org.graphiks.kadre.application.ActivationState
-import org.graphiks.kadre.application.AttachmentState
 import org.graphiks.kadre.application.KadreApplicationFactory
 import org.graphiks.kadre.application.KadreLaunchReason
 import org.graphiks.kadre.application.KadreSession
@@ -17,6 +16,7 @@ import org.graphiks.kadre.application.LifecycleState
 import org.graphiks.kadre.application.MemoryPressureLevel
 import org.graphiks.kadre.application.SessionId
 import org.graphiks.kadre.application.SessionOutcome
+import org.graphiks.kadre.application.SessionPhase
 import org.graphiks.kadre.application.SessionStopReason
 import org.graphiks.kadre.application.VisibilityState
 import org.graphiks.kadre.diagnostics.FeatureAvailability
@@ -30,6 +30,18 @@ import org.graphiks.kadre.surface.HostSurface
 import org.graphiks.kadre.surface.SurfaceId
 import org.graphiks.kadre.window.WindowManager
 import org.graphiks.kadre.window.WindowSpec
+
+public fun interface RuntimeFailureReporter {
+    public fun report(cause: Throwable)
+}
+
+public fun interface RuntimeSessionObserver {
+    public fun terminated(sessionId: SessionId, outcome: SessionOutcome)
+}
+
+public fun interface RuntimeSessionStopHandler {
+    public fun stop(sessionId: SessionId): KadreFailure.PlatformFailure?
+}
 
 /**
  * The boot request of the ownership-first runtime: everything a platform boot hands the
@@ -285,7 +297,7 @@ public class RuntimeProcessController private constructor(
 
     public companion object {
         private val DEFAULT_LIFECYCLE_STATE: LifecycleState = LifecycleState(
-            AttachmentState.Attached,
+            SessionPhase.Running,
             VisibilityState.Foreground,
             ActivationState.Active,
         )

@@ -535,7 +535,7 @@ class RuntimeSessionComponentsTest {
         testScheduler.runCurrent()
 
         assertIs<SessionState.Terminated>(session.state.value)
-        assertEquals(SessionOutcome.Stopped(org.graphiks.kadre.application.SessionStopReason.HostRequested), waiter.await())
+        assertEquals(SessionOutcome.Stopped(org.graphiks.kadre.application.SessionStopReason.SystemTermination), waiter.await())
         assertEquals(listOf("components-closed", "await-returned"), events)
     }
 

@@ -142,7 +142,7 @@ class WaylandWindowsLinuxTest {
             val outcome = assertIs<KadreResult.Success<SessionOutcome>>(result).value
             assertTrue(
                 outcome == SessionOutcome.Completed ||
-                    outcome == SessionOutcome.Stopped(SessionStopReason.HostDetached),
+                    outcome == SessionOutcome.Stopped(SessionStopReason.SystemTermination),
                 "unexpected session outcome: $outcome",
             )
         }

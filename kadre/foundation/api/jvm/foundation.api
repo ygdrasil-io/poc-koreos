@@ -6,14 +6,6 @@ public final class org/graphiks/kadre/application/ActivationState : java/lang/En
 	public static fun values ()[Lorg/graphiks/kadre/application/ActivationState;
 }
 
-public final class org/graphiks/kadre/application/AttachmentState : java/lang/Enum {
-	public static final field Attached Lorg/graphiks/kadre/application/AttachmentState;
-	public static final field Detached Lorg/graphiks/kadre/application/AttachmentState;
-	public static fun getEntries ()Lkotlin/enums/EnumEntries;
-	public static fun valueOf (Ljava/lang/String;)Lorg/graphiks/kadre/application/AttachmentState;
-	public static fun values ()[Lorg/graphiks/kadre/application/AttachmentState;
-}
-
 public final class org/graphiks/kadre/application/EventDeliverySpan {
 	public synthetic fun <init> (JJJLkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public final fun component1-Nb0FqTY ()J
@@ -44,39 +36,12 @@ public final class org/graphiks/kadre/application/EventStamp {
 	public fun toString ()Ljava/lang/String;
 }
 
-public abstract interface class org/graphiks/kadre/application/HostSignal {
-	public abstract fun getStamp ()Lorg/graphiks/kadre/application/EventStamp;
-}
-
-public final class org/graphiks/kadre/application/HostSignal$MemoryPressure : org/graphiks/kadre/application/HostSignal {
-	public fun <init> (Lorg/graphiks/kadre/application/MemoryPressureLevel;Lorg/graphiks/kadre/application/EventStamp;)V
-	public final fun component1 ()Lorg/graphiks/kadre/application/MemoryPressureLevel;
-	public final fun component2 ()Lorg/graphiks/kadre/application/EventStamp;
-	public final fun copy (Lorg/graphiks/kadre/application/MemoryPressureLevel;Lorg/graphiks/kadre/application/EventStamp;)Lorg/graphiks/kadre/application/HostSignal$MemoryPressure;
-	public static synthetic fun copy$default (Lorg/graphiks/kadre/application/HostSignal$MemoryPressure;Lorg/graphiks/kadre/application/MemoryPressureLevel;Lorg/graphiks/kadre/application/EventStamp;ILjava/lang/Object;)Lorg/graphiks/kadre/application/HostSignal$MemoryPressure;
-	public fun equals (Ljava/lang/Object;)Z
-	public final fun getLevel ()Lorg/graphiks/kadre/application/MemoryPressureLevel;
-	public fun getStamp ()Lorg/graphiks/kadre/application/EventStamp;
-	public fun hashCode ()I
-	public fun toString ()Ljava/lang/String;
-}
-
 public abstract interface class org/graphiks/kadre/application/KadreApplication {
 	public abstract fun run (Lorg/graphiks/kadre/application/KadreScope;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 }
 
 public abstract interface class org/graphiks/kadre/application/KadreApplicationFactory {
 	public abstract fun create (Lorg/graphiks/kadre/application/KadreLaunchContext;)Lorg/graphiks/kadre/application/KadreApplication;
-}
-
-public abstract interface class org/graphiks/kadre/application/KadreHost {
-	public abstract fun attach (Lkotlinx/coroutines/CoroutineScope;Lorg/graphiks/kadre/application/KadreApplicationFactory;Lorg/graphiks/kadre/policy/KadrePolicy;)Lorg/graphiks/kadre/diagnostics/KadreResult;
-	public static synthetic fun attach$default (Lorg/graphiks/kadre/application/KadreHost;Lkotlinx/coroutines/CoroutineScope;Lorg/graphiks/kadre/application/KadreApplicationFactory;Lorg/graphiks/kadre/policy/KadrePolicy;ILjava/lang/Object;)Lorg/graphiks/kadre/diagnostics/KadreResult;
-	public abstract fun getPlatform ()Lorg/graphiks/kadre/diagnostics/KadrePlatform;
-}
-
-public final class org/graphiks/kadre/application/KadreHost$DefaultImpls {
-	public static synthetic fun attach$default (Lorg/graphiks/kadre/application/KadreHost;Lkotlinx/coroutines/CoroutineScope;Lorg/graphiks/kadre/application/KadreApplicationFactory;Lorg/graphiks/kadre/policy/KadrePolicy;ILjava/lang/Object;)Lorg/graphiks/kadre/diagnostics/KadreResult;
 }
 
 public final class org/graphiks/kadre/application/KadreLaunchContext {
@@ -97,9 +62,6 @@ public final class org/graphiks/kadre/application/KadreLaunchContext {
 }
 
 public final class org/graphiks/kadre/application/KadreLaunchReason : java/lang/Enum {
-	public static final field AdditionalHostRequested Lorg/graphiks/kadre/application/KadreLaunchReason;
-	public static final field HostRestoration Lorg/graphiks/kadre/application/KadreLaunchReason;
-	public static final field InitialHostAttachment Lorg/graphiks/kadre/application/KadreLaunchReason;
 	public static final field ProcessLaunch Lorg/graphiks/kadre/application/KadreLaunchReason;
 	public static final field ProcessRestoration Lorg/graphiks/kadre/application/KadreLaunchReason;
 	public static final field WindowRequested Lorg/graphiks/kadre/application/KadreLaunchReason;
@@ -178,15 +140,15 @@ public final class org/graphiks/kadre/application/LifecycleEvent {
 }
 
 public final class org/graphiks/kadre/application/LifecycleState {
-	public fun <init> (Lorg/graphiks/kadre/application/AttachmentState;Lorg/graphiks/kadre/application/VisibilityState;Lorg/graphiks/kadre/application/ActivationState;)V
-	public final fun component1 ()Lorg/graphiks/kadre/application/AttachmentState;
+	public fun <init> (Lorg/graphiks/kadre/application/SessionPhase;Lorg/graphiks/kadre/application/VisibilityState;Lorg/graphiks/kadre/application/ActivationState;)V
+	public final fun component1 ()Lorg/graphiks/kadre/application/SessionPhase;
 	public final fun component2 ()Lorg/graphiks/kadre/application/VisibilityState;
 	public final fun component3 ()Lorg/graphiks/kadre/application/ActivationState;
-	public final fun copy (Lorg/graphiks/kadre/application/AttachmentState;Lorg/graphiks/kadre/application/VisibilityState;Lorg/graphiks/kadre/application/ActivationState;)Lorg/graphiks/kadre/application/LifecycleState;
-	public static synthetic fun copy$default (Lorg/graphiks/kadre/application/LifecycleState;Lorg/graphiks/kadre/application/AttachmentState;Lorg/graphiks/kadre/application/VisibilityState;Lorg/graphiks/kadre/application/ActivationState;ILjava/lang/Object;)Lorg/graphiks/kadre/application/LifecycleState;
+	public final fun copy (Lorg/graphiks/kadre/application/SessionPhase;Lorg/graphiks/kadre/application/VisibilityState;Lorg/graphiks/kadre/application/ActivationState;)Lorg/graphiks/kadre/application/LifecycleState;
+	public static synthetic fun copy$default (Lorg/graphiks/kadre/application/LifecycleState;Lorg/graphiks/kadre/application/SessionPhase;Lorg/graphiks/kadre/application/VisibilityState;Lorg/graphiks/kadre/application/ActivationState;ILjava/lang/Object;)Lorg/graphiks/kadre/application/LifecycleState;
 	public fun equals (Ljava/lang/Object;)Z
 	public final fun getActivation ()Lorg/graphiks/kadre/application/ActivationState;
-	public final fun getAttachment ()Lorg/graphiks/kadre/application/AttachmentState;
+	public final fun getPhase ()Lorg/graphiks/kadre/application/SessionPhase;
 	public final fun getVisibility ()Lorg/graphiks/kadre/application/VisibilityState;
 	public fun hashCode ()I
 	public fun toString ()Ljava/lang/String;
@@ -318,9 +280,6 @@ public final class org/graphiks/kadre/application/SessionState$Terminated : org/
 public final class org/graphiks/kadre/application/SessionStopReason : java/lang/Enum {
 	public static final field ApplicationCancelled Lorg/graphiks/kadre/application/SessionStopReason;
 	public static final field ApplicationRequested Lorg/graphiks/kadre/application/SessionStopReason;
-	public static final field HostDetached Lorg/graphiks/kadre/application/SessionStopReason;
-	public static final field HostRequested Lorg/graphiks/kadre/application/SessionStopReason;
-	public static final field ParentCancelled Lorg/graphiks/kadre/application/SessionStopReason;
 	public static final field SystemTermination Lorg/graphiks/kadre/application/SessionStopReason;
 	public static fun getEntries ()Lkotlin/enums/EnumEntries;
 	public static fun valueOf (Ljava/lang/String;)Lorg/graphiks/kadre/application/SessionStopReason;

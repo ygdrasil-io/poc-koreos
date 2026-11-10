@@ -1,10 +1,10 @@
 package org.graphiks.kadre.internal.appkit
 
 import org.graphiks.kadre.application.ActivationState
-import org.graphiks.kadre.application.AttachmentState
 import org.graphiks.kadre.application.LifecycleCapabilities
 import org.graphiks.kadre.application.LifecycleState
 import org.graphiks.kadre.application.MemoryPressureLevel
+import org.graphiks.kadre.application.SessionPhase
 import org.graphiks.kadre.application.VisibilityState
 import org.graphiks.kadre.diagnostics.FeatureAvailability
 import org.graphiks.kadre.diagnostics.KadreFailure
@@ -390,22 +390,22 @@ internal class AppKitProcessBroker(
 
     private fun LifecycleState.after(signal: AppKitLifecycleSignal): LifecycleState = when (signal) {
         AppKitLifecycleSignal.BecameActive -> LifecycleState(
-            AttachmentState.Attached,
+            SessionPhase.Running,
             VisibilityState.Foreground,
             ActivationState.Active,
         )
         AppKitLifecycleSignal.BecameInactive -> LifecycleState(
-            AttachmentState.Attached,
+            SessionPhase.Running,
             visibility,
             ActivationState.Inactive,
         )
         AppKitLifecycleSignal.DidHide -> LifecycleState(
-            AttachmentState.Attached,
+            SessionPhase.Running,
             VisibilityState.Background,
             ActivationState.Inactive,
         )
         AppKitLifecycleSignal.DidUnhide -> LifecycleState(
-            AttachmentState.Attached,
+            SessionPhase.Running,
             VisibilityState.Foreground,
             ActivationState.Inactive,
         )
@@ -414,12 +414,12 @@ internal class AppKitProcessBroker(
 
     private companion object {
         val EMBEDDED_INITIAL_LIFECYCLE: LifecycleState = LifecycleState(
-            AttachmentState.Attached,
+            SessionPhase.Running,
             VisibilityState.Foreground,
             ActivationState.Active,
         )
         val DETACHED_LIFECYCLE: LifecycleState = LifecycleState(
-            AttachmentState.Detached,
+            SessionPhase.Terminated,
             VisibilityState.Background,
             ActivationState.Inactive,
         )

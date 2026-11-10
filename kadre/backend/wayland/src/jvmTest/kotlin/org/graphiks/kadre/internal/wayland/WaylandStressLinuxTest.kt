@@ -130,7 +130,7 @@ class WaylandStressLinuxTest {
                 ?: error("churn session failed: $result")
             assertTrue(
                 outcome == SessionOutcome.Completed ||
-                    outcome == org.graphiks.kadre.application.SessionStopReason.HostDetached.let(SessionOutcome::Stopped),
+                    outcome == org.graphiks.kadre.application.SessionStopReason.SystemTermination.let(SessionOutcome::Stopped),
                 "unexpected session outcome: $outcome",
             )
             val after = openDescriptorCount()

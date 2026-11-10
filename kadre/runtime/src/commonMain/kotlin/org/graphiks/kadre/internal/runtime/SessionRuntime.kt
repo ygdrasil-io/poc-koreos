@@ -205,13 +205,12 @@ internal class SessionRuntime(
         val startup = rootScope.launch(start = CoroutineStart.LAZY) {
             val application = try {
                 applicationFactory.create(
-                    // The launch identity is the attachment's, not this session's invention: an
-                    // ordinary host attachment states nothing and the application observes exactly
-                    // the initial-host launch it always has, while a child session opened for an
-                    // admitted window request reports that reason and the request that caused it.
+                    // The launch identity is the boot's, not this session's invention: the
+                    // process controller states ProcessLaunch, and an embedded boot without
+                    // explicit launch information reports the process launch it observes.
                     KadreLaunchContext(
                         id,
-                        launchInfo?.reason ?: KadreLaunchReason.InitialHostAttachment,
+                        launchInfo?.reason ?: KadreLaunchReason.ProcessLaunch,
                         launchInfo?.originatingRequestId,
                         null,
                     ),
@@ -283,7 +282,7 @@ internal class SessionRuntime(
     }
 
     fun hostDetached() {
-        requestTermination(SessionOutcome.Stopped(SessionStopReason.HostDetached))
+        requestTermination(SessionOutcome.Stopped(SessionStopReason.SystemTermination))
     }
 
     fun hostDetachedImmediately() {
@@ -291,7 +290,7 @@ internal class SessionRuntime(
             if (finished) return
             selectedOutcome = selectOutcome(
                 selectedOutcome,
-                SessionOutcome.Stopped(SessionStopReason.HostDetached),
+                SessionOutcome.Stopped(SessionStopReason.SystemTermination),
             )
             mutableState.value = SessionState.Stopping
             revokeTargetResources()
@@ -330,11 +329,13 @@ internal class SessionRuntime(
     }
 
     private fun requestHostStop() {
-        requestTermination(SessionOutcome.Stopped(SessionStopReason.HostRequested))
+        // The session handle speaks for the process owner (the OS-side host of old): closing the
+        // handle is the system termination of the embedded/bootstrapping world.
+        requestTermination(SessionOutcome.Stopped(SessionStopReason.SystemTermination))
     }
 
     private fun parentCancelled() {
-        val outcome = SessionOutcome.Stopped(SessionStopReason.ParentCancelled)
+        val outcome = SessionOutcome.Stopped(SessionStopReason.SystemTermination)
         lock.withLock {
             if (finished) return
             selectedOutcome = selectOutcome(selectedOutcome, outcome)
@@ -364,10 +365,13 @@ internal class SessionRuntime(
             cause is CancellationException -> {
                 val alreadySelected = lock.withLock { selectedOutcome }
                 if (alreadySelected == null) {
+                    // A live parent means the application cancelled itself; a dead parent means
+                    // the embedding scope died around it — a system termination either way the
+                    // closed reason set can express.
                     val reason = if (parentJob.isActive) {
                         SessionStopReason.ApplicationCancelled
                     } else {
-                        SessionStopReason.ParentCancelled
+                        SessionStopReason.SystemTermination
                     }
                     requestTermination(SessionOutcome.Stopped(reason))
                 }

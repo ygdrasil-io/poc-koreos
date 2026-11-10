@@ -3,9 +3,7 @@ package org.graphiks.kadre.internal.runtime
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import org.graphiks.kadre.application.ActivationState
-import org.graphiks.kadre.application.AttachmentState
 import org.graphiks.kadre.application.KadreApplicationFactory
-import org.graphiks.kadre.application.KadreHost
 import org.graphiks.kadre.application.KadreLaunchReason
 import org.graphiks.kadre.application.KadreSession
 import org.graphiks.kadre.application.LifecycleCapabilities
@@ -13,8 +11,8 @@ import org.graphiks.kadre.application.LifecycleState
 import org.graphiks.kadre.application.MemoryPressureLevel
 import org.graphiks.kadre.application.SessionId
 import org.graphiks.kadre.application.SessionOutcome
+import org.graphiks.kadre.application.SessionPhase
 import org.graphiks.kadre.application.VisibilityState
-import org.graphiks.kadre.diagnostics.ExperimentalKadreApi
 import org.graphiks.kadre.diagnostics.FeatureAvailability
 import org.graphiks.kadre.diagnostics.KadreFailure
 import org.graphiks.kadre.diagnostics.KadrePlatform
@@ -22,42 +20,21 @@ import org.graphiks.kadre.diagnostics.KadreResourceKind
 import org.graphiks.kadre.diagnostics.KadreResult
 import org.graphiks.kadre.policy.KadrePolicies
 import org.graphiks.kadre.policy.KadrePolicy
-import org.graphiks.kadre.surface.HostSurface
 import org.graphiks.kadre.surface.SurfaceId
-import org.graphiks.kadre.window.WindowRequestId
-
-public fun interface RuntimeFailureReporter {
-    public fun report(cause: Throwable)
-}
-
-public fun interface RuntimeSessionObserver {
-    public fun terminated(sessionId: SessionId, outcome: SessionOutcome)
-}
-
-public fun interface RuntimeSessionStopHandler {
-    public fun stop(sessionId: SessionId): KadreFailure.PlatformFailure?
-}
 
 /**
- * The launch identity an attachment carries into the application's [KadreLaunchContext].
+ * supprimé par la Task 8 — chemins embedded.
  *
- * The default attachment states none, and the session reports [KadreLaunchReason.InitialHostAttachment]
- * with no originating request — the behaviour every existing host observes, unchanged. A host that
- * opens a session as the result of an admitted window request states the pair instead, so the child
- * application learns why it was launched and which request caused it.
+ * This is the OLD world's host controller, relocated: the public host-attach contract it
+ * implemented is gone (Task 7 deleted the interface from foundation), but the desktop
+ * backends' EMBEDDED paths (`DesktopBackendProvider.attach` — appkit/wayland/win32) still
+ * assemble their sessions through `withComponents`/`withPrimarySurface` + `attach` until
+ * Task 8 removes the embedded desktop surface entirely. The class keeps its name so those
+ * providers compile unchanged; it implements nothing, publishes on the phase axis, and
+ * carries no public API standing beyond the embedded seams.
  */
-internal data class KadreLaunchInfo(
-    val reason: KadreLaunchReason,
-    val originatingRequestId: WindowRequestId?,
-)
-
-internal fun interface RuntimeSessionRevocationHandler {
-    fun revoke(sessionId: SessionId)
-}
-
-@OptIn(ExperimentalKadreApi::class)
 public class RuntimeHostController private constructor(
-    override val platform: KadrePlatform,
+    public val platform: KadrePlatform,
     initialLifecycleState: LifecycleState,
     initialLifecycleCapabilities: LifecycleCapabilities,
     private val failureReporter: RuntimeFailureReporter,
@@ -66,7 +43,7 @@ public class RuntimeHostController private constructor(
     private val sessionObserver: RuntimeSessionObserver,
     private val clockFactory: RuntimeClockFactory,
     private val componentsFactory: RuntimeSessionComponentsFactory,
-) : KadreHost {
+) {
     public constructor(
         platform: KadrePlatform,
         initialLifecycleState: LifecycleState = DEFAULT_LIFECYCLE_STATE,
@@ -90,12 +67,12 @@ public class RuntimeHostController private constructor(
     private val sessions = linkedSetOf<SessionRuntime>()
     private var lifecycleState = initialLifecycleState
     private var lifecycleCapabilities = initialLifecycleCapabilities
-    private var detached = initialLifecycleState.attachment == AttachmentState.Detached
+    private var terminated = initialLifecycleState.phase == SessionPhase.Terminated
 
-    override fun attach(
+    public fun attach(
         parentScope: CoroutineScope,
         applicationFactory: KadreApplicationFactory,
-        policy: KadrePolicy,
+        policy: KadrePolicy = KadrePolicies.Default,
     ): KadreResult<KadreSession> = attach(parentScope, applicationFactory, policy, launch = null)
 
     internal fun attach(
@@ -109,7 +86,7 @@ public class RuntimeHostController private constructor(
         if (!parentJob.isActive) return KadreResult.Failure(KadreFailure.ParentScopeCancelled)
 
         val initialLifecycle = lock.withLock {
-            if (detached) return KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.Host))
+            if (terminated) return KadreResult.Failure(KadreFailure.Closed(KadreResourceKind.Host))
             if (!parentJob.isActive) return KadreResult.Failure(KadreFailure.ParentScopeCancelled)
             lifecycleState to lifecycleCapabilities
         }
@@ -137,7 +114,7 @@ public class RuntimeHostController private constructor(
 
         val installFailure = lock.withLock {
             when {
-                detached -> KadreFailure.Closed(KadreResourceKind.Host)
+                terminated -> KadreFailure.Closed(KadreResourceKind.Host)
                 !parentJob.isActive -> KadreFailure.ParentScopeCancelled
                 else -> {
                     session.updateLifecycle(lifecycleState)
@@ -158,14 +135,14 @@ public class RuntimeHostController private constructor(
 
     public fun updateLifecycle(state: LifecycleState): LifecycleState {
         val targets = lock.withLock {
-            require(!detached) { "host is detached" }
+            require(!terminated) { "embedded host is terminated" }
             if (lifecycleState == state) return lifecycleState
             lifecycleState = state
-            if (state.attachment == AttachmentState.Detached) detached = true
+            if (state.phase == SessionPhase.Terminated) terminated = true
             sessions.toList()
         }
         targets.forEach { it.updateLifecycle(state) }
-        if (state.attachment == AttachmentState.Detached) {
+        if (state.phase == SessionPhase.Terminated) {
             targets.forEach(SessionRuntime::hostDetached)
         }
         return state
@@ -173,7 +150,7 @@ public class RuntimeHostController private constructor(
 
     public fun updateLifecycleCapabilities(capabilities: LifecycleCapabilities) {
         val targets = lock.withLock {
-            require(!detached) { "host is detached" }
+            require(!terminated) { "embedded host is terminated" }
             if (lifecycleCapabilities == capabilities) return
             lifecycleCapabilities = capabilities
             sessions.toList()
@@ -183,7 +160,7 @@ public class RuntimeHostController private constructor(
 
     public fun emitMemoryPressure(level: MemoryPressureLevel) {
         val targets = lock.withLock {
-            require(!detached) { "host is detached" }
+            require(!terminated) { "embedded host is terminated" }
             require(lifecycleCapabilities.memoryPressure == FeatureAvailability.Available) {
                 "memory pressure is unavailable"
             }
@@ -193,39 +170,39 @@ public class RuntimeHostController private constructor(
     }
 
     public fun detach() {
-        val detachedState = LifecycleState(
-            AttachmentState.Detached,
+        val terminatedState = LifecycleState(
+            SessionPhase.Terminated,
             VisibilityState.Background,
             ActivationState.Inactive,
         )
         val targets = lock.withLock {
-            if (detached) return
-            detached = true
-            lifecycleState = detachedState
+            if (terminated) return
+            terminated = true
+            lifecycleState = terminatedState
             sessions.toList()
         }
-        targets.forEach { it.updateLifecycle(detachedState) }
+        targets.forEach { it.updateLifecycle(terminatedState) }
         targets.forEach(SessionRuntime::hostDetached)
     }
 
     /**
-     * Immediately publishes host detachment for a runtime that may be destroyed without a
+     * Immediately publishes termination for a runtime that may be destroyed without a
      * cooperative shutdown opportunity, such as browser pagehide.
      */
     internal fun detachImmediately() {
-        val detachedState = LifecycleState(
-            AttachmentState.Detached,
+        val terminatedState = LifecycleState(
+            SessionPhase.Terminated,
             VisibilityState.Background,
             ActivationState.Inactive,
         )
         val targets = lock.withLock {
-            if (!detached) {
-                detached = true
-                lifecycleState = detachedState
+            if (!terminated) {
+                terminated = true
+                lifecycleState = terminatedState
             }
             sessions.toList()
         }
-        targets.forEach { it.updateLifecycle(detachedState) }
+        targets.forEach { it.updateLifecycle(terminatedState) }
         targets.forEach(SessionRuntime::hostDetachedImmediately)
     }
 
@@ -268,7 +245,7 @@ public class RuntimeHostController private constructor(
 
     public companion object {
         private val DEFAULT_LIFECYCLE_STATE: LifecycleState = LifecycleState(
-            AttachmentState.Attached,
+            SessionPhase.Running,
             VisibilityState.Foreground,
             ActivationState.Active,
         )
@@ -407,4 +384,18 @@ public class RuntimeHostController private constructor(
         private val NO_SESSION_REVOCATION: RuntimeSessionRevocationHandler =
             RuntimeSessionRevocationHandler { }
     }
+}
+
+/**
+ * The launch identity an embedded boot carries into the application's
+ * `KadreLaunchContext`: why the process was launched and which window request caused it,
+ * when the embedder states one. A `null` launch reports [KadreLaunchReason.ProcessLaunch].
+ */
+internal data class KadreLaunchInfo(
+    val reason: KadreLaunchReason,
+    val originatingRequestId: org.graphiks.kadre.window.WindowRequestId?,
+)
+
+internal fun interface RuntimeSessionRevocationHandler {
+    fun revoke(sessionId: SessionId)
 }
