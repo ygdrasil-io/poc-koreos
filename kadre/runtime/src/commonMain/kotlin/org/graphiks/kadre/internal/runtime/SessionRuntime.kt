@@ -306,6 +306,24 @@ internal class SessionRuntime(
         requestTermination(SessionOutcome.Failed(failure))
     }
 
+    /**
+     * Terminates the session as [SessionOutcome.Completed] — the ownership-first controller's
+     * last-container rule: the last OS container the session owned has closed, and a process
+     * whose containers are all gone has finished, not failed.
+     */
+    fun lastContainerClosed() {
+        requestTermination(SessionOutcome.Completed)
+    }
+
+    /**
+     * Terminates the session as [SessionOutcome.Stopped] with
+     * [SessionStopReason.SystemTermination] — the single system-termination path, driven by the
+     * process controller when the OS tears the process's containers down.
+     */
+    fun systemTerminating() {
+        requestTermination(SessionOutcome.Stopped(SessionStopReason.SystemTermination))
+    }
+
     private fun eventDeliveryFailed(failure: KadreFailure) {
         failureReporter(KadreException(failure))
         requestTermination(SessionOutcome.Failed(failure))
