@@ -115,18 +115,12 @@ rootProject.name = "kadre"
 include(":kadre")
 include(":kadre:foundation")
 include(":kadre:contracts:validator")
-include(":kadre:contracts:driver:web")
-include(":kadre:contracts:driver:uikit")
+// ownership-first: réactivé par le plan Android/UIKit/Web
+// (contracts:driver:web, contracts:driver:uikit)
 include(":kadre:platform:desktop")
-include(":kadre:platform:web")
-include(":kadre:platform:uikit")
-include(":kadre:platform:android")
-include(":kadre:platform:android-devicetest")
-include(":kadre:contracts:driver:android")
-// La liaison Compose Android (phase 9) — android-only, hors de l'allowlist `check` du
-// root : la gate de phase (Task 4, instrumentation) en est propriétaire.
-include(":kadre:integration:compose")
-include(":kadre:integration:awt")
+// ownership-first: réactivé par le plan Android/UIKit/Web
+// (platform:web, platform:uikit, platform:android, platform:android-devicetest,
+// contracts:driver:android, integration:awt, integration:compose)
 include(":kadre:contracts:driver:wayland")
 include(":kadre:contracts:driver:win32")
 include(":kadre:runtime")
@@ -136,35 +130,5 @@ include(":kadre:backend:wayland")
 include(":kadre:backend:win32")
 include(":kadre:samples:desk-tour")
 include(":kadre:samples:hello-kadre")
-include(":kadre:samples:embedded-awt")
-
-// Les samples Android migrés (phase 9, AND-010) : applications Android AGP pures qui
-// consomment les artefacts PUBLIÉS du repository contractuel (l'umbrella `kadre-android`,
-// la liaison `compose-android` — le pattern `consumers/android`). Comme
-// `:kadre:integration:compose`, ils restent HORS de l'allowlist `check` du root : la gate
-// d'instrumentation Android (`androidContractsCheck`) en est propriétaire. Le repository
-// contractuel est déclaré plus haut (filtré sur les groupes kadre) — les coordonnées
-// `-android` visent les AAR publiés ; la coordonnée par défaut de l'umbrella serait
-// substituée par le projet `:kadre` (substitution automatique group:name du build).
-//
-// Leur COMPILATION DE SCRIPT exige les flags AGP 9 (`systemProp.android.builtInKotlin/
-// newDsl=false` — la forme DSL héritée y est écrite). Les invocations racine directes
-// fonctionnaient (la fuite JVM du buildSrc-first est déterministe — CI 38679060381 :
-// démon frais, configuration racine complète OK) ; le seul contexte cassé était le build
-// IMBRIQUÉ GradleBuild de l'agrégateur consumer (racine = racine du dépôt, macOS
-// uniquement, jamais exercé en CI) : aucun systemProp ne le traverse (ni -D, ni
-// startParameter.systemPropertiesArgs, ni le gradle.properties parent — Gradle 9.8,
-// vérifié), la configuration racine complète y échouait donc. L'exclusion
-// `kadre.androidSamples=false` du nesting est SANS PERTE (il ne résout que
-// assembleKadreUikitDebugXCFramework). Défaut : inclus.
-val androidSamplesEnabled: Boolean =
-    providers.gradleProperty("kadre.androidSamples").getOrElse("true") != "false"
-if (androidSamplesEnabled) {
-    include(":kadre:samples:android-hello-window")
-    include(":kadre:samples:android-hello-touch")
-    include(":kadre:samples:android-compose-showcase")
-    // Le tour Kadre sur Android (phase 11) : la visite commune (`desk-tour`) sur le host
-    // Android — sources core/ + ui/ partagées par `kotlin.srcDir`, host de notes
-    // capability-off, managers Android réels. Même pattern `consumers/android`.
-    include(":kadre:samples:android-kadre-tour")
-}
+// ownership-first: réactivé par le plan Android/UIKit/Web
+// (samples:embedded-awt, samples:android-*)

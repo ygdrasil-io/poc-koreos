@@ -76,21 +76,23 @@ kadre/
 | `kadre` | umbrella KMP et point d’entrée de dépendance | publique principale | `foundation`, puis `platform:*` selon la target |
 | `foundation` | contrats, types, outcomes, policies et Host SPI publics | transitive contractuelle | aucune |
 | `runtime` | sessions, coroutines, ownership, flows, budgets et SPI d’implémentation | transitive interne | `foundation` |
-| `platform:android` | attach `Activity`/`View` et traduction du lifecycle Android | transitive contractuelle | `foundation`, `runtime` |
-| `platform:uikit` | attach `UIWindowScene`/`UIViewController` et scènes UIKit | transitive contractuelle | `foundation`, `runtime` |
-| `platform:web` | attach DOM partagé JS/Wasm et traduction browser | transitive contractuelle | `foundation`, `runtime` |
+| `platform:android` | attach `Activity`/`View` et traduction du lifecycle Android — hors build — résurrection par le plan 2/3/4 (ownership-first) | transitive contractuelle | `foundation`, `runtime` |
+| `platform:uikit` | attach `UIWindowScene`/`UIViewController` et scènes UIKit — hors build — résurrection par le plan 2/3/4 (ownership-first) | transitive contractuelle | `foundation`, `runtime` |
+| `platform:web` | attach DOM partagé JS/Wasm et traduction browser — hors build — résurrection par le plan 2/3/4 (ownership-first) | transitive contractuelle | `foundation`, `runtime` |
 | `platform:desktop` | hosts desktop, boucle embedded/standalone et sélection de backend | transitive contractuelle | `foundation`, `runtime`, backends en runtime |
 | `backend:appkit` | provider desktop AppKit | transitive interne | `runtime`, KFFI AppKit/ObjC |
 | `backend:win32` | provider desktop Win32 | transitive interne | `runtime`, KFFI Win32 |
 | `backend:x11` | provider desktop X11 | transitive interne | `runtime`, KFFI X11 |
 | `backend:wayland` | provider desktop Wayland | transitive interne | `runtime`, KFFI Wayland |
 | `test` | fake host, horloge et contrôleurs virtuels publics | publique optionnelle | `foundation`, `runtime` |
-| `integration:*` | glue de lifecycle pour un framework tiers | publique optionnelle | `kadre`, framework concerné |
+| `integration:*` | glue de lifecycle pour un framework tiers — `integration:awt` et `integration:compose` hors build — résurrection par le plan 2/3/4 (ownership-first) | publique optionnelle | `kadre`, framework concerné |
 | `contracts:*` | oracles, scénarios, drivers et validation CI | non publiée | selon la section 9 |
-| `samples:*` | applications consommatrices réelles | non publiée | `kadre` ou une intégration |
+| `samples:*` | applications consommatrices réelles — `samples:embedded-awt` et `samples:android-*` hors build — résurrection par le plan 2/3/4 (ownership-first) | non publiée | `kadre` ou une intégration |
 | `benchmarks:*` | mesures ciblées, sans verdict fonctionnel | non publiée | composant mesuré |
 
 `kadre` peut être un umbrella mince : les classes publiques sont fournies transitivement par `foundation` et les composants de plateforme. Il reste le seul artifact principal documenté et évite le cycle impossible où un adapter dépendrait du projet qui doit lui-même l’agréger.
+
+Ownership-first (2026-11) : les modules `platform:{web,uikit,android}`, `platform:android-devicetest`, `contracts:driver:{web,uikit,android}`, `integration:{awt,compose}` et `samples:{embedded-awt,android-*}` sont hors build — résurrection par le plan 2/3/4 (ownership-first). Leurs sources demeurent sur le disque.
 
 ## 4. Graphe de dépendances
 
