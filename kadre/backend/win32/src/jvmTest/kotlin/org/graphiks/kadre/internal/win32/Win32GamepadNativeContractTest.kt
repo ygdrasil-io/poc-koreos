@@ -22,8 +22,9 @@ import org.graphiks.kadre.window.*
 class Win32GamepadNativeContractTest {
     @Test fun absentSlotsPublishNothingAndNeverInventRumbleSuccess() {
         val observed = CompletableDeferred<DeviceInventory>()
-        runKadreApplication(
-            options = DesktopHostOptions.Standalone(backend = DesktopBackend.Win32),
+        runBlocking { runKadreApplication(
+            options = KadreRunOptions(),
+            backend = DesktopBackend.Win32,
             application = KadreApplication {
                 windows.requestWindow(WindowSpec(title = "Kadre native gamepads proof",
                     contentSize = LogicalSize(320.0, 240.0)))
@@ -65,6 +66,6 @@ class Win32GamepadNativeContractTest {
                 }
                 requestStop()
             },
-        )
+        ) }.getOrNull() ?: error("run failed")
     }
 }

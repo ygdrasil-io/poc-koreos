@@ -7,12 +7,13 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import org.graphiks.kadre.application.EventStamp
-import org.graphiks.kadre.application.HostSignal
 import org.graphiks.kadre.application.KadreLifecycle
 import org.graphiks.kadre.application.LifecycleCapabilities
 import org.graphiks.kadre.application.LifecycleEvent
 import org.graphiks.kadre.application.LifecycleState
 import org.graphiks.kadre.application.MemoryPressureLevel
+import org.graphiks.kadre.application.SessionPhase
+import org.graphiks.kadre.application.SystemSignal
 import org.graphiks.kadre.diagnostics.FeatureAvailability
 
 internal class RuntimeLifecycle(
@@ -26,21 +27,21 @@ internal class RuntimeLifecycle(
     private val mutableState = MutableStateFlow(initialState)
     private val mutableCapabilities = MutableStateFlow(initialCapabilities)
     private val mutableEvents = MutableSharedFlow<LifecycleEvent>(extraBufferCapacity = EVENT_BUFFER_CAPACITY)
-    private val mutableSignals = MutableSharedFlow<HostSignal>(extraBufferCapacity = SIGNAL_BUFFER_CAPACITY)
+    private val mutableSignals = MutableSharedFlow<SystemSignal>(extraBufferCapacity = SIGNAL_BUFFER_CAPACITY)
 
     override val state: StateFlow<LifecycleState> = mutableState.asStateFlow()
     override val capabilities: StateFlow<LifecycleCapabilities> = mutableCapabilities.asStateFlow()
     override val events: Flow<LifecycleEvent> = mutableEvents.asSharedFlow().withEventCollectorAdmission(
         collectorAllocator.newGate(maxCollectorsPerFlow),
     )
-    override val signals: Flow<HostSignal> = mutableSignals.asSharedFlow().withEventCollectorAdmission(
+    override val signals: Flow<SystemSignal> = mutableSignals.asSharedFlow().withEventCollectorAdmission(
         collectorAllocator.newGate(maxCollectorsPerFlow),
     )
 
     fun updateState(next: LifecycleState): LifecycleState = lock.withLock {
         val previous = mutableState.value
         if (previous == next) return@withLock previous
-        if (previous.attachment == org.graphiks.kadre.application.AttachmentState.Detached) return@withLock previous
+        if (previous.phase == SessionPhase.Terminated) return@withLock previous
 
         mutableState.value = next
         check(mutableEvents.tryEmit(LifecycleEvent(previous, next, nextStamp()))) {
@@ -54,14 +55,14 @@ internal class RuntimeLifecycle(
     }
 
     fun emitMemoryPressure(level: MemoryPressureLevel) = lock.withLock {
-        require(mutableState.value.attachment != org.graphiks.kadre.application.AttachmentState.Detached) {
-            "lifecycle is detached"
+        require(mutableState.value.phase != SessionPhase.Terminated) {
+            "lifecycle is terminated"
         }
         require(mutableCapabilities.value.memoryPressure == FeatureAvailability.Available) {
             "memory pressure is unavailable"
         }
-        check(mutableSignals.tryEmit(HostSignal.MemoryPressure(level, nextStamp()))) {
-            "host signal buffer overflow"
+        check(mutableSignals.tryEmit(SystemSignal.MemoryPressure(level, nextStamp()))) {
+            "system signal buffer overflow"
         }
     }
 

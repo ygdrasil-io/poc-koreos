@@ -24,6 +24,9 @@ kotlin {
             kotlin.srcDir("manual")
             dependencies {
                 implementation(kotlin("test"))
+                // the process controller's owned root scope lives on Dispatchers.Main:
+                // the standalone-run tests install a Main dispatcher with setMain
+                implementation(libs.kotlinx.coroutines.test)
                 implementation(project(":kadre:platform:desktop"))
             }
         }
@@ -172,18 +175,6 @@ if (System.getProperty("os.name", "").let { name ->
         workingDir(rootProject.projectDir)
         jvmArgs(
             "-XstartOnFirstThread",
-            "--enable-native-access=ALL-UNNAMED",
-        )
-        standardInput = System.`in`
-    }
-    tasks.register<JavaExec>("phase9MemoryPressureHarness") {
-        group = "verification"
-        description = "Runs the external interactive AppKit Phase 9 memory-pressure harness."
-        dependsOn(tasks.named("jvmTestClasses"))
-        classpath = jvmTest.get().classpath
-        mainClass.set("org.graphiks.kadre.internal.appkit.manual.Phase9MemoryPressureHarnessKt")
-        workingDir(rootProject.projectDir)
-        jvmArgs(
             "--enable-native-access=ALL-UNNAMED",
         )
         standardInput = System.`in`

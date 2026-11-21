@@ -1,8 +1,8 @@
 package org.graphiks.kadre.internal.runtime
 
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.runTest
 import org.graphiks.kadre.application.EventStamp
 import org.graphiks.kadre.application.KadreApplication
@@ -50,18 +50,15 @@ class RuntimePrimarySurfaceConfigurationTest {
     @Test
     fun hostProvidedPrimarySurfaceReceivesSessionStampSourceAndPolicy() = runTest {
         val recorded = RecordingSurface()
-        val controller = RuntimeHostController.withPrimarySurface(
+        val controller = RuntimeProcessController.withPrimarySurface(
             platform = KadrePlatform.Web,
             primarySurfaceFactory = { id -> RuntimePrimarySurface(recorded.surfaceFor(id)) { } },
         )
-        val scope = CoroutineScope(SupervisorJob() + coroutineContext)
-        val session = assertIs<KadreResult.Success<KadreSession>>(
-            controller.attach(
-                scope,
-                KadreApplicationFactory { KadreApplication { awaitCancellation() } },
-                KadrePolicies.Default,
-            ),
-        ).value
+        val session = bootSession(
+            controller,
+            KadreApplicationFactory { KadreApplication { awaitCancellation() } },
+            KadrePolicies.Default,
+        )
 
         val configuration = assertNotNull(
             recorded.configuration,
@@ -105,18 +102,15 @@ class RuntimePrimarySurfaceConfigurationTest {
     @Test
     fun policyRedrawDeliveryIsForwardedForBufferedProfiles() = runTest {
         val recorded = RecordingSurface()
-        val controller = RuntimeHostController.withPrimarySurface(
+        val controller = RuntimeProcessController.withPrimarySurface(
             platform = KadrePlatform.Web,
             primarySurfaceFactory = { id -> RuntimePrimarySurface(recorded.surfaceFor(id)) { } },
         )
-        val scope = CoroutineScope(SupervisorJob() + coroutineContext)
-        val session = assertIs<KadreResult.Success<KadreSession>>(
-            controller.attach(
-                scope,
-                KadreApplicationFactory { KadreApplication { awaitCancellation() } },
-                KadrePolicies.Recording,
-            ),
-        ).value
+        val session = bootSession(
+            controller,
+            KadreApplicationFactory { KadreApplication { awaitCancellation() } },
+            KadrePolicies.Recording,
+        )
 
         val configuration = assertNotNull(recorded.configuration)
         assertEquals(KadrePolicies.Recording.window, configuration.deliveryPolicy)
@@ -145,7 +139,7 @@ class RuntimePrimarySurfaceConfigurationTest {
         val recorded = RecordingSurface()
         val components = RecordingComponentsManager()
         val rawInputPort = RecordingRawInputPort()
-        val controller = RuntimeHostController.withComponents(
+        val controller = RuntimeProcessController.withComponents(
             platform = KadrePlatform.Web,
             componentsFactory = RuntimeSessionComponentsFactory { _, _ ->
                 RuntimeSessionComponents(
@@ -155,14 +149,11 @@ class RuntimePrimarySurfaceConfigurationTest {
                 )
             },
         )
-        val scope = CoroutineScope(SupervisorJob() + coroutineContext)
-        val session = assertIs<KadreResult.Success<KadreSession>>(
-            controller.attach(
-                scope,
-                KadreApplicationFactory { KadreApplication { awaitCancellation() } },
-                KadrePolicies.Recording,
-            ),
-        ).value
+        val session = bootSession(
+            controller,
+            KadreApplicationFactory { KadreApplication { awaitCancellation() } },
+            KadrePolicies.Recording,
+        )
 
         val surface = assertNotNull(
             recorded.configuration,
@@ -223,7 +214,7 @@ class RuntimePrimarySurfaceConfigurationTest {
     fun deferredPrimaryResolvesAfterManagerConfigurationAndSharesItsBudget() = runTest {
         val recorded = RecordingSurface()
         val components = RecordingComponentsManager()
-        val controller = RuntimeHostController.withComponents(
+        val controller = RuntimeProcessController.withComponents(
             platform = KadrePlatform.Web,
             componentsFactory = RuntimeSessionComponentsFactory { _, _ ->
                 RuntimeSessionComponents(
@@ -236,10 +227,11 @@ class RuntimePrimarySurfaceConfigurationTest {
                 )
             },
         )
-        val session = assertIs<KadreResult.Success<KadreSession>>(controller.attach(
-            CoroutineScope(SupervisorJob() + coroutineContext),
-            KadreApplicationFactory { KadreApplication { awaitCancellation() } }, KadrePolicies.Default,
-        )).value
+        val session = bootSession(
+            controller,
+            KadreApplicationFactory { KadreApplication { awaitCancellation() } },
+            KadrePolicies.Default,
+        )
         try {
             val primaryBudget = assertNotNull(recorded.payloadBudget)
             assertSame(components.payloadBudget, primaryBudget)
@@ -251,6 +243,26 @@ class RuntimePrimarySurfaceConfigurationTest {
             assertIs<KadreResult.Success<AutoCloseable>>(primaryBudget.retain(1)).value.close()
         } finally { session.requestStop(); testScheduler.runCurrent() }
     }
+
+    /**
+     * Boots one session on the process controller with the test scheduler as the process's
+     * main dispatcher: every owned coroutine is driven by the runTest virtual time, exactly
+     * like the embedded parent scope the old world handed the controller.
+     */
+    private fun kotlinx.coroutines.test.TestScope.bootSession(
+        controller: RuntimeProcessController,
+        applicationFactory: KadreApplicationFactory,
+        policy: org.graphiks.kadre.policy.KadrePolicy,
+    ): KadreSession = assertIs<KadreResult.Success<KadreSession>>(
+        controller.boot(
+            RuntimeBootRequest(
+                platform = KadrePlatform.Web,
+                applicationFactory = applicationFactory,
+                policy = policy,
+                mainDispatcher = StandardTestDispatcher(testScheduler),
+            ),
+        ),
+    ).value
 
     private class RecordingSurface {
         var payloadBudget: RuntimePayloadBudget? = null

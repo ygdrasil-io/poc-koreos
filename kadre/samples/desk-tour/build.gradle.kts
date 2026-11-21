@@ -10,9 +10,8 @@ plugins {
 kotlin {
     jvmToolchain(25)
 
-    // Opt-ins portées par le code partagé (ui/ compose) : les mêmes marqueurs existent
-    // dans les artefacts compose jvm et wasmJs. L'opt-in kffi reste propre au JVM —
-    // le marqueur n'existe pas sur la classe-path wasm.
+    // Opt-ins portées par le code partagé (ui/ compose). L'opt-in kffi reste propre
+    // au JVM.
     compilerOptions {
         freeCompilerArgs.addAll(
             "-opt-in=androidx.compose.ui.InternalComposeUiApi",
@@ -45,21 +44,7 @@ kotlin {
         }
     }
 
-    wasmJs {
-        browser {
-            // Décision T2 (le plus petit choix honnête) : aucun harnais de test navigateur
-            // n'est configuré pour ce sample — karma + webpack + navigateur achèteraient
-            // rien pour une suite de logique. La suite commune tourne déjà sur jvm
-            // (jvmTest porte tout commonTest) et le binaire wasm est couvert bout-en-bout
-            // par le filet e2e commis (e2e/README.md). La tâche est désactivée
-            // explicitement pour qu'un `check` n'essaie pas d'amorcer un harnais qui
-            // n'existe pas.
-            testTask { enabled = false }
-        }
-        // Le binaire navigateur (wasmJsBrowserDistribution) est ce que l'hôte web
-        // servira ; le host lui-même est la tâche 3.
-        binaries.executable()
-    }
+    // ownership-first: réactivé par le plan Android/UIKit/Web (wasmJs browser)
 
     sourceSets {
         commonMain.dependencies {
@@ -75,19 +60,12 @@ kotlin {
             implementation(compose.desktop.currentOs)
             implementation(compose.material3)
         }
-        wasmJsMain.dependencies {
-            // Les mêmes accès que la sonde a compilés et exécutés (PROBE-NOTES.md).
-            implementation(compose.runtime)
-            implementation(compose.ui)
-            implementation(compose.material3)
-        }
     }
 }
 
 tasks.named<Test>("jvmTest") { useJUnitPlatform() }
 
-// L'opt-in kffi (pont AppKit) reste propre aux compilations JVM : le marqueur
-// `org.graphiks.kffi.objc.PlatformAvailability` n'existe pas sur la classe-path wasm.
+// L'opt-in kffi (pont AppKit) reste propre aux compilations JVM.
 tasks.withType<KotlinJvmCompile>().configureEach {
     compilerOptions.freeCompilerArgs.add("-opt-in=org.graphiks.kffi.objc.PlatformAvailability")
 }

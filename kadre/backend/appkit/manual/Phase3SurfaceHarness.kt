@@ -6,11 +6,13 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import org.graphiks.kadre.application.KadreApplication
+import org.graphiks.kadre.application.KadreRunOptions
 import org.graphiks.kadre.diagnostics.KadreResult
+import org.graphiks.kadre.diagnostics.getOrNull
 import org.graphiks.kadre.platform.desktop.DesktopBackend
-import org.graphiks.kadre.platform.desktop.DesktopHostOptions
 import org.graphiks.kadre.platform.desktop.runKadreApplication
 import org.graphiks.kadre.surface.CursorStyle
 import org.graphiks.kadre.surface.HitTestingMode
@@ -33,6 +35,7 @@ import kotlin.time.Duration.Companion.seconds
 
 /** External AppKit observation tool. It logs Kadre state; it does not render application content. */
 public fun main(args: Array<String>) {
+    installManualHarnessMainDispatcher()
     val options = HarnessOptions.parse(args)
     val recorder = HarnessRecorder(options.recordPath)
     val commands = Channel<String>(Channel.UNLIMITED)
@@ -43,11 +46,9 @@ public fun main(args: Array<String>) {
     }
 
     try {
-        val outcome = runKadreApplication(
-            options = DesktopHostOptions.Standalone(
-                backend = DesktopBackend.AppKit,
-                stopWhenLastWindowClosed = false,
-            ),
+        val outcome = runBlocking { runKadreApplication(
+            options = KadreRunOptions(),
+            backend = DesktopBackend.AppKit,
             application = KadreApplication {
                 val opened = when (val request = windows.requestWindow(WindowSpec(title = "Kadre Phase 3 surface"))) {
                     is KadreResult.Failure -> error("window request failed: ${request.reason}")
@@ -56,6 +57,16 @@ public fun main(args: Array<String>) {
                 val window = when (opened) {
                     is WindowRequestOutcome.OpenedHere -> opened.window
                     else -> error("window did not open: $opened")
+                }
+                // Sentinel: the ownership rule completes the session when its LAST container
+                // closes, so a second window stays open across the terminal observation below.
+                val sentinelOpened = when (val request = windows.requestWindow(sentinelSpec("Kadre Phase 3 sentinel"))) {
+                    is KadreResult.Failure -> error("sentinel window request failed: ${request.reason}")
+                    is KadreResult.Success -> request.value.await()
+                }
+                val sentinel = when (sentinelOpened) {
+                    is WindowRequestOutcome.OpenedHere -> sentinelOpened.window
+                    else -> error("sentinel window did not open: $sentinelOpened")
                 }
                 val surface = window.surface
                 recorder.metadata(
@@ -161,9 +172,16 @@ public fun main(args: Array<String>) {
                 closeAndObserveTerminal()
                 stateCollector.cancel()
                 eventCollector.cancel()
+                // The observation is done: the sentinel closes last, so the fixed
+                // last-container rule ends the session only after the record is complete.
+                sentinel.close()
+                withTimeout(5.seconds) {
+                    window.state.first { it.phase == org.graphiks.kadre.window.WindowPhase.Closed }
+                    sentinel.state.first { it.phase == org.graphiks.kadre.window.WindowPhase.Closed }
+                }
                 requestStop()
             },
-        )
+        ) }.getOrNull() ?: error("harness run failed")
         recorder.line("SESSION_OUTCOME\t$outcome")
     } finally {
         recorder.close()
@@ -174,6 +192,12 @@ private fun stateRevisionVisible(
     current: org.graphiks.kadre.surface.SurfaceState,
     event: SurfaceEvent,
 ): Boolean = current.revision.value >= event.stateRevision.value
+
+/** The second window kept open across a terminal observation (ownership sentinel). */
+internal fun sentinelSpec(title: String): WindowSpec = WindowSpec(
+    title = title,
+    contentSize = org.graphiks.kadre.surface.LogicalSize(160.0, 100.0),
+)
 
 private fun printHelp(recorder: HarnessRecorder) {
     recorder.line(

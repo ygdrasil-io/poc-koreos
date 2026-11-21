@@ -1,12 +1,12 @@
 package org.graphiks.kadre.internal.appkit
 
 import org.graphiks.kadre.diagnostics.KadrePlatform
-import org.graphiks.kadre.internal.runtime.RuntimeHostController
+import org.graphiks.kadre.internal.runtime.RuntimeProcessController
 import org.graphiks.kadre.internal.runtime.RuntimeSessionComponents
 import org.graphiks.kadre.internal.runtime.RuntimeSessionComponentsFactory
 import org.graphiks.kadre.window.WindowManager
 import kotlin.test.Test
-import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
 
 class RuntimeSessionComponentsSpiTest {
     @Test
@@ -18,11 +18,11 @@ class RuntimeSessionComponentsSpiTest {
             makeComponents(error("compile proof does not create components"))
         }
 
-        val host = RuntimeHostController.withComponents(
+        val controller = RuntimeProcessController.withComponents(
             platform = KadrePlatform.AppKit,
             componentsFactory = factory,
         )
 
-        assertEquals(KadrePlatform.AppKit, host.platform)
+        assertNotNull(controller)
     }
 }

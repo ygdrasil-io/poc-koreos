@@ -23,7 +23,11 @@ dependencies {
     // modules frères — le consumer les déclare lui-même.
     implementation("org.graphiks.kadre:kadre:$kadreVersion")
     implementation("org.graphiks.kadre:foundation-jvm:$kadreVersion")
-    implementation("org.graphiks.kadre:runtime-jvm:$kadreVersion")
+    // Le module runtime se publie sous le groupe internal (depuis le renommage
+    // du projet) : les coordonnées explicites du consumer les reflètent — la
+    // transitivité POM à travers le repo contractuel ne garantit pas la
+    // résolution des modules frères, le consumer les déclare lui-même.
+    implementation("org.graphiks.kadre.internal:runtime-jvm:$kadreVersion")
     implementation("org.graphiks.kadre:desktop-jvm:$kadreVersion")
     // Provider win32 publié (phase 13) : l'exécution de découverte ServiceLoader
     // a besoin du jar provider sur le classpath runtime ; jamais project(...).

@@ -22,8 +22,9 @@ import org.graphiks.kadre.window.*
 @OptIn(KadrePlatformApi::class, DelicateKadreApi::class)
 class Win32CaptureNativeContractTest {
     @Test fun liveMonitorCaptureStreamsRealFrames() {
-        runKadreApplication(
-            options = DesktopHostOptions.Standalone(backend = DesktopBackend.Win32),
+        runBlocking { runKadreApplication(
+            options = KadreRunOptions(),
+            backend = DesktopBackend.Win32,
             application = KadreApplication {
                 windows.requestWindow(WindowSpec(title = "Kadre native capture proof",
                     contentSize = LogicalSize(320.0, 240.0)))
@@ -59,6 +60,6 @@ class Win32CaptureNativeContractTest {
                     else -> error("honest control plane required, got: $inventory")
                 }
             },
-        )
+        ) }.getOrNull() ?: error("run failed")
     }
 }

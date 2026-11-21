@@ -44,6 +44,16 @@ import kotlin.coroutines.AbstractCoroutineContextElement
 import kotlin.coroutines.CoroutineContext
 import kotlin.coroutines.cancellation.CancellationException
 
+/**
+ * The launch identity a boot carries into the application's `KadreLaunchContext`: why the
+ * process was launched and which window request caused it, when the platform states one.
+ * A `null` launch reports [KadreLaunchReason.ProcessLaunch].
+ */
+internal data class KadreLaunchInfo(
+    val reason: KadreLaunchReason,
+    val originatingRequestId: org.graphiks.kadre.window.WindowRequestId?,
+)
+
 @OptIn(InternalCoroutinesApi::class)
 internal class SessionRuntime(
     override val id: SessionId,
@@ -205,13 +215,12 @@ internal class SessionRuntime(
         val startup = rootScope.launch(start = CoroutineStart.LAZY) {
             val application = try {
                 applicationFactory.create(
-                    // The launch identity is the attachment's, not this session's invention: an
-                    // ordinary host attachment states nothing and the application observes exactly
-                    // the initial-host launch it always has, while a child session opened for an
-                    // admitted window request reports that reason and the request that caused it.
+                    // The launch identity is the boot's, not this session's invention: the
+                    // process controller states ProcessLaunch, and an embedded boot without
+                    // explicit launch information reports the process launch it observes.
                     KadreLaunchContext(
                         id,
-                        launchInfo?.reason ?: KadreLaunchReason.InitialHostAttachment,
+                        launchInfo?.reason ?: KadreLaunchReason.ProcessLaunch,
                         launchInfo?.originatingRequestId,
                         null,
                     ),
@@ -282,28 +291,26 @@ internal class SessionRuntime(
         }
     }
 
-    fun hostDetached() {
-        requestTermination(SessionOutcome.Stopped(SessionStopReason.HostDetached))
-    }
-
-    fun hostDetachedImmediately() {
-        val final = lock.withLock {
-            if (finished) return
-            selectedOutcome = selectOutcome(
-                selectedOutcome,
-                SessionOutcome.Stopped(SessionStopReason.HostDetached),
-            )
-            mutableState.value = SessionState.Stopping
-            revokeTargetResources()
-            startupJob?.cancel()
-            applicationJob?.cancel()
-            checkNotNull(selectedOutcome)
-        }
-        finish(final)
-    }
-
     fun hostFailed(failure: KadreFailure.PlatformFailure) {
         requestTermination(SessionOutcome.Failed(failure))
+    }
+
+    /**
+     * Terminates the session as [SessionOutcome.Completed] — the ownership-first controller's
+     * last-container rule: the last OS container the session owned has closed, and a process
+     * whose containers are all gone has finished, not failed.
+     */
+    fun lastContainerClosed() {
+        requestTermination(SessionOutcome.Completed)
+    }
+
+    /**
+     * Terminates the session as [SessionOutcome.Stopped] with
+     * [SessionStopReason.SystemTermination] — the single system-termination path, driven by the
+     * process controller when the OS tears the process's containers down.
+     */
+    fun systemTerminating() {
+        requestTermination(SessionOutcome.Stopped(SessionStopReason.SystemTermination))
     }
 
     private fun eventDeliveryFailed(failure: KadreFailure) {
@@ -312,11 +319,13 @@ internal class SessionRuntime(
     }
 
     private fun requestHostStop() {
-        requestTermination(SessionOutcome.Stopped(SessionStopReason.HostRequested))
+        // The session handle speaks for the process owner (the OS-side host of old): closing the
+        // handle is the system termination of the embedded/bootstrapping world.
+        requestTermination(SessionOutcome.Stopped(SessionStopReason.SystemTermination))
     }
 
     private fun parentCancelled() {
-        val outcome = SessionOutcome.Stopped(SessionStopReason.ParentCancelled)
+        val outcome = SessionOutcome.Stopped(SessionStopReason.SystemTermination)
         lock.withLock {
             if (finished) return
             selectedOutcome = selectOutcome(selectedOutcome, outcome)
@@ -346,10 +355,13 @@ internal class SessionRuntime(
             cause is CancellationException -> {
                 val alreadySelected = lock.withLock { selectedOutcome }
                 if (alreadySelected == null) {
+                    // A live parent means the application cancelled itself; a dead parent means
+                    // the embedding scope died around it — a system termination either way the
+                    // closed reason set can express.
                     val reason = if (parentJob.isActive) {
                         SessionStopReason.ApplicationCancelled
                     } else {
-                        SessionStopReason.ParentCancelled
+                        SessionStopReason.SystemTermination
                     }
                     requestTermination(SessionOutcome.Stopped(reason))
                 }

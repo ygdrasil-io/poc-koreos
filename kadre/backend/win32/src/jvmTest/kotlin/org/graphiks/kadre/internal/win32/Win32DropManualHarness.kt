@@ -39,7 +39,7 @@ internal object Win32DropManualHarness {
         var offers = 0
         var drops = 0
         var rejected = 0
-        runKadreApplication(options = DesktopHostOptions.Standalone(backend = DesktopBackend.Win32), application = KadreApplication {
+        runBlocking { runKadreApplication(options = KadreRunOptions(), backend = DesktopBackend.Win32, application = KadreApplication {
             val requested = windows.requestWindow(WindowSpec(title = "Kadre drop — glisser ici",
                 contentSize = LogicalSize(560.0, 420.0)))
             val request = (requested as? KadreResult.Success)?.value ?: error("Window admission failed")
@@ -82,7 +82,7 @@ internal object Win32DropManualHarness {
             }
             window.state.first { it.phase == WindowPhase.Closed }
             SwingUtilities.invokeLater { viewer.dispose() }
-        })
+        }) }.getOrNull() ?: error("run failed")
         println("Offres=$offers drops=$drops refus=$rejected")
     }
 }

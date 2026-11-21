@@ -7,8 +7,8 @@ import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
 import org.graphiks.kadre.application.EventStamp
 import org.graphiks.kadre.application.ActivationState
-import org.graphiks.kadre.application.AttachmentState
 import org.graphiks.kadre.application.SessionInstant
+import org.graphiks.kadre.application.SessionPhase
 import org.graphiks.kadre.application.SessionSequence
 import org.graphiks.kadre.application.LifecycleState
 import org.graphiks.kadre.application.VisibilityState
@@ -642,7 +642,7 @@ class RuntimeGamepadManagerTest {
     private fun lifecycle(
         visibility: VisibilityState,
         activation: ActivationState,
-    ): LifecycleState = LifecycleState(AttachmentState.Attached, visibility, activation)
+    ): LifecycleState = LifecycleState(SessionPhase.Running, visibility, activation)
 }
 
 private class FakeGamepadPort(

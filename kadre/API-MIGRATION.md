@@ -28,14 +28,14 @@ Décisions :
 
 | Surface actuelle | Décision | Cible ou justification |
 |---|---|---|
-| `kadre.EventLoop`, `kadre.core.EventLoop` | remove | `KadreHost.attach`, adaptateurs embeddable et `runKadreApplication` desktop |
-| `ApplicationHandler` | replace | `KadreApplication`, `KadreApplicationFactory`, `KadreScope`, admission d’enfants fermée au retour de `run`, parent scope actif obligatoire et terminaison logique bornée dès que le runtime reste schedulable |
+| `kadre.EventLoop`, `kadre.core.EventLoop` | remove | l’entrée ownership `runKadreApplication` de l’umbrella et ses overloads desktop (`KadreRunOptions`) |
+| `ApplicationHandler` | replace | `KadreApplication`, `KadreApplicationFactory`, `KadreScope`, admission d’enfants fermée au retour de `run`, dispatcher garanti du boot Kadre et terminaison logique bornée dès que le runtime reste schedulable |
 | `ActiveEventLoop`, `EventLoopProxy` | remove | managers attachés à la session ; aucun proxy de boucle public |
 | `ControlFlow`, `StartCause` | remove | scheduling interne et primitives coroutine |
 | `kadre.coroutines.EventLoopDispatcher` | internalize | dispatcher/pump du backend |
 | `kadre.coroutines.KadreAppScope`, `KadreWindow`, `kadreApplication` | replace | API application et surface commune dans l’artifact principal |
 | `FrameTimingTracer` | internalize | instrumentation interne ; Kadre n’impose pas une boucle de rendu |
-| `ApplicationHandler.memoryWarning` | replace | `KadreLifecycle.capabilities`, `KadreLifecycle.signals` et `HostSignal.MemoryPressure` |
+| `ApplicationHandler.memoryWarning` | replace | `KadreLifecycle.capabilities`, `KadreLifecycle.signals` et `SystemSignal.MemoryPressure` |
 
 ## Géométrie, temps et identités
 
@@ -127,8 +127,8 @@ Le flux input unifié conserve son ordre grâce à un scheduler borné : une lan
 | `AndroidKadreRuntime` | remove | aucune session ou handler global |
 | `KadreActivity` | replace | extensions `ComponentActivity.attachKadre` et `View.attachKadre` |
 | `KadreAppDelegate`, `KadreRegistry` UIKit, `KadreMetalView` | replace/internalize | `KadreIos.attach`, host surface et bridge Swift minimal ; aucun renderer Metal public |
-| `AppKitWindow`, delegates AppKit concrets, `KadreWindowDelegate`, `MainThreadCheck` et callbacks publics | internalize | `attachKadreDesktop` et options host typées |
-| `ActivationPolicy` | remove | `Standalone` AppKit utilise `Regular`; un host ayant une autre activation policy utilise `Embedded` et la configure lui-même |
+| `AppKitWindow`, delegates AppKit concrets, `KadreWindowDelegate`, `MainThreadCheck` et callbacks publics | internalize | l’entrée ownership `runKadreApplication` (`platform:desktop`) et `DesktopBackend` |
+| `ActivationPolicy` | remove | le boot AppKit possédé par Kadre utilise `Regular` ; le mode embedded et sa configuration par l’hôte sont supprimés (ownership-first) |
 | `StatusBarStyle`, `ValidOrientations`, `setPreferredStatusBarStyle`, `setPrefersHomeIndicatorHidden`, `setPrefersStatusBarHidden` | remove | chrome et orientations UIKit possédés par le host controller, pas par une fenêtre Kadre |
 | `contentRect` Android/UIKit | replace | `HostSurface.state` fournit les métriques atomiques et les conversions explicites |
 | `config` Android | replace | lecture target-specific bornée via `withAndroidView`; aucun snapshot arbitraire de `Configuration` dans le commun |
@@ -161,7 +161,7 @@ Ces règles couvrent également les déclarations Kotlin publiques visibles dans
 | `WaylandWindow`, `WaylandEventLoop`, `WaylandEventLoopProxy`, `mapWaylandKeyEvent`, `mapWaylandKeyboardFocused`, `mapWaylandPointerAxis`, `mapWaylandPointerButton`, `mapWaylandPointerMotion`, `mapWaylandTouchCancel`, `mapWaylandTouchDown`, `mapWaylandTouchMotion`, `mapWaylandTouchUp`, `waylandButtonStateToKeyState`, `waylandKeyStateToKeyState`, `linuxButtonToMouseButton`, `linuxKeycodeToKeyCode`, `linuxKeycodeToPhysicalKey`, `wlFixedToDouble`, `probeConnection`, `WaylandScreenCapturer`, `WaylandCaptureSession` | internalize | implementation, protocol mapping et probes backend |
 | `WaylandWindowAttributes`, `setPreferCsd`, `setActivationToken`, `waylandProtocols`, `hasWaylandProtocol` | internalize | hors noyau v1 ; availability exprimée par capabilities, pas par inspection de protocole publique |
 | `isWayland`, `xdgToplevel` | replace | `KadrePlatform` et `Window.withDesktopHandle` |
-| toutes les fonctions backend `runApp` | replace | `attachKadreDesktop` ou `runKadreApplication` |
+| toutes les fonctions backend `runApp` | replace | l’entrée ownership `runKadreApplication` (umbrella et overloads desktop) |
 
 ## Artifact `kadre-test` actuel
 

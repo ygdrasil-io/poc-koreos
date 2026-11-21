@@ -4,10 +4,14 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.test.setMain
 import org.graphiks.kadre.application.KadreApplication
 import org.graphiks.kadre.application.KadreApplicationFactory
 import org.graphiks.kadre.application.KadreScope
@@ -62,19 +66,17 @@ import kotlin.test.assertSame
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
 import kotlin.test.assertFailsWith
-import java.util.concurrent.Executors
-import java.util.concurrent.TimeUnit
 
 class RuntimeSessionComponentsTest {
     @Test
-    fun throwingDisplayObserverClosesEveryCreatedComponentExactlyOnce() = runTest {
+    fun throwingDisplayObserverClosesEveryCreatedComponentExactlyOnce() = runProcessTest {
         val display = RecordingDisplayPort(failObserver = true)
         val pads = RecordingGamepadPort()
         val devices = RecordingInputDevicePort()
         val raw = RecordingRawInputPort()
         var windowRuntimeCloses = 0
         var root: Job? = null
-        val host = RuntimeHostController.withComponents(
+        val controller = RuntimeProcessController.withComponents(
             platform = KadrePlatform.Fake,
             componentsFactory = RuntimeSessionComponentsFactory { _, scope ->
                 root = scope.coroutineContext[Job]
@@ -87,7 +89,14 @@ class RuntimeSessionComponentsTest {
                 ) { windowRuntimeCloses++ }
             },
         )
-        assertIs<KadreResult.Failure>(host.attach(this, KadreApplicationFactory { KadreApplication { } }))
+        assertIs<KadreResult.Failure>(
+            controller.boot(
+                RuntimeBootRequest(
+                    platform = KadrePlatform.Fake,
+                    applicationFactory = KadreApplicationFactory { KadreApplication { } },
+                ),
+            ),
+        )
         assertEquals(1, display.closeCount)
         assertEquals(1, pads.closeCount)
         assertEquals(1, devices.closeCount)
@@ -97,14 +106,14 @@ class RuntimeSessionComponentsTest {
     }
 
     @Test
-    fun injectedCapturePortIsProjectedThroughItsSessionScopeAndClosedWithTheSession() = runTest {
+    fun injectedCapturePortIsProjectedThroughItsSessionScopeAndClosedWithTheSession() = runProcessTest {
         val port = RecordingCapturePort(
             snapshot(
                 permissions = CapturePermissionState(PermissionState.Granted, PermissionState.Granted),
                 sources = CapturePortSources.HostPickerOnly,
             ),
         )
-        val host = RuntimeHostController.withComponents(
+        val controller = RuntimeProcessController.withComponents(
             platform = KadrePlatform.Fake,
             componentsFactory = RuntimeSessionComponentsFactory { _, _ ->
                 RuntimeSessionComponents(RecordingWindowManager(), capturePort = port)
@@ -112,7 +121,7 @@ class RuntimeSessionComponentsTest {
         )
         lateinit var observed: CaptureManager
 
-        val session = attach(host) {
+        val session = boot(controller) {
             observed = capture
             awaitCancellation()
         }
@@ -127,11 +136,11 @@ class RuntimeSessionComponentsTest {
     }
 
     @Test
-    fun configurationFailureReturnsAnAttachFailureAndClosesCreatedComponents() = runTest {
+    fun configurationFailureReturnsAnAttachFailureAndClosesCreatedComponents() = runProcessTest {
         var componentsClosed = 0
         val display = RecordingDisplayPort()
         var componentScopeJob: Job? = null
-        val host = RuntimeHostController.withComponents(
+        val controller = RuntimeProcessController.withComponents(
             platform = KadrePlatform.Fake,
             componentsFactory = RuntimeSessionComponentsFactory { _, rootScope ->
                 componentScopeJob = rootScope.coroutineContext[Job]
@@ -139,7 +148,12 @@ class RuntimeSessionComponentsTest {
             },
         )
 
-        val result = host.attach(this, KadreApplicationFactory { KadreApplication { } })
+        val result = controller.boot(
+            RuntimeBootRequest(
+                platform = KadrePlatform.Fake,
+                applicationFactory = KadreApplicationFactory { KadreApplication { } },
+            ),
+        )
 
         assertEquals(
             KadreResult.Failure(
@@ -154,9 +168,9 @@ class RuntimeSessionComponentsTest {
     }
 
     @Test
-    fun injectedDisplayPortIsProjectedThroughItsSessionScopeAndClosedWithTheSession() = runTest {
+    fun injectedDisplayPortIsProjectedThroughItsSessionScopeAndClosedWithTheSession() = runProcessTest {
         val port = RecordingDisplayPort()
-        val host = RuntimeHostController.withComponents(
+        val controller = RuntimeProcessController.withComponents(
             platform = KadrePlatform.Fake,
             componentsFactory = RuntimeSessionComponentsFactory { _, _ ->
                 RuntimeSessionComponents(RecordingWindowManager(), displayPort = port)
@@ -164,7 +178,7 @@ class RuntimeSessionComponentsTest {
         )
         lateinit var observed: KadreScope
 
-        val session = attach(host) {
+        val session = boot(controller) {
             observed = this
             awaitCancellation()
         }
@@ -180,9 +194,9 @@ class RuntimeSessionComponentsTest {
     }
 
     @Test
-    fun injectedGamepadPortIsProjectedThroughItsSessionScopeAndClosedWithTheSession() = runTest {
+    fun injectedGamepadPortIsProjectedThroughItsSessionScopeAndClosedWithTheSession() = runProcessTest {
         val port = RecordingGamepadPort()
-        val host = RuntimeHostController.withComponents(
+        val controller = RuntimeProcessController.withComponents(
             platform = KadrePlatform.Fake,
             componentsFactory = RuntimeSessionComponentsFactory { _, _ ->
                 RuntimeSessionComponents(RecordingWindowManager(), gamepadPort = port)
@@ -190,7 +204,7 @@ class RuntimeSessionComponentsTest {
         )
         lateinit var observed: KadreScope
 
-        val session = attach(host) {
+        val session = boot(controller) {
             observed = this
             awaitCancellation()
         }
@@ -205,9 +219,9 @@ class RuntimeSessionComponentsTest {
     }
 
     @Test
-    fun inputOnlyPortCreatesAndClosesTheSessionDeviceManager() = runTest {
+    fun inputOnlyPortCreatesAndClosesTheSessionDeviceManager() = runProcessTest {
         val port = RecordingInputDevicePort()
-        val host = RuntimeHostController.withComponents(
+        val controller = RuntimeProcessController.withComponents(
             platform = KadrePlatform.Fake,
             componentsFactory = RuntimeSessionComponentsFactory { _, _ ->
                 RuntimeSessionComponents(RecordingWindowManager(), inputDevicePort = port)
@@ -215,7 +229,7 @@ class RuntimeSessionComponentsTest {
         )
         lateinit var observed: KadreScope
 
-        val session = attach(host) {
+        val session = boot(controller) {
             observed = this
             awaitCancellation()
         }
@@ -238,11 +252,11 @@ class RuntimeSessionComponentsTest {
      * de la session est ce qui distingue un bon slot d'un slot où le port serait seulement fermé.
      */
     @Test
-    fun deferredProviderDisplayPortOverloadProjectsThroughTheDisplaySlotAndClosesThePortOnce() = runTest {
+    fun deferredProviderDisplayPortOverloadProjectsThroughTheDisplaySlotAndClosesThePortOnce() = runProcessTest {
         val port = RecordingDisplayPort()
         var providerRuns = 0
         var closeActionRuns = 0
-        val host = RuntimeHostController.withComponents(
+        val controller = RuntimeProcessController.withComponents(
             platform = KadrePlatform.Fake,
             componentsFactory = RuntimeSessionComponentsFactory { _, _ ->
                 RuntimeSessionComponents(
@@ -255,7 +269,7 @@ class RuntimeSessionComponentsTest {
         )
         lateinit var observed: KadreScope
 
-        val session = attach(host) {
+        val session = boot(controller) {
             observed = this
             awaitCancellation()
         }
@@ -281,13 +295,13 @@ class RuntimeSessionComponentsTest {
      * fois par la terminaison de session, après le closeAction.
      */
     @Test
-    fun deferredProviderThreePortOverloadProjectsEachPortInItsSlotAndClosesEachOnce() = runTest {
+    fun deferredProviderThreePortOverloadProjectsEachPortInItsSlotAndClosesEachOnce() = runProcessTest {
         val displayPort = RecordingDisplayPort()
         val gamepadPort = RecordingGamepadPort()
         val inputDevicePort = RecordingInputDevicePort()
         var providerRuns = 0
         var closeActionRuns = 0
-        val host = RuntimeHostController.withComponents(
+        val controller = RuntimeProcessController.withComponents(
             platform = KadrePlatform.Fake,
             componentsFactory = RuntimeSessionComponentsFactory { _, _ ->
                 RuntimeSessionComponents(
@@ -302,7 +316,7 @@ class RuntimeSessionComponentsTest {
         )
         lateinit var observed: KadreScope
 
-        val session = attach(host) {
+        val session = boot(controller) {
             observed = this
             awaitCancellation()
         }
@@ -338,7 +352,7 @@ class RuntimeSessionComponentsTest {
      * déranger.
      */
     @Test
-    fun deferredProviderCapturePortOverloadProjectsTheCapturePortInItsSlotAndClosesEachPortOnce() = runTest {
+    fun deferredProviderCapturePortOverloadProjectsTheCapturePortInItsSlotAndClosesEachPortOnce() = runProcessTest {
         val displayPort = RecordingDisplayPort()
         val gamepadPort = RecordingGamepadPort()
         val inputDevicePort = RecordingInputDevicePort()
@@ -352,7 +366,7 @@ class RuntimeSessionComponentsTest {
         )
         var providerRuns = 0
         var closeActionRuns = 0
-        val host = RuntimeHostController.withComponents(
+        val controller = RuntimeProcessController.withComponents(
             platform = KadrePlatform.Fake,
             componentsFactory = RuntimeSessionComponentsFactory { _, _ ->
                 RuntimeSessionComponents(
@@ -368,7 +382,7 @@ class RuntimeSessionComponentsTest {
         )
         lateinit var observed: KadreScope
 
-        val session = attach(host) {
+        val session = boot(controller) {
             observed = this
             awaitCancellation()
         }
@@ -412,10 +426,10 @@ class RuntimeSessionComponentsTest {
     }
 
     @Test
-    fun injectedWindowManagerIsVisibleThroughItsSessionScope() = runTest {
+    fun injectedWindowManagerIsVisibleThroughItsSessionScope() = runProcessTest {
         val manager = RecordingWindowManager()
         var factoryScopeJob: Job? = null
-        val host = RuntimeHostController.withComponents(
+        val controller = RuntimeProcessController.withComponents(
             platform = KadrePlatform.Fake,
             componentsFactory = RuntimeSessionComponentsFactory { _, rootScope ->
                 factoryScopeJob = rootScope.coroutineContext[Job]
@@ -424,7 +438,7 @@ class RuntimeSessionComponentsTest {
         )
         lateinit var observed: WindowManager
 
-        val session = attach(host) {
+        val session = boot(controller) {
             observed = windows
             awaitCancellation()
         }
@@ -439,9 +453,9 @@ class RuntimeSessionComponentsTest {
     }
 
     @Test
-    fun sessionComponentsAreIsolatedAndCloseOnlyTheirSessionExactlyOnce() = runTest {
+    fun sessionComponentsAreIsolatedAndCloseOnlyTheirSessionExactlyOnce() = runProcessTest {
         val components = mutableListOf<RecordingComponent>()
-        val host = RuntimeHostController.withComponents(
+        val controller = RuntimeProcessController.withComponents(
             platform = KadrePlatform.Fake,
             componentsFactory = RuntimeSessionComponentsFactory { _, _ ->
                 RecordingComponent().also(components::add).asRuntimeComponent()
@@ -450,11 +464,15 @@ class RuntimeSessionComponentsTest {
         lateinit var firstWindows: WindowManager
         lateinit var secondWindows: WindowManager
 
-        val first = attach(host) {
+        val first = boot(controller) {
             firstWindows = windows
             awaitCancellation()
         }
-        val second = attach(host) {
+        testScheduler.runCurrent()
+        first.close()
+        first.close()
+        testScheduler.advanceUntilIdle()
+        val second = boot(controller) {
             secondWindows = windows
             awaitCancellation()
         }
@@ -464,10 +482,6 @@ class RuntimeSessionComponentsTest {
         assertSame(components[0].manager, firstWindows)
         assertSame(components[1].manager, secondWindows)
         assertFalse(firstWindows === secondWindows)
-
-        first.close()
-        first.close()
-        testScheduler.runCurrent()
 
         assertEquals(1, components[0].closeCount)
         assertEquals(0, components[1].closeCount)
@@ -494,9 +508,9 @@ class RuntimeSessionComponentsTest {
     }
 
     @Test
-    fun sessionComponentsCloseBeforeHostTerminationIsObserved() = runTest {
+    fun sessionComponentsCloseBeforeHostTerminationIsObserved() = runProcessTest {
         val events = mutableListOf<String>()
-        val host = RuntimeHostController.withComponents(
+        val controller = RuntimeProcessController.withComponents(
             platform = KadrePlatform.Fake,
             componentsFactory = RuntimeSessionComponentsFactory { _, _ ->
                 RuntimeSessionComponents(RecordingWindowManager()) { events += "components-closed" }
@@ -504,17 +518,17 @@ class RuntimeSessionComponentsTest {
             sessionObserver = RuntimeSessionObserver { _, _ -> events += "host-observed-termination" },
         )
 
-        attach(host) { requestStop() }
+        boot(controller) { requestStop() }
         testScheduler.runCurrent()
 
         assertEquals(listOf("components-closed", "host-observed-termination"), events)
     }
 
     @Test
-    fun terminationStateAndAwaitBecomeVisibleOnlyAfterComponentsClose() = runTest {
+    fun terminationStateAndAwaitBecomeVisibleOnlyAfterComponentsClose() = runProcessTest {
         val events = mutableListOf<String>()
         lateinit var session: KadreSession
-        val host = RuntimeHostController.withComponents(
+        val controller = RuntimeProcessController.withComponents(
             platform = KadrePlatform.Fake,
             componentsFactory = RuntimeSessionComponentsFactory { _, _ ->
                 RuntimeSessionComponents(RecordingWindowManager()) {
@@ -524,7 +538,7 @@ class RuntimeSessionComponentsTest {
             },
         )
 
-        session = attach(host) { awaitCancellation() }
+        session = boot(controller) { awaitCancellation() }
         testScheduler.runCurrent()
         val waiter = async {
             session.awaitTermination().also { events += "await-returned" }
@@ -535,17 +549,17 @@ class RuntimeSessionComponentsTest {
         testScheduler.runCurrent()
 
         assertIs<SessionState.Terminated>(session.state.value)
-        assertEquals(SessionOutcome.Stopped(org.graphiks.kadre.application.SessionStopReason.HostRequested), waiter.await())
+        assertEquals(SessionOutcome.Stopped(org.graphiks.kadre.application.SessionStopReason.SystemTermination), waiter.await())
         assertEquals(listOf("components-closed", "await-returned"), events)
     }
 
     @Test
-    fun componentFactoryFailureIsReportedAndDoesNotEscapeAttach() = runTest {
+    fun componentFactoryFailureIsReportedAndDoesNotEscapeBoot() = runProcessTest {
         val failure = IllegalStateException("components")
         val reported = mutableListOf<Throwable>()
         val componentScopeJobs = mutableListOf<Job>()
         var observedTerminations = 0
-        val host = RuntimeHostController.withComponents(
+        val controller = RuntimeProcessController.withComponents(
             platform = KadrePlatform.AppKit,
             componentsFactory = RuntimeSessionComponentsFactory { _, rootScope ->
                 componentScopeJobs += checkNotNull(rootScope.coroutineContext[Job])
@@ -555,7 +569,12 @@ class RuntimeSessionComponentsTest {
             sessionObserver = RuntimeSessionObserver { _, _ -> observedTerminations += 1 },
         )
 
-        val result = host.attach(this, KadreApplicationFactory { KadreApplication { } })
+        val result = controller.boot(
+            RuntimeBootRequest(
+                platform = KadrePlatform.AppKit,
+                applicationFactory = KadreApplicationFactory { KadreApplication { } },
+            ),
+        )
 
         assertEquals(
             KadreResult.Failure(
@@ -566,64 +585,40 @@ class RuntimeSessionComponentsTest {
         assertEquals(listOf<Throwable>(failure), reported)
         assertEquals(1, componentScopeJobs.size)
         assertFalse(componentScopeJobs.single().isActive)
-
-        host.detach()
         assertEquals(0, observedTerminations)
     }
 
-    @Test
-    fun attachRaceWithHostDetachmentDisposesUnstartedComponentsWithoutNotification() {
-        val factoryStarted = java.util.concurrent.CountDownLatch(1)
-        val allowFactoryToComplete = java.util.concurrent.CountDownLatch(1)
-        val componentScopeJobs = mutableListOf<Job>()
-        var closedComponents = 0
-        var observedTerminations = 0
-        val host = RuntimeHostController.withComponents(
-            platform = KadrePlatform.Fake,
-            componentsFactory = RuntimeSessionComponentsFactory { _, rootScope ->
-                componentScopeJobs += checkNotNull(rootScope.coroutineContext[Job])
-                factoryStarted.countDown()
-                check(allowFactoryToComplete.await(2, TimeUnit.SECONDS))
-                RuntimeSessionComponents(RecordingWindowManager()) { closedComponents += 1 }
-            },
-            sessionObserver = RuntimeSessionObserver { _, _ -> observedTerminations += 1 },
-        )
-        val parentScope = CoroutineScope(SupervisorJob())
-        val executor = Executors.newFixedThreadPool(2)
-
-        try {
-            val attach = executor.submit<KadreResult<KadreSession>> {
-                host.attach(parentScope, KadreApplicationFactory { KadreApplication { } })
-            }
-            assertTrue(factoryStarted.await(2, TimeUnit.SECONDS))
-
-            val detach = executor.submit { host.detach() }
-            detach.get(2, TimeUnit.SECONDS)
-            allowFactoryToComplete.countDown()
-
-            assertEquals(
-                KadreResult.Failure(KadreFailure.Closed(org.graphiks.kadre.diagnostics.KadreResourceKind.Host)),
-                attach.get(2, TimeUnit.SECONDS),
-            )
-            assertEquals(1, closedComponents)
-            assertFalse(componentScopeJobs.single().isActive)
-            assertEquals(0, observedTerminations)
-        } finally {
-            allowFactoryToComplete.countDown()
-            parentScope.coroutineContext[Job]?.cancel()
-            executor.shutdownNow()
-        }
-    }
-
-    private fun kotlinx.coroutines.test.TestScope.attach(
-        host: RuntimeHostController,
+    private suspend fun kotlinx.coroutines.test.TestScope.boot(
+        controller: RuntimeProcessController,
         application: suspend KadreScope.() -> Unit,
-    ): KadreSession = assertIsSuccess(host.attach(this, KadreApplicationFactory { KadreApplication(application) }))
+    ): KadreSession = assertIsSuccess(
+        controller.boot(
+            RuntimeBootRequest(
+                platform = KadrePlatform.Fake,
+                applicationFactory = KadreApplicationFactory { KadreApplication(application) },
+            ),
+        ),
+    )
 
     private fun assertIsSuccess(result: KadreResult<KadreSession>): KadreSession = when (result) {
         is KadreResult.Success -> result.value
-        is KadreResult.Failure -> error("expected attached session, got ${result.reason}")
+        is KadreResult.Failure -> error("expected booted session, got ${result.reason}")
     }
+
+    /**
+     * The controller's owned root scope lives on `Dispatchers.Main.immediate`; a process test
+     * installs the test scheduler as Main so every owned coroutine is driven by virtual time.
+     */
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+    private fun runProcessTest(body: suspend kotlinx.coroutines.test.TestScope.() -> Unit): Unit =
+        kotlinx.coroutines.test.runTest {
+            Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+            try {
+                body()
+            } finally {
+                Dispatchers.resetMain()
+            }
+        }
 
     private class RecordingComponent {
         val manager = RecordingWindowManager()

@@ -146,7 +146,7 @@ class Win32InputNativeContractTest {
         var observed: InputEvent.Key? = null
         var workerThread: Thread? = null
         val ownerThread = Thread.currentThread()
-        val outcome = runKadreApplication(options = DesktopHostOptions.Standalone(backend = DesktopBackend.Win32),
+        val outcome = runBlocking { runKadreApplication(options = KadreRunOptions(), backend = DesktopBackend.Win32,
             application = KadreApplication {
                 withTimeout(6000) {
                     workerThread = Thread.currentThread()
@@ -160,9 +160,11 @@ class Win32InputNativeContractTest {
                     observed = event.await()
                     window.close()
                 }
-            })
+            }) }.getOrNull() ?: error("run failed")
         assertTrue(workerThread != ownerThread, "application coroutines must exercise worker-to-UI admission")
         assertEquals(PhysicalKey.Code(7, 4), assertNotNull(observed).physicalKey)
-        assertTrue(outcome == SessionOutcome.Completed || outcome is SessionOutcome.Stopped, "session outcome: $outcome")
+        // Deterministic last-window outcome (no driver-side pump-stop wiring): the
+        // controller's last-container rule owns the Completed terminal reason.
+        assertEquals(SessionOutcome.Completed, outcome)
     }
 }

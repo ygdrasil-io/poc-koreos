@@ -30,7 +30,7 @@ internal object Win32RichInputManualHarness {
         println("Le curseur TSF fourni reste au point client logique (24,24); aucun layout de caractères n'est inventé.")
         println("Les logs contiennent des catégories et compteurs; les documents restent dans l'aperçu local.")
         try {
-            runKadreApplication(options=DesktopHostOptions.Standalone(backend=DesktopBackend.Win32), application=KadreApplication {
+            runBlocking { runKadreApplication(options=KadreRunOptions(), backend=DesktopBackend.Win32, application=KadreApplication {
                 val jobs = mutableListOf<Job>()
                 repeat(2) { index ->
                     val requested = windows.requestWindow(WindowSpec(title="Kadre texte/contacts ${index+1} — fermer pour terminer",
@@ -96,7 +96,7 @@ internal object Win32RichInputManualHarness {
                 }
                 windows.state.first { it.windows.isEmpty() }
                 jobs.forEach { it.cancel() }; jobs.joinAll()
-            })
+            }) }.getOrNull() ?: error("run failed")
         } catch (cause: Throwable) { println("manual harness stopped: ${cause.javaClass.simpleName}") }
         finally { SwingUtilities.invokeLater { viewer.dispose() } }
     }

@@ -6,16 +6,19 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import org.graphiks.kadre.application.KadreApplication
+import org.graphiks.kadre.application.KadreRunOptions
+import org.graphiks.kadre.diagnostics.FeatureAvailability
 import org.graphiks.kadre.diagnostics.KadreResult
+import org.graphiks.kadre.diagnostics.getOrNull
 import org.graphiks.kadre.diagnostics.DelicateKadreApi
 import org.graphiks.kadre.input.InputEvent
 import org.graphiks.kadre.interaction.InteractionAction
 import org.graphiks.kadre.interaction.InteractionEvent
 import org.graphiks.kadre.interaction.InteractionHandler
 import org.graphiks.kadre.platform.desktop.DesktopBackend
-import org.graphiks.kadre.platform.desktop.DesktopHostOptions
 import org.graphiks.kadre.platform.desktop.runKadreApplication
 import org.graphiks.kadre.surface.SurfaceAttachmentState
 import org.graphiks.kadre.window.WindowRequestOutcome
@@ -38,6 +41,7 @@ import kotlin.time.Duration.Companion.seconds
  */
 @OptIn(DelicateKadreApi::class)
 public fun main(args: Array<String>) {
+    installManualHarnessMainDispatcher()
     val options = Phase7DropHarnessOptions.parse(args)
     val recorder = Phase7DropHarnessRecorder(options.recordPath)
     val commands = Channel<String>(Channel.UNLIMITED)
@@ -48,11 +52,9 @@ public fun main(args: Array<String>) {
     }
 
     try {
-        val outcome = runKadreApplication(
-            options = DesktopHostOptions.Standalone(
-                backend = DesktopBackend.AppKit,
-                stopWhenLastWindowClosed = false,
-            ),
+        val outcome = runBlocking { runKadreApplication(
+            options = KadreRunOptions(),
+            backend = DesktopBackend.AppKit,
             application = KadreApplication {
                 val opened = when (val request = windows.requestWindow(WindowSpec(title = "Kadre Phase 7 drop"))) {
                     is KadreResult.Failure -> error("window request failed: ${request.reason}")
@@ -61,6 +63,16 @@ public fun main(args: Array<String>) {
                 val window = when (opened) {
                     is WindowRequestOutcome.OpenedHere -> opened.window
                     else -> error("window did not open: $opened")
+                }
+                // Sentinel: the ownership rule completes the session when its LAST container
+                // closes, so a second window stays open across the terminal observation below.
+                val sentinelOpened = when (val request = windows.requestWindow(sentinelSpec("Kadre Phase 7 sentinel"))) {
+                    is KadreResult.Failure -> error("sentinel window request failed: ${request.reason}")
+                    is KadreResult.Success -> request.value.await()
+                }
+                val sentinel = when (sentinelOpened) {
+                    is WindowRequestOutcome.OpenedHere -> sentinelOpened.window
+                    else -> error("sentinel window did not open: $sentinelOpened")
                 }
                 val input = window.surface.input
                 recorder.metadata(options)
@@ -137,11 +149,19 @@ public fun main(args: Array<String>) {
                     recorder.line("COMMAND\tclose\t${window.close()}")
                     withTimeout(5.seconds) {
                         window.surface.state.first { it.attachment == SurfaceAttachmentState.Detached }
+                        // The input stream's own terminal is its teardown reset (capabilities
+                        // withdrawn): with the sentinel window open across the observation,
+                        // that reset lands right after the surface detaches, so the stability
+                        // window opens on the reset — the same no-late-anything claim.
+                        input.state.first { it.capabilities.keyboard != FeatureAvailability.Available }
                     }
                     withTimeout(5.seconds) {
                         while (activeTransfers.get() != 0) delay(10.milliseconds)
                     }
-                    val terminalRevision = latestRevision.get()
+                    // The recorder collector may deliver the terminal snapshot after this
+                    // probe saw it: anchor on whichever view is furthest along, so the
+                    // catch-up delivery is not mistaken for a late revision.
+                    val terminalRevision = maxOf(latestRevision.get(), input.state.value.revision.value)
                     val terminalEventCount = observedEventCount.get()
                     delay(250.milliseconds)
                     val noLateRevision = latestRevision.get() == terminalRevision
@@ -183,9 +203,15 @@ public fun main(args: Array<String>) {
                 closeAndObserveTerminal()
                 stateCollector.cancel()
                 eventCollector.cancel()
+                // The observation is done: the sentinel closes last, so the fixed
+                // last-container rule ends the session only after the record is complete.
+                sentinel.close()
+                withTimeout(5.seconds) {
+                    sentinel.state.first { it.phase == org.graphiks.kadre.window.WindowPhase.Closed }
+                }
                 requestStop()
             },
-        )
+        ) }.getOrNull() ?: error("harness run failed")
         recorder.line("SESSION_OUTCOME\t$outcome")
     } finally {
         recorder.close()

@@ -3,10 +3,12 @@ package org.graphiks.kadre.internal.win32
 import kotlin.test.*
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.setMain
 import org.graphiks.kadre.application.*
 import org.graphiks.kadre.diagnostics.*
 import org.graphiks.kadre.input.*
-import org.graphiks.kadre.internal.runtime.desktop.DesktopStandaloneRequest
+import org.graphiks.kadre.internal.runtime.desktop.DesktopRunRequest
 import org.graphiks.kadre.policy.KadrePolicies
 import org.graphiks.kadre.platform.desktop.*
 import org.graphiks.kadre.surface.LogicalSize
@@ -30,10 +32,20 @@ import java.util.concurrent.TimeUnit
  */
 @OptIn(KadrePlatformApi::class, DelicateKadreApi::class)
 class Win32RawInputNativeContractTest {
+    @BeforeTest fun installProcessMainDispatcher() {
+        // The process controller owns its root scope on Dispatchers.Main.immediate; the
+        // standalone run below stands it up on the Default pool like the production host.
+        Dispatchers.setMain(Dispatchers.Default)
+    }
+
+    @AfterTest fun resetProcessMainDispatcher() {
+        Dispatchers.resetMain()
+    }
+
     @Test fun realRegistrationDeliversInjectedMotionToThePublicAccess() {
         val motions = CopyOnWriteArrayList<RawInputEvent>()
         val provider = Win32BackendProvider()
-        val outcome = assertIs<KadreResult.Success<SessionOutcome>>(provider.run(DesktopStandaloneRequest(
+        val outcome = assertIs<KadreResult.Success<SessionOutcome>>(provider.run(DesktopRunRequest(
             applicationFactory = KadreApplicationFactory {
                 KadreApplication {
                     val requested = windows.requestWindow(WindowSpec(title = "Kadre native raw-input proof",
@@ -57,7 +69,6 @@ class Win32RawInputNativeContractTest {
                     requestStop()
                 }
             },
-            stopWhenLastWindowClosed = true,
             policy = KadrePolicies.Default,
         )))
         // requestStop ends the session with Stopped; the outcome is asserted only loosely.

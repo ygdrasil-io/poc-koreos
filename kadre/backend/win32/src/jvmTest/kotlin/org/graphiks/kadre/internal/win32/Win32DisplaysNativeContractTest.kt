@@ -19,8 +19,9 @@ import org.graphiks.kadre.window.*
 class Win32DisplaysNativeContractTest {
     @Test fun realInventoryEnumeratesThePrimaryWithRealBoundsAndModes() {
         val observed = CompletableDeferred<DisplayInventory>()
-        runKadreApplication(
-            options = DesktopHostOptions.Standalone(backend = DesktopBackend.Win32),
+        runBlocking { runKadreApplication(
+            options = KadreRunOptions(),
+            backend = DesktopBackend.Win32,
             application = KadreApplication {
                 val requested = windows.requestWindow(WindowSpec(title = "Kadre native displays proof",
                     contentSize = LogicalSize(320.0, 240.0)))
@@ -42,6 +43,6 @@ class Win32DisplaysNativeContractTest {
                 assertTrue(state.modes.contains(current), "the current mode must be among the modes")
                 requestStop()
             },
-        )
+        ) }.getOrNull() ?: error("run failed")
     }
 }

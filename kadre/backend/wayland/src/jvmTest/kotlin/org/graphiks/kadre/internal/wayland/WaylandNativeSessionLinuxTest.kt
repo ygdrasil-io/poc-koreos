@@ -3,10 +3,15 @@ package org.graphiks.kadre.internal.wayland
 import java.io.FileInputStream
 import java.nio.file.Files
 import java.nio.file.Path
+import kotlin.test.AfterTest
+import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.setMain
 import org.graphiks.kadre.application.KadreApplication
 import org.graphiks.kadre.application.KadreApplicationFactory
 import org.graphiks.kadre.application.SessionOutcome
@@ -15,7 +20,7 @@ import org.graphiks.kadre.contracts.driver.wayland.WaylandCompositorController
 import org.graphiks.kadre.diagnostics.KadreFailure
 import org.graphiks.kadre.diagnostics.KadrePlatform
 import org.graphiks.kadre.diagnostics.KadreResult
-import org.graphiks.kadre.internal.runtime.desktop.DesktopStandaloneRequest
+import org.graphiks.kadre.internal.runtime.desktop.DesktopRunRequest
 import org.graphiks.kadre.policy.KadrePolicies
 
 /**
@@ -25,6 +30,18 @@ import org.graphiks.kadre.policy.KadrePolicies
  * fait ÉCHOUER le gate, jamais un skip silencieux.
  */
 class WaylandNativeSessionLinuxTest {
+
+    @BeforeTest
+    fun installProcessMainDispatcher() {
+        // The process controller owns its root scope on Dispatchers.Main.immediate; the
+        // standalone runs below stand it up on the Default pool like the production host.
+        Dispatchers.setMain(Dispatchers.Default)
+    }
+
+    @AfterTest
+    fun resetProcessMainDispatcher() {
+        Dispatchers.resetMain()
+    }
 
     private fun compositor(): WaylandCompositorController =
         WaylandCompositorController(socketName = "kadre-wayland-o3").also { it.start() }
@@ -49,19 +66,17 @@ class WaylandNativeSessionLinuxTest {
             loopStarted = loopStarted,
         )
 
-    private fun aliveApplication(): DesktopStandaloneRequest =
-        DesktopStandaloneRequest(
+    private fun aliveApplication(): DesktopRunRequest =
+        DesktopRunRequest(
             applicationFactory = KadreApplicationFactory {
                 KadreApplication { awaitCancellation() }
             },
-            stopWhenLastWindowClosed = true,
             policy = KadrePolicies.Default,
         )
 
-    private fun completingRequest(): DesktopStandaloneRequest =
-        DesktopStandaloneRequest(
+    private fun completingRequest(): DesktopRunRequest =
+        DesktopRunRequest(
             applicationFactory = KadreApplicationFactory { KadreApplication { } },
-            stopWhenLastWindowClosed = true,
             policy = KadrePolicies.Default,
         )
 
@@ -94,11 +109,14 @@ class WaylandNativeSessionLinuxTest {
                 }.start()
             }
             val outcome = provider.run(aliveApplication())
-            // l'arrêt vient du hook pompe (fin de boucle host), pas d'un
-            // session.stop() runtime : le motif terminal est HostDetached ;
-            // un stop runtime conserverait HostRequested (selectOutcome garde
-            // le premier motif terminal, cf. SessionRuntime.requestTermination)
-            assertEquals(KadreResult.Success(SessionOutcome.Stopped(SessionStopReason.HostDetached)), outcome)
+            // l'arrêt vient du hook pompe (fin de boucle OS) : le motif terminal
+            // est la terminaison système du process ; un arrêt demandé côté
+            // session conserverait son propre motif (selectOutcome garde le
+            // premier motif terminal, cf. SessionRuntime.requestTermination)
+            assertEquals(
+                KadreResult.Success(SessionOutcome.Stopped(SessionStopReason.SystemTermination)),
+                outcome,
+            )
         }
     }
 
@@ -109,7 +127,10 @@ class WaylandNativeSessionLinuxTest {
                 Thread { pump.requestStop() }.start()
             }
             val outcome = provider.run(aliveApplication())
-            assertEquals(KadreResult.Success(SessionOutcome.Stopped(SessionStopReason.HostDetached)), outcome)
+            assertEquals(
+                KadreResult.Success(SessionOutcome.Stopped(SessionStopReason.SystemTermination)),
+                outcome,
+            )
         }
     }
 
